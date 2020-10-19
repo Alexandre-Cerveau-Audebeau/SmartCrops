@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmartCrops.Api.Data;
+using SmartCrops.Api.Jobs;
 using SmartCrops.Api.Models;
 
 namespace SmartCrops.Api.Controllers
@@ -30,8 +31,11 @@ namespace SmartCrops.Api.Controllers
 
         // GET: api/Plants/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Plant>> GetPlant(Guid id)
+        public async Task<IActionResult> GetPlant(Guid id)
         {
+            TrefleIoDataRetreiver test = new TrefleIoDataRetreiver();
+            return Ok(await test.GetPlants());
+
             var plant = await _context.Plants.FindAsync(id);
 
             if (plant == null)
@@ -39,7 +43,7 @@ namespace SmartCrops.Api.Controllers
                 return NotFound();
             }
 
-            return plant;
+            return Ok(plant);
         }
 
         // PUT: api/Plants/5
