@@ -30,7 +30,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Remove="ClientApp\src\pages\plants.tsx" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\SmartCrops.TrefleIo.ApiClient\SmartCrops.TrefleIo.ApiClient.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <TypeScriptCompile Include="ClientApp\src\pages\plants.tsx" />
   </ItemGroup>
 
   <Target Name="DebugEnsureNodeEnv" BeforeTargets="Build" Condition=" '$(Configuration)' == 'Debug' And !Exists('$(SpaRoot)node_modules') ">

@@ -29,7 +29,7 @@ namespace SmartCrops.Api.Controllers
             return await _context.Plants.ToListAsync();
         }
 
-        // GET: api/Plants/5
+        // GET: api/Plants/Guid Id
         [HttpGet("{id}")]
         public async Task<IActionResult> GetPlant(Guid id)
         {
@@ -44,7 +44,7 @@ namespace SmartCrops.Api.Controllers
             }
 
             return Ok(plant);
-        }
+        }   
 
         // PUT: api/Plants/5
         // To protect from overposting attacks, please enable the specific properties you want to bind to, for
