@@ -44,9 +44,9 @@ namespace SmartCrops.Api.Controllers
             }
 
             return Ok(plant);
-        }   
+        }
 
-        // PUT: api/Plants/5
+        // PUT: api/Plants/95a80f63-4d96-4ad7-88b3-2126c671aa8a
         // To protect from overposting attacks, please enable the specific properties you want to bind to, for
         // more details see https://aka.ms/RazorPagesCRUD.
         [HttpPut("{id}")]
