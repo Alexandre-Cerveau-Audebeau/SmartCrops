@@ -1,11 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.29411.108
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.32112.339
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SmartCrops.Api", "SmartCrops.Api\SmartCrops.Api.csproj", "{5DF1F8F0-7508-46F6-BFC7-2D8A0975523B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartCrops.TrefleIo.ApiClient", "SmartCrops.TrefleIo.ApiClient\SmartCrops.TrefleIo.ApiClient.csproj", "{4404F9AA-E4FE-4C51-A4B7-3447D79CC4A7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SmartCrops.TrefleIo.ApiClient", "SmartCrops.TrefleIo.ApiClient\SmartCrops.TrefleIo.ApiClient.csproj", "{4404F9AA-E4FE-4C51-A4B7-3447D79CC4A7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartCrops.Entities", "SmartCrops.Entities\SmartCrops.Entities.csproj", "{3F826B41-B0C7-4FA2-9142-627D10F05DB5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{4404F9AA-E4FE-4C51-A4B7-3447D79CC4A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4404F9AA-E4FE-4C51-A4B7-3447D79CC4A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4404F9AA-E4FE-4C51-A4B7-3447D79CC4A7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3F826B41-B0C7-4FA2-9142-627D10F05DB5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3F826B41-B0C7-4FA2-9142-627D10F05DB5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3F826B41-B0C7-4FA2-9142-627D10F05DB5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3F826B41-B0C7-4FA2-9142-627D10F05DB5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
