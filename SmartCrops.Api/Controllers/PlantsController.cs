@@ -24,9 +24,9 @@ namespace SmartCrops.Api.Controllers
 
         // GET: api/Plants
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Plant>>> GetPlants()
+        public async Task<IActionResult> GetPlants()
         {
-            return await _context.Plants.ToListAsync();
+            return Ok(await _context.Users.Where(x => x.Email == "alex").SingleOrDefaultAsync());
         }
 
         // GET: api/Plants/Guid Id
