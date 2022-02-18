@@ -6,13 +6,27 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddDbContext<SmartCropsDbContext>(options =>
 {
-    options.UseNpgsql(builder.Configuration.GetValue<string>("DefaultConnectionString"));
+    options.UseNpgsql(builder.Configuration.GetValue<string>("DefaultConnectionString"), x =>
+    {
+        x.MigrationsAssembly(typeof(Program).Assembly.FullName);
+    });
 });
 
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Add CORS policies
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins("http://localhost:3000")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 var app = builder.Build();
 
@@ -24,6 +38,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors();
 
 app.UseAuthorization();
 
