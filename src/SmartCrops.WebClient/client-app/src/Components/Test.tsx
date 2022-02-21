@@ -1,5 +1,6 @@
 import axios from "axios";
 import React from "react";
+import Button from 'react-bootstrap/Button';
 import PlantType from "../Models/PlantType"
 
 
@@ -13,14 +14,12 @@ export default function Test()
     }
 
     return(<React.Fragment>
-        <button onClick={test}>test</button>
+        <Button onClick={test}>Afficher Plantes</Button>
         {plants.map(plant => {
             return (
                 <ul>
                     {plant.plantName}
                 </ul>
-                    
-
                 );
         })}
     </React.Fragment>);

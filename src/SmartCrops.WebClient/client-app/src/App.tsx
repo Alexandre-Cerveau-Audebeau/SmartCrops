@@ -1,31 +1,30 @@
 import React from 'react';
-import logo from './logo.svg';
 import './App.css';
 
-import Test from './Components/Test';
+import Navigation from './Components/Navigation';
+import Home from './Pages/Home';
+import Account from './Pages/Account';
+import Library from './Pages/Library';
+import MyGardens from './Pages/MyGardens';
+import ConnectedSensors from './Pages/ConnectedSensors';
 
-
+import {BrowserRouter, Route, Routes} from 'react-router-dom';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <Test />
-        
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <BrowserRouter>    
+
+    <Navigation/>
+    <Routes>
+      <Route path='/' element={<Home />} />      
+      <Route path='/account' element={<Account />} />
+      <Route path='/library' element={<Library />} />
+      <Route path='/myGardens' element={<MyGardens />} />
+      <Route path='/connectedSensors' element={<ConnectedSensors />} />
+
+    </Routes>
+
+    </BrowserRouter>
   );
 }
 
