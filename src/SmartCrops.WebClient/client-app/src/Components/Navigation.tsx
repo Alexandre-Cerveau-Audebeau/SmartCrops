@@ -1,49 +1,153 @@
-import React from "react";
-import {Navbar,Nav, NavItem} from 'react-bootstrap';
+import * as React from 'react';
+import AppBar from '@mui/material/AppBar';
+import Box from '@mui/material/Box';
+import Toolbar from '@mui/material/Toolbar';
+import IconButton from '@mui/material/IconButton';
+import Typography from '@mui/material/Typography';
+import Menu from '@mui/material/Menu';
+import MenuIcon from '@mui/icons-material/Menu';
+import Container from '@mui/material/Container';
+import Avatar from '@mui/material/Avatar';
+import Button from '@mui/material/Button';
+import Tooltip from '@mui/material/Tooltip';
+import MenuItem from '@mui/material/MenuItem';
 import {Link} from 'react-router-dom';
+import MuiLink from '@mui/material/Link';
 
-export default function Navigation(){
-    return(
-        <Navbar bg="dark" expand ="lg">
-            <Navbar.Toggle aria-controls="basic-navbar-nav"/>
-            <Navbar.Collapse id="basic-navbar-nav">
-                <Nav>
-                    <NavItem>
-                        <Nav.Link className="d-inline p-2 bg-dark text-white"  as={Link} to='/'>
-                            Accueil
-                        </Nav.Link>
-                    </NavItem>
+interface IPage {
+    name: string;
+    link: string;
+};
 
-                    <NavItem>
-                        <Nav.Link className="d-inline p-2 bg-dark text-white" as={Link} to='/library'>
-                            Bibliothèque
-                        </Nav.Link>
-                    </NavItem>
+const pages: IPage[] = [
+    { name: 'Bibliothèque', link: '/library'},
+    { name: 'Mon Jardin', link: '/myGarden'},
+    { name: 'Objet Connectés', link: '/connectedSensors'},
+];
+const settings = ['Profile', 'Account', 'Dashboard', 'Logout'];
 
-                    <NavItem>
-                        <Nav.Link className="d-inline p-2 bg-dark text-white" as={Link} to='/myGardens'>
-                            Mon Jardin
-                        </Nav.Link>
-                    </NavItem>
-                    
-                    <NavItem>
-                        <Nav.Link className="d-inline p-2 bg-dark text-white" as={Link} to='/connectedSensors'>
-                            Objects Connectés
-                        </Nav.Link>
-                    </NavItem>
-                    
-                    <Nav className="ml-auto">
-                        <NavItem>
-                            <Nav.Link className="d-inline p-2 bg-dark text-white" as={Link} to='/account'>
-                                Login
-                            </Nav.Link>
-                        </NavItem>                        
-                    </Nav>
-                    
-                </Nav>
-            </Navbar.Collapse>
-        </Navbar>
-    )
+export default function ResponsiveAppBar() {
+  const [anchorElNav, setAnchorElNav] = React.useState<null | HTMLElement>(null);
+  const [anchorElUser, setAnchorElUser] = React.useState<null | HTMLElement>(null);
 
+  const handleOpenNavMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorElNav(event.currentTarget);
+  };
+  const handleOpenUserMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorElUser(event.currentTarget);
+  };
 
-}
+  const handleCloseNavMenu = () => {
+    setAnchorElNav(null);
+  };
+
+  const handleCloseUserMenu = () => {
+    setAnchorElUser(null);
+  };
+
+  return (
+    <AppBar position="static">
+      <Container maxWidth="xl">
+        <Toolbar disableGutters>            
+            <Button
+                onClick={handleCloseNavMenu}
+                sx={{ my: 2, color: 'white', display: 'block' }}
+                >
+                <MuiLink href='/'color="inherit" underline="none">
+                    SmartCrops
+                </MuiLink>
+              </Button>
+            
+
+          <Box sx={{ flexGrow: 1, display: { xs: 'flex', md: 'none' } }}>
+            <IconButton
+              size="large"
+              aria-label="account of current user"
+              aria-controls="menu-appbar"
+              aria-haspopup="true"
+              onClick={handleOpenNavMenu}
+              color="inherit"
+            >
+              <MenuIcon />
+            </IconButton>
+            <Menu
+              id="menu-appbar"
+              anchorEl={anchorElNav}
+              anchorOrigin={{
+                vertical: 'bottom',
+                horizontal: 'left',
+              }}
+              keepMounted
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'left',
+              }}
+              open={Boolean(anchorElNav)}
+              onClose={handleCloseNavMenu}
+              sx={{
+                display: { xs: 'block', md: 'none' },
+              }}
+            >
+              {pages.map((page: IPage) => (
+                <MenuItem key={page.name} onClick={handleCloseNavMenu}>
+                  <Typography textAlign="center">{page.name}</Typography>
+                </MenuItem>
+              ))}
+            </Menu>
+          </Box>
+          <Typography
+            variant="h6"
+            noWrap
+            component="div"
+            sx={{ flexGrow: 1, display: { xs: 'flex', md: 'none' } }}
+          >
+            <Link to='/'>LOGO</Link>
+          </Typography>
+          <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' } }}>
+            {pages.map((page: IPage) => (
+              <Button
+                key={page.name}
+                onClick={handleCloseNavMenu}
+                sx={{ my: 2, color: 'white', display: 'block' }}
+              >
+                <MuiLink href={page.link}color="inherit" underline="none">
+                    {page.name}
+                </MuiLink>
+              </Button>
+            ))}
+          </Box>
+
+          <Box sx={{ flexGrow: 0 }}>
+            <Tooltip title="Open settings">
+              <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
+                <Avatar alt="Remy Sharp" src="/static/images/avatar/2.jpg" />
+              </IconButton>
+            </Tooltip>
+            <Menu
+              sx={{ mt: '45px' }}
+              id="menu-appbar"
+              anchorEl={anchorElUser}
+              anchorOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+              keepMounted
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+              open={Boolean(anchorElUser)}
+              onClose={handleCloseUserMenu}
+            >
+              {settings.map((setting) => (
+                <MenuItem key={setting} onClick={handleCloseUserMenu}>
+                  <Typography textAlign="center">{setting}</Typography>
+                </MenuItem>
+              ))}
+            </Menu>
+          </Box>
+        </Toolbar>
+      </Container>
+    </AppBar>
+  );
+};

@@ -1,7 +1,7 @@
 import React from 'react';
 import './App.css';
 
-import Navigation from './Components/Navigation';
+import ResponsiveAppBar from './Components/Navigation';
 import Home from './Pages/Home';
 import Account from './Pages/Account';
 import Library from './Pages/Library';
@@ -14,14 +14,13 @@ function App() {
   return (
     <BrowserRouter>    
 
-    <Navigation/>
+    <ResponsiveAppBar/>
     <Routes>
       <Route path='/' element={<Home />} />      
       <Route path='/account' element={<Account />} />
       <Route path='/library' element={<Library />} />
       <Route path='/myGardens' element={<MyGardens />} />
       <Route path='/connectedSensors' element={<ConnectedSensors />} />
-
     </Routes>
 
     </BrowserRouter>
