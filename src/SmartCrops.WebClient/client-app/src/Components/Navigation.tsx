@@ -17,10 +17,11 @@ import MuiLink from '@mui/material/Link';
 interface IPage {
     name: string;
     link: string;
+    isMegaMenu?: boolean;
 };
 
 const pages: IPage[] = [
-    { name: 'Bibliothèque', link: '/library'},
+    { name: 'Bibliothèque', link: '/library', isMegaMenu: true},
     { name: 'Mon Jardin', link: '/myGarden'},
     { name: 'Objet Connectés', link: '/connectedSensors'},
 ];
@@ -29,6 +30,7 @@ const settings = ['Profile', 'Account', 'Dashboard', 'Logout'];
 export default function ResponsiveAppBar() {
   const [anchorElNav, setAnchorElNav] = React.useState<null | HTMLElement>(null);
   const [anchorElUser, setAnchorElUser] = React.useState<null | HTMLElement>(null);
+  const [isMegaMenuOpen, setIsMegaMenuOpen] = React.useState<boolean>(false); 
 
   const handleOpenNavMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorElNav(event.currentTarget);
@@ -46,6 +48,7 @@ export default function ResponsiveAppBar() {
   };
 
   return (
+    <React.Fragment>
     <AppBar position="static">
       <Container maxWidth="xl">
         <Toolbar disableGutters>            
@@ -100,8 +103,10 @@ export default function ResponsiveAppBar() {
             noWrap
             component="div"
             sx={{ flexGrow: 1, display: { xs: 'flex', md: 'none' } }}
-          >
-            <Link to='/'>LOGO</Link>
+                      >
+            <MuiLink href='/'color="inherit" underline="none">
+                SmartCrops
+            </MuiLink>
           </Typography>
           <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' } }}>
             {pages.map((page: IPage) => (
@@ -109,6 +114,8 @@ export default function ResponsiveAppBar() {
                 key={page.name}
                 onClick={handleCloseNavMenu}
                 sx={{ my: 2, color: 'white', display: 'block' }}
+                onMouseEnter={() => page.isMegaMenu ? setIsMegaMenuOpen(true) : null}
+                onMouseLeave={() => page.isMegaMenu ? setIsMegaMenuOpen(false) : null}
               >
                 <MuiLink href={page.link}color="inherit" underline="none">
                     {page.name}
@@ -149,5 +156,7 @@ export default function ResponsiveAppBar() {
         </Toolbar>
       </Container>
     </AppBar>
+    {isMegaMenuOpen ? 'blablabla' : 'alex'}
+    </React.Fragment>
   );
 };
