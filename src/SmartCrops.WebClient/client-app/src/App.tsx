@@ -5,6 +5,8 @@ import ResponsiveAppBar from './Components/Navigation';
 import Home from './Pages/Home';
 import Account from './Pages/Account';
 import Library from './Pages/Library';
+import PlantsLibrary from './Pages/PlantsLibrary';
+import GroundsLibrary from './Pages/GroundsLibrary';
 import MyGardens from './Pages/MyGardens';
 import ConnectedSensors from './Pages/ConnectedSensors';
 
@@ -21,6 +23,8 @@ function App() {
       <Route path='/library' element={<Library />} />
       <Route path='/myGardens' element={<MyGardens />} />
       <Route path='/connectedSensors' element={<ConnectedSensors />} />
+      <Route path='/plantsLibrary' element={<PlantsLibrary />} />
+      <Route path='/groundsLibrary' element={<GroundsLibrary />} />
     </Routes>
 
     </BrowserRouter>

@@ -2,10 +2,9 @@ import React from 'react';
 import DisplayPlant from '../Components/PlantButton';
 
 
-export default function Library(){
+export default function PlantsLibrary(){
     return (
     <p>
-        This is My Library
         <div className="App">
             <DisplayPlant />
         </div>

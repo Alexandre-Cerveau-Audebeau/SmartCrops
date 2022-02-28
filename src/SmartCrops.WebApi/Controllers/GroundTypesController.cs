@@ -31,5 +31,22 @@ namespace SmartCrops.WebApi.Controllers
             await _context.SaveChangesAsync();
             return Created(nameof(Index), groundType);
         }
+
+        [HttpPut]
+        public async Task<IActionResult> Update(GroundType groundType)
+        {
+            _context.GroundTypes.Update(groundType);
+            await _context.SaveChangesAsync();
+            return Ok(groundType);
+        }
+
+        [HttpDelete]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var groundType = new GroundType { Id = id };
+            _context.GroundTypes.Remove(groundType);
+            await _context.SaveChangesAsync();
+            return Ok(groundType);
+        }
     }
 }

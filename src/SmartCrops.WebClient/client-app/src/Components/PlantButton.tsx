@@ -2,7 +2,6 @@ import axios from "axios";
 import React from "react";
 import Button from 'react-bootstrap/Button';
 import PlantType from "../Models/PlantType";
-import GroundType from "../Models/GroundType";
 
 
 
@@ -14,14 +13,15 @@ export default function DisplayPlant()
         setPlants(response.data);
     }
 
-    return(<React.Fragment>
-        <Button onClick={displayPlant}>Afficher Plantes</Button>
-        {plants.map(plant => {
-            return (
-                <ul>
-                    {plant.plantName}
-                </ul>
-                );
-        })}
-    </React.Fragment>);
+    return(
+        <React.Fragment>
+            <Button onClick={displayPlant}>Afficher Plantes</Button>
+            {plants.map(plant => {
+                return (
+                    <ul>
+                        {plant.plantName}
+                    </ul>
+                    );
+            })}
+        </React.Fragment>);
 }
