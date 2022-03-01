@@ -1,5 +1,5 @@
 import React from 'react';
-import DisplayGrounds from '../Components/GroundButton';
+import DisplayGrounds from '../Components/GroundList';
 
 
 export default function GroundsLibrary(){

@@ -1,13 +1,26 @@
 import React from 'react';
-import DisplayPlant from '../Components/PlantButton';
+import { Button } from '@mui/material';
+import MuiLink from '@mui/material/Link';
 
 
 export default function Library(){
     return (
     <p>
-        This is My Library
         <div className="App">
-            <DisplayPlant />
+            <Button >
+                <MuiLink href='/plantsLibrary' color="inherit" underline="none">
+                    Plantes
+                </MuiLink>
+                
+            </Button>
+        </div>
+
+        <div className="App">
+            <Button >
+                <MuiLink href='/groundsLibrary' color="inherit" underline="none">
+                    Sols
+                </MuiLink>
+            </Button>
         </div>
 
         

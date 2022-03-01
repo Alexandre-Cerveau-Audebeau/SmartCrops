@@ -1,12 +1,12 @@
 import React from 'react';
-import DisplayPlant from '../Components/PlantButton';
+import DisplayPlants from '../Components/PlantList';
 
 
 export default function PlantsLibrary(){
     return (
     <p>
         <div className="App">
-            <DisplayPlant />
+            <DisplayPlants />
         </div>
 
         

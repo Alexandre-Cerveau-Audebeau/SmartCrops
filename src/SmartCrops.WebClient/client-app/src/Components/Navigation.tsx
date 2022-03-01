@@ -11,9 +11,7 @@ import Avatar from '@mui/material/Avatar';
 import Button from '@mui/material/Button';
 import Tooltip from '@mui/material/Tooltip';
 import MenuItem from '@mui/material/MenuItem';
-import {Link} from 'react-router-dom';
 import MuiLink from '@mui/material/Link';
-import { Grid } from '@mui/material';
 import Dropdown from './DropDown';
 
 interface IPage {
@@ -24,7 +22,7 @@ interface IPage {
 
 const pages: IPage[] = [
     { name: 'Bibliothèque', link: '/library', isDropDown: true},
-    { name: 'Mon Jardin', link: '/myGarden'},
+    { name: 'Mon Jardin', link: '/myGardens'},
     { name: 'Objet Connectés', link: '/connectedSensors'},
 ];
 const settings: IPage[] = [
@@ -121,6 +119,7 @@ return (
             </MuiLink>
 
         </Typography>
+
         <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' } }}>
             {pages.map((page: IPage) => {
                 if(page.isDropDown) {
@@ -141,7 +140,6 @@ return (
                     )
                 }
             })}
-            
         </Box>
 
         <Box sx={{ flexGrow: 0 }}>

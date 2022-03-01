@@ -34,9 +34,6 @@ export default function Dropdown(props: IProps) {
             }
   }
 
-  //function handleClose() {
-  //  setAnchorEl(null);
-  //}
 
   const handleClose = () => {
     setAnchorEl(null);
