@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import Modal from '@mui/material/Modal';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
 
 const style = {
   position: 'absolute' as 'absolute',
@@ -16,14 +17,16 @@ const style = {
   p: 4,
 };
 
-export default function KeepMountedModal() {
+export default function EditPlantModal() {
   const [open, setOpen] = React.useState(false);
   const handleOpen = () => setOpen(true);
   const handleClose = () => setOpen(false);
 
+  
+
   return (
     <div>
-      <Button onClick={handleOpen}>Open modal</Button>
+      <Button onClick={handleOpen}>Edit</Button>
       <Modal
         keepMounted
         open={open}
@@ -37,7 +40,7 @@ export default function KeepMountedModal() {
                 </Typography>
 
                 <Typography id="keep-mounted-modal-description" sx={{ mt: 2 }}>
-                    Duis mollis, est non commodo luctus, nisi erat porttitor ligula.
+                    Edit une plant
                 </Typography>
          </Box>
       </Modal>

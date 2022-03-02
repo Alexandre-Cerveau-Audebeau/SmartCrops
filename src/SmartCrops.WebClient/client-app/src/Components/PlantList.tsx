@@ -1,6 +1,8 @@
 import axios from "axios";
 import * as React from 'react';
 import PlantType from "../Models/PlantType";
+import EditPlantModal from "./PlantModalEdit";
+import AddPlantModal from "./PlantModalAdd";
 
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
@@ -11,6 +13,7 @@ import TableHead from '@mui/material/TableHead';
 import TablePagination from '@mui/material/TablePagination';
 import TableRow from '@mui/material/TableRow';
 import Button from '@mui/material/Button'
+import { Box } from "@mui/system";
 
 
   export default function DisplayPlants() {
@@ -39,61 +42,71 @@ import Button from '@mui/material/Button'
     };
   
     return (
-      <Paper sx={{ width: '100%', overflow: 'hidden' }}>
-        <TableContainer sx={{ maxHeight: 440 }}>
-          <Table stickyHeader aria-label="sticky table">
-            <TableHead>
-              <TableRow>
-                  <TableCell align='center'>
-                      Id Plante
-                  </TableCell>
-                  <TableCell align='center'>
-                      Nom Plante
-                  </TableCell>
-                  <TableCell align='center'>
-                      Edit / Delete
-                  </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {plants
-                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                .map(plant => {
-                  return (
-                    <TableRow hover role="checkbox" tabIndex={-1} key={plant.id}>
+      <div>
+        <Box sx={{my:2}}>
+          <AddPlantModal/>
+        </Box>       
+        <Paper sx={{ width: '100%', overflow: 'hidden' }}>     
+          <TableContainer sx={{ maxHeight: 440 }}>
+            <Table stickyHeader aria-label="sticky table">
+              <TableHead>
+                <TableRow>
+                    <TableCell align='center'>
+                        Id Plante
+                    </TableCell>
+                    <TableCell align='center'>
+                        Nom Plante
+                    </TableCell>
+                    <TableCell align='center'>
+                        Edit / Delete
+                    </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {plants
+                  .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                  .map(plant => {
+                    return (
+                      <TableRow hover role="checkbox" tabIndex={-1} key={plant.id}>
 
-                          <TableCell align='center'>
-                              {plant.id}
-                          </TableCell>
+                            <TableCell align='center'>
+                                {plant.id}
+                            </TableCell>
 
-                          <TableCell align='center'>
-                              {plant.plantName}
-                          </TableCell>
+                            <TableCell align='center'>
+                                {plant.plantName}
+                            </TableCell>
 
-                          <TableCell align='center'>
-                            <Button >
-                                Edit
-                            </Button>
-                            <Button >
-                                Delete
-                            </Button>
-                          </TableCell>
+                            <TableCell align='center'>
 
-                    </TableRow>
-                  );
-                })}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        <TablePagination
-          rowsPerPageOptions={[10, 25, 100]}
-          component="div"
-          count={plants.length}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={handleChangePage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-        />
-      </Paper>
+                              <Button >
+                                  <EditPlantModal/>
+                              </Button>
+
+                              <Button >
+                                  Delete
+                              </Button>
+
+                            </TableCell>
+
+                      </TableRow>
+                    );
+                  })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <TablePagination
+            rowsPerPageOptions={[10, 25, 100]}
+            component="div"
+            count={plants.length}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+          />
+
+        </Paper>
+      </div>
+      
     );
   }
