@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import axios from 'axios';
 import PlantType from '../Models/PlantType';
+import { Refresh } from '@mui/icons-material';
 
 const style = {
   position: 'absolute' as 'absolute',
@@ -27,14 +28,12 @@ export default function AddPlantModal() {
   
 
   async function createPlant() {
-    let response = await axios.post<PlantType>('https://localhost:7137/api/plantTypes', {
-      plantName: name 
+    await axios.post<PlantType>('https://localhost:7137/api/plantTypes', {
+      plantName: name
     });
-}
-
-
-  
-
+    handleClose();
+  }
+ 
   return (
     <div>
       <Button sx={{ml:0}} variant="contained" onClick={handleOpen}>
@@ -48,9 +47,6 @@ export default function AddPlantModal() {
         aria-describedby="keep-mounted-modal-description"
       >
           <Box sx={style}>
-                <Typography id="keep-mounted-modal-title" variant="h6" component="h2">
-                    Text in a modal
-                </Typography>
 
                 <Typography id="keep-mounted-modal-description" sx={{ mt: 2 }}>
                     Ajouter une plante
@@ -62,7 +58,15 @@ export default function AddPlantModal() {
                   label="Plant Name Required"
                   value={name}
                   onChange={(event)=>setName(event.target.value)}
+
+                  onKeyPress={(ev) => {
+                    if (ev.key === "Enter") {
+                      ev.preventDefault();
+                      createPlant();
+                    }
+                  }}
                 />
+                
                 <Button
                 onClick={createPlant}>
                   Ajouter

@@ -14,22 +14,15 @@ import TablePagination from '@mui/material/TablePagination';
 import TableRow from '@mui/material/TableRow';
 import Button from '@mui/material/Button'
 import { Box } from "@mui/system";
+import useSWR from "swr";
 
 
   export default function DisplayPlants() {
 
     const [page, setPage] = React.useState(0);
     const [rowsPerPage, setRowsPerPage] = React.useState(10);
-
-    const [plants, setPlants] = React.useState<PlantType[]>([]);
-    async function displayPlant() {
-        let response = await axios.get<PlantType[]>('https://localhost:7137/api/plantTypes');
-        setPlants(response.data);
-    }
-
-    React.useEffect(() => {
-        displayPlant()
-      },[]);
+    
+    const {data: plantTypes, error } = useSWR<PlantType[]>('/plantTypes', {refreshInterval:10000});
 
 
     const handleChangePage = (event: unknown, newPage: number) => {
@@ -40,14 +33,18 @@ import { Box } from "@mui/system";
       setRowsPerPage(+event.target.value);
       setPage(0);
     };
+
+    if (error) return <p>Une Erreur est survenue</p>;
+
+    if (!plantTypes) return <p>Chargement en cours</p>;
   
     return (
       <div>
         <Box sx={{my:2}}>
           <AddPlantModal/>
-        </Box>       
+        </Box>
         <Paper sx={{ width: '100%', overflow: 'hidden' }}>     
-          <TableContainer sx={{ maxHeight: 440 }}>
+          <TableContainer sx={{ maxHeight: '70%' }}>
             <Table stickyHeader aria-label="sticky table">
               <TableHead>
                 <TableRow>
@@ -63,8 +60,8 @@ import { Box } from "@mui/system";
                 </TableRow>
               </TableHead>
               <TableBody>
-                {plants
-                  .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                {plantTypes?.sort((planta, plantb)  => planta.id - plantb.id)
+                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                   .map(plant => {
                     return (
                       <TableRow hover role="checkbox" tabIndex={-1} key={plant.id}>
@@ -80,7 +77,7 @@ import { Box } from "@mui/system";
                             <TableCell align='center'>
 
                               <Button >
-                                  <EditPlantModal/>
+                                  <EditPlantModal plant={plant} />
                               </Button>
 
                               <Button >
@@ -98,7 +95,7 @@ import { Box } from "@mui/system";
           <TablePagination
             rowsPerPageOptions={[10, 25, 100]}
             component="div"
-            count={plants.length}
+            count={plantTypes? plantTypes.length: 0}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
