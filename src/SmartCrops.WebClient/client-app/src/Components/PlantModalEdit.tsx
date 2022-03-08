@@ -43,11 +43,6 @@ export default function EditPlantModal(props: IProps) {
     await axios.put<PlantType>('https://localhost:7137/api/plantTypes', plant);
     mutate('/plantTypes');
     handleClose();
-    console.log(
-      "name : ",plant?.plantName, " Plant ID : ", plant?.id
-    );
-    
-
   }
 
   

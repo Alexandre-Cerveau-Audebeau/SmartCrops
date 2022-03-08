@@ -40,16 +40,10 @@ export default function DeletePlantModal(props: IProps) {
   
   
   async function deletePlant() {
-    await axios.delete<PlantType>('https://localhost:7137/api/plantTypes/');
+    await axios.delete<PlantType>('https://localhost:7137/api/plantTypes?id='+plant?.id);
     mutate('/plantTypes');
-    handleClose();
-    console.log(
-      "name : ",plant?.plantName, " Plant ID : ", plant?.id
-    );
-    
-
+    handleClose(); 
   }
-
   
   return (
     <div>
@@ -64,7 +58,13 @@ export default function DeletePlantModal(props: IProps) {
         aria-labelledby="keep-mounted-modal-title"
         aria-describedby="keep-mounted-modal-description"
       >
-          <Box sx={style}>
+          <Box sx={style}
+          onKeyPress={(ev) => {
+            if (ev.key === "Enter") {
+              ev.preventDefault();
+              deletePlant();
+            }
+          }}>
 
                 <Typography id="keep-mounted-modal-description" sx={{ mt: 2, mb: 2}} align="left">
                     Voulez-vous supprimer La plante ?

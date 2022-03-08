@@ -1,4 +1,3 @@
-import axios from "axios";
 import * as React from 'react';
 import PlantType from "../Models/PlantType";
 import EditPlantModal from "./PlantModalEdit";
@@ -13,7 +12,6 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TablePagination from '@mui/material/TablePagination';
 import TableRow from '@mui/material/TableRow';
-import Button from '@mui/material/Button'
 import { Box } from "@mui/system";
 import useSWR from "swr";
 
