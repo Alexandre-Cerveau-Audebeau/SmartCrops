@@ -3,6 +3,7 @@ import * as React from 'react';
 import PlantType from "../Models/PlantType";
 import EditPlantModal from "./PlantModalEdit";
 import AddPlantModal from "./PlantModalAdd";
+import DeletePlantModal from "./PlantModalDelete";
 
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
@@ -75,15 +76,14 @@ import useSWR from "swr";
                             </TableCell>
 
                             <TableCell align='center'>
-
-                              <Button >
-                                  <EditPlantModal plant={plant} />
-                              </Button>
-
-                              <Button >
-                                  Delete
-                              </Button>
-
+                              <p>
+                                <EditPlantModal plant={plant}/>
+                              </p>
+                              <p>
+                                <DeletePlantModal plant={plant}/>
+                              </p>
+                              
+                              
                             </TableCell>
 
                       </TableRow>

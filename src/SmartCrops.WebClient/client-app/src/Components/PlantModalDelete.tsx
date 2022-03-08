@@ -26,7 +26,7 @@ interface IProps {
 }
 
 
-export default function EditPlantModal(props: IProps) {
+export default function DeletePlantModal(props: IProps) {
   const [open, setOpen] = React.useState(false);
   const [plant, setPlant] = React.useState<PlantType | undefined>();
   const {mutate} = useSWRConfig();
@@ -39,8 +39,8 @@ export default function EditPlantModal(props: IProps) {
 
   
   
-  async function editPlant() {
-    await axios.put<PlantType>('https://localhost:7137/api/plantTypes', plant);
+  async function deletePlant() {
+    await axios.delete<PlantType>('https://localhost:7137/api/plantTypes/');
     mutate('/plantTypes');
     handleClose();
     console.log(
@@ -53,10 +53,8 @@ export default function EditPlantModal(props: IProps) {
   
   return (
     <div>
-      <Button variant="outlined"
-      onClick={handleOpen}
-      >
-        Edit
+      <Button variant="outlined" color="error" onClick={handleOpen}>
+        Delete
       </Button>
       
       <Modal
@@ -67,33 +65,34 @@ export default function EditPlantModal(props: IProps) {
         aria-describedby="keep-mounted-modal-description"
       >
           <Box sx={style}>
-                <Typography id="keep-mounted-modal-description" sx={{ mt: 2, mb: 2 }}>
-                    Editer la plante
+
+                <Typography id="keep-mounted-modal-description" sx={{ mt: 2, mb: 2}} align="left">
+                    Voulez-vous supprimer La plante ?
                 </Typography>
-                <TextField
-                  disabled
-                  id="outlined-disabled"
-                  label="Disabled"
-                  sx={{ mb: 2, mr: 2 }}
-                  value={plant?.id}
-                />
-                <TextField
-                  required
-                  id="outlined-required"
-                  label="Plant Name Required"
-                  value={plant?.plantName}
-                  onChange={(event)=>{setPlant(Object.assign( {}, {...plant, plantName: event.target.value}) as PlantType);}}
-                  onKeyPress={(ev) => {
-                    if (ev.key === "Enter") {
-                      ev.preventDefault();
-                      editPlant();
-                    }
-                  }}
-                />
-                <Button variant="contained"
-                onClick={editPlant}>
-                  Modifier
-                </Button>
+                <p>
+                  <TextField 
+                    disabled
+                    id="filled-disabled"
+                    label="Disabled"
+                    variant="filled"
+                    value={plant?.id}
+                    sx={{ mr: 2 }}
+                  />
+                  <TextField
+                    disabled
+                    id="filled-disabled"
+                    label="Disabled"
+                    variant="filled"
+                    value={plant?.plantName}
+                  />
+                </p>                
+                  <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={deletePlant}>
+                    Supprimer
+                  </Button>
+                  
          </Box>
       </Modal>
     </div>

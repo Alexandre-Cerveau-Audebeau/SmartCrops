@@ -6,7 +6,6 @@ import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import axios from 'axios';
 import PlantType from '../Models/PlantType';
-import { Refresh } from '@mui/icons-material';
 
 const style = {
   position: 'absolute' as 'absolute',
@@ -67,7 +66,7 @@ export default function AddPlantModal() {
                   }}
                 />
                 
-                <Button
+                <Button variant="contained" color="success"
                 onClick={createPlant}>
                   Ajouter
                 </Button>
