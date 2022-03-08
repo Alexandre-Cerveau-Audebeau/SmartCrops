@@ -13,6 +13,6 @@ Dans la console nugget :
 * update-database 
 * add-migration
 
-Dans Clien-App
-yarn install
+Dans Clien-App :
+* yarn install
 
