@@ -9,9 +9,9 @@ npm install-g yarn
 
 Cloner le projet
 
-Dans la console nugget
-update-database 
-add-migration
+Dans la console nugget :
+* update-database 
+* add-migration
 
 Dans Clien-App
 yarn install
