@@ -48,45 +48,44 @@ import useSWR from "swr";
               <TableHead>
                 <TableRow>
                     <TableCell align='center'>
-                        Id Plante
+                      Id Plante
                     </TableCell>
                     <TableCell align='center'>
-                        Nom Plante
+                      Nom Plante
                     </TableCell>
                     <TableCell align='center'>
-                        Edit / Delete
+                      Edit / Delete
                     </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
+                
                 {plantTypes?.sort((planta, plantb)  => planta.id - plantb.id)
                 .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                  .map(plant => {
-                    return (
-                      <TableRow hover role="checkbox" tabIndex={-1} key={plant.id}>
+                .map(plant => {
+                  return (
+                    <TableRow hover role="checkbox" tabIndex={-1} key={plant.id}>
 
-                            <TableCell align='center'>
-                                {plant.id}
-                            </TableCell>
+                          <TableCell align='center'>
+                              {plant.id}
+                          </TableCell>
 
-                            <TableCell align='center'>
-                                {plant.plantName}
-                            </TableCell>
+                          <TableCell align='center'>
+                              {plant.plantName}
+                          </TableCell>
 
-                            <TableCell align='center'>
-                              <p>
-                                <EditPlantModal plant={plant}/>
-                              </p>
-                              <p>
-                                <DeletePlantModal plant={plant}/>
-                              </p>
-                              
-                              
-                            </TableCell>
+                          <TableCell align='center'>
+                            <p>
+                              <EditPlantModal plant={plant}/>
+                            </p>
+                            <p>
+                              <DeletePlantModal plant={plant}/>
+                            </p>
+                          </TableCell>
 
-                      </TableRow>
-                    );
-                  })}
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </TableContainer>
@@ -99,7 +98,6 @@ import useSWR from "swr";
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
           />
-
         </Paper>
       </div>
       

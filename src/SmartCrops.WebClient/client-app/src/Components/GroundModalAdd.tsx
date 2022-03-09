@@ -5,7 +5,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import axios from 'axios';
-import PlantType from '../Models/PlantType';
+import GroundType from '../Models/GroundType';
 
 const style = {
   position: 'absolute' as 'absolute',
@@ -19,16 +19,16 @@ const style = {
   p: 4,
 };
 
-export default function AddPlantModal() {
+export default function AddGroundModal() {
   const [open, setOpen] = React.useState(false);
   const [name, setName] = React.useState<string>('');
   const handleOpen = () => setOpen(true);
   const handleClose = () => setOpen(false);
   
 
-  async function createPlant() {
-    await axios.post<PlantType>('https://localhost:7137/api/plantTypes', {
-      plantName: name
+  async function createGround() {
+    await axios.post<GroundType>('https://localhost:7137/api/groundTypes', {
+      groundName: name
     });
     handleClose();
   }
@@ -36,7 +36,7 @@ export default function AddPlantModal() {
   return (
     <div>
       <Button sx={{ml:0}} variant="contained" onClick={handleOpen}>
-        Ajouter Plante
+        Ajouter Sol
       </Button>
       <Modal
         keepMounted
@@ -47,27 +47,27 @@ export default function AddPlantModal() {
       >
           <Box sx={style}>
 
-                <Typography id="keep-mounted-modal-description" sx={{ mt: 0, mb: 2 }}>
-                    Ajouter une plante
+                <Typography id="keep-mounted-modal-description" sx={{ mt: 0, mb: 2}}>
+                    Ajouter un Sol
                 </Typography>
                 
                 <TextField
                   required
                   id="outlined-required"
-                  label="Plant Name Required"
+                  label="Ground Name Required"
                   value={name}
                   onChange={(event)=>setName(event.target.value)}
 
                   onKeyPress={(ev) => {
                     if (ev.key === "Enter") {
                       ev.preventDefault();
-                      createPlant();
+                      createGround();
                     }
                   }}
                 />
                 
                 <Button variant="contained" color="success"
-                onClick={createPlant}>
+                onClick={createGround}>
                   Ajouter
                 </Button>
          </Box>

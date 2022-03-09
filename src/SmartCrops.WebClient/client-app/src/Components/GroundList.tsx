@@ -1,6 +1,8 @@
-import axios from "axios";
 import * as React from 'react';
 import GroundType from "../Models/GroundType";
+import EditGroundModal from "./GroundModalEdit";
+import AddGroundModal from "./GroundModalAdd";
+import DeleteGroundModal from "./GroundModalDelete";
 
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
@@ -10,7 +12,8 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TablePagination from '@mui/material/TablePagination';
 import TableRow from '@mui/material/TableRow';
-import { Button } from "@mui/material";
+import useSWR from "swr";
+import { Box } from '@mui/material';
 
 
   export default function DisplayGrounds() {
@@ -18,17 +21,9 @@ import { Button } from "@mui/material";
     const [page, setPage] = React.useState(0);
     const [rowsPerPage, setRowsPerPage] = React.useState(10);
 
-    const [grounds, setGrounds] = React.useState<GroundType[]>([]);
-    async function displayGround() {
-        let response = await axios.get<GroundType[]>('https://localhost:7137/api/groundTypes');
-        setGrounds(response.data);
-    }
+    const {data: groundTypes, error } = useSWR<GroundType[]>('/groundTypes', {refreshInterval:10000});
 
-    React.useEffect(() => {
-        displayGround()
-      },[]);
-
-
+  
     const handleChangePage = (event: unknown, newPage: number) => {
       setPage(newPage);
     };
@@ -37,26 +32,35 @@ import { Button } from "@mui/material";
       setRowsPerPage(+event.target.value);
       setPage(0);
     };
+
+    if (error) return <p>Une Erreur est survenue</p>;
+
+    if (!groundTypes) return <p>Chargement en cours</p>;
   
     return (
-      <Paper sx={{ width: '100%', overflow: 'hidden' }}>
-        <TableContainer sx={{ maxHeight: 440 }}>
-          <Table stickyHeader aria-label="sticky table">
-            <TableHead>
-              <TableRow>
-                  <TableCell align='center'>
-                    Id Sol
-                  </TableCell>
-                  <TableCell align='center'>
-                    Nom Sol
-                  </TableCell>
-                  <TableCell align='center'>
+      <div>
+        <Box sx={{my:2,mb:2}}>
+          <AddGroundModal/>
+        </Box>
+        <Paper sx={{ width: '100%', overflow: 'hidden' }}>
+          <TableContainer sx={{ maxHeight: '70%' }}>
+            <Table stickyHeader aria-label="sticky table">
+              <TableHead>
+                <TableRow>
+                    <TableCell align='center'>
+                      Id Sol
+                    </TableCell>
+                    <TableCell align='center'>
+                      Nom Sol
+                    </TableCell>
+                    <TableCell align='center'>
                       Edit / Delete
-                  </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {grounds
+                    </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+
+                {groundTypes?.sort((grounda, groundb)  => grounda.id - groundb.id)
                 .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                 .map(ground => {
                   return (
@@ -71,30 +75,31 @@ import { Button } from "@mui/material";
                           </TableCell>
 
                           <TableCell align='center'>
-                            <Button >
-                                Edit
-                            </Button>
-                            <Button >
-                                Delete
-                            </Button>
+                            <p>
+                              <EditGroundModal ground={ground}/>
+                            </p>
+                            <p>
+                              <DeleteGroundModal ground={ground}/>
+                            </p>
                           </TableCell>
-                          
+
                     </TableRow>
                   );
                 })}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        <TablePagination
-          rowsPerPageOptions={[10, 25, 100]}
-          component="div"
-          count={grounds.length}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={handleChangePage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-        />
-      </Paper>
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <TablePagination
+            rowsPerPageOptions={[10, 25, 100]}
+            component="div"
+            count={groundTypes? groundTypes.length: 0}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+          />
+        </Paper>
+      </div>
     );
   }
 
