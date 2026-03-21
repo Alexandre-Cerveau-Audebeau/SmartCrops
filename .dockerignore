@@ -1,0 +1,28 @@
+# Git
+.git
+.gitignore
+
+# .NET build artifacts
+**/bin/
+**/obj/
+
+# Frontend
+**/node_modules/
+**/dist/
+**/.vite/
+
+# Environment files
+*.env
+*.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+**/Dockerfile
+docker-compose*.yml
