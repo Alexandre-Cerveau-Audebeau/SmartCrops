@@ -1,60 +1,44 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.0.32126.317
+VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{67BD77AB-E053-477A-B56A-E40529D74710}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A77ABE0C-3DE1-42B6-9738-7EFE9704821E}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SmartCrops.WebApi", "src\SmartCrops.WebApi\SmartCrops.WebApi.csproj", "{BCEA5EC0-F580-445B-A94A-79FC8056C1E9}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "backend", "backend", "{5CB30CEE-F2C2-4814-A5F7-0416A3DEEEB9}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SmartCrops.Services", "src\SmartCrops.Services\SmartCrops.Services.csproj", "{7536CEA1-0D8B-41ED-9632-26BD9901E08F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartCrops.Api", "src\backend\SmartCrops.Api\SmartCrops.Api.csproj", "{EB2501A6-11E6-48FC-90E6-E7118959CCDE}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SmartCrops.Entities", "src\SmartCrops.Entities\SmartCrops.Entities.csproj", "{1484FDAF-82D5-4CFF-B34A-E0ED6104CB57}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartCrops.Core", "src\backend\SmartCrops.Core\SmartCrops.Core.csproj", "{9F235B66-19AF-4A17-A57A-3F7674289207}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SmartCrops.ViewModels", "src\SmartCrops.ViewModels\SmartCrops.ViewModels.csproj", "{6D60DB37-A346-42D9-96A1-C3F163E14FE2}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{243D806B-F107-4E3B-BA84-213B2A7821EB}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartCrops.WebClient", "src\SmartCrops.WebClient\SmartCrops.WebClient.csproj", "{6FA5C97F-15DA-478A-A211-7EC3D7CB158F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartCrops.Infrastructure", "src\backend\SmartCrops.Infrastructure\SmartCrops.Infrastructure.csproj", "{C1D46B6E-781F-47F6-81F1-CA5E74CDB432}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
-	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{BCEA5EC0-F580-445B-A94A-79FC8056C1E9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{BCEA5EC0-F580-445B-A94A-79FC8056C1E9}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{BCEA5EC0-F580-445B-A94A-79FC8056C1E9}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{BCEA5EC0-F580-445B-A94A-79FC8056C1E9}.Release|Any CPU.Build.0 = Release|Any CPU
-		{7536CEA1-0D8B-41ED-9632-26BD9901E08F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{7536CEA1-0D8B-41ED-9632-26BD9901E08F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{7536CEA1-0D8B-41ED-9632-26BD9901E08F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{7536CEA1-0D8B-41ED-9632-26BD9901E08F}.Release|Any CPU.Build.0 = Release|Any CPU
-		{1484FDAF-82D5-4CFF-B34A-E0ED6104CB57}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{1484FDAF-82D5-4CFF-B34A-E0ED6104CB57}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{1484FDAF-82D5-4CFF-B34A-E0ED6104CB57}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{1484FDAF-82D5-4CFF-B34A-E0ED6104CB57}.Release|Any CPU.Build.0 = Release|Any CPU
-		{6D60DB37-A346-42D9-96A1-C3F163E14FE2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{6D60DB37-A346-42D9-96A1-C3F163E14FE2}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{6D60DB37-A346-42D9-96A1-C3F163E14FE2}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{6D60DB37-A346-42D9-96A1-C3F163E14FE2}.Release|Any CPU.Build.0 = Release|Any CPU
-		{6FA5C97F-15DA-478A-A211-7EC3D7CB158F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{6FA5C97F-15DA-478A-A211-7EC3D7CB158F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{6FA5C97F-15DA-478A-A211-7EC3D7CB158F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{6FA5C97F-15DA-478A-A211-7EC3D7CB158F}.Release|Any CPU.Build.0 = Release|Any CPU
-	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
-	GlobalSection(NestedProjects) = preSolution
-		{BCEA5EC0-F580-445B-A94A-79FC8056C1E9} = {67BD77AB-E053-477A-B56A-E40529D74710}
-		{7536CEA1-0D8B-41ED-9632-26BD9901E08F} = {67BD77AB-E053-477A-B56A-E40529D74710}
-		{1484FDAF-82D5-4CFF-B34A-E0ED6104CB57} = {67BD77AB-E053-477A-B56A-E40529D74710}
-		{6D60DB37-A346-42D9-96A1-C3F163E14FE2} = {67BD77AB-E053-477A-B56A-E40529D74710}
-		{6FA5C97F-15DA-478A-A211-7EC3D7CB158F} = {67BD77AB-E053-477A-B56A-E40529D74710}
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EB2501A6-11E6-48FC-90E6-E7118959CCDE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EB2501A6-11E6-48FC-90E6-E7118959CCDE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EB2501A6-11E6-48FC-90E6-E7118959CCDE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EB2501A6-11E6-48FC-90E6-E7118959CCDE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9F235B66-19AF-4A17-A57A-3F7674289207}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9F235B66-19AF-4A17-A57A-3F7674289207}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9F235B66-19AF-4A17-A57A-3F7674289207}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9F235B66-19AF-4A17-A57A-3F7674289207}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1D46B6E-781F-47F6-81F1-CA5E74CDB432}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C1D46B6E-781F-47F6-81F1-CA5E74CDB432}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C1D46B6E-781F-47F6-81F1-CA5E74CDB432}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1D46B6E-781F-47F6-81F1-CA5E74CDB432}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
-	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {762523BC-0CDC-40BF-8C21-7C40CEA98A56}
+	GlobalSection(NestedProjects) = preSolution
+		{5CB30CEE-F2C2-4814-A5F7-0416A3DEEEB9} = {A77ABE0C-3DE1-42B6-9738-7EFE9704821E}
+		{EB2501A6-11E6-48FC-90E6-E7118959CCDE} = {5CB30CEE-F2C2-4814-A5F7-0416A3DEEEB9}
+		{9F235B66-19AF-4A17-A57A-3F7674289207} = {5CB30CEE-F2C2-4814-A5F7-0416A3DEEEB9}
+		{C1D46B6E-781F-47F6-81F1-CA5E74CDB432} = {5CB30CEE-F2C2-4814-A5F7-0416A3DEEEB9}
 	EndGlobalSection
 EndGlobal

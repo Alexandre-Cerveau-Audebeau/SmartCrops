@@ -1,0 +1,6 @@
+@SmartCrops.Api_HostAddress = http://localhost:5216
+
+GET {{SmartCrops.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
