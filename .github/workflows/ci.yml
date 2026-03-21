@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  backend:
+    name: Backend (.NET 8)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore SmartCrops.sln
+
+      - name: Check formatting
+        run: dotnet format SmartCrops.sln --verify-no-changes
+
+      - name: Build
+        run: dotnet build SmartCrops.sln --no-restore
+
+      - name: Test
+        run: dotnet test SmartCrops.sln --no-build
+
+  frontend:
+    name: Frontend (Node 20)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: src/frontend
+
+      - name: Lint
+        run: npm run lint
+        working-directory: src/frontend
+
+      - name: Test
+        run: npm test
+        working-directory: src/frontend
+
+      - name: Build
+        run: npm run build
+        working-directory: src/frontend
