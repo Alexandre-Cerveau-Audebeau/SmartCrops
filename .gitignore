@@ -18,7 +18,7 @@ appsettings.Development.json
 *.db
 *.db-shm
 *.db-wal
-Migrations/
+# EF Core migration files must be committed — do not ignore Migrations/
 
 # Node / React
 node_modules/
