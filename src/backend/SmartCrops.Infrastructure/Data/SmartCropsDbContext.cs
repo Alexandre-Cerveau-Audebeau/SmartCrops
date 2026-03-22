@@ -8,6 +8,7 @@ public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options) 
     public DbSet<Plant> Plants => Set<Plant>();
     public DbSet<PlantType> PlantTypes => Set<PlantType>();
     public DbSet<PlantTranslation> PlantTranslations => Set<PlantTranslation>();
+    public DbSet<PlantSuggestion> PlantSuggestions => Set<PlantSuggestion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

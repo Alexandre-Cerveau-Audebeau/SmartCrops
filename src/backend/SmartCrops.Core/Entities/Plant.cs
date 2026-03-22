@@ -40,4 +40,5 @@ public class Plant
     public DateTime UpdatedAt { get; set; }
 
     public ICollection<PlantTranslation> Translations { get; set; } = [];
+    public ICollection<PlantSuggestion> Suggestions { get; set; } = [];
 }
