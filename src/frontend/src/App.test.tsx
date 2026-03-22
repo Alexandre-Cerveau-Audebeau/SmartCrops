@@ -7,13 +7,14 @@ describe('App', () => {
     render(<App />);
   });
 
-  it('renders the Get started heading', () => {
+  it('renders the navbar brand name', () => {
     render(<App />);
-    expect(screen.getByText('Get started')).toBeInTheDocument();
+    expect(screen.getAllByText('SmartCrops').length).toBeGreaterThan(0);
   });
 
-  it('renders the counter button', () => {
+  it('renders the Library nav link', () => {
     render(<App />);
-    expect(screen.getByText(/Count is/)).toBeInTheDocument();
+    // "Library" appears in both Navbar and Footer
+    expect(screen.getAllByRole('link', { name: 'Library' }).length).toBeGreaterThan(0);
   });
 });
