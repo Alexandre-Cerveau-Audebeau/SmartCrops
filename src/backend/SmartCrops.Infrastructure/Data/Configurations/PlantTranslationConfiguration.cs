@@ -12,7 +12,7 @@ public class PlantTranslationConfiguration : IEntityTypeConfiguration<PlantTrans
 
         builder.Property(t => t.Language)
             .IsRequired()
-            .HasMaxLength(5); // ISO 639-1 ("en") or BCP 47 tag ("zh-TW") — 5 chars covers both.
+            .HasMaxLength(10); // BCP 47: simple tags ("en", "fr") up to extended script tags ("zh-Hans-CN").
 
         builder.Property(t => t.CommonName)
             .IsRequired()
