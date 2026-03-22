@@ -31,9 +31,15 @@ public class PlantSuggestionConfiguration : IEntityTypeConfiguration<PlantSugges
         builder.Property(s => s.UserId).HasMaxLength(200);
         builder.Property(s => s.ReviewedBy).HasMaxLength(200);
 
-        // Primary query pattern: load all pending suggestions for a given plant,
-        // or load all pending suggestions across the system for the moderation queue.
+        builder.ToTable(t => t.HasCheckConstraint(
+            "CK_PlantSuggestions_Status",
+            "\"Status\" IN ('Pending','Approved','Rejected')"));
+
+        // Composite index: pending suggestions for a specific plant (detail view).
         builder.HasIndex(s => new { s.PlantId, s.Status });
+
+        // Single-column index: all suggestions by status for the moderation queue.
+        builder.HasIndex(s => s.Status);
 
         builder.HasOne(s => s.Plant)
             .WithMany(p => p.Suggestions)

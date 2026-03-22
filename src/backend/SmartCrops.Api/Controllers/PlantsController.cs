@@ -57,7 +57,16 @@ public class PlantsController(IPlantRepository repository) : ControllerBase
         if (existing is null)
             return NotFound();
 
-        await repository.UpdateAsync(plant);
+        existing.ScientificName = plant.ScientificName;
+        existing.PlantTypeId = plant.PlantTypeId;
+        existing.SunExposure = plant.SunExposure;
+        existing.WaterNeeds = plant.WaterNeeds;
+        existing.SowingPeriod = plant.SowingPeriod;
+        existing.HarvestPeriod = plant.HarvestPeriod;
+        existing.ImageUrl = plant.ImageUrl;
+        existing.UpdatedAt = DateTime.UtcNow;
+
+        await repository.UpdateAsync(existing);
         return NoContent();
     }
 
