@@ -28,4 +28,17 @@ public static class DependencyInjection
 
         return services;
     }
+
+    /// <summary>
+    /// Applies pending EF Core migrations and seeds reference data.
+    /// NOTE: suitable for development/staging. In production, prefer running
+    /// migrations as a dedicated deployment step (dotnet ef database update).
+    /// </summary>
+    public static async Task InitialiseDatabaseAsync(this IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        context.Database.Migrate();
+        await DataSeeder.SeedAsync(context);
+    }
 }
