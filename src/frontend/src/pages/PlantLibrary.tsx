@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -13,16 +14,9 @@ import Typography from '@mui/material/Typography';
 import SearchIcon from '@mui/icons-material/Search';
 import SpaIcon from '@mui/icons-material/Spa';
 import { fetchPlants, fetchPlantTypes, searchPlants } from '../services/plantApi';
-import type { Plant, PlantTranslation } from '../types/Plant';
+import type { Plant } from '../types/Plant';
 import type { PlantType } from '../types/PlantType';
-
-function getTranslation(plant: Plant, language = 'en'): PlantTranslation | null {
-  return (
-    plant.translations.find((t) => t.language === language) ??
-    plant.translations[0] ??
-    null
-  );
-}
+import { getTranslation } from '../utils/getTranslation';
 
 export default function PlantLibrary() {
   const [plants, setPlants] = useState<Plant[]>([]);
@@ -156,10 +150,16 @@ export default function PlantLibrary() {
 
             return (
               <Grid key={plant.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                <Box
+                  component={RouterLink}
+                  to={`/library/${plant.id}`}
+                  sx={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+                >
                 <Card
                   variant="outlined"
                   sx={{
                     borderRadius: 3,
+                    cursor: 'pointer',
                     transition: 'box-shadow 0.2s ease, transform 0.2s ease',
                     '&:hover': {
                       boxShadow: 3,
@@ -215,6 +215,7 @@ export default function PlantLibrary() {
                     )}
                   </CardContent>
                 </Card>
+                </Box>
               </Grid>
             );
           })}
