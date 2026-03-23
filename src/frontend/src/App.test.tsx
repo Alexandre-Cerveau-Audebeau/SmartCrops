@@ -9,12 +9,12 @@ describe('App', () => {
 
   it('renders the navbar brand name', () => {
     render(<App />);
-    expect(screen.getAllByText('SmartCrops').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('SmartCrops')).toHaveLength(3);
   });
 
   it('renders the Library nav link', () => {
     render(<App />);
     // "Library" appears in both Navbar and Footer
-    expect(screen.getAllByRole('link', { name: 'Library' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: 'Library' })).toHaveLength(2);
   });
 });
