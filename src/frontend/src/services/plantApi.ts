@@ -15,6 +15,12 @@ export async function fetchPlantTypes(signal?: AbortSignal): Promise<PlantType[]
   return res.json();
 }
 
+export async function fetchPlantById(id: string, signal?: AbortSignal): Promise<Plant> {
+  const res = await fetch(`${API_BASE}/plants/${id}`, { signal });
+  if (!res.ok) throw new Error(`Failed to fetch plant: ${res.status}`);
+  return res.json();
+}
+
 export async function searchPlants(query: string, language: string, signal?: AbortSignal): Promise<Plant[]> {
   const params = new URLSearchParams({ query, language });
   const res = await fetch(`${API_BASE}/plants/search?${params}`, { signal });

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -156,10 +157,16 @@ export default function PlantLibrary() {
 
             return (
               <Grid key={plant.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                <Box
+                  component={RouterLink}
+                  to={`/library/${plant.id}`}
+                  sx={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+                >
                 <Card
                   variant="outlined"
                   sx={{
                     borderRadius: 3,
+                    cursor: 'pointer',
                     transition: 'box-shadow 0.2s ease, transform 0.2s ease',
                     '&:hover': {
                       boxShadow: 3,
@@ -215,6 +222,7 @@ export default function PlantLibrary() {
                     )}
                   </CardContent>
                 </Card>
+                </Box>
               </Grid>
             );
           })}
