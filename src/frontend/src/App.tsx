@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Layout from './components/Layout/Layout';
+import { LanguageProvider } from './contexts/LanguageContext';
 import Home from './pages/Home';
 import NotFound from './pages/NotFound';
 import PlantDetail from './pages/PlantDetail';
@@ -12,6 +13,7 @@ export default function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <LanguageProvider>
       <BrowserRouter>
         <Layout>
           <Routes>
@@ -22,6 +24,7 @@ export default function App() {
           </Routes>
         </Layout>
       </BrowserRouter>
+      </LanguageProvider>
     </ThemeProvider>
   );
 }
