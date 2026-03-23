@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +26,14 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IPlantRepository, PlantRepository>();
+
+        services.AddIdentity<IdentityUser, IdentityRole>(options =>
+        {
+            options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+";
+            options.User.RequireUniqueEmail = true;
+        })
+            .AddEntityFrameworkStores<SmartCropsDbContext>()
+            .AddDefaultTokenProviders();
 
         return services;
     }

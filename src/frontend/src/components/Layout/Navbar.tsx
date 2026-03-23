@@ -17,6 +17,7 @@ import { useTheme } from '@mui/material/styles';
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import { NAV_BG } from '../../constants/colors';
+import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
 import LogoButton from '../LogoButton';
 
@@ -30,6 +31,7 @@ export default function Navbar() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { language, setLanguage } = useLanguage();
+  const { isAuthenticated, user, logout } = useAuth();
   const toggleLanguage = () => setLanguage(language === 'en' ? 'fr' : 'en');
 
   const toggleDrawer = (open: boolean) => () => setDrawerOpen(open);
@@ -78,9 +80,20 @@ export default function Navbar() {
           {' / '}
           <Box component="span" sx={{ fontWeight: language === 'en' ? 700 : 400 }}>EN</Box>
         </Button>
-        <Button variant="contained" fullWidth>
-          Login
-        </Button>
+        {isAuthenticated ? (
+          <>
+            <Typography variant="body2" sx={{ textAlign: 'center', color: 'text.secondary' }}>
+              {user?.email}
+            </Typography>
+            <Button variant="outlined" fullWidth onClick={() => { logout(); toggleDrawer(false)(); }}>
+              Logout
+            </Button>
+          </>
+        ) : (
+          <Button variant="contained" fullWidth component={RouterLink} to="/login" onClick={toggleDrawer(false)}>
+            Login
+          </Button>
+        )}
       </Box>
     </Box>
   );
@@ -121,7 +134,7 @@ export default function Navbar() {
                 ))}
               </Box>
 
-              {/* Right: language + login */}
+              {/* Right: language + auth */}
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <Button
                   variant="outlined"
@@ -138,9 +151,29 @@ export default function Navbar() {
                   <Box component="span" sx={{ mx: 0.5 }}>/</Box>
                   <Box component="span" sx={{ fontWeight: language === 'en' ? 700 : 400, opacity: language === 'en' ? 1 : 0.6 }}>EN</Box>
                 </Button>
-                <Button variant="contained" color="secondary" size="small">
-                  Login
-                </Button>
+                {isAuthenticated ? (
+                  <>
+                    <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)' }}>
+                      {user?.email}
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={logout}
+                      sx={{
+                        color: '#fff',
+                        borderColor: 'rgba(255,255,255,0.5)',
+                        '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.1)' },
+                      }}
+                    >
+                      Logout
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="contained" color="secondary" size="small" component={RouterLink} to="/login">
+                    Login
+                  </Button>
+                )}
               </Box>
             </>
           )}

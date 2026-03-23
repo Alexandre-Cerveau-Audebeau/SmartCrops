@@ -1,9 +1,12 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SmartCrops.Core.Entities;
 
 namespace SmartCrops.Infrastructure.Data;
 
-public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options) : DbContext(options)
+public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options)
+    : IdentityDbContext<IdentityUser>(options)
 {
     public DbSet<Plant> Plants => Set<Plant>();
     public DbSet<PlantType> PlantTypes => Set<PlantType>();
@@ -12,6 +15,8 @@ public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options) 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        base.OnModelCreating(modelBuilder);
+
         // Scans this assembly for all IEntityTypeConfiguration<T> implementations
         // and applies them automatically — no manual registration needed when adding
         // new configuration classes.
