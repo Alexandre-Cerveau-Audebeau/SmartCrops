@@ -17,6 +17,7 @@ import { useTheme } from '@mui/material/styles';
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import { NAV_BG } from '../../constants/colors';
+import { useLanguage } from '../../hooks/useLanguage';
 import LogoButton from '../LogoButton';
 
 const navLinks = [
@@ -28,6 +29,8 @@ export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { language, setLanguage } = useLanguage();
+  const toggleLanguage = () => setLanguage(language === 'en' ? 'fr' : 'en');
 
   const toggleDrawer = (open: boolean) => () => setDrawerOpen(open);
 
@@ -70,8 +73,10 @@ export default function Navbar() {
       </List>
       <Divider />
       <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Button variant="outlined" fullWidth>
-          FR / EN
+        <Button variant="outlined" fullWidth onClick={toggleLanguage} aria-label={`Switch language (current: ${language.toUpperCase()})`}>
+          <Box component="span" sx={{ fontWeight: language === 'fr' ? 700 : 400 }}>FR</Box>
+          {' / '}
+          <Box component="span" sx={{ fontWeight: language === 'en' ? 700 : 400 }}>EN</Box>
         </Button>
         <Button variant="contained" fullWidth>
           Login
@@ -121,13 +126,17 @@ export default function Navbar() {
                 <Button
                   variant="outlined"
                   size="small"
+                  onClick={toggleLanguage}
+                  aria-label={`Switch language (current: ${language.toUpperCase()})`}
                   sx={{
                     color: '#fff',
                     borderColor: 'rgba(255,255,255,0.5)',
                     '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.1)' },
                   }}
                 >
-                  FR / EN
+                  <Box component="span" sx={{ fontWeight: language === 'fr' ? 700 : 400, opacity: language === 'fr' ? 1 : 0.6 }}>FR</Box>
+                  <Box component="span" sx={{ mx: 0.5 }}>/</Box>
+                  <Box component="span" sx={{ fontWeight: language === 'en' ? 700 : 400, opacity: language === 'en' ? 1 : 0.6 }}>EN</Box>
                 </Button>
                 <Button variant="contained" color="secondary" size="small">
                   Login

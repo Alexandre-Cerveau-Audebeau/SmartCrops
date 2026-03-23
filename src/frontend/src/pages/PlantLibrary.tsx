@@ -13,6 +13,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import SearchIcon from '@mui/icons-material/Search';
 import SpaIcon from '@mui/icons-material/Spa';
+import { useLanguage } from '../hooks/useLanguage';
 import { fetchPlants, fetchPlantTypes, searchPlants } from '../services/plantApi';
 import type { Plant } from '../types/Plant';
 import type { PlantType } from '../types/PlantType';
@@ -25,6 +26,7 @@ export default function PlantLibrary() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeType, setActiveType] = useState<number | null>(null);
+  const { language } = useLanguage();
 
   useEffect(() => {
     Promise.all([fetchPlants(), fetchPlantTypes()])
@@ -54,7 +56,7 @@ export default function PlantLibrary() {
     if (searchQuery.length < 2) return () => controller.abort();
 
     const timeout = setTimeout(() => {
-      searchPlants(searchQuery, 'en', controller.signal)
+      searchPlants(searchQuery, language, controller.signal)
         .then(setPlants)
         .catch((err) => {
           if (err.name !== 'AbortError') console.error(err);
@@ -65,7 +67,7 @@ export default function PlantLibrary() {
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [searchQuery]);
+  }, [searchQuery, language]);
 
   const filteredPlants =
     activeType === null ? plants : plants.filter((p) => p.plantTypeId === activeType);
@@ -145,7 +147,7 @@ export default function PlantLibrary() {
       {!loading && filteredPlants.length > 0 && (
         <Grid container spacing={3}>
           {filteredPlants.map((plant) => {
-            const t = getTranslation(plant);
+            const t = getTranslation(plant, language);
             const typeName = plantTypes.find((pt) => pt.id === plant.plantTypeId)?.name;
 
             return (

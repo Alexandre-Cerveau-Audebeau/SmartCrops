@@ -13,6 +13,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import WaterDropIcon from '@mui/icons-material/WaterDrop';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
+import { useLanguage } from '../hooks/useLanguage';
 import { fetchPlantById } from '../services/plantApi';
 import type { Plant } from '../types/Plant';
 import { getTranslation } from '../utils/getTranslation';
@@ -25,6 +26,7 @@ const languageLabels: Record<string, string> = {
 export default function PlantDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { language } = useLanguage();
   const [plant, setPlant] = useState<Plant | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +103,7 @@ export default function PlantDetail() {
     );
   }
 
-  const t = getTranslation(plant);
+  const t = getTranslation(plant, language);
 
   const conditions = [
     { icon: <WbSunnyIcon />, label: 'Sun Exposure', value: plant.sunExposure },
