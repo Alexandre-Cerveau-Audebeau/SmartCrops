@@ -73,7 +73,7 @@ export default function Navbar() {
       </List>
       <Divider />
       <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Button variant="outlined" fullWidth onClick={toggleLanguage}>
+        <Button variant="outlined" fullWidth onClick={toggleLanguage} aria-label={`Switch language (current: ${language.toUpperCase()})`}>
           <Box component="span" sx={{ fontWeight: language === 'fr' ? 700 : 400 }}>FR</Box>
           {' / '}
           <Box component="span" sx={{ fontWeight: language === 'en' ? 700 : 400 }}>EN</Box>
@@ -127,6 +127,7 @@ export default function Navbar() {
                   variant="outlined"
                   size="small"
                   onClick={toggleLanguage}
+                  aria-label={`Switch language (current: ${language.toUpperCase()})`}
                   sx={{
                     color: '#fff',
                     borderColor: 'rgba(255,255,255,0.5)',
