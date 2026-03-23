@@ -10,11 +10,4 @@ export interface AuthContextValue {
   isAuthenticated: boolean;
 }
 
-export const AuthContext = createContext<AuthContextValue>({
-  user: null,
-  token: null,
-  login: async () => {},
-  register: async () => {},
-  logout: () => {},
-  isAuthenticated: false,
-});
+export const AuthContext = createContext<AuthContextValue | undefined>(undefined);

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -7,8 +8,8 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace SmartCrops.Api.Controllers;
 
-public record RegisterRequest(string Email, string Password);
-public record LoginRequest(string Email, string Password);
+public record RegisterRequest([Required, EmailAddress] string Email, [Required, MinLength(6)] string Password);
+public record LoginRequest([Required, EmailAddress] string Email, [Required] string Password);
 public record AuthResponse(string Token, DateTime Expiration);
 
 [ApiController]
@@ -31,8 +32,18 @@ public class AuthController(UserManager<IdentityUser> userManager, IConfiguratio
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         var user = await userManager.FindByEmailAsync(request.Email);
-        if (user is null || !await userManager.CheckPasswordAsync(user, request.Password))
+        if (user is null)
+        {
+            // Perform dummy hash to prevent timing-based user enumeration
+            new PasswordHasher<IdentityUser>().VerifyHashedPassword(null!, string.Empty, request.Password);
             return Unauthorized();
+        }
+
+        if (!await userManager.CheckPasswordAsync(user, request.Password))
+            return Unauthorized();
+
+        var jwtKey = configuration["Jwt:Key"]
+            ?? throw new InvalidOperationException("JWT signing key is not configured");
 
         var claims = new[]
         {
@@ -41,8 +52,7 @@ public class AuthController(UserManager<IdentityUser> userManager, IConfiguratio
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         };
 
-        var key = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(configuration["Jwt:Key"]!));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var expiration = DateTime.UtcNow.AddDays(7);
 
