@@ -42,13 +42,16 @@ public class AuthController(UserManager<IdentityUser> userManager, IConfiguratio
         if (!await userManager.CheckPasswordAsync(user, request.Password))
             return Unauthorized();
 
+        if (string.IsNullOrEmpty(user.Email))
+            return Unauthorized();
+
         var jwtKey = configuration["Jwt:Key"]
             ?? throw new InvalidOperationException("JWT signing key is not configured");
 
         var claims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email!),
+            new Claim(JwtRegisteredClaimNames.Email, user.Email),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         };
 

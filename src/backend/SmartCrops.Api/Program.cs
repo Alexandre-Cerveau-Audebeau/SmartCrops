@@ -14,6 +14,8 @@ var jwtIssuer = jwtSection["Issuer"];
 var jwtAudience = jwtSection["Audience"];
 if (string.IsNullOrWhiteSpace(jwtKey) || string.IsNullOrWhiteSpace(jwtIssuer) || string.IsNullOrWhiteSpace(jwtAudience))
     throw new InvalidOperationException("Jwt settings (Key, Issuer, Audience) must all be configured.");
+if (jwtKey.Length < 32)
+    throw new InvalidOperationException("Jwt:Key must be at least 32 characters for HS256.");
 
 builder.Services.AddAuthentication(options =>
 {
