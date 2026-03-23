@@ -44,7 +44,7 @@ export default function Navbar() {
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <LogoButton height={32} withHover={false} />
+          <LogoButton height={26} withHover={true} />
           <Typography variant="h6" sx={{ color: '#fff', fontWeight: 700 }}>
             SmartCrops
           </Typography>
@@ -86,7 +86,7 @@ export default function Navbar() {
         <Toolbar sx={{ justifyContent: 'space-between' }}>
           {/* Left: logo + brand */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <LogoButton height={40} withHover={false} />
+            <LogoButton height={30} withHover={true} />
             <Typography variant="h6" sx={{ color: '#fff', fontWeight: 700, letterSpacing: 0.5 }}>
               SmartCrops
             </Typography>

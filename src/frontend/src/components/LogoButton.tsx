@@ -6,7 +6,7 @@ interface LogoButtonProps {
   withHover?: boolean;
 }
 
-export default function LogoButton({ height = 36, withHover = true }: LogoButtonProps) {
+export default function LogoButton({ height = 30, withHover = true }: LogoButtonProps) {
   return (
     <Box
       component={RouterLink}
@@ -16,17 +16,18 @@ export default function LogoButton({ height = 36, withHover = true }: LogoButton
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        width: 44,
-        height: 44,
+        width: 40,
+        height: 40,
         borderRadius: '50%',
-        bgcolor: 'rgba(255,255,255,0.1)',
-        transition: 'transform 0.2s ease, background 0.2s ease',
+        background: 'rgba(255,255,255,0.95)',
+        border: '1.5px solid rgba(0,0,0,0.08)',
+        transition: 'border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease',
         flexShrink: 0,
         ...(withHover && {
           '&:hover': {
-            bgcolor: 'rgba(255,255,255,0.2)',
+            borderColor: 'rgba(0,0,0,0.15)',
+            boxShadow: '0 0 8px rgba(78,175,120,0.35)',
             transform: 'scale(1.05)',
-            filter: 'brightness(1.1)',
           },
         }),
       }}
