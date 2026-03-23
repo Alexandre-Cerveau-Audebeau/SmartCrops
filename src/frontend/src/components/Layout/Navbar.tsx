@@ -13,10 +13,11 @@ import ListItemText from '@mui/material/ListItemText';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
-
-const NAV_BG = '#1B5E3A';
+import { NAV_BG } from '../../constants/colors';
+import LogoButton from '../LogoButton';
 
 const navLinks = [
   { label: 'Library', to: '/library', enabled: true },
@@ -25,7 +26,8 @@ const navLinks = [
 
 export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const isMobile = useMediaQuery('(max-width:768px)');
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const toggleDrawer = (open: boolean) => () => setDrawerOpen(open);
 
@@ -42,12 +44,12 @@ export default function Navbar() {
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Box component="img" src="/logo.png" alt="SmartCrops logo" sx={{ height: 32 }} />
+          <LogoButton height={32} withHover={false} />
           <Typography variant="h6" sx={{ color: '#fff', fontWeight: 700 }}>
             SmartCrops
           </Typography>
         </Box>
-        <IconButton onClick={toggleDrawer(false)} sx={{ color: '#fff' }}>
+        <IconButton onClick={toggleDrawer(false)} sx={{ color: '#fff' }} aria-label="Close menu">
           <CloseIcon />
         </IconButton>
       </Box>
@@ -88,14 +90,14 @@ export default function Navbar() {
             to="/"
             sx={{ display: 'flex', alignItems: 'center', gap: 1.5, textDecoration: 'none' }}
           >
-            <Box component="img" src="/logo.png" alt="SmartCrops logo" sx={{ height: 40 }} />
+            <LogoButton height={40} withHover={false} />
             <Typography variant="h6" sx={{ color: '#fff', fontWeight: 700, letterSpacing: 0.5 }}>
               SmartCrops
             </Typography>
           </Box>
 
           {isMobile ? (
-            <IconButton onClick={toggleDrawer(true)} sx={{ color: '#fff' }}>
+            <IconButton onClick={toggleDrawer(true)} sx={{ color: '#fff' }} aria-label="Open menu">
               <MenuIcon />
             </IconButton>
           ) : (

@@ -7,8 +7,8 @@ import Link from '@mui/material/Link';
 import OutlinedInput from '@mui/material/OutlinedInput';
 import Typography from '@mui/material/Typography';
 import { Link as RouterLink } from 'react-router-dom';
-
-const NAV_BG = '#1B5E3A';
+import { NAV_BG } from '../../constants/colors';
+import LogoButton from '../LogoButton';
 
 const exploreLinks = [
   { label: 'Library', to: '/library' },
@@ -42,7 +42,7 @@ export default function Footer() {
           {/* Column 1: Brand */}
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-              <Box component="img" src="/logo.png" alt="SmartCrops logo" sx={{ height: 36 }} />
+              <LogoButton height={36} />
               <Typography variant="h6" sx={{ fontWeight: 700 }}>
                 SmartCrops
               </Typography>
@@ -83,6 +83,8 @@ export default function Footer() {
             <Box sx={{ display: 'flex', gap: 1 }}>
               <OutlinedInput
                 placeholder="your@email.com"
+                type="email"
+                inputProps={{ 'aria-label': 'Email address for newsletter' }}
                 size="small"
                 sx={{
                   flexGrow: 1,
