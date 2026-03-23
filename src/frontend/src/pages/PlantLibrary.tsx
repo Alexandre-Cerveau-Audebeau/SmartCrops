@@ -47,17 +47,30 @@ export default function PlantLibrary() {
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     if (searchQuery.length === 0) {
-      fetchPlants().then(setPlants).catch(() => {});
-      return;
+      fetchPlants(controller.signal)
+        .then(setPlants)
+        .catch((err) => {
+          if (err.name !== 'AbortError') console.error(err);
+        });
+      return () => controller.abort();
     }
-    if (searchQuery.length < 2) return;
+    if (searchQuery.length < 2) return () => controller.abort();
 
     const timeout = setTimeout(() => {
-      searchPlants(searchQuery, 'en').then(setPlants).catch(() => {});
+      searchPlants(searchQuery, 'en', controller.signal)
+        .then(setPlants)
+        .catch((err) => {
+          if (err.name !== 'AbortError') console.error(err);
+        });
     }, 300);
 
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
   }, [searchQuery]);
 
   const filteredPlants =
@@ -144,10 +157,8 @@ export default function PlantLibrary() {
             return (
               <Grid key={plant.id} size={{ xs: 12, sm: 6, md: 4 }}>
                 <Card
+                  variant="outlined"
                   sx={{
-                    elevation: 0,
-                    border: '1px solid',
-                    borderColor: 'divider',
                     borderRadius: 3,
                     transition: 'box-shadow 0.2s ease, transform 0.2s ease',
                     '&:hover': {

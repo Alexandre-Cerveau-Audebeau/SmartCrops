@@ -21,5 +21,5 @@ export interface Plant {
   createdAt: string;
   updatedAt: string;
   translations: PlantTranslation[];
-  suggestions: [];
+  suggestions: unknown[];
 }
