@@ -14,15 +14,8 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import WaterDropIcon from '@mui/icons-material/WaterDrop';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import { fetchPlantById } from '../services/plantApi';
-import type { Plant, PlantTranslation } from '../types/Plant';
-
-function getTranslation(plant: Plant, language = 'en'): PlantTranslation | null {
-  return (
-    plant.translations.find((t) => t.language === language) ??
-    plant.translations[0] ??
-    null
-  );
-}
+import type { Plant } from '../types/Plant';
+import { getTranslation } from '../utils/getTranslation';
 
 const languageLabels: Record<string, string> = {
   en: 'English',
@@ -38,19 +31,39 @@ export default function PlantDetail() {
 
   useEffect(() => {
     if (!id) return;
+
     const controller = new AbortController();
 
     fetchPlantById(id, controller.signal)
-      .then(setPlant)
+      .then((data) => {
+        if (!controller.signal.aborted) setPlant(data);
+      })
       .catch((err) => {
-        if (err.name !== 'AbortError') {
+        if (err.name === 'AbortError') return;
+        if (err.status === 404) return;
+        if (!controller.signal.aborted) {
           setError(err instanceof Error ? err.message : 'Failed to load plant');
         }
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
 
     return () => controller.abort();
   }, [id]);
+
+  if (!id) {
+    return (
+      <Container maxWidth="md" sx={{ pt: 4 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Missing plant id
+        </Alert>
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/library')}>
+          Back to Library
+        </Button>
+      </Container>
+    );
+  }
 
   if (loading) {
     return (

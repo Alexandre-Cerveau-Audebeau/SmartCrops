@@ -14,16 +14,9 @@ import Typography from '@mui/material/Typography';
 import SearchIcon from '@mui/icons-material/Search';
 import SpaIcon from '@mui/icons-material/Spa';
 import { fetchPlants, fetchPlantTypes, searchPlants } from '../services/plantApi';
-import type { Plant, PlantTranslation } from '../types/Plant';
+import type { Plant } from '../types/Plant';
 import type { PlantType } from '../types/PlantType';
-
-function getTranslation(plant: Plant, language = 'en'): PlantTranslation | null {
-  return (
-    plant.translations.find((t) => t.language === language) ??
-    plant.translations[0] ??
-    null
-  );
-}
+import { getTranslation } from '../utils/getTranslation';
 
 export default function PlantLibrary() {
   const [plants, setPlants] = useState<Plant[]>([]);
