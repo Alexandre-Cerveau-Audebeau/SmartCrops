@@ -85,7 +85,7 @@ export default function Navbar() {
       <AppBar position="fixed" sx={{ bgcolor: NAV_BG, boxShadow: 2 }}>
         <Toolbar sx={{ justifyContent: 'space-between' }}>
           {/* Left: logo + brand */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, textDecoration: 'none' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <LogoButton height={40} withHover={false} />
             <Typography variant="h6" sx={{ color: '#fff', fontWeight: 700, letterSpacing: 0.5 }}>
               SmartCrops
