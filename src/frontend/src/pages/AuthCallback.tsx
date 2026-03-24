@@ -1,12 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useAuth } from '../hooks/useAuth';
+import { exchangeCode } from '../services/authApi';
 
 export default function AuthCallback() {
   const [searchParams] = useSearchParams();
@@ -14,32 +12,34 @@ export default function AuthCallback() {
   const navigate = useNavigate();
   const processed = useRef(false);
 
-  const token = searchParams.get('token');
+  const code = searchParams.get('code');
+  const error = searchParams.get('error');
 
   useEffect(() => {
-    if (!token || processed.current) return;
-    processed.current = true;
+    if (processed.current) return;
 
-    try {
-      googleCallback(token);
-      navigate('/library', { replace: true });
-    } catch {
-      navigate('/login?error=invalid-token', { replace: true });
+    if (error) {
+      processed.current = true;
+      navigate(`/login?error=${error}`, { replace: true });
+      return;
     }
-  }, [token, googleCallback, navigate]);
 
-  if (!token) {
-    return (
-      <Container maxWidth="xs" sx={{ pt: 8, textAlign: 'center' }}>
-        <Alert severity="error" sx={{ mb: 2 }}>
-          No authentication token received
-        </Alert>
-        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/login')}>
-          Back to Login
-        </Button>
-      </Container>
-    );
-  }
+    if (!code) {
+      processed.current = true;
+      navigate('/login?error=no-code', { replace: true });
+      return;
+    }
+
+    processed.current = true;
+    exchangeCode(code)
+      .then(({ token }) => {
+        googleCallback(token);
+        navigate('/library', { replace: true });
+      })
+      .catch(() => {
+        navigate('/login?error=invalid-code', { replace: true });
+      });
+  }, [code, error, googleCallback, navigate]);
 
   return (
     <Container maxWidth="xs" sx={{ pt: 8 }}>

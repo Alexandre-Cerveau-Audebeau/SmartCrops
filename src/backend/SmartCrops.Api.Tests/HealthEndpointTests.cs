@@ -18,6 +18,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["Jwt:Audience"] = "SmartCrops",
                 ["Google:ClientId"] = "test-client-id",
                 ["Google:ClientSecret"] = "test-client-secret",
+                ["Frontend:BaseUrl"] = "http://localhost:3000",
             });
         });
     }

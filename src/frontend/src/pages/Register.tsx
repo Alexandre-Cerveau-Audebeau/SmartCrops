@@ -13,6 +13,8 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useAuth } from '../hooks/useAuth';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -101,7 +103,7 @@ export default function Register() {
           <Button
             variant="outlined"
             fullWidth
-            onClick={() => { window.location.href = 'http://localhost:5000/api/auth/google-login'; }}
+            onClick={() => { window.location.href = `${API_BASE}/api/auth/google-login`; }}
             sx={{
               bgcolor: '#fff',
               color: '#444',

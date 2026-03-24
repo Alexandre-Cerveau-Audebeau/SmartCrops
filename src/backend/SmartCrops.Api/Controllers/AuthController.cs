@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -12,6 +13,7 @@ namespace SmartCrops.Api.Controllers;
 public record RegisterRequest([Required, EmailAddress] string Email, [Required, MinLength(6)] string Password);
 public record LoginRequest([Required, EmailAddress] string Email, [Required] string Password);
 public record AuthResponse(string Token, DateTime Expiration);
+public record ExchangeCodeRequest([Required] string Code);
 
 [ApiController]
 [Route("api/[controller]")]
@@ -22,6 +24,7 @@ public class AuthController(
 {
     private static readonly PasswordHasher<IdentityUser> _dummyHasher = new();
     private static readonly string _dummyHash = _dummyHasher.HashPassword(new IdentityUser(), "DummyPassword123!");
+    private static readonly ConcurrentDictionary<string, (string Token, DateTime Expiry)> _authCodes = new();
 
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
@@ -66,35 +69,56 @@ public class AuthController(
     [HttpGet("google-callback")]
     public async Task<IActionResult> GoogleCallback()
     {
+        var frontendUrl = configuration["Frontend:BaseUrl"] ?? "http://localhost:3000";
+
         var info = await signInManager.GetExternalLoginInfoAsync();
         if (info is null)
-            // TODO: read frontend URL from configuration in production
-            return Redirect("http://localhost:3000/login?error=google-failed");
+            return Redirect($"{frontendUrl}/login?error=google-failed");
 
         var email = info.Principal.FindFirstValue(ClaimTypes.Email);
         if (string.IsNullOrEmpty(email))
-            return Redirect("http://localhost:3000/login?error=no-email");
+            return Redirect($"{frontendUrl}/login?error=no-email");
 
         var user = await userManager.FindByEmailAsync(email);
         if (user is null)
         {
-            user = new IdentityUser { UserName = email, Email = email };
+            user = new IdentityUser { UserName = email, Email = email, EmailConfirmed = true };
             var createResult = await userManager.CreateAsync(user);
             if (!createResult.Succeeded)
-                return Redirect("http://localhost:3000/login?error=create-failed");
+                return Redirect($"{frontendUrl}/login?error=create-failed");
 
-            await userManager.AddLoginAsync(user, info);
+            var addLoginResult = await userManager.AddLoginAsync(user, info);
+            if (!addLoginResult.Succeeded)
+                return Redirect($"{frontendUrl}/login?error=link-failed");
         }
         else
         {
             var logins = await userManager.GetLoginsAsync(user);
             if (!logins.Any(l => l.LoginProvider == info.LoginProvider && l.ProviderKey == info.ProviderKey))
-                await userManager.AddLoginAsync(user, info);
+            {
+                var addLoginResult = await userManager.AddLoginAsync(user, info);
+                if (!addLoginResult.Succeeded)
+                    return Redirect($"{frontendUrl}/login?error=link-failed");
+            }
         }
 
         var tokenResponse = GenerateTokenResponse(user.Id, email);
-        // TODO: read frontend URL from configuration in production
-        return Redirect($"http://localhost:3000/auth/callback?token={tokenResponse.Token}");
+        var code = Guid.NewGuid().ToString("N");
+        _authCodes[code] = (tokenResponse.Token, DateTime.UtcNow.AddMinutes(1));
+
+        return Redirect($"{frontendUrl}/auth/callback?code={code}");
+    }
+
+    [HttpPost("exchange-code")]
+    public IActionResult ExchangeCode([FromBody] ExchangeCodeRequest request)
+    {
+        if (!_authCodes.TryRemove(request.Code, out var stored))
+            return BadRequest(new { error = "Invalid or expired code" });
+
+        if (stored.Expiry < DateTime.UtcNow)
+            return BadRequest(new { error = "Code expired" });
+
+        return Ok(new { token = stored.Token });
     }
 
     private AuthResponse GenerateTokenResponse(string userId, string email)
