@@ -8,15 +8,6 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddInfrastructure(builder.Configuration);
 
-var jwtSection = builder.Configuration.GetSection("Jwt");
-var jwtKey = jwtSection["Key"];
-var jwtIssuer = jwtSection["Issuer"];
-var jwtAudience = jwtSection["Audience"];
-if (string.IsNullOrWhiteSpace(jwtKey) || string.IsNullOrWhiteSpace(jwtIssuer) || string.IsNullOrWhiteSpace(jwtAudience))
-    throw new InvalidOperationException("Jwt settings (Key, Issuer, Audience) must all be configured.");
-if (jwtKey.Length < 32)
-    throw new InvalidOperationException("Jwt:Key must be at least 32 characters for HS256.");
-
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -30,10 +21,10 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtIssuer,
-        ValidAudience = jwtAudience,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(jwtKey)),
+            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? string.Empty)),
     };
 });
 
@@ -47,6 +38,16 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+// Validate JWT configuration at startup.
+var jwtConfig = app.Configuration.GetSection("Jwt");
+var jwtKeyValue = jwtConfig["Key"];
+var jwtIssuerValue = jwtConfig["Issuer"];
+var jwtAudienceValue = jwtConfig["Audience"];
+if (string.IsNullOrWhiteSpace(jwtKeyValue) || string.IsNullOrWhiteSpace(jwtIssuerValue) || string.IsNullOrWhiteSpace(jwtAudienceValue))
+    throw new InvalidOperationException("Jwt settings (Key, Issuer, Audience) must all be configured.");
+if (jwtKeyValue.Length < 32)
+    throw new InvalidOperationException("Jwt:Key must be at least 32 characters for HS256.");
 
 // Skip DB init when no connection string is configured (e.g. unit test environments).
 if (!string.IsNullOrEmpty(app.Configuration.GetConnectionString("DefaultConnection")))
