@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 
 namespace SmartCrops.Api.Controllers;
@@ -22,11 +23,12 @@ public class AuthController(
     UserManager<IdentityUser> userManager,
     SignInManager<IdentityUser> signInManager,
     IConfiguration configuration,
-    IAuthenticationSchemeProvider schemeProvider) : ControllerBase
+    IAuthenticationSchemeProvider schemeProvider,
+    IHostEnvironment hostEnvironment) : ControllerBase
 {
     private static readonly PasswordHasher<IdentityUser> _dummyHasher = new();
     private static readonly string _dummyHash = _dummyHasher.HashPassword(new IdentityUser(), "DummyPassword123!");
-    private static readonly ConcurrentDictionary<string, (string Token, DateTime Expiry)> _authCodes = new();
+    private static readonly ConcurrentDictionary<string, (string Token, DateTime Expiry, string Binding)> _authCodes = new();
 
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
@@ -76,52 +78,78 @@ public class AuthController(
     public async Task<IActionResult> GoogleCallback()
     {
         CleanupExpiredCodes();
-        var frontendUrl = configuration["Frontend:BaseUrl"] ?? "http://localhost:3000";
 
-        var info = await signInManager.GetExternalLoginInfoAsync();
-        if (info is null)
-            return Redirect($"{frontendUrl}/login?error=google-failed");
-
-        var email = info.Principal.FindFirstValue(ClaimTypes.Email);
-        if (string.IsNullOrEmpty(email))
-            return Redirect($"{frontendUrl}/login?error=no-email");
-
-        var user = await userManager.FindByEmailAsync(email);
-        if (user is null)
+        var frontendUrl = configuration["Frontend:BaseUrl"];
+        if (string.IsNullOrWhiteSpace(frontendUrl))
         {
-            user = new IdentityUser { UserName = email, Email = email, EmailConfirmed = true };
-            var createResult = await userManager.CreateAsync(user);
-            if (!createResult.Succeeded)
-                return Redirect($"{frontendUrl}/login?error=create-failed");
-
-            var addLoginResult = await userManager.AddLoginAsync(user, info);
-            if (!addLoginResult.Succeeded)
-            {
-                await userManager.DeleteAsync(user);
-                return Redirect($"{frontendUrl}/login?error=link-failed");
-            }
+            if (!hostEnvironment.IsDevelopment())
+                throw new InvalidOperationException("Frontend:BaseUrl is not configured");
+            frontendUrl = "http://localhost:3000";
         }
-        else
+
+        try
         {
-            var logins = await userManager.GetLoginsAsync(user);
-            if (!logins.Any(l => l.LoginProvider == info.LoginProvider && l.ProviderKey == info.ProviderKey))
+            var info = await signInManager.GetExternalLoginInfoAsync();
+            if (info is null)
+                return Redirect($"{frontendUrl}/login?error=google-failed");
+
+            var email = info.Principal.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(email))
+                return Redirect($"{frontendUrl}/login?error=no-email");
+
+            var user = await userManager.FindByEmailAsync(email);
+            if (user is null)
             {
+                user = new IdentityUser { UserName = email, Email = email, EmailConfirmed = true };
+                var createResult = await userManager.CreateAsync(user);
+                if (!createResult.Succeeded)
+                    return Redirect($"{frontendUrl}/login?error=create-failed");
+
                 var addLoginResult = await userManager.AddLoginAsync(user, info);
                 if (!addLoginResult.Succeeded)
+                {
+                    await userManager.DeleteAsync(user);
                     return Redirect($"{frontendUrl}/login?error=link-failed");
+                }
             }
+            else
+            {
+                var logins = await userManager.GetLoginsAsync(user);
+                if (!logins.Any(l => l.LoginProvider == info.LoginProvider && l.ProviderKey == info.ProviderKey))
+                {
+                    var addLoginResult = await userManager.AddLoginAsync(user, info);
+                    if (!addLoginResult.Succeeded)
+                        return Redirect($"{frontendUrl}/login?error=link-failed");
+                }
+            }
+
+            var tokenResponse = GenerateTokenResponse(user.Id, email);
+            var code = Guid.NewGuid().ToString("N");
+            var binding = Guid.NewGuid().ToString("N");
+            _authCodes[code] = (tokenResponse.Token, DateTime.UtcNow.AddMinutes(1), binding);
+
+            Response.Cookies.Append("auth_binding", binding, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = false, // false for localhost dev, should be true in production
+                SameSite = SameSiteMode.Lax,
+                MaxAge = TimeSpan.FromMinutes(2),
+                Path = "/api/auth/exchange-code",
+            });
+
+            return Redirect($"{frontendUrl}/auth/callback?code={code}");
         }
-
-        var tokenResponse = GenerateTokenResponse(user.Id, email);
-        var code = Guid.NewGuid().ToString("N");
-        _authCodes[code] = (tokenResponse.Token, DateTime.UtcNow.AddMinutes(1));
-
-        return Redirect($"{frontendUrl}/auth/callback?code={code}");
+        finally
+        {
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+        }
     }
 
     [HttpPost("exchange-code")]
     public IActionResult ExchangeCode([FromBody] ExchangeCodeRequest request)
     {
+        var bindingCookie = Request.Cookies["auth_binding"];
+
         if (!_authCodes.TryGetValue(request.Code, out var stored))
             return BadRequest(new { error = "Invalid or expired code" });
 
@@ -131,9 +159,16 @@ public class AuthController(
             return BadRequest(new { error = "Code expired" });
         }
 
+        if (string.IsNullOrEmpty(bindingCookie) || bindingCookie != stored.Binding)
+        {
+            _authCodes.TryRemove(request.Code, out _);
+            return BadRequest(new { error = "Invalid binding" });
+        }
+
         if (!_authCodes.TryRemove(request.Code, out _))
             return BadRequest(new { error = "Invalid or expired code" });
 
+        Response.Cookies.Delete("auth_binding");
         return Ok(new { token = stored.Token });
     }
 
