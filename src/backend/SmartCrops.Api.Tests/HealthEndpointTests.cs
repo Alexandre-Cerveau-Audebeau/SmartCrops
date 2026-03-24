@@ -1,17 +1,33 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 
 namespace SmartCrops.Api.Tests;
 
-public class HealthEndpointTests : IClassFixture<WebApplicationFactory<Program>>
+public class CustomWebApplicationFactory : WebApplicationFactory<Program>
+{
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseEnvironment("Development");
+        builder.ConfigureAppConfiguration((context, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Jwt:Key"] = "SmartCrops-Test-Secret-Key-Min32Characters!!",
+                ["Jwt:Issuer"] = "SmartCrops",
+                ["Jwt:Audience"] = "SmartCrops",
+            });
+        });
+    }
+}
+
+public class HealthEndpointTests : IClassFixture<CustomWebApplicationFactory>
 {
     private readonly HttpClient _client;
 
-    public HealthEndpointTests(WebApplicationFactory<Program> factory)
+    public HealthEndpointTests(CustomWebApplicationFactory factory)
     {
-        _client = factory
-            .WithWebHostBuilder(builder => builder.UseEnvironment("Development"))
-            .CreateClient();
+        _client = factory.CreateClient();
     }
 
     [Fact]
