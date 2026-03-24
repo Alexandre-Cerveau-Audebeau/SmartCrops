@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -20,7 +21,8 @@ public record ExchangeCodeRequest([Required] string Code);
 public class AuthController(
     UserManager<IdentityUser> userManager,
     SignInManager<IdentityUser> signInManager,
-    IConfiguration configuration) : ControllerBase
+    IConfiguration configuration,
+    IAuthenticationSchemeProvider schemeProvider) : ControllerBase
 {
     private static readonly PasswordHasher<IdentityUser> _dummyHasher = new();
     private static readonly string _dummyHash = _dummyHasher.HashPassword(new IdentityUser(), "DummyPassword123!");
@@ -58,8 +60,12 @@ public class AuthController(
     }
 
     [HttpGet("google-login")]
-    public IActionResult GoogleLogin()
+    public async Task<IActionResult> GoogleLogin()
     {
+        var scheme = await schemeProvider.GetSchemeAsync(GoogleDefaults.AuthenticationScheme);
+        if (scheme is null)
+            return NotFound(new { error = "Google authentication is not configured" });
+
         var properties = signInManager.ConfigureExternalAuthenticationProperties(
             GoogleDefaults.AuthenticationScheme,
             Url.Action(nameof(GoogleCallback)));
@@ -90,7 +96,10 @@ public class AuthController(
 
             var addLoginResult = await userManager.AddLoginAsync(user, info);
             if (!addLoginResult.Succeeded)
+            {
+                await userManager.DeleteAsync(user);
                 return Redirect($"{frontendUrl}/login?error=link-failed");
+            }
         }
         else
         {
