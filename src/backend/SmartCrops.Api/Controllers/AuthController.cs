@@ -113,11 +113,17 @@ public class AuthController(
     [HttpPost("exchange-code")]
     public IActionResult ExchangeCode([FromBody] ExchangeCodeRequest request)
     {
-        if (!_authCodes.TryRemove(request.Code, out var stored))
+        if (!_authCodes.TryGetValue(request.Code, out var stored))
             return BadRequest(new { error = "Invalid or expired code" });
 
         if (stored.Expiry < DateTime.UtcNow)
+        {
+            _authCodes.TryRemove(request.Code, out _);
             return BadRequest(new { error = "Code expired" });
+        }
+
+        if (!_authCodes.TryRemove(request.Code, out _))
+            return BadRequest(new { error = "Invalid or expired code" });
 
         return Ok(new { token = stored.Token });
     }

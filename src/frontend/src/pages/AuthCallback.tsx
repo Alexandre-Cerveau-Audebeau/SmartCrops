@@ -20,7 +20,7 @@ export default function AuthCallback() {
 
     if (error) {
       processed.current = true;
-      navigate(`/login?error=${error}`, { replace: true });
+      navigate(`/login?error=${encodeURIComponent(error)}`, { replace: true });
       return;
     }
 
