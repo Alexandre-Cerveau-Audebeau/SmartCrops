@@ -16,6 +16,9 @@ public record AuthResponse(string Token, DateTime Expiration);
 [Route("api/[controller]")]
 public class AuthController(UserManager<IdentityUser> userManager, IConfiguration configuration) : ControllerBase
 {
+    private static readonly PasswordHasher<IdentityUser> _dummyHasher = new();
+    private static readonly string _dummyHash = _dummyHasher.HashPassword(new IdentityUser(), "DummyPassword123!");
+
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
@@ -34,8 +37,7 @@ public class AuthController(UserManager<IdentityUser> userManager, IConfiguratio
         var user = await userManager.FindByEmailAsync(request.Email);
         if (user is null)
         {
-            // Perform dummy hash to prevent timing-based user enumeration
-            new PasswordHasher<IdentityUser>().VerifyHashedPassword(null!, string.Empty, request.Password);
+            _dummyHasher.VerifyHashedPassword(new IdentityUser(), _dummyHash, request.Password);
             return Unauthorized();
         }
 
@@ -47,6 +49,10 @@ public class AuthController(UserManager<IdentityUser> userManager, IConfiguratio
 
         var jwtKey = configuration["Jwt:Key"]
             ?? throw new InvalidOperationException("JWT signing key is not configured");
+        var jwtIssuer = configuration["Jwt:Issuer"]
+            ?? throw new InvalidOperationException("JWT issuer is not configured");
+        var jwtAudience = configuration["Jwt:Audience"]
+            ?? throw new InvalidOperationException("JWT audience is not configured");
 
         var claims = new[]
         {
@@ -60,8 +66,8 @@ public class AuthController(UserManager<IdentityUser> userManager, IConfiguratio
         var expiration = DateTime.UtcNow.AddDays(7);
 
         var token = new JwtSecurityToken(
-            issuer: configuration["Jwt:Issuer"],
-            audience: configuration["Jwt:Audience"],
+            issuer: jwtIssuer,
+            audience: jwtAudience,
             claims: claims,
             expires: expiration,
             signingCredentials: credentials);
