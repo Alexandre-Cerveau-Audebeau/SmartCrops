@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -34,6 +35,11 @@ public static class DependencyInjection
         })
             .AddEntityFrameworkStores<SmartCropsDbContext>()
             .AddDefaultTokenProviders();
+
+        services.ConfigureExternalCookie(options =>
+        {
+            options.Cookie.SameSite = SameSiteMode.Lax;
+        });
 
         return services;
     }

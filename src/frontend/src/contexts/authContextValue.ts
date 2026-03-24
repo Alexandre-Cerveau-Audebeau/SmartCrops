@@ -6,6 +6,7 @@ export interface AuthContextValue {
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
+  googleCallback: (token: string) => void;
   logout: () => void;
   isAuthenticated: boolean;
 }

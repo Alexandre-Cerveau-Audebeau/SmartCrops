@@ -2,6 +2,8 @@ using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
@@ -14,7 +16,10 @@ public record AuthResponse(string Token, DateTime Expiration);
 
 [ApiController]
 [Route("api/[controller]")]
-public class AuthController(UserManager<IdentityUser> userManager, IConfiguration configuration) : ControllerBase
+public class AuthController(
+    UserManager<IdentityUser> userManager,
+    SignInManager<IdentityUser> signInManager,
+    IConfiguration configuration) : ControllerBase
 {
     private static readonly PasswordHasher<IdentityUser> _dummyHasher = new();
     private static readonly string _dummyHash = _dummyHasher.HashPassword(new IdentityUser(), "DummyPassword123!");
@@ -47,6 +52,53 @@ public class AuthController(UserManager<IdentityUser> userManager, IConfiguratio
         if (string.IsNullOrEmpty(user.Email))
             return Unauthorized();
 
+        return Ok(GenerateTokenResponse(user.Id, user.Email));
+    }
+
+    [HttpGet("google-login")]
+    public IActionResult GoogleLogin()
+    {
+        var properties = new AuthenticationProperties
+        {
+            RedirectUri = Url.Action(nameof(GoogleCallback)),
+        };
+        return Challenge(properties, GoogleDefaults.AuthenticationScheme);
+    }
+
+    [HttpGet("google-callback")]
+    public async Task<IActionResult> GoogleCallback()
+    {
+        var info = await signInManager.GetExternalLoginInfoAsync();
+        if (info is null)
+            return Redirect("http://localhost:3000/login?error=google-failed");
+
+        var email = info.Principal.FindFirstValue(ClaimTypes.Email);
+        if (string.IsNullOrEmpty(email))
+            return Redirect("http://localhost:3000/login?error=no-email");
+
+        var user = await userManager.FindByEmailAsync(email);
+        if (user is null)
+        {
+            user = new IdentityUser { UserName = email, Email = email };
+            var createResult = await userManager.CreateAsync(user);
+            if (!createResult.Succeeded)
+                return Redirect("http://localhost:3000/login?error=create-failed");
+
+            await userManager.AddLoginAsync(user, info);
+        }
+        else
+        {
+            var logins = await userManager.GetLoginsAsync(user);
+            if (!logins.Any(l => l.LoginProvider == info.LoginProvider && l.ProviderKey == info.ProviderKey))
+                await userManager.AddLoginAsync(user, info);
+        }
+
+        var tokenResponse = GenerateTokenResponse(user.Id, email);
+        return Redirect($"http://localhost:3000/auth/callback?token={tokenResponse.Token}");
+    }
+
+    private AuthResponse GenerateTokenResponse(string userId, string email)
+    {
         var jwtKey = configuration["Jwt:Key"]
             ?? throw new InvalidOperationException("JWT signing key is not configured");
         var jwtIssuer = configuration["Jwt:Issuer"]
@@ -56,8 +108,8 @@ public class AuthController(UserManager<IdentityUser> userManager, IConfiguratio
 
         var claims = new[]
         {
-            new Claim(JwtRegisteredClaimNames.Sub, user.Id),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email),
+            new Claim(JwtRegisteredClaimNames.Sub, userId),
+            new Claim(JwtRegisteredClaimNames.Email, email),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         };
 
@@ -72,8 +124,8 @@ public class AuthController(UserManager<IdentityUser> userManager, IConfiguratio
             expires: expiration,
             signingCredentials: credentials);
 
-        return Ok(new AuthResponse(
+        return new AuthResponse(
             new JwtSecurityTokenHandler().WriteToken(token),
-            expiration));
+            expiration);
     }
 }

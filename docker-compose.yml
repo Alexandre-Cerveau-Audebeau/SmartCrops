@@ -20,6 +20,8 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=smartcrops;Username=smartcrops;Password=smartcrops_dev"
       Jwt__Key: "SmartCrops-Dev-Secret-Key-Change-In-Production-Min32Chars!"
+      Google__ClientId: ${GOOGLE_CLIENT_ID:-}
+      Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
     ports:
       - "5000:8080"
     depends_on:

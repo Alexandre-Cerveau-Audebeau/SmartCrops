@@ -7,6 +7,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
+import Divider from '@mui/material/Divider';
 import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -75,6 +76,28 @@ export default function Login() {
               {loading ? <CircularProgress size={24} color="inherit" /> : 'Login'}
             </Button>
           </Box>
+
+          <Divider sx={{ my: 3 }}>
+            <Typography variant="caption" color="text.secondary">
+              OR
+            </Typography>
+          </Divider>
+
+          <Button
+            variant="outlined"
+            fullWidth
+            onClick={() => { window.location.href = '/api/auth/google-login'; }}
+            sx={{
+              bgcolor: '#fff',
+              color: '#444',
+              borderColor: '#ddd',
+              textTransform: 'none',
+              fontWeight: 500,
+              '&:hover': { bgcolor: '#f5f5f5', borderColor: '#ccc' },
+            }}
+          >
+            Sign in with Google
+          </Button>
 
           <Typography variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
             Don&apos;t have an account?{' '}

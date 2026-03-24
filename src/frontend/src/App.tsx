@@ -4,6 +4,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import Layout from './components/Layout/Layout';
 import { AuthProvider } from './contexts/AuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
+import AuthCallback from './pages/AuthCallback';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import NotFound from './pages/NotFound';
@@ -22,6 +23,7 @@ export default function App() {
         <Layout>
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/library/:id" element={<PlantDetail />} />
