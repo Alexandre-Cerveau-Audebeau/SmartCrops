@@ -46,8 +46,8 @@ var jwtIssuerValue = jwtConfig["Issuer"];
 var jwtAudienceValue = jwtConfig["Audience"];
 if (string.IsNullOrWhiteSpace(jwtKeyValue) || string.IsNullOrWhiteSpace(jwtIssuerValue) || string.IsNullOrWhiteSpace(jwtAudienceValue))
     throw new InvalidOperationException("Jwt settings (Key, Issuer, Audience) must all be configured.");
-if (jwtKeyValue.Length < 32)
-    throw new InvalidOperationException("Jwt:Key must be at least 32 characters for HS256.");
+if (Encoding.UTF8.GetByteCount(jwtKeyValue) < 32)
+    throw new InvalidOperationException("Jwt:Key must be at least 32 bytes for HS256.");
 
 // Skip DB init when no connection string is configured (e.g. unit test environments).
 if (!string.IsNullOrEmpty(app.Configuration.GetConnectionString("DefaultConnection")))
