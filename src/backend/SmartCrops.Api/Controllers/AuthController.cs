@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -58,10 +57,9 @@ public class AuthController(
     [HttpGet("google-login")]
     public IActionResult GoogleLogin()
     {
-        var properties = new AuthenticationProperties
-        {
-            RedirectUri = Url.Action(nameof(GoogleCallback)),
-        };
+        var properties = signInManager.ConfigureExternalAuthenticationProperties(
+            GoogleDefaults.AuthenticationScheme,
+            Url.Action(nameof(GoogleCallback)));
         return Challenge(properties, GoogleDefaults.AuthenticationScheme);
     }
 
@@ -70,6 +68,7 @@ public class AuthController(
     {
         var info = await signInManager.GetExternalLoginInfoAsync();
         if (info is null)
+            // TODO: read frontend URL from configuration in production
             return Redirect("http://localhost:3000/login?error=google-failed");
 
         var email = info.Principal.FindFirstValue(ClaimTypes.Email);
@@ -94,6 +93,7 @@ public class AuthController(
         }
 
         var tokenResponse = GenerateTokenResponse(user.Id, email);
+        // TODO: read frontend URL from configuration in production
         return Redirect($"http://localhost:3000/auth/callback?token={tokenResponse.Token}");
     }
 

@@ -86,7 +86,7 @@ export default function Login() {
           <Button
             variant="outlined"
             fullWidth
-            onClick={() => { window.location.href = '/api/auth/google-login'; }}
+            onClick={() => { window.location.href = 'http://localhost:5000/api/auth/google-login'; }}
             sx={{
               bgcolor: '#fff',
               color: '#444',
