@@ -69,6 +69,7 @@ public class AuthController(
     [HttpGet("google-callback")]
     public async Task<IActionResult> GoogleCallback()
     {
+        CleanupExpiredCodes();
         var frontendUrl = configuration["Frontend:BaseUrl"] ?? "http://localhost:3000";
 
         var info = await signInManager.GetExternalLoginInfoAsync();
@@ -119,6 +120,16 @@ public class AuthController(
             return BadRequest(new { error = "Code expired" });
 
         return Ok(new { token = stored.Token });
+    }
+
+    private static void CleanupExpiredCodes()
+    {
+        var expiredKeys = _authCodes
+            .Where(kvp => kvp.Value.Expiry < DateTime.UtcNow)
+            .Select(kvp => kvp.Key)
+            .ToList();
+        foreach (var key in expiredKeys)
+            _authCodes.TryRemove(key, out _);
     }
 
     private AuthResponse GenerateTokenResponse(string userId, string email)

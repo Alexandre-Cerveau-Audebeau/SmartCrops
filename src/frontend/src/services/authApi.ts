@@ -35,6 +35,9 @@ export async function exchangeCode(code: string): Promise<{ token: string }> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code }),
   });
-  if (!res.ok) throw new Error('Code exchange failed');
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error ?? 'Code exchange failed');
+  }
   return res.json();
 }
