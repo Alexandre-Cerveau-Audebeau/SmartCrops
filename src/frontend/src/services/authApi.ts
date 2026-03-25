@@ -28,3 +28,16 @@ export async function login(email: string, password: string): Promise<AuthRespon
   }
   return res.json();
 }
+
+export async function exchangeCode(code: string): Promise<{ token: string }> {
+  const res = await fetch(`${API_BASE}/auth/exchange-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error ?? 'Code exchange failed');
+  }
+  return res.json();
+}

@@ -54,6 +54,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await login(email, password);
   }, [login]);
 
+  const googleCallback = useCallback((token: string) => {
+    const user = decodeToken(token);
+    if (!user) throw new Error('Received an invalid authentication token');
+    localStorage.setItem(STORAGE_KEY, token);
+    setAuth({ token, user });
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     setAuth({ token: null, user: null });
@@ -64,9 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     token: auth.token,
     login,
     register,
+    googleCallback,
     logout,
     isAuthenticated: auth.user !== null,
-  }), [auth, login, register, logout]);
+  }), [auth, login, register, googleCallback, logout]);
 
   return (
     <AuthContext.Provider value={value}>

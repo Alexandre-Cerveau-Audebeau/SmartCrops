@@ -16,6 +16,9 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["Jwt:Key"] = "SmartCrops-Test-Secret-Key-Min32Characters!!",
                 ["Jwt:Issuer"] = "SmartCrops",
                 ["Jwt:Audience"] = "SmartCrops",
+                ["Google:ClientId"] = "test-client-id",
+                ["Google:ClientSecret"] = "test-client-secret",
+                ["Frontend:BaseUrl"] = "http://localhost:3000",
             });
         });
     }
