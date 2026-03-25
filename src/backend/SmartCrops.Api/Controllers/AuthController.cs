@@ -131,7 +131,7 @@ public class AuthController(
             Response.Cookies.Append("auth_binding", binding, new CookieOptions
             {
                 HttpOnly = true,
-                Secure = false, // false for localhost dev, should be true in production
+                Secure = !hostEnvironment.IsDevelopment(),
                 SameSite = SameSiteMode.Lax,
                 MaxAge = TimeSpan.FromMinutes(2),
                 Path = "/api/auth/exchange-code",
@@ -168,7 +168,7 @@ public class AuthController(
         if (!_authCodes.TryRemove(request.Code, out _))
             return BadRequest(new { error = "Invalid or expired code" });
 
-        Response.Cookies.Delete("auth_binding");
+        Response.Cookies.Delete("auth_binding", new CookieOptions { Path = "/api/auth/exchange-code" });
         return Ok(new { token = stored.Token });
     }
 
