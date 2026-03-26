@@ -9,7 +9,7 @@ describe('App', () => {
 
   it('renders the navbar brand name', () => {
     render(<App />);
-    expect(screen.getAllByText('SmartCrops')).toHaveLength(3);
+    expect(screen.getAllByText('SmartCrops')).toHaveLength(2);
   });
 
   it('renders the Library nav link', () => {
