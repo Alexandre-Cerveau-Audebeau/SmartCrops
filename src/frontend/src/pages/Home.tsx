@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -154,6 +154,10 @@ export default function Home() {
 
   const itemsPerPage = isMobile ? 1 : 3;
   const totalPages = Math.ceil(testimonials.length / itemsPerPage);
+  const snappedIndex = useMemo(
+    () => Math.floor(currentIndex / itemsPerPage) * itemsPerPage,
+    [currentIndex, itemsPerPage],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -181,10 +185,10 @@ export default function Home() {
   };
 
   const visibleTestimonials = testimonials.slice(
-    currentIndex,
-    currentIndex + itemsPerPage,
+    snappedIndex,
+    snappedIndex + itemsPerPage,
   );
-  const currentPage = Math.floor(currentIndex / itemsPerPage);
+  const currentPage = Math.floor(snappedIndex / itemsPerPage);
 
   return (
     <Box>
@@ -613,6 +617,8 @@ export default function Home() {
             Get updates on new plants, features, and seasonal tips.
           </Typography>
           <Box
+            component="form"
+            onSubmit={(e: React.FormEvent) => e.preventDefault()}
             sx={{
               display: 'flex',
               gap: 1,
@@ -621,11 +627,16 @@ export default function Home() {
           >
             <TextField
               placeholder="your@email.com"
+              label="Email address"
+              type="email"
+              aria-label="Email address"
               size="small"
               fullWidth
               sx={{ maxWidth: 320 }}
             />
-            <Button variant="contained">Subscribe</Button>
+            <Button variant="contained" disabled>
+              Subscribe (Coming soon)
+            </Button>
           </Box>
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: 'block' }}>
             No spam, unsubscribe anytime.
