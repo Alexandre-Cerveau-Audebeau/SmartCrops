@@ -150,6 +150,7 @@ export default function Home() {
 
   const [plants, setPlants] = useState<Plant[]>([]);
   const [plantsLoading, setPlantsLoading] = useState(true);
+  const [plantsError, setPlantsError] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const itemsPerPage = isMobile ? 1 : 3;
@@ -164,7 +165,7 @@ export default function Home() {
     fetchPlants(controller.signal)
       .then((data) => setPlants(data.slice(0, 3)))
       .catch((err) => {
-        if (err.name !== 'AbortError') setPlantsLoading(false);
+        if (err.name !== 'AbortError') setPlantsError(true);
       })
       .finally(() => setPlantsLoading(false));
     return () => controller.abort();
@@ -358,7 +359,11 @@ export default function Home() {
             A sneak peek from our growing collection.
           </Typography>
           <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-            {plantsLoading
+            {plantsError ? (
+              <Typography color="text.secondary" sx={{ width: '100%', textAlign: 'center' }}>
+                Unable to load plants. Please try again later.
+              </Typography>
+            ) : plantsLoading
               ? Array.from({ length: 3 }).map((_, i) => (
                   <Card
                     key={i}
@@ -428,7 +433,8 @@ export default function Home() {
                       </CardContent>
                     </Card>
                   );
-                })}
+                })
+            }
           </Box>
           <Box sx={{ textAlign: 'center', mt: 4 }}>
             <Button
@@ -563,6 +569,8 @@ export default function Home() {
           </Box>
           {/* Pagination dots */}
           <Box
+            role="tablist"
+            aria-label="Testimonial pages"
             sx={{
               display: 'flex',
               justifyContent: 'center',
@@ -573,12 +581,18 @@ export default function Home() {
             {Array.from({ length: totalPages }).map((_, i) => (
               <Box
                 key={i}
+                role="tab"
+                aria-selected={i === currentPage}
+                aria-label={`Page ${i + 1} of ${totalPages}`}
+                tabIndex={i === currentPage ? 0 : -1}
+                onClick={() => setCurrentIndex(i * itemsPerPage)}
                 sx={{
                   width: 8,
                   height: 8,
                   borderRadius: '50%',
                   bgcolor: i === currentPage ? 'primary.main' : 'action.disabled',
                   transition: 'background-color 0.2s',
+                  cursor: 'pointer',
                 }}
               />
             ))}
