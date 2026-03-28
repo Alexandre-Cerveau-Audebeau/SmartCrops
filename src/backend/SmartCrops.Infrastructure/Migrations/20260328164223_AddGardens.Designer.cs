@@ -12,7 +12,7 @@ using SmartCrops.Infrastructure.Data;
 namespace SmartCrops.Infrastructure.Migrations
 {
     [DbContext(typeof(SmartCropsDbContext))]
-    [Migration("20260328162903_AddGardens")]
+    [Migration("20260328164223_AddGardens")]
     partial class AddGardens
     {
         /// <inheritdoc />
@@ -517,6 +517,15 @@ namespace SmartCrops.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<string>", b =>
+                {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SmartCrops.Core.Entities.Garden", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", null)
                         .WithMany()

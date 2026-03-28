@@ -522,6 +522,15 @@ namespace SmartCrops.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("SmartCrops.Core.Entities.Garden", b =>
+                {
+                    b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("SmartCrops.Core.Entities.GardenPlant", b =>
                 {
                     b.HasOne("SmartCrops.Core.Entities.Garden", "Garden")

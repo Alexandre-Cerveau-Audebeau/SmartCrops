@@ -25,6 +25,12 @@ namespace SmartCrops.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Gardens", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Gardens_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
