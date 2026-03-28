@@ -8,5 +8,5 @@ public class Garden
     public string UserId { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
-    public ICollection<GardenPlant> GardenPlants { get; set; } = new List<GardenPlant>();
+    public ICollection<GardenPlant> GardenPlants { get; set; } = [];
 }

@@ -20,6 +20,7 @@ public class GardenPlantConfiguration : IEntityTypeConfiguration<GardenPlant>
             .HasForeignKey(gp => gp.PlantId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.Property(gp => gp.AddedAt).HasDefaultValueSql("now()");
         builder.Property(gp => gp.Notes).HasMaxLength(500);
     }
 }

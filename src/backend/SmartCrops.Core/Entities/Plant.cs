@@ -41,5 +41,5 @@ public class Plant
 
     public ICollection<PlantTranslation> Translations { get; set; } = [];
     public ICollection<PlantSuggestion> Suggestions { get; set; } = [];
-    public ICollection<GardenPlant> GardenPlants { get; set; } = new List<GardenPlant>();
+    public ICollection<GardenPlant> GardenPlants { get; set; } = [];
 }

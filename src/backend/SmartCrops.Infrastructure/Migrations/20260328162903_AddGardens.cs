@@ -33,7 +33,7 @@ namespace SmartCrops.Infrastructure.Migrations
                 {
                     GardenId = table.Column<Guid>(type: "uuid", nullable: false),
                     PlantId = table.Column<Guid>(type: "uuid", nullable: false),
-                    AddedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    AddedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     Notes = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true)
                 },
                 constraints: table =>

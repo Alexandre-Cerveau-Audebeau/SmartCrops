@@ -12,7 +12,7 @@ using SmartCrops.Infrastructure.Data;
 namespace SmartCrops.Infrastructure.Migrations
 {
     [DbContext(typeof(SmartCropsDbContext))]
-    [Migration("20260328161430_AddGardens")]
+    [Migration("20260328162903_AddGardens")]
     partial class AddGardens
     {
         /// <inheritdoc />
@@ -263,7 +263,9 @@ namespace SmartCrops.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("AddedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(500)

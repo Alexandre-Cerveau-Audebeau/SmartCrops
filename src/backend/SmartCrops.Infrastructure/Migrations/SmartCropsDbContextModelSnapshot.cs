@@ -260,7 +260,9 @@ namespace SmartCrops.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("AddedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(500)
