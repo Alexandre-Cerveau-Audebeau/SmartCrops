@@ -12,6 +12,8 @@ public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options)
     public DbSet<PlantType> PlantTypes => Set<PlantType>();
     public DbSet<PlantTranslation> PlantTranslations => Set<PlantTranslation>();
     public DbSet<PlantSuggestion> PlantSuggestions => Set<PlantSuggestion>();
+    public DbSet<Garden> Gardens => Set<Garden>();
+    public DbSet<GardenPlant> GardenPlants => Set<GardenPlant>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
