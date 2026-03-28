@@ -586,6 +586,12 @@ export default function Home() {
                 aria-label={`Page ${i + 1} of ${totalPages}`}
                 tabIndex={i === currentPage ? 0 : -1}
                 onClick={() => setCurrentIndex(i * itemsPerPage)}
+                onKeyDown={(e: React.KeyboardEvent) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setCurrentIndex(i * itemsPerPage);
+                  }
+                }}
                 sx={{
                   width: 8,
                   height: 8,
@@ -643,7 +649,6 @@ export default function Home() {
               placeholder="your@email.com"
               label="Email address"
               type="email"
-              aria-label="Email address"
               size="small"
               fullWidth
               sx={{ maxWidth: 320 }}
