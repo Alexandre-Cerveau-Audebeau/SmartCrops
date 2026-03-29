@@ -45,7 +45,7 @@ export default function GardenDetail() {
     if (!id) return;
     try {
       await removePlantFromGarden(id, plantId);
-      loadGarden();
+      await loadGarden();
     } catch {
       setError(true);
     }
