@@ -73,7 +73,7 @@ export async function addPlantToGarden(
     {
       method: 'POST',
       headers: authHeaders(),
-      body: notes ? JSON.stringify({ notes }) : undefined,
+      body: JSON.stringify(notes ? { notes } : {}),
     },
   );
   if (!res.ok) throwWithStatus(`Failed to add plant to garden: ${res.status}`, res.status);

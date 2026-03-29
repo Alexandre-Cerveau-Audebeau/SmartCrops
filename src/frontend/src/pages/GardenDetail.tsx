@@ -43,8 +43,12 @@ export default function GardenDetail() {
 
   const handleRemovePlant = async (plantId: string) => {
     if (!id) return;
-    await removePlantFromGarden(id, plantId);
-    loadGarden();
+    try {
+      await removePlantFromGarden(id, plantId);
+      loadGarden();
+    } catch {
+      setError(true);
+    }
   };
 
   if (loading) {
@@ -98,7 +102,21 @@ export default function GardenDetail() {
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
           {garden.gardenPlants.map((gp) => {
             const plant = gp.plant;
-            if (!plant) return null;
+            if (!plant) {
+              return (
+                <Card
+                  key={gp.plantId}
+                  variant="outlined"
+                  sx={{ flex: '1 1 300px', minWidth: 0, borderRadius: 3 }}
+                >
+                  <CardContent>
+                    <Typography variant="body2" color="text.secondary">
+                      Plant data unavailable
+                    </Typography>
+                  </CardContent>
+                </Card>
+              );
+            }
             const t = getTranslation(plant, language);
 
             return (

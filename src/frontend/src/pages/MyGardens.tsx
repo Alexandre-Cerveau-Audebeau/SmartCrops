@@ -54,25 +54,37 @@ export default function MyGardens() {
   }, []);
 
   const handleCreate = async () => {
-    await createGarden(newGardenName, newGardenDescription || undefined);
-    setCreateDialogOpen(false);
-    setNewGardenName('');
-    setNewGardenDescription('');
-    loadGardens();
+    try {
+      await createGarden(newGardenName, newGardenDescription || undefined);
+      setCreateDialogOpen(false);
+      setNewGardenName('');
+      setNewGardenDescription('');
+      loadGardens();
+    } catch {
+      setError(true);
+    }
   };
 
   const handleEdit = async () => {
     if (!editingGarden) return;
-    await updateGarden(editingGarden.id, editName, editDescription || undefined);
-    setEditingGarden(null);
-    loadGardens();
+    try {
+      await updateGarden(editingGarden.id, editName, editDescription || undefined);
+      setEditingGarden(null);
+      loadGardens();
+    } catch {
+      setError(true);
+    }
   };
 
   const handleDelete = async () => {
     if (!deleteConfirmGarden) return;
-    await deleteGarden(deleteConfirmGarden.id);
-    setDeleteConfirmGarden(null);
-    loadGardens();
+    try {
+      await deleteGarden(deleteConfirmGarden.id);
+      setDeleteConfirmGarden(null);
+      loadGardens();
+    } catch {
+      setError(true);
+    }
   };
 
   const openEditDialog = (garden: Garden) => {
@@ -144,10 +156,18 @@ export default function MyGardens() {
                 <Button size="small" component={RouterLink} to={`/gardens/${garden.id}`}>
                   View
                 </Button>
-                <IconButton size="small" onClick={() => openEditDialog(garden)}>
+                <IconButton
+                  size="small"
+                  onClick={() => openEditDialog(garden)}
+                  aria-label={`Edit garden ${garden.name}`}
+                >
                   <EditIcon fontSize="small" />
                 </IconButton>
-                <IconButton size="small" onClick={() => setDeleteConfirmGarden(garden)}>
+                <IconButton
+                  size="small"
+                  onClick={() => setDeleteConfirmGarden(garden)}
+                  aria-label={`Delete garden ${garden.name}`}
+                >
                   <DeleteIcon fontSize="small" />
                 </IconButton>
               </CardActions>
