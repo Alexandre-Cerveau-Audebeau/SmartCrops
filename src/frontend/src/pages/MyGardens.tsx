@@ -23,7 +23,9 @@ import type { Garden } from '../types/Garden';
 export default function MyGardens() {
   const [gardens, setGardens] = useState<Garden[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [mutationError, setMutationError] = useState(false);
+  const [isMutating, setIsMutating] = useState(false);
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newGardenName, setNewGardenName] = useState('');
@@ -39,9 +41,9 @@ export default function MyGardens() {
     try {
       const data = await fetchGardens(signal);
       setGardens(data);
-      setError(false);
+      setLoadError(false);
     } catch (err) {
-      if ((err as Error).name !== 'AbortError') setError(true);
+      if ((err as Error).name !== 'AbortError') setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -54,6 +56,9 @@ export default function MyGardens() {
   }, []);
 
   const handleCreate = async () => {
+    if (isMutating) return;
+    setIsMutating(true);
+    setMutationError(false);
     try {
       await createGarden(newGardenName, newGardenDescription || undefined);
       setCreateDialogOpen(false);
@@ -61,29 +66,39 @@ export default function MyGardens() {
       setNewGardenDescription('');
       loadGardens();
     } catch {
-      setError(true);
+      setMutationError(true);
+    } finally {
+      setIsMutating(false);
     }
   };
 
   const handleEdit = async () => {
-    if (!editingGarden) return;
+    if (!editingGarden || isMutating) return;
+    setIsMutating(true);
+    setMutationError(false);
     try {
       await updateGarden(editingGarden.id, editName, editDescription || undefined);
       setEditingGarden(null);
       loadGardens();
     } catch {
-      setError(true);
+      setMutationError(true);
+    } finally {
+      setIsMutating(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!deleteConfirmGarden) return;
+    if (!deleteConfirmGarden || isMutating) return;
+    setIsMutating(true);
+    setMutationError(false);
     try {
       await deleteGarden(deleteConfirmGarden.id);
       setDeleteConfirmGarden(null);
       loadGardens();
     } catch {
-      setError(true);
+      setMutationError(true);
+    } finally {
+      setIsMutating(false);
     }
   };
 
@@ -112,13 +127,19 @@ export default function MyGardens() {
         </Box>
       )}
 
-      {error && (
+      {loadError && (
         <Typography color="text.secondary">
           Unable to load gardens. Please try again later.
         </Typography>
       )}
 
-      {!loading && !error && gardens.length === 0 && (
+      {mutationError && (
+        <Typography color="error" sx={{ mb: 2 }}>
+          An error occurred. Please try again.
+        </Typography>
+      )}
+
+      {!loading && !loadError && gardens.length === 0 && (
         <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
           <Typography sx={{ mb: 2 }}>
             You don&apos;t have any gardens yet. Create your first garden!
@@ -206,7 +227,7 @@ export default function MyGardens() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" disabled={!newGardenName.trim()} onClick={handleCreate}>
+          <Button variant="contained" disabled={isMutating || !newGardenName.trim()} onClick={handleCreate}>
             Create
           </Button>
         </DialogActions>
@@ -242,7 +263,7 @@ export default function MyGardens() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditingGarden(null)}>Cancel</Button>
-          <Button variant="contained" disabled={!editName.trim()} onClick={handleEdit}>
+          <Button variant="contained" disabled={isMutating || !editName.trim()} onClick={handleEdit}>
             Save
           </Button>
         </DialogActions>
@@ -259,7 +280,7 @@ export default function MyGardens() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteConfirmGarden(null)}>Cancel</Button>
-          <Button variant="contained" color="error" onClick={handleDelete}>
+          <Button variant="contained" color="error" disabled={isMutating} onClick={handleDelete}>
             Delete
           </Button>
         </DialogActions>

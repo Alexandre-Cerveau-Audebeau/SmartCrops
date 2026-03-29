@@ -156,6 +156,7 @@ export default function GardenDetail() {
                       variant="outlined"
                       color="error"
                       onClick={() => handleRemovePlant(gp.plantId)}
+                      aria-label={`Remove ${t?.commonName ?? plant.scientificName} from garden`}
                     >
                       Remove
                     </Button>
