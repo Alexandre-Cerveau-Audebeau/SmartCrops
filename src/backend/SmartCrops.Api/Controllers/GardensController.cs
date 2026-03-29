@@ -163,7 +163,14 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         };
 
         context.GardenPlants.Add(gardenPlant);
-        await context.SaveChangesAsync();
+        try
+        {
+            await context.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict("Plant already in garden");
+        }
 
         return CreatedAtAction(nameof(GetGarden), new { id }, gardenPlant);
     }
