@@ -51,7 +51,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
             return Unauthorized();
 
         var garden = await context
-            .Gardens.Where(g => g.Id == id)
+            .Gardens.Where(g => g.Id == id && g.UserId == userId)
             .Include(g => g.GardenPlants)
             .ThenInclude(gp => gp.Plant)
             .ThenInclude(p => p.Translations)
@@ -61,7 +61,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
             .AsNoTracking()
             .FirstOrDefaultAsync();
 
-        if (garden == null || garden.UserId != userId)
+        if (garden == null)
             return NotFound();
 
         return Ok(garden);
@@ -97,9 +97,11 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
-        var garden = await context.Gardens.FirstOrDefaultAsync(g => g.Id == id);
+        var garden = await context.Gardens.FirstOrDefaultAsync(g =>
+            g.Id == id && g.UserId == userId
+        );
 
-        if (garden == null || garden.UserId != userId)
+        if (garden == null)
             return NotFound();
 
         garden.Name = request.Name;
@@ -118,9 +120,11 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
-        var garden = await context.Gardens.FirstOrDefaultAsync(g => g.Id == id);
+        var garden = await context.Gardens.FirstOrDefaultAsync(g =>
+            g.Id == id && g.UserId == userId
+        );
 
-        if (garden == null || garden.UserId != userId)
+        if (garden == null)
             return NotFound();
 
         context.Gardens.Remove(garden);
@@ -133,16 +137,19 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     public async Task<IActionResult> AddPlantToGarden(
         Guid id,
         Guid plantId,
-        [FromBody] AddPlantToGardenRequest? request
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)]
+            AddPlantToGardenRequest? request
     )
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
-        var garden = await context.Gardens.FirstOrDefaultAsync(g => g.Id == id);
+        var garden = await context.Gardens.FirstOrDefaultAsync(g =>
+            g.Id == id && g.UserId == userId
+        );
 
-        if (garden == null || garden.UserId != userId)
+        if (garden == null)
             return NotFound();
 
         var plantExists = await context.Plants.AnyAsync(p => p.Id == plantId);
@@ -184,9 +191,11 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
-        var garden = await context.Gardens.FirstOrDefaultAsync(g => g.Id == id);
+        var garden = await context.Gardens.FirstOrDefaultAsync(g =>
+            g.Id == id && g.UserId == userId
+        );
 
-        if (garden == null || garden.UserId != userId)
+        if (garden == null)
             return NotFound();
 
         var gardenPlant = await context.GardenPlants.FirstOrDefaultAsync(gp =>
