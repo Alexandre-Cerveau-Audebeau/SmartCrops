@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -20,17 +20,26 @@ export default function GardenDetail() {
   const [garden, setGarden] = useState<Garden | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const loadGarden = async (signal?: AbortSignal) => {
     if (!id) return;
     try {
       const data = await fetchGarden(id, signal);
-      setGarden(data);
-      setError(false);
+      if (mountedRef.current) {
+        setGarden(data);
+        setError(false);
+      }
     } catch (err) {
-      if ((err as Error).name !== 'AbortError') setError(true);
+      if ((err as Error).name !== 'AbortError' && mountedRef.current) setError(true);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
@@ -45,9 +54,13 @@ export default function GardenDetail() {
     if (!id) return;
     try {
       await removePlantFromGarden(id, plantId);
-      await loadGarden();
+      if (mountedRef.current) {
+        await loadGarden();
+      }
     } catch {
-      setError(true);
+      if (mountedRef.current) {
+        setError(true);
+      }
     }
   };
 
