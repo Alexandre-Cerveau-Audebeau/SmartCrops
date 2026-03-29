@@ -35,6 +35,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         var gardens = await context
             .Gardens.Where(g => g.UserId == userId)
             .Include(g => g.GardenPlants)
+            .ThenInclude(gp => gp.Plant)
             .OrderByDescending(g => g.CreatedAt)
             .AsNoTracking()
             .ToListAsync();
