@@ -167,7 +167,8 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         {
             await context.SaveChangesAsync();
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex)
+            when (ex.InnerException is Npgsql.NpgsqlException { SqlState: "23505" })
         {
             return Conflict("Plant already in garden");
         }
