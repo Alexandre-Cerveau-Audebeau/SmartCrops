@@ -18,6 +18,6 @@ public class GardenConfiguration : IEntityTypeConfiguration<Garden>
         builder.HasOne<IdentityUser>()
             .WithMany()
             .HasForeignKey(g => g.UserId)
-            .OnDelete(DeleteBehavior.Cascade);
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

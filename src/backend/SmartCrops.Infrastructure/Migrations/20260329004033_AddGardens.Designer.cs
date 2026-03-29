@@ -12,7 +12,7 @@ using SmartCrops.Infrastructure.Data;
 namespace SmartCrops.Infrastructure.Migrations
 {
     [DbContext(typeof(SmartCropsDbContext))]
-    [Migration("20260328164223_AddGardens")]
+    [Migration("20260329004033_AddGardens")]
     partial class AddGardens
     {
         /// <inheritdoc />
@@ -530,7 +530,7 @@ namespace SmartCrops.Infrastructure.Migrations
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
