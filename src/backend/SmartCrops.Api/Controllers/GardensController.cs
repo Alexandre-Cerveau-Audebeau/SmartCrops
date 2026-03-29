@@ -29,6 +29,8 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     public async Task<IActionResult> GetGardens()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
 
         var gardens = await context
             .Gardens.Where(g => g.UserId == userId)
@@ -44,6 +46,8 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     public async Task<IActionResult> GetGarden(Guid id)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
 
         var garden = await context
             .Gardens.Where(g => g.Id == id)
@@ -66,13 +70,15 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     public async Task<IActionResult> CreateGarden(CreateGardenRequest request)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
 
         var garden = new Garden
         {
             Id = Guid.NewGuid(),
             Name = request.Name,
             Description = request.Description,
-            UserId = userId!,
+            UserId = userId,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
@@ -87,6 +93,8 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     public async Task<IActionResult> UpdateGarden(Guid id, UpdateGardenRequest request)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
 
         var garden = await context.Gardens.FirstOrDefaultAsync(g => g.Id == id);
 
@@ -106,6 +114,8 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     public async Task<IActionResult> DeleteGarden(Guid id)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
 
         var garden = await context.Gardens.FirstOrDefaultAsync(g => g.Id == id);
 
@@ -126,6 +136,8 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     )
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
 
         var garden = await context.Gardens.FirstOrDefaultAsync(g => g.Id == id);
 
@@ -153,13 +165,15 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         context.GardenPlants.Add(gardenPlant);
         await context.SaveChangesAsync();
 
-        return Created($"/api/gardens/{id}/plants/{plantId}", gardenPlant);
+        return CreatedAtAction(nameof(GetGarden), new { id }, gardenPlant);
     }
 
     [HttpDelete("{id:guid}/plants/{plantId:guid}")]
     public async Task<IActionResult> RemovePlantFromGarden(Guid id, Guid plantId)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
 
         var garden = await context.Gardens.FirstOrDefaultAsync(g => g.Id == id);
 
