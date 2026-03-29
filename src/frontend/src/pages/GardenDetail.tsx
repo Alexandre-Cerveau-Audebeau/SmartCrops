@@ -20,6 +20,7 @@ export default function GardenDetail() {
   const [garden, setGarden] = useState<Garden | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -45,6 +46,9 @@ export default function GardenDetail() {
 
   useEffect(() => {
     const controller = new AbortController();
+    setLoading(true);
+    setError(false);
+    setGarden(null);
     loadGarden(controller.signal);
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -53,13 +57,14 @@ export default function GardenDetail() {
   const handleRemovePlant = async (plantId: string) => {
     if (!id) return;
     try {
+      setRemoveError(null);
       await removePlantFromGarden(id, plantId);
       if (mountedRef.current) {
         await loadGarden();
       }
     } catch {
       if (mountedRef.current) {
-        setError(true);
+        setRemoveError('Failed to remove plant. Please try again.');
       }
     }
   };
@@ -97,6 +102,12 @@ export default function GardenDetail() {
       {garden.description && (
         <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
           {garden.description}
+        </Typography>
+      )}
+
+      {removeError && (
+        <Typography color="error" sx={{ mb: 2 }}>
+          {removeError}
         </Typography>
       )}
 
