@@ -2,11 +2,14 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Layout from './components/Layout/Layout';
+import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import AuthCallback from './pages/AuthCallback';
+import GardenDetail from './pages/GardenDetail';
 import Home from './pages/Home';
 import Login from './pages/Login';
+import MyGardens from './pages/MyGardens';
 import NotFound from './pages/NotFound';
 import PlantDetail from './pages/PlantDetail';
 import PlantLibrary from './pages/PlantLibrary';
@@ -28,6 +31,10 @@ export default function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/library/:id" element={<PlantDetail />} />
             <Route path="/library" element={<PlantLibrary />} />
+            <Route element={<ProtectedRoute />}>
+              <Route path="/gardens" element={<MyGardens />} />
+              <Route path="/gardens/:id" element={<GardenDetail />} />
+            </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>

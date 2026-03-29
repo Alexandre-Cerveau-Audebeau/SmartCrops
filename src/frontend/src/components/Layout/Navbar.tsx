@@ -23,7 +23,7 @@ import LogoButton from '../LogoButton';
 
 const navLinks = [
   { label: 'Library', to: '/library', enabled: true },
-  { label: 'My Gardens', to: '/gardens', enabled: false },
+  { label: 'My Gardens', to: '/gardens', enabled: true },
 ];
 
 export default function Navbar() {
