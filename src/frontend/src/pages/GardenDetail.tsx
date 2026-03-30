@@ -7,11 +7,22 @@ import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import AddIcon from '@mui/icons-material/Add';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useLanguage } from '../hooks/useLanguage';
-import { fetchGarden, removePlantFromGarden } from '../services/gardenApi';
+import { addPlantToGarden, fetchGarden, removePlantFromGarden } from '../services/gardenApi';
+import { fetchPlants } from '../services/plantApi';
 import type { Garden } from '../types/Garden';
+import type { Plant } from '../types/Plant';
 import { getTranslation } from '../utils/getTranslation';
 
 export default function GardenDetail() {
@@ -23,11 +34,15 @@ export default function GardenDetail() {
   const [removeError, setRemoveError] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [availablePlants, setAvailablePlants] = useState<Plant[]>([]);
+  const [plantsLoading, setPlantsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedPlant, setSelectedPlant] = useState<Plant | null>(null);
+  const [plantNotes, setPlantNotes] = useState('');
+  const [addingPlant, setAddingPlant] = useState(false);
+  const [addPlantError, setAddPlantError] = useState<string | null>(null);
+  const [addPlantSuccess, setAddPlantSuccess] = useState<string | null>(null);
 
   const loadGarden = async (signal?: AbortSignal) => {
     if (!id) return;
@@ -45,12 +60,16 @@ export default function GardenDetail() {
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     const controller = new AbortController();
     setLoading(true);
     setError(false);
     setGarden(null);
     loadGarden(controller.signal);
-    return () => controller.abort();
+    return () => {
+      mountedRef.current = false;
+      controller.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -68,6 +87,58 @@ export default function GardenDetail() {
       }
     }
   };
+
+  const openAddPlantDialog = async () => {
+    setAddDialogOpen(true);
+    setPlantsLoading(true);
+    setAddPlantError(null);
+    setAddPlantSuccess(null);
+    setSelectedPlant(null);
+    setPlantNotes('');
+    setSearchQuery('');
+    try {
+      const allPlants = await fetchPlants();
+      const gardenPlantIds = new Set(garden?.gardenPlants.map((gp) => gp.plantId) ?? []);
+      setAvailablePlants(allPlants.filter((p) => !gardenPlantIds.has(p.id)));
+    } catch {
+      setAddPlantError('Failed to load plants');
+    } finally {
+      setPlantsLoading(false);
+    }
+  };
+
+  const handleAddPlant = async () => {
+    if (!selectedPlant || !garden || addingPlant) return;
+    setAddingPlant(true);
+    setAddPlantError(null);
+    try {
+      await addPlantToGarden(garden.id, selectedPlant.id, plantNotes || undefined);
+      const name = getTranslation(selectedPlant, language)?.commonName ?? selectedPlant.scientificName;
+      setAddPlantSuccess(`Added ${name}!`);
+      setSelectedPlant(null);
+      setPlantNotes('');
+      if (mountedRef.current) await loadGarden();
+      setTimeout(() => {
+        setAddDialogOpen(false);
+        setAddPlantSuccess(null);
+      }, 1500);
+    } catch (err) {
+      if ((err as Error & { status?: number }).status === 409) {
+        setAddPlantError('This plant is already in this garden');
+      } else {
+        setAddPlantError('Failed to add plant. Please try again.');
+      }
+    } finally {
+      setAddingPlant(false);
+    }
+  };
+
+  const filteredPlants = availablePlants.filter((p) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    const commonName = getTranslation(p, language)?.commonName?.toLowerCase() ?? '';
+    return commonName.includes(query) || p.scientificName.toLowerCase().includes(query);
+  });
 
   if (loading) {
     return (
@@ -96,9 +167,14 @@ export default function GardenDetail() {
         Back to Gardens
       </Button>
 
-      <Typography variant="h4" fontWeight={700} color="primary" sx={{ mb: 1 }}>
-        {garden.name}
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Typography variant="h4" fontWeight={700} color="primary">
+          {garden.name}
+        </Typography>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={openAddPlantDialog}>
+          Add plants
+        </Button>
+      </Box>
       {garden.description && (
         <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
           {garden.description}
@@ -114,16 +190,21 @@ export default function GardenDetail() {
       {garden.gardenPlants.length === 0 && (
         <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
           <Typography sx={{ mb: 2 }}>
-            No plants in this garden yet. Browse the library to add some!
+            No plants in this garden yet. Add some from the library!
           </Typography>
-          <Button variant="contained" component={RouterLink} to="/library">
-            Browse Library
-          </Button>
+          <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={openAddPlantDialog}>
+              Add plants
+            </Button>
+            <Button variant="outlined" component={RouterLink} to="/library">
+              Browse Library
+            </Button>
+          </Box>
         </Box>
       )}
 
       {garden.gardenPlants.length > 0 && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 3 }}>
           {garden.gardenPlants.map((gp) => {
             const plant = gp.plant;
             if (!plant) {
@@ -131,7 +212,7 @@ export default function GardenDetail() {
                 <Card
                   key={gp.plantId}
                   variant="outlined"
-                  sx={{ flex: '1 1 300px', minWidth: 0, borderRadius: 3 }}
+                  sx={{ borderRadius: 3 }}
                 >
                   <CardContent>
                     <Typography variant="body2" color="text.secondary">
@@ -147,7 +228,7 @@ export default function GardenDetail() {
               <Card
                 key={gp.plantId}
                 variant="outlined"
-                sx={{ flex: '1 1 300px', minWidth: 0, borderRadius: 3 }}
+                sx={{ borderRadius: 3 }}
               >
                 <CardContent>
                   <Typography variant="h6" fontWeight={600}>
@@ -170,8 +251,8 @@ export default function GardenDetail() {
                     />
                   )}
                   {gp.notes && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                      {gp.notes}
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic' }}>
+                      Notes: {gp.notes}
                     </Typography>
                   )}
                   <Box sx={{ mt: 1 }}>
@@ -191,6 +272,105 @@ export default function GardenDetail() {
           })}
         </Box>
       )}
+      {/* Add plant dialog */}
+      <Dialog
+        open={addDialogOpen}
+        onClose={() => setAddDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Add a plant to this garden</DialogTitle>
+        <DialogContent>
+          {plantsLoading && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          )}
+
+          {addPlantSuccess && (
+            <Typography color="success.main" sx={{ mb: 2 }}>
+              {addPlantSuccess}
+            </Typography>
+          )}
+
+          {addPlantError && (
+            <Typography color="error" sx={{ mb: 2 }}>
+              {addPlantError}
+            </Typography>
+          )}
+
+          {!plantsLoading && !addPlantSuccess && (
+            <>
+              <TextField
+                placeholder="Search plants..."
+                size="small"
+                fullWidth
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                sx={{ mb: 2 }}
+              />
+              {filteredPlants.length > 0 ? (
+                <List sx={{ maxHeight: 300, overflow: 'auto' }}>
+                  {filteredPlants.map((p) => {
+                    const pt = getTranslation(p, language);
+                    return (
+                      <ListItemButton
+                        key={p.id}
+                        selected={selectedPlant?.id === p.id}
+                        onClick={() => setSelectedPlant(p)}
+                      >
+                        <ListItemText
+                          primary={pt?.commonName ?? p.scientificName}
+                          secondary={
+                            <Typography
+                              component="span"
+                              variant="body2"
+                              sx={{ fontStyle: 'italic' }}
+                            >
+                              {p.scientificName}
+                            </Typography>
+                          }
+                        />
+                        {p.plantType && (
+                          <Chip label={p.plantType.name} size="small" variant="outlined" />
+                        )}
+                      </ListItemButton>
+                    );
+                  })}
+                </List>
+              ) : searchQuery ? (
+                <Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+                  No plants match your search
+                </Typography>
+              ) : (
+                <Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+                  All plants are already in this garden!
+                </Typography>
+              )}
+              <TextField
+                label="Notes (optional)"
+                fullWidth
+                multiline
+                rows={2}
+                inputProps={{ maxLength: 500 }}
+                value={plantNotes}
+                onChange={(e) => setPlantNotes(e.target.value)}
+                sx={{ mt: 2 }}
+              />
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={!selectedPlant || addingPlant}
+            onClick={handleAddPlant}
+          >
+            Add to garden
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }

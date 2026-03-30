@@ -17,13 +17,17 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import { useLanguage } from '../hooks/useLanguage';
 import { createGarden, deleteGarden, fetchGardens, updateGarden } from '../services/gardenApi';
 import type { Garden } from '../types/Garden';
+import { getTranslation } from '../utils/getTranslation';
 
 export default function MyGardens() {
+  const { language } = useLanguage();
   const [gardens, setGardens] = useState<Garden[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
   const [mutationError, setMutationError] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
 
@@ -108,6 +112,15 @@ export default function MyGardens() {
     setEditDescription(garden.description ?? '');
   };
 
+  const toggleDescription = (gardenId: string) => {
+    setExpandedDescriptions((prev) => {
+      const next = new Set(prev);
+      if (next.has(gardenId)) next.delete(gardenId);
+      else next.add(gardenId);
+      return next;
+    });
+  };
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -151,20 +164,45 @@ export default function MyGardens() {
       )}
 
       {!loading && gardens.length > 0 && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 3 }}>
           {gardens.map((garden) => (
             <Card
               key={garden.id}
               variant="outlined"
-              sx={{ flex: '1 1 300px', minWidth: 0, borderRadius: 3 }}
+              sx={{ borderRadius: 3 }}
             >
               <CardContent>
                 <Typography variant="h6" fontWeight={600}>
                   {garden.name}
                 </Typography>
                 {garden.description && (
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={
+                      expandedDescriptions.has(garden.id)
+                        ? { mb: 0.5 }
+                        : {
+                            mb: 0.5,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                          }
+                    }
+                  >
                     {garden.description}
+                  </Typography>
+                )}
+                {garden.description && garden.description.length > 80 && (
+                  <Typography
+                    variant="body2"
+                    color="primary"
+                    sx={{ cursor: 'pointer', mt: 0.5, mb: 1, fontSize: '0.8rem' }}
+                    onClick={() => toggleDescription(garden.id)}
+                  >
+                    {expandedDescriptions.has(garden.id) ? 'See less' : 'See more'}
                   </Typography>
                 )}
                 <Chip
@@ -172,6 +210,20 @@ export default function MyGardens() {
                   size="small"
                   variant="outlined"
                 />
+                {garden.gardenPlants.length > 0 && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    {garden.gardenPlants
+                      .slice(0, 3)
+                      .map((gp) => {
+                        if (!gp.plant) return 'Unknown';
+                        const t = getTranslation(gp.plant, language);
+                        return t?.commonName || gp.plant.translations?.[0]?.commonName || gp.plant.scientificName;
+                      })
+                      .join(', ')}
+                    {garden.gardenPlants.length > 3 &&
+                      ` +${garden.gardenPlants.length - 3} more`}
+                  </Typography>
+                )}
               </CardContent>
               <CardActions>
                 <Button size="small" component={RouterLink} to={`/gardens/${garden.id}`}>
