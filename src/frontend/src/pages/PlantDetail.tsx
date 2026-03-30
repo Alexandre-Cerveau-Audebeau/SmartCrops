@@ -44,6 +44,7 @@ export default function PlantDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [gardens, setGardens] = useState<Garden[]>([]);
@@ -63,6 +64,10 @@ export default function PlantDetail() {
   };
 
   const openAddDialog = async () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
     if (!isAuthenticated) {
       navigate('/login');
       return;
@@ -119,11 +124,12 @@ export default function PlantDetail() {
       if (alreadyAdded > 0) message += ` ${alreadyAdded} already had this plant.`;
       setAddSuccess(message);
       setSelectedGardenIds(new Set());
-      setTimeout(() => {
+      closeTimerRef.current = setTimeout(() => {
         if (!mountedRef.current) return;
         setDialogOpen(false);
         setAddSuccess(null);
         setIsAdding(false);
+        closeTimerRef.current = null;
       }, 2000);
       return;
     }
@@ -132,7 +138,13 @@ export default function PlantDetail() {
 
   useEffect(() => {
     mountedRef.current = true;
-    if (!id) return;
+    setPlant(null);
+    setError(null);
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
 
     const controller = new AbortController();
 
@@ -154,6 +166,10 @@ export default function PlantDetail() {
     return () => {
       mountedRef.current = false;
       controller.abort();
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
     };
   }, [id]);
 
