@@ -263,14 +263,14 @@ export default function GardenDetail() {
                     notes={gp.notes ?? null}
                     disabled={loading}
                     onSave={async (newNotes) => {
-                      await updatePlantNotes(garden.id, gp.plantId, newNotes);
+                      const updated = await updatePlantNotes(garden.id, gp.plantId, newNotes);
                       setGarden((prev) => {
                         if (!prev) return prev;
                         return {
                           ...prev,
                           gardenPlants: prev.gardenPlants.map((p) =>
                             p.plantId === gp.plantId
-                              ? { ...p, notes: newNotes ?? undefined }
+                              ? { ...p, notes: updated.notes ?? undefined }
                               : p,
                           ),
                         };

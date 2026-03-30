@@ -94,9 +94,12 @@ public class GardensControllerTests : IClassFixture<GardensTestFactory>
             UpdatedAt = DateTime.UtcNow,
         };
 
-        var plantType = new PlantType { Id = 1, Name = "Vegetable" };
-        if (!await db.PlantTypes.AnyAsync(pt => pt.Id == 1))
+        var plantType = await db.PlantTypes.FindAsync(1);
+        if (plantType == null)
+        {
+            plantType = new PlantType { Id = 1, Name = "Vegetable" };
             db.PlantTypes.Add(plantType);
+        }
 
         var plant = new Plant
         {
@@ -179,6 +182,27 @@ public class GardensControllerTests : IClassFixture<GardensTestFactory>
         var response = await client.PatchAsJsonAsync(
             $"/api/gardens/{Guid.NewGuid()}/plants/{Guid.NewGuid()}",
             new { Notes = "Some notes" }
+        );
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchPlantNotes_OtherUsersGarden_Returns404()
+    {
+        var ownerUserId = Guid.NewGuid().ToString();
+        var otherUserId = Guid.NewGuid().ToString();
+        var (gardenId, plantId) = await SeedGardenWithPlant(ownerUserId);
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            _factory.GenerateToken(otherUserId)
+        );
+
+        var response = await client.PatchAsJsonAsync(
+            $"/api/gardens/{gardenId}/plants/{plantId}",
+            new { Notes = "Hacked notes" }
         );
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);

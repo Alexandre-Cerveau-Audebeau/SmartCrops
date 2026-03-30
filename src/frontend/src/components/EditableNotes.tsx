@@ -20,6 +20,7 @@ export default function EditableNotes({ notes, onSave, disabled }: EditableNotes
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isCancellingRef = useRef(false);
+  const isSavingRef = useRef(false);
 
   const startEditing = () => {
     setValue(notes ?? '');
@@ -33,6 +34,7 @@ export default function EditableNotes({ notes, onSave, disabled }: EditableNotes
   };
 
   const save = async () => {
+    if (isSavingRef.current) return;
     const trimmed = value.trim();
     const newNotes = trimmed === '' ? null : trimmed;
 
@@ -41,6 +43,7 @@ export default function EditableNotes({ notes, onSave, disabled }: EditableNotes
       return;
     }
 
+    isSavingRef.current = true;
     setIsSaving(true);
     setError(null);
     try {
@@ -49,6 +52,7 @@ export default function EditableNotes({ notes, onSave, disabled }: EditableNotes
     } catch {
       setError('Failed to save notes.');
     } finally {
+      isSavingRef.current = false;
       setIsSaving(false);
     }
   };
@@ -115,6 +119,7 @@ export default function EditableNotes({ notes, onSave, disabled }: EditableNotes
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
         <IconButton
           size="small"
+          onMouseDown={(e) => e.preventDefault()}
           onClick={save}
           disabled={isSaving}
           aria-label="Save notes"
