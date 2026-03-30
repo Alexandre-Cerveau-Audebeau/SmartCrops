@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -43,6 +43,7 @@ export default function PlantDetail() {
   const [plant, setPlant] = useState<Plant | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [gardens, setGardens] = useState<Garden[]>([]);
@@ -72,6 +73,7 @@ export default function PlantDetail() {
     setAddSuccess(null);
     setSelectedGardenIds(new Set());
     setGardens([]);
+    setIsAdding(false);
     try {
       const data = await fetchGardens();
       setGardens(data);
@@ -118,6 +120,7 @@ export default function PlantDetail() {
       setAddSuccess(message);
       setSelectedGardenIds(new Set());
       setTimeout(() => {
+        if (!mountedRef.current) return;
         setDialogOpen(false);
         setAddSuccess(null);
         setIsAdding(false);
@@ -128,6 +131,7 @@ export default function PlantDetail() {
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     if (!id) return;
 
     const controller = new AbortController();
@@ -147,7 +151,10 @@ export default function PlantDetail() {
         if (!controller.signal.aborted) setLoading(false);
       });
 
-    return () => controller.abort();
+    return () => {
+      mountedRef.current = false;
+      controller.abort();
+    };
   }, [id]);
 
   if (!id) {
