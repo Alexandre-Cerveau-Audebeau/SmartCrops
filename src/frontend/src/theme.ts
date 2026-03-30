@@ -31,6 +31,14 @@ const theme = createTheme({
     borderRadius: 8,
   },
   components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        html: {
+          overflowY: 'scroll',
+          scrollbarGutter: 'stable',
+        },
+      },
+    },
     MuiCard: {
       styleOverrides: {
         root: {
