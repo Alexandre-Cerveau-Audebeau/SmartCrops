@@ -96,11 +96,13 @@ export default function GardenDetail() {
     setSelectedPlant(null);
     setPlantNotes('');
     setSearchQuery('');
+    setAvailablePlants([]);
     try {
       const allPlants = await fetchPlants();
       const gardenPlantIds = new Set(garden?.gardenPlants.map((gp) => gp.plantId) ?? []);
       setAvailablePlants(allPlants.filter((p) => !gardenPlantIds.has(p.id)));
     } catch {
+      setAvailablePlants([]);
       setAddPlantError('Failed to load plants');
     } finally {
       setPlantsLoading(false);
@@ -119,6 +121,7 @@ export default function GardenDetail() {
       setPlantNotes('');
       if (mountedRef.current) await loadGarden();
       setTimeout(() => {
+        if (!mountedRef.current) return;
         setAddDialogOpen(false);
         setAddPlantSuccess(null);
       }, 1500);
@@ -364,7 +367,7 @@ export default function GardenDetail() {
           <Button onClick={() => setAddDialogOpen(false)}>Cancel</Button>
           <Button
             variant="contained"
-            disabled={!selectedPlant || addingPlant}
+            disabled={!selectedPlant || addingPlant || !filteredPlants.some((p) => p.id === selectedPlant.id)}
             onClick={handleAddPlant}
           >
             Add to garden

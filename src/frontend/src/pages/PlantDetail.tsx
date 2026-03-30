@@ -71,10 +71,12 @@ export default function PlantDetail() {
     setAddError(null);
     setAddSuccess(null);
     setSelectedGardenIds(new Set());
+    setGardens([]);
     try {
       const data = await fetchGardens();
       setGardens(data);
     } catch {
+      setGardens([]);
       setAddError('Failed to load gardens');
     } finally {
       setGardensLoading(false);
@@ -104,16 +106,24 @@ export default function PlantDetail() {
     const successes = results.filter((r) => r.success).length;
     const alreadyAdded = results.filter((r) => r.error === 'already added').length;
     const failed = results.filter((r) => r.error === 'failed').length;
-    let message = '';
-    if (successes > 0) message += `Added to ${successes} garden(s).`;
-    if (alreadyAdded > 0) message += ` ${alreadyAdded} already had this plant.`;
-    if (failed > 0) message += ` ${failed} failed.`;
-    setAddSuccess(message.trim());
-    setSelectedGardenIds(new Set());
-    setTimeout(() => {
-      setDialogOpen(false);
-      setAddSuccess(null);
-    }, 2000);
+
+    if (failed > 0) {
+      let errorMsg = `${failed} garden(s) failed.`;
+      if (successes > 0) errorMsg = `Added to ${successes} garden(s), but ${failed} failed.`;
+      if (alreadyAdded > 0) errorMsg += ` ${alreadyAdded} already had this plant.`;
+      setAddError(errorMsg);
+    } else {
+      let message = `Added to ${successes} garden(s).`;
+      if (alreadyAdded > 0) message += ` ${alreadyAdded} already had this plant.`;
+      setAddSuccess(message);
+      setSelectedGardenIds(new Set());
+      setTimeout(() => {
+        setDialogOpen(false);
+        setAddSuccess(null);
+        setIsAdding(false);
+      }, 2000);
+      return;
+    }
     setIsAdding(false);
   };
 
