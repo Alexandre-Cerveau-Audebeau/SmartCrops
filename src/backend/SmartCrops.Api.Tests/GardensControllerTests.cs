@@ -5,7 +5,6 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -206,6 +205,61 @@ public class GardensControllerTests : IClassFixture<GardensTestFactory>
         );
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchPlantNotes_NoAuthHeader_Returns401()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.PatchAsJsonAsync(
+            $"/api/gardens/{Guid.NewGuid()}/plants/{Guid.NewGuid()}",
+            new { Notes = "Some notes" }
+        );
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchPlantNotes_PlantNotInGarden_Returns404()
+    {
+        var userId = Guid.NewGuid().ToString();
+        var (gardenId, _) = await SeedGardenWithPlant(userId);
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            _factory.GenerateToken(userId)
+        );
+
+        var response = await client.PatchAsJsonAsync(
+            $"/api/gardens/{gardenId}/plants/{Guid.NewGuid()}",
+            new { Notes = "Some notes" }
+        );
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchPlantNotes_NullNotes_ClearsNotes()
+    {
+        var userId = Guid.NewGuid().ToString();
+        var (gardenId, plantId) = await SeedGardenWithPlant(userId);
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            _factory.GenerateToken(userId)
+        );
+
+        var response = await client.PatchAsJsonAsync(
+            $"/api/gardens/{gardenId}/plants/{plantId}",
+            new { Notes = (string?)null }
+        );
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<PlantNotesResponse>();
+        Assert.Null(body?.Notes);
     }
 
     private record PlantNotesResponse(Guid GardenId, Guid PlantId, string? Notes, DateTime AddedAt);
