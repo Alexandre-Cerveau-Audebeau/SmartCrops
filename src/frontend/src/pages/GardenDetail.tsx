@@ -18,8 +18,14 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import AddIcon from '@mui/icons-material/Add';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import EditableNotes from '../components/EditableNotes';
 import { useLanguage } from '../hooks/useLanguage';
-import { addPlantToGarden, fetchGarden, removePlantFromGarden } from '../services/gardenApi';
+import {
+  addPlantToGarden,
+  fetchGarden,
+  removePlantFromGarden,
+  updatePlantNotes,
+} from '../services/gardenApi';
 import { fetchPlants } from '../services/plantApi';
 import type { Garden } from '../types/Garden';
 import type { Plant } from '../types/Plant';
@@ -253,11 +259,24 @@ export default function GardenDetail() {
                       sx={{ mb: 1 }}
                     />
                   )}
-                  {gp.notes && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic' }}>
-                      Notes: {gp.notes}
-                    </Typography>
-                  )}
+                  <EditableNotes
+                    notes={gp.notes ?? null}
+                    disabled={loading}
+                    onSave={async (newNotes) => {
+                      await updatePlantNotes(garden.id, gp.plantId, newNotes);
+                      setGarden((prev) => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          gardenPlants: prev.gardenPlants.map((p) =>
+                            p.plantId === gp.plantId
+                              ? { ...p, notes: newNotes ?? undefined }
+                              : p,
+                          ),
+                        };
+                      });
+                    }}
+                  />
                   <Box sx={{ mt: 1 }}>
                     <Button
                       size="small"

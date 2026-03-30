@@ -1,4 +1,4 @@
-import type { Garden } from '../types/Garden';
+import type { Garden, GardenPlant } from '../types/Garden';
 
 const API_BASE = '/api';
 
@@ -91,4 +91,21 @@ export async function removePlantFromGarden(
     },
   );
   if (!res.ok) throwWithStatus(`Failed to remove plant from garden: ${res.status}`, res.status);
+}
+
+export async function updatePlantNotes(
+  gardenId: string,
+  plantId: string,
+  notes: string | null,
+): Promise<GardenPlant> {
+  const res = await fetch(
+    `${API_BASE}/gardens/${encodeURIComponent(gardenId)}/plants/${encodeURIComponent(plantId)}`,
+    {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ notes }),
+    },
+  );
+  if (!res.ok) throwWithStatus(`Failed to update plant notes: ${res.status}`, res.status);
+  return res.json();
 }

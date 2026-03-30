@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Entities;
 using SmartCrops.Infrastructure.Data;
 
@@ -182,6 +183,45 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         }
 
         return CreatedAtAction(nameof(GetGarden), new { id }, gardenPlant);
+    }
+
+    [HttpPatch("{id:guid}/plants/{plantId:guid}")]
+    public async Task<IActionResult> UpdatePlantNotes(
+        Guid id,
+        Guid plantId,
+        UpdatePlantNotesRequest request
+    )
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        var garden = await context.Gardens.FirstOrDefaultAsync(g =>
+            g.Id == id && g.UserId == userId
+        );
+
+        if (garden == null)
+            return NotFound();
+
+        var gardenPlant = await context.GardenPlants.FirstOrDefaultAsync(gp =>
+            gp.GardenId == id && gp.PlantId == plantId
+        );
+
+        if (gardenPlant == null)
+            return NotFound("Plant not in garden");
+
+        gardenPlant.Notes = request.Notes;
+        await context.SaveChangesAsync();
+
+        return Ok(
+            new
+            {
+                gardenPlant.GardenId,
+                gardenPlant.PlantId,
+                gardenPlant.Notes,
+                gardenPlant.AddedAt,
+            }
+        );
     }
 
     [HttpDelete("{id:guid}/plants/{plantId:guid}")]
