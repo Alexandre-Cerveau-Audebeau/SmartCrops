@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -5,6 +6,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
+import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
 import Skeleton from '@mui/material/Skeleton';
 import TextField from '@mui/material/TextField';
@@ -14,18 +16,34 @@ import { useTheme } from '@mui/material/styles';
 import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
 import YardIcon from '@mui/icons-material/Yard';
 import TranslateIcon from '@mui/icons-material/Translate';
+import GridOnIcon from '@mui/icons-material/GridOn';
+import SensorsIcon from '@mui/icons-material/Sensors';
 import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
 import CodeIcon from '@mui/icons-material/Code';
 import StarIcon from '@mui/icons-material/Star';
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { Link as RouterLink } from 'react-router-dom';
+import HeroCarousel from '../components/HeroCarousel';
 import { fetchPlants } from '../services/plantApi';
 import { getTranslation } from '../utils/getTranslation';
 import { useLanguage } from '../hooks/useLanguage';
 import type { Plant } from '../types/Plant';
 
-const features = [
+interface FeatureItem {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  comingSoon?: boolean;
+}
+
+interface TechItem {
+  name: string;
+  logo: string;
+  role: string;
+}
+
+const features: FeatureItem[] = [
   {
     icon: <LocalFloristIcon sx={{ fontSize: 48, color: 'primary.main' }} />,
     title: 'Plant Library',
@@ -44,6 +62,20 @@ const features = [
     title: 'Bilingual Support',
     description:
       'Access plant information in English and French, with more languages planned.',
+  },
+  {
+    icon: <GridOnIcon sx={{ fontSize: 48, color: 'primary.main', opacity: 0.85 }} />,
+    title: 'Garden Planner',
+    description:
+      'Design your garden layout with drag-and-drop. Place plants on a virtual grid and plan your space.',
+    comingSoon: true,
+  },
+  {
+    icon: <SensorsIcon sx={{ fontSize: 48, color: 'primary.main', opacity: 0.85 }} />,
+    title: 'Smart Monitoring',
+    description:
+      'Connect weather data and IoT sensors to get personalized care recommendations for your plants.',
+    comingSoon: true,
   },
 ];
 
@@ -143,6 +175,27 @@ const testimonials = [
   },
 ];
 
+const currentTech: TechItem[] = [
+  { name: 'React', logo: '/images/tech/react.svg', role: 'Frontend UI' },
+  { name: 'TypeScript', logo: '/images/tech/typescript.svg', role: 'Type Safety' },
+  { name: 'Vite', logo: '/images/tech/vite.svg', role: 'Build Tool' },
+  { name: '.NET 8', logo: '/images/tech/dotnet.svg', role: 'Backend API' },
+  { name: 'PostgreSQL', logo: '/images/tech/postgresql.svg', role: 'Database' },
+  { name: 'Docker', logo: '/images/tech/docker.svg', role: 'Containers' },
+  { name: 'GitHub Actions', logo: '/images/tech/githubactions.svg', role: 'CI/CD' },
+  { name: 'CodeRabbit', logo: '/images/tech/coderabbit.svg', role: 'AI Code Review' },
+  { name: 'Claude', logo: '/images/tech/claude.svg', role: 'AI Assistant' },
+  { name: 'OVH', logo: '/images/tech/ovh.svg', role: 'Domain & DNS' },
+];
+
+const plannedTech: TechItem[] = [
+  { name: 'Kubernetes', logo: '/images/tech/kubernetes.svg', role: 'Orchestration' },
+  { name: 'AWS', logo: '/images/tech/aws.svg', role: 'Cloud Platform' },
+  { name: 'Redis', logo: '/images/tech/redis.svg', role: 'Caching' },
+  { name: 'Elasticsearch', logo: '/images/tech/elasticsearch.svg', role: 'Search Engine' },
+  { name: 'Terraform', logo: '/images/tech/terraform.svg', role: 'Infrastructure as Code' },
+];
+
 export default function Home() {
   const { language } = useLanguage();
   const theme = useTheme();
@@ -194,67 +247,7 @@ export default function Home() {
   return (
     <Box>
       {/* ==================== SECTION 1 — HERO ==================== */}
-      {/* TODO: Replace gradient with background-image when photo is available */}
-      <Box
-        sx={{
-          minHeight: '70vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          textAlign: 'center',
-          background:
-            'linear-gradient(135deg, #1B5E3A 0%, #2E8B57 40%, #4CAF50 100%)',
-          color: '#fff',
-        }}
-      >
-        <Container maxWidth="md">
-          <Typography variant="h2" fontWeight={800} gutterBottom>
-            Your Smart Gardening Companion
-          </Typography>
-          <Typography
-            variant="h5"
-            sx={{ fontWeight: 400, opacity: 0.9, maxWidth: 600, mx: 'auto', mb: 4 }}
-          >
-            Explore our plant library, plan your garden, and grow with
-            confidence. SmartCrops helps you make the most of every season.
-          </Typography>
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 2,
-              justifyContent: 'center',
-              flexWrap: 'wrap',
-            }}
-          >
-            <Button
-              variant="contained"
-              size="large"
-              component={RouterLink}
-              to="/library"
-              sx={{
-                bgcolor: '#fff',
-                color: 'primary.main',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' },
-              }}
-            >
-              Explore the Library
-            </Button>
-            <Button
-              variant="outlined"
-              size="large"
-              component={RouterLink}
-              to="/register"
-              sx={{
-                borderColor: '#fff',
-                color: '#fff',
-                '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.1)' },
-              }}
-            >
-              Create an Account
-            </Button>
-          </Box>
-        </Container>
-      </Box>
+      <HeroCarousel />
 
       {/* ==================== SECTION 2 — STATS BAR ==================== */}
       <Box sx={{ bgcolor: '#1B5E3A', py: 3, color: '#fff' }}>
@@ -304,22 +297,41 @@ export default function Home() {
         >
           Everything you need to plan, plant, and grow — all in one place.
         </Typography>
-        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: 3,
+            justifyItems: 'center',
+          }}
+        >
           {features.map((feature) => (
             <Card
               key={feature.title}
               variant="outlined"
               sx={{
-                flex: '1 1 300px',
-                minWidth: 0,
+                width: '100%',
+                maxWidth: 400,
                 borderRadius: 3,
                 p: 4,
                 textAlign: 'center',
-                height: '100%',
+                position: 'relative',
                 transition: 'box-shadow 0.2s',
                 '&:hover': { boxShadow: 4 },
+                ...(feature.comingSoon && {
+                  borderStyle: 'dashed',
+                  opacity: 0.85,
+                }),
               }}
             >
+              {feature.comingSoon && (
+                <Chip
+                  label="Coming Soon"
+                  color="warning"
+                  size="small"
+                  sx={{ position: 'absolute', top: 12, right: 12 }}
+                />
+              )}
               <CardContent>
                 {feature.icon}
                 <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
@@ -327,16 +339,6 @@ export default function Home() {
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   {feature.description}
-                  {feature.comingSoon && (
-                    <Typography
-                      component="span"
-                      variant="body2"
-                      sx={{ color: 'text.disabled', fontStyle: 'italic' }}
-                    >
-                      {' '}
-                      (Coming Soon)
-                    </Typography>
-                  )}
                 </Typography>
               </CardContent>
             </Card>
@@ -606,7 +608,101 @@ export default function Home() {
         </Container>
       </Box>
 
-      {/* ==================== SECTION 7 — CTA FINAL ==================== */}
+      {/* ==================== SECTION 7 — BUILT WITH ==================== */}
+      <Box sx={{ bgcolor: '#F5F5F5', py: 8 }}>
+        <Container maxWidth="lg">
+          <Typography variant="h4" textAlign="center" gutterBottom>
+            Built With Modern Tools
+          </Typography>
+          <Typography
+            variant="body1"
+            textAlign="center"
+            color="text.secondary"
+            sx={{ mb: 6 }}
+          >
+            The technologies powering SmartCrops today
+          </Typography>
+          <Box
+            sx={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              gap: 4,
+            }}
+          >
+            {currentTech.map((tech) => (
+              <Box
+                key={tech.name}
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  transition: 'transform 0.2s ease',
+                  '&:hover': { transform: 'scale(1.05)' },
+                }}
+              >
+                <Box
+                  component="img"
+                  src={tech.logo}
+                  alt={tech.name}
+                  loading="lazy"
+                  decoding="async"
+                  sx={{ width: 40, height: 40, mb: 1 }}
+                />
+                <Typography variant="body2" fontWeight={600}>
+                  {tech.name}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {tech.role}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+          <Divider sx={{ my: 4 }} />
+          <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mb: 3 }}>
+            On Our Roadmap
+          </Typography>
+          <Box
+            sx={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              gap: 3,
+            }}
+          >
+            {plannedTech.map((tech) => (
+              <Box
+                key={tech.name}
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  opacity: 0.7,
+                  transition: 'transform 0.2s ease, opacity 0.2s ease',
+                  '&:hover': { transform: 'scale(1.05)', opacity: 1 },
+                }}
+              >
+                <Box
+                  component="img"
+                  src={tech.logo}
+                  alt={tech.name}
+                  loading="lazy"
+                  decoding="async"
+                  sx={{ width: 32, height: 32, mb: 1 }}
+                />
+                <Typography variant="caption" fontWeight={600}>
+                  {tech.name}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {tech.role}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Container>
+      </Box>
+
+      {/* ==================== SECTION 8 — CTA FINAL ==================== */}
       <Box sx={{ py: 8, textAlign: 'center' }}>
         <Container maxWidth="sm">
           <Typography variant="h4" gutterBottom>
@@ -627,7 +723,7 @@ export default function Home() {
         </Container>
       </Box>
 
-      {/* ==================== SECTION 8 — NEWSLETTER ==================== */}
+      {/* ==================== SECTION 9 — NEWSLETTER ==================== */}
       <Box sx={{ bgcolor: 'rgba(46, 125, 50, 0.04)', py: 6 }}>
         <Container maxWidth="sm" sx={{ textAlign: 'center' }}>
           <Typography variant="h5" gutterBottom>
