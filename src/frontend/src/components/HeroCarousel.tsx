@@ -11,7 +11,10 @@ import { Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
+import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
+import PauseIcon from '@mui/icons-material/Pause';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 
 const heroImages = [
   { src: '/images/hero/hero-1.jpg', alt: 'Aerial view of garden seedling rows', credit: 'Geio Tischler' },
@@ -23,14 +26,16 @@ const heroImages = [
 
 export default function HeroCarousel() {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const startTimer = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
+    if (!isPlaying) return;
     intervalRef.current = setInterval(() => {
       setActiveIndex((prev) => (prev + 1) % heroImages.length);
     }, 5000);
-  }, []);
+  }, [isPlaying]);
 
   useEffect(() => {
     startTimer();
@@ -41,8 +46,13 @@ export default function HeroCarousel() {
 
   const goToSlide = (index: number) => {
     setActiveIndex(index);
-    startTimer();
+    if (isPlaying) startTimer();
   };
+
+  const togglePlay = () => setIsPlaying((prev) => !prev);
+
+  const prevIndex = (activeIndex - 1 + heroImages.length) % heroImages.length;
+  const nextIndex = (activeIndex + 1) % heroImages.length;
 
   return (
     <Box
@@ -53,27 +63,31 @@ export default function HeroCarousel() {
       }}
     >
       {/* Background images */}
-      {heroImages.map((img, i) => (
-        <Box
-          key={img.src}
-          component="img"
-          src={img.src}
-          alt={img.alt}
-          loading={i === 0 ? 'eager' : 'lazy'}
-          fetchPriority={i === 0 ? 'high' : 'low'}
-          decoding="async"
-          sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            opacity: i === activeIndex ? 1 : 0,
-            transition: 'opacity 1s ease-in-out',
-          }}
-        />
-      ))}
+      {heroImages.map((img, i) => {
+        const shouldRender = i === activeIndex || i === prevIndex || i === nextIndex;
+        if (!shouldRender) return null;
+        return (
+          <Box
+            key={img.src}
+            component="img"
+            src={img.src}
+            alt={img.alt}
+            loading={i === activeIndex ? 'eager' : 'lazy'}
+            fetchPriority={i === activeIndex ? 'high' : 'low'}
+            decoding="async"
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              opacity: i === activeIndex ? 1 : 0,
+              transition: 'opacity 1s ease-in-out',
+            }}
+          />
+        );
+      })}
 
       {/* Dark overlay */}
       <Box
@@ -149,7 +163,7 @@ export default function HeroCarousel() {
         </Container>
       </Box>
 
-      {/* Navigation dots */}
+      {/* Navigation dots + play/pause */}
       <Box
         sx={{
           position: 'absolute',
@@ -158,6 +172,7 @@ export default function HeroCarousel() {
           transform: 'translateX(-50%)',
           zIndex: 2,
           display: 'flex',
+          alignItems: 'center',
           gap: 1.5,
         }}
       >
@@ -185,6 +200,18 @@ export default function HeroCarousel() {
             }}
           />
         ))}
+        <IconButton
+          size="small"
+          onClick={togglePlay}
+          aria-label={isPlaying ? 'Pause slideshow' : 'Play slideshow'}
+          sx={{
+            color: '#fff',
+            opacity: 0.7,
+            '&:hover': { opacity: 1 },
+          }}
+        >
+          {isPlaying ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
+        </IconButton>
       </Box>
 
       {/* Photo credit */}
