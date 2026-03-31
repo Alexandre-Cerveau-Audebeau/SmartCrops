@@ -5,6 +5,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
+import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
 import Skeleton from '@mui/material/Skeleton';
 import TextField from '@mui/material/TextField';
@@ -158,6 +159,26 @@ const testimonials = [
     quote:
       'Beautiful design and so easy to use. My kids love browsing the plant cards!',
   },
+];
+
+const currentTech = [
+  { name: 'React', logo: '/images/tech/react.svg', role: 'Frontend UI' },
+  { name: 'TypeScript', logo: '/images/tech/typescript.svg', role: 'Type Safety' },
+  { name: 'Vite', logo: '/images/tech/vite.svg', role: 'Build Tool' },
+  { name: '.NET 8', logo: '/images/tech/dotnet.svg', role: 'Backend API' },
+  { name: 'PostgreSQL', logo: '/images/tech/postgresql.svg', role: 'Database' },
+  { name: 'Docker', logo: '/images/tech/docker.svg', role: 'Containers' },
+  { name: 'GitHub Actions', logo: '/images/tech/githubactions.svg', role: 'CI/CD' },
+  { name: 'CodeRabbit', logo: '/images/tech/coderabbit.svg', role: 'AI Code Review' },
+  { name: 'Claude', logo: '/images/tech/claude.svg', role: 'AI Assistant' },
+];
+
+const plannedTech = [
+  { name: 'Kubernetes', logo: '/images/tech/kubernetes.svg', role: 'Orchestration' },
+  { name: 'AWS', logo: '/images/tech/aws.svg', role: 'Cloud Platform' },
+  { name: 'Redis', logo: '/images/tech/redis.svg', role: 'Caching' },
+  { name: 'ElasticSearch', logo: '/images/tech/elasticsearch.svg', role: 'Search Engine' },
+  { name: 'Terraform', logo: '/images/tech/terraform.svg', role: 'Infrastructure as Code' },
 ];
 
 export default function Home() {
@@ -584,7 +605,7 @@ export default function Home() {
             color="text.secondary"
             sx={{ mb: 6 }}
           >
-            SmartCrops is powered by industry-standard technologies
+            The technologies powering SmartCrops today
           </Typography>
           <Box
             sx={{
@@ -594,15 +615,7 @@ export default function Home() {
               gap: 4,
             }}
           >
-            {[
-              { name: 'React', letter: 'R', bg: '#61DAFB', role: 'Frontend UI' },
-              { name: 'TypeScript', letter: 'TS', bg: '#3178C6', role: 'Type Safety' },
-              { name: '.NET 8', letter: '.N', bg: '#512BD4', role: 'Backend API' },
-              { name: 'PostgreSQL', letter: 'PG', bg: '#336791', role: 'Database' },
-              { name: 'Docker', letter: 'D', bg: '#2496ED', role: 'Containers' },
-              { name: 'GitHub Actions', letter: 'GA', bg: '#2088FF', role: 'CI/CD' },
-              { name: 'CodeRabbit', letter: 'CR', bg: '#FF6B2B', role: 'AI Code Review' },
-            ].map((tech) => (
+            {currentTech.map((tech) => (
               <Box
                 key={tech.name}
                 sx={{
@@ -614,23 +627,51 @@ export default function Home() {
                 }}
               >
                 <Box
-                  sx={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 2,
-                    bgcolor: tech.bg,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#fff',
-                    fontWeight: 700,
-                    fontSize: 16,
-                    mb: 1,
-                  }}
-                >
-                  {tech.letter}
-                </Box>
+                  component="img"
+                  src={tech.logo}
+                  alt={tech.name}
+                  sx={{ width: 40, height: 40, mb: 1 }}
+                />
                 <Typography variant="body2" fontWeight={600}>
+                  {tech.name}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {tech.role}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+          <Divider sx={{ my: 4 }} />
+          <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mb: 3 }}>
+            On Our Roadmap
+          </Typography>
+          <Box
+            sx={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              gap: 3,
+            }}
+          >
+            {plannedTech.map((tech) => (
+              <Box
+                key={tech.name}
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  opacity: 0.7,
+                  transition: 'transform 0.2s ease, opacity 0.2s ease',
+                  '&:hover': { transform: 'scale(1.05)', opacity: 1 },
+                }}
+              >
+                <Box
+                  component="img"
+                  src={tech.logo}
+                  alt={tech.name}
+                  sx={{ width: 32, height: 32, mb: 1 }}
+                />
+                <Typography variant="caption" fontWeight={600}>
                   {tech.name}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
