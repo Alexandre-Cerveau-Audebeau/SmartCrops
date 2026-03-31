@@ -663,7 +663,7 @@ export default function Home() {
         </Container>
       </Box>
 
-      {/* ==================== SECTION 8 — NEWSLETTER ==================== */}
+      {/* ==================== SECTION 9 — NEWSLETTER ==================== */}
       <Box sx={{ bgcolor: 'rgba(46, 125, 50, 0.04)', py: 6 }}>
         <Container maxWidth="sm" sx={{ textAlign: 'center' }}>
           <Typography variant="h5" gutterBottom>

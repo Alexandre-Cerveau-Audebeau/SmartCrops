@@ -59,6 +59,9 @@ export default function HeroCarousel() {
           component="img"
           src={img.src}
           alt={img.alt}
+          loading={i === 0 ? 'eager' : 'lazy'}
+          fetchPriority={i === 0 ? 'high' : 'low'}
+          decoding="async"
           sx={{
             position: 'absolute',
             top: 0,
@@ -158,18 +161,27 @@ export default function HeroCarousel() {
           gap: 1.5,
         }}
       >
-        {heroImages.map((_, i) => (
+        {heroImages.map((img, i) => (
           <Box
-            key={i}
+            component="button"
+            type="button"
+            key={img.src}
             onClick={() => goToSlide(i)}
             aria-label={`Go to slide ${i + 1}`}
+            aria-current={i === activeIndex ? 'true' : undefined}
             sx={{
+              border: 0,
+              p: 0,
               width: i === activeIndex ? 12 : 8,
               height: i === activeIndex ? 12 : 8,
               borderRadius: '50%',
               bgcolor: i === activeIndex ? '#fff' : 'rgba(255,255,255,0.5)',
               cursor: 'pointer',
               transition: 'all 0.3s ease',
+              '&:focus-visible': {
+                outline: '2px solid #fff',
+                outlineOffset: 2,
+              },
             }}
           />
         ))}
