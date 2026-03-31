@@ -71,4 +71,4 @@ This project is for educational and portfolio purposes.
 
 ---
 
-*Built by [Alexandre Cerveau Audebeau](https://linkedin.com/in/acervaude/) — rebuilt from a 2022 Master's thesis with modern tooling and AI-assisted development workflows.*
+_Built by [Alexandre Cerveau Audebeau](https://linkedin.com/in/acervaude/) — rebuilt from a 2022 Master's thesis with modern tooling and AI-assisted development workflows._
