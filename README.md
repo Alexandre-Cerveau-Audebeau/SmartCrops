@@ -30,6 +30,8 @@ Eco-friendly web application for virtual garden management. Browse a bilingual p
 ### Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [.NET 8 SDK](https://dotnet.microsoft.com/download)
+- [Node.js 20+](https://nodejs.org/)
 
 ### Run with Docker
 ```bash
@@ -53,8 +55,10 @@ dotnet build SmartCrops.sln && dotnet test SmartCrops.sln && dotnet format Smart
 
 ## Project Status
 
+_As of March 31, 2026_
+
 - ✅ 19 PRs merged on develop
-- ✅ 17 REST API endpoints (9 Plants + 4 Auth + 7 Gardens + PATCH)
+- ✅ 21 REST API endpoints (9 Plants + 4 Auth + 8 Gardens)
 - ✅ 10 backend integration tests
 - ✅ Bilingual plant data (FR/EN)
 - 🔜 Internationalization (react-i18next)
