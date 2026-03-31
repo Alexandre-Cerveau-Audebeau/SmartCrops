@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -29,7 +30,20 @@ import { getTranslation } from '../utils/getTranslation';
 import { useLanguage } from '../hooks/useLanguage';
 import type { Plant } from '../types/Plant';
 
-const features = [
+interface FeatureItem {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  comingSoon?: boolean;
+}
+
+interface TechItem {
+  name: string;
+  logo: string;
+  role: string;
+}
+
+const features: FeatureItem[] = [
   {
     icon: <LocalFloristIcon sx={{ fontSize: 48, color: 'primary.main' }} />,
     title: 'Plant Library',
@@ -161,7 +175,7 @@ const testimonials = [
   },
 ];
 
-const currentTech = [
+const currentTech: TechItem[] = [
   { name: 'React', logo: '/images/tech/react.svg', role: 'Frontend UI' },
   { name: 'TypeScript', logo: '/images/tech/typescript.svg', role: 'Type Safety' },
   { name: 'Vite', logo: '/images/tech/vite.svg', role: 'Build Tool' },
@@ -171,13 +185,14 @@ const currentTech = [
   { name: 'GitHub Actions', logo: '/images/tech/githubactions.svg', role: 'CI/CD' },
   { name: 'CodeRabbit', logo: '/images/tech/coderabbit.svg', role: 'AI Code Review' },
   { name: 'Claude', logo: '/images/tech/claude.svg', role: 'AI Assistant' },
+  { name: 'OVH', logo: '/images/tech/ovh.svg', role: 'Domain & DNS' },
 ];
 
-const plannedTech = [
+const plannedTech: TechItem[] = [
   { name: 'Kubernetes', logo: '/images/tech/kubernetes.svg', role: 'Orchestration' },
   { name: 'AWS', logo: '/images/tech/aws.svg', role: 'Cloud Platform' },
   { name: 'Redis', logo: '/images/tech/redis.svg', role: 'Caching' },
-  { name: 'ElasticSearch', logo: '/images/tech/elasticsearch.svg', role: 'Search Engine' },
+  { name: 'Elasticsearch', logo: '/images/tech/elasticsearch.svg', role: 'Search Engine' },
   { name: 'Terraform', logo: '/images/tech/terraform.svg', role: 'Infrastructure as Code' },
 ];
 
@@ -630,6 +645,8 @@ export default function Home() {
                   component="img"
                   src={tech.logo}
                   alt={tech.name}
+                  loading="lazy"
+                  decoding="async"
                   sx={{ width: 40, height: 40, mb: 1 }}
                 />
                 <Typography variant="body2" fontWeight={600}>
@@ -669,6 +686,8 @@ export default function Home() {
                   component="img"
                   src={tech.logo}
                   alt={tech.name}
+                  loading="lazy"
+                  decoding="async"
                   sx={{ width: 32, height: 32, mb: 1 }}
                 />
                 <Typography variant="caption" fontWeight={600}>
