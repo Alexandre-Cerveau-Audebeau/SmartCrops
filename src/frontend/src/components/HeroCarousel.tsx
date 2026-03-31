@@ -51,9 +51,6 @@ export default function HeroCarousel() {
 
   const togglePlay = () => setIsPlaying((prev) => !prev);
 
-  const prevIndex = (activeIndex - 1 + heroImages.length) % heroImages.length;
-  const nextIndex = (activeIndex + 1) % heroImages.length;
-
   return (
     <Box
       sx={{
@@ -63,31 +60,27 @@ export default function HeroCarousel() {
       }}
     >
       {/* Background images */}
-      {heroImages.map((img, i) => {
-        const shouldRender = i === activeIndex || i === prevIndex || i === nextIndex;
-        if (!shouldRender) return null;
-        return (
-          <Box
-            key={img.src}
-            component="img"
-            src={img.src}
-            alt={img.alt}
-            loading={i === activeIndex ? 'eager' : 'lazy'}
-            fetchPriority={i === activeIndex ? 'high' : 'low'}
-            decoding="async"
-            sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              opacity: i === activeIndex ? 1 : 0,
-              transition: 'opacity 1s ease-in-out',
-            }}
-          />
-        );
-      })}
+      {heroImages.map((img, i) => (
+        <Box
+          key={img.src}
+          component="img"
+          src={img.src}
+          alt={img.alt}
+          loading={i === 0 ? 'eager' : 'lazy'}
+          fetchPriority={i === 0 ? 'high' : 'low'}
+          decoding="async"
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            opacity: i === activeIndex ? 1 : 0,
+            transition: 'opacity 1s ease-in-out',
+          }}
+        />
+      ))}
 
       {/* Dark overlay */}
       <Box
@@ -204,6 +197,7 @@ export default function HeroCarousel() {
           size="small"
           onClick={togglePlay}
           aria-label={isPlaying ? 'Pause slideshow' : 'Play slideshow'}
+          aria-pressed={isPlaying}
           sx={{
             color: '#fff',
             opacity: 0.7,
