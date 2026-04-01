@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -23,6 +24,7 @@ import type { Garden } from '../types/Garden';
 import { getTranslation } from '../utils/getTranslation';
 
 export default function MyGardens() {
+  const { t } = useTranslation();
   const { language } = useLanguage();
   const [gardens, setGardens] = useState<Garden[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,10 +127,10 @@ export default function MyGardens() {
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" fontWeight={700} color="primary">
-          My Gardens
+          {t('gardens.title')}
         </Typography>
         <Button variant="contained" onClick={() => setCreateDialogOpen(true)}>
-          Create Garden
+          {t('gardens.createGarden')}
         </Button>
       </Box>
 
@@ -142,23 +144,23 @@ export default function MyGardens() {
 
       {loadError && (
         <Typography color="text.secondary">
-          Unable to load gardens. Please try again later.
+          {t('gardens.error')}
         </Typography>
       )}
 
       {mutationError && (
         <Typography color="error" sx={{ mb: 2 }}>
-          An error occurred. Please try again.
+          {t('gardens.mutationError')}
         </Typography>
       )}
 
       {!loading && !loadError && gardens.length === 0 && (
         <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
           <Typography sx={{ mb: 2 }}>
-            You don&apos;t have any gardens yet. Create your first garden!
+            {t('gardens.noGardens')}
           </Typography>
           <Button variant="contained" onClick={() => setCreateDialogOpen(true)}>
-            Create Garden
+            {t('gardens.createGarden')}
           </Button>
         </Box>
       )}
@@ -196,17 +198,17 @@ export default function MyGardens() {
                   </Typography>
                 )}
                 {garden.description && garden.description.length > 80 && (
-                  <Typography
-                    variant="body2"
-                    color="primary"
-                    sx={{ cursor: 'pointer', mt: 0.5, mb: 1, fontSize: '0.8rem' }}
+                  <Button
+                    variant="text"
+                    size="small"
                     onClick={() => toggleDescription(garden.id)}
+                    sx={{ mt: 0.5, mb: 1, p: 0, minWidth: 0, fontSize: '0.8rem' }}
                   >
-                    {expandedDescriptions.has(garden.id) ? 'See less' : 'See more'}
-                  </Typography>
+                    {expandedDescriptions.has(garden.id) ? t('gardens.seeLess') : t('gardens.seeMore')}
+                  </Button>
                 )}
                 <Chip
-                  label={`${garden.gardenPlants.length} plants`}
+                  label={t('gardens.plantsCount', { count: garden.gardenPlants.length })}
                   size="small"
                   variant="outlined"
                 />
@@ -216,30 +218,31 @@ export default function MyGardens() {
                       .slice(0, 3)
                       .map((gp) => {
                         if (!gp.plant) return 'Unknown';
-                        const t = getTranslation(gp.plant, language);
-                        return t?.commonName || gp.plant.translations?.[0]?.commonName || gp.plant.scientificName;
+                        const tr = getTranslation(gp.plant, language);
+                        return tr?.commonName || gp.plant.translations?.[0]?.commonName || gp.plant.scientificName;
                       })
                       .join(', ')}
                     {garden.gardenPlants.length > 3 &&
-                      ` +${garden.gardenPlants.length - 3} more`}
+                      ` ${t('gardens.more', { count: garden.gardenPlants.length - 3 })}`}
+
                   </Typography>
                 )}
               </CardContent>
               <CardActions>
                 <Button size="small" component={RouterLink} to={`/gardens/${garden.id}`}>
-                  View
+                  {t('gardens.view')}
                 </Button>
                 <IconButton
                   size="small"
                   onClick={() => openEditDialog(garden)}
-                  aria-label={`Edit garden ${garden.name}`}
+                  aria-label={`${t('gardens.edit')} ${garden.name}`}
                 >
                   <EditIcon fontSize="small" />
                 </IconButton>
                 <IconButton
                   size="small"
                   onClick={() => setDeleteConfirmGarden(garden)}
-                  aria-label={`Delete garden ${garden.name}`}
+                  aria-label={`${t('gardens.delete')} ${garden.name}`}
                 >
                   <DeleteIcon fontSize="small" />
                 </IconButton>
@@ -256,10 +259,10 @@ export default function MyGardens() {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Create a new garden</DialogTitle>
+        <DialogTitle>{t('gardens.createDialogTitle')}</DialogTitle>
         <DialogContent>
           <TextField
-            label="Name"
+            label={t('gardens.gardenName')}
             fullWidth
             required
             inputProps={{ maxLength: 100 }}
@@ -268,7 +271,7 @@ export default function MyGardens() {
             sx={{ mt: 1, mb: 2 }}
           />
           <TextField
-            label="Description"
+            label={t('gardens.description')}
             fullWidth
             multiline
             rows={3}
@@ -278,9 +281,9 @@ export default function MyGardens() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => setCreateDialogOpen(false)}>{t('gardens.cancel')}</Button>
           <Button variant="contained" disabled={isMutating || !newGardenName.trim()} onClick={handleCreate}>
-            Create
+            {t('gardens.create')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -292,10 +295,10 @@ export default function MyGardens() {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Edit garden</DialogTitle>
+        <DialogTitle>{t('gardens.editDialogTitle')}</DialogTitle>
         <DialogContent>
           <TextField
-            label="Name"
+            label={t('gardens.gardenName')}
             fullWidth
             required
             inputProps={{ maxLength: 100 }}
@@ -304,7 +307,7 @@ export default function MyGardens() {
             sx={{ mt: 1, mb: 2 }}
           />
           <TextField
-            label="Description"
+            label={t('gardens.description')}
             fullWidth
             multiline
             rows={3}
@@ -314,26 +317,25 @@ export default function MyGardens() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditingGarden(null)}>Cancel</Button>
+          <Button onClick={() => setEditingGarden(null)}>{t('gardens.cancel')}</Button>
           <Button variant="contained" disabled={isMutating || !editName.trim()} onClick={handleEdit}>
-            Save
+            {t('gardens.save')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Delete Confirm Dialog */}
       <Dialog open={deleteConfirmGarden !== null} onClose={() => setDeleteConfirmGarden(null)}>
-        <DialogTitle>Delete garden?</DialogTitle>
+        <DialogTitle>{t('gardens.deleteDialogTitle')}</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete &apos;{deleteConfirmGarden?.name}&apos;? This action
-            cannot be undone.
+            {t('gardens.deleteConfirm', { name: deleteConfirmGarden?.name })}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteConfirmGarden(null)}>Cancel</Button>
+          <Button onClick={() => setDeleteConfirmGarden(null)}>{t('gardens.cancel')}</Button>
           <Button variant="contained" color="error" disabled={isMutating} onClick={handleDelete}>
-            Delete
+            {t('gardens.delete')}
           </Button>
         </DialogActions>
       </Dialog>

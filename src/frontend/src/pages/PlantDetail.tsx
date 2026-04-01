@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -36,6 +37,7 @@ const languageLabels: Record<string, string> = {
 };
 
 export default function PlantDetail() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { language } = useLanguage();
@@ -84,7 +86,7 @@ export default function PlantDetail() {
       setGardens(data);
     } catch {
       setGardens([]);
-      setAddError('Failed to load gardens');
+      setAddError(t('gardens.failedToLoadGardens'));
     } finally {
       setGardensLoading(false);
     }
@@ -115,13 +117,14 @@ export default function PlantDetail() {
     const failed = results.filter((r) => r.error === 'failed').length;
 
     if (failed > 0) {
-      let errorMsg = `${failed} garden(s) failed.`;
-      if (successes > 0) errorMsg = `Added to ${successes} garden(s), but ${failed} failed.`;
-      if (alreadyAdded > 0) errorMsg += ` ${alreadyAdded} already had this plant.`;
+      let errorMsg = successes > 0
+        ? t('gardens.addedButFailed', { count: successes, failed })
+        : t('gardens.failedCount', { count: failed });
+      if (alreadyAdded > 0) errorMsg += ` ${t('gardens.addedWithExisting', { count: alreadyAdded })}`;
       setAddError(errorMsg);
-    } else {
-      let message = `Added to ${successes} garden(s).`;
-      if (alreadyAdded > 0) message += ` ${alreadyAdded} already had this plant.`;
+    } else if (successes > 0) {
+      let message = t('gardens.addedToCount', { count: successes });
+      if (alreadyAdded > 0) message += ` ${t('gardens.addedWithExisting', { count: alreadyAdded })}`;
       setAddSuccess(message);
       setSelectedGardenIds(new Set());
       closeTimerRef.current = setTimeout(() => {
@@ -132,6 +135,8 @@ export default function PlantDetail() {
         closeTimerRef.current = null;
       }, 2000);
       return;
+    } else if (alreadyAdded > 0) {
+      setAddError(t('gardens.addedWithExisting', { count: alreadyAdded }));
     }
     setIsAdding(false);
   };
@@ -156,7 +161,7 @@ export default function PlantDetail() {
         if (err.name === 'AbortError') return;
         if (err.status === 404) return;
         if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : 'Failed to load plant');
+          setError(err instanceof Error ? err.message : t('library.error'));
         }
       })
       .finally(() => {
@@ -171,16 +176,17 @@ export default function PlantDetail() {
         closeTimerRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   if (!id) {
     return (
       <Container maxWidth="md" sx={{ pt: 4 }}>
         <Alert severity="error" sx={{ mb: 2 }}>
-          Missing plant id
+          {t('library.missingPlantId')}
         </Alert>
         <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/library')}>
-          Back to Library
+          {t('library.backToLibrary')}
         </Button>
       </Container>
     );
@@ -203,7 +209,7 @@ export default function PlantDetail() {
           {error}
         </Alert>
         <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/library')}>
-          Back to Library
+          {t('library.backToLibrary')}
         </Button>
       </Container>
     );
@@ -213,22 +219,22 @@ export default function PlantDetail() {
     return (
       <Container maxWidth="md" sx={{ pt: 4, textAlign: 'center' }}>
         <Typography color="text.secondary" sx={{ py: 8 }}>
-          Plant not found.
+          {t('library.plantNotFound')}
         </Typography>
         <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/library')}>
-          Back to Library
+          {t('library.backToLibrary')}
         </Button>
       </Container>
     );
   }
 
-  const t = getTranslation(plant, language);
+  const tr = getTranslation(plant, language);
 
   const conditions = [
-    { icon: <WbSunnyIcon />, label: 'Sun Exposure', value: plant.sunExposure },
-    { icon: <WaterDropIcon />, label: 'Water Needs', value: plant.waterNeeds },
-    { icon: <CalendarMonthIcon />, label: 'Sowing Period', value: plant.sowingPeriod },
-    { icon: <AgricultureIcon />, label: 'Harvest Period', value: plant.harvestPeriod },
+    { icon: <WbSunnyIcon />, label: t('library.sunExposure'), value: plant.sunExposure },
+    { icon: <WaterDropIcon />, label: t('library.waterNeeds'), value: plant.waterNeeds },
+    { icon: <CalendarMonthIcon />, label: t('library.sowingPeriod'), value: plant.sowingPeriod },
+    { icon: <AgricultureIcon />, label: t('library.harvestPeriod'), value: plant.harvestPeriod },
   ].filter((c) => c.value);
 
   return (
@@ -238,11 +244,11 @@ export default function PlantDetail() {
         onClick={() => navigate('/library')}
         sx={{ mb: 3 }}
       >
-        Back to Library
+        {t('library.backToLibrary')}
       </Button>
 
       <Typography variant="h3" fontWeight={700} sx={{ mb: 0.5 }}>
-        {t?.commonName ?? plant.scientificName}
+        {tr?.commonName ?? plant.scientificName}
       </Typography>
       <Typography variant="h6" color="text.secondary" sx={{ fontStyle: 'italic', mb: 2 }}>
         {plant.scientificName}
@@ -263,13 +269,13 @@ export default function PlantDetail() {
           startIcon={<AddIcon />}
           onClick={openAddDialog}
         >
-          Add to my garden
+          {t('library.addToGarden')}
         </Button>
       </Box>
 
-      {t?.description && (
+      {tr?.description && (
         <Typography variant="body1" sx={{ mb: 4, lineHeight: 1.8 }}>
-          {t.description}
+          {tr.description}
         </Typography>
       )}
 
@@ -283,7 +289,7 @@ export default function PlantDetail() {
           }}
         >
           <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-            Growing Conditions
+            {t('library.growingConditions')}
           </Typography>
           <Grid container spacing={2}>
             {conditions.map((c) => (
@@ -308,13 +314,13 @@ export default function PlantDetail() {
       {plant.translations.length > 0 && (
         <Box>
           <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-            Available in
+            {t('library.availableIn')}
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            {plant.translations.map((tr) => (
+            {plant.translations.map((translation) => (
               <Chip
-                key={tr.language}
-                label={languageLabels[tr.language] ?? tr.language}
+                key={translation.language}
+                label={languageLabels[translation.language] ?? translation.language}
                 size="small"
                 variant="outlined"
               />
@@ -329,7 +335,7 @@ export default function PlantDetail() {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Add to garden</DialogTitle>
+        <DialogTitle>{t('library.addToGardenDialog')}</DialogTitle>
         <DialogContent>
           {gardensLoading && (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -339,9 +345,9 @@ export default function PlantDetail() {
 
           {!gardensLoading && gardens.length === 0 && !addError && (
             <Box sx={{ textAlign: 'center', py: 2 }}>
-              <Typography sx={{ mb: 2 }}>You don&apos;t have any gardens yet.</Typography>
+              <Typography sx={{ mb: 2 }}>{t('library.noGardensYet')}</Typography>
               <Button variant="contained" component={RouterLink} to="/gardens">
-                Create a garden
+                {t('library.createAGarden')}
               </Button>
             </Box>
           )}
@@ -373,7 +379,7 @@ export default function PlantDetail() {
                   />
                   <ListItemText
                     primary={garden.name}
-                    secondary={`${garden.gardenPlants.length} plants`}
+                    secondary={t('gardens.plantsCount', { count: garden.gardenPlants.length })}
                   />
                 </ListItemButton>
               ))}
@@ -381,15 +387,16 @@ export default function PlantDetail() {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => setDialogOpen(false)}>{t('gardens.cancel')}</Button>
           <Button
             variant="contained"
             disabled={selectedGardenIds.size === 0 || isAdding}
             onClick={handleAddToGarden}
           >
             {selectedGardenIds.size > 0
-              ? `Add to ${selectedGardenIds.size} garden(s)`
-              : 'Add'}
+              ? t('library.addToCount', { count: selectedGardenIds.size })
+              : t('library.add')}
+
           </Button>
         </DialogActions>
       </Dialog>

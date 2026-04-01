@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
@@ -15,6 +16,7 @@ interface EditableNotesProps {
 }
 
 export default function EditableNotes({ notes, onSave, disabled }: EditableNotesProps) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -50,7 +52,7 @@ export default function EditableNotes({ notes, onSave, disabled }: EditableNotes
       await onSave(newNotes);
       setEditing(false);
     } catch {
-      setError('Failed to save notes.');
+      setError(t('editableNotes.failedToSave'));
     } finally {
       isSavingRef.current = false;
       setIsSaving(false);
@@ -82,13 +84,13 @@ export default function EditableNotes({ notes, onSave, disabled }: EditableNotes
           color="text.secondary"
           sx={{ fontStyle: 'italic' }}
         >
-          {notes ? `Notes: ${notes}` : 'Add notes...'}
+          {notes ? t('editableNotes.notes', { notes }) : t('editableNotes.addNotes')}
         </Typography>
         <IconButton
           size="small"
           onClick={startEditing}
           disabled={disabled}
-          aria-label="Edit notes"
+          aria-label={t('editableNotes.editNotes')}
         >
           <EditIcon sx={{ fontSize: 16 }} />
         </IconButton>
@@ -113,8 +115,8 @@ export default function EditableNotes({ notes, onSave, disabled }: EditableNotes
         fullWidth
         autoFocus
         disabled={isSaving}
-        inputProps={{ maxLength: 500 }}
-        placeholder="Add notes..."
+        inputProps={{ maxLength: 500, 'aria-label': t('editableNotes.addNotes') }}
+        placeholder={t('editableNotes.addNotes')}
       />
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
         <IconButton
@@ -122,7 +124,7 @@ export default function EditableNotes({ notes, onSave, disabled }: EditableNotes
           onMouseDown={(e) => e.preventDefault()}
           onClick={save}
           disabled={isSaving}
-          aria-label="Save notes"
+          aria-label={t('editableNotes.saveNotes')}
         >
           {isSaving ? <CircularProgress size={16} /> : <CheckIcon sx={{ fontSize: 16 }} />}
         </IconButton>
@@ -133,7 +135,7 @@ export default function EditableNotes({ notes, onSave, disabled }: EditableNotes
           }}
           onClick={cancel}
           disabled={isSaving}
-          aria-label="Cancel editing"
+          aria-label={t('editableNotes.cancelEditing')}
         >
           <CloseIcon sx={{ fontSize: 16 }} />
         </IconButton>
