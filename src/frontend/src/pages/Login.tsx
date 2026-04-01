@@ -75,9 +75,11 @@ export default function Login() {
               variant="contained"
               fullWidth
               disabled={loading}
+              aria-busy={loading}
+              startIcon={loading ? <CircularProgress size={18} color="inherit" aria-hidden="true" /> : undefined}
               sx={{ mt: 1 }}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : t('auth.loginButton')}
+              {t('auth.loginButton')}
             </Button>
           </Box>
 
