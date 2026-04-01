@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -32,6 +33,7 @@ import type { Plant } from '../types/Plant';
 import { getTranslation } from '../utils/getTranslation';
 
 export default function GardenDetail() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const { language } = useLanguage();
   const [garden, setGarden] = useState<Garden | null>(null);
@@ -89,7 +91,7 @@ export default function GardenDetail() {
       }
     } catch {
       if (mountedRef.current) {
-        setRemoveError('Failed to remove plant. Please try again.');
+        setRemoveError(t('gardens.failedToRemove'));
       }
     }
   };
@@ -109,7 +111,7 @@ export default function GardenDetail() {
       setAvailablePlants(allPlants.filter((p) => !gardenPlantIds.has(p.id)));
     } catch {
       setAvailablePlants([]);
-      setAddPlantError('Failed to load plants');
+      setAddPlantError(t('gardens.failedToLoadPlants'));
     } finally {
       setPlantsLoading(false);
     }
@@ -122,7 +124,7 @@ export default function GardenDetail() {
     try {
       await addPlantToGarden(garden.id, selectedPlant.id, plantNotes || undefined);
       const name = getTranslation(selectedPlant, language)?.commonName ?? selectedPlant.scientificName;
-      setAddPlantSuccess(`Added ${name}!`);
+      setAddPlantSuccess(t('gardens.addedPlant', { name }));
       setSelectedPlant(null);
       setPlantNotes('');
       if (mountedRef.current) await loadGarden();
@@ -133,9 +135,9 @@ export default function GardenDetail() {
       }, 1500);
     } catch (err) {
       if ((err as Error & { status?: number }).status === 409) {
-        setAddPlantError('This plant is already in this garden');
+        setAddPlantError(t('gardens.alreadyInGarden'));
       } else {
-        setAddPlantError('Failed to add plant. Please try again.');
+        setAddPlantError(t('gardens.failedToAddPlant'));
       }
     } finally {
       setAddingPlant(false);
@@ -163,9 +165,9 @@ export default function GardenDetail() {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Button component={RouterLink} to="/gardens" startIcon={<ArrowBackIcon />} sx={{ mb: 2 }}>
-          Back to Gardens
+          {t('gardens.backToGardens')}
         </Button>
-        <Typography color="text.secondary">Garden not found.</Typography>
+        <Typography color="text.secondary">{t('gardens.gardenNotFound')}</Typography>
       </Container>
     );
   }
@@ -173,7 +175,7 @@ export default function GardenDetail() {
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Button component={RouterLink} to="/gardens" startIcon={<ArrowBackIcon />} sx={{ mb: 2 }}>
-        Back to Gardens
+        {t('gardens.backToGardens')}
       </Button>
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
@@ -181,7 +183,7 @@ export default function GardenDetail() {
           {garden.name}
         </Typography>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openAddPlantDialog}>
-          Add plants
+          {t('gardens.addPlants')}
         </Button>
       </Box>
       {garden.description && (
@@ -199,14 +201,14 @@ export default function GardenDetail() {
       {garden.gardenPlants.length === 0 && (
         <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
           <Typography sx={{ mb: 2 }}>
-            No plants in this garden yet. Add some from the library!
+            {t('gardens.emptyGarden')}
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
             <Button variant="contained" startIcon={<AddIcon />} onClick={openAddPlantDialog}>
-              Add plants
+              {t('gardens.addPlants')}
             </Button>
             <Button variant="outlined" component={RouterLink} to="/library">
-              Browse Library
+              {t('gardens.browseLibrary')}
             </Button>
           </Box>
         </Box>
@@ -225,13 +227,13 @@ export default function GardenDetail() {
                 >
                   <CardContent>
                     <Typography variant="body2" color="text.secondary">
-                      Plant data unavailable
+                      {t('gardens.plantDataUnavailable')}
                     </Typography>
                   </CardContent>
                 </Card>
               );
             }
-            const t = getTranslation(plant, language);
+            const tr = getTranslation(plant, language);
 
             return (
               <Card
@@ -241,7 +243,7 @@ export default function GardenDetail() {
               >
                 <CardContent>
                   <Typography variant="h6" fontWeight={600}>
-                    {t?.commonName ?? plant.scientificName}
+                    {tr?.commonName ?? plant.scientificName}
                   </Typography>
                   <Typography
                     variant="body2"
@@ -283,9 +285,9 @@ export default function GardenDetail() {
                       variant="outlined"
                       color="error"
                       onClick={() => handleRemovePlant(gp.plantId)}
-                      aria-label={`Remove ${t?.commonName ?? plant.scientificName} from garden`}
+                      aria-label={t('gardens.removeFromGarden', { name: tr?.commonName ?? plant.scientificName })}
                     >
-                      Remove
+                      {t('gardens.removePlant')}
                     </Button>
                   </Box>
                 </CardContent>
@@ -301,7 +303,7 @@ export default function GardenDetail() {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Add a plant to this garden</DialogTitle>
+        <DialogTitle>{t('gardens.addPlantDialog')}</DialogTitle>
         <DialogContent>
           {plantsLoading && (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -324,7 +326,7 @@ export default function GardenDetail() {
           {!plantsLoading && !addPlantSuccess && (
             <>
               <TextField
-                placeholder="Search plants..."
+                placeholder={t('gardens.searchPlants')}
                 size="small"
                 fullWidth
                 value={searchQuery}
@@ -362,15 +364,15 @@ export default function GardenDetail() {
                 </List>
               ) : searchQuery ? (
                 <Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
-                  No plants match your search
+                  {t('gardens.noMatchingPlants')}
                 </Typography>
               ) : (
                 <Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
-                  All plants are already in this garden!
+                  {t('gardens.allPlantsAdded')}
                 </Typography>
               )}
               <TextField
-                label="Notes (optional)"
+                label={t('gardens.notesOptional')}
                 fullWidth
                 multiline
                 rows={2}
@@ -383,13 +385,13 @@ export default function GardenDetail() {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAddDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => setAddDialogOpen(false)}>{t('gardens.cancel')}</Button>
           <Button
             variant="contained"
             disabled={!selectedPlant || addingPlant || !filteredPlants.some((p) => p.id === selectedPlant.id)}
             onClick={handleAddPlant}
           >
-            Add to garden
+            {t('gardens.addToGarden')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -20,6 +21,7 @@ import type { PlantType } from '../types/PlantType';
 import { getTranslation } from '../utils/getTranslation';
 
 export default function PlantLibrary() {
+  const { t } = useTranslation();
   const [plants, setPlants] = useState<Plant[]>([]);
   const [plantTypes, setPlantTypes] = useState<PlantType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,11 +37,12 @@ export default function PlantLibrary() {
         setPlantTypes(typesData);
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Failed to load data');
+        setError(err instanceof Error ? err.message : t('library.error'));
       })
       .finally(() => {
         setLoading(false);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -75,13 +78,13 @@ export default function PlantLibrary() {
   return (
     <Container maxWidth="lg" sx={{ pt: 4, pb: 6 }}>
       <Typography variant="h4" fontWeight={700} color="primary" sx={{ mb: 3 }}>
-        Plant Library
+        {t('library.title')}
       </Typography>
 
       {!loading && !error && (
         <>
           <TextField
-            placeholder="Search plants by name..."
+            placeholder={t('library.searchPlaceholder')}
             fullWidth
             variant="outlined"
             size="small"
@@ -101,7 +104,7 @@ export default function PlantLibrary() {
 
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 3 }}>
             <Chip
-              label="All"
+              label={t('library.allTypes')}
               color={activeType === null ? 'primary' : 'default'}
               variant={activeType === null ? 'filled' : 'outlined'}
               onClick={() => setActiveType(null)}
@@ -134,20 +137,20 @@ export default function PlantLibrary() {
       {!loading && !error && plants.length === 0 && (
         <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
           <SpaIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
-          <Typography>No plants found yet — check back soon!</Typography>
+          <Typography>{t('library.noPlants')}</Typography>
         </Box>
       )}
 
       {!loading && plants.length > 0 && filteredPlants.length === 0 && (
         <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
-          <Typography>No plants match your search.</Typography>
+          <Typography>{t('library.noResults')}</Typography>
         </Box>
       )}
 
       {!loading && filteredPlants.length > 0 && (
         <Grid container spacing={3}>
           {filteredPlants.map((plant) => {
-            const t = getTranslation(plant, language);
+            const tr = getTranslation(plant, language);
             const typeName = plantTypes.find((pt) => pt.id === plant.plantTypeId)?.name;
 
             return (
@@ -171,7 +174,7 @@ export default function PlantLibrary() {
                 >
                   <CardContent>
                     <Typography variant="h6" fontWeight={600}>
-                      {t?.commonName ?? plant.scientificName}
+                      {tr?.commonName ?? plant.scientificName}
                     </Typography>
                     <Typography
                       variant="body2"
@@ -191,7 +194,7 @@ export default function PlantLibrary() {
                       />
                     )}
 
-                    {t?.description && (
+                    {tr?.description && (
                       <Typography
                         variant="body2"
                         color="text.secondary"
@@ -204,15 +207,15 @@ export default function PlantLibrary() {
                           WebkitBoxOrient: 'vertical',
                         }}
                       >
-                        {t.description}
+                        {tr.description}
                       </Typography>
                     )}
 
                     {(plant.sunExposure || plant.waterNeeds) && (
                       <Typography variant="caption" color="text.secondary">
-                        {plant.sunExposure && `Sun: ${plant.sunExposure}`}
+                        {plant.sunExposure && `${t('library.sun')}: ${plant.sunExposure}`}
                         {plant.sunExposure && plant.waterNeeds && ' · '}
-                        {plant.waterNeeds && `Water: ${plant.waterNeeds}`}
+                        {plant.waterNeeds && `${t('library.water')}: ${plant.waterNeeds}`}
                       </Typography>
                     )}
                   </CardContent>
