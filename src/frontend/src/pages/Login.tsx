@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -16,6 +17,7 @@ import { useAuth } from '../hooks/useAuth';
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:5000';
 
 export default function Login() {
+  const { t } = useTranslation();
   const { login } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -30,8 +32,8 @@ export default function Login() {
     try {
       await login(email, password);
       navigate('/library');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+    } catch {
+      setError(t('auth.loginError'));
     } finally {
       setLoading(false);
     }
@@ -42,7 +44,7 @@ export default function Login() {
       <Card variant="outlined" sx={{ borderRadius: 3 }}>
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h5" fontWeight={700} color="primary" sx={{ mb: 3, textAlign: 'center' }}>
-            Login
+            {t('auth.login')}
           </Typography>
 
           {error && (
@@ -51,9 +53,9 @@ export default function Login() {
             </Alert>
           )}
 
-          <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box component="form" onSubmit={handleSubmit} aria-label={t('auth.login')} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <TextField
-              label="Email"
+              label={t('auth.email')}
               type="email"
               required
               fullWidth
@@ -61,7 +63,7 @@ export default function Login() {
               onChange={(e) => setEmail(e.target.value)}
             />
             <TextField
-              label="Password"
+              label={t('auth.password')}
               type="password"
               required
               fullWidth
@@ -75,19 +77,20 @@ export default function Login() {
               disabled={loading}
               sx={{ mt: 1 }}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Login'}
+              {loading ? <CircularProgress size={24} color="inherit" /> : t('auth.loginButton')}
             </Button>
           </Box>
 
           <Divider sx={{ my: 3 }}>
             <Typography variant="caption" color="text.secondary">
-              OR
+              {t('auth.orDivider')}
             </Typography>
           </Divider>
 
           <Button
             variant="outlined"
             fullWidth
+            aria-label={t('auth.googleLogin')}
             onClick={() => { window.location.href = `${API_BASE}/api/auth/google-login`; }}
             sx={{
               bgcolor: '#fff',
@@ -98,13 +101,13 @@ export default function Login() {
               '&:hover': { bgcolor: '#f5f5f5', borderColor: '#ccc' },
             }}
           >
-            Sign in with Google
+            {t('auth.googleLogin')}
           </Button>
 
           <Typography variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
-            Don&apos;t have an account?{' '}
+            {t('auth.noAccount')}{' '}
             <Link component={RouterLink} to="/register">
-              Register
+              {t('auth.signUpLink')}
             </Link>
           </Typography>
         </CardContent>

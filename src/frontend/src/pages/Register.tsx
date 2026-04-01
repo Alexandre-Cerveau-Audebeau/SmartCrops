@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -16,6 +17,7 @@ import { useAuth } from '../hooks/useAuth';
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:5000';
 
 export default function Register() {
+  const { t } = useTranslation();
   const { register } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -29,7 +31,7 @@ export default function Register() {
     setError(null);
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('auth.passwordMismatch'));
       return;
     }
 
@@ -37,8 +39,8 @@ export default function Register() {
     try {
       await register(email, password);
       navigate('/library');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+    } catch {
+      setError(t('auth.registerError'));
     } finally {
       setLoading(false);
     }
@@ -49,7 +51,7 @@ export default function Register() {
       <Card variant="outlined" sx={{ borderRadius: 3 }}>
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h5" fontWeight={700} color="primary" sx={{ mb: 3, textAlign: 'center' }}>
-            Register
+            {t('auth.register')}
           </Typography>
 
           {error && (
@@ -58,9 +60,9 @@ export default function Register() {
             </Alert>
           )}
 
-          <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box component="form" onSubmit={handleSubmit} aria-label={t('auth.register')} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <TextField
-              label="Email"
+              label={t('auth.email')}
               type="email"
               required
               fullWidth
@@ -68,7 +70,7 @@ export default function Register() {
               onChange={(e) => setEmail(e.target.value)}
             />
             <TextField
-              label="Password"
+              label={t('auth.password')}
               type="password"
               required
               fullWidth
@@ -76,7 +78,7 @@ export default function Register() {
               onChange={(e) => setPassword(e.target.value)}
             />
             <TextField
-              label="Confirm Password"
+              label={t('auth.confirmPassword')}
               type="password"
               required
               fullWidth
@@ -90,19 +92,20 @@ export default function Register() {
               disabled={loading}
               sx={{ mt: 1 }}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Register'}
+              {loading ? <CircularProgress size={24} color="inherit" /> : t('auth.registerButton')}
             </Button>
           </Box>
 
           <Divider sx={{ my: 3 }}>
             <Typography variant="caption" color="text.secondary">
-              OR
+              {t('auth.orDivider')}
             </Typography>
           </Divider>
 
           <Button
             variant="outlined"
             fullWidth
+            aria-label={t('auth.googleRegister')}
             onClick={() => { window.location.href = `${API_BASE}/api/auth/google-login`; }}
             sx={{
               bgcolor: '#fff',
@@ -113,13 +116,13 @@ export default function Register() {
               '&:hover': { bgcolor: '#f5f5f5', borderColor: '#ccc' },
             }}
           >
-            Sign in with Google
+            {t('auth.googleRegister')}
           </Button>
 
           <Typography variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
-            Already have an account?{' '}
+            {t('auth.hasAccount')}{' '}
             <Link component={RouterLink} to="/login">
-              Login
+              {t('auth.signInLink')}
             </Link>
           </Typography>
         </CardContent>

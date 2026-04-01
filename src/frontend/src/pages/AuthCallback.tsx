@@ -1,12 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
+import Typography from '@mui/material/Typography';
 import { useAuth } from '../hooks/useAuth';
 import { exchangeCode } from '../services/authApi';
 
 export default function AuthCallback() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const { googleCallback } = useAuth();
   const navigate = useNavigate();
@@ -43,8 +46,11 @@ export default function AuthCallback() {
 
   return (
     <Container maxWidth="xs" sx={{ pt: 8 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 8 }}>
         <CircularProgress />
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+          {t('auth.callbackProcessing')}
+        </Typography>
       </Box>
     </Container>
   );
