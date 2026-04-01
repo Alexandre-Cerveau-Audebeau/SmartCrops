@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import i18next from 'i18next';
 import { LanguageContext } from './languageContextValue';
 import type { Language } from './languageContextValue';
 
@@ -28,6 +29,10 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       // localStorage unavailable
     }
   };
+
+  useEffect(() => {
+    i18next.changeLanguage(language);
+  }, [language]);
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage }}>

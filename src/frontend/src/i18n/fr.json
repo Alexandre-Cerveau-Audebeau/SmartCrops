@@ -1,0 +1,93 @@
+{
+  "nav": {
+    "library": "Bibliothèque",
+    "myGardens": "Mes Jardins",
+    "login": "Connexion",
+    "logout": "Déconnexion"
+  },
+  "footer": {
+    "tagline": "Votre compagnon de jardin virtuel — découvrez, cultivez et partagez des plantes du monde entier.",
+    "explore": "Explorer",
+    "library": "Bibliothèque",
+    "plantFinder": "Recherche de plantes",
+    "about": "À propos",
+    "aboutUs": "À propos de nous",
+    "contact": "Contact",
+    "privacy": "Confidentialité",
+    "connect": "Restons connectés",
+    "connectDescription": "Recevez des conseils et des nouveautés directement dans votre boîte mail.",
+    "subscribe": "S'abonner",
+    "emailPlaceholder": "votre@email.com",
+    "copyright": "© {{year}} SmartCrops. Tous droits réservés."
+  },
+  "home": {
+    "hero": {
+      "title": "Votre Compagnon de Jardin Virtuel",
+      "subtitle": "Découvrez, planifiez et cultivez votre jardin avec une bibliothèque de plantes et des outils intelligents.",
+      "browseLibrary": "Parcourir la bibliothèque",
+      "createAccount": "Créer un compte",
+      "photoCredit": "Photo par",
+      "onUnsplash": "sur Unsplash",
+      "pause": "Mettre en pause le carrousel",
+      "play": "Relancer le carrousel"
+    },
+    "stats": {
+      "plants": "Plantes",
+      "languages": "Langues",
+      "free": "Gratuit",
+      "openSource": "Open Source",
+      "community": "Communauté"
+    },
+    "features": {
+      "title": "Pourquoi SmartCrops ?",
+      "subtitle": "Tout ce qu'il faut pour planifier, planter et cultiver — au même endroit.",
+      "plantLibrary": "Bibliothèque de plantes",
+      "plantLibraryDesc": "Parcourez des centaines de plantes avec leurs conditions de culture, informations saisonnières et descriptions multilingues.",
+      "virtualGarden": "Jardin Virtuel",
+      "virtualGardenDesc": "Concevez l'agencement de votre jardin, suivez vos plantes et recevez des conseils de culture personnalisés.",
+      "bilingualSupport": "Support Bilingue",
+      "bilingualSupportDesc": "Accédez aux informations sur les plantes en anglais et en français, d'autres langues sont prévues.",
+      "gardenPlanner": "Planificateur de Jardin",
+      "gardenPlannerDesc": "Concevez votre jardin en glisser-déposer. Placez les plantes sur une grille virtuelle et planifiez votre espace.",
+      "smartMonitoring": "Suivi Intelligent",
+      "smartMonitoringDesc": "Connectez les données météo et les capteurs IoT pour recevoir des recommandations de soins personnalisées.",
+      "comingSoon": "Bientôt disponible"
+    },
+    "libraryPreview": {
+      "title": "Explorez notre bibliothèque de plantes",
+      "subtitle": "Découvrez les plantes idéales pour votre jardin",
+      "viewAll": "Voir toutes les plantes",
+      "loading": "Chargement des plantes...",
+      "error": "Impossible de charger les plantes"
+    },
+    "howItWorks": {
+      "title": "Comment ça marche",
+      "step1Title": "Parcourez",
+      "step1Desc": "Explorez notre bibliothèque de plantes avec des guides de culture détaillés et des informations saisonnières.",
+      "step2Title": "Planifiez",
+      "step2Desc": "Créez des jardins virtuels et organisez vos plantes avec des notes et des conditions de culture.",
+      "step3Title": "Cultivez",
+      "step3Desc": "Suivez les recommandations personnalisées et suivez l'évolution de votre jardin au fil des saisons."
+    },
+    "testimonials": {
+      "title": "Ce que disent nos utilisateurs"
+    },
+    "builtWith": {
+      "title": "Construit avec des outils modernes",
+      "subtitle": "Les technologies qui font tourner SmartCrops aujourd'hui",
+      "roadmap": "Dans notre feuille de route"
+    },
+    "cta": {
+      "title": "Prêt à commencer ?",
+      "subtitle": "Rejoignez SmartCrops et découvrez les plantes idéales pour votre jardin.",
+      "button": "Commencer — C'est gratuit"
+    },
+    "newsletter": {
+      "title": "Restez informé",
+      "subtitle": "Recevez les nouveautés sur les plantes, les fonctionnalités et les conseils de saison.",
+      "placeholder": "Adresse e-mail",
+      "subscribe": "S'abonner (Bientôt)",
+      "disclaimer": "Pas de spam, désabonnement à tout moment."
+    }
+  }
+}
