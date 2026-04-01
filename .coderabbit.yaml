@@ -1,6 +1,17 @@
 reviews:
+  high_level_summary: true
+  high_level_summary_in_walkthrough: true
+  sequence_diagrams: true
   auto_review:
     enabled: true
     base_branches:
       - main
       - develop
+  path_instructions:
+    - path: "src/backend/**/*.cs"
+      instructions: "Focus on architectural patterns, dependency management, security, and system design impact."
+    - path: "src/frontend/src/**/*.tsx"
+      instructions: "Focus on component architecture, accessibility, state management patterns, and performance."
+    - path: "src/frontend/src/**/*.ts"
+      instructions: "Focus on type safety, API design, and error handling patterns."
+  tone_instructions: "Provide architectural insights on system design, scalability, and long-term maintainability. Be specific with code suggestions."
