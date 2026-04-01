@@ -331,6 +331,7 @@ export default function GardenDetail() {
                 fullWidth
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                inputProps={{ 'aria-label': t('gardens.searchPlants') }}
                 sx={{ mb: 2 }}
               />
               {filteredPlants.length > 0 ? (

@@ -90,6 +90,7 @@ export default function PlantLibrary() {
             size="small"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            inputProps={{ 'aria-label': t('library.searchPlaceholder') }}
             slotProps={{
               input: {
                 startAdornment: (

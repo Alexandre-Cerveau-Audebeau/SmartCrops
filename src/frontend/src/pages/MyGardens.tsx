@@ -198,17 +198,17 @@ export default function MyGardens() {
                   </Typography>
                 )}
                 {garden.description && garden.description.length > 80 && (
-                  <Typography
-                    variant="body2"
-                    color="primary"
-                    sx={{ cursor: 'pointer', mt: 0.5, mb: 1, fontSize: '0.8rem' }}
+                  <Button
+                    variant="text"
+                    size="small"
                     onClick={() => toggleDescription(garden.id)}
+                    sx={{ mt: 0.5, mb: 1, p: 0, minWidth: 0, fontSize: '0.8rem' }}
                   >
                     {expandedDescriptions.has(garden.id) ? t('gardens.seeLess') : t('gardens.seeMore')}
-                  </Typography>
+                  </Button>
                 )}
                 <Chip
-                  label={`${garden.gardenPlants.length} ${t('gardens.plants')}`}
+                  label={t('gardens.plantsCount', { count: garden.gardenPlants.length })}
                   size="small"
                   variant="outlined"
                 />
@@ -224,6 +224,7 @@ export default function MyGardens() {
                       .join(', ')}
                     {garden.gardenPlants.length > 3 &&
                       ` ${t('gardens.more', { count: garden.gardenPlants.length - 3 })}`}
+
                   </Typography>
                 )}
               </CardContent>

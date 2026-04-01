@@ -115,7 +115,7 @@ export default function EditableNotes({ notes, onSave, disabled }: EditableNotes
         fullWidth
         autoFocus
         disabled={isSaving}
-        inputProps={{ maxLength: 500 }}
+        inputProps={{ maxLength: 500, 'aria-label': t('editableNotes.addNotes') }}
         placeholder={t('editableNotes.addNotes')}
       />
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>

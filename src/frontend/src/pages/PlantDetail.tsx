@@ -118,13 +118,13 @@ export default function PlantDetail() {
 
     if (failed > 0) {
       let errorMsg = successes > 0
-        ? t('gardens.addedButFailed', { successes, failed })
-        : t('gardens.failedCount', { failed });
-      if (alreadyAdded > 0) errorMsg += ` ${t('gardens.addedWithExisting', { successes: alreadyAdded })}`;
+        ? t('gardens.addedButFailed', { count: successes, failed })
+        : t('gardens.failedCount', { count: failed });
+      if (alreadyAdded > 0) errorMsg += ` ${t('gardens.addedWithExisting', { count: alreadyAdded })}`;
       setAddError(errorMsg);
-    } else {
-      let message = t('gardens.addedToCount', { successes });
-      if (alreadyAdded > 0) message += ` ${t('gardens.addedWithExisting', { successes: alreadyAdded })}`;
+    } else if (successes > 0) {
+      let message = t('gardens.addedToCount', { count: successes });
+      if (alreadyAdded > 0) message += ` ${t('gardens.addedWithExisting', { count: alreadyAdded })}`;
       setAddSuccess(message);
       setSelectedGardenIds(new Set());
       closeTimerRef.current = setTimeout(() => {
@@ -135,6 +135,8 @@ export default function PlantDetail() {
         closeTimerRef.current = null;
       }, 2000);
       return;
+    } else if (alreadyAdded > 0) {
+      setAddError(t('gardens.addedWithExisting', { count: alreadyAdded }));
     }
     setIsAdding(false);
   };
@@ -377,7 +379,7 @@ export default function PlantDetail() {
                   />
                   <ListItemText
                     primary={garden.name}
-                    secondary={`${garden.gardenPlants.length} ${t('gardens.plants')}`}
+                    secondary={t('gardens.plantsCount', { count: garden.gardenPlants.length })}
                   />
                 </ListItemButton>
               ))}
@@ -394,6 +396,7 @@ export default function PlantDetail() {
             {selectedGardenIds.size > 0
               ? t('library.addToCount', { count: selectedGardenIds.size })
               : t('library.add')}
+
           </Button>
         </DialogActions>
       </Dialog>
