@@ -18,6 +18,7 @@
     "connectDescription": "Recevez des conseils et des nouveautés directement dans votre boîte mail.",
     "subscribe": "S'abonner",
     "emailPlaceholder": "votre@email.com",
+    "emailAriaLabel": "Adresse e-mail pour la newsletter",
     "copyright": "© {{year}} SmartCrops. Tous droits réservés."
   },
   "home": {
@@ -26,8 +27,7 @@
       "subtitle": "Découvrez, planifiez et cultivez votre jardin avec une bibliothèque de plantes et des outils intelligents.",
       "browseLibrary": "Parcourir la bibliothèque",
       "createAccount": "Créer un compte",
-      "photoCredit": "Photo par",
-      "onUnsplash": "sur Unsplash",
+      "photoCreditFull": "Photo par {{author}} sur Unsplash",
       "pause": "Mettre en pause le carrousel",
       "play": "Relancer le carrousel"
     },

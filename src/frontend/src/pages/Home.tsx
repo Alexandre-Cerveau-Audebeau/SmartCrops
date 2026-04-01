@@ -242,13 +242,13 @@ export default function Home() {
             }}
           >
             {[
-              { icon: <LocalFloristIcon sx={{ fontSize: 24 }} />, value: '5+', label: t('home.stats.plants') },
-              { icon: <TranslateIcon sx={{ fontSize: 24 }} />, value: '2', label: t('home.stats.languages') },
-              { icon: <CardGiftcardIcon sx={{ fontSize: 24 }} />, value: '100%', label: t('home.stats.free') },
-              { icon: <CodeIcon sx={{ fontSize: 24 }} />, value: t('home.stats.openSource'), label: t('home.stats.community') },
+              { id: 'plants', icon: <LocalFloristIcon sx={{ fontSize: 24 }} />, value: '5+', label: t('home.stats.plants') },
+              { id: 'languages', icon: <TranslateIcon sx={{ fontSize: 24 }} />, value: '2', label: t('home.stats.languages') },
+              { id: 'free', icon: <CardGiftcardIcon sx={{ fontSize: 24 }} />, value: '100%', label: t('home.stats.free') },
+              { id: 'openSource', icon: <CodeIcon sx={{ fontSize: 24 }} />, value: t('home.stats.openSource'), label: t('home.stats.community') },
             ].map((stat) => (
               <Box
-                key={stat.label}
+                key={stat.id}
                 sx={{
                   flex: { xs: '0 0 50%', sm: '0 0 auto' },
                   textAlign: 'center',

@@ -18,6 +18,7 @@
     "connectDescription": "Get plant tips and updates straight to your inbox.",
     "subscribe": "Subscribe",
     "emailPlaceholder": "your@email.com",
+    "emailAriaLabel": "Email address for newsletter",
     "copyright": "© {{year}} SmartCrops. All rights reserved."
   },
   "home": {
@@ -26,8 +27,7 @@
       "subtitle": "Discover, plan, and grow your garden with a curated plant library and smart tools.",
       "browseLibrary": "Browse Library",
       "createAccount": "Create Account",
-      "photoCredit": "Photo by",
-      "onUnsplash": "on Unsplash",
+      "photoCreditFull": "Photo by {{author}} on Unsplash",
       "pause": "Pause slideshow",
       "play": "Play slideshow"
     },

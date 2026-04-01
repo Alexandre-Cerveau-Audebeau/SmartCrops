@@ -86,7 +86,7 @@ export default function Footer() {
               <OutlinedInput
                 placeholder={t('footer.emailPlaceholder')}
                 type="email"
-                inputProps={{ 'aria-label': 'Email address for newsletter' }}
+                inputProps={{ 'aria-label': t('footer.emailAriaLabel') }}
                 size="small"
                 sx={{
                   flexGrow: 1,

@@ -221,7 +221,7 @@ export default function HeroCarousel() {
           fontSize: 12,
         }}
       >
-        {t('home.hero.photoCredit')} {heroImages[activeIndex].credit} {t('home.hero.onUnsplash')}
+        {t('home.hero.photoCreditFull', { author: heroImages[activeIndex].credit })}
       </Typography>
     </Box>
   );
