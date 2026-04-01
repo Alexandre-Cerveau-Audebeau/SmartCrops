@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -32,8 +33,8 @@ import type { Plant } from '../types/Plant';
 
 interface FeatureItem {
   icon: ReactNode;
-  title: string;
-  description: string;
+  titleKey: string;
+  descKey: string;
   comingSoon?: boolean;
 }
 
@@ -46,58 +47,38 @@ interface TechItem {
 const features: FeatureItem[] = [
   {
     icon: <LocalFloristIcon sx={{ fontSize: 48, color: 'primary.main' }} />,
-    title: 'Plant Library',
-    description:
-      'Browse hundreds of plants with detailed growing conditions, seasonal info, and multilingual descriptions.',
+    titleKey: 'home.features.plantLibrary',
+    descKey: 'home.features.plantLibraryDesc',
   },
   {
     icon: <YardIcon sx={{ fontSize: 48, color: 'primary.main' }} />,
-    title: 'Virtual Garden',
-    description:
-      'Design your garden layout, track your plants, and get personalized growing advice.',
+    titleKey: 'home.features.virtualGarden',
+    descKey: 'home.features.virtualGardenDesc',
     comingSoon: true,
   },
   {
     icon: <TranslateIcon sx={{ fontSize: 48, color: 'primary.main' }} />,
-    title: 'Bilingual Support',
-    description:
-      'Access plant information in English and French, with more languages planned.',
+    titleKey: 'home.features.bilingualSupport',
+    descKey: 'home.features.bilingualSupportDesc',
   },
   {
     icon: <GridOnIcon sx={{ fontSize: 48, color: 'primary.main', opacity: 0.85 }} />,
-    title: 'Garden Planner',
-    description:
-      'Design your garden layout with drag-and-drop. Place plants on a virtual grid and plan your space.',
+    titleKey: 'home.features.gardenPlanner',
+    descKey: 'home.features.gardenPlannerDesc',
     comingSoon: true,
   },
   {
     icon: <SensorsIcon sx={{ fontSize: 48, color: 'primary.main', opacity: 0.85 }} />,
-    title: 'Smart Monitoring',
-    description:
-      'Connect weather data and IoT sensors to get personalized care recommendations for your plants.',
+    titleKey: 'home.features.smartMonitoring',
+    descKey: 'home.features.smartMonitoringDesc',
     comingSoon: true,
   },
 ];
 
 const steps = [
-  {
-    number: '1',
-    title: 'Browse Plants',
-    description:
-      'Explore our curated library of plants suited to your region and growing conditions.',
-  },
-  {
-    number: '2',
-    title: 'Plan Your Garden',
-    description:
-      'Organize your selections and plan out your garden for each season.',
-  },
-  {
-    number: '3',
-    title: 'Grow with Confidence',
-    description:
-      'Follow tailored guidance and watch your garden thrive all year long.',
-  },
+  { number: '1', titleKey: 'home.howItWorks.step1Title', descKey: 'home.howItWorks.step1Desc' },
+  { number: '2', titleKey: 'home.howItWorks.step2Title', descKey: 'home.howItWorks.step2Desc' },
+  { number: '3', titleKey: 'home.howItWorks.step3Title', descKey: 'home.howItWorks.step3Desc' },
 ];
 
 const testimonials = [
@@ -197,6 +178,7 @@ const plannedTech: TechItem[] = [
 ];
 
 export default function Home() {
+  const { t } = useTranslation();
   const { language } = useLanguage();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -260,13 +242,13 @@ export default function Home() {
             }}
           >
             {[
-              { icon: <LocalFloristIcon sx={{ fontSize: 24 }} />, value: '5+', label: 'Plants' },
-              { icon: <TranslateIcon sx={{ fontSize: 24 }} />, value: '2', label: 'Languages' },
-              { icon: <CardGiftcardIcon sx={{ fontSize: 24 }} />, value: '100%', label: 'Free' },
-              { icon: <CodeIcon sx={{ fontSize: 24 }} />, value: 'Open Source', label: 'Community' },
+              { id: 'plants', icon: <LocalFloristIcon sx={{ fontSize: 24 }} />, value: '5+', label: t('home.stats.plants') },
+              { id: 'languages', icon: <TranslateIcon sx={{ fontSize: 24 }} />, value: '2', label: t('home.stats.languages') },
+              { id: 'free', icon: <CardGiftcardIcon sx={{ fontSize: 24 }} />, value: '100%', label: t('home.stats.free') },
+              { id: 'openSource', icon: <CodeIcon sx={{ fontSize: 24 }} />, value: t('home.stats.openSource'), label: t('home.stats.community') },
             ].map((stat) => (
               <Box
-                key={stat.label}
+                key={stat.id}
                 sx={{
                   flex: { xs: '0 0 50%', sm: '0 0 auto' },
                   textAlign: 'center',
@@ -287,7 +269,7 @@ export default function Home() {
       {/* ==================== SECTION 3 — FEATURES ==================== */}
       <Container maxWidth="lg" sx={{ py: 8 }}>
         <Typography variant="h4" textAlign="center" color="primary" gutterBottom>
-          Why SmartCrops?
+          {t('home.features.title')}
         </Typography>
         <Typography
           variant="body1"
@@ -295,7 +277,7 @@ export default function Home() {
           color="text.secondary"
           sx={{ mb: 6 }}
         >
-          Everything you need to plan, plant, and grow — all in one place.
+          {t('home.features.subtitle')}
         </Typography>
         <Box
           sx={{
@@ -307,7 +289,7 @@ export default function Home() {
         >
           {features.map((feature) => (
             <Card
-              key={feature.title}
+              key={feature.titleKey}
               variant="outlined"
               sx={{
                 width: '100%',
@@ -326,7 +308,7 @@ export default function Home() {
             >
               {feature.comingSoon && (
                 <Chip
-                  label="Coming Soon"
+                  label={t('home.features.comingSoon')}
                   color="warning"
                   size="small"
                   sx={{ position: 'absolute', top: 12, right: 12 }}
@@ -335,10 +317,10 @@ export default function Home() {
               <CardContent>
                 {feature.icon}
                 <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
-                  {feature.title}
+                  {t(feature.titleKey)}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {feature.description}
+                  {t(feature.descKey)}
                 </Typography>
               </CardContent>
             </Card>
@@ -350,7 +332,7 @@ export default function Home() {
       <Box sx={{ bgcolor: 'rgba(46, 125, 50, 0.04)', py: 8 }}>
         <Container maxWidth="lg">
           <Typography variant="h4" textAlign="center" gutterBottom>
-            Discover our plants
+            {t('home.libraryPreview.title')}
           </Typography>
           <Typography
             variant="body1"
@@ -358,12 +340,12 @@ export default function Home() {
             color="text.secondary"
             sx={{ mb: 6 }}
           >
-            A sneak peek from our growing collection.
+            {t('home.libraryPreview.subtitle')}
           </Typography>
           <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
             {plantsError ? (
               <Typography color="text.secondary" sx={{ width: '100%', textAlign: 'center' }}>
-                Unable to load plants. Please try again later.
+                {t('home.libraryPreview.error')}
               </Typography>
             ) : plantsLoading
               ? Array.from({ length: 3 }).map((_, i) => (
@@ -444,7 +426,7 @@ export default function Home() {
               component={RouterLink}
               to="/library"
             >
-              View all plants
+              {t('home.libraryPreview.viewAll')}
             </Button>
           </Box>
         </Container>
@@ -453,7 +435,7 @@ export default function Home() {
       {/* ==================== SECTION 5 — HOW IT WORKS ==================== */}
       <Container maxWidth="lg" sx={{ py: 8 }}>
         <Typography variant="h4" textAlign="center" gutterBottom>
-          Get Started in Minutes
+          {t('home.howItWorks.title')}
         </Typography>
         <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap', mt: 4 }}>
           {steps.map((step) => (
@@ -469,10 +451,10 @@ export default function Home() {
                 {step.number}
               </Typography>
               <Typography variant="h6" sx={{ mb: 1 }}>
-                {step.title}
+                {t(step.titleKey)}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {step.description}
+                {t(step.descKey)}
               </Typography>
             </Box>
           ))}
@@ -483,7 +465,7 @@ export default function Home() {
       <Box sx={{ bgcolor: 'background.default', py: 8 }}>
         <Container maxWidth="lg">
           <Typography variant="h4" textAlign="center" gutterBottom>
-            What gardeners say
+            {t('home.testimonials.title')}
           </Typography>
           <Box
             sx={{
@@ -505,9 +487,9 @@ export default function Home() {
                 minWidth: 0,
               }}
             >
-              {visibleTestimonials.map((t) => (
+              {visibleTestimonials.map((testimonial) => (
                 <Box
-                  key={t.name}
+                  key={testimonial.name}
                   sx={{
                     flex: '1 1 280px',
                     minWidth: 0,
@@ -523,7 +505,7 @@ export default function Home() {
                         key={i}
                         sx={{
                           fontSize: 16,
-                          color: i < t.rating ? '#EF9F27' : 'action.disabled',
+                          color: i < testimonial.rating ? '#EF9F27' : 'action.disabled',
                         }}
                       />
                     ))}
@@ -533,7 +515,7 @@ export default function Home() {
                     color="text.secondary"
                     sx={{ fontStyle: 'italic', mb: 2 }}
                   >
-                    &ldquo;{t.quote}&rdquo;
+                    &ldquo;{testimonial.quote}&rdquo;
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <Box
@@ -551,14 +533,14 @@ export default function Home() {
                         flexShrink: 0,
                       }}
                     >
-                      {t.initials}
+                      {testimonial.initials}
                     </Box>
                     <Box>
                       <Typography variant="body2" fontWeight={500}>
-                        {t.name}
+                        {testimonial.name}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {t.location}
+                        {testimonial.location}
                       </Typography>
                     </Box>
                   </Box>
@@ -612,7 +594,7 @@ export default function Home() {
       <Box sx={{ bgcolor: '#F5F5F5', py: 8 }}>
         <Container maxWidth="lg">
           <Typography variant="h4" textAlign="center" gutterBottom>
-            Built With Modern Tools
+            {t('home.builtWith.title')}
           </Typography>
           <Typography
             variant="body1"
@@ -620,7 +602,7 @@ export default function Home() {
             color="text.secondary"
             sx={{ mb: 6 }}
           >
-            The technologies powering SmartCrops today
+            {t('home.builtWith.subtitle')}
           </Typography>
           <Box
             sx={{
@@ -660,7 +642,7 @@ export default function Home() {
           </Box>
           <Divider sx={{ my: 4 }} />
           <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mb: 3 }}>
-            On Our Roadmap
+            {t('home.builtWith.roadmap')}
           </Typography>
           <Box
             sx={{
@@ -706,11 +688,10 @@ export default function Home() {
       <Box sx={{ py: 8, textAlign: 'center' }}>
         <Container maxWidth="sm">
           <Typography variant="h4" gutterBottom>
-            Ready to Start Growing?
+            {t('home.cta.title')}
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Join SmartCrops today and discover the perfect plants for your
-            garden.
+            {t('home.cta.subtitle')}
           </Typography>
           <Button
             variant="contained"
@@ -718,7 +699,7 @@ export default function Home() {
             component={RouterLink}
             to="/register"
           >
-            Get Started — It&apos;s Free
+            {t('home.cta.button')}
           </Button>
         </Container>
       </Box>
@@ -727,10 +708,10 @@ export default function Home() {
       <Box sx={{ bgcolor: 'rgba(46, 125, 50, 0.04)', py: 6 }}>
         <Container maxWidth="sm" sx={{ textAlign: 'center' }}>
           <Typography variant="h5" gutterBottom>
-            Stay in the loop
+            {t('home.newsletter.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Get updates on new plants, features, and seasonal tips.
+            {t('home.newsletter.subtitle')}
           </Typography>
           <Box
             component="form"
@@ -742,19 +723,19 @@ export default function Home() {
             }}
           >
             <TextField
-              placeholder="your@email.com"
-              label="Email address"
+              placeholder={t('home.newsletter.placeholder')}
+              label={t('home.newsletter.placeholder')}
               type="email"
               size="small"
               fullWidth
               sx={{ maxWidth: 320 }}
             />
             <Button variant="contained" disabled>
-              Subscribe (Coming soon)
+              {t('home.newsletter.subscribe')}
             </Button>
           </Box>
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: 'block' }}>
-            No spam, unsubscribe anytime.
+            {t('home.newsletter.disclaimer')}
           </Typography>
         </Container>
       </Box>

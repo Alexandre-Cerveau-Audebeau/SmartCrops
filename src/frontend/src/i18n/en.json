@@ -1,0 +1,93 @@
+{
+  "nav": {
+    "library": "Library",
+    "myGardens": "My Gardens",
+    "login": "Login",
+    "logout": "Logout"
+  },
+  "footer": {
+    "tagline": "Your virtual garden companion — discover, grow, and share plants from around the world.",
+    "explore": "Explore",
+    "library": "Library",
+    "plantFinder": "Plant Finder",
+    "about": "About",
+    "aboutUs": "About Us",
+    "contact": "Contact",
+    "privacy": "Privacy",
+    "connect": "Connect",
+    "connectDescription": "Get plant tips and updates straight to your inbox.",
+    "subscribe": "Subscribe",
+    "emailPlaceholder": "your@email.com",
+    "emailAriaLabel": "Email address for newsletter",
+    "copyright": "© {{year}} SmartCrops. All rights reserved."
+  },
+  "home": {
+    "hero": {
+      "title": "Your Virtual Garden Companion",
+      "subtitle": "Discover, plan, and grow your garden with a curated plant library and smart tools.",
+      "browseLibrary": "Browse Library",
+      "createAccount": "Create Account",
+      "photoCreditFull": "Photo by {{author}} on Unsplash",
+      "pause": "Pause slideshow",
+      "play": "Play slideshow"
+    },
+    "stats": {
+      "plants": "Plants",
+      "languages": "Languages",
+      "free": "Free",
+      "openSource": "Open Source",
+      "community": "Community"
+    },
+    "features": {
+      "title": "Why SmartCrops?",
+      "subtitle": "Everything you need to plan, plant, and grow — all in one place.",
+      "plantLibrary": "Plant Library",
+      "plantLibraryDesc": "Browse hundreds of plants with detailed growing conditions, seasonal info, and multilingual descriptions.",
+      "virtualGarden": "Virtual Garden",
+      "virtualGardenDesc": "Design your garden layout, track your plants, and get personalized growing advice.",
+      "bilingualSupport": "Bilingual Support",
+      "bilingualSupportDesc": "Access plant information in English and French, with more languages planned.",
+      "gardenPlanner": "Garden Planner",
+      "gardenPlannerDesc": "Design your garden layout with drag-and-drop. Place plants on a virtual grid and plan your space.",
+      "smartMonitoring": "Smart Monitoring",
+      "smartMonitoringDesc": "Connect weather data and IoT sensors to get personalized care recommendations for your plants.",
+      "comingSoon": "Coming Soon"
+    },
+    "libraryPreview": {
+      "title": "Explore Our Plant Library",
+      "subtitle": "Discover plants perfect for your garden",
+      "viewAll": "View all plants",
+      "loading": "Loading plants...",
+      "error": "Failed to load plants"
+    },
+    "howItWorks": {
+      "title": "How It Works",
+      "step1Title": "Browse",
+      "step1Desc": "Explore our curated plant library with detailed growing guides and seasonal information.",
+      "step2Title": "Plan",
+      "step2Desc": "Create virtual gardens and organize your plants with notes and growing conditions.",
+      "step3Title": "Grow",
+      "step3Desc": "Follow personalized recommendations and track your garden's progress throughout the seasons."
+    },
+    "testimonials": {
+      "title": "What Our Users Say"
+    },
+    "builtWith": {
+      "title": "Built With Modern Tools",
+      "subtitle": "The technologies powering SmartCrops today",
+      "roadmap": "On Our Roadmap"
+    },
+    "cta": {
+      "title": "Ready to Start Growing?",
+      "subtitle": "Join SmartCrops today and discover the perfect plants for your garden.",
+      "button": "Get Started — It's Free"
+    },
+    "newsletter": {
+      "title": "Stay in the loop",
+      "subtitle": "Get updates on new plants, features, and seasonal tips.",
+      "placeholder": "Email address",
+      "subscribe": "Subscribe (Coming soon)",
+      "disclaimer": "No spam, unsubscribe anytime."
+    }
+  }
+}

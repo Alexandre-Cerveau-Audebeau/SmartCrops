@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
@@ -22,11 +23,12 @@ import { useLanguage } from '../../hooks/useLanguage';
 import LogoButton from '../LogoButton';
 
 const navLinks = [
-  { label: 'Library', to: '/library', enabled: true },
-  { label: 'My Gardens', to: '/gardens', enabled: true },
+  { key: 'nav.library', to: '/library', enabled: true },
+  { key: 'nav.myGardens', to: '/gardens', enabled: true },
 ];
 
 export default function Navbar() {
+  const { t } = useTranslation();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -61,14 +63,14 @@ export default function Navbar() {
       <Divider />
       <List>
         {navLinks.map((link) => (
-          <ListItem key={link.label} disablePadding>
+          <ListItem key={link.key} disablePadding>
             <ListItemButton
               component={RouterLink}
               to={link.to}
               disabled={!link.enabled}
               onClick={toggleDrawer(false)}
             >
-              <ListItemText primary={link.label} />
+              <ListItemText primary={t(link.key)} />
             </ListItemButton>
           </ListItem>
         ))}
@@ -86,12 +88,12 @@ export default function Navbar() {
               {user?.email}
             </Typography>
             <Button variant="outlined" fullWidth onClick={() => { logout(); toggleDrawer(false)(); }}>
-              Logout
+              {t('nav.logout')}
             </Button>
           </>
         ) : (
           <Button variant="contained" fullWidth component={RouterLink} to="/login" onClick={toggleDrawer(false)}>
-            Login
+            {t('nav.login')}
           </Button>
         )}
       </Box>
@@ -120,7 +122,7 @@ export default function Navbar() {
               <Box sx={{ display: 'flex', gap: 0.5 }}>
                 {navLinks.map((link) => (
                   <Button
-                    key={link.label}
+                    key={link.key}
                     component={RouterLink}
                     to={link.to}
                     disabled={!link.enabled}
@@ -129,7 +131,7 @@ export default function Navbar() {
                       '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
                     }}
                   >
-                    {link.label}
+                    {t(link.key)}
                   </Button>
                 ))}
               </Box>
@@ -166,12 +168,12 @@ export default function Navbar() {
                         '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.1)' },
                       }}
                     >
-                      Logout
+                      {t('nav.logout')}
                     </Button>
                   </>
                 ) : (
                   <Button variant="contained" color="secondary" size="small" component={RouterLink} to="/login">
-                    Login
+                    {t('nav.login')}
                   </Button>
                 )}
               </Box>

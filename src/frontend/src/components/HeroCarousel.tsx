@@ -7,6 +7,7 @@
  * - hero-8.jpg: Zoe Richardson
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -25,6 +26,7 @@ const heroImages = [
 ];
 
 export default function HeroCarousel() {
+  const { t } = useTranslation();
   const [activeIndex, setActiveIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -110,13 +112,13 @@ export default function HeroCarousel() {
       >
         <Container maxWidth="md">
           <Typography variant="h2" fontWeight={800} gutterBottom>
-            Your Virtual Garden Companion
+            {t('home.hero.title')}
           </Typography>
           <Typography
             variant="h5"
             sx={{ fontWeight: 400, opacity: 0.9, maxWidth: 600, mx: 'auto', mb: 4 }}
           >
-            Discover, plan, and grow your garden with a curated plant library and smart tools.
+            {t('home.hero.subtitle')}
           </Typography>
           <Box
             sx={{
@@ -137,7 +139,7 @@ export default function HeroCarousel() {
                 '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.1)' },
               }}
             >
-              Browse Library
+              {t('home.hero.browseLibrary')}
             </Button>
             <Button
               variant="contained"
@@ -150,7 +152,7 @@ export default function HeroCarousel() {
                 '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' },
               }}
             >
-              Create Account
+              {t('home.hero.createAccount')}
             </Button>
           </Box>
         </Container>
@@ -196,7 +198,7 @@ export default function HeroCarousel() {
         <IconButton
           size="small"
           onClick={togglePlay}
-          aria-label={isPlaying ? 'Pause slideshow' : 'Play slideshow'}
+          aria-label={isPlaying ? t('home.hero.pause') : t('home.hero.play')}
           aria-pressed={isPlaying}
           sx={{
             color: '#fff',
@@ -219,7 +221,7 @@ export default function HeroCarousel() {
           fontSize: 12,
         }}
       >
-        Photo by {heroImages[activeIndex].credit} on Unsplash
+        {t('home.hero.photoCreditFull', { author: heroImages[activeIndex].credit })}
       </Typography>
     </Box>
   );
