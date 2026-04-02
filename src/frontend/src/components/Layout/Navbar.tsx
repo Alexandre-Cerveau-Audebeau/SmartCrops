@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -10,21 +10,24 @@ import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
+import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
-import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
+import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
+import MenuIcon from '@mui/icons-material/Menu';
+import GrassIcon from '@mui/icons-material/Grass';
 import { NAV_BG } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
 import LogoButton from '../LogoButton';
 
 const navLinks = [
-  { key: 'nav.library', to: '/library', enabled: true },
-  { key: 'nav.myGardens', to: '/gardens', enabled: true },
+  { key: 'nav.library', to: '/library', enabled: true, icon: <LocalFloristIcon sx={{ fontSize: 18 }} /> },
+  { key: 'nav.myGardens', to: '/gardens', enabled: true, icon: <GrassIcon sx={{ fontSize: 18 }} /> },
 ];
 
 export default function Navbar() {
@@ -33,6 +36,7 @@ export default function Navbar() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { language, setLanguage } = useLanguage();
+  const location = useLocation();
   const { isAuthenticated, user, logout } = useAuth();
   const toggleLanguage = () => setLanguage(language === 'en' ? 'fr' : 'en');
 
@@ -62,18 +66,29 @@ export default function Navbar() {
       </Box>
       <Divider />
       <List>
-        {navLinks.map((link) => (
-          <ListItem key={link.key} disablePadding>
-            <ListItemButton
-              component={RouterLink}
-              to={link.to}
-              disabled={!link.enabled}
-              onClick={toggleDrawer(false)}
-            >
-              <ListItemText primary={t(link.key)} />
-            </ListItemButton>
-          </ListItem>
-        ))}
+        {navLinks.map((link) => {
+          const isActive = location.pathname.startsWith(link.to);
+          return (
+            <ListItem key={link.key} disablePadding>
+              <ListItemButton
+                component={RouterLink}
+                to={link.to}
+                disabled={!link.enabled}
+                onClick={toggleDrawer(false)}
+                sx={{
+                  bgcolor: isActive ? 'rgba(46,125,50,0.08)' : 'transparent',
+                  fontWeight: isActive ? 700 : 400,
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 36 }}>{link.icon}</ListItemIcon>
+                <ListItemText
+                  primary={t(link.key)}
+                  primaryTypographyProps={{ fontWeight: isActive ? 700 : 400 }}
+                />
+              </ListItemButton>
+            </ListItem>
+          );
+        })}
       </List>
       <Divider />
       <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -120,20 +135,29 @@ export default function Navbar() {
             <>
               {/* Center: nav links */}
               <Box sx={{ display: 'flex', gap: 0.5 }}>
-                {navLinks.map((link) => (
-                  <Button
-                    key={link.key}
-                    component={RouterLink}
-                    to={link.to}
-                    disabled={!link.enabled}
-                    sx={{
-                      color: link.enabled ? '#fff' : 'rgba(255,255,255,0.4)',
-                      '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
-                    }}
-                  >
-                    {t(link.key)}
-                  </Button>
-                ))}
+                {navLinks.map((link) => {
+                  const isActive = location.pathname.startsWith(link.to);
+                  return (
+                    <Button
+                      key={link.key}
+                      component={RouterLink}
+                      to={link.to}
+                      disabled={!link.enabled}
+                      sx={{
+                        color: link.enabled ? '#fff' : 'rgba(255,255,255,0.4)',
+                        opacity: isActive ? 1 : 0.7,
+                        bgcolor: isActive ? 'rgba(255,255,255,0.15)' : 'transparent',
+                        borderRadius: 1,
+                        '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', opacity: 1 },
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        {link.icon}
+                        {t(link.key)}
+                      </Box>
+                    </Button>
+                  );
+                })}
               </Box>
 
               {/* Right: language + auth */}

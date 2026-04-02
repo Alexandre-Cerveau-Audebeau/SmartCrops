@@ -203,6 +203,28 @@
     "invalidToken": "Invalid authentication token.",
     "backToLogin": "Back to login"
   },
+  "notFound": {
+    "title": "404",
+    "heading": "Oops — looks like this page didn't sprout.",
+    "message": "The page you're looking for has gone to seed. Let's get you back to the garden.",
+    "backHome": "Back to Home"
+  },
+  "plantValues": {
+    "full_sun": "Full Sun",
+    "partial_shade": "Partial Shade",
+    "shade": "Shade",
+    "low": "Low",
+    "moderate": "Moderate",
+    "regular": "Regular",
+    "high": "High"
+  },
+  "plantTypes": {
+    "Vegetable": "Vegetable",
+    "Fruit": "Fruit",
+    "Herb": "Herb",
+    "Ornamental": "Ornamental",
+    "Medicinal": "Medicinal"
+  },
   "editableNotes": {
     "notes": "Notes: {{notes}}",
     "addNotes": "Add notes...",
