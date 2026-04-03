@@ -35,8 +35,8 @@ export default function AuthCallback() {
 
     processed.current = true;
     exchangeCode(code)
-      .then(({ token }) => {
-        googleCallback(token);
+      .then(() => googleCallback())
+      .then(() => {
         navigate('/library', { replace: true });
       })
       .catch(() => {

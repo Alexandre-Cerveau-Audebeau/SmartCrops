@@ -6,7 +6,14 @@ vi.mock('./services/plantApi', () => ({
   fetchPlants: vi.fn().mockResolvedValue([]),
   fetchPlantTypes: vi.fn().mockResolvedValue([]),
   searchPlants: vi.fn().mockResolvedValue([]),
-  exchangeCode: vi.fn().mockResolvedValue({ token: '' }),
+}));
+
+vi.mock('./services/authApi', () => ({
+  fetchMe: vi.fn().mockRejectedValue(new Error('Not authenticated')),
+  login: vi.fn().mockResolvedValue(undefined),
+  register: vi.fn().mockResolvedValue(undefined),
+  exchangeCode: vi.fn().mockResolvedValue(undefined),
+  logout: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe('App', () => {

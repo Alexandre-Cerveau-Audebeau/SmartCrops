@@ -5,6 +5,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Hosting;
@@ -24,7 +25,8 @@ public class AuthController(
     SignInManager<IdentityUser> signInManager,
     IConfiguration configuration,
     IAuthenticationSchemeProvider schemeProvider,
-    IHostEnvironment hostEnvironment) : ControllerBase
+    IHostEnvironment hostEnvironment,
+    IWebHostEnvironment env) : ControllerBase
 {
     private static readonly PasswordHasher<IdentityUser> _dummyHasher = new();
     private static readonly string _dummyHash = _dummyHasher.HashPassword(new IdentityUser(), "DummyPassword123!");
@@ -39,7 +41,9 @@ public class AuthController(
         if (!result.Succeeded)
             return BadRequest(result.Errors);
 
-        return StatusCode(201);
+        var tokenResponse = GenerateTokenResponse(user.Id, request.Email);
+        SetAuthCookie(tokenResponse.Token);
+        return StatusCode(201, tokenResponse);
     }
 
     [HttpPost("login")]
@@ -58,7 +62,9 @@ public class AuthController(
         if (string.IsNullOrEmpty(user.Email))
             return Unauthorized();
 
-        return Ok(GenerateTokenResponse(user.Id, user.Email));
+        var tokenResponse = GenerateTokenResponse(user.Id, user.Email);
+        SetAuthCookie(tokenResponse.Token);
+        return Ok(tokenResponse);
     }
 
     [HttpGet("google-login")]
@@ -169,7 +175,38 @@ public class AuthController(
             return BadRequest(new { error = "Invalid or expired code" });
 
         Response.Cookies.Delete("auth_binding", new CookieOptions { Path = "/api/auth/exchange-code" });
+        SetAuthCookie(stored.Token);
         return Ok(new { token = stored.Token });
+    }
+
+    [HttpPost("logout")]
+    public IActionResult Logout()
+    {
+        Response.Cookies.Delete("smartcrops_token", new CookieOptions { Path = "/" });
+        return Ok();
+    }
+
+    [Authorize]
+    [HttpGet("me")]
+    public IActionResult Me()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var email = User.FindFirstValue(ClaimTypes.Email);
+        if (userId == null) return Unauthorized();
+        return Ok(new { userId, email });
+    }
+
+    private void SetAuthCookie(string token)
+    {
+        var cookieOptions = new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = !env.IsDevelopment(),
+            SameSite = SameSiteMode.Lax,
+            Path = "/",
+            Expires = DateTimeOffset.UtcNow.AddDays(7),
+        };
+        Response.Cookies.Append("smartcrops_token", token, cookieOptions);
     }
 
     private static void CleanupExpiredCodes()
