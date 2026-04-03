@@ -60,7 +60,7 @@ _As of March 31, 2026_
 - ✅ 19 PRs merged on develop
 - ✅ 21 REST API endpoints (9 Plants + 4 Auth + 8 Gardens)
 - ✅ 10 backend integration tests
-- ✅ Bilingual plant data (FR/EN)
+- ✅ 30 bilingual plant entries (FR/EN) across 5 categories
 - 🔜 Internationalization (react-i18next)
 - 🔜 Cloud deployment (AWS)
 - 🔜 Garden Planner (drag-and-drop grid)
