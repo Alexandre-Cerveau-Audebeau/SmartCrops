@@ -1,9 +1,12 @@
+import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 
 export default function NotFound() {
+  const { t } = useTranslation();
+
   return (
     <Box
       sx={{
@@ -18,16 +21,16 @@ export default function NotFound() {
       }}
     >
       <Typography variant="h1" fontWeight={700} color="primary" sx={{ fontSize: { xs: '5rem', md: '8rem' } }}>
-        404
+        {t('notFound.title')}
       </Typography>
       <Typography variant="h5" fontWeight={600}>
-        Oops — looks like this page didn&apos;t sprout.
+        {t('notFound.heading')}
       </Typography>
       <Typography variant="body1" color="text.secondary">
-        The page you&apos;re looking for has gone to seed. Let&apos;s get you back to the garden.
+        {t('notFound.message')}
       </Typography>
       <Button component={RouterLink} to="/" variant="contained" color="primary" size="large" sx={{ mt: 1 }}>
-        Back to Home
+        {t('notFound.backHome')}
       </Button>
     </Box>
   );

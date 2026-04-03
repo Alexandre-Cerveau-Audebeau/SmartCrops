@@ -113,7 +113,7 @@ export default function PlantLibrary() {
             {plantTypes.map((pt) => (
               <Chip
                 key={pt.id}
-                label={pt.name}
+                label={t(`plantTypes.${pt.name}`, pt.name)}
                 color={activeType === pt.id ? 'primary' : 'default'}
                 variant={activeType === pt.id ? 'filled' : 'outlined'}
                 onClick={() => setActiveType(pt.id)}
@@ -187,7 +187,7 @@ export default function PlantLibrary() {
 
                     {typeName && (
                       <Chip
-                        label={typeName}
+                        label={t(`plantTypes.${typeName}`, typeName)}
                         size="small"
                         color="primary"
                         variant="outlined"
@@ -214,9 +214,9 @@ export default function PlantLibrary() {
 
                     {(plant.sunExposure || plant.waterNeeds) && (
                       <Typography variant="caption" color="text.secondary">
-                        {plant.sunExposure && `${t('library.sun')}: ${plant.sunExposure}`}
+                        {plant.sunExposure && `${t('library.sun')}: ${t(`plantValues.${plant.sunExposure}`, plant.sunExposure)}`}
                         {plant.sunExposure && plant.waterNeeds && ' · '}
-                        {plant.waterNeeds && `${t('library.water')}: ${plant.waterNeeds}`}
+                        {plant.waterNeeds && `${t('library.water')}: ${t(`plantValues.${plant.waterNeeds}`, plant.waterNeeds)}`}
                       </Typography>
                     )}
                   </CardContent>

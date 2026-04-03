@@ -203,6 +203,28 @@
     "invalidToken": "Jeton d'authentification invalide.",
     "backToLogin": "Retour à la connexion"
   },
+  "notFound": {
+    "title": "404",
+    "heading": "Oups — on dirait que cette page n'a pas germé.",
+    "message": "La page que vous cherchez est introuvable. Retournons au jardin.",
+    "backHome": "Retour à l'accueil"
+  },
+  "plantValues": {
+    "full_sun": "Plein soleil",
+    "partial_shade": "Mi-ombre",
+    "shade": "Ombre",
+    "low": "Faible",
+    "moderate": "Modéré",
+    "regular": "Régulier",
+    "high": "Élevé"
+  },
+  "plantTypes": {
+    "Vegetable": "Légume",
+    "Fruit": "Fruit",
+    "Herb": "Herbe aromatique",
+    "Ornamental": "Ornementale",
+    "Medicinal": "Médicinale"
+  },
   "editableNotes": {
     "notes": "Notes : {{notes}}",
     "addNotes": "Ajouter des notes...",

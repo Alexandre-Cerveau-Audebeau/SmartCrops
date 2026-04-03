@@ -231,8 +231,8 @@ export default function PlantDetail() {
   const tr = getTranslation(plant, language);
 
   const conditions = [
-    { icon: <WbSunnyIcon />, label: t('library.sunExposure'), value: plant.sunExposure },
-    { icon: <WaterDropIcon />, label: t('library.waterNeeds'), value: plant.waterNeeds },
+    { icon: <WbSunnyIcon />, label: t('library.sunExposure'), value: plant.sunExposure ? t(`plantValues.${plant.sunExposure}`, plant.sunExposure) : undefined },
+    { icon: <WaterDropIcon />, label: t('library.waterNeeds'), value: plant.waterNeeds ? t(`plantValues.${plant.waterNeeds}`, plant.waterNeeds) : undefined },
     { icon: <CalendarMonthIcon />, label: t('library.sowingPeriod'), value: plant.sowingPeriod },
     { icon: <AgricultureIcon />, label: t('library.harvestPeriod'), value: plant.harvestPeriod },
   ].filter((c) => c.value);
@@ -255,7 +255,7 @@ export default function PlantDetail() {
       </Typography>
       {plant.plantType && (
         <Chip
-          label={plant.plantType.name}
+          label={t(`plantTypes.${plant.plantType.name}`, plant.plantType.name)}
           color="primary"
           variant="outlined"
           sx={{ mb: 3 }}
