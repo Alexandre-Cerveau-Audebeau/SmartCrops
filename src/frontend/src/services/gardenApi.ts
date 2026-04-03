@@ -2,14 +2,6 @@ import type { Garden, GardenPlant } from '../types/Garden';
 
 const API_BASE = '/api';
 
-function authHeaders(): HeadersInit {
-  const token = localStorage.getItem('smartcrops-token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
 function throwWithStatus(message: string, status: number): never {
   const error = new Error(message) as Error & { status: number };
   error.status = status;
@@ -17,14 +9,14 @@ function throwWithStatus(message: string, status: number): never {
 }
 
 export async function fetchGardens(signal?: AbortSignal): Promise<Garden[]> {
-  const res = await fetch(`${API_BASE}/gardens`, { headers: authHeaders(), signal });
+  const res = await fetch(`${API_BASE}/gardens`, { credentials: 'include', signal });
   if (!res.ok) throwWithStatus(`Failed to fetch gardens: ${res.status}`, res.status);
   return res.json();
 }
 
 export async function fetchGarden(id: string, signal?: AbortSignal): Promise<Garden> {
   const res = await fetch(`${API_BASE}/gardens/${encodeURIComponent(id)}`, {
-    headers: authHeaders(),
+    credentials: 'include',
     signal,
   });
   if (!res.ok) throwWithStatus(`Failed to fetch garden: ${res.status}`, res.status);
@@ -34,7 +26,8 @@ export async function fetchGarden(id: string, signal?: AbortSignal): Promise<Gar
 export async function createGarden(name: string, description?: string): Promise<Garden> {
   const res = await fetch(`${API_BASE}/gardens`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ name, description }),
   });
   if (!res.ok) throwWithStatus(`Failed to create garden: ${res.status}`, res.status);
@@ -48,7 +41,8 @@ export async function updateGarden(
 ): Promise<Garden> {
   const res = await fetch(`${API_BASE}/gardens/${encodeURIComponent(id)}`, {
     method: 'PUT',
-    headers: authHeaders(),
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ name, description }),
   });
   if (!res.ok) throwWithStatus(`Failed to update garden: ${res.status}`, res.status);
@@ -58,7 +52,7 @@ export async function updateGarden(
 export async function deleteGarden(id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/gardens/${encodeURIComponent(id)}`, {
     method: 'DELETE',
-    headers: authHeaders(),
+    credentials: 'include',
   });
   if (!res.ok) throwWithStatus(`Failed to delete garden: ${res.status}`, res.status);
 }
@@ -72,7 +66,8 @@ export async function addPlantToGarden(
     `${API_BASE}/gardens/${encodeURIComponent(gardenId)}/plants/${encodeURIComponent(plantId)}`,
     {
       method: 'POST',
-      headers: authHeaders(),
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(notes ? { notes } : {}),
     },
   );
@@ -87,7 +82,7 @@ export async function removePlantFromGarden(
     `${API_BASE}/gardens/${encodeURIComponent(gardenId)}/plants/${encodeURIComponent(plantId)}`,
     {
       method: 'DELETE',
-      headers: authHeaders(),
+      credentials: 'include',
     },
   );
   if (!res.ok) throwWithStatus(`Failed to remove plant from garden: ${res.status}`, res.status);
@@ -102,7 +97,8 @@ export async function updatePlantNotes(
     `${API_BASE}/gardens/${encodeURIComponent(gardenId)}/plants/${encodeURIComponent(plantId)}`,
     {
       method: 'PATCH',
-      headers: authHeaders(),
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ notes }),
     },
   );
