@@ -75,9 +75,9 @@ export default function Navbar() {
                 to={link.to}
                 disabled={!link.enabled}
                 onClick={toggleDrawer(false)}
+                aria-current={isActive ? 'page' : undefined}
                 sx={{
                   bgcolor: isActive ? 'rgba(46,125,50,0.08)' : 'transparent',
-                  fontWeight: isActive ? 700 : 400,
                 }}
               >
                 <ListItemIcon sx={{ minWidth: 36 }}>{link.icon}</ListItemIcon>
@@ -143,6 +143,7 @@ export default function Navbar() {
                       component={RouterLink}
                       to={link.to}
                       disabled={!link.enabled}
+                      aria-current={isActive ? 'page' : undefined}
                       sx={{
                         color: link.enabled ? '#fff' : 'rgba(255,255,255,0.4)',
                         opacity: isActive ? 1 : 0.7,
