@@ -52,8 +52,11 @@ export async function fetchMe(): Promise<AuthUser> {
 }
 
 export async function logout(): Promise<void> {
-  await fetch(`${API_BASE}/auth/logout`, {
+  const res = await fetch(`${API_BASE}/auth/logout`, {
     method: 'POST',
     credentials: 'include',
   });
+  if (!res.ok) {
+    console.warn('Logout request failed:', res.status);
+  }
 }

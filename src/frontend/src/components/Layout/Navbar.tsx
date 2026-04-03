@@ -102,7 +102,10 @@ export default function Navbar() {
             <Typography variant="body2" sx={{ textAlign: 'center', color: 'text.secondary' }}>
               {user?.email}
             </Typography>
-            <Button variant="outlined" fullWidth onClick={() => { logout(); toggleDrawer(false)(); }}>
+            <Button variant="outlined" fullWidth onClick={async () => {
+              try { await logout(); } catch { /* user sees logged-out state regardless */ }
+              toggleDrawer(false)();
+            }}>
               {t('nav.logout')}
             </Button>
           </>
@@ -186,7 +189,9 @@ export default function Navbar() {
                     <Button
                       variant="outlined"
                       size="small"
-                      onClick={logout}
+                      onClick={async () => {
+                        try { await logout(); } catch { /* user sees logged-out state regardless */ }
+                      }}
                       sx={{
                         color: '#fff',
                         borderColor: 'rgba(255,255,255,0.5)',

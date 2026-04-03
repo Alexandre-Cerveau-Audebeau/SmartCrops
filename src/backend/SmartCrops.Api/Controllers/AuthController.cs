@@ -43,7 +43,7 @@ public class AuthController(
 
         var tokenResponse = GenerateTokenResponse(user.Id, request.Email);
         SetAuthCookie(tokenResponse.Token);
-        return StatusCode(201, tokenResponse);
+        return StatusCode(201);
     }
 
     [HttpPost("login")]
@@ -64,7 +64,7 @@ public class AuthController(
 
         var tokenResponse = GenerateTokenResponse(user.Id, user.Email);
         SetAuthCookie(tokenResponse.Token);
-        return Ok(tokenResponse);
+        return NoContent();
     }
 
     [HttpGet("google-login")]
@@ -176,7 +176,7 @@ public class AuthController(
 
         Response.Cookies.Delete("auth_binding", new CookieOptions { Path = "/api/auth/exchange-code" });
         SetAuthCookie(stored.Token);
-        return Ok(new { token = stored.Token });
+        return NoContent();
     }
 
     [HttpPost("logout")]
