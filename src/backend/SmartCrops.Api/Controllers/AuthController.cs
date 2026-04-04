@@ -19,7 +19,11 @@ public record LoginRequest([Required, EmailAddress] string Email, [Required] str
 public record AuthResponse(string Token, DateTime Expiration);
 public record ExchangeCodeRequest([Required] string Code);
 public record UserProfileResponse(string Email, string? DisplayName, string? FirstName, string? LastName, string? City);
-public record UpdateProfileRequest(string? DisplayName, string? FirstName, string? LastName, string? City);
+public record UpdateProfileRequest(
+    [StringLength(100)] string? DisplayName,
+    [StringLength(50)] string? FirstName,
+    [StringLength(50)] string? LastName,
+    [StringLength(100)] string? City);
 public record ChangePasswordRequest([Required] string CurrentPassword, [Required, MinLength(6)] string NewPassword);
 
 [ApiController]
