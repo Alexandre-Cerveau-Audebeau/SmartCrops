@@ -55,13 +55,14 @@ dotnet build SmartCrops.sln && dotnet test SmartCrops.sln && dotnet format Smart
 
 ## Project Status
 
-_As of March 31, 2026_
+_As of April 3, 2026_
 
-- ✅ 19 PRs merged on develop
-- ✅ 21 REST API endpoints (9 Plants + 4 Auth + 8 Gardens)
+- ✅ 27 PRs merged on develop
+- ✅ 23 REST API endpoints (9 Plants + 6 Auth + 8 Gardens)
 - ✅ 10 backend integration tests
 - ✅ 30 bilingual plant entries (FR/EN) across 5 categories
-- 🔜 Internationalization (react-i18next)
+- ✅ Internationalization (react-i18next) — all pages translated FR/EN
+- ✅ HttpOnly cookie authentication
 - 🔜 Cloud deployment (AWS)
 - 🔜 Garden Planner (drag-and-drop grid)
 

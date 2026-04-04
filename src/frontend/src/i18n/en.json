@@ -34,9 +34,8 @@
     "stats": {
       "plants": "Plants",
       "languages": "Languages",
-      "free": "Free",
-      "openSource": "Open Source",
-      "community": "Community"
+      "tools": "Tools",
+      "gardens": "Gardens"
     },
     "features": {
       "title": "Why SmartCrops?",
