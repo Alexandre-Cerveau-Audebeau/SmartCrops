@@ -100,7 +100,7 @@ export default function GardenPlanner() {
           setLayoutHeight(layoutData.height);
           setCellSize(layoutData.cellSize);
           setGrid(parseCellsJson(layoutData.cellsJson, layoutData.width, layoutData.height));
-          setPlacements(layoutData.placements.map(p => ({
+          setPlacements((layoutData.placements ?? []).map(p => ({
             plantId: p.plantId,
             startRow: p.startRow,
             startCol: p.startCol,
