@@ -20,6 +20,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
 import MenuIcon from '@mui/icons-material/Menu';
 import GrassIcon from '@mui/icons-material/Grass';
+import PersonIcon from '@mui/icons-material/Person';
 import { NAV_BG } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
@@ -99,9 +100,17 @@ export default function Navbar() {
         </Button>
         {isAuthenticated ? (
           <>
-            <Typography variant="body2" sx={{ textAlign: 'center', color: 'text.secondary' }}>
-              {user?.email}
-            </Typography>
+            <Button
+              variant="text"
+              fullWidth
+              component={RouterLink}
+              to="/profile"
+              onClick={toggleDrawer(false)}
+              startIcon={<PersonIcon />}
+              sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
+            >
+              {user?.displayName || user?.email}
+            </Button>
             <Button variant="outlined" fullWidth onClick={async () => {
               try { await logout(); } catch { /* user sees logged-out state regardless */ }
               toggleDrawer(false)();
@@ -183,9 +192,20 @@ export default function Navbar() {
                 </Button>
                 {isAuthenticated ? (
                   <>
-                    <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)' }}>
-                      {user?.email}
-                    </Typography>
+                    <Button
+                      variant="text"
+                      size="small"
+                      component={RouterLink}
+                      to="/profile"
+                      startIcon={<PersonIcon />}
+                      sx={{
+                        color: 'rgba(255,255,255,0.8)',
+                        textTransform: 'none',
+                        '&:hover': { color: '#fff' },
+                      }}
+                    >
+                      {user?.displayName || user?.email}
+                    </Button>
                     <Button
                       variant="outlined"
                       size="small"

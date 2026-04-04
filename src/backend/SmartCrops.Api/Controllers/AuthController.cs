@@ -18,7 +18,7 @@ public record RegisterRequest([Required, EmailAddress] string Email, [Required, 
 public record LoginRequest([Required, EmailAddress] string Email, [Required] string Password);
 public record AuthResponse(string Token, DateTime Expiration);
 public record ExchangeCodeRequest([Required] string Code);
-public record UserProfileResponse(string Email, string? DisplayName, string? FirstName, string? LastName, string? City);
+public record UserProfileResponse(string Email, string? DisplayName, string? FirstName, string? LastName, string? City, bool HasPassword);
 public record UpdateProfileRequest(
     [StringLength(100)] string? DisplayName,
     [StringLength(50)] string? FirstName,
@@ -213,12 +213,14 @@ public class AuthController(
         if (userId == null) return Unauthorized();
         var user = await userManager.FindByIdAsync(userId);
         if (user == null) return NotFound();
+        var hasPassword = await userManager.HasPasswordAsync(user);
         return Ok(new UserProfileResponse(
             user.Email ?? "",
             user.DisplayName,
             user.FirstName,
             user.LastName,
-            user.City));
+            user.City,
+            hasPassword));
     }
 
     [Authorize]
@@ -238,12 +240,14 @@ public class AuthController(
         var result = await userManager.UpdateAsync(user);
         if (!result.Succeeded) return BadRequest(result.Errors);
 
+        var hasPassword = await userManager.HasPasswordAsync(user);
         return Ok(new UserProfileResponse(
             user.Email ?? "",
             user.DisplayName,
             user.FirstName,
             user.LastName,
-            user.City));
+            user.City,
+            hasPassword));
     }
 
     [Authorize]
