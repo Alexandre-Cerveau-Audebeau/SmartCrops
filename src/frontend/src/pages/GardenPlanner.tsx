@@ -78,6 +78,7 @@ export default function GardenPlanner() {
   const [loading, setLoading] = useState(true);
   const [showSetup, setShowSetup] = useState(false);
   const [showResize, setShowResize] = useState(false);
+  const [showHelp, setShowHelp] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Drag-to-paint state
@@ -368,8 +369,8 @@ export default function GardenPlanner() {
         </Alert>
       )}
 
-      {grid && (
-        <Alert severity="info" variant="outlined" sx={{ mb: 2 }} icon={false}>
+      {grid && showHelp && (
+        <Alert severity="info" variant="outlined" sx={{ mb: 2 }} icon={false} onClose={() => setShowHelp(false)}>
           <Typography variant="body2">
             {mode === 'shape' && t('planner.help.shape')}
             {mode === 'garden' && t('planner.help.garden')}
