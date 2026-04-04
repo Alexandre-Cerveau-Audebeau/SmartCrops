@@ -14,6 +14,7 @@ import MyGardens from './pages/MyGardens';
 import NotFound from './pages/NotFound';
 import PlantDetail from './pages/PlantDetail';
 import PlantLibrary from './pages/PlantLibrary';
+import Profile from './pages/Profile';
 import Register from './pages/Register';
 import theme from './theme';
 
@@ -35,6 +36,7 @@ export default function App() {
             <Route element={<ProtectedRoute />}>
               <Route path="/gardens" element={<MyGardens />} />
               <Route path="/gardens/:id" element={<GardenDetail />} />
+              <Route path="/profile" element={<Profile />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

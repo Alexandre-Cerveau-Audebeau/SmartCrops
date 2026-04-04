@@ -40,6 +40,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const me = await authApi.fetchMe();
+      setUser(me);
+    } catch {
+      // Silently fail — user stays with current state
+    }
+  }, []);
+
   const value = useMemo(() => ({
     user,
     token: null,
@@ -47,9 +56,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     register,
     googleCallback,
     logout,
+    refreshUser,
     isAuthenticated: user !== null,
     loading,
-  }), [user, login, register, googleCallback, logout, loading]);
+  }), [user, login, register, googleCallback, logout, refreshUser, loading]);
 
   return (
     <AuthContext.Provider value={value}>

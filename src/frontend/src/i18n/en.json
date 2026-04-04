@@ -3,7 +3,8 @@
     "library": "Library",
     "myGardens": "My Gardens",
     "login": "Login",
-    "logout": "Logout"
+    "logout": "Logout",
+    "profile": "My Profile"
   },
   "footer": {
     "tagline": "Your virtual garden companion — discover, grow, and share plants from around the world.",
@@ -223,6 +224,28 @@
     "Herb": "Herb",
     "Ornamental": "Ornamental",
     "Medicinal": "Medicinal"
+  },
+  "profile": {
+    "title": "My Profile",
+    "profileInfo": "Profile Information",
+    "email": "Email",
+    "displayName": "Display Name",
+    "firstName": "First Name",
+    "lastName": "Last Name",
+    "city": "City",
+    "save": "Save Changes",
+    "saveSuccess": "Profile updated successfully.",
+    "saveError": "Failed to update profile.",
+    "changePassword": "Change Password",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmNewPassword": "Confirm New Password",
+    "changePasswordButton": "Change Password",
+    "passwordSuccess": "Password changed. Redirecting to login...",
+    "passwordError": "Failed to change password.",
+    "passwordMismatch": "Passwords do not match.",
+    "loadError": "Failed to load profile.",
+    "googleAccount": "Your account uses Google sign-in. Password management is not available."
   },
   "editableNotes": {
     "notes": "Notes: {{notes}}",
