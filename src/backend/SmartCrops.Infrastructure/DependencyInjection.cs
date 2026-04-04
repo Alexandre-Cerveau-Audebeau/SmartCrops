@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure.Data;
 using SmartCrops.Infrastructure.Repositories;
@@ -28,7 +29,7 @@ public static class DependencyInjection
 
         services.AddScoped<IPlantRepository, PlantRepository>();
 
-        services.AddIdentity<IdentityUser, IdentityRole>(options =>
+        services.AddIdentity<ApplicationUser, IdentityRole>(options =>
         {
             options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+";
             options.User.RequireUniqueEmail = true;
