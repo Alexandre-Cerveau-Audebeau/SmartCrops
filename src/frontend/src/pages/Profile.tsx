@@ -10,10 +10,12 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { useAuth } from '../hooks/useAuth';
 import { fetchProfile, updateProfile, changePassword } from '../services/profileApi';
 
 export default function Profile() {
   const { t } = useTranslation();
+  const { refreshUser } = useAuth();
   const navigate = useNavigate();
   const mountedRef = useRef(true);
 
@@ -52,7 +54,8 @@ export default function Profile() {
         if (mountedRef.current) setLoading(false);
       });
     return () => { mountedRef.current = false; };
-  }, [t]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,6 +68,7 @@ export default function Profile() {
         lastName: lastName || null,
         city: city || null,
       });
+      await refreshUser();
       setProfileMsg({ type: 'success', text: t('profile.saveSuccess') });
     } catch {
       setProfileMsg({ type: 'error', text: t('profile.saveError') });

@@ -40,7 +40,11 @@ export async function changePassword(currentPassword: string, newPassword: strin
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    const message = body?.errors?.[0]?.description ?? 'Failed to change password';
+    const firstError =
+      Array.isArray(body) ? body[0]
+      : Array.isArray(body?.errors) ? body.errors[0]
+      : null;
+    const message = firstError?.description ?? 'Failed to change password';
     throw new Error(message);
   }
 }
