@@ -14,6 +14,8 @@ public class GardenConfiguration : IEntityTypeConfiguration<Garden>
         builder.Property(g => g.UserId).IsRequired().HasMaxLength(450);
         builder.HasIndex(g => g.UserId);
 
+        builder.Property(g => g.CellSize).HasMaxLength(10);
+
         builder.HasOne<ApplicationUser>()
             .WithMany()
             .HasForeignKey(g => g.UserId)

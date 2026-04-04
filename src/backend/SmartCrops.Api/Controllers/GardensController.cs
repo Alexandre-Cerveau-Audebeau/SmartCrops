@@ -22,6 +22,39 @@ public record UpdateGardenRequest(
 
 public record AddPlantToGardenRequest([MaxLength(500)] string? Notes);
 
+public record GardenLayoutResponse(
+    int? Width,
+    int? Height,
+    string? CellSize,
+    string? CellsJson,
+    List<PlacementResponse> Placements);
+
+public record PlacementResponse(
+    Guid Id,
+    Guid PlantId,
+    string? PlantName,
+    string? PlantScientificName,
+    int StartRow,
+    int StartCol,
+    int SpanRows,
+    int SpanCols,
+    string? Notes);
+
+public record SaveLayoutRequest(
+    [Range(1, 100)] int Width,
+    [Range(1, 100)] int Height,
+    [Required, StringLength(10)] string CellSize,
+    string? CellsJson,
+    List<SavePlacementRequest> Placements);
+
+public record SavePlacementRequest(
+    Guid PlantId,
+    [Range(0, 99)] int StartRow,
+    [Range(0, 99)] int StartCol,
+    [Range(1, 20)] int SpanRows,
+    [Range(1, 20)] int SpanCols,
+    [MaxLength(500)] string? Notes);
+
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -249,6 +282,79 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         context.GardenPlants.Remove(gardenPlant);
         await context.SaveChangesAsync();
 
+        return NoContent();
+    }
+
+    [HttpGet("{id:guid}/layout")]
+    public async Task<IActionResult> GetLayout(Guid id)
+    {
+        var userId = GetCurrentUserId();
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        var garden = await context.Gardens
+            .Include(g => g.Placements)
+                .ThenInclude(p => p.Plant)
+                    .ThenInclude(p => p.Translations)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(g => g.Id == id && g.UserId == userId);
+
+        if (garden == null) return NotFound();
+
+        var placements = garden.Placements.Select(p => new PlacementResponse(
+            p.Id,
+            p.PlantId,
+            p.Plant.Translations.FirstOrDefault(t => t.Language == "en")?.CommonName ?? p.Plant.ScientificName,
+            p.Plant.ScientificName,
+            p.StartRow,
+            p.StartCol,
+            p.SpanRows,
+            p.SpanCols,
+            p.Notes)).ToList();
+
+        return Ok(new GardenLayoutResponse(
+            garden.LayoutWidth,
+            garden.LayoutHeight,
+            garden.CellSize,
+            garden.CellsJson,
+            placements));
+    }
+
+    [HttpPut("{id:guid}/layout")]
+    public async Task<IActionResult> SaveLayout(Guid id, [FromBody] SaveLayoutRequest request)
+    {
+        var userId = GetCurrentUserId();
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        var garden = await context.Gardens
+            .Include(g => g.Placements)
+            .FirstOrDefaultAsync(g => g.Id == id && g.UserId == userId);
+
+        if (garden == null) return NotFound();
+
+        garden.LayoutWidth = request.Width;
+        garden.LayoutHeight = request.Height;
+        garden.CellSize = request.CellSize;
+        garden.CellsJson = request.CellsJson;
+        garden.UpdatedAt = DateTime.UtcNow;
+
+        context.GardenPlacements.RemoveRange(garden.Placements);
+
+        foreach (var p in request.Placements)
+        {
+            context.GardenPlacements.Add(new GardenPlacement
+            {
+                GardenId = id,
+                PlantId = p.PlantId,
+                StartRow = p.StartRow,
+                StartCol = p.StartCol,
+                SpanRows = p.SpanRows,
+                SpanCols = p.SpanCols,
+                Notes = p.Notes,
+                PlacedAt = DateTime.UtcNow,
+            });
+        }
+
+        await context.SaveChangesAsync();
         return NoContent();
     }
 
