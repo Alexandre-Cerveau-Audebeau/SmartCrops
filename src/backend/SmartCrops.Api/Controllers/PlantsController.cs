@@ -85,7 +85,7 @@ public class PlantsController(IPlantRepository repository) : ControllerBase
         catch (DbUpdateException ex)
             when (ex.InnerException is Npgsql.NpgsqlException { SqlState: "23503" })
         {
-            return BadRequest("Cannot delete plant; it is used in garden placements.");
+            return BadRequest("Cannot delete plant; it is referenced by existing garden data.");
         }
 
         return NoContent();
