@@ -339,6 +339,16 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
 
         context.GardenPlacements.RemoveRange(garden.Placements);
 
+        var plantIds = request.Placements.Select(p => p.PlantId).Distinct().ToList();
+        var existingPlantIds = await context.Plants
+            .Where(p => plantIds.Contains(p.Id))
+            .Select(p => p.Id)
+            .ToListAsync();
+
+        var missingIds = plantIds.Except(existingPlantIds).ToList();
+        if (missingIds.Count > 0)
+            return BadRequest($"Invalid PlantIds: {string.Join(", ", missingIds)}");
+
         foreach (var p in request.Placements)
         {
             context.GardenPlacements.Add(new GardenPlacement

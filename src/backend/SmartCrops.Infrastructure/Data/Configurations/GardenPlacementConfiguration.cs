@@ -20,6 +20,7 @@ public class GardenPlacementConfiguration : IEntityTypeConfiguration<GardenPlace
         builder.Property(p => p.Notes).HasMaxLength(500);
 
         builder.HasIndex(p => p.GardenId);
+        builder.HasIndex(p => p.PlantId);
 
         builder.HasOne(p => p.Garden)
             .WithMany(g => g.Placements)
