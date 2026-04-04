@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 
@@ -77,7 +78,16 @@ public class PlantsController(IPlantRepository repository) : ControllerBase
         if (existing is null)
             return NotFound();
 
-        await repository.DeleteAsync(id);
+        try
+        {
+            await repository.DeleteAsync(id);
+        }
+        catch (DbUpdateException ex)
+            when (ex.InnerException is Npgsql.NpgsqlException { SqlState: "23503" })
+        {
+            return BadRequest("Cannot delete plant; it is referenced by existing garden data.");
+        }
+
         return NoContent();
     }
 }

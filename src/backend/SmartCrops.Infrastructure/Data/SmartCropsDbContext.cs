@@ -13,6 +13,7 @@ public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options)
     public DbSet<PlantSuggestion> PlantSuggestions => Set<PlantSuggestion>();
     public DbSet<Garden> Gardens => Set<Garden>();
     public DbSet<GardenPlant> GardenPlants => Set<GardenPlant>();
+    public DbSet<GardenPlacement> GardenPlacements => Set<GardenPlacement>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
