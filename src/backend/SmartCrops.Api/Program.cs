@@ -1,7 +1,10 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
+using SmartCrops.Core.Entities;
 using SmartCrops.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -38,6 +41,21 @@ var authBuilder = builder.Services.AddAuthentication(options =>
                 context.Token = cookieToken;
             }
             return Task.CompletedTask;
+        },
+        OnTokenValidated = async context =>
+        {
+            var stamp = context.Principal?.FindFirstValue("security_stamp");
+            if (stamp == null) return;
+
+            var userId = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null) return;
+
+            var um = context.HttpContext.RequestServices.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await um.FindByIdAsync(userId);
+            if (user == null || user.SecurityStamp != stamp)
+            {
+                context.Fail("Security stamp mismatch");
+            }
         },
     };
 });

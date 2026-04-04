@@ -49,7 +49,7 @@ public class AuthController(
         if (!result.Succeeded)
             return BadRequest(result.Errors);
 
-        var tokenResponse = GenerateTokenResponse(user.Id, request.Email);
+        var tokenResponse = GenerateTokenResponse(user.Id, request.Email, user.SecurityStamp);
         SetAuthCookie(tokenResponse.Token);
         return StatusCode(201);
     }
@@ -70,7 +70,7 @@ public class AuthController(
         if (string.IsNullOrEmpty(user.Email))
             return Unauthorized();
 
-        var tokenResponse = GenerateTokenResponse(user.Id, user.Email);
+        var tokenResponse = GenerateTokenResponse(user.Id, user.Email, user.SecurityStamp);
         SetAuthCookie(tokenResponse.Token);
         return NoContent();
     }
@@ -137,7 +137,7 @@ public class AuthController(
                 }
             }
 
-            var tokenResponse = GenerateTokenResponse(user.Id, email);
+            var tokenResponse = GenerateTokenResponse(user.Id, email, user.SecurityStamp);
             var code = Guid.NewGuid().ToString("N");
             var binding = Guid.NewGuid().ToString("N");
             _authCodes[code] = (tokenResponse.Token, DateTime.UtcNow.AddMinutes(1), binding);
@@ -198,7 +198,7 @@ public class AuthController(
     [HttpGet("me")]
     public async Task<IActionResult> Me()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetCurrentUserId();
         var email = User.FindFirstValue(ClaimTypes.Email);
         if (userId == null) return Unauthorized();
         var user = await userManager.FindByIdAsync(userId);
@@ -209,7 +209,7 @@ public class AuthController(
     [HttpGet("profile")]
     public async Task<IActionResult> GetProfile()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
         var user = await userManager.FindByIdAsync(userId);
         if (user == null) return NotFound();
@@ -225,7 +225,7 @@ public class AuthController(
     [HttpPut("profile")]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
         var user = await userManager.FindByIdAsync(userId);
         if (user == null) return NotFound();
@@ -250,7 +250,7 @@ public class AuthController(
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
         var user = await userManager.FindByIdAsync(userId);
         if (user == null) return NotFound();
@@ -258,9 +258,14 @@ public class AuthController(
         var result = await userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
         if (!result.Succeeded) return BadRequest(result.Errors);
 
+        await userManager.UpdateSecurityStampAsync(user);
         Response.Cookies.Delete("smartcrops_token", new CookieOptions { Path = "/" });
         return NoContent();
     }
+
+    private string? GetCurrentUserId() =>
+        User.FindFirstValue(ClaimTypes.NameIdentifier)
+        ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
 
     private void SetAuthCookie(string token)
     {
@@ -285,7 +290,7 @@ public class AuthController(
             _authCodes.TryRemove(key, out _);
     }
 
-    private AuthResponse GenerateTokenResponse(string userId, string email)
+    private AuthResponse GenerateTokenResponse(string userId, string email, string? securityStamp)
     {
         var jwtKey = configuration["Jwt:Key"]
             ?? throw new InvalidOperationException("JWT signing key is not configured");
@@ -299,6 +304,7 @@ public class AuthController(
             new Claim(JwtRegisteredClaimNames.Sub, userId),
             new Claim(JwtRegisteredClaimNames.Email, email),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new Claim("security_stamp", securityStamp ?? ""),
         };
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
