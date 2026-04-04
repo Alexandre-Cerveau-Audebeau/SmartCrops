@@ -15,7 +15,7 @@ import { fetchProfile, updateProfile, changePassword } from '../services/profile
 
 export default function Profile() {
   const { t } = useTranslation();
-  const { refreshUser } = useAuth();
+  const { refreshUser, logout } = useAuth();
   const navigate = useNavigate();
   const mountedRef = useRef(true);
 
@@ -25,6 +25,7 @@ export default function Profile() {
   const [lastName, setLastName] = useState('');
   const [city, setCity] = useState('');
   const [hasPassword, setHasPassword] = useState(true);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -46,6 +47,7 @@ export default function Profile() {
         setLastName(p.lastName ?? '');
         setCity(p.city ?? '');
         setHasPassword(p.hasPassword);
+        setProfileLoaded(true);
       })
       .catch(() => {
         if (mountedRef.current) setProfileMsg({ type: 'error', text: t('profile.loadError') });
@@ -89,6 +91,7 @@ export default function Profile() {
     setChangingPassword(true);
     try {
       await changePassword(currentPassword, newPassword);
+      await logout();
       setPasswordMsg({ type: 'success', text: t('profile.passwordSuccess') });
       setTimeout(() => navigate('/login', { replace: true }), 2000);
     } catch (err) {
@@ -134,6 +137,7 @@ export default function Profile() {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               fullWidth
+              disabled={!profileLoaded || saving}
               inputProps={{ maxLength: 100 }}
             />
             <TextField
@@ -141,6 +145,7 @@ export default function Profile() {
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               fullWidth
+              disabled={!profileLoaded || saving}
               inputProps={{ maxLength: 50 }}
             />
             <TextField
@@ -148,6 +153,7 @@ export default function Profile() {
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               fullWidth
+              disabled={!profileLoaded || saving}
               inputProps={{ maxLength: 50 }}
             />
             <TextField
@@ -155,12 +161,13 @@ export default function Profile() {
               value={city}
               onChange={(e) => setCity(e.target.value)}
               fullWidth
+              disabled={!profileLoaded || saving}
               inputProps={{ maxLength: 100 }}
             />
             <Button
               type="submit"
               variant="contained"
-              disabled={saving}
+              disabled={!profileLoaded || saving}
               startIcon={saving ? <CircularProgress size={18} color="inherit" aria-hidden="true" /> : undefined}
               sx={{ mt: 1 }}
             >
