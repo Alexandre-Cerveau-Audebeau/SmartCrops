@@ -4,7 +4,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
-import CardActions from '@mui/material/CardActions';
+import CardActionArea from '@mui/material/CardActionArea';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
@@ -16,6 +16,7 @@ import IconButton from '@mui/material/IconButton';
 import Skeleton from '@mui/material/Skeleton';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import { useLanguage } from '../hooks/useLanguage';
@@ -171,82 +172,104 @@ export default function MyGardens() {
             <Card
               key={garden.id}
               variant="outlined"
-              sx={{ borderRadius: 3 }}
+              sx={{
+                borderRadius: 3,
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  boxShadow: 4,
+                  borderColor: 'primary.main',
+                  transform: 'scale(1.005)',
+                },
+              }}
             >
-              <CardContent>
-                <Typography variant="h6" fontWeight={600}>
-                  {garden.name}
-                </Typography>
-                {garden.description && (
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={
-                      expandedDescriptions.has(garden.id)
-                        ? { mb: 0.5 }
-                        : {
-                            mb: 0.5,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                          }
-                    }
-                  >
-                    {garden.description}
-                  </Typography>
-                )}
-                {garden.description && garden.description.length > 80 && (
-                  <Button
-                    variant="text"
-                    size="small"
-                    onClick={() => toggleDescription(garden.id)}
-                    sx={{ mt: 0.5, mb: 1, p: 0, minWidth: 0, fontSize: '0.8rem' }}
-                  >
-                    {expandedDescriptions.has(garden.id) ? t('gardens.seeLess') : t('gardens.seeMore')}
-                  </Button>
-                )}
-                <Chip
-                  label={t('gardens.plantsCount', { count: garden.gardenPlants.length })}
-                  size="small"
-                  variant="outlined"
-                />
-                {garden.gardenPlants.length > 0 && (
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    {garden.gardenPlants
-                      .slice(0, 3)
-                      .map((gp) => {
-                        if (!gp.plant) return 'Unknown';
-                        const tr = getTranslation(gp.plant, language);
-                        return tr?.commonName || gp.plant.translations?.[0]?.commonName || gp.plant.scientificName;
-                      })
-                      .join(', ')}
-                    {garden.gardenPlants.length > 3 &&
-                      ` ${t('gardens.more', { count: garden.gardenPlants.length - 3 })}`}
-
-                  </Typography>
-                )}
-              </CardContent>
-              <CardActions>
-                <Button size="small" component={RouterLink} to={`/gardens/${garden.id}`}>
-                  {t('gardens.view')}
-                </Button>
+              {/* Edit / Delete buttons — top right */}
+              <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1, display: 'flex', gap: 0.5 }}>
                 <IconButton
                   size="small"
-                  onClick={() => openEditDialog(garden)}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); openEditDialog(garden); }}
                   aria-label={`${t('gardens.edit')} ${garden.name}`}
                 >
                   <EditIcon fontSize="small" />
                 </IconButton>
                 <IconButton
                   size="small"
-                  onClick={() => setDeleteConfirmGarden(garden)}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDeleteConfirmGarden(garden); }}
                   aria-label={`${t('gardens.delete')} ${garden.name}`}
+                  sx={{ color: 'error.main' }}
                 >
                   <DeleteIcon fontSize="small" />
                 </IconButton>
-              </CardActions>
+              </Box>
+
+              {/* Chevron indicator */}
+              <ChevronRightIcon sx={{
+                position: 'absolute',
+                bottom: 12,
+                right: 8,
+                color: 'text.disabled',
+                pointerEvents: 'none',
+              }} />
+
+              {/* Clickable area — navigates to planner */}
+              <CardActionArea component={RouterLink} to={`/gardens/${garden.id}/planner`} sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+                <CardContent sx={{ flex: 1, pr: 5 }}>
+                  <Typography variant="h6" fontWeight={600}>
+                    {garden.name}
+                  </Typography>
+                  {garden.description && (
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={
+                        expandedDescriptions.has(garden.id)
+                          ? { mb: 0.5 }
+                          : {
+                              mb: 0.5,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                            }
+                      }
+                    >
+                      {garden.description}
+                    </Typography>
+                  )}
+                  {garden.description && garden.description.length > 80 && (
+                    <Button
+                      variant="text"
+                      size="small"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleDescription(garden.id); }}
+                      sx={{ mt: 0.5, mb: 1, p: 0, minWidth: 0, fontSize: '0.8rem' }}
+                    >
+                      {expandedDescriptions.has(garden.id) ? t('gardens.seeLess') : t('gardens.seeMore')}
+                    </Button>
+                  )}
+                  <Chip
+                    label={t('gardens.plantsCount', { count: garden.gardenPlants.length })}
+                    size="small"
+                    variant="outlined"
+                  />
+                  {garden.gardenPlants.length > 0 && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                      {garden.gardenPlants
+                        .slice(0, 3)
+                        .map((gp) => {
+                          if (!gp.plant) return 'Unknown';
+                          const tr = getTranslation(gp.plant, language);
+                          return tr?.commonName || gp.plant.translations?.[0]?.commonName || gp.plant.scientificName;
+                        })
+                        .join(', ')}
+                      {garden.gardenPlants.length > 3 &&
+                        ` ${t('gardens.more', { count: garden.gardenPlants.length - 3 })}`}
+                    </Typography>
+                  )}
+                </CardContent>
+              </CardActionArea>
             </Card>
           ))}
         </Box>

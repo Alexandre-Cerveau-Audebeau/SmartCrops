@@ -170,7 +170,8 @@
     "failedCount_one": "{{count}} jardin échoué.",
     "failedCount_other": "{{count}} jardins échoués.",
     "addedButFailed_one": "Ajouté à {{count}} jardin, mais {{failed}} échoué.",
-    "addedButFailed_other": "Ajouté à {{count}} jardins, mais {{failed}} échoués."
+    "addedButFailed_other": "Ajouté à {{count}} jardins, mais {{failed}} échoués.",
+    "planMyGarden": "Planifier mon jardin"
   },
   "common": {
     "cancel": "Annuler",
@@ -246,6 +247,53 @@
     "passwordMismatch": "Les mots de passe ne correspondent pas.",
     "loadError": "Impossible de charger le profil.",
     "googleAccount": "Votre compte utilise la connexion Google. La gestion du mot de passe n'est pas disponible."
+  },
+  "planner": {
+    "title": "Planificateur de jardin",
+    "setup": {
+      "title": "Configurez votre jardin",
+      "columns": "Colonnes",
+      "rows": "Lignes",
+      "cellSize": "Taille des cellules",
+      "dimensions": "Dimensions",
+      "create": "Créer",
+      "cancel": "Annuler",
+      "resizeTitle": "Redimensionner le jardin",
+      "apply": "Appliquer"
+    },
+    "shape": {
+      "selectAll": "Tout sélectionner",
+      "deselectAll": "Tout désélectionner"
+    },
+    "modes": {
+      "shape": "Forme",
+      "garden": "Jardin",
+      "soil": "Sol"
+    },
+    "toolbar": {
+      "backToGarden": "Retour au jardin",
+      "backToGardens": "Retour à mes jardins",
+      "save": "Enregistrer",
+      "resize": "Redimensionner",
+      "activeCells": "{{active}}/{{total}} parcelles actives ({{surface}} m²)",
+      "saving": "Enregistrement...",
+      "unsavedChanges": "Modifications non enregistrées",
+      "saved": "Toutes les modifications sont enregistrées",
+      "saveSuccess": "Plan enregistré avec succès.",
+      "saveError": "Impossible d'enregistrer le plan."
+    },
+    "cell": {
+      "active": "Actif",
+      "inactive": "Inactif",
+      "toggleCell": "Basculer la cellule"
+    },
+    "help": {
+      "shape": "Cliquez et glissez pour activer ou désactiver les parcelles. Utilisez + et − pour ajouter ou retirer des lignes et colonnes. Pour de grands changements, utilisez le bouton Redimensionner.",
+      "garden": "Sélectionnez une plante dans le menu latéral et cliquez sur une parcelle pour la placer. (Bientôt disponible)",
+      "soil": "Sélectionnez un type de sol et cliquez sur les parcelles pour l'appliquer. (Bientôt disponible)"
+    },
+    "dimensions": "{{cols}} × {{rows}} — {{width}} × {{height}} ({{cellSize}}/cellule)",
+    "plantsInGarden": "Plantes dans ce jardin"
   },
   "editableNotes": {
     "notes": "Notes : {{notes}}",
