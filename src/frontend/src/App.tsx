@@ -8,6 +8,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import AuthCallback from './pages/AuthCallback';
 import GardenDetail from './pages/GardenDetail';
+import GardenPlanner from './pages/GardenPlanner';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import MyGardens from './pages/MyGardens';
@@ -36,6 +37,7 @@ export default function App() {
             <Route element={<ProtectedRoute />}>
               <Route path="/gardens" element={<MyGardens />} />
               <Route path="/gardens/:id" element={<GardenDetail />} />
+              <Route path="/gardens/:id/planner" element={<GardenPlanner />} />
               <Route path="/profile" element={<Profile />} />
             </Route>
             <Route path="*" element={<NotFound />} />

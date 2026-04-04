@@ -170,7 +170,8 @@
     "failedCount_one": "{{count}} garden failed.",
     "failedCount_other": "{{count}} gardens failed.",
     "addedButFailed_one": "Added to {{count}} garden, but {{failed}} failed.",
-    "addedButFailed_other": "Added to {{count}} gardens, but {{failed}} failed."
+    "addedButFailed_other": "Added to {{count}} gardens, but {{failed}} failed.",
+    "planMyGarden": "Plan my garden"
   },
   "common": {
     "cancel": "Cancel",
@@ -246,6 +247,53 @@
     "passwordMismatch": "Passwords do not match.",
     "loadError": "Failed to load profile.",
     "googleAccount": "Your account uses Google sign-in. Password management is not available."
+  },
+  "planner": {
+    "title": "Garden planner",
+    "setup": {
+      "title": "Set up your garden",
+      "columns": "Columns",
+      "rows": "Rows",
+      "cellSize": "Cell size",
+      "dimensions": "Dimensions",
+      "create": "Create",
+      "cancel": "Cancel",
+      "resizeTitle": "Resize garden",
+      "apply": "Apply"
+    },
+    "shape": {
+      "selectAll": "Select all",
+      "deselectAll": "Deselect all"
+    },
+    "modes": {
+      "shape": "Shape",
+      "garden": "Garden",
+      "soil": "Soil"
+    },
+    "toolbar": {
+      "backToGarden": "Back to garden",
+      "backToGardens": "Back to my gardens",
+      "save": "Save",
+      "resize": "Resize",
+      "activeCells": "{{active}}/{{total}} active cells ({{surface}} m²)",
+      "saving": "Saving...",
+      "unsavedChanges": "Unsaved changes",
+      "saved": "All changes saved",
+      "saveSuccess": "Layout saved successfully.",
+      "saveError": "Failed to save layout."
+    },
+    "cell": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "toggleCell": "Toggle cell"
+    },
+    "help": {
+      "shape": "Click and drag to activate or deactivate cells. Use + and − to add or remove rows and columns. For larger changes, use the Resize button.",
+      "garden": "Select a plant from the sidebar and click on a cell to place it. (Coming soon)",
+      "soil": "Select a soil type and click on cells to apply it. (Coming soon)"
+    },
+    "dimensions": "{{cols}} × {{rows}} — {{width}} × {{height}} ({{cellSize}}/cell)",
+    "plantsInGarden": "Plants in this garden"
   },
   "editableNotes": {
     "notes": "Notes: {{notes}}",
