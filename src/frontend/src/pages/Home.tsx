@@ -19,12 +19,12 @@ import YardIcon from '@mui/icons-material/Yard';
 import TranslateIcon from '@mui/icons-material/Translate';
 import GridOnIcon from '@mui/icons-material/GridOn';
 import SensorsIcon from '@mui/icons-material/Sensors';
-import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
-import CodeIcon from '@mui/icons-material/Code';
+import GrassIcon from '@mui/icons-material/Grass';
+import HandymanIcon from '@mui/icons-material/Handyman';
 import StarIcon from '@mui/icons-material/Star';
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import HeroCarousel from '../components/HeroCarousel';
 import { fetchPlants } from '../services/plantApi';
 import { getTranslation } from '../utils/getTranslation';
@@ -180,6 +180,7 @@ const plannedTech: TechItem[] = [
 export default function Home() {
   const { t } = useTranslation();
   const { language } = useLanguage();
+  const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -242,17 +243,33 @@ export default function Home() {
             }}
           >
             {[
-              { id: 'plants', icon: <LocalFloristIcon sx={{ fontSize: 24 }} />, value: '5+', label: t('home.stats.plants') },
+              { id: 'plants', icon: <LocalFloristIcon sx={{ fontSize: 24 }} />, value: '30+', label: t('home.stats.plants'), onClick: () => navigate('/library') },
               { id: 'languages', icon: <TranslateIcon sx={{ fontSize: 24 }} />, value: '2', label: t('home.stats.languages') },
-              { id: 'free', icon: <CardGiftcardIcon sx={{ fontSize: 24 }} />, value: '100%', label: t('home.stats.free') },
-              { id: 'openSource', icon: <CodeIcon sx={{ fontSize: 24 }} />, value: t('home.stats.openSource'), label: t('home.stats.community') },
+              { id: 'tools', icon: <HandymanIcon sx={{ fontSize: 24 }} />, value: '5', label: t('home.stats.tools'), onClick: () => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }) },
+              { id: 'gardens', icon: <GrassIcon sx={{ fontSize: 24 }} />, value: '∞', label: t('home.stats.gardens'), onClick: () => navigate('/gardens') },
             ].map((stat) => (
               <Box
                 key={stat.id}
+                component={stat.onClick ? 'button' : 'div'}
+                type={stat.onClick ? 'button' : undefined}
+                onClick={stat.onClick}
+                aria-label={stat.onClick ? stat.label : undefined}
                 sx={{
+                  border: 0,
+                  background: 'transparent',
+                  color: 'inherit',
                   flex: { xs: '0 0 50%', sm: '0 0 auto' },
                   textAlign: 'center',
                   py: { xs: 1, sm: 0 },
+                  ...(stat.onClick && {
+                    cursor: 'pointer',
+                    '&:focus-visible': {
+                      outline: '2px solid',
+                      outlineColor: 'primary.main',
+                      outlineOffset: 2,
+                      borderRadius: 1,
+                    },
+                  }),
                 }}
               >
                 <Box sx={{ mb: 0.5 }}>{stat.icon}</Box>
@@ -267,7 +284,7 @@ export default function Home() {
       </Box>
 
       {/* ==================== SECTION 3 — FEATURES ==================== */}
-      <Container maxWidth="lg" sx={{ py: 8 }}>
+      <Container id="features" maxWidth="lg" sx={{ py: 8 }}>
         <Typography variant="h4" textAlign="center" color="primary" gutterBottom>
           {t('home.features.title')}
         </Typography>
