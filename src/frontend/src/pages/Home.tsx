@@ -261,7 +261,15 @@ export default function Home() {
                   flex: { xs: '0 0 50%', sm: '0 0 auto' },
                   textAlign: 'center',
                   py: { xs: 1, sm: 0 },
-                  ...(stat.onClick && { cursor: 'pointer' }),
+                  ...(stat.onClick && {
+                    cursor: 'pointer',
+                    '&:focus-visible': {
+                      outline: '2px solid',
+                      outlineColor: 'primary.main',
+                      outlineOffset: 2,
+                      borderRadius: 1,
+                    },
+                  }),
                 }}
               >
                 <Box sx={{ mb: 0.5 }}>{stat.icon}</Box>
