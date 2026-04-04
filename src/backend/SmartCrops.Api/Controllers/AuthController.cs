@@ -258,7 +258,8 @@ public class AuthController(
         var result = await userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
         if (!result.Succeeded) return BadRequest(result.Errors);
 
-        return Ok();
+        Response.Cookies.Delete("smartcrops_token", new CookieOptions { Path = "/" });
+        return NoContent();
     }
 
     private void SetAuthCookie(string token)
