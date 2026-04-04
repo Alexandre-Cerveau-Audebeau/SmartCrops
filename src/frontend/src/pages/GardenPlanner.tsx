@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -18,6 +18,7 @@ import SetupLayoutDialog from '../components/Garden/SetupLayoutDialog';
 import { useLanguage } from '../hooks/useLanguage';
 import { fetchGarden } from '../services/gardenApi';
 import { fetchLayout, saveLayout } from '../services/gardenLayoutApi';
+import type { SavePlacementData } from '../services/gardenLayoutApi';
 import type { Garden } from '../types/Garden';
 import type { CellData } from '../types/GardenLayout';
 import { parseCellsJson, serializeCellsJson } from '../types/GardenLayout';
@@ -64,10 +65,12 @@ const removeBtnSx = {
 export default function GardenPlanner() {
   const { t } = useTranslation();
   const { language } = useLanguage();
+  const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const mountedRef = useRef(true);
 
   const [garden, setGarden] = useState<Garden | null>(null);
+  const [placements, setPlacements] = useState<SavePlacementData[]>([]);
   const [grid, setGrid] = useState<CellData[][] | null>(null);
   const [layoutWidth, setLayoutWidth] = useState(0);
   const [layoutHeight, setLayoutHeight] = useState(0);
@@ -97,6 +100,14 @@ export default function GardenPlanner() {
           setLayoutHeight(layoutData.height);
           setCellSize(layoutData.cellSize);
           setGrid(parseCellsJson(layoutData.cellsJson, layoutData.width, layoutData.height));
+          setPlacements(layoutData.placements.map(p => ({
+            plantId: p.plantId,
+            startRow: p.startRow,
+            startCol: p.startCol,
+            spanRows: p.spanRows,
+            spanCols: p.spanCols,
+            notes: p.notes,
+          })));
         } else {
           setShowSetup(true);
         }
@@ -241,7 +252,7 @@ export default function GardenPlanner() {
         height: layoutHeight,
         cellSize,
         cellsJson: serializeCellsJson(grid),
-        placements: [],
+        placements,
       });
       setIsDirty(false);
       setMessage({ type: 'success', text: t('planner.toolbar.saveSuccess') });
@@ -282,7 +293,7 @@ export default function GardenPlanner() {
       <SetupLayoutDialog
         open={showSetup}
         onConfirm={handleSetupConfirm}
-        onCancel={() => window.history.back()}
+        onCancel={() => navigate('/gardens')}
       />
 
       {/* Resize dialog */}

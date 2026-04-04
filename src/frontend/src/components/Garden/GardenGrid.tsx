@@ -39,22 +39,26 @@ export default function GardenGrid({ grid, mode, onCellClick, onCellDragStart, o
 
   useEffect(() => {
     if (!hasDrag || !onCellDragEnd) return;
-    const handleMouseUp = () => onCellDragEnd();
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => window.removeEventListener('mouseup', handleMouseUp);
+    const handlePointerUp = () => onCellDragEnd();
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
   }, [hasDrag, onCellDragEnd]);
 
   return (
     <Box
-      onMouseUp={hasDrag ? () => onCellDragEnd!() : undefined}
-      onMouseLeave={hasDrag ? () => onCellDragEnd!() : undefined}
+      onPointerUp={hasDrag ? () => onCellDragEnd!() : undefined}
+      onPointerLeave={hasDrag ? () => onCellDragEnd!() : undefined}
       sx={{
         display: 'inline-grid',
         gridTemplateColumns: `repeat(${width}, ${cellSizePx}px)`,
         border: '1px solid rgba(0,0,0,0.15)',
         borderRadius: 1,
         overflow: 'auto',
-        ...(isShape && { userSelect: 'none' }),
+        ...(isShape && { userSelect: 'none', touchAction: 'none' }),
       }}
     >
       {grid.flatMap((row, r) =>
@@ -77,9 +81,8 @@ export default function GardenGrid({ grid, mode, onCellClick, onCellDragStart, o
                 key={`${r}-${c}`}
                 component="button"
                 type="button"
-                onMouseDown={hasDrag ? (e: React.MouseEvent) => { e.preventDefault(); onCellDragStart!(r, c); } : undefined}
-                onMouseEnter={hasDrag ? () => onCellDragEnter!(r, c) : undefined}
-                onTouchStart={hasDrag ? (e: React.TouchEvent) => { e.preventDefault(); onCellDragStart!(r, c); } : undefined}
+                onPointerDown={hasDrag ? (e: React.PointerEvent) => { e.preventDefault(); onCellDragStart!(r, c); } : undefined}
+                onPointerEnter={hasDrag ? () => onCellDragEnter!(r, c) : undefined}
                 onClick={!hasDrag && onCellClick ? () => onCellClick(r, c) : undefined}
                 aria-label={`${t('planner.cell.toggleCell')} (${r}, ${c})`}
                 sx={{
