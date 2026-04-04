@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -29,7 +30,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetGardens()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -47,7 +48,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetGarden(Guid id)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -71,7 +72,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateGarden(CreateGardenRequest request)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -94,7 +95,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> UpdateGarden(Guid id, UpdateGardenRequest request)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -117,7 +118,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteGarden(Guid id)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -142,7 +143,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
             AddPlantToGardenRequest? request
     )
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -192,7 +193,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         UpdatePlantNotesRequest request
     )
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -227,7 +228,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     [HttpDelete("{id:guid}/plants/{plantId:guid}")]
     public async Task<IActionResult> RemovePlantFromGarden(Guid id, Guid plantId)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
@@ -250,4 +251,8 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
 
         return NoContent();
     }
+
+    private string? GetCurrentUserId() =>
+        User.FindFirstValue(ClaimTypes.NameIdentifier)
+        ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
 }

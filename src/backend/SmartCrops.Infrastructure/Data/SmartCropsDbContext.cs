@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SmartCrops.Core.Entities;
@@ -6,7 +5,7 @@ using SmartCrops.Core.Entities;
 namespace SmartCrops.Infrastructure.Data;
 
 public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options)
-    : IdentityDbContext<IdentityUser>(options)
+    : IdentityDbContext<ApplicationUser>(options)
 {
     public DbSet<Plant> Plants => Set<Plant>();
     public DbSet<PlantType> PlantTypes => Set<PlantType>();

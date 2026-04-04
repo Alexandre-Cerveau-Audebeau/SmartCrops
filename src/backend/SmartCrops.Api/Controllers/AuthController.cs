@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
+using SmartCrops.Core.Entities;
 
 namespace SmartCrops.Api.Controllers;
 
@@ -17,31 +18,38 @@ public record RegisterRequest([Required, EmailAddress] string Email, [Required, 
 public record LoginRequest([Required, EmailAddress] string Email, [Required] string Password);
 public record AuthResponse(string Token, DateTime Expiration);
 public record ExchangeCodeRequest([Required] string Code);
+public record UserProfileResponse(string Email, string? DisplayName, string? FirstName, string? LastName, string? City);
+public record UpdateProfileRequest(
+    [StringLength(100)] string? DisplayName,
+    [StringLength(50)] string? FirstName,
+    [StringLength(50)] string? LastName,
+    [StringLength(100)] string? City);
+public record ChangePasswordRequest([Required] string CurrentPassword, [Required, MinLength(6)] string NewPassword);
 
 [ApiController]
 [Route("api/[controller]")]
 public class AuthController(
-    UserManager<IdentityUser> userManager,
-    SignInManager<IdentityUser> signInManager,
+    UserManager<ApplicationUser> userManager,
+    SignInManager<ApplicationUser> signInManager,
     IConfiguration configuration,
     IAuthenticationSchemeProvider schemeProvider,
     IHostEnvironment hostEnvironment,
     IWebHostEnvironment env) : ControllerBase
 {
-    private static readonly PasswordHasher<IdentityUser> _dummyHasher = new();
-    private static readonly string _dummyHash = _dummyHasher.HashPassword(new IdentityUser(), "DummyPassword123!");
+    private static readonly PasswordHasher<ApplicationUser> _dummyHasher = new();
+    private static readonly string _dummyHash = _dummyHasher.HashPassword(new ApplicationUser(), "DummyPassword123!");
     private static readonly ConcurrentDictionary<string, (string Token, DateTime Expiry, string Binding)> _authCodes = new();
 
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        var user = new IdentityUser { UserName = request.Email, Email = request.Email };
+        var user = new ApplicationUser { UserName = request.Email, Email = request.Email };
         var result = await userManager.CreateAsync(user, request.Password);
 
         if (!result.Succeeded)
             return BadRequest(result.Errors);
 
-        var tokenResponse = GenerateTokenResponse(user.Id, request.Email);
+        var tokenResponse = GenerateTokenResponse(user.Id, request.Email, user.SecurityStamp);
         SetAuthCookie(tokenResponse.Token);
         return StatusCode(201);
     }
@@ -52,7 +60,7 @@ public class AuthController(
         var user = await userManager.FindByEmailAsync(request.Email);
         if (user is null)
         {
-            _dummyHasher.VerifyHashedPassword(new IdentityUser(), _dummyHash, request.Password);
+            _dummyHasher.VerifyHashedPassword(new ApplicationUser(), _dummyHash, request.Password);
             return Unauthorized();
         }
 
@@ -62,7 +70,7 @@ public class AuthController(
         if (string.IsNullOrEmpty(user.Email))
             return Unauthorized();
 
-        var tokenResponse = GenerateTokenResponse(user.Id, user.Email);
+        var tokenResponse = GenerateTokenResponse(user.Id, user.Email, user.SecurityStamp);
         SetAuthCookie(tokenResponse.Token);
         return NoContent();
     }
@@ -106,7 +114,7 @@ public class AuthController(
             var user = await userManager.FindByEmailAsync(email);
             if (user is null)
             {
-                user = new IdentityUser { UserName = email, Email = email, EmailConfirmed = true };
+                user = new ApplicationUser { UserName = email, Email = email, EmailConfirmed = true };
                 var createResult = await userManager.CreateAsync(user);
                 if (!createResult.Succeeded)
                     return Redirect($"{frontendUrl}/login?error=create-failed");
@@ -129,7 +137,7 @@ public class AuthController(
                 }
             }
 
-            var tokenResponse = GenerateTokenResponse(user.Id, email);
+            var tokenResponse = GenerateTokenResponse(user.Id, email, user.SecurityStamp);
             var code = Guid.NewGuid().ToString("N");
             var binding = Guid.NewGuid().ToString("N");
             _authCodes[code] = (tokenResponse.Token, DateTime.UtcNow.AddMinutes(1), binding);
@@ -188,13 +196,76 @@ public class AuthController(
 
     [Authorize]
     [HttpGet("me")]
-    public IActionResult Me()
+    public async Task<IActionResult> Me()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userId = GetCurrentUserId();
         var email = User.FindFirstValue(ClaimTypes.Email);
         if (userId == null) return Unauthorized();
-        return Ok(new { userId, email });
+        var user = await userManager.FindByIdAsync(userId);
+        return Ok(new { userId, email, displayName = user?.DisplayName });
     }
+
+    [Authorize]
+    [HttpGet("profile")]
+    public async Task<IActionResult> GetProfile()
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+        var user = await userManager.FindByIdAsync(userId);
+        if (user == null) return NotFound();
+        return Ok(new UserProfileResponse(
+            user.Email ?? "",
+            user.DisplayName,
+            user.FirstName,
+            user.LastName,
+            user.City));
+    }
+
+    [Authorize]
+    [HttpPut("profile")]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+        var user = await userManager.FindByIdAsync(userId);
+        if (user == null) return NotFound();
+
+        user.DisplayName = request.DisplayName;
+        user.FirstName = request.FirstName;
+        user.LastName = request.LastName;
+        user.City = request.City;
+
+        var result = await userManager.UpdateAsync(user);
+        if (!result.Succeeded) return BadRequest(result.Errors);
+
+        return Ok(new UserProfileResponse(
+            user.Email ?? "",
+            user.DisplayName,
+            user.FirstName,
+            user.LastName,
+            user.City));
+    }
+
+    [Authorize]
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+        var user = await userManager.FindByIdAsync(userId);
+        if (user == null) return NotFound();
+
+        var result = await userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+        if (!result.Succeeded) return BadRequest(result.Errors);
+
+        await userManager.UpdateSecurityStampAsync(user);
+        Response.Cookies.Delete("smartcrops_token", new CookieOptions { Path = "/" });
+        return NoContent();
+    }
+
+    private string? GetCurrentUserId() =>
+        User.FindFirstValue(ClaimTypes.NameIdentifier)
+        ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
 
     private void SetAuthCookie(string token)
     {
@@ -219,7 +290,7 @@ public class AuthController(
             _authCodes.TryRemove(key, out _);
     }
 
-    private AuthResponse GenerateTokenResponse(string userId, string email)
+    private AuthResponse GenerateTokenResponse(string userId, string email, string? securityStamp)
     {
         var jwtKey = configuration["Jwt:Key"]
             ?? throw new InvalidOperationException("JWT signing key is not configured");
@@ -233,6 +304,7 @@ public class AuthController(
             new Claim(JwtRegisteredClaimNames.Sub, userId),
             new Claim(JwtRegisteredClaimNames.Email, email),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new Claim("security_stamp", securityStamp ?? ""),
         };
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));

@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using SmartCrops.Core.Entities;
@@ -15,7 +14,7 @@ public class GardenConfiguration : IEntityTypeConfiguration<Garden>
         builder.Property(g => g.UserId).IsRequired().HasMaxLength(450);
         builder.HasIndex(g => g.UserId);
 
-        builder.HasOne<IdentityUser>()
+        builder.HasOne<ApplicationUser>()
             .WithMany()
             .HasForeignKey(g => g.UserId)
             .OnDelete(DeleteBehavior.Restrict);
