@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import type { CellData } from '../../types/GardenLayout';
@@ -58,6 +58,18 @@ export default function GardenGrid({ grid, shapeEditMode, placements, onCellClic
     };
   }, [hasDrag, onCellDragEnd]);
 
+  const placementMap = useMemo(() => {
+    const map = new Map<string, PlacementOverlay>();
+    placements?.forEach(p => {
+      for (let r = p.startRow; r < p.startRow + p.spanRows; r++) {
+        for (let c = p.startCol; c < p.startCol + p.spanCols; c++) {
+          map.set(`${r}-${c}`, p);
+        }
+      }
+    });
+    return map;
+  }, [placements]);
+
   return (
     <Box
       onPointerUp={hasDrag ? () => onCellDragEnd!() : undefined}
@@ -72,10 +84,7 @@ export default function GardenGrid({ grid, shapeEditMode, placements, onCellClic
     >
       {grid.flatMap((row, r) =>
         row.map((cell, c) => {
-          const placement = placements?.find(p =>
-            r >= p.startRow && r < p.startRow + p.spanRows &&
-            c >= p.startCol && c < p.startCol + p.spanCols
-          );
+          const placement = placementMap.get(`${r}-${c}`);
           const plantColor = placement ? getPlantColor(placement.plantId) : undefined;
           const baseBg = getCellBg(cell);
           const bg = placement ? plantColor! : baseBg;

@@ -19,7 +19,9 @@ import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import GardenGrid from '../components/Garden/GardenGrid';
 import PlantSidebar from '../components/Garden/PlantSidebar';
 import SetupLayoutDialog from '../components/Garden/SetupLayoutDialog';
+import { STICKY_OFFSET } from '../constants/layout';
 import { useLanguage } from '../hooks/useLanguage';
+import { useScrollHold } from '../hooks/useScrollHold';
 import { fetchGarden } from '../services/gardenApi';
 import { fetchLayout, saveLayout } from '../services/gardenLayoutApi';
 import type { SavePlacementData } from '../services/gardenLayoutApi';
@@ -34,52 +36,6 @@ function cellSizeToMeters(cellSize: string): number {
   if (cellSize === '1m') return 1;
   if (cellSize === '50cm') return 0.5;
   return 0.25;
-}
-
-function useScrollHold(scrollRef: React.RefObject<HTMLDivElement | null>, direction: 'left' | 'right') {
-  const intervalRef = useRef<number | null>(null);
-
-  const start = useCallback(() => {
-    if (intervalRef.current !== null) return;
-    const step = direction === 'left' ? -20 : 20;
-    const scroll = () => scrollRef.current?.scrollBy({ left: step, behavior: 'auto' });
-    scroll();
-    intervalRef.current = window.setInterval(scroll, 30);
-  }, [scrollRef, direction]);
-
-  const stop = useCallback(() => {
-    if (intervalRef.current !== null) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current !== null) clearInterval(intervalRef.current);
-    };
-  }, []);
-
-  // Safety net: if the button vanishes mid-press (arrow hidden, grid resized),
-  // the local onMouseUp/onTouchEnd never fire — listen at window level too.
-  useEffect(() => {
-    const handler = () => {
-      if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-    window.addEventListener('mouseup', handler);
-    window.addEventListener('touchend', handler);
-    window.addEventListener('touchcancel', handler);
-    return () => {
-      window.removeEventListener('mouseup', handler);
-      window.removeEventListener('touchend', handler);
-      window.removeEventListener('touchcancel', handler);
-    };
-  }, []);
-
-  return { start, stop };
 }
 
 const addBtnSx = {
@@ -434,7 +390,7 @@ export default function GardenPlanner() {
       const node = gridWrapperRef.current;
       if (!node) return;
       const rect = node.getBoundingClientRect();
-      setPanelTop(Math.max(rect.top, 80));
+      setPanelTop(Math.max(rect.top, STICKY_OFFSET));
     };
     updateTop();
     window.addEventListener('scroll', updateTop, { passive: true });
@@ -452,23 +408,24 @@ export default function GardenPlanner() {
     const node = gridWrapperRef.current;
     if (!node) return;
     const rect = node.getBoundingClientRect();
-    setPanelTop(Math.max(rect.top, 80));
+    setPanelTop(Math.max(rect.top, STICKY_OFFSET));
   }, [selectedPlacementIndex]);
 
-  const enrichedPlacements = useMemo(() =>
-    placements.map(p => {
-      const plant = allPlants.find(pl => pl.id === p.plantId);
+  const enrichedPlacements = useMemo(() => {
+    const plantMap = new Map(allPlants.map(p => [p.id, p]));
+    return placements.map(p => {
+      const plant = plantMap.get(p.plantId);
       return {
         ...p,
         plantName: plant
           ? (getTranslation(plant, language)?.commonName || plant.scientificName)
           : 'Unknown',
       };
-    }),
-    [placements, allPlants, language]
-  );
+    });
+  }, [placements, allPlants, language]);
 
   const plantsToShow = useMemo(() => {
+    const plantMap = new Map(allPlants.map(p => [p.id, p]));
     const seen = new Set<string>();
     const list: Array<{ plantId: string; plantName: string; scientificName: string }> = [];
     garden?.gardenPlants?.forEach(gp => {
@@ -483,7 +440,7 @@ export default function GardenPlanner() {
     });
     placements.forEach(p => {
       if (seen.has(p.plantId)) return;
-      const plant = allPlants.find(pl => pl.id === p.plantId);
+      const plant = plantMap.get(p.plantId);
       if (!plant) return;
       seen.add(p.plantId);
       list.push({
@@ -740,7 +697,7 @@ export default function GardenPlanner() {
             }}
           >
             {/* Scroll arrows — sticky to top of viewport (page scroll) so they stay visible */}
-            <Box sx={{ position: 'sticky', top: 80, zIndex: 5, height: 0, alignSelf: 'stretch' }}>
+            <Box sx={{ position: 'sticky', top: STICKY_OFFSET, zIndex: 5, height: 0, alignSelf: 'stretch' }}>
               {showLeftArrow && (
                 <IconButton
                   size="small"
@@ -780,8 +737,42 @@ export default function GardenPlanner() {
             {/* TOP +/- row — OUTSIDE scroll, centered in wrapper width (= visible viewport) */}
             {shapeEditMode && (
               <Box sx={{ display: 'flex', gap: 0.5, alignSelf: 'center', mb: 0.5 }}>
-                <Box onClick={addRowTop} sx={{ ...addBtnSx, width: 28, height: 20 }}>+</Box>
-                <Box onClick={removeRowTop} sx={{ ...removeBtnSx, width: 28, height: 20 }}>{'−'}</Box>
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={addRowTop}
+                  aria-label={t('planner.shape.addRowTop')}
+                  sx={{
+                    ...addBtnSx,
+                    width: 28,
+                    height: 20,
+                    border: 'none',
+                    cursor: 'pointer',
+                    '&:focus-visible': {
+                      outline: '2px solid',
+                      outlineColor: 'primary.main',
+                      outlineOffset: 2,
+                    },
+                  }}
+                >+</Box>
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={removeRowTop}
+                  aria-label={t('planner.shape.removeRowTop')}
+                  sx={{
+                    ...removeBtnSx,
+                    width: 28,
+                    height: 20,
+                    border: 'none',
+                    cursor: 'pointer',
+                    '&:focus-visible': {
+                      outline: '2px solid',
+                      outlineColor: 'primary.main',
+                      outlineOffset: 2,
+                    },
+                  }}
+                >{'−'}</Box>
               </Box>
             )}
 
@@ -800,8 +791,42 @@ export default function GardenPlanner() {
               <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
                 {shapeEditMode && (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                    <Box onClick={addColLeft} sx={{ ...addBtnSx, width: 20, height: 28 }}>+</Box>
-                    <Box onClick={removeColLeft} sx={{ ...removeBtnSx, width: 20, height: 28 }}>{'−'}</Box>
+                    <Box
+                      component="button"
+                      type="button"
+                      onClick={addColLeft}
+                      aria-label={t('planner.shape.addColLeft')}
+                      sx={{
+                        ...addBtnSx,
+                        width: 20,
+                        height: 28,
+                        border: 'none',
+                        cursor: 'pointer',
+                        '&:focus-visible': {
+                          outline: '2px solid',
+                          outlineColor: 'primary.main',
+                          outlineOffset: 2,
+                        },
+                      }}
+                    >+</Box>
+                    <Box
+                      component="button"
+                      type="button"
+                      onClick={removeColLeft}
+                      aria-label={t('planner.shape.removeColLeft')}
+                      sx={{
+                        ...removeBtnSx,
+                        width: 20,
+                        height: 28,
+                        border: 'none',
+                        cursor: 'pointer',
+                        '&:focus-visible': {
+                          outline: '2px solid',
+                          outlineColor: 'primary.main',
+                          outlineOffset: 2,
+                        },
+                      }}
+                    >{'−'}</Box>
                   </Box>
                 )}
                 <GardenGrid
@@ -816,8 +841,42 @@ export default function GardenPlanner() {
                 />
                 {shapeEditMode && (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                    <Box onClick={addColRight} sx={{ ...addBtnSx, width: 20, height: 28 }}>+</Box>
-                    <Box onClick={removeColRight} sx={{ ...removeBtnSx, width: 20, height: 28 }}>{'−'}</Box>
+                    <Box
+                      component="button"
+                      type="button"
+                      onClick={addColRight}
+                      aria-label={t('planner.shape.addColRight')}
+                      sx={{
+                        ...addBtnSx,
+                        width: 20,
+                        height: 28,
+                        border: 'none',
+                        cursor: 'pointer',
+                        '&:focus-visible': {
+                          outline: '2px solid',
+                          outlineColor: 'primary.main',
+                          outlineOffset: 2,
+                        },
+                      }}
+                    >+</Box>
+                    <Box
+                      component="button"
+                      type="button"
+                      onClick={removeColRight}
+                      aria-label={t('planner.shape.removeColRight')}
+                      sx={{
+                        ...removeBtnSx,
+                        width: 20,
+                        height: 28,
+                        border: 'none',
+                        cursor: 'pointer',
+                        '&:focus-visible': {
+                          outline: '2px solid',
+                          outlineColor: 'primary.main',
+                          outlineOffset: 2,
+                        },
+                      }}
+                    >{'−'}</Box>
                   </Box>
                 )}
               </Box>
@@ -826,8 +885,42 @@ export default function GardenPlanner() {
             {/* BOTTOM +/- row — OUTSIDE scroll, centered in wrapper width */}
             {shapeEditMode && (
               <Box sx={{ display: 'flex', gap: 0.5, alignSelf: 'center', mt: 0.5 }}>
-                <Box onClick={addRowBottom} sx={{ ...addBtnSx, width: 28, height: 20 }}>+</Box>
-                <Box onClick={removeRowBottom} sx={{ ...removeBtnSx, width: 28, height: 20 }}>{'−'}</Box>
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={addRowBottom}
+                  aria-label={t('planner.shape.addRowBottom')}
+                  sx={{
+                    ...addBtnSx,
+                    width: 28,
+                    height: 20,
+                    border: 'none',
+                    cursor: 'pointer',
+                    '&:focus-visible': {
+                      outline: '2px solid',
+                      outlineColor: 'primary.main',
+                      outlineOffset: 2,
+                    },
+                  }}
+                >+</Box>
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={removeRowBottom}
+                  aria-label={t('planner.shape.removeRowBottom')}
+                  sx={{
+                    ...removeBtnSx,
+                    width: 28,
+                    height: 20,
+                    border: 'none',
+                    cursor: 'pointer',
+                    '&:focus-visible': {
+                      outline: '2px solid',
+                      outlineColor: 'primary.main',
+                      outlineOffset: 2,
+                    },
+                  }}
+                >{'−'}</Box>
               </Box>
             )}
           </Box>

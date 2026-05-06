@@ -13,6 +13,7 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTranslation } from 'react-i18next';
+import { STICKY_OFFSET } from '../../constants/layout';
 import type { Plant } from '../../types/Plant';
 import { getTranslation } from '../../utils/getTranslation';
 import { getPlantColor } from '../../utils/plantColor';
@@ -41,7 +42,7 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
   });
 
   return (
-    <Box sx={{ width: 320, maxHeight: 480, display: 'flex', flexDirection: 'column', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', flexShrink: 0, overflow: 'hidden', position: 'sticky', top: 80 }}>
+    <Box sx={{ width: 320, maxHeight: 480, display: 'flex', flexDirection: 'column', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', flexShrink: 0, overflow: 'hidden', position: 'sticky', top: STICKY_OFFSET }}>
       <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
         <FormControlLabel
           control={<Switch checked={shapeEditMode} onChange={(e) => onShapeEditToggle(e.target.checked)} size="small" />}
@@ -67,6 +68,7 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
               size="small"
               fullWidth
               placeholder={t('planner.sidebar.search')}
+              inputProps={{ 'aria-label': t('planner.sidebar.search') }}
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
             />

@@ -263,7 +263,15 @@
     },
     "shape": {
       "selectAll": "Tout sélectionner",
-      "deselectAll": "Tout désélectionner"
+      "deselectAll": "Tout désélectionner",
+      "addRowTop": "Ajouter une ligne en haut",
+      "removeRowTop": "Retirer la ligne du haut",
+      "addRowBottom": "Ajouter une ligne en bas",
+      "removeRowBottom": "Retirer la ligne du bas",
+      "addColLeft": "Ajouter une colonne à gauche",
+      "removeColLeft": "Retirer la colonne de gauche",
+      "addColRight": "Ajouter une colonne à droite",
+      "removeColRight": "Retirer la colonne de droite"
     },
     "shapeEditMode": "Modifier la forme",
     "tabs": {

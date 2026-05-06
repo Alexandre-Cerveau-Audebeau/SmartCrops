@@ -263,7 +263,15 @@
     },
     "shape": {
       "selectAll": "Select all",
-      "deselectAll": "Deselect all"
+      "deselectAll": "Deselect all",
+      "addRowTop": "Add row at top",
+      "removeRowTop": "Remove top row",
+      "addRowBottom": "Add row at bottom",
+      "removeRowBottom": "Remove bottom row",
+      "addColLeft": "Add column on left",
+      "removeColLeft": "Remove left column",
+      "addColRight": "Add column on right",
+      "removeColRight": "Remove right column"
     },
     "shapeEditMode": "Edit shape",
     "tabs": {
