@@ -265,19 +265,26 @@
       "selectAll": "Tout sélectionner",
       "deselectAll": "Tout désélectionner"
     },
-    "modes": {
-      "shape": "Forme",
-      "garden": "Jardin",
-      "soil": "Sol"
+    "shapeEditMode": "Modifier la forme",
+    "tabs": {
+      "plants": "Plantes",
+      "soils": "Sols",
+      "infrastructure": "Infrastructure"
     },
+    "placementsRemoved_one": "{{count}} plante a été retirée (hors zone)",
+    "placementsRemoved_other": "{{count}} plantes ont été retirées (hors zone)",
     "toolbar": {
       "backToGarden": "Retour au jardin",
       "backToGardens": "Retour à mes jardins",
       "save": "Enregistrer",
+      "cancel": "Annuler",
       "resize": "Redimensionner",
       "activeCells": "{{active}}/{{total}} parcelles actives ({{surface}} m²)",
       "saving": "Enregistrement...",
-      "unsavedChanges": "Modifications non enregistrées",
+      "unsavedChanges": "Modifications non sauvegardées",
+      "changesDiscarded": "Modifications annulées",
+      "zoomIn": "Zoomer",
+      "zoomOut": "Dézoomer",
       "saved": "Toutes les modifications sont enregistrées",
       "saveSuccess": "Plan enregistré avec succès.",
       "saveError": "Impossible d'enregistrer le plan."
@@ -288,12 +295,26 @@
       "toggleCell": "Basculer la cellule"
     },
     "help": {
-      "shape": "Cliquez et glissez pour activer ou désactiver les parcelles. Utilisez + et − pour ajouter ou retirer des lignes et colonnes. Pour de grands changements, utilisez le bouton Redimensionner.",
-      "garden": "Sélectionnez une plante dans le menu latéral et cliquez sur une parcelle pour la placer. (Bientôt disponible)",
-      "soil": "Sélectionnez un type de sol et cliquez sur les parcelles pour l'appliquer. (Bientôt disponible)"
+      "unified": "Cliquez sur une plante dans le menu, puis sur les parcelles pour la placer. Cliquez à nouveau pour la remplacer. Activez 'Modifier la forme' pour changer la forme du jardin."
     },
     "dimensions": "{{cols}} × {{rows}} — {{width}} × {{height}} ({{cellSize}}/cellule)",
-    "plantsInGarden": "Plantes dans ce jardin"
+    "plantsInGarden": "Plantes dans ce jardin",
+    "sidebar": {
+      "search": "Rechercher des plantes...",
+      "noResults": "Aucune plante trouvée",
+      "title": "Bibliothèque de plantes",
+      "deselect": "Désélectionner la plante"
+    },
+    "placement": {
+      "position": "Position : ligne {{row}}, colonne {{col}}",
+      "remove": "Retirer du plan",
+      "details": "Détails de la plante",
+      "soil": "Sol : {{soil}}",
+      "replaceHint": "Sélectionnez une autre plante dans le menu pour remplacer celle-ci."
+    }
+  },
+  "plantDetail": {
+    "backToGarden": "Retour à {{name}}"
   },
   "editableNotes": {
     "notes": "Notes : {{notes}}",

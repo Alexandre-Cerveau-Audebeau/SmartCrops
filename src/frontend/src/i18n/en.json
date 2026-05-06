@@ -265,19 +265,26 @@
       "selectAll": "Select all",
       "deselectAll": "Deselect all"
     },
-    "modes": {
-      "shape": "Shape",
-      "garden": "Garden",
-      "soil": "Soil"
+    "shapeEditMode": "Edit shape",
+    "tabs": {
+      "plants": "Plants",
+      "soils": "Soils",
+      "infrastructure": "Infrastructure"
     },
+    "placementsRemoved_one": "{{count}} plant was removed (out of bounds)",
+    "placementsRemoved_other": "{{count}} plants were removed (out of bounds)",
     "toolbar": {
       "backToGarden": "Back to garden",
       "backToGardens": "Back to my gardens",
       "save": "Save",
+      "cancel": "Cancel",
       "resize": "Resize",
       "activeCells": "{{active}}/{{total}} active cells ({{surface}} m²)",
       "saving": "Saving...",
-      "unsavedChanges": "Unsaved changes",
+      "unsavedChanges": "You have unsaved changes",
+      "changesDiscarded": "Changes discarded",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
       "saved": "All changes saved",
       "saveSuccess": "Layout saved successfully.",
       "saveError": "Failed to save layout."
@@ -288,12 +295,26 @@
       "toggleCell": "Toggle cell"
     },
     "help": {
-      "shape": "Click and drag to activate or deactivate cells. Use + and − to add or remove rows and columns. For larger changes, use the Resize button.",
-      "garden": "Select a plant from the sidebar and click on a cell to place it. (Coming soon)",
-      "soil": "Select a soil type and click on cells to apply it. (Coming soon)"
+      "unified": "Click a plant in the sidebar, then click cells to place it. Click again to replace. Toggle 'Edit shape' to change the garden's shape."
     },
     "dimensions": "{{cols}} × {{rows}} — {{width}} × {{height}} ({{cellSize}}/cell)",
-    "plantsInGarden": "Plants in this garden"
+    "plantsInGarden": "Plants in this garden",
+    "sidebar": {
+      "search": "Search plants...",
+      "noResults": "No plants found",
+      "title": "Plant library",
+      "deselect": "Deselect plant"
+    },
+    "placement": {
+      "position": "Position: row {{row}}, col {{col}}",
+      "remove": "Remove from plan",
+      "details": "Plant details",
+      "soil": "Soil: {{soil}}",
+      "replaceHint": "Select another plant in the sidebar to replace this one."
+    }
+  },
+  "plantDetail": {
+    "backToGarden": "Back to {{name}}"
   },
   "editableNotes": {
     "notes": "Notes: {{notes}}",

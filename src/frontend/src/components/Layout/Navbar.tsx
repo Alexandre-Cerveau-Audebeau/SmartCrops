@@ -55,8 +55,20 @@ export default function Navbar() {
           bgcolor: NAV_BG,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <LogoButton height={26} withHover={true} />
+        <Box
+          component={RouterLink}
+          to="/"
+          aria-label="SmartCrops home"
+          onClick={toggleDrawer(false)}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            textDecoration: 'none',
+            color: 'inherit',
+          }}
+        >
+          <LogoButton height={26} withHover={true} noLink />
           <Typography variant="h6" sx={{ color: '#fff', fontWeight: 700 }}>
             SmartCrops
           </Typography>
@@ -131,9 +143,20 @@ export default function Navbar() {
     <>
       <AppBar position="fixed" sx={{ bgcolor: NAV_BG, boxShadow: 2 }}>
         <Toolbar sx={{ justifyContent: 'space-between' }}>
-          {/* Left: logo + brand */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <LogoButton height={30} withHover={true} />
+          {/* Left: logo + brand (single link) */}
+          <Box
+            component={RouterLink}
+            to="/"
+            aria-label="SmartCrops home"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              textDecoration: 'none',
+              color: 'inherit',
+            }}
+          >
+            <LogoButton height={30} withHover={true} noLink />
             <Typography variant="h6" sx={{ color: '#fff', fontWeight: 700, letterSpacing: 0.5 }}>
               SmartCrops
             </Typography>
