@@ -679,7 +679,7 @@ export default function GardenPlanner() {
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             selectedPlantId={selectedPlantId}
-            onPlantSelect={(idVal) => setSelectedPlantId(idVal || null)}
+            onPlantSelect={setSelectedPlantId}
             language={language}
             shapeEditMode={shapeEditMode}
             onShapeEditToggle={setShapeEditMode}
@@ -701,11 +701,10 @@ export default function GardenPlanner() {
               {showLeftArrow && (
                 <IconButton
                   size="small"
-                  onMouseDown={leftHold.start}
-                  onMouseUp={leftHold.stop}
-                  onMouseLeave={leftHold.stop}
-                  onTouchStart={leftHold.start}
-                  onTouchEnd={leftHold.stop}
+                  onPointerDown={leftHold.start}
+                  onPointerUp={leftHold.stop}
+                  onPointerLeave={leftHold.stop}
+                  onPointerCancel={leftHold.stop}
                   sx={{
                     position: 'absolute', left: 4, top: 4,
                     bgcolor: 'background.paper', boxShadow: 2,
@@ -718,11 +717,10 @@ export default function GardenPlanner() {
               {showRightArrow && (
                 <IconButton
                   size="small"
-                  onMouseDown={rightHold.start}
-                  onMouseUp={rightHold.stop}
-                  onMouseLeave={rightHold.stop}
-                  onTouchStart={rightHold.start}
-                  onTouchEnd={rightHold.stop}
+                  onPointerDown={rightHold.start}
+                  onPointerUp={rightHold.stop}
+                  onPointerLeave={rightHold.stop}
+                  onPointerCancel={rightHold.stop}
                   sx={{
                     position: 'absolute', right: 4, top: 4,
                     bgcolor: 'background.paper', boxShadow: 2,

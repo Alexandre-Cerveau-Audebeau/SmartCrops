@@ -28,7 +28,7 @@ export function useScrollHold(
   }, []);
 
   // Safety net: if the button vanishes mid-press (arrow hidden, grid resized),
-  // the local onMouseUp/onTouchEnd never fire — listen at window level too.
+  // the local pointer handlers never fire — listen at window level too.
   useEffect(() => {
     const handler = () => {
       if (intervalRef.current !== null) {
@@ -36,13 +36,11 @@ export function useScrollHold(
         intervalRef.current = null;
       }
     };
-    window.addEventListener('mouseup', handler);
-    window.addEventListener('touchend', handler);
-    window.addEventListener('touchcancel', handler);
+    window.addEventListener('pointerup', handler);
+    window.addEventListener('pointercancel', handler);
     return () => {
-      window.removeEventListener('mouseup', handler);
-      window.removeEventListener('touchend', handler);
-      window.removeEventListener('touchcancel', handler);
+      window.removeEventListener('pointerup', handler);
+      window.removeEventListener('pointercancel', handler);
     };
   }, []);
 

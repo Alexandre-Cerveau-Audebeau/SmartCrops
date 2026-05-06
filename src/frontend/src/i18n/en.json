@@ -300,7 +300,10 @@
     "cell": {
       "active": "Active",
       "inactive": "Inactive",
-      "toggleCell": "Toggle cell"
+      "toggleCell": "Toggle cell",
+      "plantedCell": "{{plant}} at row {{row}}, column {{col}}",
+      "emptyCell": "Empty cell at row {{row}}, column {{col}}",
+      "inactiveCell": "Inactive cell at row {{row}}, column {{col}}"
     },
     "help": {
       "unified": "Click a plant in the sidebar, then click cells to place it. Click again to replace. Toggle 'Edit shape' to change the garden's shape."

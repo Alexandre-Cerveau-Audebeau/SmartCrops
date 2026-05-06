@@ -143,10 +143,30 @@ export default function GardenGrid({ grid, shapeEditMode, placements, onCellClic
           return (
             <Box
               key={`${r}-${c}`}
+              role="gridcell"
+              tabIndex={cell.active && onCellClick ? 0 : -1}
               onClick={cell.active && onCellClick ? () => onCellClick(r, c) : undefined}
+              onKeyDown={cell.active && onCellClick ? (e: React.KeyboardEvent) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onCellClick(r, c);
+                }
+              } : undefined}
+              aria-label={
+                cell.active
+                  ? (placement?.plantName
+                      ? t('planner.cell.plantedCell', { plant: placement.plantName, row: r, col: c })
+                      : t('planner.cell.emptyCell', { row: r, col: c }))
+                  : t('planner.cell.inactiveCell', { row: r, col: c })
+              }
               sx={{
                 ...commonSx,
                 ...(cell.active && { cursor: 'pointer' }),
+                '&:focus-visible': cell.active ? {
+                  outline: '2px solid',
+                  outlineColor: 'primary.main',
+                  outlineOffset: -2,
+                } : undefined,
               }}
             >
               {placement?.plantName ? placement.plantName.charAt(0).toUpperCase() : null}

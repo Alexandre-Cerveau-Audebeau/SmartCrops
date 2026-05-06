@@ -300,7 +300,10 @@
     "cell": {
       "active": "Actif",
       "inactive": "Inactif",
-      "toggleCell": "Basculer la cellule"
+      "toggleCell": "Basculer la cellule",
+      "plantedCell": "{{plant}} à la ligne {{row}}, colonne {{col}}",
+      "emptyCell": "Cellule vide à la ligne {{row}}, colonne {{col}}",
+      "inactiveCell": "Cellule inactive à la ligne {{row}}, colonne {{col}}"
     },
     "help": {
       "unified": "Cliquez sur une plante dans le menu, puis sur les parcelles pour la placer. Cliquez à nouveau pour la remplacer. Activez 'Modifier la forme' pour changer la forme du jardin."

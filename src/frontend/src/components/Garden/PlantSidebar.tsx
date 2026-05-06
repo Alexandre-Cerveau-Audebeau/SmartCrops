@@ -23,7 +23,7 @@ interface Props {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   selectedPlantId: string | null;
-  onPlantSelect: (plantId: string) => void;
+  onPlantSelect: (plantId: string | null) => void;
   language: string;
   shapeEditMode: boolean;
   onShapeEditToggle: (value: boolean) => void;
@@ -76,7 +76,7 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
               <Button
                 size="small"
                 variant="text"
-                onClick={() => onPlantSelect('')}
+                onClick={() => onPlantSelect(null)}
                 sx={{ mt: 1 }}
               >
                 {t('planner.sidebar.deselect')}
