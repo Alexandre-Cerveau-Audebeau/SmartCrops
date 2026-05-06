@@ -293,6 +293,8 @@
       "changesDiscarded": "Changes discarded",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
+      "scrollLeft": "Scroll grid left",
+      "scrollRight": "Scroll grid right",
       "saved": "All changes saved",
       "saveSuccess": "Layout saved successfully.",
       "saveError": "Failed to save layout."

@@ -144,16 +144,17 @@ export default function GardenGrid({ grid, shapeEditMode, placements, onCellClic
             );
           }
 
+          const interactive = (cell.active || !!placement) && !!onCellClick;
           return (
             <Box
               key={`${r}-${c}`}
               role="gridcell"
-              tabIndex={cell.active && onCellClick ? 0 : -1}
-              onClick={cell.active && onCellClick ? () => onCellClick(r, c) : undefined}
-              onKeyDown={cell.active && onCellClick ? (e: React.KeyboardEvent) => {
+              tabIndex={interactive ? 0 : -1}
+              onClick={interactive ? () => onCellClick!(r, c) : undefined}
+              onKeyDown={interactive ? (e: React.KeyboardEvent) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
-                  onCellClick(r, c);
+                  onCellClick!(r, c);
                 }
               } : undefined}
               aria-label={
@@ -165,8 +166,8 @@ export default function GardenGrid({ grid, shapeEditMode, placements, onCellClic
               }
               sx={{
                 ...commonSx,
-                ...(cell.active && { cursor: 'pointer' }),
-                '&:focus-visible': cell.active ? {
+                ...(interactive && { cursor: 'pointer' }),
+                '&:focus-visible': interactive ? {
                   outline: '2px solid',
                   outlineColor: 'primary.main',
                   outlineOffset: -2,

@@ -293,6 +293,8 @@
       "changesDiscarded": "Modifications annulées",
       "zoomIn": "Zoomer",
       "zoomOut": "Dézoomer",
+      "scrollLeft": "Faire défiler la grille vers la gauche",
+      "scrollRight": "Faire défiler la grille vers la droite",
       "saved": "Toutes les modifications sont enregistrées",
       "saveSuccess": "Plan enregistré avec succès.",
       "saveError": "Impossible d'enregistrer le plan."

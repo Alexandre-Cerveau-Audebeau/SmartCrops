@@ -122,6 +122,13 @@ export default function GardenPlanner() {
   const leftHold = useScrollHold(scrollRef, 'left');
   const rightHold = useScrollHold(scrollRef, 'right');
 
+  const handleScrollLeftStep = useCallback(() => {
+    scrollRef.current?.scrollBy({ left: -100, behavior: 'smooth' });
+  }, []);
+  const handleScrollRightStep = useCallback(() => {
+    scrollRef.current?.scrollBy({ left: 100, behavior: 'smooth' });
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     if (!id) return;
@@ -323,12 +330,15 @@ export default function GardenPlanner() {
   }, [grid, placements, notifyRemovedPlacements]);
 
   const handleCellClick = useCallback((row: number, col: number) => {
-    if (shapeEditMode || !grid || !grid[row][col].active) return;
+    if (shapeEditMode || !grid) return;
 
     const existingIndex = placements.findIndex(p =>
       row >= p.startRow && row < p.startRow + p.spanRows &&
       col >= p.startCol && col < p.startCol + p.spanCols
     );
+
+    // Block clicks on inactive cells only when there's no placement to interact with
+    if (!grid[row][col].active && existingIndex < 0) return;
 
     if (selectedPlantId) {
       if (existingIndex >= 0) {
@@ -481,7 +491,19 @@ export default function GardenPlanner() {
   };
 
   const handleCancel = useCallback(() => {
-    if (!lastSavedRef.current) return;
+    if (!lastSavedRef.current) {
+      // No save yet — discard the setup draft and re-show the setup dialog
+      setGrid(null);
+      setPlacements([]);
+      setLayoutWidth(0);
+      setLayoutHeight(0);
+      setSelectedPlacementIndex(null);
+      setSelectedPlantId(null);
+      setIsDirty(false);
+      setShowSetup(true);
+      setMessage({ type: 'info', text: t('planner.toolbar.changesDiscarded') });
+      return;
+    }
     const snap = lastSavedRef.current;
     setGrid(snap.grid ? snap.grid.map(row => row.map(cell => ({ ...cell }))) : null);
     setLayoutWidth(snap.layoutWidth);
@@ -705,6 +727,8 @@ export default function GardenPlanner() {
               {showLeftArrow && (
                 <IconButton
                   size="small"
+                  aria-label={t('planner.toolbar.scrollLeft')}
+                  onClick={() => { if (!leftHold.wasHeld()) handleScrollLeftStep(); }}
                   onPointerDown={leftHold.start}
                   onPointerUp={leftHold.stop}
                   onPointerLeave={leftHold.stop}
@@ -721,6 +745,8 @@ export default function GardenPlanner() {
               {showRightArrow && (
                 <IconButton
                   size="small"
+                  aria-label={t('planner.toolbar.scrollRight')}
+                  onClick={() => { if (!rightHold.wasHeld()) handleScrollRightStep(); }}
                   onPointerDown={rightHold.start}
                   onPointerUp={rightHold.stop}
                   onPointerLeave={rightHold.stop}

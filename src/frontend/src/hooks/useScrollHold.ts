@@ -5,13 +5,18 @@ export function useScrollHold(
   direction: 'left' | 'right'
 ) {
   const intervalRef = useRef<number | null>(null);
+  const hasHeldRef = useRef(false);
 
   const start = useCallback(() => {
     if (intervalRef.current !== null) return;
+    hasHeldRef.current = false;
     const step = direction === 'left' ? -20 : 20;
     const scroll = () => scrollRef.current?.scrollBy({ left: step, behavior: 'auto' });
     scroll();
-    intervalRef.current = window.setInterval(scroll, 30);
+    intervalRef.current = window.setInterval(() => {
+      hasHeldRef.current = true;
+      scroll();
+    }, 30);
   }, [scrollRef, direction]);
 
   const stop = useCallback(() => {
@@ -39,5 +44,5 @@ export function useScrollHold(
     };
   }, [stop]);
 
-  return { start, stop };
+  return { start, stop, wasHeld: () => hasHeldRef.current };
 }
