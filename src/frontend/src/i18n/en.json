@@ -297,6 +297,9 @@
       "saveSuccess": "Layout saved successfully.",
       "saveError": "Failed to save layout."
     },
+    "grid": {
+      "label": "Garden grid"
+    },
     "cell": {
       "active": "Active",
       "inactive": "Inactive",

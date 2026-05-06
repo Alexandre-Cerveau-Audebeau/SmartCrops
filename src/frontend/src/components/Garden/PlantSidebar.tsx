@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -35,11 +35,13 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabValue>('plants');
 
-  const filtered = plants.filter((p) => {
+  const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    const name = getTranslation(p, language)?.commonName || '';
-    return name.toLowerCase().includes(q) || p.scientificName.toLowerCase().includes(q);
-  });
+    return plants.filter((p) => {
+      const name = getTranslation(p, language)?.commonName || '';
+      return name.toLowerCase().includes(q) || p.scientificName.toLowerCase().includes(q);
+    });
+  }, [plants, searchQuery, language]);
 
   return (
     <Box sx={{ width: 320, maxHeight: 480, display: 'flex', flexDirection: 'column', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', flexShrink: 0, overflow: 'hidden', position: 'sticky', top: STICKY_OFFSET }}>

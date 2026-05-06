@@ -30,19 +30,14 @@ export function useScrollHold(
   // Safety net: if the button vanishes mid-press (arrow hidden, grid resized),
   // the local pointer handlers never fire — listen at window level too.
   useEffect(() => {
-    const handler = () => {
-      if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
+    const handler = () => stop();
     window.addEventListener('pointerup', handler);
     window.addEventListener('pointercancel', handler);
     return () => {
       window.removeEventListener('pointerup', handler);
       window.removeEventListener('pointercancel', handler);
     };
-  }, []);
+  }, [stop]);
 
   return { start, stop };
 }

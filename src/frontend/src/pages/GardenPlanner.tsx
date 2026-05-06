@@ -512,8 +512,12 @@ export default function GardenPlanner() {
   const selectedPlant = selectedPlacement
     ? allPlants.find(p => p.id === selectedPlacement.plantId) ?? null
     : null;
-  const selectedCellSoil = selectedPlacement && grid
-    ? grid[selectedPlacement.startRow]?.[selectedPlacement.startCol]?.soil
+  const selectedCellSoil = selectedPlacement && grid &&
+    selectedPlacement.startRow >= 0 &&
+    selectedPlacement.startRow < grid.length &&
+    selectedPlacement.startCol >= 0 &&
+    selectedPlacement.startCol < (grid[selectedPlacement.startRow]?.length ?? 0)
+    ? grid[selectedPlacement.startRow][selectedPlacement.startCol]?.soil
     : undefined;
 
   if (loading) {

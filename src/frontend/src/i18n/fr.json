@@ -297,6 +297,9 @@
       "saveSuccess": "Plan enregistré avec succès.",
       "saveError": "Impossible d'enregistrer le plan."
     },
+    "grid": {
+      "label": "Grille du jardin"
+    },
     "cell": {
       "active": "Actif",
       "inactive": "Inactif",

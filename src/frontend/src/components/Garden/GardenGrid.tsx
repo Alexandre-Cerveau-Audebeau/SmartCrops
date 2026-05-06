@@ -72,6 +72,10 @@ export default function GardenGrid({ grid, shapeEditMode, placements, onCellClic
 
   return (
     <Box
+      role="grid"
+      aria-label={t('planner.grid.label')}
+      aria-rowcount={height}
+      aria-colcount={width}
       onPointerUp={hasDrag ? () => onCellDragEnd!() : undefined}
       onPointerLeave={hasDrag ? () => onCellDragEnd!() : undefined}
       sx={{
