@@ -1,0 +1,54 @@
+import { useCallback, useEffect, useRef } from 'react';
+
+export function useScrollHold(
+  scrollRef: React.RefObject<HTMLDivElement | null>,
+  direction: 'left' | 'right'
+) {
+  const intervalRef = useRef<number | null>(null);
+  const hasHeldRef = useRef(false);
+
+  const start = useCallback(() => {
+    if (intervalRef.current !== null) return;
+    hasHeldRef.current = false;
+    const step = direction === 'left' ? -20 : 20;
+    const scroll = () => scrollRef.current?.scrollBy({ left: step, behavior: 'auto' });
+    scroll();
+    intervalRef.current = window.setInterval(() => {
+      hasHeldRef.current = true;
+      scroll();
+    }, 30);
+  }, [scrollRef, direction]);
+
+  const stop = useCallback(() => {
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current !== null) clearInterval(intervalRef.current);
+    };
+  }, []);
+
+  // Safety net: if the button vanishes mid-press (arrow hidden, grid resized),
+  // the local pointer handlers never fire — listen at window level too.
+  useEffect(() => {
+    const handler = () => stop();
+    window.addEventListener('pointerup', handler);
+    window.addEventListener('pointercancel', handler);
+    return () => {
+      window.removeEventListener('pointerup', handler);
+      window.removeEventListener('pointercancel', handler);
+    };
+  }, [stop]);
+
+  const consumeWasHeld = useCallback(() => {
+    const result = hasHeldRef.current;
+    hasHeldRef.current = false;
+    return result;
+  }, []);
+
+  return { start, stop, consumeWasHeld };
+}

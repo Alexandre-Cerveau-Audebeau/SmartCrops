@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -36,10 +36,19 @@ const languageLabels: Record<string, string> = {
   fr: 'Français',
 };
 
+type PlantDetailNavState = { from?: string; gardenId?: string; gardenName?: string } | null;
+
 export default function PlantDetail() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const navState = location.state as PlantDetailNavState;
+  const fromPlanner = navState?.from === 'planner' && !!navState.gardenId;
+  const backTarget = fromPlanner ? `/gardens/${navState!.gardenId}/planner` : '/library';
+  const backLabel = fromPlanner
+    ? t('plantDetail.backToGarden', { name: navState!.gardenName ?? '' })
+    : t('library.backToLibrary');
   const { language } = useLanguage();
   const { isAuthenticated } = useAuth();
   const [plant, setPlant] = useState<Plant | null>(null);
@@ -185,8 +194,8 @@ export default function PlantDetail() {
         <Alert severity="error" sx={{ mb: 2 }}>
           {t('library.missingPlantId')}
         </Alert>
-        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/library')}>
-          {t('library.backToLibrary')}
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(backTarget)}>
+          {backLabel}
         </Button>
       </Container>
     );
@@ -208,8 +217,8 @@ export default function PlantDetail() {
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
-        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/library')}>
-          {t('library.backToLibrary')}
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(backTarget)}>
+          {backLabel}
         </Button>
       </Container>
     );
@@ -221,8 +230,8 @@ export default function PlantDetail() {
         <Typography color="text.secondary" sx={{ py: 8 }}>
           {t('library.plantNotFound')}
         </Typography>
-        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/library')}>
-          {t('library.backToLibrary')}
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(backTarget)}>
+          {backLabel}
         </Button>
       </Container>
     );
@@ -241,10 +250,10 @@ export default function PlantDetail() {
     <Container maxWidth="md" sx={{ pt: 4, pb: 6 }}>
       <Button
         startIcon={<ArrowBackIcon />}
-        onClick={() => navigate('/library')}
+        onClick={() => navigate(backTarget)}
         sx={{ mb: 3 }}
       >
-        {t('library.backToLibrary')}
+        {backLabel}
       </Button>
 
       <Typography variant="h3" fontWeight={700} sx={{ mb: 0.5 }}>
