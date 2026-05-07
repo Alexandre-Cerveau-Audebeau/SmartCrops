@@ -37,6 +37,17 @@ dist/
 .cache/
 .next/
 
+# Postman / API tooling — never commit these (may contain API tokens, env vars, secrets)
+.postman/
+postman/
+*.postman_collection.json
+*.postman_environment.json
+*.postman_globals.json
+
+# Other API tooling
+.insomnia/
+.bruno/
+
 # OS
 .DS_Store
 Thumbs.db
