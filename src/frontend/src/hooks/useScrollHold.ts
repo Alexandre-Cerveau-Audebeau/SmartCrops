@@ -44,5 +44,11 @@ export function useScrollHold(
     };
   }, [stop]);
 
-  return { start, stop, wasHeld: () => hasHeldRef.current };
+  const consumeWasHeld = useCallback(() => {
+    const result = hasHeldRef.current;
+    hasHeldRef.current = false;
+    return result;
+  }, []);
+
+  return { start, stop, consumeWasHeld };
 }

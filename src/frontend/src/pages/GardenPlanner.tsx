@@ -728,7 +728,7 @@ export default function GardenPlanner() {
                 <IconButton
                   size="small"
                   aria-label={t('planner.toolbar.scrollLeft')}
-                  onClick={() => { if (!leftHold.wasHeld()) handleScrollLeftStep(); }}
+                  onClick={() => { if (!leftHold.consumeWasHeld()) handleScrollLeftStep(); }}
                   onPointerDown={leftHold.start}
                   onPointerUp={leftHold.stop}
                   onPointerLeave={leftHold.stop}
@@ -746,7 +746,7 @@ export default function GardenPlanner() {
                 <IconButton
                   size="small"
                   aria-label={t('planner.toolbar.scrollRight')}
-                  onClick={() => { if (!rightHold.wasHeld()) handleScrollRightStep(); }}
+                  onClick={() => { if (!rightHold.consumeWasHeld()) handleScrollRightStep(); }}
                   onPointerDown={rightHold.start}
                   onPointerUp={rightHold.stop}
                   onPointerLeave={rightHold.stop}
