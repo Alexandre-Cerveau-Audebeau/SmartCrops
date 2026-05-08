@@ -1,5 +1,19 @@
+using SmartCrops.Core.Enums;
+
 namespace SmartCrops.Core.Entities;
 
+/// <summary>
+/// Root of the plant aggregate.
+///
+/// Architecture:
+/// - Canonical fields (life cycle, watering need, hardiness, etc.) live directly on
+///   Plant for fast reads — denormalized READ MODEL.
+/// - Source-specific raw data is kept in <see cref="PlantTrefleData"/> and
+///   <see cref="PlantPerenualData"/> as an audit trail and for re-derivation.
+/// - Multilingual content lives in <see cref="PlantTranslation"/> (legacy short text)
+///   and <see cref="PlantLongDescription"/> (rich long-form, one row per language).
+/// - During ETL, merge priority is: Manual &gt; Perenual &gt; Trefle &gt; GBIF.
+/// </summary>
 public class Plant
 {
     public Guid Id { get; set; }
@@ -39,7 +53,83 @@ public class Plant
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
+    // ── Identity (GBIF canonical) ───────────────────────────────────────────────
+
+    /// <summary>GBIF taxon key — globally unique numeric ID for the species.</summary>
+    public int? GbifTaxonKey { get; set; }
+
+    /// <summary>Family name (e.g. "Solanaceae").</summary>
+    public string? Family { get; set; }
+
+    /// <summary>Genus name (e.g. "Solanum").</summary>
+    public string? Genus { get; set; }
+
+    /// <summary>Species epithet (e.g. "lycopersicum").</summary>
+    public string? SpeciesEpithet { get; set; }
+
+    /// <summary>Taxonomic authority (e.g. "L." for Linnaeus).</summary>
+    public string? Author { get; set; }
+
+    // ── Canonical READ MODEL (denormalized from sources) ────────────────────────
+
+    public PlantLifeCycle? LifeCycle { get; set; }
+    public PlantGrowthRate? GrowthRate { get; set; }
+    public PlantWateringNeed? WateringNeedLevel { get; set; }
+    public PlantCareLevel? CareLevel { get; set; }
+
+    /// <summary>USDA hardiness zone lower bound.</summary>
+    public int? HardinessZoneMin { get; set; }
+
+    /// <summary>USDA hardiness zone upper bound.</summary>
+    public int? HardinessZoneMax { get; set; }
+
+    public int? MinHeightCm { get; set; }
+    public int? MaxHeightCm { get; set; }
+    public int? MinSpreadCm { get; set; }
+    public int? MaxSpreadCm { get; set; }
+
+    public decimal? SoilPhMin { get; set; }
+    public decimal? SoilPhMax { get; set; }
+
+    /// <summary>Light requirement on a 0-10 scale (Trefle convention).</summary>
+    public int? LightLevel { get; set; }
+
+    public int? MinTempC { get; set; }
+    public int? MaxTempC { get; set; }
+
+    // ── Boolean flags ───────────────────────────────────────────────────────────
+
+    public bool? IsEdible { get; set; }
+    public bool? IsMedicinal { get; set; }
+    public bool? IsIndoor { get; set; }
+    public bool? IsDroughtTolerant { get; set; }
+    public bool? IsSaltTolerant { get; set; }
+    public bool? IsThorny { get; set; }
+    public bool? IsInvasive { get; set; }
+    public bool? IsTropical { get; set; }
+    public bool? IsToxicToHumans { get; set; }
+    public bool? IsToxicToPets { get; set; }
+    public bool? AttractsPollinators { get; set; }
+
+    // ── Enrichment metadata ─────────────────────────────────────────────────────
+
+    public EnrichmentStatus EnrichmentStatus { get; set; } = EnrichmentStatus.Manual;
+
+    public DateTime? LastEnrichmentAt { get; set; }
+
+    // ── Navigation properties ───────────────────────────────────────────────────
+
     public ICollection<PlantTranslation> Translations { get; set; } = [];
     public ICollection<PlantSuggestion> Suggestions { get; set; } = [];
     public ICollection<GardenPlant> GardenPlants { get; set; } = [];
+
+    public ICollection<PlantLongDescription> LongDescriptions { get; set; } = [];
+    public ICollection<PlantCommonName> CommonNames { get; set; } = [];
+    public ICollection<PlantImage> Images { get; set; } = [];
+    public ICollection<PlantPhase> Phases { get; set; } = [];
+    public ICollection<PlantSynonym> Synonyms { get; set; } = [];
+    public ICollection<PlantSource> Sources { get; set; } = [];
+
+    public PlantTrefleData? TrefleData { get; set; }
+    public PlantPerenualData? PerenualData { get; set; }
 }
