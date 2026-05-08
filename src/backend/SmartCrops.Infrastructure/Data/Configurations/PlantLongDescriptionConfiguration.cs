@@ -10,6 +10,12 @@ public class PlantLongDescriptionConfiguration : IEntityTypeConfiguration<PlantL
     {
         builder.HasKey(d => d.Id);
 
+        builder.ToTable("PlantLongDescriptions", t =>
+        {
+            // Enforce ISO 639-1 lowercase letters; rejects invalid codes like "e1" or "EN".
+            t.HasCheckConstraint("CK_PlantLongDescription_Language", "\"Language\" ~ '^[a-z]{2}$'");
+        });
+
         builder.HasOne(d => d.Plant)
             .WithMany(p => p.LongDescriptions)
             .HasForeignKey(d => d.PlantId)

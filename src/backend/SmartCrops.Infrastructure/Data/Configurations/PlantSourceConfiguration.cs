@@ -35,7 +35,11 @@ public class PlantSourceConfiguration : IEntityTypeConfiguration<PlantSource>
 
         // Lookup all sources of a given kind for a plant (e.g. "Trefle entries for X").
         builder.HasIndex(s => new { s.PlantId, s.SourceType });
-        // Reverse lookup: given an upstream id, find the linked plant during ETL.
+        // Reverse lookup: given an upstream id, find linked plant(s) during ETL.
+        // NOT unique on purpose: scientific synonyms (e.g. Matricaria chamomilla and
+        // Matricaria recutita both pointing to the same Trefle slug) can legitimately
+        // share an external id. Per-source uniqueness is enforced in PlantTrefleData
+        // and PlantPerenualData via PlantId.
         builder.HasIndex(s => new { s.SourceType, s.ExternalId });
     }
 }

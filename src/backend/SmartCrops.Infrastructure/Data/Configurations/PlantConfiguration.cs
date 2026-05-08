@@ -44,9 +44,10 @@ public class PlantConfiguration : IEntityTypeConfiguration<Plant>
         builder.Property(p => p.CareLevel).HasConversion<string>().HasMaxLength(20);
 
         // EnrichmentStatus is [Flags] — store as int so bitwise combinations round-trip.
+        // Default value is set at the entity level (Plant.cs) to avoid double-defaulting
+        // and to preserve ETL merge precedence (Manual > Perenual > Trefle > GBIF).
         builder.Property(p => p.EnrichmentStatus)
-            .HasConversion<int>()
-            .HasDefaultValue(EnrichmentStatus.Manual);
+            .HasConversion<int>();
 
         builder.Property(p => p.SoilPhMin).HasColumnType("decimal(4,2)");
         builder.Property(p => p.SoilPhMax).HasColumnType("decimal(4,2)");

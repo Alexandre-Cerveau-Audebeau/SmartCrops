@@ -46,7 +46,11 @@ public class PlantImageConfiguration : IEntityTypeConfiguration<PlantImage>
 
         // Drives the per-plant gallery query order.
         builder.HasIndex(i => new { i.PlantId, i.ImageType, i.DisplayOrder });
-        // Lets ETL deduplicate by source + external id without scanning all rows.
-        builder.HasIndex(i => new { i.Source, i.SourceExternalId });
+        // Enforce idempotency for sourced images: a given (PlantId, Source, SourceExternalId)
+        // tuple can only exist once, preventing duplicates from ETL retries or concurrent imports.
+        // Filtered to allow images without an external id (e.g. manually uploaded).
+        builder.HasIndex(i => new { i.PlantId, i.Source, i.SourceExternalId })
+            .IsUnique()
+            .HasFilter("\"SourceExternalId\" IS NOT NULL");
     }
 }

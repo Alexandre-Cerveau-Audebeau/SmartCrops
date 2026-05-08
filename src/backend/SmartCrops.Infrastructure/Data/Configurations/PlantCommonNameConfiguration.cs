@@ -15,10 +15,11 @@ public class PlantCommonNameConfiguration : IEntityTypeConfiguration<PlantCommon
             .HasForeignKey(c => c.PlantId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Up to 5 chars to accommodate BCP 47-style tags (e.g. "pt-BR").
+        // BCP 47 tags can include script + region + variant subtags (e.g. "zh-Hant", "sr-Latn-RS").
+        // RFC 5646 allows each subtag up to 8 chars with no overall limit; 35 covers practical cases.
         builder.Property(c => c.LanguageCode)
             .IsRequired()
-            .HasMaxLength(5);
+            .HasMaxLength(35);
 
         builder.Property(c => c.Name)
             .IsRequired()
@@ -34,6 +35,12 @@ public class PlantCommonNameConfiguration : IEntityTypeConfiguration<PlantCommon
         // names per language (e.g. "tomato" and "love apple" in EN), and the same
         // common name can apply to multiple plants across languages.
         builder.HasIndex(c => new { c.PlantId, c.LanguageCode });
+
+        // Enforce at most one primary common name per (plant, language) at the DB level.
+        builder.HasIndex(c => new { c.PlantId, c.LanguageCode })
+            .HasFilter("\"IsPrimary\" = TRUE")
+            .IsUnique();
+
         builder.HasIndex(c => c.Name);
     }
 }
