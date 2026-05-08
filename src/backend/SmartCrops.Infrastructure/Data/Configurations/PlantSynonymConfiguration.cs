@@ -10,6 +10,13 @@ public class PlantSynonymConfiguration : IEntityTypeConfiguration<PlantSynonym>
     {
         builder.HasKey(s => s.Id);
 
+        // Synonyms drive scientific name matching during ETL — blank values are useless
+        // and would create false matches against legitimate empty-string queries.
+        builder.ToTable("PlantSynonyms", t =>
+            t.HasCheckConstraint(
+                "CK_PlantSynonym_Synonym_NotBlank",
+                "btrim(\"Synonym\") <> ''"));
+
         builder.HasOne(s => s.Plant)
             .WithMany(p => p.Synonyms)
             .HasForeignKey(s => s.PlantId)

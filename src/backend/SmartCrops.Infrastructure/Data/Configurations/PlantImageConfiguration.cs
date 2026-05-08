@@ -10,6 +10,12 @@ public class PlantImageConfiguration : IEntityTypeConfiguration<PlantImage>
     {
         builder.HasKey(i => i.Id);
 
+        // Image URLs must be non-blank — a row pointing nowhere is unusable.
+        builder.ToTable("PlantImages", t =>
+            t.HasCheckConstraint(
+                "CK_PlantImage_Url_NotBlank",
+                "btrim(\"Url\") <> ''"));
+
         builder.HasOne(i => i.Plant)
             .WithMany(p => p.Images)
             .HasForeignKey(i => i.PlantId)

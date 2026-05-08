@@ -10,6 +10,13 @@ public class PlantSourceConfiguration : IEntityTypeConfiguration<PlantSource>
     {
         builder.HasKey(s => s.Id);
 
+        // External ids must be meaningful — block blank/whitespace values that
+        // would create ambiguous reverse lookups during ETL.
+        builder.ToTable("PlantSources", t =>
+            t.HasCheckConstraint(
+                "CK_PlantSource_ExternalId_NotBlank",
+                "btrim(\"ExternalId\") <> ''"));
+
         builder.HasOne(s => s.Plant)
             .WithMany(p => p.Sources)
             .HasForeignKey(s => s.PlantId)

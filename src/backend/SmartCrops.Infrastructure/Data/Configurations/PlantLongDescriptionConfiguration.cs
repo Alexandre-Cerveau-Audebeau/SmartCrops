@@ -14,6 +14,11 @@ public class PlantLongDescriptionConfiguration : IEntityTypeConfiguration<PlantL
         {
             // Enforce ISO 639-1 lowercase letters; rejects invalid codes like "e1" or "EN".
             t.HasCheckConstraint("CK_PlantLongDescription_Language", "\"Language\" ~ '^[a-z]{2}$'");
+
+            // Block empty/whitespace descriptions — a row with no content is useless.
+            t.HasCheckConstraint(
+                "CK_PlantLongDescription_LongDescription_NotBlank",
+                "btrim(\"LongDescription\") <> ''");
         });
 
         builder.HasOne(d => d.Plant)

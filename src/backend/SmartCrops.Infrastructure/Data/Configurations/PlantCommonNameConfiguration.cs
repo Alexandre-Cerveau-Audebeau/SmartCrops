@@ -10,6 +10,12 @@ public class PlantCommonNameConfiguration : IEntityTypeConfiguration<PlantCommon
     {
         builder.HasKey(c => c.Id);
 
+        // A common name with no text is meaningless — block at the DB level.
+        builder.ToTable("PlantCommonNames", t =>
+            t.HasCheckConstraint(
+                "CK_PlantCommonName_Name_NotBlank",
+                "btrim(\"Name\") <> ''"));
+
         builder.HasOne(c => c.Plant)
             .WithMany(p => p.CommonNames)
             .HasForeignKey(c => c.PlantId)
