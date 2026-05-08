@@ -15,6 +15,15 @@ public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options)
     public DbSet<GardenPlant> GardenPlants => Set<GardenPlant>();
     public DbSet<GardenPlacement> GardenPlacements => Set<GardenPlacement>();
 
+    public DbSet<PlantTrefleData> PlantTrefleData => Set<PlantTrefleData>();
+    public DbSet<PlantPerenualData> PlantPerenualData => Set<PlantPerenualData>();
+    public DbSet<PlantLongDescription> PlantLongDescriptions => Set<PlantLongDescription>();
+    public DbSet<PlantCommonName> PlantCommonNames => Set<PlantCommonName>();
+    public DbSet<PlantImage> PlantImages => Set<PlantImage>();
+    public DbSet<PlantPhase> PlantPhases => Set<PlantPhase>();
+    public DbSet<PlantSynonym> PlantSynonyms => Set<PlantSynonym>();
+    public DbSet<PlantSource> PlantSources => Set<PlantSource>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

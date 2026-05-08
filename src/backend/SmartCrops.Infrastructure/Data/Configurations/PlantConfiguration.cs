@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using SmartCrops.Core.Entities;
+using SmartCrops.Core.Enums;
 
 namespace SmartCrops.Infrastructure.Data.Configurations;
 
@@ -9,6 +10,10 @@ public class PlantConfiguration : IEntityTypeConfiguration<Plant>
     public void Configure(EntityTypeBuilder<Plant> builder)
     {
         builder.HasKey(p => p.Id);
+
+        // Plants generate their Id client-side (DataSeeder + application code) so EF
+        // never picks a value for us — keeps Id assignment explicit at the call site.
+        builder.Property(p => p.Id).ValueGeneratedNever();
 
         builder.Property(p => p.ScientificName)
             .IsRequired()
@@ -24,6 +29,37 @@ public class PlantConfiguration : IEntityTypeConfiguration<Plant>
         builder.Property(p => p.HarvestPeriod).HasMaxLength(50);
         builder.Property(p => p.ImageUrl).HasMaxLength(500);
 
+        // ── Identity (GBIF canonical) ───────────────────────────────────────────
+        builder.Property(p => p.Family).HasMaxLength(100);
+        builder.Property(p => p.Genus).HasMaxLength(100);
+        builder.Property(p => p.SpeciesEpithet).HasMaxLength(100);
+        builder.Property(p => p.Author).HasMaxLength(200);
+
+        // ── Canonical READ MODEL ────────────────────────────────────────────────
+        // Enums are stored as strings so changing numeric values upstream doesn't
+        // silently corrupt rows; the max length covers the longest variant name.
+        builder.Property(p => p.LifeCycle).HasConversion<string>().HasMaxLength(20);
+        builder.Property(p => p.GrowthRate).HasConversion<string>().HasMaxLength(20);
+        builder.Property(p => p.WateringNeedLevel).HasConversion<string>().HasMaxLength(20);
+        builder.Property(p => p.CareLevel).HasConversion<string>().HasMaxLength(20);
+
+        // EnrichmentStatus is [Flags] — store as int so bitwise combinations round-trip.
+        builder.Property(p => p.EnrichmentStatus)
+            .HasConversion<int>()
+            .HasDefaultValue(EnrichmentStatus.Manual);
+
+        builder.Property(p => p.SoilPhMin).HasColumnType("decimal(4,2)");
+        builder.Property(p => p.SoilPhMax).HasColumnType("decimal(4,2)");
+
+        // ── Timestamps ──────────────────────────────────────────────────────────
+        builder.Property(p => p.CreatedAt)
+            .IsRequired()
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
+        builder.Property(p => p.UpdatedAt)
+            .IsRequired()
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+        // ── Relationships ───────────────────────────────────────────────────────
         builder.HasOne(p => p.PlantType)
             .WithMany()
             .HasForeignKey(p => p.PlantTypeId)
@@ -33,5 +69,16 @@ public class PlantConfiguration : IEntityTypeConfiguration<Plant>
             .WithOne(t => t.Plant)
             .HasForeignKey(t => t.PlantId)
             .OnDelete(DeleteBehavior.Cascade); // Translations are owned by the plant — delete together.
+
+        // ── Indexes ─────────────────────────────────────────────────────────────
+        // GbifTaxonKey is the global canonical id — only enforce uniqueness on rows
+        // that have one, since most plants are seeded without it initially.
+        builder.HasIndex(p => p.GbifTaxonKey)
+            .IsUnique()
+            .HasFilter("\"GbifTaxonKey\" IS NOT NULL");
+
+        builder.HasIndex(p => p.Family);
+        builder.HasIndex(p => p.Genus);
+        builder.HasIndex(p => p.EnrichmentStatus);
     }
 }
