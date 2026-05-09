@@ -12,9 +12,16 @@ public class PlantCommonNameConfiguration : IEntityTypeConfiguration<PlantCommon
 
         // A common name with no text is meaningless — block at the DB level.
         builder.ToTable("PlantCommonNames", t =>
+        {
             t.HasCheckConstraint(
                 "CK_PlantCommonName_Name_NotBlank",
-                "btrim(\"Name\") <> ''"));
+                "btrim(\"Name\") <> ''");
+
+            // Block empty/whitespace LanguageCode to preserve (PlantId, LanguageCode) key semantics.
+            t.HasCheckConstraint(
+                "CK_PlantCommonName_LanguageCode_NotBlank",
+                "btrim(\"LanguageCode\") <> ''");
+        });
 
         builder.HasOne(c => c.Plant)
             .WithMany(p => p.CommonNames)
