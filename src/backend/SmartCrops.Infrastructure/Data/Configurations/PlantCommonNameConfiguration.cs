@@ -44,12 +44,16 @@ public class PlantCommonNameConfiguration : IEntityTypeConfiguration<PlantCommon
             .IsRequired()
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-        // Both indexes intentionally non-unique: a plant can have multiple common
-        // names per language (e.g. "tomato" and "love apple" in EN), and the same
-        // common name can apply to multiple plants across languages.
-        builder.HasIndex(c => new { c.PlantId, c.LanguageCode });
+        // Single-column PlantId index: covers the FK back to Plant for cascade delete
+        // and for general "load all common names for a plant" queries. The previous
+        // (PlantId, LanguageCode) composite was collapsed by EF onto the filtered
+        // partial unique below (same column tuple), so it never produced a separate
+        // unfiltered DB index — leaving cascade delete with no usable index.
+        builder.HasIndex(c => c.PlantId);
 
         // Enforce at most one primary common name per (plant, language) at the DB level.
+        // A plant can still have multiple non-primary names per language (e.g. "tomato"
+        // and "love apple" in EN); only one of them may carry IsPrimary = TRUE.
         builder.HasIndex(c => new { c.PlantId, c.LanguageCode })
             .HasFilter("\"IsPrimary\" = TRUE")
             .IsUnique();
