@@ -48,6 +48,10 @@ namespace SmartCrops.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // Note: Data normalization (0 -> 1) is NOT reverted. EnrichmentStatus = 0
+            // was semantically incorrect — rolling back the schema doesn't undo the
+            // semantic fix. New inserts will get default 0; existing rows stay at 1.
+
             migrationBuilder.DropCheckConstraint(
                 name: "CK_Plants_Height_Range",
                 table: "Plants");
