@@ -11,6 +11,45 @@ public class PlantConfiguration : IEntityTypeConfiguration<Plant>
     {
         builder.HasKey(p => p.Id);
 
+        // Range and domain CHECK constraints — all NULL-tolerant since the columns are
+        // optional. Backfill of existing rows is unaffected (NULL bypasses each check).
+        builder.ToTable("Plants", t =>
+        {
+            t.HasCheckConstraint(
+                "CK_Plants_HardinessZone_Range",
+                "\"HardinessZoneMin\" IS NULL OR \"HardinessZoneMax\" IS NULL OR \"HardinessZoneMin\" <= \"HardinessZoneMax\"");
+
+            // Height and Spread are physical sizes — negative values are nonsensical
+            // and almost always indicate a unit-conversion bug upstream. Reject them
+            // at the DB boundary in addition to the min<=max ordering.
+            t.HasCheckConstraint(
+                "CK_Plants_Height_Range",
+                "(\"MinHeightCm\" IS NULL OR \"MinHeightCm\" >= 0) AND " +
+                "(\"MaxHeightCm\" IS NULL OR \"MaxHeightCm\" >= 0) AND " +
+                "(\"MinHeightCm\" IS NULL OR \"MaxHeightCm\" IS NULL OR \"MinHeightCm\" <= \"MaxHeightCm\")");
+
+            t.HasCheckConstraint(
+                "CK_Plants_Spread_Range",
+                "(\"MinSpreadCm\" IS NULL OR \"MinSpreadCm\" >= 0) AND " +
+                "(\"MaxSpreadCm\" IS NULL OR \"MaxSpreadCm\" >= 0) AND " +
+                "(\"MinSpreadCm\" IS NULL OR \"MaxSpreadCm\" IS NULL OR \"MinSpreadCm\" <= \"MaxSpreadCm\")");
+
+            t.HasCheckConstraint(
+                "CK_Plants_Temperature_Range",
+                "\"MinTempC\" IS NULL OR \"MaxTempC\" IS NULL OR \"MinTempC\" <= \"MaxTempC\"");
+
+            // Soil pH must stay in 0..14 and respect min<=max.
+            t.HasCheckConstraint(
+                "CK_Plants_SoilPh_Range",
+                "(\"SoilPhMin\" IS NULL OR \"SoilPhMin\" BETWEEN 0 AND 14) AND (\"SoilPhMax\" IS NULL OR \"SoilPhMax\" BETWEEN 0 AND 14) AND (\"SoilPhMin\" IS NULL OR \"SoilPhMax\" IS NULL OR \"SoilPhMin\" <= \"SoilPhMax\")");
+
+            // Light level uses Trefle's 0-10 scale; 1-10 here aligns with the
+            // "any sunlight at all" floor we treat as a known value.
+            t.HasCheckConstraint(
+                "CK_Plants_LightLevel_Range",
+                "\"LightLevel\" IS NULL OR \"LightLevel\" BETWEEN 1 AND 10");
+        });
+
         // Plants generate their Id client-side (DataSeeder + application code) so EF
         // never picks a value for us — keeps Id assignment explicit at the call site.
         builder.Property(p => p.Id).ValueGeneratedNever();
@@ -44,10 +83,13 @@ public class PlantConfiguration : IEntityTypeConfiguration<Plant>
         builder.Property(p => p.CareLevel).HasConversion<string>().HasMaxLength(20);
 
         // EnrichmentStatus is [Flags] — store as int so bitwise combinations round-trip.
-        // Default value is set at the entity level (Plant.cs) to avoid double-defaulting
-        // and to preserve ETL merge precedence (Manual > Perenual > Trefle > GBIF).
+        // DB default and aggregate initializer agree on Manual: every plant created
+        // without an explicit enrichment provenance (DataSeeder, admin panel, Suggest
+        // Edit) was authored manually. None should only be reached as an explicit
+        // downgrade by ETL pruning logic, never as the silent default for new rows.
         builder.Property(p => p.EnrichmentStatus)
-            .HasConversion<int>();
+            .HasConversion<int>()
+            .HasDefaultValue(EnrichmentStatus.Manual);
 
         builder.Property(p => p.SoilPhMin).HasColumnType("decimal(4,2)");
         builder.Property(p => p.SoilPhMax).HasColumnType("decimal(4,2)");
