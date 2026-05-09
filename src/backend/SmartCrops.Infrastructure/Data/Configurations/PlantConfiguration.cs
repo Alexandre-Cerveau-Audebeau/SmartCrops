@@ -19,13 +19,20 @@ public class PlantConfiguration : IEntityTypeConfiguration<Plant>
                 "CK_Plants_HardinessZone_Range",
                 "\"HardinessZoneMin\" IS NULL OR \"HardinessZoneMax\" IS NULL OR \"HardinessZoneMin\" <= \"HardinessZoneMax\"");
 
+            // Height and Spread are physical sizes — negative values are nonsensical
+            // and almost always indicate a unit-conversion bug upstream. Reject them
+            // at the DB boundary in addition to the min<=max ordering.
             t.HasCheckConstraint(
                 "CK_Plants_Height_Range",
-                "\"MinHeightCm\" IS NULL OR \"MaxHeightCm\" IS NULL OR \"MinHeightCm\" <= \"MaxHeightCm\"");
+                "(\"MinHeightCm\" IS NULL OR \"MinHeightCm\" >= 0) AND " +
+                "(\"MaxHeightCm\" IS NULL OR \"MaxHeightCm\" >= 0) AND " +
+                "(\"MinHeightCm\" IS NULL OR \"MaxHeightCm\" IS NULL OR \"MinHeightCm\" <= \"MaxHeightCm\")");
 
             t.HasCheckConstraint(
                 "CK_Plants_Spread_Range",
-                "\"MinSpreadCm\" IS NULL OR \"MaxSpreadCm\" IS NULL OR \"MinSpreadCm\" <= \"MaxSpreadCm\"");
+                "(\"MinSpreadCm\" IS NULL OR \"MinSpreadCm\" >= 0) AND " +
+                "(\"MaxSpreadCm\" IS NULL OR \"MaxSpreadCm\" >= 0) AND " +
+                "(\"MinSpreadCm\" IS NULL OR \"MaxSpreadCm\" IS NULL OR \"MinSpreadCm\" <= \"MaxSpreadCm\")");
 
             t.HasCheckConstraint(
                 "CK_Plants_Temperature_Range",
@@ -76,14 +83,13 @@ public class PlantConfiguration : IEntityTypeConfiguration<Plant>
         builder.Property(p => p.CareLevel).HasConversion<string>().HasMaxLength(20);
 
         // EnrichmentStatus is [Flags] — store as int so bitwise combinations round-trip.
-        // Entity initializer sets EnrichmentStatus.Manual on new rows; the DB default
-        // of 0 (None) is only consumed when adding the NOT NULL column to existing rows
-        // and matches what the AddPlantEnrichmentSchema migration emitted. Declaring it
-        // here keeps the model snapshot in sync so the next migration generation
-        // doesn't produce a phantom "remove default" diff.
+        // DB default and aggregate initializer agree on Manual: every plant created
+        // without an explicit enrichment provenance (DataSeeder, admin panel, Suggest
+        // Edit) was authored manually. None should only be reached as an explicit
+        // downgrade by ETL pruning logic, never as the silent default for new rows.
         builder.Property(p => p.EnrichmentStatus)
             .HasConversion<int>()
-            .HasDefaultValue(EnrichmentStatus.None);
+            .HasDefaultValue(EnrichmentStatus.Manual);
 
         builder.Property(p => p.SoilPhMin).HasColumnType("decimal(4,2)");
         builder.Property(p => p.SoilPhMax).HasColumnType("decimal(4,2)");

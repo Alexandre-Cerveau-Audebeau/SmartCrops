@@ -30,9 +30,15 @@ public class PlantCommonNameConfiguration : IEntityTypeConfiguration<PlantCommon
 
         // BCP 47 tags can include script + region + variant subtags (e.g. "zh-Hant", "sr-Latn-RS").
         // RFC 5646 allows each subtag up to 8 chars with no overall limit; 35 covers practical cases.
+        // BCP 47 also defines tags as case-insensitive — normalize to lowercase on write
+        // so the partial unique index (PlantId, LanguageCode) WHERE IsPrimary = TRUE actually
+        // enforces uniqueness regardless of how the caller cased the tag.
         builder.Property(c => c.LanguageCode)
             .IsRequired()
-            .HasMaxLength(35);
+            .HasMaxLength(35)
+            .HasConversion(
+                v => v.ToLowerInvariant(),
+                v => v);
 
         builder.Property(c => c.Name)
             .IsRequired()
