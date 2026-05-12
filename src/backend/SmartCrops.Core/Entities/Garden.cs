@@ -1,6 +1,8 @@
+using SmartCrops.Core.Interfaces;
+
 namespace SmartCrops.Core.Entities;
 
-public class Garden
+public class Garden : IHasUpdatedAt
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;

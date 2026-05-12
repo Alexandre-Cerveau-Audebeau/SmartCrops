@@ -1,4 +1,5 @@
 using SmartCrops.Core.Enums;
+using SmartCrops.Core.Interfaces;
 
 namespace SmartCrops.Core.Entities;
 
@@ -6,7 +7,7 @@ namespace SmartCrops.Core.Entities;
 /// Reference to an external source for traceability. One Plant can have many sources
 /// across the various enrichment APIs (GBIF, Trefle, Perenual, etc.).
 /// </summary>
-public class PlantSource
+public class PlantSource : IHasUpdatedAt
 {
     public int Id { get; set; }
 

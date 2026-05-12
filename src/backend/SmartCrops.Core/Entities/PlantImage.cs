@@ -1,11 +1,12 @@
 using SmartCrops.Core.Enums;
+using SmartCrops.Core.Interfaces;
 
 namespace SmartCrops.Core.Entities;
 
 /// <summary>
 /// A categorized image of a plant with full licensing metadata for attribution.
 /// </summary>
-public class PlantImage
+public class PlantImage : IHasUpdatedAt
 {
     public int Id { get; set; }
 

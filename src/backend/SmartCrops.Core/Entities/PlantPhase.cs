@@ -1,4 +1,5 @@
 using SmartCrops.Core.Enums;
+using SmartCrops.Core.Interfaces;
 
 namespace SmartCrops.Core.Entities;
 
@@ -6,7 +7,7 @@ namespace SmartCrops.Core.Entities;
 /// A phase of the plant's annual life cycle, expressed as a month range.
 /// Ranges may wrap the year boundary (e.g. start=11, end=2 → Nov through Feb).
 /// </summary>
-public class PlantPhase
+public class PlantPhase : IHasUpdatedAt
 {
     public int Id { get; set; }
 

@@ -1,3 +1,5 @@
+using SmartCrops.Core.Interfaces;
+
 namespace SmartCrops.Core.Entities;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace SmartCrops.Core.Entities;
 /// fields and the raw API response so we can re-derive canonical fields without
 /// re-calling Perenual.
 /// </summary>
-public class PlantPerenualData
+public class PlantPerenualData : IHasUpdatedAt
 {
     public Guid Id { get; set; }
 
