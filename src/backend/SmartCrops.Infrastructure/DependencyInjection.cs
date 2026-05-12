@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure.Data;
+using SmartCrops.Infrastructure.Interceptors;
 using SmartCrops.Infrastructure.Repositories;
 
 namespace SmartCrops.Infrastructure;
@@ -16,15 +17,19 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddSingleton<UpdateTimestampInterceptor>();
+
         // Resolve the connection string inside the options lambda so it is read after
         // all configuration sources (including test overrides) have been applied.
-        services.AddDbContext<SmartCropsDbContext>(options =>
+        services.AddDbContext<SmartCropsDbContext>((sp, options) =>
         {
             var connectionString = configuration.GetConnectionString("DefaultConnection")
                 ?? throw new InvalidOperationException(
                     "Connection string 'DefaultConnection' is not configured.");
 
-            options.UseNpgsql(connectionString);
+            options
+                .UseNpgsql(connectionString)
+                .AddInterceptors(sp.GetRequiredService<UpdateTimestampInterceptor>());
         });
 
         services.AddScoped<IPlantRepository, PlantRepository>();
