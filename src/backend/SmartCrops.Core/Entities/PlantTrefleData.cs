@@ -1,10 +1,12 @@
+using SmartCrops.Core.Interfaces;
+
 namespace SmartCrops.Core.Entities;
 
 /// <summary>
 /// Trefle.io specific data for a plant (1-1 relationship). Stores both extracted fields
 /// and the raw API response so we can re-derive canonical fields without re-calling Trefle.
 /// </summary>
-public class PlantTrefleData
+public class PlantTrefleData : IHasUpdatedAt
 {
     public Guid Id { get; set; }
 

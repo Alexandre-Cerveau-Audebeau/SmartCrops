@@ -1,4 +1,5 @@
 using SmartCrops.Core.Enums;
+using SmartCrops.Core.Interfaces;
 
 namespace SmartCrops.Core.Entities;
 
@@ -14,7 +15,7 @@ namespace SmartCrops.Core.Entities;
 ///   and <see cref="PlantLongDescription"/> (rich long-form, one row per language).
 /// - During ETL, merge priority is: Manual &gt; Perenual &gt; Trefle &gt; GBIF.
 /// </summary>
-public class Plant
+public class Plant : IHasUpdatedAt
 {
     public Guid Id { get; set; }
 

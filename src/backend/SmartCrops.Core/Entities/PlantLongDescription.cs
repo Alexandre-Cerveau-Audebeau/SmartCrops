@@ -1,10 +1,12 @@
+using SmartCrops.Core.Interfaces;
+
 namespace SmartCrops.Core.Entities;
 
 /// <summary>
 /// Long-form rich description of a plant, one row per language.
 /// Distinct from PlantTranslation which holds short descriptions for the legacy UI.
 /// </summary>
-public class PlantLongDescription
+public class PlantLongDescription : IHasUpdatedAt
 {
     public int Id { get; set; }
 
