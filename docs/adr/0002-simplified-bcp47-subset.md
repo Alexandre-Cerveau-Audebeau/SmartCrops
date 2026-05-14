@@ -9,7 +9,7 @@
 
 PR #41 introduced a database-level `CHECK` constraint and a shared C# regex constant (`SmartCrops.Core.Validation.ValidationPatterns.Bcp47LanguageCodeLowercase`) for `PlantCommonName.LanguageCode`. The regex enforces a structural pattern:
 
-```
+```regex
 ^[a-z]{2,3}(-[a-z]{4})?(-([a-z]{2}|[0-9]{3}))?$
 ```
 
