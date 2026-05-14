@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using SmartCrops.Core.Entities;
+using SmartCrops.Core.Validation;
 
 namespace SmartCrops.Infrastructure.Data.Configurations;
 
@@ -17,10 +18,15 @@ public class PlantCommonNameConfiguration : IEntityTypeConfiguration<PlantCommon
                 "CK_PlantCommonName_Name_NotBlank",
                 "btrim(\"Name\") <> ''");
 
-            // Block empty/whitespace LanguageCode to preserve (PlantId, LanguageCode) key semantics.
+            // BCP 47 structural validation of LanguageCode, in lowercase form to match
+            // the ToLowerInvariant value converter below. The full regex rationale and
+            // scope (which BCP 47 subtags are intentionally excluded) lives on
+            // SmartCrops.Core.Validation.ValidationPatterns.Bcp47LanguageCodeLowercase.
+            // Uses the case-sensitive ~ operator (not ~*) because storage is guaranteed
+            // lowercase by the value converter.
             t.HasCheckConstraint(
-                "CK_PlantCommonName_LanguageCode_NotBlank",
-                "btrim(\"LanguageCode\") <> ''");
+                "CK_PlantCommonName_LanguageCode_Bcp47",
+                $"\"LanguageCode\" ~ '{ValidationPatterns.Bcp47LanguageCodeLowercase}'");
         });
 
         builder.HasOne(c => c.Plant)
