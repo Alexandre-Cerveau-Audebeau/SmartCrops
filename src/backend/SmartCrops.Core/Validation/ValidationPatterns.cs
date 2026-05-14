@@ -21,6 +21,12 @@ public static class ValidationPatterns
     /// case-insensitive, so storing <c>"fr-fr"</c> is semantically
     /// equivalent to <c>"fr-FR"</c>.
     ///
+    /// <para>
+    /// See <c>docs/adr/0002-simplified-bcp47-subset.md</c> for the formal
+    /// architectural decision record covering scope, rationale, consequences,
+    /// and triggers for revisiting this decision.
+    /// </para>
+    ///
     /// <para>Structure (all subtags lowercase):</para>
     /// <list type="bullet">
     ///   <item><c>[a-z]{2,3}</c> — language subtag, mandatory
