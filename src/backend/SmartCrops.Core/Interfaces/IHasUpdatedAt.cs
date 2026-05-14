@@ -9,8 +9,8 @@ namespace SmartCrops.Core.Interfaces;
 /// Why not <c>IHasTimestamps</c>?
 /// <list type="bullet">
 ///   <item>The interceptor only ever touches <see cref="UpdatedAt"/>.
-///   <c>CreatedAt</c> stays under PostgreSQL's control via
-///   <c>DEFAULT CURRENT_TIMESTAMP</c> on INSERT.</item>
+///   <c>CreatedAt</c> is managed at the persistence layer (typically via a
+///   database-level default) and is not modified by this interceptor.</item>
 ///   <item>One marker = one precise behavior (Single Responsibility for the
 ///   contract).</item>
 ///   <item>Future markers like <c>IHasSoftDelete</c> follow the same

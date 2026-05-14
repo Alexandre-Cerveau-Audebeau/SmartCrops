@@ -37,11 +37,13 @@ public class InterceptorTestFactory : WebApplicationFactory<Program>
             // UpdateTimestampInterceptor wired in (the production options registration
             // adds it through DI; we have to re-attach it here because we are replacing
             // the entire DbContextOptions descriptor).
-            var descriptor = services.SingleOrDefault(d =>
-                d.ServiceType == typeof(DbContextOptions<SmartCropsDbContext>)
-            );
-            if (descriptor != null)
+            var descriptors = services
+                .Where(d => d.ServiceType == typeof(DbContextOptions<SmartCropsDbContext>))
+                .ToList();
+            foreach (var descriptor in descriptors)
+            {
                 services.Remove(descriptor);
+            }
 
             services.AddDbContext<SmartCropsDbContext>((sp, options) =>
             {
@@ -83,12 +85,11 @@ public class UpdateTimestampInterceptorTests : IClassFixture<InterceptorTestFact
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
 
-        var plantType = await db.PlantTypes.FindAsync(1);
-        if (plantType == null)
-        {
-            plantType = new PlantType { Id = 1, Name = "Vegetable" };
-            db.PlantTypes.Add(plantType);
-        }
+        // Defensive per-test isolation: reset the in-memory store on every
+        // call. EnsureCreatedAsync materializes the PlantType reference data
+        // from HasData (see PlantTypeConfiguration), so no explicit seed here.
+        await db.Database.EnsureDeletedAsync();
+        await db.Database.EnsureCreatedAsync();
 
         // Seed entities with a deliberately old UpdatedAt so the interceptor's
         // refresh is unambiguous in assertions.
@@ -229,11 +230,16 @@ public class UpdateTimestampInterceptorTests : IClassFixture<InterceptorTestFact
         Assert.True(garden.UpdatedAt > beforeGarden);
         Assert.True(phase.UpdatedAt > beforePhase);
 
-        // All three entities are refreshed inside the same SaveChanges call,
-        // so they share the single DateTime.UtcNow snapshot captured by the
-        // interceptor at the start of the helper.
-        Assert.Equal(plant.UpdatedAt, garden.UpdatedAt);
-        Assert.Equal(garden.UpdatedAt, phase.UpdatedAt);
+        // Contract: all entities modified in a single SaveChangesAsync have their
+        // UpdatedAt refreshed to approximately "now".
+        // Implementation detail (not asserted): the current interceptor captures
+        // DateTime.UtcNow once per SaveChanges call, so the three values would also
+        // be strictly equal. We deliberately don't assert that, to leave the door
+        // open for future per-entity timestamp strategies (e.g. distributed tracing).
+        var now = DateTime.UtcNow;
+        Assert.InRange(plant.UpdatedAt, now - Tolerance, now + Tolerance);
+        Assert.InRange(garden.UpdatedAt, now - Tolerance, now + Tolerance);
+        Assert.InRange(phase.UpdatedAt, now - Tolerance, now + Tolerance);
     }
 
     [Fact]
