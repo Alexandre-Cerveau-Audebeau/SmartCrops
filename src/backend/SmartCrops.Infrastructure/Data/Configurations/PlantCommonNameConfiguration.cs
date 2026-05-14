@@ -17,10 +17,20 @@ public class PlantCommonNameConfiguration : IEntityTypeConfiguration<PlantCommon
                 "CK_PlantCommonName_Name_NotBlank",
                 "btrim(\"Name\") <> ''");
 
-            // Block empty/whitespace LanguageCode to preserve (PlantId, LanguageCode) key semantics.
+            // BCP 47 structural validation of LanguageCode, in lowercase form to match
+            // the ToLowerInvariant value converter below. Rejects malformed tags like
+            // "francais", "FR_US", "" or "fr fr" at the persistence boundary. This regex
+            // strictly subsumes the former CK_PlantCommonName_LanguageCode_NotBlank check
+            // (any value matching the pattern is necessarily non-blank), so that
+            // constraint is replaced rather than kept alongside.
+            //   [a-z]{2,3}              ISO 639-1/639-3 language subtag (mandatory)
+            //   (-[a-z]{4})?            optional script subtag (-hant, -latn)
+            //   (-([a-z]{2}|[0-9]{3}))? optional region subtag (-us, or -419)
+            // Uses the case-sensitive ~ operator (not ~*) because storage is guaranteed
+            // lowercase by the value converter.
             t.HasCheckConstraint(
-                "CK_PlantCommonName_LanguageCode_NotBlank",
-                "btrim(\"LanguageCode\") <> ''");
+                "CK_PlantCommonName_LanguageCode_Bcp47",
+                "\"LanguageCode\" ~ '^[a-z]{2,3}(-[a-z]{4})?(-([a-z]{2}|[0-9]{3}))?$'");
         });
 
         builder.HasOne(c => c.Plant)
