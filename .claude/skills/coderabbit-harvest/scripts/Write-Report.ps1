@@ -54,6 +54,50 @@ end {
         exit 1
     }
 
+    # Validate critical schema fields before use. Malformed input shouldn't
+    # produce a cryptic .Substring() / property-access error; report clearly
+    # which field is wrong. (Get-SafeProp duplicated from Classify-Comments.ps1
+    # to keep this script independently runnable.)
+    function Get-SafeProp {
+        [CmdletBinding()]
+        param($Object, [Parameter(Mandatory = $true)] [string]$Name, $Default = '')
+        if ($Object -and $Object.PSObject.Properties[$Name]) {
+            $value = $Object.PSObject.Properties[$Name].Value
+            if ($null -ne $value) { return $value }
+        }
+        return $Default
+    }
+
+    $targetCommit = (Get-SafeProp -Object $data -Name 'targetCommit').ToString()
+    if ([string]::IsNullOrWhiteSpace($targetCommit) -or $targetCommit.Length -lt 7) {
+        Write-Error "Schema validation failed: 'targetCommit' missing or shorter than 7 chars (got '$targetCommit')"
+        exit 1
+    }
+
+    $prNumber = Get-SafeProp -Object $data -Name 'prNumber' -Default $null
+    if ($null -eq $prNumber) {
+        Write-Error "Schema validation failed: 'prNumber' missing from input JSON"
+        exit 1
+    }
+
+    $extensionMeta = Get-SafeProp -Object $data -Name 'extensionMeta' -Default $null
+    if ($null -eq $extensionMeta) {
+        Write-Error "Schema validation failed: 'extensionMeta' missing from input JSON"
+        exit 1
+    }
+
+    $commentsRaw = Get-SafeProp -Object $data -Name 'comments' -Default $null
+    if ($null -eq $commentsRaw) {
+        Write-Error "Schema validation failed: 'comments' missing from input JSON"
+        exit 1
+    }
+
+    $counts = Get-SafeProp -Object $data -Name 'counts' -Default $null
+    if ($null -eq $counts) {
+        Write-Error "Schema validation failed: 'counts' missing from input JSON"
+        exit 1
+    }
+
     # Write raw JSON to OutputPath (ensure parent dir exists)
     $outputDir = Split-Path $OutputPath -Parent
     if ($outputDir -and -not (Test-Path $outputDir)) {
@@ -63,17 +107,17 @@ end {
 
     # Build markdown summary
     $sb = [System.Text.StringBuilder]::new()
-    $shortSha = $data.targetCommit.Substring(0, 7)
+    $shortSha = $targetCommit.Substring(0, 7)
 
-    [void]$sb.AppendLine("# Harvest report — PR #$($data.prNumber) commit $shortSha")
+    [void]$sb.AppendLine("# Harvest report — PR #$prNumber commit $shortSha")
     [void]$sb.AppendLine()
 
     # Sanity
     [void]$sb.AppendLine("## Sanity")
-    [void]$sb.AppendLine("- Commit: $($data.targetCommit)")
-    [void]$sb.AppendLine("- PR: #$($data.prNumber)")
-    [void]$sb.AppendLine("- Extension review: $($data.extensionMeta.title) (status=$($data.extensionMeta.status))")
-    [void]$sb.AppendLine("- Review window: $($data.extensionMeta.startedAt) → $($data.extensionMeta.endedAt)")
+    [void]$sb.AppendLine("- Commit: $targetCommit")
+    [void]$sb.AppendLine("- PR: #$prNumber")
+    [void]$sb.AppendLine("- Extension review: $($extensionMeta.title) (status=$($extensionMeta.status))")
+    [void]$sb.AppendLine("- Review window: $($extensionMeta.startedAt) → $($extensionMeta.endedAt)")
     if ($data.comparisonMode) {
         [void]$sb.AppendLine("- Comparison mode: ENABLED")
     }
@@ -81,13 +125,13 @@ end {
 
     # Counts
     [void]$sb.AppendLine("## Counts (auto-classified)")
-    [void]$sb.AppendLine("- LGTM: $($data.counts.LGTM)")
-    [void]$sb.AppendLine("- NITPICK: $($data.counts.NITPICK)")
-    [void]$sb.AppendLine("- MAJOR: $($data.counts.MAJOR)")
-    [void]$sb.AppendLine("- REVIEW_NEEDED: $($data.counts.REVIEW_NEEDED) (flagged for Claude's judgment)")
-    [void]$sb.AppendLine("- TOTAL: $($data.counts.total)")
+    [void]$sb.AppendLine("- LGTM: $($counts.LGTM)")
+    [void]$sb.AppendLine("- NITPICK: $($counts.NITPICK)")
+    [void]$sb.AppendLine("- MAJOR: $($counts.MAJOR)")
+    [void]$sb.AppendLine("- REVIEW_NEEDED: $($counts.REVIEW_NEEDED) (flagged for Claude's judgment)")
+    [void]$sb.AppendLine("- TOTAL: $($counts.total)")
     if ($data.comparisonMode) {
-        [void]$sb.AppendLine("- RESOLVED (vs previous): $($data.counts.resolved)")
+        [void]$sb.AppendLine("- RESOLVED (vs previous): $($counts.resolved)")
     }
     [void]$sb.AppendLine()
 
@@ -95,8 +139,8 @@ end {
     # (no reliable deterministic key — see classification-rules.md). Counts are
     # reported per-source; the same finding may appear in both.
     # @(...) forces an array so .Count is valid even for 0 matches.
-    $extensionCount = @($data.comments | Where-Object source -eq 'extension').Count
-    $githubCount = @($data.comments | Where-Object source -eq 'github').Count
+    $extensionCount = @($commentsRaw | Where-Object source -eq 'extension').Count
+    $githubCount = @($commentsRaw | Where-Object source -eq 'github').Count
     [void]$sb.AppendLine("## Cross-source surfaces")
     [void]$sb.AppendLine("- Extension: $extensionCount comment(s)")
     [void]$sb.AppendLine("- GitHub: $githubCount comment(s)")
@@ -105,7 +149,7 @@ end {
 
     # Substantive comments table (NITPICK / MAJOR / REVIEW_NEEDED + MODIFIED regardless)
     # @(...) forces an array so .Count is valid even for 0 matches.
-    $substantive = @($data.comments | Where-Object {
+    $substantive = @($commentsRaw | Where-Object {
         $_.classification -in @('NITPICK', 'MAJOR', 'REVIEW_NEEDED') -or
         ($data.comparisonMode -and $_.transition -eq 'MODIFIED')
     })
@@ -159,7 +203,7 @@ end {
     }
 
     # Resolved section (only in comparison mode)
-    if ($data.comparisonMode -and $data.counts.resolved -gt 0) {
+    if ($data.comparisonMode -and $counts.resolved -gt 0) {
         [void]$sb.AppendLine("## Resolved comments (vs previous harvest)")
         [void]$sb.AppendLine()
         foreach ($r in $data.resolved) {
@@ -171,10 +215,10 @@ end {
     }
 
     # Poem
-    if ($data.extensionMeta.poem) {
+    if ($extensionMeta.poem) {
         [void]$sb.AppendLine("## Poem")
         [void]$sb.AppendLine()
-        [void]$sb.AppendLine($data.extensionMeta.poem)
+        [void]$sb.AppendLine($extensionMeta.poem)
         [void]$sb.AppendLine()
     }
 

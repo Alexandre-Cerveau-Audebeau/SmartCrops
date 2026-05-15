@@ -297,6 +297,21 @@ if (-not (Test-Path $ReviewsFile)) {
     exit 2
 }
 
+# Step 1b: freshness check — the Extension JSON should be recently written
+# (post-push, post-CodeRabbit-review). If it's stale, we're likely reading
+# a previous harvest's data, not the current one. Per SKILL.md, STOP and
+# report rather than silently producing stale output.
+$fileAge = (Get-Date) - (Get-Item $ReviewsFile).LastWriteTime
+$freshnessLimitMinutes = 5
+if ($fileAge.TotalMinutes -gt $freshnessLimitMinutes) {
+    # Build the format string fully before applying -f: the format operator
+    # binds tighter than +, so "a" + "b" -f x would format only "b".
+    $staleMsg = "Extension reviews JSON is stale: last written {0:F1} min ago (limit: {1} min). " +
+        "Re-trigger the CodeRabbit Extension review, or pass --commit explicitly to harvest a known commit."
+    Write-Error ($staleMsg -f $fileAge.TotalMinutes, $freshnessLimitMinutes)
+    exit 2
+}
+
 $json = Get-Content $ReviewsFile -Raw -Encoding UTF8 | ConvertFrom-Json -Depth 100
 $review = $json | Where-Object { $_.headCommitId -like "$CommitSha*" } | Select-Object -Last 1
 

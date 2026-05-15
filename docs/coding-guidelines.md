@@ -48,7 +48,7 @@ Conventions may evolve; significant changes should be made via PR and discussed.
 
 - **Target**: React 18 + Vite + TypeScript strict mode + MUI v7.
 - **No `any` type**. Use `unknown` and narrow, or define a proper type. The strict mode in `tsconfig.json` enforces this.
-- **Component naming**: PascalCase for components, camelCase for functions, kebab-case for files (`PlantCard.tsx`, `usePlantData.ts`).
+- **Component naming**: PascalCase for component files (`PlantCard.tsx`), camelCase for hook and utility files (`usePlantData.ts`). Functions use camelCase; types and interfaces use PascalCase.
 - **MUI v7 only**. Don't introduce other UI libraries. If a component is missing, build it from MUI primitives.
 - **Error boundaries** at the page level for graceful degradation.
 - **State management**: React's built-in hooks (`useState`, `useReducer`, `useContext`). No external state library unless cross-page state becomes complex.

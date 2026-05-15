@@ -164,7 +164,7 @@ For `--help`, just print this SKILL.md content. The `Classify-Comments.ps1` scri
 
 The skill STOPs and reports without producing output if any of these happens:
 
-- Extension JSON workspace file not found or older than 5 minutes
+- Extension JSON workspace file not found, or last written more than 5 minutes ago (configurable in `Classify-Comments.ps1` via the `$freshnessLimitMinutes` local). Stale data is treated as a STOP condition because the most likely cause is the Extension hasn't synced after the latest push — silently using stale data would produce a misleading harvest.
 - Review object for target commit absent from JSON
 - `gh` CLI not authenticated or rate-limited (exit codes from `gh api`)
 - Target PR closed/merged at harvest time (the harvest is for an in-progress PR; closed PRs should be queried via the JSON file from a prior harvest)
