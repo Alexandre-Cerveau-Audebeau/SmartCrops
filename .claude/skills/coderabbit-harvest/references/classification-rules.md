@@ -17,7 +17,7 @@ The four buckets correspond to four distinct workflow actions:
 
 The fourth bucket exists to keep the deterministic rules conservative. Anything ambiguous flows to **REVIEW_NEEDED** rather than getting silently miscategorized.
 
-## The 11 rules (applied in order — first match wins)
+## The classification rules (applied in order — first match wins)
 
 ### Rule 1 — Self-invalidated by CodeRabbit → **LGTM**
 
@@ -25,14 +25,13 @@ If the comment has an `analysis.type` in `{incorrect_review_comment, off_topic, 
 
 Example: PR #41 commit `bdd970e` had a comment with body about ReDoS safety but `analysis.type = incorrect_review_comment`.
 
-### Rule 2 — Body is a pure compliment → **LGTM**
+### Rule 2a — Body is an exact LGTM marker → **LGTM**
 
-The body, after trimming whitespace, matches one of:
+The body, after trimming whitespace, exactly matches one of (case-insensitive): `LGTM!`, `LGTM`, `Looks good!`, `Looks good to me!`, `No issues found.`, `Approved.`
 
-- Exact (case-insensitive): `LGTM!`, `LGTM`, `Looks good!`, `Looks good to me!`, `No issues found.`, `Approved.`
-- Starts with (and total length ≤ 200 chars): `Excellent`, `Great`, `Nice`, `Well done`
+These strings are unambiguous LGTM by construction, so this check runs at the **top** of the rule chain — there is no risk of it masking an actionable finding.
 
-The 200-character cap prevents misclassification of "Great catch but here's a real issue..." comments. The list is intentionally conservative; false negatives flow to REVIEW_NEEDED, which is safe.
+Compliment *prefixes* (`Excellent`/`Great`/etc.) are handled separately by **Rule 10a**, deliberately placed *after* the type-driven rules — see below.
 
 ### Rule 3 — `type='actionable'` AND `severity='major'` (or `critical`) → **MAJOR**
 
@@ -62,7 +61,7 @@ The most common case for assertive: lightweight architectural commentary worth r
 - `severity` in `{'', none, low, minor}` → **LGTM** (the common case — no-op)
 - otherwise → **REVIEW_NEEDED**
 
-The LGTM mapping for benign severity is what makes long, markdown-bolded compliment bodies (e.g. `**Excellent architectural traceability.**…`, which is >200 chars so Rule 2's prefix branch can't catch it) classify correctly as no-ops rather than falling through to the catch-all.
+The LGTM mapping for benign severity is what makes long, markdown-bolded compliment bodies (e.g. `**Excellent architectural traceability.**…`, which is >200 chars so Rule 10a's prefix branch can't catch it) classify correctly as no-ops rather than falling through to the catch-all.
 
 ### Rule 9 — `type='outsideDiffRange'` → **REVIEW_NEEDED**
 
@@ -71,6 +70,14 @@ Comments about code outside the current diff. Context is unclear without reading
 ### Rule 10 — `type='duplicate'` → **LGTM**
 
 CodeRabbit's deduplication marker. No-op.
+
+### Rule 10a — Compliment-prefix body → **LGTM** (only if no type rule matched)
+
+A short body (≤ 200 chars after trimming) opening with a complimentary word — `Excellent`, `Great`, `Nice`, `Well done` — is treated as a no-op compliment.
+
+This check is **intentionally placed after the type-driven rules** (3–10), not with Rule 2a at the top. The prefix heuristic is weaker than the exact-match list: a genuine `actionable` / `severity=major` finding could open with "Excellent point, but…". Running the prefix check first would silently downgrade such a finding to LGTM. Consulting it only as a near-catch-all means any comment carrying real type/severity metadata is classified by that metadata first; the prefix heuristic is just the fallback before the final `REVIEW_NEEDED`.
+
+The 200-character cap further guards against "Great catch but here's a real issue…" bodies.
 
 ### Rule 11 — Catch-all → **REVIEW_NEEDED**
 
@@ -118,14 +125,16 @@ When invoked with a previous harvest's JSON, each comment gets a **transition la
 | **RESOLVED** | Comment exists in previous, absent from current |
 
 Matching priority:
-1. By `id` (stable across CodeRabbit re-reviews)
-2. Fallback: `path + startLine + endLine`
+1. By `id` (stable across CodeRabbit re-reviews).
+2. Fallback: **same `source`** + `path` + `startLine` + `endLine`, with an exact-body match preferred (→ PERSISTED) over a location-only match (→ MODIFIED).
+
+The fallback is **source-scoped**: a current Extension comment is only ever matched against previous *Extension* comments (and likewise for GitHub). Cross-source matches are intentionally never made — the same finding renders very differently on the two surfaces (see "Cross-source handling" above), so matching across them would produce spurious MODIFIED transitions. RESOLVED detection uses the same source-scoped location key (`source:path:startLine:endLine:body`).
 
 MODIFIED comments are always detailed in the markdown summary regardless of their classification bucket — body changes signal CodeRabbit's analysis evolved.
 
 ## Known limitations
 
-1. **Body-based LGTM detection is heuristic.** "LGTM, but please consider X" would be misclassified by Rule 2. Not observed in PRs #37/#41/#45.
+1. **Body-based LGTM detection is heuristic.** A short, type-less body like "Great catch, but here's a real issue…" could be misclassified LGTM by Rule 10a's prefix heuristic. Mitigated by placing Rule 10a *after* the type-driven rules (so anything with real type/severity is classified by metadata first) and by the 200-char cap; residual risk is limited to short, type-less bodies. Not observed in PRs #37/#41/#45.
 2. **GitHub-side comments are under-classified.** Lack of internal type/severity means non-LGTM GitHub comments flow to REVIEW_NEEDED. Acceptable: Extension is the more comprehensive source.
 3. **Self-invalidated comments count toward total.** They're LGTM (no-op) for action purposes but appear in counts.
 4. **No multi-language detection.** All rules assume English CodeRabbit output.

@@ -67,7 +67,7 @@ Conventions may evolve; significant changes should be made via PR and discussed.
 
 - **XML doc** on every public C# method, property, and class with non-trivial behavior. The Docstring Coverage check threshold is 80%; warnings are tolerated, not addressed reactively.
 - **`/// <summary>`** for the top-level description, `<param>` for each parameter, `<returns>` for non-void return, `<exception>` for thrown exceptions when relevant.
-- **README.md** at the repo root summarizes the project. Subdirectory README.md files (e.g. `.claude/skills/<name>/README.md`) describe scoped concerns.
+- **README.md** at the repo root summarizes the project. Subdirectory docs follow the local convention: Claude Code skills use `.claude/skills/<name>/SKILL.md` as the canonical entry point (with `README.md` as optional human-readable supplement); other subdirectories may use `README.md` or directory-local conventions as appropriate.
 - **ADRs** in `docs/adr/` for architectural decisions. Follow the format established by ADR-0001 (`docs/adr/0001-...md`): Status / Date / Deciders / Context / Decision / Rationale / Consequences / When to revisit / Related.
 - **Markdown fenced code blocks** must declare a language tag (markdownlint MD040). Use `regex`, `text`, `csharp`, `powershell`, etc. — pick the closest fit.
 

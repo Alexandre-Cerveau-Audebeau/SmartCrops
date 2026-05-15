@@ -104,26 +104,41 @@ $Script:LgtmStartingPrefixes = @(
 # Helpers
 # ---------------------------------------------------------------------------
 
-function Test-IsLgtmBody {
+function Test-IsExactLgtmBody {
     [CmdletBinding()]
     param([string]$Body)
 
+    # Rule 2a — body (trimmed) exactly matches an unambiguous LGTM marker.
+    # Safe to consult before the type-driven rules: these strings are pure
+    # LGTM by construction, with no risk of masking an actionable finding.
     if ([string]::IsNullOrWhiteSpace($Body)) { return $false }
 
     $normalized = $Body.Trim()
-
     foreach ($exact in $Script:LgtmExactMatches) {
         if ($normalized -ieq $exact) { return $true }
     }
+    return $false
+}
 
-    if ($normalized.Length -le 200) {
-        foreach ($prefix in $Script:LgtmStartingPrefixes) {
-            if ($normalized.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-                return $true
-            }
+function Test-IsComplimentPrefixBody {
+    [CmdletBinding()]
+    param([string]$Body)
+
+    # Rule 10a — short body opening with a complimentary word (Excellent/Great/
+    # Nice/Well done), capped at 200 chars. This is a weaker heuristic than the
+    # exact-match list, so Get-CommentClassification consults it only AFTER the
+    # type/severity rules — a major actionable finding that happens to start
+    # with "Excellent" must not be silently downgraded to LGTM.
+    if ([string]::IsNullOrWhiteSpace($Body)) { return $false }
+
+    $normalized = $Body.Trim()
+    if ($normalized.Length -gt 200) { return $false }
+
+    foreach ($prefix in $Script:LgtmStartingPrefixes) {
+        if ($normalized.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $true
         }
     }
-
     return $false
 }
 
@@ -143,8 +158,9 @@ function Get-CommentClassification {
         return 'LGTM'
     }
 
-    # Rule 2: LGTM/compliment body
-    if (Test-IsLgtmBody -Body $body) { return 'LGTM' }
+    # Rule 2a: body exactly matches an unambiguous LGTM marker. Safe at the top
+    # of the chain — these are pure LGTM by construction.
+    if (Test-IsExactLgtmBody -Body $body) { return 'LGTM' }
 
     # Rules 3-5: actionable
     if ($type -eq 'actionable') {
@@ -182,6 +198,12 @@ function Get-CommentClassification {
     # Rules 9-10
     if ($type -eq 'outsideDiffRange') { return 'REVIEW_NEEDED' }
     if ($type -eq 'duplicate') { return 'LGTM' }
+
+    # Rule 10a: compliment-prefix LGTM (Excellent/Great/Nice/Well done, <=200 chars).
+    # Deliberately AFTER the type-driven rules so a major/critical actionable
+    # comment that happens to start with a complimentary word is not silently
+    # downgraded to LGTM.
+    if (Test-IsComplimentPrefixBody -Body $body) { return 'LGTM' }
 
     # Rule 11: catch-all
     return 'REVIEW_NEEDED'
@@ -266,23 +288,33 @@ function Get-TransitionLabel {
         [Parameter(Mandatory = $true)] [object[]]$PreviousComments
     )
 
-    # Match by id first
-    $byId = $PreviousComments | Where-Object { $_.id -and $CurrentComment.id -and $_.id -eq $CurrentComment.id } | Select-Object -First 1
+    # Match by id first (most reliable)
+    $byId = $PreviousComments | Where-Object {
+        $_.id -and $CurrentComment.id -and $_.id -eq $CurrentComment.id
+    } | Select-Object -First 1
     if ($byId) {
         if ($byId.body -eq $CurrentComment.body) { return 'PERSISTED' }
         return 'MODIFIED'
     }
 
-    # Fallback: match by path + startLine + endLine
-    $byLocation = $PreviousComments | Where-Object {
+    # Fallback: match by source + path + startLine + endLine.
+    # Restricting to the same source avoids cross-source false matches — the
+    # same finding may appear on both Extension and GitHub with very different
+    # rendered bodies, and must NOT be reported as MODIFIED across sources.
+    $sameLocation = $PreviousComments | Where-Object {
+        $_.source -eq $CurrentComment.source -and
         $_.path -eq $CurrentComment.path -and
         $_.startLine -eq $CurrentComment.startLine -and
         $_.endLine -eq $CurrentComment.endLine
-    } | Select-Object -First 1
-    if ($byLocation) {
-        if ($byLocation.body -eq $CurrentComment.body) { return 'PERSISTED' }
-        return 'MODIFIED'
     }
+
+    # Prefer an exact body match among same-location, same-source candidates.
+    $exactMatch = $sameLocation | Where-Object {
+        $_.body -eq $CurrentComment.body
+    } | Select-Object -First 1
+    if ($exactMatch) { return 'PERSISTED' }
+
+    if ($sameLocation) { return 'MODIFIED' }
 
     return 'NEW'
 }
@@ -312,7 +344,12 @@ if ($fileAge.TotalMinutes -gt $freshnessLimitMinutes) {
     exit 2
 }
 
-$json = Get-Content $ReviewsFile -Raw -Encoding UTF8 | ConvertFrom-Json -Depth 100
+try {
+    $json = Get-Content $ReviewsFile -Raw -Encoding UTF8 | ConvertFrom-Json -Depth 100
+} catch {
+    Write-Error "Failed to parse Extension reviews JSON at: $ReviewsFile`n$($_.Exception.Message)"
+    exit 3
+}
 $review = $json | Where-Object { $_.headCommitId -like "$CommitSha*" } | Select-Object -Last 1
 
 if (-not $review) {
@@ -346,13 +383,23 @@ if ($review.PSObject.Properties['fileReviewMap'] -and $review.fileReviewMap) {
 }
 
 # Step 3: fetch GitHub comments
-$ghCommentsRaw = gh api "repos/{owner}/{repo}/pulls/$GitHubPrNumber/comments" 2>$null
+# --paginate fetches all pages; --slurp combines them into a single JSON array
+# (without --slurp, the response is one JSON object per page, not parseable as one).
+$ghCommentsRaw = gh api "repos/{owner}/{repo}/pulls/$GitHubPrNumber/comments" --paginate --slurp 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to fetch GitHub comments for PR #$GitHubPrNumber"
     exit 3
 }
 
-$ghComments = ($ghCommentsRaw | ConvertFrom-Json -Depth 100) | Where-Object {
+# With --slurp, the structure is [[page1...], [page2...], ...] — flatten it.
+try {
+    $ghPages = $ghCommentsRaw | ConvertFrom-Json -Depth 100
+} catch {
+    Write-Error "Failed to parse GitHub PR comments JSON for PR #$GitHubPrNumber`n$($_.Exception.Message)"
+    exit 3
+}
+
+$ghComments = @($ghPages | ForEach-Object { $_ }) | Where-Object {
     $_.user.login -in @('coderabbitai', 'coderabbitai[bot]')
 }
 
@@ -363,7 +410,12 @@ if ($PreviousJsonPath) {
         Write-Error "Previous harvest JSON not found: $PreviousJsonPath"
         exit 2
     }
-    $previousJson = Get-Content $PreviousJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json -Depth 100
+    try {
+        $previousJson = Get-Content $PreviousJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json -Depth 100
+    } catch {
+        Write-Error "Failed to parse previous harvest JSON at: $PreviousJsonPath`n$($_.Exception.Message)"
+        exit 3
+    }
     $previousComments = $previousJson.comments
 }
 
@@ -383,7 +435,13 @@ foreach ($raw in $extensionComments) {
 
 foreach ($raw in $ghComments) {
     $norm = ConvertTo-NormalizedComment -RawComment $raw -Source 'github'
-    $cls = if (Test-IsLgtmBody -Body $norm.body) { 'LGTM' } else { 'REVIEW_NEEDED' }
+    # GitHub comments carry no CodeRabbit type/severity, so the body heuristics
+    # (exact marker OR compliment prefix) are the only signal available here.
+    $cls = if ((Test-IsExactLgtmBody -Body $norm.body) -or (Test-IsComplimentPrefixBody -Body $norm.body)) {
+        'LGTM'
+    } else {
+        'REVIEW_NEEDED'
+    }
     Add-Member -InputObject $norm -NotePropertyName classification -NotePropertyValue $cls -Force
     if ($PreviousJsonPath) {
         $transition = Get-TransitionLabel -CurrentComment $norm -PreviousComments $previousComments
@@ -401,12 +459,23 @@ foreach ($raw in $ghComments) {
 # Step 6: detect RESOLVED (in previous but not in current)
 $resolvedComments = [System.Collections.Generic.List[PSCustomObject]]::new()
 if ($PreviousJsonPath) {
+    # Build per-source location keys so a finding resolved on one surface isn't
+    # masked by the same finding still present on the other (source is part of
+    # the key — cross-source matches are intentionally never treated as the same).
     $currentIds = $classified | ForEach-Object { $_.id }
-    $currentLocations = $classified | ForEach-Object { "$($_.path):$($_.startLine):$($_.endLine)" }
+    $currentLocations = $classified | ForEach-Object {
+        "$($_.source):$($_.path):$($_.startLine):$($_.endLine):$($_.body)"
+    }
+
     foreach ($prev in $previousComments) {
         $matched = $false
-        if ($prev.id -and $prev.id -in $currentIds) { $matched = $true }
-        elseif ("$($prev.path):$($prev.startLine):$($prev.endLine)" -in $currentLocations) { $matched = $true }
+        if ($prev.id -and $prev.id -in $currentIds) {
+            $matched = $true
+        }
+        else {
+            $prevKey = "$($prev.source):$($prev.path):$($prev.startLine):$($prev.endLine):$($prev.body)"
+            if ($prevKey -in $currentLocations) { $matched = $true }
+        }
         if (-not $matched) {
             $resolved = $prev.PSObject.Copy()
             Add-Member -InputObject $resolved -NotePropertyName transition -NotePropertyValue 'RESOLVED' -Force
