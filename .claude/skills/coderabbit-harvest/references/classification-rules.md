@@ -53,13 +53,15 @@ Assertive comments with major severity signal real concerns.
 
 The most common case for assertive: lightweight architectural commentary worth reading but rarely action-required.
 
-### Rule 8 — `type='additional'` → severity-based
+### Rule 8 — `type='additional'` → severity-based (asymmetric with Rule 7)
 
-`additional` is CodeRabbit's bucket for non-actionable supplementary remarks — compliments, `LGTM!` bodies, and short observations. Empirically every `additional` comment observed across PRs #41 and #45 was a no-op. Classified symmetrically to `assertive`:
+`additional` is CodeRabbit's bucket for non-actionable supplementary remarks — compliments, `LGTM!` bodies, and short observations. Empirically every `additional` comment observed across PRs #41 and #45 was a no-op.
 
 - `severity` in `{major, critical}` → **MAJOR**
 - `severity` in `{'', none, low, minor}` → **LGTM** (the common case — no-op)
-- otherwise → **REVIEW_NEEDED**
+- otherwise (including `nitpick`) → **REVIEW_NEEDED**
+
+**Note: this is intentionally asymmetric with Rule 7.** Rule 7 (`assertive`) routes `severity='nitpick'` to NITPICK because an "assertive" finding marked nitpick is a coherent lightweight architectural note. Rule 8 (`additional`) routes `severity='nitpick'` to REVIEW_NEEDED instead, because an "additional/compliment" comment marked nitpick is an internally-conflicting payload (CodeRabbit saying both "this is supplementary" and "this is a nitpick") that warrants a human glance. If empirical evidence shows `additional + nitpick` is a recurring no-op pattern in practice, this rule can be widened.
 
 The LGTM mapping for benign severity is what makes long, markdown-bolded compliment bodies (e.g. `**Excellent architectural traceability.**…`, which is >200 chars so Rule 10a's prefix branch can't catch it) classify correctly as no-ops rather than falling through to the catch-all.
 
