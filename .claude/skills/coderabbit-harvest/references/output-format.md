@@ -1,0 +1,105 @@
+# Output format
+
+The `coderabbit-harvest` skill produces two outputs: a persistent JSON file and a markdown summary printed to stdout.
+
+## JSON file (`/tmp/harvest-<sha-prefix>.json`)
+
+The JSON schema captures **all** raw data, including LGTM bodies that are omitted from the markdown summary. This enables re-querying without re-running the harvest.
+
+### Top-level fields
+
+| Field | Type | Description |
+|---|---|---|
+| `targetCommit` | string | Full SHA of the commit harvested |
+| `prNumber` | integer | GitHub PR number associated with the branch |
+| `extensionMeta` | object | Metadata from the Extension review object |
+| `comments` | array | Classified comment array (see schema below) |
+| `resolved` | array | Comments present in previous harvest but absent here (comparison mode only) |
+| `counts` | object | Tally per classification bucket |
+| `comparisonMode` | boolean | `true` if `--PreviousJsonPath` was set |
+
+### `extensionMeta` schema
+
+```json
+{
+  "startedAt": "ISO 8601 timestamp",
+  "endedAt": "ISO 8601 timestamp",
+  "status": "completed | in_progress | failed",
+  "title": "Title of the review",
+  "poem": "Optional CodeRabbit poem"
+}
+```
+
+### `comments[]` schema
+
+```json
+{
+  "id": "string | null (CodeRabbit comment UUID)",
+  "source": "extension | github",
+  "type": "actionable | assertive | additional | outsideDiffRange | duplicate | ''",
+  "severity": "major | critical | minor | nitpick | low | '' (lowercase)",
+  "path": "string (file path relative to repo root)",
+  "startLine": "integer",
+  "endLine": "integer",
+  "title": "string",
+  "body": "string (full comment markdown)",
+  "analysisType": "incorrect_review_comment | off_topic | invalid | ''",
+  "codegenInstructions": "string",
+  "classification": "LGTM | NITPICK | MAJOR | REVIEW_NEEDED",
+  "transition": "NEW | PERSISTED | MODIFIED (only present in comparison mode)"
+}
+```
+
+### `resolved[]` schema
+
+Same as `comments[]`, with `transition` always set to `RESOLVED`.
+
+### `counts` schema
+
+```json
+{
+  "LGTM": "integer",
+  "NITPICK": "integer",
+  "MAJOR": "integer",
+  "REVIEW_NEEDED": "integer",
+  "total": "integer",
+  "resolved": "integer (0 if not comparison mode)"
+}
+```
+
+## Markdown summary (stdout)
+
+The markdown summary is the human-readable rendering. Structure:
+
+1. **Header** — `# Harvest report — PR #N commit SHA`
+2. **Sanity** — commit, PR, review title/status, time window, comparison mode flag
+3. **Counts** — per-bucket counts and total
+4. **Cross-source surfaces** — per-source counts (Extension vs GitHub); the skill does not deduplicate across sources (see `classification-rules.md`)
+5. **Substantive comments** — table of NITPICK/MAJOR/REVIEW_NEEDED comments (+ MODIFIED in comparison mode)
+6. **Details** — per-comment expanded view: title, body, codegen instructions, transition
+7. **Resolved comments** — only in comparison mode, lists items absent vs previous harvest
+8. **Poem** — CodeRabbit's signature
+9. **Footer** — pointer to the JSON file path
+
+**Token efficiency**: LGTM comments are omitted from the markdown summary entirely. The details section repeats body content of substantive comments — this is the largest contributor to output size and scales with the number of comments worth reading.
+
+## Re-querying the JSON file
+
+To re-read a previous harvest without re-running the skill:
+
+```powershell
+$h = Get-Content /tmp/harvest-<sha-prefix>.json -Raw | ConvertFrom-Json -Depth 100
+
+# Counts
+$h.counts
+
+# Just the substantive comments
+$h.comments | Where-Object classification -in 'NITPICK', 'MAJOR', 'REVIEW_NEEDED'
+
+# A specific comment's full body
+$h.comments | Where-Object { $_.path -eq 'docs/adr/0002-...md' -and $_.startLine -eq 12 } | Select-Object -ExpandProperty body
+```
+
+## Schema versioning
+
+This is v1 of the output schema. Future changes will be additive when possible. If a breaking change is needed, the JSON gains a top-level `schemaVersion` field and the skill increments accordingly.

@@ -57,4 +57,9 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
-.claude/
+
+# Claude Code: share .claude/skills, .claude/commands, .claude/settings.json; ignore only user-local settings
+.claude/settings.local.json
+
+# coderabbit-harvest skill output files (transient, regenerable)
+/tmp/harvest-*.json
