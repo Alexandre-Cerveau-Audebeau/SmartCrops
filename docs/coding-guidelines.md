@@ -47,7 +47,7 @@ Conventions may evolve; significant changes should be made via PR and discussed.
 ## 4. Frontend TypeScript / React conventions
 
 - **Target**: React 18 + Vite + TypeScript strict mode + MUI v7.
-- **No `any` type**. Use `unknown` and narrow, or define a proper type. The strict mode in `tsconfig.json` enforces this.
+- **No `any` type**. Use `unknown` and narrow, or define a proper type. TypeScript's strict mode (incl. `noImplicitAny`) prevents *implicit* `any` (when type inference fails); explicit `any` annotations remain permitted unless an ESLint rule like `@typescript-eslint/no-explicit-any` is enabled. The team standard is to avoid explicit `any` even where the compiler allows it.
 - **Component naming**: PascalCase for component files (`PlantCard.tsx`), camelCase for hook and utility files (`usePlantData.ts`). Functions use camelCase; types and interfaces use PascalCase.
 - **MUI v7 only**. Don't introduce other UI libraries. If a component is missing, build it from MUI primitives.
 - **Error boundaries** at the page level for graceful degradation.
@@ -65,7 +65,7 @@ Conventions may evolve; significant changes should be made via PR and discussed.
 
 ## 6. Documentation
 
-- **XML doc** on every public C# method, property, and class with non-trivial behavior. The Docstring Coverage check threshold is 80%; warnings are tolerated, not addressed reactively.
+- **XML doc expectation**: document public C# methods, properties, and classes with non-trivial behavior — this is the team standard. The CI Docstring Coverage check enforces an 80% floor (warnings tolerated, but missing docs are still a violation of the standard, to be improved incrementally).
 - **`/// <summary>`** for the top-level description, `<param>` for each parameter, `<returns>` for non-void return, `<exception>` for thrown exceptions when relevant.
 - **README.md** at the repo root summarizes the project. Subdirectory docs follow the local convention: Claude Code skills use `.claude/skills/<name>/SKILL.md` as the canonical entry point (with `README.md` as optional human-readable supplement); other subdirectories may use `README.md` or directory-local conventions as appropriate.
 - **ADRs** in `docs/adr/` for architectural decisions. Follow the format established by ADR-0001 (`docs/adr/0001-...md`): Status / Date / Deciders / Context / Decision / Rationale / Consequences / When to revisit / Related.

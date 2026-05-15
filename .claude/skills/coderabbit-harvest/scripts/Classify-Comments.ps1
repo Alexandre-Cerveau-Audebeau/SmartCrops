@@ -179,7 +179,7 @@ function Get-CommentClassification {
         switch ($severity) {
             'major' { return 'MAJOR' }
             'critical' { return 'MAJOR' }
-            { $_ -in @('', 'none', 'low', 'minor') } { return 'NITPICK' }
+            { $_ -in @('', 'none', 'low', 'minor', 'nitpick') } { return 'NITPICK' }
             default { return 'REVIEW_NEEDED' }
         }
     }

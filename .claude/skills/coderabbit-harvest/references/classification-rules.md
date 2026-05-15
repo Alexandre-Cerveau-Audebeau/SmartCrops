@@ -49,7 +49,7 @@ Actionable without a clear severity label. Flag for Claude's judgment.
 
 Assertive comments with major severity signal real concerns.
 
-### Rule 7 — `type='assertive'` AND `severity` in `{'', none, low, minor}` → **NITPICK**
+### Rule 7 — `type='assertive'` AND `severity` in `{'', none, low, minor, nitpick}` → **NITPICK**
 
 The most common case for assertive: lightweight architectural commentary worth reading but rarely action-required.
 
