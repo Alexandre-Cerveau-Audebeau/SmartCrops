@@ -23,7 +23,7 @@ Conventions may evolve; significant changes should be made via PR and discussed.
 ## 2. PR conventions
 
 - **PR title**: same as the squash subject — conventional commit format.
-- **PR body**: structured with Summary / Design / Scope / Testing / Validation sections at minimum. The Validation section is a checklist confirming `dotnet build` / `dotnet test` / `dotnet format` / `npm run lint` / `npm test` all pass.
+- **PR body**: structured with Summary / Design / Scope / Testing / Validation sections at minimum. The Validation section is a checklist confirming `dotnet build` / `dotnet test` / `dotnet format --verify-no-changes` / `npm run lint` / `npm test` all pass.
 - **One concern per PR**. If a PR grows in scope mid-flight, split it. Doc-only PRs are valid (e.g. PR #45 introduced ADR-0002 with no code change).
 - **CodeRabbit harvest** is mandatory after each push. The `coderabbit-harvest` skill formalizes this — see `.claude/skills/coderabbit-harvest/`.
 - **CodeRabbit comments** are classified ACCEPT / DEFER / REJECT / NO-OP. ACCEPT items are addressed in the same PR. DEFER items become GitHub issues with `tech-debt` or `enhancement` labels. REJECT items are rationalized in the PR thread or commit body.

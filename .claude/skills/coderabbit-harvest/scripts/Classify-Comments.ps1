@@ -359,18 +359,23 @@ if (-not $review) {
 
 # Step 2: collect Extension comments
 $extensionComments = [System.Collections.Generic.List[PSCustomObject]]::new()
-$ad = $review.additionalDetails
+# Read additionalDetails defensively — CodeRabbit's review shape isn't guaranteed
+# to include this field on every review object (and under strict mode a missing
+# property throws on direct access). If absent, the loop becomes a no-op and we
+# still capture comments via the fileReviewMap path below.
+$ad = Get-SafeProp -Object $review -Name 'additionalDetails' -Default $null
+if ($ad) {
+    foreach ($cat in @('actionableComments', 'assertiveComments', 'additionalComments', 'outsideDiffRangeComments', 'duplicateComments')) {
+        $catVal = $ad.PSObject.Properties[$cat]
+        if (-not $catVal -or -not $catVal.Value) { continue }
 
-foreach ($cat in @('actionableComments', 'assertiveComments', 'additionalComments', 'outsideDiffRangeComments', 'duplicateComments')) {
-    $catVal = $ad.PSObject.Properties[$cat]
-    if (-not $catVal -or -not $catVal.Value) { continue }
-
-    $items = $catVal.Value
-    if ($items -is [System.Array]) {
-        foreach ($c in $items) { $extensionComments.Add($c) | Out-Null }
-    } else {
-        foreach ($p in $items.PSObject.Properties) {
-            foreach ($c in $p.Value) { $extensionComments.Add($c) | Out-Null }
+        $items = $catVal.Value
+        if ($items -is [System.Array]) {
+            foreach ($c in $items) { $extensionComments.Add($c) | Out-Null }
+        } else {
+            foreach ($p in $items.PSObject.Properties) {
+                foreach ($c in $p.Value) { $extensionComments.Add($c) | Out-Null }
+            }
         }
     }
 }
@@ -383,6 +388,14 @@ if ($review.PSObject.Properties['fileReviewMap'] -and $review.fileReviewMap) {
 }
 
 # Step 3: fetch GitHub comments
+# Pre-check that the gh CLI is available. SKILL.md lists it as a requirement;
+# if it's missing, fail cleanly via the documented exit 3 path rather than
+# letting PowerShell raise an opaque native-command error.
+if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+    Write-Error "The 'gh' CLI is required but was not found on PATH. Install it via https://cli.github.com/ and authenticate with 'gh auth login'."
+    exit 3
+}
+
 # --paginate fetches all pages; --slurp combines them into a single JSON array
 # (without --slurp, the response is one JSON object per page, not parseable as one).
 $ghCommentsRaw = gh api "repos/{owner}/{repo}/pulls/$GitHubPrNumber/comments" --paginate --slurp 2>$null

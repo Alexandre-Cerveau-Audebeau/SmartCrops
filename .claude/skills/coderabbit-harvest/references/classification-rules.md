@@ -121,7 +121,7 @@ When invoked with a previous harvest's JSON, each comment gets a **transition la
 |---|---|
 | **NEW** | Comment exists in current harvest, absent from previous |
 | **PERSISTED** | Comment exists in both, body unchanged |
-| **MODIFIED** | Comment id exists in both, but body differs |
+| **MODIFIED** | Same comment present in both harvests (matched by id, or by same source + path + line range when ids differ), but body has changed |
 | **RESOLVED** | Comment exists in previous, absent from current |
 
 Matching priority:
