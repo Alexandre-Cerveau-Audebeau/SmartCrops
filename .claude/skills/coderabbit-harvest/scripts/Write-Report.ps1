@@ -19,6 +19,9 @@
 .NOTES
     PowerShell 7+ required.
     Exit codes: 0 = OK, 1 = invalid input.
+    Error reporting: error paths use the Write-Stderr helper, not Write-Error.
+    Necessary because $ErrorActionPreference='Stop' makes Write-Error terminating,
+    which would short-circuit before any explicit `exit N` line could run. See issue #50.
 #>
 
 [CmdletBinding()]
@@ -34,6 +37,21 @@ begin {
     $ErrorActionPreference = 'Stop'
     Set-StrictMode -Version Latest
     $inputLines = [System.Collections.Generic.List[string]]::new()
+
+    # Duplicated from Classify-Comments.ps1 (parity with Get-SafeProp) to keep
+    # this script independently runnable. See issue #50 for the rationale —
+    # Write-Error becomes terminating under strict mode, so the explicit
+    # `exit N` lines below would never run without this workaround.
+    function Write-Stderr {
+        [CmdletBinding()]
+        [OutputType([void])]
+        param(
+            [Parameter(Mandatory = $true)] [string]$Message,
+            [Parameter(Mandatory = $true)] [int]$ExitCode
+        )
+        [Console]::Error.WriteLine($Message)
+        exit $ExitCode
+    }
 }
 
 process {
@@ -43,15 +61,13 @@ process {
 end {
     $joined = $inputLines -join "`n"
     if (-not $joined) {
-        Write-Error "No JSON input received (expected from stdin or -InputJson)"
-        exit 1
+        Write-Stderr -Message "No JSON input received (expected from stdin or -InputJson)" -ExitCode 1
     }
 
     try {
         $data = $joined | ConvertFrom-Json -Depth 100
     } catch {
-        Write-Error "Failed to parse input JSON: $_"
-        exit 1
+        Write-Stderr -Message "Failed to parse input JSON: $_" -ExitCode 1
     }
 
     # Validate critical schema fields before use. Malformed input shouldn't
@@ -60,6 +76,7 @@ end {
     # to keep this script independently runnable.)
     function Get-SafeProp {
         [CmdletBinding()]
+        [OutputType([object])]
         param($Object, [Parameter(Mandatory = $true)] [string]$Name, $Default = '')
         if ($Object -and $Object.PSObject.Properties[$Name]) {
             $value = $Object.PSObject.Properties[$Name].Value
@@ -70,32 +87,27 @@ end {
 
     $targetCommit = (Get-SafeProp -Object $data -Name 'targetCommit').ToString()
     if ([string]::IsNullOrWhiteSpace($targetCommit) -or $targetCommit.Length -lt 7) {
-        Write-Error "Schema validation failed: 'targetCommit' missing or shorter than 7 chars (got '$targetCommit')"
-        exit 1
+        Write-Stderr -Message "Schema validation failed: 'targetCommit' missing or shorter than 7 chars (got '$targetCommit')" -ExitCode 1
     }
 
     $prNumber = Get-SafeProp -Object $data -Name 'prNumber' -Default $null
     if ($null -eq $prNumber) {
-        Write-Error "Schema validation failed: 'prNumber' missing from input JSON"
-        exit 1
+        Write-Stderr -Message "Schema validation failed: 'prNumber' missing from input JSON" -ExitCode 1
     }
 
     $extensionMeta = Get-SafeProp -Object $data -Name 'extensionMeta' -Default $null
     if ($null -eq $extensionMeta) {
-        Write-Error "Schema validation failed: 'extensionMeta' missing from input JSON"
-        exit 1
+        Write-Stderr -Message "Schema validation failed: 'extensionMeta' missing from input JSON" -ExitCode 1
     }
 
     $commentsRaw = Get-SafeProp -Object $data -Name 'comments' -Default $null
     if ($null -eq $commentsRaw) {
-        Write-Error "Schema validation failed: 'comments' missing from input JSON"
-        exit 1
+        Write-Stderr -Message "Schema validation failed: 'comments' missing from input JSON" -ExitCode 1
     }
 
     $counts = Get-SafeProp -Object $data -Name 'counts' -Default $null
     if ($null -eq $counts) {
-        Write-Error "Schema validation failed: 'counts' missing from input JSON"
-        exit 1
+        Write-Stderr -Message "Schema validation failed: 'counts' missing from input JSON" -ExitCode 1
     }
 
     # Write raw JSON to OutputPath (ensure parent dir exists)
