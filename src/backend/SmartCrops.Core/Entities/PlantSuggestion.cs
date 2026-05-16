@@ -1,6 +1,8 @@
+using SmartCrops.Core.Interfaces;
+
 namespace SmartCrops.Core.Entities;
 
-public class PlantSuggestion
+public class PlantSuggestion : IHasUpdatedAt
 {
     public Guid Id { get; set; }
 
@@ -37,6 +39,8 @@ public class PlantSuggestion
     public string Status { get; set; } = "Pending";
 
     public DateTime CreatedAt { get; set; }
+
+    public DateTime UpdatedAt { get; set; }
 
     public DateTime? ReviewedAt { get; set; }
 

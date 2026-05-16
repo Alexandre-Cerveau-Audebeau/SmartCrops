@@ -55,6 +55,9 @@ public class PlantCommonNameConfiguration : IEntityTypeConfiguration<PlantCommon
         builder.Property(c => c.CreatedAt)
             .IsRequired()
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
+        builder.Property(c => c.UpdatedAt)
+            .IsRequired()
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
         // Single-column PlantId index: covers the FK back to Plant for cascade delete
         // and for general "load all common names for a plant" queries. The previous

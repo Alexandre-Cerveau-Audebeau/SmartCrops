@@ -1,3 +1,5 @@
+using SmartCrops.Core.Interfaces;
+
 namespace SmartCrops.Core.Entities;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace SmartCrops.Core.Entities;
 /// A plant can have multiple common names per language (e.g. "tomato" and "love apple"
 /// in English), so uniqueness is NOT enforced on (PlantId, LanguageCode).
 /// </summary>
-public class PlantCommonName
+public class PlantCommonName : IHasUpdatedAt
 {
     public int Id { get; set; }
 
@@ -22,4 +24,5 @@ public class PlantCommonName
     public bool IsPrimary { get; set; }
 
     public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
 }
