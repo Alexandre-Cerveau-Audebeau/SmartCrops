@@ -1,10 +1,12 @@
+using SmartCrops.Core.Interfaces;
+
 namespace SmartCrops.Core.Entities;
 
 /// <summary>
 /// A scientific synonym for the plant. Used during ETL to fuzzy-match upstream
 /// records against an existing canonical Plant.
 /// </summary>
-public class PlantSynonym
+public class PlantSynonym : IHasUpdatedAt
 {
     public int Id { get; set; }
 
@@ -18,4 +20,5 @@ public class PlantSynonym
     public string? Authority { get; set; }
 
     public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
 }

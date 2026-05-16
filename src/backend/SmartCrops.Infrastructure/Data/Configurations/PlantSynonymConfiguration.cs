@@ -31,6 +31,9 @@ public class PlantSynonymConfiguration : IEntityTypeConfiguration<PlantSynonym>
         builder.Property(s => s.CreatedAt)
             .IsRequired()
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
+        builder.Property(s => s.UpdatedAt)
+            .IsRequired()
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
         // Supports fuzzy lookup of upstream records during ETL.
         builder.HasIndex(s => s.Synonym);

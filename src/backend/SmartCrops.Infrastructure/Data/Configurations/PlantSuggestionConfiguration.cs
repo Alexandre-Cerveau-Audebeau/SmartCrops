@@ -31,6 +31,13 @@ public class PlantSuggestionConfiguration : IEntityTypeConfiguration<PlantSugges
         builder.Property(s => s.UserId).HasMaxLength(200);
         builder.Property(s => s.ReviewedBy).HasMaxLength(200);
 
+        builder.Property(s => s.CreatedAt)
+            .IsRequired()
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
+        builder.Property(s => s.UpdatedAt)
+            .IsRequired()
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
         builder.ToTable(t => t.HasCheckConstraint(
             "CK_PlantSuggestions_Status",
             "\"Status\" IN ('Pending','Approved','Rejected')"));
