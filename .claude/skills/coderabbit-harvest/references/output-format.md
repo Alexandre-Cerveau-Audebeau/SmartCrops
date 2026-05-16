@@ -10,6 +10,7 @@ The JSON schema captures **all** raw data, including LGTM bodies that are omitte
 
 | Field | Type | Description |
 |---|---|---|
+| `schemaVersion` | integer | Output schema version (currently `1`). Consumers should default to `1` when absent for backward compatibility with pre-versioned harvests. |
 | `targetCommit` | string | Full SHA of the commit harvested |
 | `prNumber` | integer | GitHub PR number associated with the branch |
 | `extensionMeta` | object | Metadata from the Extension review object |
@@ -102,4 +103,4 @@ $h.comments | Where-Object { $_.path -eq 'docs/adr/0002-...md' -and $_.startLine
 
 ## Schema versioning
 
-This is v1 of the output schema. Future changes will be additive when possible. If a breaking change is needed, the JSON gains a top-level `schemaVersion` field and the skill increments accordingly.
+Output emits an explicit `schemaVersion: 1` at the top level. Future changes will be additive when possible; breaking changes will bump to `2` (etc.). Consumers should branch on `schemaVersion ?? 1` for backward compatibility with pre-versioned harvests.

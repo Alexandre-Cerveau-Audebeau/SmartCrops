@@ -39,6 +39,10 @@
     PowerShell 7+ required (null-coalescing, ternary).
     Windows-only by design — see ADR rationale and .coderabbit.yaml path_instructions.
     Exit codes: 0 = OK, 1 = invalid input, 2 = data not found, 3 = parse/API error.
+    Error reporting: error paths use the Write-Stderr helper, not Write-Error.
+    Necessary because $ErrorActionPreference='Stop' makes Write-Error terminating,
+    which would short-circuit before any explicit `exit N` line could run and
+    collapse the documented exit codes to a uniform 1. See issue #50.
 #>
 
 [CmdletBinding(DefaultParameterSetName = 'Run')]
@@ -66,6 +70,38 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 # ---------------------------------------------------------------------------
+# Error reporting helper — see issue #50
+# ---------------------------------------------------------------------------
+
+function Write-Stderr {
+    <#
+    .SYNOPSIS
+    Write a message to stderr and exit with a specific code.
+
+    .DESCRIPTION
+    Workaround for $ErrorActionPreference='Stop' making Write-Error terminating
+    (which short-circuits before any explicit `exit N` line is reached). Uses
+    [Console]::Error.WriteLine — writes to stderr without raising a terminating
+    error, so the documented exit codes (0/1/2/3) are actually reachable.
+    See issue #50 for the original analysis.
+
+    .PARAMETER Message
+    The error message to write to stderr.
+
+    .PARAMETER ExitCode
+    The exit code: 1 = invalid input, 2 = data not found, 3 = parse/API error.
+    #>
+    [CmdletBinding()]
+    [OutputType([void])]
+    param(
+        [Parameter(Mandatory = $true)] [string]$Message,
+        [Parameter(Mandatory = $true)] [int]$ExitCode
+    )
+    [Console]::Error.WriteLine($Message)
+    exit $ExitCode
+}
+
+# ---------------------------------------------------------------------------
 # Help mode — print parent SKILL.md and exit
 # ---------------------------------------------------------------------------
 
@@ -74,8 +110,7 @@ if ($Help) {
     if (Test-Path $skillMdPath) {
         Get-Content $skillMdPath -Raw
     } else {
-        Write-Error "SKILL.md not found at: $skillMdPath"
-        exit 2
+        Write-Stderr -Message "SKILL.md not found at: $skillMdPath" -ExitCode 2
     }
     exit 0
 }
@@ -106,6 +141,7 @@ $Script:LgtmStartingPrefixes = @(
 
 function Test-IsExactLgtmBody {
     [CmdletBinding()]
+    [OutputType([bool])]
     param([string]$Body)
 
     # Rule 2a — body (trimmed) exactly matches an unambiguous LGTM marker.
@@ -122,6 +158,7 @@ function Test-IsExactLgtmBody {
 
 function Test-IsComplimentPrefixBody {
     [CmdletBinding()]
+    [OutputType([bool])]
     param([string]$Body)
 
     # Rule 10a — short body opening with a complimentary word (Excellent/Great/
@@ -144,6 +181,7 @@ function Test-IsComplimentPrefixBody {
 
 function Get-CommentClassification {
     [CmdletBinding()]
+    [OutputType([string])]
     param([Parameter(Mandatory = $true)] [PSCustomObject]$Comment)
 
     $type = ($Comment.PSObject.Properties['type'] ? ($Comment.type ?? '') : '').ToString()
@@ -211,6 +249,7 @@ function Get-CommentClassification {
 
 function Get-SafeProp {
     [CmdletBinding()]
+    [OutputType([object])]
     param(
         $Object,
         [Parameter(Mandatory = $true)] [string]$Name,
@@ -230,6 +269,7 @@ function Get-SafeProp {
 
 function ConvertTo-NormalizedComment {
     [CmdletBinding()]
+    [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory = $true)] [PSCustomObject]$RawComment,
         [Parameter(Mandatory = $true)] [ValidateSet('extension', 'github')] [string]$Source
@@ -283,6 +323,7 @@ function ConvertTo-NormalizedComment {
 
 function Get-TransitionLabel {
     [CmdletBinding()]
+    [OutputType([string])]
     param(
         [Parameter(Mandatory = $true)] [PSCustomObject]$CurrentComment,
         [Parameter(Mandatory = $true)] [object[]]$PreviousComments
@@ -325,8 +366,7 @@ function Get-TransitionLabel {
 
 # Step 1: read Extension JSON
 if (-not (Test-Path $ReviewsFile)) {
-    Write-Error "Extension reviews JSON not found at: $ReviewsFile"
-    exit 2
+    Write-Stderr -Message "Extension reviews JSON not found at: $ReviewsFile" -ExitCode 2
 }
 
 # Step 1b: freshness check — the Extension JSON should be recently written
@@ -340,21 +380,18 @@ if ($fileAge.TotalMinutes -gt $freshnessLimitMinutes) {
     # binds tighter than +, so "a" + "b" -f x would format only "b".
     $staleMsg = "Extension reviews JSON is stale: last written {0:F1} min ago (limit: {1} min). " +
         "Re-trigger the CodeRabbit Extension review, or pass --commit explicitly to harvest a known commit."
-    Write-Error ($staleMsg -f $fileAge.TotalMinutes, $freshnessLimitMinutes)
-    exit 2
+    Write-Stderr -Message ($staleMsg -f $fileAge.TotalMinutes, $freshnessLimitMinutes) -ExitCode 2
 }
 
 try {
     $json = Get-Content $ReviewsFile -Raw -Encoding UTF8 | ConvertFrom-Json -Depth 100
 } catch {
-    Write-Error "Failed to parse Extension reviews JSON at: $ReviewsFile`n$($_.Exception.Message)"
-    exit 3
+    Write-Stderr -Message "Failed to parse Extension reviews JSON at: $ReviewsFile`n$($_.Exception.Message)" -ExitCode 3
 }
 $review = $json | Where-Object { $_.headCommitId -like "$CommitSha*" } | Select-Object -Last 1
 
 if (-not $review) {
-    Write-Error "No Extension review object found for commit prefix: $CommitSha"
-    exit 2
+    Write-Stderr -Message "No Extension review object found for commit prefix: $CommitSha" -ExitCode 2
 }
 
 # Step 2: collect Extension comments
@@ -392,24 +429,21 @@ if ($review.PSObject.Properties['fileReviewMap'] -and $review.fileReviewMap) {
 # if it's missing, fail cleanly via the documented exit 3 path rather than
 # letting PowerShell raise an opaque native-command error.
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-    Write-Error "The 'gh' CLI is required but was not found on PATH. Install it via https://cli.github.com/ and authenticate with 'gh auth login'."
-    exit 3
+    Write-Stderr -Message "The 'gh' CLI is required but was not found on PATH. Install it via https://cli.github.com/ and authenticate with 'gh auth login'." -ExitCode 3
 }
 
 # --paginate fetches all pages; --slurp combines them into a single JSON array
 # (without --slurp, the response is one JSON object per page, not parseable as one).
 $ghCommentsRaw = gh api "repos/{owner}/{repo}/pulls/$GitHubPrNumber/comments" --paginate --slurp 2>$null
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Failed to fetch GitHub comments for PR #$GitHubPrNumber"
-    exit 3
+    Write-Stderr -Message "Failed to fetch GitHub comments for PR #$GitHubPrNumber" -ExitCode 3
 }
 
 # With --slurp, the structure is [[page1...], [page2...], ...] — flatten it.
 try {
     $ghPages = $ghCommentsRaw | ConvertFrom-Json -Depth 100
 } catch {
-    Write-Error "Failed to parse GitHub PR comments JSON for PR #$GitHubPrNumber`n$($_.Exception.Message)"
-    exit 3
+    Write-Stderr -Message "Failed to parse GitHub PR comments JSON for PR #$GitHubPrNumber`n$($_.Exception.Message)" -ExitCode 3
 }
 
 $ghComments = @($ghPages | ForEach-Object { $_ }) | Where-Object {
@@ -420,14 +454,12 @@ $ghComments = @($ghPages | ForEach-Object { $_ }) | Where-Object {
 $previousComments = @()
 if ($PreviousJsonPath) {
     if (-not (Test-Path $PreviousJsonPath)) {
-        Write-Error "Previous harvest JSON not found: $PreviousJsonPath"
-        exit 2
+        Write-Stderr -Message "Previous harvest JSON not found: $PreviousJsonPath" -ExitCode 2
     }
     try {
         $previousJson = Get-Content $PreviousJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json -Depth 100
     } catch {
-        Write-Error "Failed to parse previous harvest JSON at: $PreviousJsonPath`n$($_.Exception.Message)"
-        exit 3
+        Write-Stderr -Message "Failed to parse previous harvest JSON at: $PreviousJsonPath`n$($_.Exception.Message)" -ExitCode 3
     }
     $previousComments = $previousJson.comments
 }
@@ -500,6 +532,7 @@ if ($PreviousJsonPath) {
 # Step 7: emit
 if (-not $NoOutput) {
     $output = [PSCustomObject]@{
+        schemaVersion = 1
         targetCommit  = $CommitSha
         prNumber      = $GitHubPrNumber
         extensionMeta = @{
