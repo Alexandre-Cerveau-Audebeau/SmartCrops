@@ -33,7 +33,9 @@ public abstract class IntegrationTestBase : IAsyncLifetime
 
     public Task DisposeAsync()
     {
-        Client.Dispose();
+        // Null-safe: if InitializeAsync threw before Client was assigned, calling
+        // Client.Dispose() would NRE and mask the original setup failure.
+        Client?.Dispose();
         return Task.CompletedTask;
     }
 

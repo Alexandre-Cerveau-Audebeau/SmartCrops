@@ -54,7 +54,7 @@ public class GardenLayoutEndpointsTests : IntegrationTestBase
     {
         // Ownership filter folds non-owned into the same 404 bucket as nonexistent —
         // intentional, prevents discovery of others' garden ids.
-        var (ownerId, gardenId, _) = await SeedAsync();
+        var (_, gardenId, _) = await SeedAsync();
         var otherUserId = $"u-{Guid.NewGuid():N}";
         await SeedUserAsync(otherUserId);
         AuthAs(otherUserId);
@@ -62,8 +62,6 @@ public class GardenLayoutEndpointsTests : IntegrationTestBase
         var response = await Client.GetAsync($"/api/gardens/{gardenId}/layout");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        // Suppress unused warning — keep ownerId in the seed for the contract symmetry.
-        _ = ownerId;
     }
 
     [Fact]
@@ -215,7 +213,9 @@ public class GardenLayoutEndpointsTests : IntegrationTestBase
         Assert.Equal(8, garden.LayoutHeight);
         Assert.Equal("L", garden.CellSize);
         Assert.Equal("{\"cells\":[]}", garden.CellsJson);
-        Assert.True(garden.UpdatedAt >= beforeUpdatedAt);
+        Assert.True(
+            garden.UpdatedAt > beforeUpdatedAt,
+            "UpdatedAt must be strictly greater after PUT — guards against the interceptor being silently skipped.");
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

@@ -21,13 +21,13 @@ public class SmokeTests : IntegrationTestBase
 
         Assert.True(await db.Database.CanConnectAsync());
 
-        // The Plants table is created by the InitialCreate migration. Bypass the
-        // ORM and ask the catalog directly to avoid an empty-set ambiguity.
-        var hasPlantsTable = await db.Plants
-            .FromSqlRaw("SELECT * FROM \"Plants\" LIMIT 0")
-            .AnyAsync()
-            .ContinueWith(_ => true);  // throws if table missing, returns true on success
-        Assert.True(hasPlantsTable);
+        // The Plants table is created by the InitialCreate migration. Touch it via a
+        // raw SELECT — if the table is missing the query throws and the assertion fails.
+        // (An earlier version used ContinueWith(_ => true) which silently swallowed the
+        // fault and always reported success — round-2 fix surfaced by CodeRabbit.)
+        var ex = await Record.ExceptionAsync(() =>
+            db.Database.ExecuteSqlRawAsync("SELECT 1 FROM \"Plants\" LIMIT 1;"));
+        Assert.Null(ex);
     }
 
     [Fact]
@@ -35,6 +35,8 @@ public class SmokeTests : IntegrationTestBase
     {
         // Respawn is configured to ignore PlantTypes (seeded via HasData in the
         // InitialCreate migration). Each test starts with the 5 reference rows intact.
+        // Authoritative source: PlantTypeConfiguration.cs HasData call seeds
+        // Vegetable / Fruit / Herb / Ornamental / Medicinal.
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
 

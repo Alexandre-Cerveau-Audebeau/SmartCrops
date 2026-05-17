@@ -77,8 +77,10 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         // Respawn ignores schema-bearing and reference tables so the schema invariants
         // and seeded enum-like data (PlantTypes via HasData) survive across tests.
-        // Identity tables are excluded since some endpoint tests seed an ApplicationUser
-        // explicitly and the lifecycle is managed per-test by the test itself.
+        // Identity tables (AspNetUsers et al.) are intentionally NOT in the ignore list:
+        // each test owns its user lifecycle and starts from a clean slate — the
+        // GardenLayoutEndpointsTests helper seeds an ApplicationUser at the start of
+        // every test method.
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
         Respawner = await Respawner.CreateAsync(connection, new RespawnerOptions
@@ -95,8 +97,20 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        await Factory.DisposeAsync();
-        await _container.DisposeAsync();
+        // Always tear down the container, even if Factory disposal throws — leaking a
+        // running Docker container across CI runs is worse than masking a transient
+        // factory error.
+        try
+        {
+            if (Factory is not null)
+            {
+                await Factory.DisposeAsync();
+            }
+        }
+        finally
+        {
+            await _container.DisposeAsync();
+        }
     }
 
     /// <summary>
