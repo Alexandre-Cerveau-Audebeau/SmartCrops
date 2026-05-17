@@ -71,6 +71,19 @@ public class Plant : IHasUpdatedAt
     /// <summary>Taxonomic authority (e.g. "L." for Linnaeus).</summary>
     public string? Author { get; set; }
 
+    /// <summary>
+    /// World Flora Online taxon id (audit source for the canonical species).
+    /// Denormalized from <see cref="PlantTrefleData"/> per ADR-0003 so the
+    /// canonical read model carries every cross-reference id directly.
+    /// </summary>
+    public string? WfoId { get; set; }
+
+    /// <summary>
+    /// Year the species was first published in scientific literature (GBIF).
+    /// CHECK constraint: between 1700 and the current year.
+    /// </summary>
+    public int? Year { get; set; }
+
     // ── Canonical READ MODEL (denormalized from sources) ────────────────────────
 
     public PlantLifeCycle? LifeCycle { get; set; }
@@ -95,12 +108,19 @@ public class Plant : IHasUpdatedAt
     /// <summary>Light requirement on a 0-10 scale (Trefle convention).</summary>
     public int? LightLevel { get; set; }
 
+    /// <summary>Trefle soil nutriments preference on a 0-10 scale.</summary>
+    public int? SoilNutriments { get; set; }
+
     public int? MinTempC { get; set; }
     public int? MaxTempC { get; set; }
 
     // ── Boolean flags ───────────────────────────────────────────────────────────
 
     public bool? IsEdible { get; set; }
+
+    /// <summary>Trefle classification: whether the plant is a vegetable.</summary>
+    public bool? IsVegetable { get; set; }
+
     public bool? IsMedicinal { get; set; }
     public bool? IsIndoor { get; set; }
     public bool? IsDroughtTolerant { get; set; }
@@ -111,6 +131,47 @@ public class Plant : IHasUpdatedAt
     public bool? IsToxicToHumans { get; set; }
     public bool? IsToxicToPets { get; set; }
     public bool? AttractsPollinators { get; set; }
+
+    // ── Growth habit (Trefle) ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Plant growth habit per Trefle classification. Stored as string in DB.
+    /// </summary>
+    public PlantGrowthHabit? GrowthHabit { get; set; }
+
+    // ── Trefle structured data (denormalized from PlantTrefleData per ADR-0003) ─
+
+    /// <summary>
+    /// Flower colors as JSON array of strings (e.g. <c>["red","pink"]</c>).
+    /// Denormalized from <see cref="PlantTrefleData.FlowerColors"/> for fast
+    /// Library filtering without cross-joining the audit table.
+    /// </summary>
+    public string? FlowerColors { get; set; }
+
+    /// <summary>
+    /// TDWG region codes where the plant is native, as JSON array.
+    /// Denormalized from <see cref="PlantTrefleData.NativeRegionsJson"/>.
+    /// </summary>
+    public string? NativeRegions { get; set; }
+
+    /// <summary>
+    /// TDWG region codes where the plant has been introduced, as JSON array.
+    /// Denormalized from <see cref="PlantTrefleData.IntroducedRegionsJson"/>.
+    /// </summary>
+    public string? IntroducedRegions { get; set; }
+
+    // ── Perenual descriptive data ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Edible parts as JSON array of strings (e.g. <c>["fruit","leaf","root"]</c>).
+    /// </summary>
+    public string? EdibleParts { get; set; }
+
+    /// <summary>Sowing instructions text (Perenual).</summary>
+    public string? SowingInstructions { get; set; }
+
+    /// <summary>Propagation instructions text (Perenual).</summary>
+    public string? PropagationInstructions { get; set; }
 
     // ── Enrichment metadata ─────────────────────────────────────────────────────
 
@@ -130,6 +191,7 @@ public class Plant : IHasUpdatedAt
     public ICollection<PlantPhase> Phases { get; set; } = [];
     public ICollection<PlantSynonym> Synonyms { get; set; } = [];
     public ICollection<PlantSource> Sources { get; set; } = [];
+    public ICollection<PlantPest> Pests { get; set; } = [];
 
     public PlantTrefleData? TrefleData { get; set; }
     public PlantPerenualData? PerenualData { get; set; }

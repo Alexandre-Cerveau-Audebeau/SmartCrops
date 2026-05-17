@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SmartCrops.Infrastructure.Data;
@@ -11,9 +12,11 @@ using SmartCrops.Infrastructure.Data;
 namespace SmartCrops.Infrastructure.Migrations
 {
     [DbContext(typeof(SmartCropsDbContext))]
-    partial class SmartCropsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260517145416_AddPlantD1RealDelta")]
+    partial class AddPlantD1RealDelta
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -277,7 +280,7 @@ namespace SmartCrops.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Gardens", (string)null);
+                    b.ToTable("Gardens");
                 });
 
             modelBuilder.Entity("SmartCrops.Core.Entities.GardenPlacement", b =>
@@ -321,7 +324,7 @@ namespace SmartCrops.Infrastructure.Migrations
 
                     b.HasIndex("PlantId");
 
-                    b.ToTable("GardenPlacements", (string)null);
+                    b.ToTable("GardenPlacements");
                 });
 
             modelBuilder.Entity("SmartCrops.Core.Entities.GardenPlant", b =>
@@ -345,7 +348,7 @@ namespace SmartCrops.Infrastructure.Migrations
 
                     b.HasIndex("PlantId");
 
-                    b.ToTable("GardenPlants", (string)null);
+                    b.ToTable("GardenPlants");
                 });
 
             modelBuilder.Entity("SmartCrops.Core.Entities.Plant", b =>
@@ -867,7 +870,7 @@ namespace SmartCrops.Infrastructure.Migrations
                     b.HasIndex("PlantId")
                         .IsUnique();
 
-                    b.ToTable("PlantPerenualData", (string)null);
+                    b.ToTable("PlantPerenualData");
                 });
 
             modelBuilder.Entity("SmartCrops.Core.Entities.PlantPest", b =>
@@ -1114,7 +1117,7 @@ namespace SmartCrops.Infrastructure.Migrations
 
                     b.HasIndex("PlantId", "Status");
 
-                    b.ToTable("PlantSuggestions", null, t =>
+                    b.ToTable("PlantSuggestions", t =>
                         {
                             t.HasCheckConstraint("CK_PlantSuggestions_Status", "\"Status\" IN ('Pending','Approved','Rejected')");
                         });
@@ -1193,7 +1196,7 @@ namespace SmartCrops.Infrastructure.Migrations
                     b.HasIndex("PlantId", "Language")
                         .IsUnique();
 
-                    b.ToTable("PlantTranslations", (string)null);
+                    b.ToTable("PlantTranslations");
                 });
 
             modelBuilder.Entity("SmartCrops.Core.Entities.PlantTrefleData", b =>
@@ -1269,7 +1272,7 @@ namespace SmartCrops.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"TrefleSlug\" IS NOT NULL");
 
-                    b.ToTable("PlantTrefleData", (string)null);
+                    b.ToTable("PlantTrefleData");
                 });
 
             modelBuilder.Entity("SmartCrops.Core.Entities.PlantType", b =>
@@ -1291,7 +1294,7 @@ namespace SmartCrops.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PlantTypes", (string)null);
+                    b.ToTable("PlantTypes");
 
                     b.HasData(
                         new

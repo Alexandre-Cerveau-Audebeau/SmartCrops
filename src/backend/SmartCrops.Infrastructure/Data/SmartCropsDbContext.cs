@@ -23,6 +23,7 @@ public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options)
     public DbSet<PlantPhase> PlantPhases => Set<PlantPhase>();
     public DbSet<PlantSynonym> PlantSynonyms => Set<PlantSynonym>();
     public DbSet<PlantSource> PlantSources => Set<PlantSource>();
+    public DbSet<PlantPest> PlantPests => Set<PlantPest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
