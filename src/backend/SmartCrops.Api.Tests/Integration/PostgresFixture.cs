@@ -3,12 +3,16 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using Respawn;
+using SmartCrops.Api.Tests.Integration.Stubs;
+using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure.Data;
 using Testcontainers.PostgreSql;
 
@@ -42,6 +46,15 @@ public sealed class PostgresFixture : IAsyncLifetime
     public string ConnectionString => _container.GetConnectionString();
     public Respawner Respawner { get; private set; } = default!;
 
+    /// <summary>
+    /// Shared stub for <see cref="IPlantTaxonomyService"/>. Integration tests
+    /// enqueue canned responses on this instance and inspect captured calls;
+    /// <see cref="IntegrationTestBase.InitializeAsync"/> calls <c>Reset()</c>
+    /// after Respawn so each test starts from a clean queue.
+    /// </summary>
+    public StubPlantTaxonomyService TaxonomyStub =>
+        Factory.Services.GetRequiredService<StubPlantTaxonomyService>();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
@@ -63,6 +76,18 @@ public sealed class PostgresFixture : IAsyncLifetime
                         ["Google:ClientSecret"] = "test-client-secret",
                         ["Frontend:BaseUrl"] = "http://localhost:3000",
                     });
+                });
+
+                // Replace the production GBIF-backed IPlantTaxonomyService with a
+                // deterministic in-memory stub. Tests enqueue PlantTaxonomyResult
+                // values on Fixture.TaxonomyStub; production HTTP/resilience
+                // plumbing stays untested at the integration layer.
+                builder.ConfigureTestServices(services =>
+                {
+                    services.RemoveAll<IPlantTaxonomyService>();
+                    services.AddSingleton<StubPlantTaxonomyService>();
+                    services.AddSingleton<IPlantTaxonomyService>(sp =>
+                        sp.GetRequiredService<StubPlantTaxonomyService>());
                 });
             });
 
