@@ -24,10 +24,19 @@ public class PlantPest : IHasUpdatedAt
     /// <summary>Short free-form description.</summary>
     public string? Description { get; set; }
 
-    /// <summary>Numbered list of observable symptoms (Perenual convention).</summary>
+    /// <summary>
+    /// Observable symptoms. Perenual emits a numbered, newline-delimited list
+    /// (e.g. <c>"1. Yellowing leaves\n2. Wilting"</c>); preserve the format verbatim
+    /// so the UI can render it as a list without further parsing. Candidate for
+    /// migration to a structured JSON schema once the ETL produces a stable shape.
+    /// </summary>
     public string? Symptoms { get; set; }
 
-    /// <summary>Suggested solutions — typically split into Cultural + Chemical sections.</summary>
+    /// <summary>
+    /// Suggested mitigations. Perenual splits this into "Cultural:" and "Chemical:"
+    /// sections (newline-delimited, section header on its own line). Preserved
+    /// verbatim for the same reason as <see cref="Symptoms"/>.
+    /// </summary>
     public string? Solutions { get; set; }
 
     /// <summary>Illustrative image URL.</summary>

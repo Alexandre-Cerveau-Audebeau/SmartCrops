@@ -58,6 +58,13 @@ public class PlantConfiguration : IEntityTypeConfiguration<Plant>
             // outliers without admitting obvious data errors; current year ceiling
             // is mutable via EXTRACT so the constraint stays correct across years
             // without needing a fresh migration.
+            //
+            // Dynamic-ceiling caveat: the upper bound advances at midnight UTC on
+            // Jan 1 each year. A row with Year = N+1 is rejected on Dec 31 of year
+            // N and accepted on Jan 1 of year N+1; downstream tests must source the
+            // ceiling from the DB clock (PlantNewRangeConstraintsTests uses
+            // DateTime.UtcNow.Year via MemberData). Backup/restore to a host with
+            // significant clock skew would shift the ceiling accordingly.
             t.HasCheckConstraint(
                 "CK_Plants_Year_Range",
                 "\"Year\" IS NULL OR (\"Year\" BETWEEN 1700 AND EXTRACT(YEAR FROM CURRENT_DATE)::INT)");

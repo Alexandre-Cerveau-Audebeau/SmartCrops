@@ -20,10 +20,19 @@ public class PlantNewRangeConstraintsTests : IntegrationTestBase
 
     // ── Year ────────────────────────────────────────────────────────────
 
+    // Valid year inputs are sourced dynamically so the upper-bound entry tracks
+    // the actual CHECK ceiling (EXTRACT(YEAR FROM CURRENT_DATE)) instead of being
+    // pinned to a calendar year that would silently rot — round-2 fix surfaced
+    // by CodeRabbit (the previous InlineData(2026) would have broken on Jan 1, 2027).
+    public static IEnumerable<object[]> ValidYearsData()
+    {
+        yield return [1700];                       // lower bound inclusive
+        yield return [1753];                       // Linné's foundational publication year
+        yield return [DateTime.UtcNow.Year];       // current year (dynamic)
+    }
+
     [Theory]
-    [InlineData(1700)]   // lower bound inclusive
-    [InlineData(1753)]   // Linné's foundational publication year
-    [InlineData(2026)]   // current year (test runs in 2026)
+    [MemberData(nameof(ValidYearsData))]
     public async Task Year_Valid_Accepted(int year)
     {
         using var scope = CreateScope();
@@ -34,9 +43,14 @@ public class PlantNewRangeConstraintsTests : IntegrationTestBase
         Assert.Null(ex);
     }
 
+    public static IEnumerable<object[]> InvalidYearsData()
+    {
+        yield return [1699];                       // just below lower bound
+        yield return [DateTime.UtcNow.Year + 1];   // first future year — always > CURRENT_DATE
+    }
+
     [Theory]
-    [InlineData(1699)]   // just below lower bound
-    [InlineData(3000)]   // far future, definitely > current year
+    [MemberData(nameof(InvalidYearsData))]
     public async Task Year_Invalid_Rejected(int year)
     {
         using var scope = CreateScope();
