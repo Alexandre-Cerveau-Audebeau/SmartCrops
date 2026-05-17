@@ -105,8 +105,11 @@ if (string.IsNullOrWhiteSpace(jwtKeyValue) || string.IsNullOrWhiteSpace(jwtIssue
 if (Encoding.UTF8.GetByteCount(jwtKeyValue) < 32)
     throw new InvalidOperationException("Jwt:Key must be at least 32 bytes for HS256.");
 
-// Skip DB init when no connection string is configured (e.g. unit test environments).
-if (!string.IsNullOrEmpty(app.Configuration.GetConnectionString("DefaultConnection")))
+// Skip DB init when no connection string is configured (e.g. unit test environments)
+// or when running under the "Testing" environment (integration tests apply migrations
+// themselves via PostgresFixture and skip DataSeeder so the test DB stays deterministic).
+if (!app.Environment.IsEnvironment("Testing")
+    && !string.IsNullOrEmpty(app.Configuration.GetConnectionString("DefaultConnection")))
     await app.Services.InitialiseDatabaseAsync();
 
 // Configure the HTTP request pipeline.

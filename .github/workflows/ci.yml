@@ -29,8 +29,13 @@ jobs:
       - name: Build
         run: dotnet build SmartCrops.sln --no-restore
 
-      - name: Test
-        run: dotnet test SmartCrops.sln --no-build
+      - name: Test (unit + component)
+        run: dotnet test SmartCrops.sln --no-build --filter "Category!=Integration"
+        timeout-minutes: 15
+
+      - name: Test (integration — Testcontainers PG)
+        run: dotnet test SmartCrops.sln --no-build --filter "Category=Integration"
+        timeout-minutes: 20
 
   frontend:
     name: Frontend (Node 20)
