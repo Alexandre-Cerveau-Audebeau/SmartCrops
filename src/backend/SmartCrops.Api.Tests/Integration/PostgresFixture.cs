@@ -55,6 +55,13 @@ public sealed class PostgresFixture : IAsyncLifetime
     public StubPlantTaxonomyService TaxonomyStub =>
         Factory.Services.GetRequiredService<StubPlantTaxonomyService>();
 
+    /// <summary>
+    /// Shared stub for <see cref="IPlantTrefleEnrichmentService"/>. Same
+    /// lifecycle as <see cref="TaxonomyStub"/> — reset per test.
+    /// </summary>
+    public StubPlantTrefleEnrichmentService TrefleStub =>
+        Factory.Services.GetRequiredService<StubPlantTrefleEnrichmentService>();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
@@ -75,12 +82,16 @@ public sealed class PostgresFixture : IAsyncLifetime
                         ["Google:ClientId"] = "test-client-id",
                         ["Google:ClientSecret"] = "test-client-secret",
                         ["Frontend:BaseUrl"] = "http://localhost:3000",
+                        // Trefle: ValidateOnStart requires a non-empty token even
+                        // though the stub below never reads it. Any non-empty
+                        // placeholder keeps the host boot happy.
+                        ["Trefle:Token"] = "test-token",
                     });
                 });
 
-                // Replace the production GBIF-backed IPlantTaxonomyService with a
-                // deterministic in-memory stub. Tests enqueue PlantTaxonomyResult
-                // values on Fixture.TaxonomyStub; production HTTP/resilience
+                // Replace the production external-API services with deterministic
+                // in-memory stubs. Tests enqueue results on Fixture.TaxonomyStub /
+                // Fixture.TrefleStub; production HTTP / resilience / Trefle-token
                 // plumbing stays untested at the integration layer.
                 builder.ConfigureTestServices(services =>
                 {
@@ -88,6 +99,11 @@ public sealed class PostgresFixture : IAsyncLifetime
                     services.AddSingleton<StubPlantTaxonomyService>();
                     services.AddSingleton<IPlantTaxonomyService>(sp =>
                         sp.GetRequiredService<StubPlantTaxonomyService>());
+
+                    services.RemoveAll<IPlantTrefleEnrichmentService>();
+                    services.AddSingleton<StubPlantTrefleEnrichmentService>();
+                    services.AddSingleton<IPlantTrefleEnrichmentService>(sp =>
+                        sp.GetRequiredService<StubPlantTrefleEnrichmentService>());
                 });
             });
 

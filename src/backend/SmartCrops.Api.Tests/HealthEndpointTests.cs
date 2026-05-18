@@ -19,6 +19,9 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["Google:ClientId"] = "test-client-id",
                 ["Google:ClientSecret"] = "test-client-secret",
                 ["Frontend:BaseUrl"] = "http://localhost:3000",
+                // TrefleOptions.Token is [Required] and validated on host boot
+                // via ValidateOnStart; placeholder keeps the test host alive.
+                ["Trefle:Token"] = "test-token",
             });
         });
     }

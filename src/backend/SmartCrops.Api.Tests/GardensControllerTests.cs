@@ -33,6 +33,11 @@ public class GardensTestFactory : WebApplicationFactory<Program>
                     ["Google:ClientId"] = "test-client-id",
                     ["Google:ClientSecret"] = "test-client-secret",
                     ["Frontend:BaseUrl"] = "http://localhost:3000",
+                    // TrefleOptions.Token is [Required] and validated on host
+                    // boot via ValidateOnStart; any non-empty placeholder keeps
+                    // the test host alive. The stub-or-disabled Trefle service
+                    // is never actually called from gardens tests.
+                    ["Trefle:Token"] = "test-token",
                 }
             );
         });

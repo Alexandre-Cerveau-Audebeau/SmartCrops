@@ -28,10 +28,11 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         await connection.OpenAsync();
         await Fixture.Respawner.ResetAsync(connection);
 
-        // The IPlantTaxonomyService stub is a shared singleton across the
-        // integration collection — reset its enqueued responses and captured
-        // call log so each test starts deterministic.
+        // The external-API stubs are shared singletons across the integration
+        // collection — reset their enqueued responses and captured call logs
+        // so each test starts deterministic.
         Fixture.TaxonomyStub.Reset();
+        Fixture.TrefleStub.Reset();
 
         Client = Fixture.Factory.CreateClient();
     }

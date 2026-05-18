@@ -28,6 +28,10 @@ public class InterceptorTestFactory : WebApplicationFactory<Program>
                     ["Google:ClientId"] = "test-client-id",
                     ["Google:ClientSecret"] = "test-client-secret",
                     ["Frontend:BaseUrl"] = "http://localhost:3000",
+                    // TrefleOptions.Token is [Required] and validated on host
+                    // boot via ValidateOnStart; placeholder keeps the test host
+                    // alive even though the interceptor tests never touch Trefle.
+                    ["Trefle:Token"] = "test-token",
                 }
             );
         });
