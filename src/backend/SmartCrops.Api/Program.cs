@@ -9,6 +9,7 @@ using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure;
 using SmartCrops.Infrastructure.ExternalApis.Gbif;
+using SmartCrops.Infrastructure.ExternalApis.Trefle;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -119,6 +120,28 @@ builder.Services.AddSingleton(sp =>
 });
 
 builder.Services.AddScoped<IPlantTaxonomyService, GbifPlantTaxonomyService>();
+
+// ── External enrichment API: Trefle ──────────────────────────────────────
+// Same shape as the GBIF block above: options validated at startup (a missing
+// token fails the host boot, not the first call), typed HttpClient with the
+// standard resilience handler, Singleton resolver (pure logic), Scoped
+// service following the EF Core request scope.
+builder.Services.AddOptions<TrefleOptions>()
+    .Bind(builder.Configuration.GetSection(TrefleOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddHttpClient<TrefleClient>((sp, client) =>
+{
+    var options = sp.GetRequiredService<IOptions<TrefleOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
+})
+.AddStandardResilienceHandler();
+
+builder.Services.AddSingleton<TrefleResolver>();
+builder.Services.AddScoped<IPlantTrefleEnrichmentService, TreflePlantEnrichmentService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
