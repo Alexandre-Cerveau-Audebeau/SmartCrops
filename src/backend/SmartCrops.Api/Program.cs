@@ -3,9 +3,12 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using SmartCrops.Core.Entities;
+using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure;
+using SmartCrops.Infrastructure.ExternalApis.Gbif;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -89,6 +92,33 @@ builder.Services.AddCors(options =>
               .AllowCredentials();
     });
 });
+
+// ── External taxonomy API: GBIF ──────────────────────────────────────────
+// Typed HttpClient with the .NET 8 standard resilience handler (retries +
+// circuit breaker + timeout). Resolver is a Singleton — pure logic, no I/O,
+// configured once from the bound options. Service is Scoped so it follows
+// the EF Core scope per request.
+builder.Services.AddOptions<GbifOptions>()
+    .Bind(builder.Configuration.GetSection(GbifOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddHttpClient<GbifClient>((sp, client) =>
+{
+    var options = sp.GetRequiredService<IOptions<GbifOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
+})
+.AddStandardResilienceHandler();
+
+builder.Services.AddSingleton(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<GbifOptions>>().Value;
+    return new GbifDedupResolver(options.FuzzyConfidenceThreshold);
+});
+
+builder.Services.AddScoped<IPlantTaxonomyService, GbifPlantTaxonomyService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
