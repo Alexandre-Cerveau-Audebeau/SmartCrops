@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SmartCrops.Api.Tests.Infrastructure;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
 using SmartCrops.Infrastructure.Data;
@@ -12,50 +12,36 @@ namespace SmartCrops.Api.Tests.Interceptors;
 
 public class InterceptorTestFactory : WebApplicationFactory<Program>
 {
-    private readonly string _dbName = Guid.NewGuid().ToString();
-
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Development");
-        builder.ConfigureAppConfiguration((_, config) =>
-        {
-            config.AddInMemoryCollection(
-                new Dictionary<string, string?>
+        new TestWebAppBuilder()
+            .WithEnvironment("Development")
+            .WithJwtAuth()
+            .WithGoogleOAuth()
+            .WithFrontendUrl()
+            .WithTrefle()
+            // WithInMemoryDatabase isn't used: these tests assert the production
+            // UpdateTimestampInterceptor still fires against the in-memory provider,
+            // so the DbContext registration has to re-attach the interceptor that
+            // the production AddDbContext lambda wires in (DependencyInjection.cs).
+            .WithServices(services =>
+            {
+                var descriptors = services
+                    .Where(d => d.ServiceType == typeof(DbContextOptions<SmartCropsDbContext>))
+                    .ToList();
+                foreach (var descriptor in descriptors)
                 {
-                    ["Jwt:Key"] = "SmartCrops-Test-Secret-Key-Min32Characters!!",
-                    ["Jwt:Issuer"] = "SmartCrops",
-                    ["Jwt:Audience"] = "SmartCrops",
-                    ["Google:ClientId"] = "test-client-id",
-                    ["Google:ClientSecret"] = "test-client-secret",
-                    ["Frontend:BaseUrl"] = "http://localhost:3000",
-                    // TrefleOptions.Token is [Required] and validated on host
-                    // boot via ValidateOnStart; placeholder keeps the test host
-                    // alive even though the interceptor tests never touch Trefle.
-                    ["Trefle:Token"] = "test-token",
+                    services.Remove(descriptor);
                 }
-            );
-        });
-        builder.ConfigureServices(services =>
-        {
-            // Swap the Npgsql options for an in-memory store while keeping the
-            // UpdateTimestampInterceptor wired in (the production options registration
-            // adds it through DI; we have to re-attach it here because we are replacing
-            // the entire DbContextOptions descriptor).
-            var descriptors = services
-                .Where(d => d.ServiceType == typeof(DbContextOptions<SmartCropsDbContext>))
-                .ToList();
-            foreach (var descriptor in descriptors)
-            {
-                services.Remove(descriptor);
-            }
 
-            services.AddDbContext<SmartCropsDbContext>((sp, options) =>
-            {
-                options
-                    .UseInMemoryDatabase(_dbName)
-                    .AddInterceptors(sp.GetRequiredService<UpdateTimestampInterceptor>());
-            });
-        });
+                services.AddDbContext<SmartCropsDbContext>((sp, options) =>
+                {
+                    options
+                        .UseInMemoryDatabase("InterceptorTests")
+                        .AddInterceptors(sp.GetRequiredService<UpdateTimestampInterceptor>());
+                });
+            })
+            .ApplyTo(builder);
     }
 }
 

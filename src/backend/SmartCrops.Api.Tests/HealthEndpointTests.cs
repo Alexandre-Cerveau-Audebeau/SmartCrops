@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.Configuration;
+using SmartCrops.Api.Tests.Infrastructure;
 
 namespace SmartCrops.Api.Tests;
 
@@ -8,22 +8,16 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Development");
-        builder.ConfigureAppConfiguration((context, config) =>
-        {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Jwt:Key"] = "SmartCrops-Test-Secret-Key-Min32Characters!!",
-                ["Jwt:Issuer"] = "SmartCrops",
-                ["Jwt:Audience"] = "SmartCrops",
-                ["Google:ClientId"] = "test-client-id",
-                ["Google:ClientSecret"] = "test-client-secret",
-                ["Frontend:BaseUrl"] = "http://localhost:3000",
-                // TrefleOptions.Token is [Required] and validated on host boot
-                // via ValidateOnStart; placeholder keeps the test host alive.
-                ["Trefle:Token"] = "test-token",
-            });
-        });
+        // No DbContext override: /health and /swagger never resolve
+        // SmartCropsDbContext, so the production lambda (lazy on first resolve)
+        // is never hit.
+        new TestWebAppBuilder()
+            .WithEnvironment("Development")
+            .WithJwtAuth()
+            .WithGoogleOAuth()
+            .WithFrontendUrl()
+            .WithTrefle()
+            .ApplyTo(builder);
     }
 }
 

@@ -7,9 +7,9 @@ using System.Text;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
+using SmartCrops.Api.Tests.Infrastructure;
 using SmartCrops.Core.Entities;
 using SmartCrops.Infrastructure.Data;
 
@@ -17,45 +17,16 @@ namespace SmartCrops.Api.Tests;
 
 public class GardensTestFactory : WebApplicationFactory<Program>
 {
-    private readonly string _dbName = Guid.NewGuid().ToString();
-
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Development");
-        builder.ConfigureAppConfiguration((_, config) =>
-        {
-            config.AddInMemoryCollection(
-                new Dictionary<string, string?>
-                {
-                    ["Jwt:Key"] = "SmartCrops-Test-Secret-Key-Min32Characters!!",
-                    ["Jwt:Issuer"] = "SmartCrops",
-                    ["Jwt:Audience"] = "SmartCrops",
-                    ["Google:ClientId"] = "test-client-id",
-                    ["Google:ClientSecret"] = "test-client-secret",
-                    ["Frontend:BaseUrl"] = "http://localhost:3000",
-                    // TrefleOptions.Token is [Required] and validated on host
-                    // boot via ValidateOnStart; any non-empty placeholder keeps
-                    // the test host alive. The stub-or-disabled Trefle service
-                    // is never actually called from gardens tests.
-                    ["Trefle:Token"] = "test-token",
-                }
-            );
-        });
-        builder.ConfigureServices(services =>
-        {
-            // Remove the existing DbContext registration
-            var descriptor = services.SingleOrDefault(d =>
-                d.ServiceType == typeof(DbContextOptions<SmartCropsDbContext>)
-            );
-            if (descriptor != null)
-                services.Remove(descriptor);
-
-            // Add in-memory database
-            services.AddDbContext<SmartCropsDbContext>(options =>
-            {
-                options.UseInMemoryDatabase(_dbName);
-            });
-        });
+        new TestWebAppBuilder()
+            .WithEnvironment("Development")
+            .WithJwtAuth()
+            .WithGoogleOAuth()
+            .WithFrontendUrl()
+            .WithTrefle()
+            .WithInMemoryDatabase("GardensTests")
+            .ApplyTo(builder);
     }
 
     public string GenerateToken(string userId)

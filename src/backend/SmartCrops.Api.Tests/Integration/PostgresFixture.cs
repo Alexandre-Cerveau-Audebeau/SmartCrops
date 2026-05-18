@@ -1,16 +1,14 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using Respawn;
+using SmartCrops.Api.Tests.Infrastructure;
 using SmartCrops.Api.Tests.Integration.Stubs;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure.Data;
@@ -66,46 +64,46 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         await _container.StartAsync();
 
-        Factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder =>
+        // "Testing" gates the Program.cs guard that skips DataSeeder.
+        // Trefle token is a non-empty placeholder kept alive by ValidateOnStart;
+        // the stub below never reads it. Production HTTP / resilience / Trefle-token
+        // plumbing stays untested at the integration layer.
+        Factory = new TestWebAppBuilder()
+            .WithEnvironment("Testing")
+            .WithJwtAuth()
+            .WithGoogleOAuth()
+            .WithFrontendUrl()
+            .WithTrefle()
+            .WithConnectionString(ConnectionString)
+            .WithServices(services =>
             {
-                // "Testing" gates the Program.cs guard that skips DataSeeder.
-                builder.UseEnvironment("Testing");
-                builder.ConfigureAppConfiguration((_, config) =>
-                {
-                    config.AddInMemoryCollection(new Dictionary<string, string?>
-                    {
-                        ["ConnectionStrings:DefaultConnection"] = ConnectionString,
-                        ["Jwt:Key"] = TestJwtKey,
-                        ["Jwt:Issuer"] = TestJwtIssuer,
-                        ["Jwt:Audience"] = TestJwtAudience,
-                        ["Google:ClientId"] = "test-client-id",
-                        ["Google:ClientSecret"] = "test-client-secret",
-                        ["Frontend:BaseUrl"] = "http://localhost:3000",
-                        // Trefle: ValidateOnStart requires a non-empty token even
-                        // though the stub below never reads it. Any non-empty
-                        // placeholder keeps the host boot happy.
-                        ["Trefle:Token"] = "test-token",
-                    });
-                });
-
                 // Replace the production external-API services with deterministic
                 // in-memory stubs. Tests enqueue results on Fixture.TaxonomyStub /
-                // Fixture.TrefleStub; production HTTP / resilience / Trefle-token
-                // plumbing stays untested at the integration layer.
-                builder.ConfigureTestServices(services =>
-                {
-                    services.RemoveAll<IPlantTaxonomyService>();
-                    services.AddSingleton<StubPlantTaxonomyService>();
-                    services.AddSingleton<IPlantTaxonomyService>(sp =>
-                        sp.GetRequiredService<StubPlantTaxonomyService>());
+                // Fixture.TrefleStub.
+                //
+                // Dual registration pattern (one block per stubbed interface):
+                //   1. AddSingleton<StubPlantTaxonomyService>() registers the concrete
+                //      stub type — so tests can resolve it directly via
+                //      Fixture.TaxonomyStub for state control (Enqueue, Reset, inspect
+                //      ReceivedNames).
+                //   2. AddSingleton<IPlantTaxonomyService>(sp => sp.GetRequiredService<
+                //      StubPlantTaxonomyService>()) maps the interface to the same
+                //      singleton instance — so production code resolving the interface
+                //      hits the same stub.
+                // A single AddSingleton<IPlantTaxonomyService>(stubInstance) would not
+                // expose the typed stub for state control; two separate AddSingleton
+                // calls would create two distinct instances whose state diverges.
+                services.RemoveAll<IPlantTaxonomyService>();
+                services.AddSingleton<StubPlantTaxonomyService>();
+                services.AddSingleton<IPlantTaxonomyService>(sp =>
+                    sp.GetRequiredService<StubPlantTaxonomyService>());
 
-                    services.RemoveAll<IPlantTrefleEnrichmentService>();
-                    services.AddSingleton<StubPlantTrefleEnrichmentService>();
-                    services.AddSingleton<IPlantTrefleEnrichmentService>(sp =>
-                        sp.GetRequiredService<StubPlantTrefleEnrichmentService>());
-                });
-            });
+                services.RemoveAll<IPlantTrefleEnrichmentService>();
+                services.AddSingleton<StubPlantTrefleEnrichmentService>();
+                services.AddSingleton<IPlantTrefleEnrichmentService>(sp =>
+                    sp.GetRequiredService<StubPlantTrefleEnrichmentService>());
+            })
+            .Build();
 
         // Apply migrations once. Force the host to build before resolving services so
         // ConfigureAppConfiguration above takes effect on the IConfiguration that
