@@ -42,5 +42,13 @@ public class GbifClient
             _logger.LogWarning(ex, "GBIF transport failure for {Name}", scientificName);
             return null;
         }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            // HttpClient timeout (Timeout property) surfaces as TaskCanceledException
+            // without the caller's token being signalled. Treat as a transport failure
+            // per the contract; real caller cancellation falls through to propagate.
+            _logger.LogWarning(ex, "GBIF request timed out for {Name}", scientificName);
+            return null;
+        }
     }
 }

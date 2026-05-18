@@ -76,6 +76,20 @@ public class GbifClientTests
     }
 
     [Fact]
+    public async Task MatchAsync_ReturnsNull_OnTimeout()
+    {
+        // HttpClient.Timeout surfaces as TaskCanceledException whose internal
+        // token is the per-request timeout token — caller's token is not signalled.
+        var handler = new ThrowingHandler(new TaskCanceledException("request timed out"));
+        var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.gbif.org/") };
+        var client = new GbifClient(http, NullLogger<GbifClient>.Instance);
+
+        var response = await client.MatchAsync("Anything", CancellationToken.None);
+
+        Assert.Null(response);
+    }
+
+    [Fact]
     public async Task MatchAsync_PropagatesCancellation()
     {
         var handler = new RecordingHandler(HttpStatusCode.OK, "{\"matchType\":\"NONE\"}");

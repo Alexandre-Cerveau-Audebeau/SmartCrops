@@ -90,6 +90,7 @@ public class PlantTaxonomyController : ControllerBase
         else
         {
             existingSource.ExternalId = result.GbifTaxonKey.Value.ToString();
+            existingSource.Url = $"https://api.gbif.org/v1/species/{result.GbifTaxonKey.Value}";
             existingSource.LastFetchedAt = DateTime.UtcNow;
         }
 
@@ -162,6 +163,10 @@ public class PlantTaxonomyController : ControllerBase
                         failed++;
                         break;
                 }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {

@@ -98,8 +98,10 @@ builder.Services.AddCors(options =>
 // circuit breaker + timeout). Resolver is a Singleton — pure logic, no I/O,
 // configured once from the bound options. Service is Scoped so it follows
 // the EF Core scope per request.
-builder.Services.Configure<GbifOptions>(
-    builder.Configuration.GetSection(GbifOptions.SectionName));
+builder.Services.AddOptions<GbifOptions>()
+    .Bind(builder.Configuration.GetSection(GbifOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 
 builder.Services.AddHttpClient<GbifClient>((sp, client) =>
 {

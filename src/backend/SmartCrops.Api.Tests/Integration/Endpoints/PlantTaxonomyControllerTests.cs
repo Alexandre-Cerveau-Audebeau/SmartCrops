@@ -137,6 +137,29 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Enrich_Force_WithDifferentTaxonKey_SyncsUrl()
+    {
+        // Regression: previously only ExternalId was updated on re-enrichment,
+        // leaving Url pointing at the stale taxon key. Both must move together.
+        var plantId = await SeedPlantAsync("Solanum lycopersicum");
+        Fixture.TaxonomyStub.Enqueue(MatchResult(2930137, "Solanaceae", "Solanum", "lycopersicum"));
+        AuthAsAnyUser();
+
+        await Client.PostAsync($"/api/admin/taxonomy/enrich/{plantId}", null);
+
+        Fixture.TaxonomyStub.Enqueue(MatchResult(9999999, "Solanaceae", "Solanum", "lycopersicum"));
+        var response = await Client.PostAsync($"/api/admin/taxonomy/enrich/{plantId}?force=true", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var source = await db.PlantSources
+            .SingleAsync(s => s.PlantId == plantId && s.SourceType == PlantSourceType.GBIF);
+        Assert.Equal("9999999", source.ExternalId);
+        Assert.Equal("https://api.gbif.org/v1/species/9999999", source.Url);
+    }
+
+    [Fact]
     public async Task Enrich_NoMatch_DoesNotWriteSource_NorSetFlag()
     {
         var plantId = await SeedPlantAsync("Plantus inventicus");
