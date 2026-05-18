@@ -32,10 +32,11 @@ public class TrefleClient
     }
 
     /// <summary>
-    /// Calls <c>/species/search?q={name}&amp;token=...</c>. Returns <c>null</c> only
-    /// on transport failure after the resilience handler exhausts retries;
-    /// an empty result set surfaces as a populated response with an empty
-    /// <c>Data</c> list for the resolver to interpret.
+    /// Calls <c>/species/search?q={name}&amp;token=...</c>. Returns <c>null</c>
+    /// on transport failure (after the resilience handler exhausts retries),
+    /// timeout, malformed JSON response, or unsupported response Content-Type.
+    /// An empty result set is <b>not</b> a failure — it surfaces as a populated
+    /// response with an empty <c>Data</c> list for the resolver to interpret.
     /// </summary>
     public async Task<TrefleSearchResponse?> SearchAsync(string scientificName, CancellationToken ct)
     {
@@ -80,8 +81,9 @@ public class TrefleClient
 
     /// <summary>
     /// Calls <c>/species/{id}?token=...</c>. Returns <c>null</c> on transport
-    /// failure / timeout; a 404 from Trefle (deleted species) likewise surfaces
-    /// as <c>null</c> since <see cref="HttpClient.GetFromJsonAsync{T}(string, CancellationToken)"/>
+    /// failure, timeout, malformed JSON response, or unsupported response
+    /// Content-Type. A 404 from Trefle (deleted species) likewise surfaces as
+    /// <c>null</c> since <see cref="HttpClient.GetFromJsonAsync{T}(string, CancellationToken)"/>
     /// throws <see cref="HttpRequestException"/> on non-success status codes.
     /// </summary>
     public async Task<TrefleSpeciesResponse?> GetSpeciesAsync(int trefleId, CancellationToken ct)

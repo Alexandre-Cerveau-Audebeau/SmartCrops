@@ -188,12 +188,63 @@ public class TrefleClientTests
     [Theory]
     [InlineData(HttpStatusCode.NotFound)]
     [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
     public async Task GetSpeciesAsync_ReturnsNull_OnHttpError(HttpStatusCode status)
     {
         var handler = new RecordingHandler(status, "{}");
         var client = NewClient(handler);
 
         var response = await client.GetSpeciesAsync(99999, CancellationToken.None);
+
+        Assert.Null(response);
+    }
+
+    [Fact]
+    public async Task SearchAsync_ReturnsNull_OnMalformedJson()
+    {
+        // GetFromJsonAsync throws JsonException on a successful response with a
+        // body that the deserialiser can't parse. The client converts to null
+        // to honor the documented "null on failure" contract.
+        var handler = new RecordingHandler(HttpStatusCode.OK, "{ invalid json }");
+        var client = NewClient(handler);
+
+        var response = await client.SearchAsync("Anything", CancellationToken.None);
+
+        Assert.Null(response);
+    }
+
+    [Fact]
+    public async Task GetSpeciesAsync_ReturnsNull_OnMalformedJson()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, "{ invalid json }");
+        var client = NewClient(handler);
+
+        var response = await client.GetSpeciesAsync(12345, CancellationToken.None);
+
+        Assert.Null(response);
+    }
+
+    [Fact]
+    public async Task SearchAsync_ReturnsNull_OnUnsupportedContentType()
+    {
+        // GetFromJsonAsync throws NotSupportedException when the Content-Type
+        // header doesn't match a JSON media type. Trefle has been observed to
+        // return text/html error pages from edge / proxy layers under load.
+        var handler = new HtmlHandler("<html>error</html>");
+        var client = NewClient(handler);
+
+        var response = await client.SearchAsync("Anything", CancellationToken.None);
+
+        Assert.Null(response);
+    }
+
+    [Fact]
+    public async Task GetSpeciesAsync_ReturnsNull_OnUnsupportedContentType()
+    {
+        var handler = new HtmlHandler("<html>error</html>");
+        var client = NewClient(handler);
+
+        var response = await client.GetSpeciesAsync(12345, CancellationToken.None);
 
         Assert.Null(response);
     }
@@ -230,5 +281,28 @@ public class TrefleClientTests
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
             => throw _ex;
+    }
+
+    /// <summary>
+    /// Returns a 200 response with a <c>text/html</c> Content-Type so
+    /// <see cref="HttpClient.GetFromJsonAsync{T}(string, CancellationToken)"/>
+    /// throws <see cref="NotSupportedException"/>. Used to verify the
+    /// content-type-mismatch path returns null.
+    /// </summary>
+    private sealed class HtmlHandler : HttpMessageHandler
+    {
+        private readonly string _content;
+
+        public HtmlHandler(string content) => _content = content;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(_content, Encoding.UTF8, "text/html"),
+            });
+        }
     }
 }

@@ -173,6 +173,14 @@ public class PlantTaxonomyController : ControllerBase
                 failed++;
                 _logger.LogError(ex, "Failed to enrich plant {Id}", id);
             }
+            finally
+            {
+                // The scoped DbContext survives a per-iteration failure: any
+                // entity staged before the throw stays tracked, and the next
+                // iteration's SaveChangesAsync would flush it alongside its
+                // own writes. Clearing the change tracker isolates each plant.
+                _db.ChangeTracker.Clear();
+            }
         }
 
         return Ok(new EnrichAllResponse(
