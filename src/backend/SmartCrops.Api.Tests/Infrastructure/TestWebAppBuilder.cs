@@ -113,6 +113,19 @@ public sealed class TestWebAppBuilder
     public TestWebAppBuilder WithGbif() => this;
 
     /// <summary>
+    /// Registers <c>Perenual:ApiKey</c>. <c>PerenualOptions.ApiKey</c> is
+    /// <c>[Required]</c> with an empty default and validated at host boot via
+    /// <c>ValidateOnStart</c>; any non-empty placeholder keeps the host alive.
+    /// Tests that mock <c>IPlantPerenualEnrichmentService</c> never actually
+    /// read the key but still need this method called so the host boots.
+    /// </summary>
+    public TestWebAppBuilder WithPerenual(string apiKey = "test-perenual-key")
+    {
+        _config["Perenual:ApiKey"] = apiKey;
+        return this;
+    }
+
+    /// <summary>
     /// Registers <c>ConnectionStrings:DefaultConnection</c>. Use this for
     /// fixtures backed by a real database (e.g. Postgres Testcontainers).
     /// Mutually exclusive with <see cref="WithInMemoryDatabase"/>: calling

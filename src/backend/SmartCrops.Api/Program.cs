@@ -9,6 +9,7 @@ using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure;
 using SmartCrops.Infrastructure.ExternalApis.Gbif;
+using SmartCrops.Infrastructure.ExternalApis.Perenual;
 using SmartCrops.Infrastructure.ExternalApis.Trefle;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -142,6 +143,30 @@ builder.Services.AddHttpClient<TrefleClient>((sp, client) =>
 
 builder.Services.AddSingleton<TrefleResolver>();
 builder.Services.AddScoped<IPlantTrefleEnrichmentService, TreflePlantEnrichmentService>();
+
+// ── External enrichment API: Perenual ────────────────────────────────────
+// Third external source, same shape as Trefle: options validated at startup
+// (missing API key fails the host boot), typed HttpClient with the standard
+// resilience handler, Singleton resolver (pure logic), Scoped enrichment
+// service following the EF Core request scope. The ApiKey lands in URL
+// query strings on every request (Perenual mandates ?key=...); operator
+// must scrub HTTP access logs in non-dev environments.
+builder.Services.AddOptions<PerenualOptions>()
+    .Bind(builder.Configuration.GetSection(PerenualOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddHttpClient<PerenualClient>((sp, client) =>
+{
+    var options = sp.GetRequiredService<IOptions<PerenualOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
+})
+.AddStandardResilienceHandler();
+
+builder.Services.AddSingleton<PerenualResolver>();
+builder.Services.AddScoped<IPlantPerenualEnrichmentService, PlantPerenualEnrichmentService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

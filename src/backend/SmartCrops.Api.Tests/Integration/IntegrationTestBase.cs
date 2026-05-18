@@ -33,6 +33,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         // so each test starts deterministic.
         Fixture.TaxonomyStub.Reset();
         Fixture.TrefleStub.Reset();
+        Fixture.PerenualStub.Reset();
 
         Client = Fixture.Factory.CreateClient();
     }
