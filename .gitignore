@@ -48,6 +48,11 @@ postman/
 .insomnia/
 .bruno/
 
+# Docker — Compose auto-merges *.override.yml/yaml; per-developer customisations
+# (mount points, extra ports, local credentials) must not be committed.
+docker-compose.override.yml
+docker-compose.override.yaml
+
 # OS
 .DS_Store
 Thumbs.db
