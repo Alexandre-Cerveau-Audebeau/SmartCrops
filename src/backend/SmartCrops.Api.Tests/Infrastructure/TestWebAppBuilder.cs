@@ -39,6 +39,8 @@ public sealed class TestWebAppBuilder
     private readonly Dictionary<string, string?> _config = new();
     private Action<IServiceCollection>? _serviceOverrides;
     private string? _environment;
+    private bool _usesConnectionString;
+    private bool _usesInMemoryDatabase;
 
     /// <summary>
     /// Sets the ASP.NET Core hosting environment (e.g. <c>"Development"</c>,
@@ -113,10 +115,20 @@ public sealed class TestWebAppBuilder
     /// <summary>
     /// Registers <c>ConnectionStrings:DefaultConnection</c>. Use this for
     /// fixtures backed by a real database (e.g. Postgres Testcontainers).
-    /// Mutually exclusive in practice with <see cref="WithInMemoryDatabase"/>.
+    /// Mutually exclusive with <see cref="WithInMemoryDatabase"/>: calling
+    /// both on the same builder throws <see cref="InvalidOperationException"/>
+    /// so an ambiguous persistence intent fails fast at builder-time rather
+    /// than silently picking one mode via DI Last-Win semantics.
     /// </summary>
     public TestWebAppBuilder WithConnectionString(string connectionString)
     {
+        if (_usesInMemoryDatabase)
+        {
+            throw new InvalidOperationException(
+                "WithConnectionString cannot be combined with WithInMemoryDatabase. " +
+                "Choose one persistence mode per test factory.");
+        }
+        _usesConnectionString = true;
         _config["ConnectionStrings:DefaultConnection"] = connectionString;
         return this;
     }
@@ -140,6 +152,13 @@ public sealed class TestWebAppBuilder
     /// <param name="databaseName">Unique-per-test-class database identifier.</param>
     public TestWebAppBuilder WithInMemoryDatabase(string databaseName = "TestDb")
     {
+        if (_usesConnectionString)
+        {
+            throw new InvalidOperationException(
+                "WithInMemoryDatabase cannot be combined with WithConnectionString. " +
+                "Choose one persistence mode per test factory.");
+        }
+        _usesInMemoryDatabase = true;
         return WithServices(services =>
         {
             var descriptors = services
@@ -173,6 +192,17 @@ public sealed class TestWebAppBuilder
     /// fakes, additional interceptors, test-only singletons). Multiple calls
     /// accumulate — each <see cref="Action{IServiceCollection}"/> runs in the
     /// order it was registered.
+    ///
+    /// <para><b>Ordering contract.</b> <c>_serviceOverrides</c> chains via
+    /// multicast delegate composition (<c>+=</c>): the first call sets it,
+    /// subsequent calls append. When <see cref="ApplyTo"/> hands the combined
+    /// delegate to <c>ConfigureTestServices</c>, ASP.NET invokes each
+    /// component in registration order. Later registrations override earlier
+    /// ones following standard DI Last-Win semantics. Callers chaining
+    /// <see cref="WithInMemoryDatabase"/> followed by a custom
+    /// <see cref="WithServices"/> that re-attaches interceptors get the
+    /// intended order; the reverse would have the in-memory DB replace the
+    /// interceptor-aware registration.</para>
     /// </summary>
     public TestWebAppBuilder WithServices(Action<IServiceCollection> configure)
     {

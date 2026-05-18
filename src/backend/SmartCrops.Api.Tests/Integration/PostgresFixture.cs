@@ -80,6 +80,19 @@ public sealed class PostgresFixture : IAsyncLifetime
                 // Replace the production external-API services with deterministic
                 // in-memory stubs. Tests enqueue results on Fixture.TaxonomyStub /
                 // Fixture.TrefleStub.
+                //
+                // Dual registration pattern (one block per stubbed interface):
+                //   1. AddSingleton<StubPlantTaxonomyService>() registers the concrete
+                //      stub type — so tests can resolve it directly via
+                //      Fixture.TaxonomyStub for state control (Enqueue, Reset, inspect
+                //      ReceivedNames).
+                //   2. AddSingleton<IPlantTaxonomyService>(sp => sp.GetRequiredService<
+                //      StubPlantTaxonomyService>()) maps the interface to the same
+                //      singleton instance — so production code resolving the interface
+                //      hits the same stub.
+                // A single AddSingleton<IPlantTaxonomyService>(stubInstance) would not
+                // expose the typed stub for state control; two separate AddSingleton
+                // calls would create two distinct instances whose state diverges.
                 services.RemoveAll<IPlantTaxonomyService>();
                 services.AddSingleton<StubPlantTaxonomyService>();
                 services.AddSingleton<IPlantTaxonomyService>(sp =>
