@@ -20,6 +20,7 @@ public class InterceptorTestFactory : WebApplicationFactory<Program>
             .WithGoogleOAuth()
             .WithFrontendUrl()
             .WithTrefle()
+            .WithPerenual()
             // WithInMemoryDatabase isn't used: these tests assert the production
             // UpdateTimestampInterceptor still fires against the in-memory provider,
             // so the DbContext registration has to re-attach the interceptor that

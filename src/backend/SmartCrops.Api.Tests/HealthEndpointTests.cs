@@ -17,6 +17,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             .WithGoogleOAuth()
             .WithFrontendUrl()
             .WithTrefle()
+            .WithPerenual()
             .ApplyTo(builder);
     }
 }

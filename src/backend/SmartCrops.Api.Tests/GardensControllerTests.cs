@@ -25,6 +25,7 @@ public class GardensTestFactory : WebApplicationFactory<Program>
             .WithGoogleOAuth()
             .WithFrontendUrl()
             .WithTrefle()
+            .WithPerenual()
             .WithInMemoryDatabase("GardensTests")
             .ApplyTo(builder);
     }

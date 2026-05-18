@@ -60,6 +60,13 @@ public sealed class PostgresFixture : IAsyncLifetime
     public StubPlantTrefleEnrichmentService TrefleStub =>
         Factory.Services.GetRequiredService<StubPlantTrefleEnrichmentService>();
 
+    /// <summary>
+    /// Shared stub for <see cref="IPlantPerenualEnrichmentService"/>. Same
+    /// lifecycle as <see cref="TaxonomyStub"/> — reset per test.
+    /// </summary>
+    public StubPlantPerenualEnrichmentService PerenualStub =>
+        Factory.Services.GetRequiredService<StubPlantPerenualEnrichmentService>();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
@@ -74,6 +81,7 @@ public sealed class PostgresFixture : IAsyncLifetime
             .WithGoogleOAuth()
             .WithFrontendUrl()
             .WithTrefle()
+            .WithPerenual()
             .WithConnectionString(ConnectionString)
             .WithServices(services =>
             {
@@ -102,6 +110,11 @@ public sealed class PostgresFixture : IAsyncLifetime
                 services.AddSingleton<StubPlantTrefleEnrichmentService>();
                 services.AddSingleton<IPlantTrefleEnrichmentService>(sp =>
                     sp.GetRequiredService<StubPlantTrefleEnrichmentService>());
+
+                services.RemoveAll<IPlantPerenualEnrichmentService>();
+                services.AddSingleton<StubPlantPerenualEnrichmentService>();
+                services.AddSingleton<IPlantPerenualEnrichmentService>(sp =>
+                    sp.GetRequiredService<StubPlantPerenualEnrichmentService>());
             })
             .Build();
 
