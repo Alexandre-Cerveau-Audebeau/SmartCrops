@@ -364,12 +364,12 @@ public class PlantTrefleController : ControllerBase
             plant.SoilNutriments = nut;
         }
 
-        plant.SoilPhMin = result.SoilPhMin ?? plant.SoilPhMin;
-        plant.SoilPhMax = result.SoilPhMax ?? plant.SoilPhMax;
-        plant.MinTempC = result.MinTempC ?? plant.MinTempC;
-        plant.MaxTempC = result.MaxTempC ?? plant.MaxTempC;
-        plant.IsEdible = result.IsEdible ?? plant.IsEdible;
-        plant.IsVegetable = result.IsVegetable ?? plant.IsVegetable;
+        if (plant.SoilPhMin is null) plant.SoilPhMin = result.SoilPhMin;
+        if (plant.SoilPhMax is null) plant.SoilPhMax = result.SoilPhMax;
+        if (plant.MinTempC is null) plant.MinTempC = result.MinTempC;
+        if (plant.MaxTempC is null) plant.MaxTempC = result.MaxTempC;
+        if (plant.IsEdible is null) plant.IsEdible = result.IsEdible;
+        if (plant.IsVegetable is null) plant.IsVegetable = result.IsVegetable;
 
         if (plant.GrowthHabit is null && TryParseGrowthHabit(result.GrowthHabit, out var habit))
         {
