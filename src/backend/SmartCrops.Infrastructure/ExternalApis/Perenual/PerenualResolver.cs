@@ -252,38 +252,64 @@ public partial class PerenualResolver
             return (null, null);
         }
 
+        // Pass 1: prefer an entry explicitly tagged as Height (CR round 1
+        // correctness fix). Phase 4 smoke worked by chance because Aloe ships
+        // a single untagged Height entry first; a plant shipping Spread first
+        // (or in addition) would mislead the height denormalisation.
         foreach (var dim in dims)
         {
-            if (dim is null || string.IsNullOrEmpty(dim.Unit))
+            if (dim?.Type is not null
+                && dim.Type.Contains("height", StringComparison.OrdinalIgnoreCase))
             {
-                continue;
+                if (TryConvertDimension(dim) is { } heightHit)
+                {
+                    return heightHit;
+                }
             }
+        }
 
-            decimal? perUnitCm = dim.Unit.ToLowerInvariant() switch
+        // Pass 2: first usable entry of any type (preserves the prior
+        // behaviour for payloads where dimension Type is null/blank).
+        foreach (var dim in dims)
+        {
+            if (TryConvertDimension(dim) is { } anyHit)
             {
-                "feet" => CmPerFoot,
-                "foot" => CmPerFoot,
-                "inches" => CmPerInch,
-                "inch" => CmPerInch,
-                "cm" => 1m,
-                "centimeters" => 1m,
-                _ => null,
-            };
-            if (perUnitCm is null)
-            {
-                continue;
+                return anyHit;
             }
-
-            int? min = dim.MinValue is decimal mn ? (int)Math.Round(mn * perUnitCm.Value, MidpointRounding.AwayFromZero) : null;
-            int? max = dim.MaxValue is decimal mx ? (int)Math.Round(mx * perUnitCm.Value, MidpointRounding.AwayFromZero) : null;
-            if (min is null && max is null)
-            {
-                continue;
-            }
-            return (min, max);
         }
 
         return (null, null);
+    }
+
+    private static (int? Min, int? Max)? TryConvertDimension(PerenualDimensionsDto? dim)
+    {
+        if (dim is null || string.IsNullOrEmpty(dim.Unit))
+        {
+            return null;
+        }
+
+        decimal? perUnitCm = dim.Unit.ToLowerInvariant() switch
+        {
+            "feet" => CmPerFoot,
+            "foot" => CmPerFoot,
+            "inches" => CmPerInch,
+            "inch" => CmPerInch,
+            "cm" => 1m,
+            "centimeters" => 1m,
+            _ => null,
+        };
+        if (perUnitCm is null)
+        {
+            return null;
+        }
+
+        int? min = dim.MinValue is decimal mn ? (int)Math.Round(mn * perUnitCm.Value, MidpointRounding.AwayFromZero) : null;
+        int? max = dim.MaxValue is decimal mx ? (int)Math.Round(mx * perUnitCm.Value, MidpointRounding.AwayFromZero) : null;
+        if (min is null && max is null)
+        {
+            return null;
+        }
+        return (min, max);
     }
 
     /// <summary>
@@ -486,6 +512,14 @@ public partial class PerenualResolver
         {
             foreach (var img in response.OtherImages)
             {
+                // System.Text.Json can produce null entries when the wire
+                // payload contains a literal null inside the array
+                // (e.g. `other_images: [null, {...}]`). Skip to avoid an
+                // NRE in AddImage. CR round 1 defensive fix.
+                if (img is null)
+                {
+                    continue;
+                }
                 AddImage(img, seen, result);
             }
         }

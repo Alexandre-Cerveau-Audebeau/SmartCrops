@@ -183,6 +183,19 @@ public class PerenualClientTests
             () => client.SearchAsync("Anything", cts.Token));
     }
 
+    [Fact]
+    public async Task GetSpeciesDetailsAsync_ReturnsNull_OnTransportFailure()
+    {
+        // Symmetry with SearchAsync_ReturnsNull_OnTransportFailure (CR
+        // round 1 nitpick): ensure GetSpeciesDetailsAsync also degrades
+        // gracefully on HttpRequestException so future refactors that
+        // diverge the two methods do not silently lose the defensive contract.
+        var handler = new ThrowingHandler(new HttpRequestException("server fault"));
+        var client = NewClient(handler);
+
+        Assert.Null(await client.GetSpeciesDetailsAsync(728, CancellationToken.None));
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.NotFound)]
     [InlineData(HttpStatusCode.InternalServerError)]

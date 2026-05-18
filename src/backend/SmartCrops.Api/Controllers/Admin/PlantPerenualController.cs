@@ -96,7 +96,7 @@ public class PlantPerenualController : ControllerBase
 
         UpsertPerenualData(plant, result);
         await ReplacePerenualImagesAsync(plantId, result.Images, ct);
-        await ReplacePerenualPestsAsync(plantId, result.Pests, result.PerenualId.Value, ct);
+        await ReplacePerenualPestsAsync(plantId, result.Pests, ct);
         await ReplacePerenualLongDescriptionAsync(plantId, result.LongDescriptionEn, ct);
         await UpsertPerenualSourceAsync(plantId, result.PerenualId.Value, ct);
         ApplyPlantDenormalisation(plant, result);
@@ -293,7 +293,6 @@ public class PlantPerenualController : ControllerBase
     private async Task ReplacePerenualPestsAsync(
         Guid plantId,
         IReadOnlyList<PerenualPest> pests,
-        int perenualSpeciesId,
         CancellationToken ct)
     {
         // Perenual is the only D1 source feeding PlantPest. Filter by Source

@@ -126,8 +126,9 @@ public class PerenualResolverTests
     public void ConvertHeightToCm_PicksFirstUsableEntry()
     {
         // Phase 4 smoke discovery: Perenual ships dimensions as an array.
-        // Multi-entry case: first entry with a known unit AND at least one
-        // populated value wins; later entries are ignored.
+        // Multi-entry case with all-untagged Types: first entry with a
+        // known unit AND at least one populated value wins; later entries
+        // are ignored.
         var dims = new List<PerenualDimensionsDto>
         {
             new() { Unit = "", MinValue = 0m, MaxValue = 0m }, // skipped (empty unit)
@@ -139,6 +140,81 @@ public class PerenualResolverTests
 
         Assert.Equal(61, min); // 2 ft = 60.96 cm
         Assert.Equal(122, max); // 4 ft = 121.92 cm
+    }
+
+    [Fact]
+    public void ConvertHeightToCm_PrefersHeightTypedEntry()
+    {
+        // CR round 1 REVIEW_NEEDED fix: when a Spread (or other non-height)
+        // entry ships first, the resolver must skip it and pick the
+        // Height-typed entry — otherwise MinHeightCm/MaxHeightCm would
+        // carry spread values, silently corrupting the read model.
+        var dims = new List<PerenualDimensionsDto>
+        {
+            new() { Type = "Spread", Unit = "feet", MinValue = 5m, MaxValue = 10m },
+            new() { Type = "Height", Unit = "feet", MinValue = 2m, MaxValue = 4m },
+        };
+
+        var (min, max) = PerenualResolver.ConvertHeightToCm(dims);
+
+        Assert.Equal(61, min); // 2 ft = 60.96 cm → 61 (Height entry, not Spread)
+        Assert.Equal(122, max); // 4 ft = 121.92 cm → 122
+    }
+
+    [Fact]
+    public void ConvertHeightToCm_HeightTypeMatchIsCaseInsensitive()
+    {
+        var dims = new List<PerenualDimensionsDto>
+        {
+            new() { Type = "Spread", Unit = "feet", MinValue = 5m, MaxValue = 10m },
+            new() { Type = "plant HEIGHT", Unit = "feet", MinValue = 1m, MaxValue = 3m },
+        };
+
+        var (min, max) = PerenualResolver.ConvertHeightToCm(dims);
+
+        Assert.Equal(30, min);
+        Assert.Equal(91, max);
+    }
+
+    [Fact]
+    public void ConvertHeightToCm_FallsBackToFirstUsableIfNoHeightType()
+    {
+        // Preserves the prior smoke-validated behaviour for payloads where
+        // dimension Type is null/blank (e.g. Aloe 728 in Phase 4 ships
+        // dimensions with type=null but unit=feet).
+        var dims = new List<PerenualDimensionsDto>
+        {
+            new() { Type = null, Unit = "feet", MinValue = 1m, MaxValue = 3m },
+        };
+
+        var (min, max) = PerenualResolver.ConvertHeightToCm(dims);
+
+        Assert.Equal(30, min);
+        Assert.Equal(91, max);
+    }
+
+    [Fact]
+    public void ExtractImages_SkipsNullEntries()
+    {
+        // CR round 1 REVIEW_NEEDED fix: System.Text.Json can produce null
+        // entries in other_images when the wire payload contains a literal
+        // null. Without the guard, AddImage would NRE and the whole
+        // enrichment transaction would roll back.
+        var response = new PerenualSpeciesResponse
+        {
+            DefaultImage = null,
+            OtherImages = new List<PerenualImageDto>
+            {
+                null!,
+                new() { OriginalUrl = "https://wasabi/usable.jpg" },
+                null!,
+            },
+        };
+
+        var images = PerenualResolver.ExtractImages(response);
+
+        Assert.Single(images);
+        Assert.Equal("https://wasabi/usable.jpg", images[0].Url);
     }
 
     // ── ComputeIsEdible truth table ───────────────────────────────────────

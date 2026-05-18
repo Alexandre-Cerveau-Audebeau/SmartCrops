@@ -267,7 +267,8 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             hardinessMin: null));
         AuthAsAnyUser();
 
-        await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
+        var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
@@ -380,7 +381,8 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Fixture.PerenualStub.Enqueue(SampleMatch(728));
         AuthAsAnyUser();
 
-        await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
+        var firstResponse = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
 
         await Task.Delay(15); // LastFetchedAt observably newer on re-enrichment
 
@@ -405,8 +407,8 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     [Fact]
     public async Task EnrichAll_SkipsAlreadyEnriched_ByDefault()
     {
-        var enrichedId = await SeedPlantAsync("Aloe vera", alreadyPerenualEnriched: true);
-        var pendingId = await SeedPlantAsync("Solanum lycopersicum");
+        await SeedPlantAsync("Aloe vera", alreadyPerenualEnriched: true);
+        await SeedPlantAsync("Solanum lycopersicum");
 
         Fixture.PerenualStub.Enqueue(SampleMatch(8759));
         AuthAsAnyUser();
@@ -422,9 +424,6 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         var seen = Fixture.PerenualStub.ReceivedNames;
         Assert.Single(seen);
         Assert.Equal("Solanum lycopersicum", seen[0]);
-
-        _ = enrichedId;
-        _ = pendingId;
     }
 
     [Fact]
