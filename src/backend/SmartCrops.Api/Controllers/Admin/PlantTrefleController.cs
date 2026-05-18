@@ -340,15 +340,18 @@ public class PlantTrefleController : ControllerBase
         plant.NativeRegions = result.NativeRegionsJson;
         plant.IntroducedRegions = result.IntroducedRegionsJson;
 
-        // Scalar fields: null-coalesce so we never replace a known value with null.
-        // Range-guard those bounded by Plant CHECK constraints (LightLevel 1-10,
-        // SoilNutriments 0-10) to avoid a tx rollback on a Trefle outlier.
-        if (result.LightLevel is int light and >= 1 and <= 10)
+        // Scalar fields: Plant takes precedence. A curated value (manual entry,
+        // GBIF, seed data) is never overwritten by Trefle — Trefle only fills
+        // gaps. LightLevel + SoilNutriments are additionally range-guarded
+        // against Plant CHECK constraints (LightLevel 1-10, SoilNutriments
+        // 0-10) so a Trefle outlier (observed: LightLevel=0) cannot abort the
+        // whole enrichment transaction.
+        if (plant.LightLevel is null && result.LightLevel is int light and >= 1 and <= 10)
         {
             plant.LightLevel = light;
         }
 
-        if (result.SoilNutriments is int nut and >= 0 and <= 10)
+        if (plant.SoilNutriments is null && result.SoilNutriments is int nut and >= 0 and <= 10)
         {
             plant.SoilNutriments = nut;
         }
@@ -360,7 +363,7 @@ public class PlantTrefleController : ControllerBase
         plant.IsEdible = result.IsEdible ?? plant.IsEdible;
         plant.IsVegetable = result.IsVegetable ?? plant.IsVegetable;
 
-        if (TryParseGrowthHabit(result.GrowthHabit, out var habit))
+        if (plant.GrowthHabit is null && TryParseGrowthHabit(result.GrowthHabit, out var habit))
         {
             plant.GrowthHabit = habit;
         }

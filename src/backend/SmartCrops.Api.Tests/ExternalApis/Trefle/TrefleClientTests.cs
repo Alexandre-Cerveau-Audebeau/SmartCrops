@@ -149,6 +149,55 @@ public class TrefleClientTests
         Assert.Null(response);
     }
 
+    [Fact]
+    public async Task GetSpeciesAsync_PropagatesCallerCancellation()
+    {
+        // Mirror of the SearchAsync cancellation test — both methods share the
+        // same OperationCanceledException pattern (caller-token signalled =
+        // propagate; timeout-token signalled = swallow + return null).
+        var handler = new RecordingHandler(HttpStatusCode.OK, "{\"data\":{\"id\":1}}");
+        var client = NewClient(handler);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.GetSpeciesAsync(12345, cts.Token));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    public async Task SearchAsync_ReturnsNull_OnHttpError(HttpStatusCode status)
+    {
+        // GetFromJsonAsync<T> throws HttpRequestException on any non-success
+        // status (4xx / 5xx, including 429 rate-limit). The client catches it
+        // and returns null so callers degrade gracefully — this is part of the
+        // contract documented on SearchAsync, and worth a regression test now
+        // that the catch block was extended (round 2) to also swallow
+        // JsonException + NotSupportedException.
+        var handler = new RecordingHandler(status, "{}");
+        var client = NewClient(handler);
+
+        var response = await client.SearchAsync("Anything", CancellationToken.None);
+
+        Assert.Null(response);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task GetSpeciesAsync_ReturnsNull_OnHttpError(HttpStatusCode status)
+    {
+        var handler = new RecordingHandler(status, "{}");
+        var client = NewClient(handler);
+
+        var response = await client.GetSpeciesAsync(99999, CancellationToken.None);
+
+        Assert.Null(response);
+    }
+
     private sealed class RecordingHandler : HttpMessageHandler
     {
         private readonly HttpStatusCode _status;

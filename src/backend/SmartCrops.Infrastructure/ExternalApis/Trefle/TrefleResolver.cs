@@ -130,12 +130,18 @@ public class TrefleResolver
 
     /// <summary>
     /// Flatten Trefle's <c>images</c> dictionary into a list, mapping
-    /// categories to <see cref="PlantImageType"/>. Handles two response traps:
+    /// categories to <see cref="PlantImageType"/>. Handles three response traps:
     /// <list type="bullet">
     ///   <item>the dictionary may contain an empty-string key (Kew Gardens
     ///   uncategorised photos) — those entries are skipped;</item>
     ///   <item>individual image entries with a blank URL are skipped (would
-    ///   violate the <c>CK_PlantImage_Url_NotBlank</c> CHECK constraint).</item>
+    ///   violate the <c>CK_PlantImage_Url_NotBlank</c> CHECK constraint);</item>
+    ///   <item>the same URL can appear under multiple categories (a flower
+    ///   close-up tagged both "flower" and "habit"); we keep the first
+    ///   occurrence and drop subsequent duplicates so the controller's
+    ///   per-plant insert batch does not produce semantically duplicate rows.
+    ///   Matches the defensive dedup pattern in <see cref="ExtractSynonyms"/>
+    ///   and <see cref="ExtractCommonNames"/>.</item>
     /// </list>
     /// </summary>
     private static IReadOnlyList<TrefleImage> ExtractImages(Dictionary<string, List<TrefleImageDto>>? images)
@@ -145,6 +151,7 @@ public class TrefleResolver
             return Array.Empty<TrefleImage>();
         }
 
+        var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var result = new List<TrefleImage>();
         foreach (var (category, imageList) in images)
         {
@@ -156,7 +163,12 @@ public class TrefleResolver
             var type = MapCategoryToImageType(category);
             foreach (var img in imageList)
             {
-                if (string.IsNullOrWhiteSpace(img.ImageUrl))
+                if (img is null || string.IsNullOrWhiteSpace(img.ImageUrl))
+                {
+                    continue;
+                }
+
+                if (!seenUrls.Add(img.ImageUrl))
                 {
                     continue;
                 }
@@ -279,7 +291,7 @@ public class TrefleResolver
         var result = new List<TrefleSynonym>();
         foreach (var s in synonyms)
         {
-            if (string.IsNullOrWhiteSpace(s.Name))
+            if (s is null || string.IsNullOrWhiteSpace(s.Name))
             {
                 continue;
             }

@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -52,6 +53,21 @@ public class TrefleClient
             _logger.LogWarning(ex, "Trefle search transport failure for {Name}", scientificName);
             return null;
         }
+        catch (JsonException ex)
+        {
+            // Malformed payload from Trefle — honor the documented "null on
+            // failure" contract instead of letting the deserialiser crash the
+            // enrichment flow.
+            _logger.LogWarning(ex, "Trefle search returned malformed JSON for {Name}", scientificName);
+            return null;
+        }
+        catch (NotSupportedException ex)
+        {
+            // GetFromJsonAsync throws this on unexpected Content-Type. Same
+            // graceful-degradation rationale as JsonException above.
+            _logger.LogWarning(ex, "Trefle search returned unsupported content for {Name}", scientificName);
+            return null;
+        }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
             // HttpClient.Timeout surfaces as TaskCanceledException without the
@@ -78,6 +94,16 @@ public class TrefleClient
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "Trefle species fetch transport failure for id {Id}", trefleId);
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Trefle species fetch returned malformed JSON for id {Id}", trefleId);
+            return null;
+        }
+        catch (NotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Trefle species fetch returned unsupported content for id {Id}", trefleId);
             return null;
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
