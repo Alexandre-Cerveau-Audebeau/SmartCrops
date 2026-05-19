@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 
@@ -20,7 +21,7 @@ public class PlantsController(IPlantRepository repository) : ControllerBase
     public async Task<IActionResult> GetById(Guid id)
     {
         var plant = await repository.GetByIdAsync(id);
-        return plant is null ? NotFound() : Ok(plant);
+        return plant is null ? NotFound() : Ok(PlantDetailMapper.ToDto(plant));
     }
 
     [HttpGet("type/{plantTypeId:int}")]

@@ -330,7 +330,190 @@
     }
   },
   "plantDetail": {
-    "backToGarden": "Retour à {{name}}"
+    "backToGarden": "Retour à {{name}}",
+    "gbifBadge": "GBIF {{key}}",
+    "sections": {
+      "about": "À propos",
+      "characteristics": "Caractéristiques",
+      "lifecycle": "Cycle de vie",
+      "edibleAndPropagation": "Parties comestibles & propagation",
+      "scientificData": "Données scientifiques (à venir)",
+      "pestsAndDiseases": "Parasites & maladies",
+      "commonNames": "Noms vernaculaires",
+      "synonyms": "Synonymes botaniques",
+      "sources": "Sources externes",
+      "adminActions": "Actions admin"
+    },
+    "scientificData": {
+      "comingSoon": "Disponible quand l'enrichissement Trefle et Perenual Supreme xData sera affiché.",
+      "items": {
+        "waterLiters": "Besoin en eau (L/semaine)",
+        "lightLumens": "Exposition lumineuse (lumens/jour)",
+        "temperatureRange": "Plage de température optimale (°C)",
+        "nutrientsNPK": "Nutriments requis (NPK)",
+        "geoDistribution": "Distribution géographique",
+        "daysToGermination": "Jours jusqu'à germination et récolte"
+      }
+    },
+    "labels": {
+      "family": "Famille",
+      "genus": "Genre",
+      "species": "Espèce",
+      "author": "Auteur",
+      "year": "Année de description",
+      "lifeCycle": "Cycle de vie",
+      "growthRate": "Croissance",
+      "careLevel": "Difficulté",
+      "wateringNeed": "Besoin en eau",
+      "growthHabit": "Port",
+      "hardinessZone": "Zone de rusticité USDA",
+      "height": "Hauteur",
+      "spread": "Étalement",
+      "soilPh": "pH du sol",
+      "lightLevel": "Luminosité",
+      "soilNutriments": "Richesse du sol",
+      "temperatureRange": "Plage de température",
+      "edibleParts": "Parties comestibles",
+      "sowingInstructions": "Semis",
+      "propagationInstructions": "Propagation",
+      "originCountries": "Origine",
+      "floweringSeason": "Saison de floraison",
+      "harvestSeason": "Saison de récolte",
+      "pruningMonths": "Mois de taille",
+      "maintenance": "Entretien",
+      "sunlight": "Ensoleillement",
+      "flowerColors": "Couleurs des fleurs",
+      "lastEnriched": "Dernier enrichissement"
+    },
+    "flags": {
+      "edible": "Comestible",
+      "medicinal": "Médicinal",
+      "toxic": "Toxique",
+      "toxicToPets": "Toxique pour animaux",
+      "indoor": "Intérieur",
+      "droughtTolerant": "Tolère la sécheresse",
+      "saltTolerant": "Tolère le sel",
+      "invasive": "Invasive",
+      "thorny": "Épineux",
+      "tropical": "Tropical",
+      "attractsPollinators": "Attire les pollinisateurs"
+    },
+    "lifecycle": {
+      "stages": {
+        "sowing": "Semis",
+        "growth": "Croissance",
+        "flowering": "Floraison",
+        "harvest": "Récolte"
+      },
+      "perennialNote": "Cycle annuel répété chaque année.",
+      "biennialNote": "Croissance végétative en année 1, floraison et fructification en année 2."
+    },
+    "enumValues": {
+      "lifeCycle": {
+        "Annual": "Annuelle",
+        "Biennial": "Bisannuelle",
+        "Perennial": "Vivace",
+        "HerbaceousPerennial": "Vivace herbacée"
+      },
+      "growthRate": {
+        "Low": "Lente",
+        "Moderate": "Modérée",
+        "High": "Rapide"
+      },
+      "careLevel": {
+        "Easy": "Facile",
+        "Medium": "Moyenne",
+        "Difficult": "Difficile"
+      },
+      "wateringNeed": {
+        "Low": "Faible",
+        "Average": "Moyen",
+        "High": "Élevé",
+        "Frequent": "Fréquent"
+      },
+      "sourceType": {
+        "Manual": "Manuel",
+        "GBIF": "GBIF",
+        "Trefle": "Trefle",
+        "Perenual": "Perenual",
+        "WFO": "World Flora Online",
+        "POWO": "Plants of the World Online",
+        "PlantNet": "PlantNet",
+        "UserSubmitted": "Soumis par utilisateur"
+      },
+      "pestType": {
+        "Disease": "Maladie",
+        "Insect": "Insecte",
+        "Fungus": "Champignon",
+        "Bacteria": "Bactérie",
+        "Mite": "Acarien",
+        "Nematode": "Nématode",
+        "Virus": "Virus",
+        "Other": "Autre"
+      },
+      "ediblePart": {
+        "fruit": "Fruit",
+        "leaf": "Feuille",
+        "leaves": "Feuilles",
+        "root": "Racine",
+        "roots": "Racines",
+        "seed": "Graine",
+        "seeds": "Graines",
+        "tuber": "Tubercule",
+        "flower": "Fleur",
+        "flowers": "Fleurs",
+        "stem": "Tige",
+        "stems": "Tiges",
+        "bark": "Écorce"
+      }
+    },
+    "gallery": {
+      "showAll": "Voir toutes les photos ({{count}})",
+      "remaining": "+{{count}} de plus",
+      "lightboxClose": "Fermer",
+      "lightboxPrev": "Photo précédente",
+      "lightboxNext": "Photo suivante",
+      "credit": "Crédit : {{name}}",
+      "license": "Licence : {{name}}"
+    },
+    "description": {
+      "readMore": "Lire plus",
+      "readLess": "Lire moins",
+      "sourceLabel": "Source : {{source}}",
+      "languageSwitch": "Lire en {{language}}"
+    },
+    "pests": {
+      "header": "Parasites & maladies ({{count}})",
+      "showAll": "Tout afficher ({{count}})",
+      "showLess": "Voir moins"
+    },
+    "commonNames": {
+      "showAllLanguages": "Afficher {{count}} langues de plus",
+      "showFewerLanguages": "Afficher moins de langues"
+    },
+    "sources": {
+      "viewExternal": "Voir sur {{source}}",
+      "fetched": "Récupéré le {{date}}"
+    },
+    "fallback": {
+      "notEnriched": "Enrichissement incomplet"
+    },
+    "warnings": {
+      "suspiciousHardiness": "Cette valeur de rusticité semble suspecte — probable artefact ETL, à vérifier."
+    },
+    "actions": {
+      "reEnrichTrefle": "Ré-enrichir depuis Trefle",
+      "reEnrichPerenual": "Ré-enrichir depuis Perenual",
+      "running": "En cours…",
+      "adminMenu": "Actions admin"
+    },
+    "toasts": {
+      "trefleSuccess": "Trefle : {{images}} images, {{commonNames}} noms vernaculaires, {{synonyms}} synonymes ajoutés.",
+      "perenualSuccess": "Perenual : {{images}} images, {{pests}} parasites, {{longDescriptions}} description(s) ajoutées.",
+      "skipped": "Déjà enrichi — rien à mettre à jour.",
+      "notMatched": "Aucune correspondance trouvée dans le catalogue source.",
+      "error": "Échec de l'enrichissement : {{reason}}"
+    }
   },
   "editableNotes": {
     "notes": "Notes : {{notes}}",

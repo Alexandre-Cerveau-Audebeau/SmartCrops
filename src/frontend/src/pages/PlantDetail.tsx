@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
@@ -11,32 +14,77 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
-import Checkbox from '@mui/material/Checkbox';
+import IconButton from '@mui/material/IconButton';
+import Link from '@mui/material/Link';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import Snackbar from '@mui/material/Snackbar';
+import Stack from '@mui/material/Stack';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import AddIcon from '@mui/icons-material/Add';
 import AgricultureIcon from '@mui/icons-material/Agriculture';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import CloseIcon from '@mui/icons-material/Close';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import ScienceIcon from '@mui/icons-material/Science';
+import SettingsIcon from '@mui/icons-material/Settings';
+import SpaIcon from '@mui/icons-material/Spa';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import WaterDropIcon from '@mui/icons-material/WaterDrop';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
+import YardIcon from '@mui/icons-material/Yard';
 import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../hooks/useLanguage';
 import { addPlantToGarden, fetchGardens } from '../services/gardenApi';
 import { fetchPlantById } from '../services/plantApi';
+import {
+  classifyReEnrich,
+  reEnrichPerenual,
+  reEnrichTrefle,
+  type ReEnrichResponse,
+} from '../services/adminApi';
 import type { Garden } from '../types/Garden';
-import type { Plant } from '../types/Plant';
+import type { Plant, PlantImage } from '../types/Plant';
+import { isAdminUser } from '../utils/admin';
+import { isUserFacingUrl, toUserFacingUrl } from '../utils/externalSourceUrl';
 import { getTranslation } from '../utils/getTranslation';
+import {
+  formatHardinessZone,
+  formatRange,
+  groupCommonNamesByLanguage,
+  hasDistinctImageTypes,
+  isHardinessSuspicious,
+  parseStringArray,
+  pickHeroImage,
+  pickLongDescription,
+  sortGalleryImages,
+} from '../utils/plantDetail';
 
 const languageLabels: Record<string, string> = {
   en: 'English',
   fr: 'Français',
 };
 
+const DESCRIPTION_TRUNCATE_CHARS = 360;
+const PESTS_PREVIEW_COUNT = 10;
+const COMMON_NAMES_PREVIEW_LANGUAGES = 6;
+const GALLERY_PREVIEW_COUNT = 6;
+
 type PlantDetailNavState = { from?: string; gardenId?: string; gardenName?: string } | null;
+
+type ToastSeverity = 'success' | 'info' | 'warning' | 'error';
+type Toast = { message: string; severity: ToastSeverity };
 
 export default function PlantDetail() {
   const { t } = useTranslation();
@@ -50,13 +98,17 @@ export default function PlantDetail() {
     ? t('plantDetail.backToGarden', { name: navState!.gardenName ?? '' })
     : t('library.backToLibrary');
   const { language } = useLanguage();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const isAdmin = isAdminUser(user?.email);
+
   const [plant, setPlant] = useState<Plant | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadCounter, setReloadCounter] = useState(0);
   const mountedRef = useRef(true);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Add-to-garden dialog (unchanged from the previous implementation) ─────
   const [dialogOpen, setDialogOpen] = useState(false);
   const [gardens, setGardens] = useState<Garden[]>([]);
   const [gardensLoading, setGardensLoading] = useState(false);
@@ -65,11 +117,20 @@ export default function PlantDetail() {
   const [addSuccess, setAddSuccess] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
 
-  const toggleGarden = (id: string) => {
+  const [descExpanded, setDescExpanded] = useState(false);
+  const [pestsExpanded, setPestsExpanded] = useState(false);
+  const [commonNamesExpanded, setCommonNamesExpanded] = useState(false);
+
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [adminMenuAnchor, setAdminMenuAnchor] = useState<null | HTMLElement>(null);
+  const [adminRunning, setAdminRunning] = useState<null | 'trefle' | 'perenual'>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
+
+  const toggleGarden = (gardenId: string) => {
     setSelectedGardenIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(gardenId)) next.delete(gardenId);
+      else next.add(gardenId);
       return next;
     });
   };
@@ -150,6 +211,7 @@ export default function PlantDetail() {
     setIsAdding(false);
   };
 
+  // ── Plant fetch with abort + reload trigger after admin re-enrich ─────────
   useEffect(() => {
     mountedRef.current = true;
     setPlant(null);
@@ -186,11 +248,77 @@ export default function PlantDetail() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, reloadCounter]);
 
+  const handleReEnrich = async (kind: 'trefle' | 'perenual') => {
+    if (!plant) return;
+    setAdminMenuAnchor(null);
+    setAdminRunning(kind);
+    try {
+      const response: ReEnrichResponse =
+        kind === 'trefle' ? await reEnrichTrefle(plant.id) : await reEnrichPerenual(plant.id);
+      const outcome = classifyReEnrich(response);
+      if (outcome === 'matched') {
+        if (kind === 'trefle') {
+          setToast({
+            severity: 'success',
+            message: t('plantDetail.toasts.trefleSuccess', {
+              images: response.imagesAdded ?? 0,
+              commonNames: response.commonNamesAdded ?? 0,
+              synonyms: response.synonymsAdded ?? 0,
+            }),
+          });
+        } else {
+          setToast({
+            severity: 'success',
+            message: t('plantDetail.toasts.perenualSuccess', {
+              images: response.imagesAdded ?? 0,
+              pests: response.pestsAdded ?? 0,
+              longDescriptions: response.longDescriptionsAdded ?? 0,
+            }),
+          });
+        }
+        // Refetch the plant so the new images / pests / common names render.
+        setReloadCounter((n) => n + 1);
+      } else if (outcome === 'skipped') {
+        setToast({ severity: 'info', message: t('plantDetail.toasts.skipped') });
+      } else {
+        setToast({ severity: 'warning', message: t('plantDetail.toasts.notMatched') });
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      setToast({ severity: 'error', message: t('plantDetail.toasts.error', { reason }) });
+    } finally {
+      setAdminRunning(null);
+    }
+  };
+
+  // ── Memoised derived data ────────────────────────────────────────────────
+  const heroImageUrl = useMemo(() => (plant ? pickHeroImage(plant) : ''), [plant]);
+  const galleryImages = useMemo<PlantImage[]>(
+    () => (plant ? sortGalleryImages(plant.images) : []),
+    [plant],
+  );
+  const longDescription = useMemo(
+    () => (plant ? pickLongDescription(plant.longDescriptions, language) : null),
+    [plant, language],
+  );
+  const groupedCommonNames = useMemo<Map<string, Plant['commonNames']>>(
+    () =>
+      plant
+        ? groupCommonNamesByLanguage(plant.commonNames, language)
+        : new Map<string, Plant['commonNames']>(),
+    [plant, language],
+  );
+  const ediblePartsList = useMemo(
+    () => (plant ? parseStringArray(plant.edibleParts) : []),
+    [plant],
+  );
+
+  // ── Early-return guards (unchanged behaviour, just maxWidth=lg) ──────────
   if (!id) {
     return (
-      <Container maxWidth="md" sx={{ pt: 4 }}>
+      <Container maxWidth="lg" sx={{ pt: 4 }}>
         <Alert severity="error" sx={{ mb: 2 }}>
           {t('library.missingPlantId')}
         </Alert>
@@ -203,7 +331,7 @@ export default function PlantDetail() {
 
   if (loading) {
     return (
-      <Container maxWidth="md" sx={{ pt: 4 }}>
+      <Container maxWidth="lg" sx={{ pt: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />
         </Box>
@@ -213,7 +341,7 @@ export default function PlantDetail() {
 
   if (error) {
     return (
-      <Container maxWidth="md" sx={{ pt: 4 }}>
+      <Container maxWidth="lg" sx={{ pt: 4 }}>
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
@@ -226,7 +354,7 @@ export default function PlantDetail() {
 
   if (!plant) {
     return (
-      <Container maxWidth="md" sx={{ pt: 4, textAlign: 'center' }}>
+      <Container maxWidth="lg" sx={{ pt: 4, textAlign: 'center' }}>
         <Typography color="text.secondary" sx={{ py: 8 }}>
           {t('library.plantNotFound')}
         </Typography>
@@ -239,15 +367,92 @@ export default function PlantDetail() {
 
   const tr = getTranslation(plant, language);
 
-  const conditions = [
-    { icon: <WbSunnyIcon />, label: t('library.sunExposure'), value: plant.sunExposure ? t(`plantValues.${plant.sunExposure}`, plant.sunExposure) : undefined },
-    { icon: <WaterDropIcon />, label: t('library.waterNeeds'), value: plant.waterNeeds ? t(`plantValues.${plant.waterNeeds}`, plant.waterNeeds) : undefined },
-    { icon: <CalendarMonthIcon />, label: t('library.sowingPeriod'), value: plant.sowingPeriod },
-    { icon: <AgricultureIcon />, label: t('library.harvestPeriod'), value: plant.harvestPeriod },
-  ].filter((c) => c.value);
+  // Section D rows — characteristics column
+  const characteristicRows: { label: string; value: string; warning?: boolean; tooltip?: string }[] = [];
+  if (plant.lifeCycle) {
+    characteristicRows.push({
+      label: t('plantDetail.labels.lifeCycle'),
+      value: t(`plantDetail.enumValues.lifeCycle.${plant.lifeCycle}`, plant.lifeCycle),
+    });
+  }
+  if (plant.growthRate) {
+    characteristicRows.push({
+      label: t('plantDetail.labels.growthRate'),
+      value: t(`plantDetail.enumValues.growthRate.${plant.growthRate}`, plant.growthRate),
+    });
+  }
+  if (plant.careLevel) {
+    characteristicRows.push({
+      label: t('plantDetail.labels.careLevel'),
+      value: t(`plantDetail.enumValues.careLevel.${plant.careLevel}`, plant.careLevel),
+    });
+  }
+  if (plant.wateringNeedLevel) {
+    characteristicRows.push({
+      label: t('plantDetail.labels.wateringNeed'),
+      value: t(`plantDetail.enumValues.wateringNeed.${plant.wateringNeedLevel}`, plant.wateringNeedLevel),
+    });
+  }
+  const zone = formatHardinessZone(plant.hardinessZoneMin, plant.hardinessZoneMax);
+  if (zone) {
+    const suspicious = isHardinessSuspicious(plant.hardinessZoneMin, plant.hardinessZoneMax);
+    characteristicRows.push({
+      label: t('plantDetail.labels.hardinessZone'),
+      value: zone,
+      warning: suspicious,
+      tooltip: suspicious ? t('plantDetail.warnings.suspiciousHardiness') : undefined,
+    });
+  }
+  const height = formatRange(plant.minHeightCm, plant.maxHeightCm, 'cm');
+  if (height) characteristicRows.push({ label: t('plantDetail.labels.height'), value: height });
+  const spread = formatRange(plant.minSpreadCm, plant.maxSpreadCm, 'cm');
+  if (spread) characteristicRows.push({ label: t('plantDetail.labels.spread'), value: spread });
+  const phRange =
+    plant.soilPhMin != null && plant.soilPhMax != null
+      ? `${plant.soilPhMin} – ${plant.soilPhMax}`
+      : null;
+  if (phRange) characteristicRows.push({ label: t('plantDetail.labels.soilPh'), value: phRange });
+
+  // Section D rows — growing conditions column (existing legacy fields)
+  const conditions = (
+    [
+      {
+        icon: <WbSunnyIcon />,
+        label: t('library.sunExposure'),
+        value: plant.sunExposure ? t(`plantValues.${plant.sunExposure}`, plant.sunExposure) : null,
+      },
+      {
+        icon: <WaterDropIcon />,
+        label: t('library.waterNeeds'),
+        value: plant.waterNeeds ? t(`plantValues.${plant.waterNeeds}`, plant.waterNeeds) : null,
+      },
+      { icon: <CalendarMonthIcon />, label: t('library.sowingPeriod'), value: plant.sowingPeriod },
+      { icon: <AgricultureIcon />, label: t('library.harvestPeriod'), value: plant.harvestPeriod },
+    ] as { icon: React.ReactNode; label: string; value: string | null }[]
+  ).filter((c): c is { icon: React.ReactNode; label: string; value: string } => Boolean(c.value));
+
+  const showLifecycleSection =
+    !!plant.sowingPeriod || !!plant.harvestPeriod || !!plant.lifeCycle;
+
+  const showEdibleAndPropagation =
+    ediblePartsList.length > 0 || !!plant.propagationInstructions || !!plant.sowingInstructions;
+
+  const pestsToShow = pestsExpanded ? plant.pests : plant.pests.slice(0, PESTS_PREVIEW_COUNT);
+  const commonNameLanguages = [...groupedCommonNames.keys()];
+  const visibleCommonNameLanguages = commonNamesExpanded
+    ? commonNameLanguages
+    : commonNameLanguages.slice(0, COMMON_NAMES_PREVIEW_LANGUAGES);
+
+  const heroChips = buildFeatureChips(plant, t);
+
+  const fullyEnriched =
+    plant.enrichmentSources.includes('Manual') &&
+    plant.enrichmentSources.includes('GBIF') &&
+    plant.enrichmentSources.includes('Trefle') &&
+    plant.enrichmentSources.includes('Perenual');
 
   return (
-    <Container maxWidth="md" sx={{ pt: 4, pb: 6 }}>
+    <Container maxWidth="lg" sx={{ pt: 4, pb: 6 }}>
       <Button
         startIcon={<ArrowBackIcon />}
         onClick={() => navigate(backTarget)}
@@ -256,94 +461,598 @@ export default function PlantDetail() {
         {backLabel}
       </Button>
 
-      <Typography variant="h3" fontWeight={700} sx={{ mb: 0.5 }}>
-        {tr?.commonName ?? plant.scientificName}
-      </Typography>
-      <Typography variant="h6" color="text.secondary" sx={{ fontStyle: 'italic', mb: 2 }}>
-        {plant.scientificName}
-      </Typography>
-      {plant.plantType && (
-        <Chip
-          label={t(`plantTypes.${plant.plantType.name}`, plant.plantType.name)}
-          color="primary"
-          variant="outlined"
-          sx={{ mb: 3 }}
-        />
-      )}
-
-      <Box sx={{ mb: 3 }}>
-        <Button
-          variant="outlined"
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={openAddDialog}
-        >
-          {t('library.addToGarden')}
-        </Button>
-      </Box>
-
-      {tr?.description && (
-        <Typography variant="body1" sx={{ mb: 4, lineHeight: 1.8 }}>
-          {tr.description}
-        </Typography>
-      )}
-
-      {conditions.length > 0 && (
+      {/* ── Section A: Hero header ─────────────────────────────────────── */}
+      <Card variant="outlined" sx={{ mb: 3, overflow: 'hidden', borderRadius: 3 }}>
         <Box
           sx={{
-            bgcolor: 'rgba(76, 175, 120, 0.08)',
-            borderRadius: 3,
-            p: 3,
-            mb: 4,
+            position: 'relative',
+            width: '100%',
+            height: { xs: 220, sm: 320, md: 400 },
+            bgcolor: 'grey.100',
           }}
         >
-          <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-            {t('library.growingConditions')}
-          </Typography>
-          <Grid container spacing={2}>
-            {conditions.map((c) => (
-              <Grid key={c.label} size={{ xs: 12, sm: 6 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  <Box sx={{ color: 'primary.main' }}>{c.icon}</Box>
-                  <Box>
-                    <Typography variant="caption" color="text.secondary">
-                      {c.label}
-                    </Typography>
-                    <Typography variant="body2" fontWeight={500}>
-                      {c.value}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Grid>
-            ))}
-          </Grid>
+          <Box
+            component="img"
+            src={heroImageUrl}
+            alt={tr?.commonName ?? plant.scientificName}
+            sx={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: 'block',
+            }}
+            onClick={() => {
+              if (plant.images.length > 0) setLightboxIndex(0);
+            }}
+            style={{ cursor: plant.images.length > 0 ? 'pointer' : 'default' }}
+          />
         </Box>
+        <CardContent>
+          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'flex-start' }} gap={2}>
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography variant="h3" fontWeight={700} sx={{ mb: 0.5 }}>
+                {tr?.commonName ?? plant.scientificName}
+              </Typography>
+              <Typography variant="h6" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                {plant.scientificName}
+                {plant.author ? <Typography component="span" color="text.secondary" sx={{ fontStyle: 'normal', ml: 1 }}>{plant.author}</Typography> : null}
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1.5, alignItems: 'center' }}>
+                {plant.plantType && (
+                  <Chip
+                    label={t(`plantTypes.${plant.plantType.name}`, plant.plantType.name)}
+                    color="primary"
+                    variant="outlined"
+                    size="small"
+                  />
+                )}
+                {plant.family && (
+                  <Typography variant="body2" color="text.secondary">
+                    {t('plantDetail.labels.family')}: <Box component="span" sx={{ fontWeight: 500 }}>{plant.family}</Box>
+                  </Typography>
+                )}
+                {plant.genus && (
+                  <Typography variant="body2" color="text.secondary">
+                    {t('plantDetail.labels.genus')}: <Box component="span" sx={{ fontStyle: 'italic' }}>{plant.genus}</Box>
+                  </Typography>
+                )}
+                {plant.gbifTaxonKey != null && (
+                  <Chip
+                    component="a"
+                    href={`https://www.gbif.org/species/${plant.gbifTaxonKey}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    label={t('plantDetail.gbifBadge', { key: plant.gbifTaxonKey })}
+                    size="small"
+                    clickable
+                    icon={<OpenInNewIcon fontSize="small" />}
+                    sx={{ bgcolor: 'grey.200' }}
+                  />
+                )}
+              </Stack>
+              {heroChips.length > 0 && (
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1.5 }}>
+                  {heroChips.map((c) => (
+                    <Chip
+                      key={c.key}
+                      label={c.label}
+                      size="small"
+                      sx={{ bgcolor: c.bgcolor, color: c.color, fontWeight: 500 }}
+                    />
+                  ))}
+                </Stack>
+              )}
+            </Box>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<AddIcon />}
+                onClick={openAddDialog}
+              >
+                {t('library.addToGarden')}
+              </Button>
+              {isAdmin && (
+                <>
+                  <Tooltip title={t('plantDetail.actions.adminMenu')}>
+                    <span>
+                      <IconButton
+                        color="default"
+                        onClick={(e) => setAdminMenuAnchor(e.currentTarget)}
+                        disabled={adminRunning !== null}
+                        aria-label={t('plantDetail.actions.adminMenu')}
+                      >
+                        {adminRunning ? <CircularProgress size={20} /> : <SettingsIcon />}
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                  <Menu
+                    anchorEl={adminMenuAnchor}
+                    open={Boolean(adminMenuAnchor)}
+                    onClose={() => setAdminMenuAnchor(null)}
+                  >
+                    <MenuItem onClick={() => handleReEnrich('trefle')} disabled={adminRunning !== null}>
+                      <RefreshIcon fontSize="small" sx={{ mr: 1 }} />
+                      {t('plantDetail.actions.reEnrichTrefle')}
+                    </MenuItem>
+                    <MenuItem onClick={() => handleReEnrich('perenual')} disabled={adminRunning !== null}>
+                      <RefreshIcon fontSize="small" sx={{ mr: 1 }} />
+                      {t('plantDetail.actions.reEnrichPerenual')}
+                    </MenuItem>
+                  </Menu>
+                </>
+              )}
+            </Stack>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      {/* ── Section B: Photo gallery ───────────────────────────────────── */}
+      {galleryImages.length > 0 && (
+        <Card variant="outlined" sx={{ mb: 3, borderRadius: 3 }}>
+          <CardContent>
+            <Grid container spacing={1.5}>
+              {galleryImages.slice(0, GALLERY_PREVIEW_COUNT).map((img, idx) => {
+                const isLastTile = idx === GALLERY_PREVIEW_COUNT - 1 && galleryImages.length > GALLERY_PREVIEW_COUNT;
+                const remaining = galleryImages.length - GALLERY_PREVIEW_COUNT + 1;
+                return (
+                  <Grid key={img.id} size={{ xs: 4, sm: 4, md: 2 }}>
+                    <Tooltip
+                      title={[img.credit, img.licenseName].filter(Boolean).join(' · ') || ''}
+                      placement="top"
+                      arrow
+                    >
+                      <Box
+                        onClick={() => setLightboxIndex(idx)}
+                        sx={{
+                          position: 'relative',
+                          aspectRatio: '1 / 1',
+                          borderRadius: 2,
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          bgcolor: 'grey.100',
+                          '&:hover .overlay': { opacity: 1 },
+                        }}
+                      >
+                        <Box
+                          component="img"
+                          src={img.thumbnailUrl ?? img.url}
+                          alt={img.imageType}
+                          sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                        {isLastTile && (
+                          <Box
+                            sx={{
+                              position: 'absolute',
+                              inset: 0,
+                              bgcolor: 'rgba(0,0,0,0.55)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#fff',
+                              fontWeight: 600,
+                              fontSize: '1.1rem',
+                            }}
+                          >
+                            +{remaining}
+                          </Box>
+                        )}
+                      </Box>
+                    </Tooltip>
+                  </Grid>
+                );
+              })}
+            </Grid>
+            {hasDistinctImageTypes(galleryImages) && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: 'block' }}>
+                {galleryImages.map((i) => i.imageType).filter((v, i, a) => a.indexOf(v) === i).join(' · ')}
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
       )}
 
-      {plant.translations.length > 0 && (
-        <Box>
-          <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-            {t('library.availableIn')}
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            {plant.translations.map((translation) => (
-              <Chip
-                key={translation.language}
-                label={languageLabels[translation.language] ?? translation.language}
-                size="small"
-                variant="outlined"
-              />
-            ))}
-          </Box>
-        </Box>
+      {/* ── Section C: About / long description ────────────────────────── */}
+      {(longDescription || tr?.description) && (
+        <Card variant="outlined" sx={{ mb: 3, borderRadius: 3 }}>
+          <CardContent>
+            <Typography variant="h6" fontWeight={600} sx={{ mb: 1.5 }}>
+              {t('plantDetail.sections.about')}
+            </Typography>
+            {longDescription ? (
+              <>
+                <Typography variant="body1" sx={{ lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+                  {descExpanded || longDescription.longDescription.length <= DESCRIPTION_TRUNCATE_CHARS
+                    ? longDescription.longDescription
+                    : `${longDescription.longDescription.slice(0, DESCRIPTION_TRUNCATE_CHARS).trimEnd()}…`}
+                </Typography>
+                {longDescription.longDescription.length > DESCRIPTION_TRUNCATE_CHARS && (
+                  <Button
+                    size="small"
+                    onClick={() => setDescExpanded((v) => !v)}
+                    sx={{ mt: 1, textTransform: 'none' }}
+                  >
+                    {descExpanded ? t('plantDetail.description.readLess') : t('plantDetail.description.readMore')}
+                  </Button>
+                )}
+                {longDescription.sourceMethod && (
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: 'block' }}>
+                    {t('plantDetail.description.sourceLabel', { source: longDescription.sourceMethod })}
+                  </Typography>
+                )}
+              </>
+            ) : tr?.description ? (
+              <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
+                {tr.description}
+              </Typography>
+            ) : null}
+          </CardContent>
+        </Card>
       )}
+
+      {/* ── Section D: Characteristics + growing conditions ────────────── */}
+      {(characteristicRows.length > 0 || conditions.length > 0) && (
+        <Grid container spacing={3} sx={{ mb: 3 }}>
+          {characteristicRows.length > 0 && (
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Card variant="outlined" sx={{ borderRadius: 3, height: '100%' }}>
+                <CardContent>
+                  <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+                    {t('plantDetail.sections.characteristics')}
+                  </Typography>
+                  <Stack spacing={1.25} divider={<Divider flexItem />}>
+                    {characteristicRows.map((row) => (
+                      <Box key={row.label} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          {row.label}
+                        </Typography>
+                        <Stack direction="row" spacing={0.5} alignItems="center">
+                          <Typography variant="body2" fontWeight={500} color={row.warning ? 'warning.main' : 'text.primary'}>
+                            {row.value}
+                          </Typography>
+                          {row.warning && (
+                            <Tooltip title={row.tooltip ?? ''} arrow>
+                              <WarningAmberIcon fontSize="small" color="warning" />
+                            </Tooltip>
+                          )}
+                        </Stack>
+                      </Box>
+                    ))}
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
+          {conditions.length > 0 && (
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Card variant="outlined" sx={{ borderRadius: 3, height: '100%' }}>
+                <CardContent>
+                  <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+                    {t('library.growingConditions')}
+                  </Typography>
+                  <Stack spacing={1.5}>
+                    {conditions.map((c) => (
+                      <Box key={c.label} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Box sx={{ color: 'primary.main', display: 'flex' }}>{c.icon}</Box>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            {c.label}
+                          </Typography>
+                          <Typography variant="body2" fontWeight={500}>
+                            {c.value}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    ))}
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
+        </Grid>
+      )}
+
+      {/* ── Section E: Lifecycle frieze ─────────────────────────────────── */}
+      {showLifecycleSection && (
+        <Card variant="outlined" sx={{ mb: 3, borderRadius: 3 }}>
+          <CardContent>
+            <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+              {t('plantDetail.sections.lifecycle')}
+            </Typography>
+            <Grid container spacing={2}>
+              <LifecycleStage
+                icon={<SpaIcon />}
+                label={t('plantDetail.lifecycle.stages.sowing')}
+                value={plant.sowingPeriod}
+              />
+              <LifecycleStage
+                icon={<YardIcon />}
+                label={t('plantDetail.lifecycle.stages.growth')}
+                value={null}
+              />
+              <LifecycleStage
+                icon={<LocalFloristIcon />}
+                label={t('plantDetail.lifecycle.stages.flowering')}
+                value={plant.perenualData?.floweringSeason ?? null}
+              />
+              <LifecycleStage
+                icon={<AgricultureIcon />}
+                label={t('plantDetail.lifecycle.stages.harvest')}
+                value={plant.harvestPeriod ?? plant.perenualData?.harvestSeason ?? null}
+              />
+            </Grid>
+            {plant.lifeCycle === 'Perennial' || plant.lifeCycle === 'HerbaceousPerennial' ? (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
+                {t('plantDetail.lifecycle.perennialNote')}
+              </Typography>
+            ) : plant.lifeCycle === 'Biennial' ? (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
+                {t('plantDetail.lifecycle.biennialNote')}
+              </Typography>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Section F: Edible parts & propagation ──────────────────────── */}
+      {showEdibleAndPropagation && (
+        <Card variant="outlined" sx={{ mb: 3, borderRadius: 3 }}>
+          <CardContent>
+            <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+              {t('plantDetail.sections.edibleAndPropagation')}
+            </Typography>
+            {ediblePartsList.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.75 }}>
+                  {t('plantDetail.labels.edibleParts')}
+                </Typography>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  {ediblePartsList.map((part) => (
+                    <Chip
+                      key={part}
+                      label={t(`plantDetail.enumValues.ediblePart.${part.toLowerCase()}`, part)}
+                      size="small"
+                      sx={{ bgcolor: '#E8F5E9', color: '#1B5E20', fontWeight: 500 }}
+                    />
+                  ))}
+                </Stack>
+              </Box>
+            )}
+            {plant.propagationInstructions && (
+              <Box sx={{ mb: plant.sowingInstructions ? 2 : 0 }}>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                  {t('plantDetail.labels.propagationInstructions')}
+                </Typography>
+                <Typography variant="body2" sx={{ lineHeight: 1.7 }}>
+                  {plant.propagationInstructions
+                    .split(/;\s*|\n/)
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Typography>
+              </Box>
+            )}
+            {plant.sowingInstructions && (
+              <Box>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                  {t('plantDetail.labels.sowingInstructions')}
+                </Typography>
+                <Typography variant="body2" sx={{ lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                  {plant.sowingInstructions}
+                </Typography>
+              </Box>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Section F.5: Scientific data (coming soon) placeholder ─────── */}
+      {/* Always rendered — this is a promise to the user about what's next,
+          not a graceful-degradation fallback. Surfaces between edible parts
+          and pests so it sits in the "deep data" middle of the page. */}
+      <Card variant="outlined" sx={{ mb: 3, borderRadius: 3, bgcolor: 'grey.50' }}>
+        <CardContent>
+          <Stack direction="row" spacing={2} alignItems="flex-start">
+            <ScienceIcon sx={{ color: 'text.secondary', mt: 0.5 }} />
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="h6" fontWeight={600} color="text.secondary" sx={{ mb: 1.5 }}>
+                {t('plantDetail.sections.scientificData')}
+              </Typography>
+              <Box
+                component="ul"
+                sx={{
+                  m: 0,
+                  pl: 2.5,
+                  color: 'text.secondary',
+                  fontStyle: 'italic',
+                  '& li': { mb: 0.5, fontSize: '0.9rem' },
+                }}
+              >
+                <li>{t('plantDetail.scientificData.items.waterLiters')}</li>
+                <li>{t('plantDetail.scientificData.items.lightLumens')}</li>
+                <li>{t('plantDetail.scientificData.items.temperatureRange')}</li>
+                <li>{t('plantDetail.scientificData.items.nutrientsNPK')}</li>
+                <li>{t('plantDetail.scientificData.items.geoDistribution')}</li>
+                <li>{t('plantDetail.scientificData.items.daysToGermination')}</li>
+              </Box>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: 'block', mt: 1.5 }}
+              >
+                {t('plantDetail.scientificData.comingSoon')}
+              </Typography>
+            </Box>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      {/* ── Section G: Pests & diseases ─────────────────────────────────── */}
+      {plant.pests.length > 0 && (
+        <Card variant="outlined" sx={{ mb: 3, borderRadius: 3 }}>
+          <CardContent>
+            <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+              {t('plantDetail.pests.header', { count: plant.pests.length })}
+            </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              {pestsToShow.map((pest) => {
+                const pestColors = pestTypeColors(pest.type);
+                return (
+                  <Tooltip key={pest.id} title={pest.description ?? ''} arrow>
+                    <Chip
+                      label={pest.name}
+                      size="small"
+                      sx={{ bgcolor: pestColors.bg, color: pestColors.fg, fontWeight: 500 }}
+                    />
+                  </Tooltip>
+                );
+              })}
+            </Stack>
+            {plant.pests.length > PESTS_PREVIEW_COUNT && (
+              <Button
+                size="small"
+                onClick={() => setPestsExpanded((v) => !v)}
+                sx={{ mt: 1.5, textTransform: 'none' }}
+              >
+                {pestsExpanded
+                  ? t('plantDetail.pests.showLess')
+                  : t('plantDetail.pests.showAll', { count: plant.pests.length })}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Section H: Common names ─────────────────────────────────────── */}
+      {plant.commonNames.length > 1 && (
+        <Card variant="outlined" sx={{ mb: 3, borderRadius: 3 }}>
+          <CardContent>
+            <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+              {t('plantDetail.sections.commonNames')}
+            </Typography>
+            <Stack spacing={1.5}>
+              {visibleCommonNameLanguages.map((lang) => {
+                const names = groupedCommonNames.get(lang) ?? [];
+                return (
+                  <Box key={lang}>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                      {languageLabels[lang] ?? lang.toUpperCase()}
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      {names.map((cn) => (
+                        <Chip
+                          key={cn.id}
+                          label={cn.name}
+                          size="small"
+                          variant={cn.isPrimary ? 'filled' : 'outlined'}
+                          color={cn.isPrimary ? 'primary' : 'default'}
+                        />
+                      ))}
+                    </Stack>
+                  </Box>
+                );
+              })}
+            </Stack>
+            {commonNameLanguages.length > COMMON_NAMES_PREVIEW_LANGUAGES && (
+              <Button
+                size="small"
+                onClick={() => setCommonNamesExpanded((v) => !v)}
+                sx={{ mt: 1.5, textTransform: 'none' }}
+              >
+                {commonNamesExpanded
+                  ? t('plantDetail.commonNames.showFewerLanguages')
+                  : t('plantDetail.commonNames.showAllLanguages', {
+                      count: commonNameLanguages.length - COMMON_NAMES_PREVIEW_LANGUAGES,
+                    })}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Section I: Synonyms ─────────────────────────────────────────── */}
+      {plant.synonyms.length > 0 && (
+        <Card variant="outlined" sx={{ mb: 3, borderRadius: 3 }}>
+          <CardContent>
+            <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
+              {t('plantDetail.sections.synonyms')}
+            </Typography>
+            <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+              {plant.synonyms.map((s) => s.synonym).join(', ')}
+            </Typography>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Section J: Enrichment footer + external sources ─────────────── */}
+      <Card variant="outlined" sx={{ mb: 3, borderRadius: 3 }}>
+        <CardContent>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }} justifyContent="space-between">
+            <Box>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                {t('plantDetail.sections.sources')}
+              </Typography>
+              <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                {plant.enrichmentSources.map((src) => (
+                  <Chip
+                    key={src}
+                    label={t(`plantDetail.enumValues.sourceType.${src}`, src)}
+                    size="small"
+                    sx={{ bgcolor: sourceTypeColors(src).bg, color: sourceTypeColors(src).fg, fontWeight: 500 }}
+                  />
+                ))}
+                {!fullyEnriched && (
+                  <Chip
+                    label={t('plantDetail.fallback.notEnriched')}
+                    size="small"
+                    variant="outlined"
+                    color="default"
+                  />
+                )}
+              </Stack>
+            </Box>
+            <Box>
+              {plant.lastEnrichmentAt && (
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {t('plantDetail.labels.lastEnriched')}:{' '}
+                  {new Date(plant.lastEnrichmentAt).toLocaleDateString(language)}
+                </Typography>
+              )}
+              {plant.sources.length > 0 && (
+                <Stack direction="row" spacing={1} sx={{ mt: 0.5 }} flexWrap="wrap" useFlexGap>
+                  {plant.sources.flatMap((s) => {
+                    // PlantSource.Url persists the API endpoint we called during enrichment.
+                    // Rewrite to the upstream's public species page before rendering, and
+                    // drop the link entirely if the rewrite couldn't take it out of /api/ —
+                    // sending the user to a JSON endpoint (or one that demands an API key)
+                    // is worse than no link at all.
+                    const userUrl = toUserFacingUrl(s.url);
+                    if (!isUserFacingUrl(userUrl)) return [];
+                    return [
+                      <Link
+                        key={s.id}
+                        href={userUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        underline="hover"
+                        variant="caption"
+                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}
+                      >
+                        {t('plantDetail.sources.viewExternal', {
+                          source: t(`plantDetail.enumValues.sourceType.${s.sourceType}`, s.sourceType),
+                        })}
+                        <OpenInNewIcon sx={{ fontSize: 12 }} />
+                      </Link>,
+                    ];
+                  })}
+                </Stack>
+              )}
+            </Box>
+          </Stack>
+        </CardContent>
+      </Card>
+
       {/* Add to garden dialog */}
-      <Dialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>{t('library.addToGardenDialog')}</DialogTitle>
         <DialogContent>
           {gardensLoading && (
@@ -376,10 +1085,7 @@ export default function PlantDetail() {
           {!gardensLoading && gardens.length > 0 && !addSuccess && (
             <List>
               {gardens.map((garden) => (
-                <ListItemButton
-                  key={garden.id}
-                  onClick={() => toggleGarden(garden.id)}
-                >
+                <ListItemButton key={garden.id} onClick={() => toggleGarden(garden.id)}>
                   <Checkbox
                     checked={selectedGardenIds.has(garden.id)}
                     edge="start"
@@ -405,10 +1111,215 @@ export default function PlantDetail() {
             {selectedGardenIds.size > 0
               ? t('library.addToCount', { count: selectedGardenIds.size })
               : t('library.add')}
-
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Photo lightbox */}
+      <PhotoLightbox
+        images={galleryImages}
+        index={lightboxIndex}
+        onClose={() => setLightboxIndex(null)}
+        onPrev={() =>
+          setLightboxIndex((i) =>
+            i == null ? null : (i - 1 + galleryImages.length) % galleryImages.length,
+          )
+        }
+        onNext={() =>
+          setLightboxIndex((i) => (i == null ? null : (i + 1) % galleryImages.length))
+        }
+      />
+
+      {/* Admin toast */}
+      <Snackbar
+        open={toast !== null}
+        autoHideDuration={6000}
+        onClose={() => setToast(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        {toast ? (
+          <Alert
+            onClose={() => setToast(null)}
+            severity={toast.severity}
+            variant="filled"
+            sx={{ width: '100%' }}
+          >
+            {toast.message}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
     </Container>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Internal helpers — kept in this file because they're tightly coupled to
+// the rendering above and not reused elsewhere.
+
+function buildFeatureChips(
+  plant: Plant,
+  t: ReturnType<typeof useTranslation>['t'],
+): { key: string; label: string; bgcolor: string; color: string }[] {
+  const chips: { key: string; label: string; bgcolor: string; color: string }[] = [];
+  if (plant.isEdible) chips.push({ key: 'edible', label: t('plantDetail.flags.edible'), bgcolor: '#E8F5E9', color: '#1B5E20' });
+  if (plant.isMedicinal) chips.push({ key: 'medicinal', label: t('plantDetail.flags.medicinal'), bgcolor: '#E0F7FA', color: '#006064' });
+  if (plant.isToxicToHumans || plant.isToxicToPets) {
+    chips.push({
+      key: 'toxic',
+      label: plant.isToxicToHumans ? t('plantDetail.flags.toxic') : t('plantDetail.flags.toxicToPets'),
+      bgcolor: '#FFEBEE',
+      color: '#B71C1C',
+    });
+  }
+  if (plant.isIndoor) chips.push({ key: 'indoor', label: t('plantDetail.flags.indoor'), bgcolor: '#E3F2FD', color: '#0D47A1' });
+  if (plant.isDroughtTolerant) chips.push({ key: 'drought', label: t('plantDetail.flags.droughtTolerant'), bgcolor: '#FFF8E1', color: '#E65100' });
+  if (plant.isSaltTolerant) chips.push({ key: 'salt', label: t('plantDetail.flags.saltTolerant'), bgcolor: '#E1F5FE', color: '#01579B' });
+  if (plant.isInvasive) chips.push({ key: 'invasive', label: t('plantDetail.flags.invasive'), bgcolor: '#FFCDD2', color: '#7F0000' });
+  if (plant.isThorny) chips.push({ key: 'thorny', label: t('plantDetail.flags.thorny'), bgcolor: '#ECEFF1', color: '#263238' });
+  if (plant.isTropical) chips.push({ key: 'tropical', label: t('plantDetail.flags.tropical'), bgcolor: '#FFF3E0', color: '#BF360C' });
+  if (plant.attractsPollinators) chips.push({ key: 'pollinators', label: t('plantDetail.flags.attractsPollinators'), bgcolor: '#F3E5F5', color: '#4A148C' });
+  return chips;
+}
+
+function pestTypeColors(type: string): { bg: string; fg: string } {
+  switch (type) {
+    case 'Insect':
+      return { bg: '#FFF3E0', fg: '#E65100' };
+    case 'Fungus':
+    case 'Disease':
+      return { bg: '#FFEBEE', fg: '#C62828' };
+    case 'Bacteria':
+      return { bg: '#FCE4EC', fg: '#AD1457' };
+    case 'Virus':
+      return { bg: '#F3E5F5', fg: '#6A1B9A' };
+    case 'Mite':
+    case 'Nematode':
+      return { bg: '#FBE9E7', fg: '#BF360C' };
+    default:
+      return { bg: '#ECEFF1', fg: '#37474F' };
+  }
+}
+
+function sourceTypeColors(source: string): { bg: string; fg: string } {
+  switch (source) {
+    case 'Manual':
+      return { bg: '#E0E0E0', fg: '#212121' };
+    case 'GBIF':
+      return { bg: '#E1F5FE', fg: '#01579B' };
+    case 'Trefle':
+      return { bg: '#E8F5E9', fg: '#1B5E20' };
+    case 'Perenual':
+      return { bg: '#FFF3E0', fg: '#E65100' };
+    default:
+      return { bg: '#F5F5F5', fg: '#424242' };
+  }
+}
+
+function LifecycleStage({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | null | undefined;
+}) {
+  return (
+    <Grid size={{ xs: 6, md: 3 }}>
+      <Box sx={{ textAlign: 'center', py: 1 }}>
+        <Box
+          sx={{
+            mx: 'auto',
+            width: 48,
+            height: 48,
+            borderRadius: '50%',
+            bgcolor: value ? 'primary.main' : 'grey.300',
+            color: value ? 'primary.contrastText' : 'text.secondary',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            mb: 1,
+          }}
+        >
+          {icon}
+        </Box>
+        <Typography variant="body2" fontWeight={600}>
+          {label}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+          {value ?? '—'}
+        </Typography>
+      </Box>
+    </Grid>
+  );
+}
+
+function PhotoLightbox({
+  images,
+  index,
+  onClose,
+  onPrev,
+  onNext,
+}: {
+  images: PlantImage[];
+  index: number | null;
+  onClose: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  const { t } = useTranslation();
+  if (index == null) return null;
+  const img = images[index];
+  if (!img) return null;
+  return (
+    <Dialog open onClose={onClose} maxWidth="lg" fullWidth>
+      <Box sx={{ position: 'relative', bgcolor: 'black' }}>
+        <Box
+          component="img"
+          src={img.url}
+          alt={img.imageType}
+          sx={{ width: '100%', maxHeight: '80vh', objectFit: 'contain', display: 'block' }}
+        />
+        {images.length > 1 && (
+          <>
+            <IconButton
+              onClick={onPrev}
+              aria-label={t('plantDetail.gallery.lightboxPrev')}
+              sx={{ position: 'absolute', top: '50%', left: 8, transform: 'translateY(-50%)', color: 'white', bgcolor: 'rgba(0,0,0,0.4)' }}
+            >
+              <ChevronLeftIcon />
+            </IconButton>
+            <IconButton
+              onClick={onNext}
+              aria-label={t('plantDetail.gallery.lightboxNext')}
+              sx={{ position: 'absolute', top: '50%', right: 8, transform: 'translateY(-50%)', color: 'white', bgcolor: 'rgba(0,0,0,0.4)' }}
+            >
+              <ChevronRightIcon />
+            </IconButton>
+          </>
+        )}
+        <IconButton
+          onClick={onClose}
+          aria-label={t('plantDetail.gallery.lightboxClose')}
+          sx={{ position: 'absolute', top: 8, right: 8, color: 'white', bgcolor: 'rgba(0,0,0,0.4)' }}
+        >
+          <CloseIcon />
+        </IconButton>
+      </Box>
+      {(img.credit || img.licenseName) && (
+        <Box sx={{ p: 2 }}>
+          {img.credit && (
+            <Typography variant="caption" display="block" color="text.secondary">
+              {t('plantDetail.gallery.credit', { name: img.credit })}
+            </Typography>
+          )}
+          {img.licenseName && (
+            <Typography variant="caption" display="block" color="text.secondary">
+              {t('plantDetail.gallery.license', { name: img.licenseName })}
+            </Typography>
+          )}
+        </Box>
+      )}
+    </Dialog>
   );
 }
