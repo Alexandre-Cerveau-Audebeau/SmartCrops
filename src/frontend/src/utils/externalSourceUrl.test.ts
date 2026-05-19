@@ -34,6 +34,27 @@ describe('toUserFacingUrl', () => {
       'https://perenual.com/plant-species-database-search-finder/species/42',
     );
   });
+
+  it('prefers an explicit Perenual id over the one embedded in the API URL', () => {
+    // Tomato canonicalisation case (issue #67): persisted URL points to the
+    // canonical id 8758 (the wrong Solanum dulcamara entry), but the
+    // requested id was 8759 — the user-facing link must use 8759.
+    expect(
+      toUserFacingUrl('https://perenual.com/api/v2/species/details/8758', 8759),
+    ).toBe('https://perenual.com/plant-species-database-search-finder/species/8759');
+  });
+
+  it('falls back to the URL-embedded id when no explicit id is provided', () => {
+    expect(
+      toUserFacingUrl('https://perenual.com/api/v2/species/details/8758', null),
+    ).toBe('https://perenual.com/plant-species-database-search-finder/species/8758');
+  });
+
+  it('does not apply the explicit id to non-Perenual URLs', () => {
+    expect(
+      toUserFacingUrl('https://api.gbif.org/v1/species/2930137', 8759),
+    ).toBe('https://www.gbif.org/species/2930137');
+  });
 });
 
 describe('isUserFacingUrl', () => {

@@ -53,8 +53,12 @@ public class PlantPerenualEnrichmentService : IPlantPerenualEnrichmentService
 
     private async Task<PerenualEnrichmentResult> FetchAndResolveAsync(int perenualId, CancellationToken ct)
     {
+        // `perenualId` here is what we ASKED Perenual for — server-side
+        // canonicalisation may overwrite the returned `response.id` with a
+        // different value (cf. issue #67). Plumb the requested id into the
+        // resolver so the audit trail records it on PerenualEnrichmentResult.
         var species = await _client.GetSpeciesDetailsAsync(perenualId, ct);
         var rawJson = species is not null ? JsonSerializer.Serialize(species) : string.Empty;
-        return _resolver.Resolve(species, rawJson);
+        return _resolver.Resolve(species, rawJson, requestedPerenualId: perenualId);
     }
 }

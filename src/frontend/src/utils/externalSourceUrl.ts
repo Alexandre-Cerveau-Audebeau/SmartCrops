@@ -15,7 +15,10 @@
  * link entirely; the caller can use {@link isUserFacingUrl} to filter
  * out the API-looking residue when rendering.
  */
-export function toUserFacingUrl(apiUrl: string | null | undefined): string | null {
+export function toUserFacingUrl(
+  apiUrl: string | null | undefined,
+  explicitPerenualId?: number | null,
+): string | null {
   if (!apiUrl) return null;
 
   const gbifMatch = apiUrl.match(/^https?:\/\/api\.gbif\.org\/v1\/species\/(\d+)/i);
@@ -27,7 +30,13 @@ export function toUserFacingUrl(apiUrl: string | null | undefined): string | nul
     /^https?:\/\/perenual\.com\/api\/v\d+\/species\/details\/(\d+)/i,
   );
   if (perenualMatch) {
-    return `https://perenual.com/plant-species-database-search-finder/species/${perenualMatch[1]}`;
+    // Prefer the caller-supplied id (typically `plant.perenualData.requestedPerenualId`)
+    // over the one embedded in the persisted API URL. The two diverge when
+    // Perenual canonicalises server-side (e.g. tomato request 8759 →
+    // response.id 8758 = Solanum dulcamara), and the requested id is what
+    // lands on the correct species page.
+    const id = explicitPerenualId ?? perenualMatch[1];
+    return `https://perenual.com/plant-species-database-search-finder/species/${id}`;
   }
 
   return apiUrl;

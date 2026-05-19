@@ -81,6 +81,37 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Enrich_PersistsRequestedPerenualIdDistinctFromCanonical()
+    {
+        // Exercises issue #67's workaround: when Perenual canonicalises an id
+        // server-side (e.g. requested 8759 → response.id 8758), the audit
+        // trail must record both — denormalised on Plant.RequestedPerenualId
+        // for fast query and on PlantPerenualData.RequestedPerenualId for the
+        // source-of-truth view.
+        var plantId = await SeedPlantAsync("Solanum lycopersicum");
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 8758,
+            requestedPerenualId: 8759,
+            canonicalName: "Solanum lycopersicum"));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(
+            $"/api/admin/perenual/enrich/{plantId}?perenualId=8759", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        Assert.Equal(8759, plant.RequestedPerenualId);
+
+        var perenualData = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+        Assert.Equal(8758, perenualData.PerenualId);
+        Assert.Equal(8759, perenualData.RequestedPerenualId);
+    }
+
+    [Fact]
     public async Task Enrich_Match_PerformsFullDualWrite()
     {
         var plantId = await SeedPlantAsync("Aloe vera");
@@ -495,8 +526,11 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         int? hardinessMax = 9,
         IReadOnlyList<PerenualImage>? images = null,
         IReadOnlyList<PerenualPest>? pests = null,
-        string? longDescriptionEn = "Test description") => new(
+        string? longDescriptionEn = "Test description",
+        int? requestedPerenualId = null,
+        bool hardinessRejectedAsSuspect = false) => new(
             PerenualId: perenualId,
+            RequestedPerenualId: requestedPerenualId ?? perenualId,
             Cultivar: cultivar,
             PerenualType: perenualType,
             CanonicalScientificName: canonicalName ?? "Aloe vera",
@@ -539,6 +573,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             Images: images ?? Array.Empty<PerenualImage>(),
             Pests: pests ?? Array.Empty<PerenualPest>(),
             LongDescriptionEn: longDescriptionEn,
+            HardinessRejectedAsSuspect: hardinessRejectedAsSuspect,
             MatchType: "EXACT");
 
     private record MatchedDto(

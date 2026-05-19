@@ -92,6 +92,15 @@ export interface PlantTrefleData {
 export interface PlantPerenualData {
   id: string;
   perenualId: number;
+  /**
+   * Id originally requested from Perenual. Differs from `perenualId` (the
+   * canonical id returned by `response.id`) when Perenual rewrites the
+   * server-side id mapping (cf. backend issue #67). Frontend prefers this
+   * value when building user-facing public URLs so the link lands on the
+   * correct species page. `null` on rows enriched before this column existed
+   * — caller falls back to `perenualId`.
+   */
+  requestedPerenualId: number | null;
   cultivar: string | null;
   perenualType: string | null;
   originCountries: string | null;

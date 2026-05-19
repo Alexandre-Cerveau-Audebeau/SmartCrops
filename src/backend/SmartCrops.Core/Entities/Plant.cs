@@ -179,6 +179,19 @@ public class Plant : IHasUpdatedAt
 
     public DateTime? LastEnrichmentAt { get; set; }
 
+    /// <summary>
+    /// Perenual id this plant was originally requested under, denormalised from
+    /// <see cref="PlantPerenualData.RequestedPerenualId"/> for fast query without
+    /// joining the audit table. Differs from <see cref="PlantPerenualData.PerenualId"/>
+    /// when Perenual's server-side canonicalisation rewrites the id (cf. issue #67:
+    /// requesting <c>/details/8759</c> returns <c>response.id = 8758</c>, which
+    /// happens to be a wholly different species' record). User-facing public
+    /// URLs use this value instead of the canonical id so the link lands on the
+    /// correct species page. Rows enriched before this column existed stay
+    /// <c>null</c>; the frontend falls back to the canonical id in that case.
+    /// </summary>
+    public int? RequestedPerenualId { get; set; }
+
     // ── Navigation properties ───────────────────────────────────────────────────
 
     public ICollection<PlantTranslation> Translations { get; set; } = [];
