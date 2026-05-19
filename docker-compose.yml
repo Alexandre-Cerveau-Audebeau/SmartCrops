@@ -35,10 +35,13 @@ services:
     environment:
       - VITE_API_URL=http://api:8080
       - VITE_AUTH_API_URL=http://localhost:5000
-      # CSV of emails granted access to the admin re-enrichment buttons in
-      # PlantDetail. UI-only gate — backend admin endpoints still authorise
-      # against [Authorize]. Set the real value in docker-compose.override.yml
+      # Comma-separated emails (case-insensitive, no spaces around commas)
+      # granted access to the admin re-enrichment buttons in PlantDetail.
+      # Example: "alice@example.com,bob@example.com".
+      # UI-only gate — backend admin endpoints still authorise against
+      # [Authorize]. Set the real value in docker-compose.override.yml
       # (gitignored) or via a host env var; empty default means "no admin UI".
+      # Replace with ASP.NET Identity Roles when available (#68).
       - VITE_ADMIN_EMAILS=${VITE_ADMIN_EMAILS:-}
     ports:
       - "3000:5173"

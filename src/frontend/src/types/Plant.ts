@@ -1,5 +1,6 @@
 import type { PlantType } from './PlantType';
 
+/** Localised display fields (common name + short description) per language. */
 export interface PlantTranslation {
   id: number;
   language: string;
@@ -7,6 +8,7 @@ export interface PlantTranslation {
   description: string | null;
 }
 
+/** A categorised photo with licensing/attribution and per-source ordering. */
 export interface PlantImage {
   id: number;
   imageType: string;
@@ -23,6 +25,7 @@ export interface PlantImage {
   isFlagged: boolean;
 }
 
+/** Long-form rich description in a single language, one row per locale. */
 export interface PlantLongDescription {
   id: number;
   language: string;
@@ -30,6 +33,7 @@ export interface PlantLongDescription {
   sourceMethod: string | null;
 }
 
+/** A vernacular name in one language, with `isPrimary` flagging the preferred entry. */
 export interface PlantCommonName {
   id: number;
   languageCode: string;
@@ -37,6 +41,7 @@ export interface PlantCommonName {
   isPrimary: boolean;
 }
 
+/** A pest or pathogen affecting the plant, sourced from Perenual today. */
 export interface PlantPest {
   id: number;
   name: string;
@@ -49,12 +54,14 @@ export interface PlantPest {
   sourceExternalId: string | null;
 }
 
+/** A historical / alternative scientific name used during ETL fuzzy match. */
 export interface PlantSynonym {
   id: number;
   synonym: string;
   authority: string | null;
 }
 
+/** Cross-reference to an external taxonomy/enrichment API, with link metadata. */
 export interface PlantSource {
   id: number;
   sourceType: string;
@@ -64,6 +71,7 @@ export interface PlantSource {
   lastFetchedAt: string | null;
 }
 
+/** Trefle-specific structured data (1-1 with Plant); `RawResponseJson` is omitted from the DTO. */
 export interface PlantTrefleData {
   id: string;
   trefleSlug: string | null;
@@ -80,6 +88,7 @@ export interface PlantTrefleData {
   lastSyncAt: string;
 }
 
+/** Perenual-specific structured data (1-1 with Plant); `RawResponseJson` is omitted from the DTO. */
 export interface PlantPerenualData {
   id: string;
   perenualId: number;
@@ -167,19 +176,23 @@ export interface Plant {
   sowingInstructions: string | null;
   propagationInstructions: string | null;
 
-  enrichmentSources: string[];
+  enrichmentSources: readonly string[];
   lastEnrichmentAt: string | null;
 
   createdAt: string;
   updatedAt: string;
 
-  translations: PlantTranslation[];
-  images: PlantImage[];
-  longDescriptions: PlantLongDescription[];
-  commonNames: PlantCommonName[];
-  pests: PlantPest[];
-  synonyms: PlantSynonym[];
-  sources: PlantSource[];
+  // Collections mirror the backend `IReadOnlyList<T>` contract — surfacing
+  // them as `readonly` here prevents callers from accidentally mutating
+  // shared Plant state (e.g. via `plant.images.sort(...)`); use a spread
+  // (`[...plant.images].sort()`) or array methods that return a new array.
+  translations: readonly PlantTranslation[];
+  images: readonly PlantImage[];
+  longDescriptions: readonly PlantLongDescription[];
+  commonNames: readonly PlantCommonName[];
+  pests: readonly PlantPest[];
+  synonyms: readonly PlantSynonym[];
+  sources: readonly PlantSource[];
 
   trefleData: PlantTrefleData | null;
   perenualData: PlantPerenualData | null;

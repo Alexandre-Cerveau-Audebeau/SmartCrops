@@ -224,4 +224,44 @@ describe('PlantDetail', () => {
     );
     expect(heroImg.src.startsWith('data:image/svg+xml')).toBe(true);
   });
+
+  it('renders the hero as a keyboard-accessible button when images are present', async () => {
+    renderAtPlant(
+      makePlant({
+        images: [
+          { id: 1, imageType: 'Main', url: 'https://img.test/main.jpg', thumbnailUrl: null, width: null, height: null, licenseName: null, licenseUrl: null, credit: null, source: 'Perenual', sourceExternalId: null, displayOrder: 0, isFlagged: false },
+        ],
+      }),
+    );
+    await screen.findByRole('heading', { name: 'Basil' });
+    // The hero is exposed as a <button> with the openHero aria-label; tab order
+    // therefore reaches it and Enter / Space triggers the lightbox.
+    const heroButton = screen.getByRole('button', { name: 'Open photo gallery' });
+    expect(heroButton.tagName).toBe('BUTTON');
+  });
+
+  it('shows the correct "+N more" count on the gallery overlay (31 images → +25, not +26)', async () => {
+    // Mirror Aloe vera's gallery shape from the production smoke matrix.
+    const images = Array.from({ length: 31 }, (_, i) => ({
+      id: i + 1,
+      imageType: i === 0 ? 'Main' : 'Other',
+      url: `https://img.test/aloe-${i}.jpg`,
+      thumbnailUrl: `https://img.test/aloe-${i}-thumb.jpg`,
+      width: null,
+      height: null,
+      licenseName: null,
+      licenseUrl: null,
+      credit: null,
+      source: 'Trefle',
+      sourceExternalId: null,
+      displayOrder: i,
+      isFlagged: false,
+    }));
+    renderAtPlant(makePlant({ images }));
+    await screen.findByRole('heading', { name: 'Basil' });
+    // GALLERY_PREVIEW_COUNT is 6, so 31 - 6 = 25 remaining (NOT 26 — the
+    // overlay tile counts as one of the 6 preview slots).
+    expect(screen.getByText('+25')).toBeInTheDocument();
+    expect(screen.queryByText('+26')).not.toBeInTheDocument();
+  });
 });

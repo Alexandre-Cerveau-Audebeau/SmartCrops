@@ -1,4 +1,4 @@
-import type { Plant, PlantImage, PlantLongDescription } from '../types/Plant';
+import type { Plant, PlantCommonName, PlantImage, PlantLongDescription } from '../types/Plant';
 
 /**
  * Gallery priority (matches `PlantDetailMapper.ImageTypePriority` server-side).
@@ -45,7 +45,7 @@ export function pickHeroImage(plant: Plant): string {
  * Stable gallery order: type priority, then `displayOrder`, then `id` as the
  * final tiebreaker. Returns a new array — callers can spread/slice freely.
  */
-export function sortGalleryImages(images: PlantImage[]): PlantImage[] {
+export function sortGalleryImages(images: readonly PlantImage[]): PlantImage[] {
   return [...images].sort((a, b) => {
     const pa = IMAGE_TYPE_PRIORITY[a.imageType] ?? 99;
     const pb = IMAGE_TYPE_PRIORITY[b.imageType] ?? 99;
@@ -61,7 +61,7 @@ export function sortGalleryImages(images: PlantImage[]): PlantImage[] {
  * tomato (5 × Perenual `Main`/`Other`) returns true on this technicality even
  * though the labels are noisy; tighten if it bothers users.
  */
-export function hasDistinctImageTypes(images: PlantImage[]): boolean {
+export function hasDistinctImageTypes(images: readonly PlantImage[]): boolean {
   if (!images?.length) return false;
   const types = new Set(images.map((i) => i.imageType));
   return types.size > 1;
@@ -130,7 +130,7 @@ export function parseStringArray(json: string | null | undefined): string[] {
  * Priority: exact language → English → first available.
  */
 export function pickLongDescription(
-  longDescriptions: PlantLongDescription[],
+  longDescriptions: readonly PlantLongDescription[],
   language: string,
 ): PlantLongDescription | null {
   if (!longDescriptions?.length) return null;
@@ -152,11 +152,24 @@ export function groupCommonNamesByLanguage(
 ): Map<string, Plant['commonNames']> {
   const grouped = new Map<string, Plant['commonNames']>();
   for (const cn of commonNames) {
-    const existing = grouped.get(cn.languageCode) ?? [];
-    existing.push(cn);
-    grouped.set(cn.languageCode, existing);
+    const existing = grouped.get(cn.languageCode);
+    if (existing) {
+      // Cast required when callers pass `readonly` arrays — the grouped Map
+      // stores the mutable working copy we just built, so the push is safe.
+      (existing as PlantCommonName[]).push(cn);
+    } else {
+      grouped.set(cn.languageCode, [cn]);
+    }
   }
-  // Sort: UI language first, then alphabetical
+  // Within each language group, primary names come first (the function
+  // contract); ties break alphabetically so the order is deterministic.
+  for (const [, names] of grouped) {
+    (names as PlantCommonName[]).sort((a, b) => {
+      if (a.isPrimary !== b.isPrimary) return Number(b.isPrimary) - Number(a.isPrimary);
+      return a.name.localeCompare(b.name);
+    });
+  }
+  // Across languages: UI language first, then alphabetical.
   const entries = [...grouped.entries()].sort(([a], [b]) => {
     if (a === uiLanguage) return -1;
     if (b === uiLanguage) return 1;

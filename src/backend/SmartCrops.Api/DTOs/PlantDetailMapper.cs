@@ -32,6 +32,14 @@ public static class PlantDetailMapper
         [PlantImageType.Other] = 6,
     };
 
+    /// <summary>
+    /// Project a fully-loaded <see cref="Plant"/> aggregate into the
+    /// <see cref="PlantDetailResponse"/> contract: enum scalars become
+    /// strings, the <c>EnrichmentStatus</c> bitfield is exploded into a
+    /// string array, collections are reordered for gallery / accessibility
+    /// concerns, and audit blobs (<c>RawResponseJson</c>) are dropped.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">when <paramref name="plant"/> is null.</exception>
     public static PlantDetailResponse ToDto(Plant plant)
     {
         ArgumentNullException.ThrowIfNull(plant);

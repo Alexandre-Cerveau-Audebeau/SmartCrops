@@ -52,4 +52,29 @@ describe('isUserFacingUrl', () => {
     expect(isUserFacingUrl(null)).toBe(false);
     expect(isUserFacingUrl(undefined)).toBe(false);
   });
+
+  it('rejects javascript: scheme (defense against malformed PlantSource.Url)', () => {
+    expect(isUserFacingUrl('javascript:alert(1)')).toBe(false);
+  });
+
+  it('rejects data: scheme', () => {
+    expect(isUserFacingUrl('data:text/html,<script>alert(1)</script>')).toBe(false);
+  });
+
+  it('rejects file: scheme', () => {
+    expect(isUserFacingUrl('file:///etc/passwd')).toBe(false);
+  });
+
+  it('rejects malformed URLs that fail to parse', () => {
+    expect(isUserFacingUrl('not a url')).toBe(false);
+    expect(isUserFacingUrl('://')).toBe(false);
+  });
+
+  it('matches /api/ on pathname only, not the hostname', () => {
+    // A site hosted at api.example.com is fine — the /api/ filter is a
+    // pathname check, so the link survives.
+    expect(isUserFacingUrl('https://api.example.com/species/123')).toBe(true);
+    // But a path that begins with /api/ is rejected, even on a non-API host.
+    expect(isUserFacingUrl('https://example.com/api/v1/species/123')).toBe(false);
+  });
 });

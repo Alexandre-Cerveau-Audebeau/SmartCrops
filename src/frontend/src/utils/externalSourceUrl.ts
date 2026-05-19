@@ -34,14 +34,29 @@ export function toUserFacingUrl(apiUrl: string | null | undefined): string | nul
 }
 
 /**
- * Heuristic: a URL is safe to render to a user when it doesn't still look
- * like an upstream API endpoint. Anything containing <c>/api/</c> in its
- * path is dropped — Trefle's <c>trefle.io/api/v1/species/{id}</c> falls
- * into this bucket today (no public catalogue page exists at a stable
- * slug-less URL), and so does any future source we haven't taught
- * {@link toUserFacingUrl} about yet.
+ * Heuristic guard before rendering a `PlantSource.Url` as a clickable link.
+ * Returns true only when the URL parses, uses `http:` or `https:`, and its
+ * pathname doesn't still look like an upstream API endpoint.
+ *
+ * <ul>
+ *   <li>Other schemes (<c>javascript:</c>, <c>data:</c>, <c>file:</c>) are
+ *       rejected outright — defense-in-depth against a malformed
+ *       <c>PlantSource.Url</c> reaching the DOM through a future ETL bug.</li>
+ *   <li>The <c>/api/</c> test runs against <c>URL.pathname</c> rather than
+ *       the raw string, so a domain like <c>api.example.com</c> doesn't
+ *       trip the filter while a real path like <c>/api/v1/…</c> does.</li>
+ *   <li>Trefle's <c>trefle.io/api/v1/species/{id}</c> still fails the
+ *       pathname check, which is intended — no public catalogue page
+ *       exists at a stable slug-less URL there yet.</li>
+ * </ul>
  */
 export function isUserFacingUrl(url: string | null | undefined): url is string {
   if (!url) return false;
-  return !/\/api\//i.test(url);
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    return !/\/api\//i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
 }

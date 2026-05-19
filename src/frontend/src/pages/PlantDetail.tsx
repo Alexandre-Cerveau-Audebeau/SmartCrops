@@ -86,6 +86,13 @@ type PlantDetailNavState = { from?: string; gardenId?: string; gardenName?: stri
 type ToastSeverity = 'success' | 'info' | 'warning' | 'error';
 type Toast = { message: string; severity: ToastSeverity };
 
+/**
+ * `GET /library/:id` detail page. Renders the full `PlantDetailResponse`
+ * payload across 12 conditional sections (hero + gallery + about +
+ * characteristics + lifecycle + edible/propagation + scientific-data
+ * placeholder + pests + common names + synonyms + sources + admin), with
+ * graceful degradation when enrichments are absent (cf. Basil seed).
+ */
 export default function PlantDetail() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
@@ -471,21 +478,41 @@ export default function PlantDetail() {
             bgcolor: 'grey.100',
           }}
         >
-          <Box
-            component="img"
-            src={heroImageUrl}
-            alt={tr?.commonName ?? plant.scientificName}
-            sx={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              display: 'block',
-            }}
-            onClick={() => {
-              if (plant.images.length > 0) setLightboxIndex(0);
-            }}
-            style={{ cursor: plant.images.length > 0 ? 'pointer' : 'default' }}
-          />
+          {/* The hero is a focusable button so keyboard users can open the
+              lightbox; when no gallery exists we render a plain img instead
+              (a disabled button would be a confusing focus target). */}
+          {plant.images.length > 0 ? (
+            <Box
+              component="button"
+              type="button"
+              onClick={() => setLightboxIndex(0)}
+              aria-label={t('plantDetail.gallery.openHero')}
+              sx={{
+                p: 0,
+                m: 0,
+                border: 0,
+                background: 'transparent',
+                width: '100%',
+                height: '100%',
+                display: 'block',
+                cursor: 'pointer',
+              }}
+            >
+              <Box
+                component="img"
+                src={heroImageUrl}
+                alt={tr?.commonName ?? plant.scientificName}
+                sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
+            </Box>
+          ) : (
+            <Box
+              component="img"
+              src={heroImageUrl}
+              alt={tr?.commonName ?? plant.scientificName}
+              sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+          )}
         </Box>
         <CardContent>
           <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'flex-start' }} gap={2}>
@@ -594,7 +621,11 @@ export default function PlantDetail() {
             <Grid container spacing={1.5}>
               {galleryImages.slice(0, GALLERY_PREVIEW_COUNT).map((img, idx) => {
                 const isLastTile = idx === GALLERY_PREVIEW_COUNT - 1 && galleryImages.length > GALLERY_PREVIEW_COUNT;
-                const remaining = galleryImages.length - GALLERY_PREVIEW_COUNT + 1;
+                // The overlay tile is itself one of the preview slots — so the
+                // remaining count is the gallery total minus the preview slots,
+                // not minus (preview - 1). Aloe vera (31 images, 6 preview slots)
+                // should display "+25 more", not "+26".
+                const remaining = galleryImages.length - GALLERY_PREVIEW_COUNT;
                 return (
                   <Grid key={img.id} size={{ xs: 4, sm: 4, md: 2 }}>
                     <Tooltip
@@ -603,7 +634,10 @@ export default function PlantDetail() {
                       arrow
                     >
                       <Box
+                        component="button"
+                        type="button"
                         onClick={() => setLightboxIndex(idx)}
+                        aria-label={t('plantDetail.gallery.openTile', { index: idx + 1 })}
                         sx={{
                           position: 'relative',
                           aspectRatio: '1 / 1',
@@ -611,6 +645,10 @@ export default function PlantDetail() {
                           overflow: 'hidden',
                           cursor: 'pointer',
                           bgcolor: 'grey.100',
+                          p: 0,
+                          border: 0,
+                          width: '100%',
+                          display: 'block',
                           '&:hover .overlay': { opacity: 1 },
                         }}
                       >
@@ -1156,6 +1194,13 @@ export default function PlantDetail() {
 // Internal helpers — kept in this file because they're tightly coupled to
 // the rendering above and not reused elsewhere.
 
+/**
+ * Build the hero feature-chip list (Edible, Medicinal, Toxic, …) from the
+ * plant's boolean trait flags. Each chip ships its own `bgcolor`/`color`
+ * pair sourced from the design palette — kept here rather than in `theme.ts`
+ * because the colours are semantic (red for toxic, green for edible) and
+ * tightly coupled to the chip labels.
+ */
 function buildFeatureChips(
   plant: Plant,
   t: ReturnType<typeof useTranslation>['t'],
@@ -1181,6 +1226,7 @@ function buildFeatureChips(
   return chips;
 }
 
+/** Map a `PlantPestType` string to its chip background/foreground palette. */
 function pestTypeColors(type: string): { bg: string; fg: string } {
   switch (type) {
     case 'Insect':
@@ -1200,6 +1246,7 @@ function pestTypeColors(type: string): { bg: string; fg: string } {
   }
 }
 
+/** Map an enrichment source label to its footer-badge palette. */
 function sourceTypeColors(source: string): { bg: string; fg: string } {
   switch (source) {
     case 'Manual':
@@ -1215,6 +1262,7 @@ function sourceTypeColors(source: string): { bg: string; fg: string } {
   }
 }
 
+/** One column of the lifecycle frieze — icon + label + period text (or em-dash). */
 function LifecycleStage({
   icon,
   label,
@@ -1254,6 +1302,11 @@ function LifecycleStage({
   );
 }
 
+/**
+ * Full-screen photo viewer with prev/next/close controls and a credit /
+ * license caption. Rendered only while `index` is non-null, so callers can
+ * mount/unmount it via a single state variable.
+ */
 function PhotoLightbox({
   images,
   index,

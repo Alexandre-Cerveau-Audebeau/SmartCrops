@@ -26,7 +26,16 @@ public record PlantDetailResponse
     public Guid Id { get; init; }
     public required string ScientificName { get; init; }
 
+    /// <summary>FK to <see cref="Core.Entities.PlantType"/>. Always present.</summary>
     public int PlantTypeId { get; init; }
+
+    /// <summary>
+    /// Denormalised <see cref="PlantTypeDto"/> projection. Nullable to stay
+    /// defensive against schema drift: the FK is always populated, but if a
+    /// future caller of <c>PlantsController.GetById</c> took a code path that
+    /// skipped the <c>PlantType</c> Include, the DTO would surface a missing
+    /// navigation here rather than crashing inside the mapper.
+    /// </summary>
     public PlantTypeDto? PlantType { get; init; }
 
     public string? SunExposure { get; init; }
@@ -100,14 +109,21 @@ public record PlantDetailResponse
     public PlantPerenualDataDto? PerenualData { get; init; }
 }
 
+/// <summary>Lightweight projection of the <c>PlantType</c> reference entity.</summary>
 public record PlantTypeDto(int Id, string Name, string? Description);
 
+/// <summary>Localised display fields (common name + short description) per language.</summary>
 public record PlantTranslationDto(
     int Id,
     string Language,
     string CommonName,
     string? Description);
 
+/// <summary>
+/// A categorised photo with licensing metadata. <c>ImageType</c> and
+/// <c>Source</c> ship as strings rather than enums so the frontend can render
+/// them as i18n keys without mirroring the backend enum tables.
+/// </summary>
 public record PlantImageDto(
     int Id,
     string ImageType,
@@ -123,18 +139,21 @@ public record PlantImageDto(
     int DisplayOrder,
     bool IsFlagged);
 
+/// <summary>Long-form description in a single language, one row per locale.</summary>
 public record PlantLongDescriptionDto(
     int Id,
     string Language,
     string LongDescription,
     string? SourceMethod);
 
+/// <summary>A vernacular name in one language; <c>IsPrimary</c> flags the preferred entry.</summary>
 public record PlantCommonNameDto(
     int Id,
     string LanguageCode,
     string Name,
     bool IsPrimary);
 
+/// <summary>A pest or pathogen affecting the plant, sourced from Perenual today.</summary>
 public record PlantPestDto(
     int Id,
     string Name,
@@ -146,11 +165,13 @@ public record PlantPestDto(
     string Source,
     string? SourceExternalId);
 
+/// <summary>A historical / alternative scientific name used during ETL fuzzy match.</summary>
 public record PlantSynonymDto(
     int Id,
     string Synonym,
     string? Authority);
 
+/// <summary>Cross-reference to an external taxonomy / enrichment API, with link metadata.</summary>
 public record PlantSourceDto(
     int Id,
     string SourceType,
@@ -159,6 +180,10 @@ public record PlantSourceDto(
     string? Notes,
     DateTime? LastFetchedAt);
 
+/// <summary>
+/// Trefle-specific structured data (1-1 with Plant). <c>RawResponseJson</c>
+/// is intentionally omitted — the audit blob stays in the DB.
+/// </summary>
 public record PlantTrefleDataDto(
     Guid Id,
     string? TrefleSlug,
@@ -174,6 +199,10 @@ public record PlantTrefleDataDto(
     string? ApiVersion,
     DateTime LastSyncAt);
 
+/// <summary>
+/// Perenual-specific structured data (1-1 with Plant). <c>RawResponseJson</c>
+/// is intentionally omitted — the audit blob stays in the DB.
+/// </summary>
 public record PlantPerenualDataDto(
     Guid Id,
     int PerenualId,

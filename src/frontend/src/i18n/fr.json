@@ -345,7 +345,7 @@
       "adminActions": "Actions admin"
     },
     "scientificData": {
-      "comingSoon": "Disponible quand l'enrichissement Trefle et Perenual Supreme xData sera affiché.",
+      "comingSoon": "Des mesures scientifiques détaillées (besoins en eau, exposition lumineuse, températures optimales, exigences nutritives, distribution géographique, durée de croissance) seront disponibles dans une prochaine mise à jour.",
       "items": {
         "waterLiters": "Besoin en eau (L/semaine)",
         "lightLumens": "Exposition lumineuse (lumens/jour)",
@@ -474,7 +474,9 @@
       "lightboxPrev": "Photo précédente",
       "lightboxNext": "Photo suivante",
       "credit": "Crédit : {{name}}",
-      "license": "Licence : {{name}}"
+      "license": "Licence : {{name}}",
+      "openHero": "Ouvrir la galerie photo",
+      "openTile": "Ouvrir la photo {{index}} dans la visionneuse"
     },
     "description": {
       "readMore": "Lire plus",
