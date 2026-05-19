@@ -246,6 +246,12 @@ public partial class PerenualResolver
         return int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : null;
     }
 
+    /// <summary>
+    /// Parse the upstream hardiness object into a <c>(min, max)</c> integer
+    /// pair via <see cref="ParseHardinessZone"/>. Does not apply the
+    /// suspect-pattern guard — callers run <see cref="IsHardinessSuspect"/>
+    /// first and skip this when it fires.
+    /// </summary>
     public static (int? Min, int? Max) ParseHardiness(PerenualHardinessDto? hardiness)
     {
         if (hardiness is null)
@@ -408,6 +414,7 @@ public partial class PerenualResolver
         return parts.Count == 0 ? null : JsonSerializer.Serialize(parts);
     }
 
+    /// <summary>Map Perenual's <c>cycle</c> string to <see cref="PlantLifeCycle"/>; unknown/blank → <c>null</c>.</summary>
     public static PlantLifeCycle? ParseLifeCycle(string? raw) => raw?.ToLowerInvariant().Trim() switch
     {
         null or "" => null,
@@ -418,6 +425,7 @@ public partial class PerenualResolver
         _ => null,
     };
 
+    /// <summary>Map Perenual's <c>growth_rate</c> string to <see cref="PlantGrowthRate"/>; unknown/blank → <c>null</c>.</summary>
     public static PlantGrowthRate? ParseGrowthRate(string? raw) => raw?.ToLowerInvariant().Trim() switch
     {
         null or "" => null,
@@ -427,6 +435,7 @@ public partial class PerenualResolver
         _ => null,
     };
 
+    /// <summary>Map Perenual's <c>watering</c> string to <see cref="PlantWateringNeed"/>; unknown/blank → <c>null</c>.</summary>
     public static PlantWateringNeed? ParseWateringNeed(string? raw) => raw?.ToLowerInvariant().Trim() switch
     {
         null or "" => null,
@@ -437,6 +446,7 @@ public partial class PerenualResolver
         _ => null,
     };
 
+    /// <summary>Map Perenual's <c>maintenance</c>/<c>care_level</c> string to <see cref="PlantCareLevel"/>; unknown/blank → <c>null</c>.</summary>
     public static PlantCareLevel? ParseCareLevel(string? raw) => raw?.ToLowerInvariant().Trim() switch
     {
         null or "" => null,
@@ -617,6 +627,12 @@ public partial class PerenualResolver
         return true;
     }
 
+    /// <summary>
+    /// Join a list with <paramref name="separator"/>, trimming entries and
+    /// dropping blanks. Returns <c>null</c> (not <c>""</c>) when the input is
+    /// null/empty or contains only blanks, so the persistence layer stores
+    /// <c>NULL</c> rather than an empty string.
+    /// </summary>
     public static string? JoinList(List<string>? items, string separator)
     {
         if (items is null || items.Count == 0)
@@ -627,6 +643,7 @@ public partial class PerenualResolver
         return filtered.Count == 0 ? null : string.Join(separator, filtered);
     }
 
+    /// <summary>Trim a string, collapsing null/whitespace-only input to <c>null</c>.</summary>
     public static string? NullIfBlank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
     /// <summary>
