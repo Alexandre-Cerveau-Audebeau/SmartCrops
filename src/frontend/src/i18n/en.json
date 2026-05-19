@@ -405,7 +405,7 @@
         "flowering": "Flowering",
         "harvest": "Harvest"
       },
-      "perennialNote": "Annual cycle repeats each year.",
+      "perennialNote": "Perennial growth resumes each year.",
       "biennialNote": "Vegetative growth in year 1, flowering and fruiting in year 2."
     },
     "enumValues": {

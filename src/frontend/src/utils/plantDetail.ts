@@ -87,6 +87,12 @@ export function isHardinessSuspicious(
   return false;
 }
 
+/**
+ * Format a USDA hardiness zone range for display. Returns `null` when both
+ * bounds are absent (caller hides the row). Collapses `min === max` to a
+ * single number and falls back to a half-open form (`5+`, `≤10`) when only
+ * one side is known.
+ */
 export function formatHardinessZone(
   min: number | null | undefined,
   max: number | null | undefined,
@@ -98,6 +104,13 @@ export function formatHardinessZone(
   return min != null ? `${min}+` : `≤${max}`;
 }
 
+/**
+ * Generic min/max range formatter for height, spread, temperature, etc.
+ * Mirrors {@link formatHardinessZone}'s contract: returns `null` when both
+ * bounds are null, collapses equal bounds, and emits half-open forms when
+ * one side is missing. The `unit` suffix (e.g. `"cm"`, `"°C"`) follows the
+ * numeric value.
+ */
 export function formatRange(
   min: number | null | undefined,
   max: number | null | undefined,

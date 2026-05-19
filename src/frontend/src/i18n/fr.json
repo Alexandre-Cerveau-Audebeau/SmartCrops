@@ -405,7 +405,7 @@
         "flowering": "Floraison",
         "harvest": "Récolte"
       },
-      "perennialNote": "Cycle annuel répété chaque année.",
+      "perennialNote": "La croissance vivace reprend chaque année.",
       "biennialNote": "Croissance végétative en année 1, floraison et fructification en année 2."
     },
     "enumValues": {
