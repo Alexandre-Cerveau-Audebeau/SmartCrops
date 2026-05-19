@@ -55,6 +55,27 @@ describe('toUserFacingUrl', () => {
       toUserFacingUrl('https://api.gbif.org/v1/species/2930137', 8759),
     ).toBe('https://www.gbif.org/species/2930137');
   });
+
+  it('falls back to the URL-embedded id when the explicit id is NaN', () => {
+    expect(
+      toUserFacingUrl('https://perenual.com/api/v2/species/details/8758', Number.NaN),
+    ).toBe('https://perenual.com/plant-species-database-search-finder/species/8758');
+  });
+
+  it('falls back to the URL-embedded id when the explicit id is zero or negative', () => {
+    expect(
+      toUserFacingUrl('https://perenual.com/api/v2/species/details/8758', 0),
+    ).toBe('https://perenual.com/plant-species-database-search-finder/species/8758');
+    expect(
+      toUserFacingUrl('https://perenual.com/api/v2/species/details/8758', -1),
+    ).toBe('https://perenual.com/plant-species-database-search-finder/species/8758');
+  });
+
+  it('falls back to the URL-embedded id when the explicit id is non-integer', () => {
+    expect(
+      toUserFacingUrl('https://perenual.com/api/v2/species/details/8758', 8759.5),
+    ).toBe('https://perenual.com/plant-species-database-search-finder/species/8758');
+  });
 });
 
 describe('isUserFacingUrl', () => {

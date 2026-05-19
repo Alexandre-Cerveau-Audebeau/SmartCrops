@@ -80,6 +80,13 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Assert.Empty(Fixture.PerenualStub.ReceivedIds);
     }
 
+    /// <summary>
+    /// Verify the issue #67 workaround end-to-end: when Perenual canonicalises
+    /// server-side (e.g. requested 8759 ↦ response.id 8758), both
+    /// <c>Plant.RequestedPerenualId</c> (denormalised) and
+    /// <c>PlantPerenualData.RequestedPerenualId</c> (audit) record the
+    /// originally-requested id so user-facing URLs can land on the correct page.
+    /// </summary>
     [Fact]
     public async Task Enrich_PersistsRequestedPerenualIdDistinctFromCanonical()
     {

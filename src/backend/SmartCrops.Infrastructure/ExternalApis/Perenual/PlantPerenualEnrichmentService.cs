@@ -36,6 +36,13 @@ public class PlantPerenualEnrichmentService : IPlantPerenualEnrichmentService
         _resolver = resolver;
     }
 
+    /// <summary>
+    /// Search-then-fetch path: <c>/species-list?q=…</c> picks a candidate id
+    /// (cultivar-aware) via <see cref="PerenualResolver.PickBestMatch"/>, then
+    /// the candidate id is sent to <see cref="FetchAndResolveAsync"/>. Returns
+    /// the <see cref="PerenualResolver.NoMatch"/> sentinel when no candidate is
+    /// found.
+    /// </summary>
     public async Task<PerenualEnrichmentResult> ResolveAsync(string scientificName, CancellationToken ct)
     {
         var search = await _client.SearchAsync(scientificName, ct);
@@ -48,9 +55,21 @@ public class PlantPerenualEnrichmentService : IPlantPerenualEnrichmentService
         return await FetchAndResolveAsync(perenualId.Value, ct);
     }
 
+    /// <summary>
+    /// Direct-fetch path: skip the search step and send <paramref name="perenualId"/>
+    /// straight to <c>/species/details/{id}</c>. Used by the admin endpoint
+    /// when the operator knows the upstream id (cultivars, reclassified species).
+    /// </summary>
     public Task<PerenualEnrichmentResult> ResolveByIdAsync(int perenualId, CancellationToken ct)
         => FetchAndResolveAsync(perenualId, ct);
 
+    /// <summary>
+    /// Shared core for both resolution paths. <paramref name="perenualId"/> is
+    /// what we ASK Perenual for; the response carries a (possibly different)
+    /// canonical id under <c>response.id</c>. Both are surfaced on
+    /// <see cref="PerenualEnrichmentResult"/> so the controller can persist the
+    /// audit trail (issue #67).
+    /// </summary>
     private async Task<PerenualEnrichmentResult> FetchAndResolveAsync(int perenualId, CancellationToken ct)
     {
         // `perenualId` here is what we ASKED Perenual for — server-side

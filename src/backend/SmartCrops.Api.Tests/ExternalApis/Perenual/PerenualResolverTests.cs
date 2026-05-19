@@ -484,6 +484,12 @@ public class PerenualResolverTests
 
     // ── Hardiness suspect guard (issue #66) ───────────────────────────────
 
+    /// <summary>
+    /// Direct evidence pattern from the tomato canonicalisation incident:
+    /// requesting <c>/species/details/8759</c> returns the Solanum dulcamara
+    /// entry (id 8758) which ships <c>{min:"2", max:"2"}</c>. The guard drops
+    /// the values and flags <c>HardinessRejectedAsSuspect</c>.
+    /// </summary>
     [Fact]
     public void Resolve_HardinessMinMax2_RejectsAsSuspectAndDropsValues()
     {
@@ -503,6 +509,11 @@ public class PerenualResolverTests
         Assert.Null(result.HardinessZoneMax);
     }
 
+    /// <summary>
+    /// Sanity that legitimate USDA bands (Aloe vera 9-11) keep their values
+    /// untouched — the guard is opt-in to a single observed corruption
+    /// pattern, not a general post-filter.
+    /// </summary>
     [Fact]
     public void Resolve_HardinessNormalRange_DoesNotTriggerGuard()
     {
@@ -520,6 +531,11 @@ public class PerenualResolverTests
         Assert.Equal(11, result.HardinessZoneMax);
     }
 
+    /// <summary>
+    /// Anti-generalisation contract test. Zone 3-3 is a real alpine band and
+    /// must survive even though it shares the <c>min == max</c> shape with
+    /// the rejected zone 2-2 pattern.
+    /// </summary>
     [Fact]
     public void Resolve_HardinessMinMax3_DoesNotGeneraliseGuard()
     {
