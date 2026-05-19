@@ -1,14 +1,23 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 
 namespace SmartCrops.Api.Controllers;
 
+/// <summary>
+/// Public plant catalogue endpoints. <c>GetById</c> projects the loaded
+/// aggregate through <see cref="PlantDetailMapper"/> to a curated DTO; the
+/// other read endpoints (list / by-type / search) intentionally surface the
+/// raw <see cref="Plant"/> entity since they only need the lean projection
+/// loaded by the matching repository methods.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class PlantsController(IPlantRepository repository) : ControllerBase
 {
+    /// <summary>List every plant for the Library grid and the planner sidebar.</summary>
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -16,13 +25,19 @@ public class PlantsController(IPlantRepository repository) : ControllerBase
         return Ok(plants);
     }
 
+    /// <summary>
+    /// Plant Detail endpoint — eager-loads the full enrichment graph and
+    /// projects to <see cref="PlantDetailResponse"/>. Returns 404 when the id
+    /// misses.
+    /// </summary>
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
         var plant = await repository.GetByIdAsync(id);
-        return plant is null ? NotFound() : Ok(plant);
+        return plant is null ? NotFound() : Ok(PlantDetailMapper.ToDto(plant));
     }
 
+    /// <summary>Filter the catalogue by <see cref="PlantType"/> id (vegetable / fruit / …) — backs the Library category chips.</summary>
     [HttpGet("type/{plantTypeId:int}")]
     public async Task<IActionResult> GetByType(int plantTypeId)
     {
@@ -30,6 +45,12 @@ public class PlantsController(IPlantRepository repository) : ControllerBase
         return Ok(plants);
     }
 
+    /// <summary>
+    /// Substring search against the localised common name / description, with
+    /// the scientific name as a language-neutral fallback. <c>query</c> is
+    /// required; <c>language</c> defaults to <c>"en"</c>. Empty queries return
+    /// 400 to keep the result page from showing the entire catalogue.
+    /// </summary>
     [HttpGet("search")]
     public async Task<IActionResult> Search([FromQuery] string query, [FromQuery] string language = "en")
     {
@@ -40,6 +61,7 @@ public class PlantsController(IPlantRepository repository) : ControllerBase
         return Ok(plants);
     }
 
+    /// <summary>Create a new plant. Used by ETL/seed flows; not exposed in the user UI.</summary>
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] Plant plant)
     {
@@ -48,6 +70,12 @@ public class PlantsController(IPlantRepository repository) : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = plant.Id }, plant);
     }
 
+    /// <summary>
+    /// Partial update of the legacy scalar fields (the enrichment payload is
+    /// owned by the dedicated <c>/api/admin/{trefle,perenual}/enrich</c>
+    /// endpoints). Validates that the route id matches the body, then
+    /// returns 204 on success or 404 when the id misses.
+    /// </summary>
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, [FromBody] Plant plant)
     {
@@ -71,6 +99,12 @@ public class PlantsController(IPlantRepository repository) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Hard-delete a plant. Maps the Postgres FK-violation error 23503 to a
+    /// 400 with a hint that the plant is still referenced by garden data —
+    /// frontend can surface the message to the user before they retry after
+    /// emptying their gardens.
+    /// </summary>
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {

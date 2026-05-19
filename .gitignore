@@ -68,3 +68,8 @@ Thumbs.db
 
 # coderabbit-harvest skill output files (transient, regenerable)
 /tmp/harvest-*.json
+
+# Local API response snapshots used for ad-hoc curl validation during
+# enrichment work (e.g. tomato-current.json). Never commit — they're
+# regenerable and tend to balloon with raw blob payloads.
+*-current.json

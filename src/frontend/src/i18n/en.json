@@ -330,7 +330,192 @@
     }
   },
   "plantDetail": {
-    "backToGarden": "Back to {{name}}"
+    "backToGarden": "Back to {{name}}",
+    "gbifBadge": "GBIF {{key}}",
+    "sections": {
+      "about": "About",
+      "characteristics": "Characteristics",
+      "lifecycle": "Life cycle",
+      "edibleAndPropagation": "Edible parts & propagation",
+      "scientificData": "Scientific data (coming soon)",
+      "pestsAndDiseases": "Pests & diseases",
+      "commonNames": "Common names",
+      "synonyms": "Botanical synonyms",
+      "sources": "External sources",
+      "adminActions": "Admin actions"
+    },
+    "scientificData": {
+      "comingSoon": "Detailed scientific measurements (water needs, light exposure, optimal temperatures, nutrient requirements, geographic distribution, growth duration) will be available in an upcoming update.",
+      "items": {
+        "waterLiters": "Water needs (L/week)",
+        "lightLumens": "Light exposure (lumens/day)",
+        "temperatureRange": "Optimal temperature range (°C)",
+        "nutrientsNPK": "Required nutrients (NPK)",
+        "geoDistribution": "Geographic distribution",
+        "daysToGermination": "Days to germination and harvest"
+      }
+    },
+    "labels": {
+      "family": "Family",
+      "genus": "Genus",
+      "species": "Species",
+      "author": "Author",
+      "year": "Year described",
+      "lifeCycle": "Life cycle",
+      "growthRate": "Growth rate",
+      "careLevel": "Care difficulty",
+      "wateringNeed": "Watering need",
+      "growthHabit": "Growth habit",
+      "hardinessZone": "USDA hardiness zone",
+      "height": "Height",
+      "spread": "Spread",
+      "soilPh": "Soil pH",
+      "lightLevel": "Light level",
+      "soilNutriments": "Soil nutriments",
+      "temperatureRange": "Temperature range",
+      "edibleParts": "Edible parts",
+      "sowingInstructions": "Sowing",
+      "propagationInstructions": "Propagation",
+      "originCountries": "Origin",
+      "floweringSeason": "Flowering season",
+      "harvestSeason": "Harvest season",
+      "pruningMonths": "Pruning months",
+      "maintenance": "Maintenance",
+      "sunlight": "Sunlight",
+      "flowerColors": "Flower colours",
+      "lastEnriched": "Last enriched"
+    },
+    "flags": {
+      "edible": "Edible",
+      "medicinal": "Medicinal",
+      "toxic": "Toxic",
+      "toxicToPets": "Toxic to pets",
+      "indoor": "Indoor",
+      "droughtTolerant": "Drought tolerant",
+      "saltTolerant": "Salt tolerant",
+      "invasive": "Invasive",
+      "thorny": "Thorny",
+      "tropical": "Tropical",
+      "attractsPollinators": "Attracts pollinators"
+    },
+    "lifecycle": {
+      "stages": {
+        "sowing": "Sowing",
+        "growth": "Growth",
+        "flowering": "Flowering",
+        "harvest": "Harvest"
+      },
+      "perennialNote": "Perennial growth resumes each year.",
+      "biennialNote": "Vegetative growth in year 1, flowering and fruiting in year 2."
+    },
+    "enumValues": {
+      "lifeCycle": {
+        "Annual": "Annual",
+        "Biennial": "Biennial",
+        "Perennial": "Perennial",
+        "HerbaceousPerennial": "Herbaceous perennial"
+      },
+      "growthRate": {
+        "Low": "Slow",
+        "Moderate": "Moderate",
+        "High": "Fast"
+      },
+      "careLevel": {
+        "Easy": "Easy",
+        "Medium": "Moderate",
+        "Difficult": "Difficult"
+      },
+      "wateringNeed": {
+        "Low": "Low",
+        "Average": "Average",
+        "High": "High",
+        "Frequent": "Frequent"
+      },
+      "sourceType": {
+        "Manual": "Manual",
+        "GBIF": "GBIF",
+        "Trefle": "Trefle",
+        "Perenual": "Perenual",
+        "WFO": "World Flora Online",
+        "POWO": "Plants of the World Online",
+        "PlantNet": "PlantNet",
+        "UserSubmitted": "User submitted"
+      },
+      "pestType": {
+        "Disease": "Disease",
+        "Insect": "Insect",
+        "Fungus": "Fungus",
+        "Bacteria": "Bacteria",
+        "Mite": "Mite",
+        "Nematode": "Nematode",
+        "Virus": "Virus",
+        "Other": "Other"
+      },
+      "ediblePart": {
+        "fruit": "Fruit",
+        "leaf": "Leaf",
+        "leaves": "Leaves",
+        "root": "Root",
+        "roots": "Roots",
+        "seed": "Seed",
+        "seeds": "Seeds",
+        "tuber": "Tuber",
+        "flower": "Flower",
+        "flowers": "Flowers",
+        "stem": "Stem",
+        "stems": "Stems",
+        "bark": "Bark"
+      }
+    },
+    "gallery": {
+      "showAll": "View all photos ({{count}})",
+      "remaining": "+{{count}} more",
+      "lightboxClose": "Close",
+      "lightboxPrev": "Previous photo",
+      "lightboxNext": "Next photo",
+      "credit": "Credit: {{name}}",
+      "license": "License: {{name}}",
+      "openHero": "Open photo gallery",
+      "openTile": "Open photo {{index}} in lightbox"
+    },
+    "description": {
+      "readMore": "Read more",
+      "readLess": "Read less",
+      "sourceLabel": "Source: {{source}}",
+      "languageSwitch": "Read in {{language}}"
+    },
+    "pests": {
+      "header": "Pests & diseases ({{count}})",
+      "showAll": "Show all ({{count}})",
+      "showLess": "Show less"
+    },
+    "commonNames": {
+      "showAllLanguages": "Show {{count}} more languages",
+      "showFewerLanguages": "Show fewer languages"
+    },
+    "sources": {
+      "viewExternal": "View on {{source}}",
+      "fetched": "Fetched {{date}}"
+    },
+    "fallback": {
+      "notEnriched": "Enrichment incomplete"
+    },
+    "warnings": {
+      "suspiciousHardiness": "This hardiness value looks suspicious — likely an ETL artefact, please verify."
+    },
+    "actions": {
+      "reEnrichTrefle": "Re-enrich from Trefle",
+      "reEnrichPerenual": "Re-enrich from Perenual",
+      "running": "Running…",
+      "adminMenu": "Admin actions"
+    },
+    "toasts": {
+      "trefleSuccess": "Trefle: {{images}} images, {{commonNames}} common names, {{synonyms}} synonyms added.",
+      "perenualSuccess": "Perenual: {{images}} images, {{pests}} pests, {{longDescriptions}} description(s) added.",
+      "skipped": "Already enriched — nothing to update.",
+      "notMatched": "No match found in the upstream catalogue.",
+      "error": "Re-enrichment failed: {{reason}}"
+    }
   },
   "editableNotes": {
     "notes": "Notes: {{notes}}",
