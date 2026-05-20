@@ -26,8 +26,10 @@ namespace SmartCrops.Core.Models;
 /// reports scientific_name <c>"Solanum lycopersicum"</c> but serves Solanum
 /// dulcamara images), so a name comparison is not a reliable detector — the id
 /// mismatch itself is. When set, the controller skips every destructive
-/// wrong-species write (images, pests, long-description, source URL) and keeps
-/// only the gap-fill scalar denormalisation + audit row. See issues #73 and #67.
+/// wrong-species write — the four collection/source targets (images, pests,
+/// long-description, source URL) AND the payload-owned <c>EdibleParts</c> JSON
+/// overwrite — and keeps only the gap-fill scalar denormalisation + audit row.
+/// See issues #73 and #67.
 /// </param>
 public record PerenualEnrichmentResult(
     int? PerenualId,

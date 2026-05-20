@@ -464,14 +464,17 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     /// <summary>
     /// Issue #73: when the resolver flags a dangerous canonical-id mismatch
     /// (<c>response.id != requestedPerenualId</c>, likely a different species),
-    /// the controller must SKIP all four destructive wrong-species writes
-    /// (images, pests, long-description, source URL) while still persisting the
-    /// <c>PlantPerenualData</c> audit row and the gap-fill scalar denormalisation.
-    /// The response surfaces <c>CanonicalMismatchSkipped=true</c> and reports
-    /// zero added rows (Finding B: counts reflect what was persisted).
+    /// the controller must SKIP every destructive wrong-species write — the four
+    /// collection/source targets (images, pests, long-description, source URL)
+    /// AND the payload-owned <c>EdibleParts</c> JSON overwrite (CodeRabbit round
+    /// 2: it lives in <c>ApplyPlantDenormalisation</c> but is a destructive write,
+    /// not gap-fill) — while still persisting the <c>PlantPerenualData</c> audit
+    /// row and the null-coalesced scalar denormalisation. The response surfaces
+    /// <c>CanonicalMismatchSkipped=true</c> and reports zero added rows
+    /// (Finding B: counts reflect what was persisted).
     /// </summary>
     [Fact]
-    public async Task Enrich_CanonicalMismatchDangerous_SkipsImagesPestsDescAndSourceURL()
+    public async Task Enrich_CanonicalMismatchDangerous_SkipsAllWrongSpeciesWrites()
     {
         var plantId = await SeedPlantAsync("Solanum lycopersicum");
         Fixture.PerenualStub.Enqueue(SampleMatch(
@@ -484,6 +487,8 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             ],
             pests: [new PerenualPest("Aphids", PlantPestType.Insect)],
             longDescriptionEn: "Wrong-species description.",
+            // Wrong-species edible-parts payload — must NOT reach the read model.
+            ediblePartsJson: "[\"fruit\"]",
             isCanonicalMismatchDangerous: true));
         AuthAsAnyUser();
 
@@ -509,10 +514,14 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Assert.Equal(0, await db.PlantSources.CountAsync(
             s => s.PlantId == plantId && s.SourceType == PlantSourceType.Perenual));
 
+        // The payload-owned EdibleParts OVERWRITE is also skipped (CR round 2):
+        // the wrong-species "[\"fruit\"]" payload must not reach the read model.
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        Assert.Null(plant.EdibleParts);
+
         // Audit row + gap-fill scalars are still applied.
         var perenualData = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
         Assert.Equal(8758, perenualData.PerenualId);
-        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
         Assert.Equal(PlantLifeCycle.Perennial, plant.LifeCycle);
         Assert.Equal(8759, plant.RequestedPerenualId);
         Assert.True(plant.EnrichmentStatus.HasFlag(EnrichmentStatus.PerenualEnriched));
@@ -533,6 +542,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             images: [new PerenualImage("https://wasabi/aloe.jpg", null, null, null)],
             pests: [new PerenualPest("Mealybugs", PlantPestType.Insect)],
             longDescriptionEn: "Correct species description.",
+            ediblePartsJson: "[\"leaf\"]",
             isCanonicalMismatchDangerous: false));
         AuthAsAnyUser();
 
@@ -554,6 +564,9 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Assert.Equal(1, await db.PlantLongDescriptions.CountAsync(d => d.PlantId == plantId));
         Assert.Equal(1, await db.PlantSources.CountAsync(
             s => s.PlantId == plantId && s.SourceType == PlantSourceType.Perenual));
+        // Happy path: the payload-owned EdibleParts overwrite is applied normally.
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        Assert.Equal("[\"leaf\"]", plant.EdibleParts);
     }
 
     [Fact]
@@ -773,6 +786,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         IReadOnlyList<PerenualImage>? images = null,
         IReadOnlyList<PerenualPest>? pests = null,
         string? longDescriptionEn = "Test description",
+        string? ediblePartsJson = null,
         int? requestedPerenualId = null,
         bool hardinessRejectedAsSuspect = false,
         bool isCanonicalMismatchDangerous = false) => new(
@@ -801,7 +815,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             IsMedicinal: isMedicinal,
             IsToxicToHumans: null,
             IsToxicToPets: null,
-            EdiblePartsJson: null,
+            EdiblePartsJson: ediblePartsJson,
             PropagationInstructions: null,
             SowingInstructions: null,
             OriginCountries: null,
