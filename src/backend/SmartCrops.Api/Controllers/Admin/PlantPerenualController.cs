@@ -400,12 +400,29 @@ public class PlantPerenualController : ControllerBase
     /// overwritten by Perenual — Perenual only fills gaps. The
     /// <c>EdibleParts</c> JSON payload is owned by Perenual (no other source
     /// in D1 produces it) and is overwritten unconditionally when present.
+    ///
+    /// <para>Exception to the null-coalesce contract: when the hardiness guard
+    /// fired upstream (<see cref="PerenualEnrichmentResult.HardinessRejectedAsSuspect"/>),
+    /// we have positive evidence the persisted value is corrupt and scrub it
+    /// even if a value was already stored. This repairs rows enriched before
+    /// PR #70's guard landed, which the plain coalesce would otherwise
+    /// preserve. See issue #71.</para>
     /// </summary>
     private static void ApplyPlantDenormalisation(Plant plant, PerenualEnrichmentResult result)
     {
         // Audit trail (denormalised) — same idempotency rule as PerenualData:
         // preserve the first requestedId we ever recorded for this plant.
         plant.RequestedPerenualId ??= result.RequestedPerenualId;
+
+        if (result.HardinessRejectedAsSuspect)
+        {
+            // Guard fired upstream — we have positive evidence the value is
+            // corrupt. Override the null-coalesce contract from ADR-0003: scrub
+            // even if a (corrupt) value was already persisted before PR #70's
+            // guard existed. See issue #71.
+            plant.HardinessZoneMin = null;
+            plant.HardinessZoneMax = null;
+        }
 
         if (plant.LifeCycle is null) plant.LifeCycle = result.LifeCycle;
         if (plant.GrowthRate is null) plant.GrowthRate = result.GrowthRate;

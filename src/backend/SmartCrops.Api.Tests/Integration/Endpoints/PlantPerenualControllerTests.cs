@@ -387,6 +387,45 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Assert.Equal(5, plant.HardinessZoneMin);
     }
 
+    /// <summary>
+    /// Issue #71 regression: when the hardiness guard fires
+    /// (<c>HardinessRejectedAsSuspect=true</c>), re-enrichment must SCRUB a
+    /// corrupt hardiness value that was persisted before PR #70's guard
+    /// existed — not preserve it. This is the documented exception to the
+    /// null-coalesce contract: the plain
+    /// <c>if (plant.X is null) plant.X = result.X;</c> rule would leave the
+    /// stale (corrupt) value intact because it is non-null. Pins the scrub
+    /// branch in <c>ApplyPlantDenormalisation</c> against accidental removal.
+    /// </summary>
+    [Fact]
+    public async Task Enrich_HardinessGuardFiring_ScrubsExistingCorruptValues()
+    {
+        // Seed a plant carrying the corrupt min==max==2 value a pre-#70
+        // enrichment would have persisted.
+        var plantId = await SeedPlantAsync("Solanum lycopersicum", configure: p =>
+        {
+            p.HardinessZoneMin = 2;
+            p.HardinessZoneMax = 2;
+        });
+        // Guard fires upstream: the result carries null hardiness AND the
+        // rejection flag — mirroring the live PR #70 guard behaviour.
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 8759,
+            hardinessMin: null,
+            hardinessMax: null,
+            hardinessRejectedAsSuspect: true));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        Assert.Null(plant.HardinessZoneMin);
+        Assert.Null(plant.HardinessZoneMax);
+    }
+
     [Fact]
     public async Task Enrich_PreservesTrefleSourcedImages_OnReplacePerenualImages()
     {
