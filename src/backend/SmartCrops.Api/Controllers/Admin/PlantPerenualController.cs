@@ -96,7 +96,9 @@ public class PlantPerenualController : ControllerBase
         // When Perenual canonicalised the requested id to a likely-different
         // species (IsCanonicalMismatchDangerous), every payload-derived
         // DESTRUCTIVE write would persist wrong-species data: the four
-        // delete-then-insert / upsert-URL targets are skipped. The
+        // collection/source targets (images, pests, long-description, source
+        // URL) are skipped here, and the payload-owned EdibleParts overwrite is
+        // skipped inside ApplyPlantDenormalisation (same skip flag). The
         // PlantPerenualData audit row (keeps RawResponseJson for diagnosis) and
         // the null-coalesced scalar denormalisation (gap-fill only, often
         // genus-shared, never overwrites curated values) are still applied.
@@ -146,7 +148,7 @@ public class PlantPerenualController : ControllerBase
             // operator can correlate per-plant and decide whether to remap the
             // requested id. Both ids logged so the divergence is visible.
             _logger.LogWarning(
-                "Perenual canonical id mismatch for plant {PlantId}: requested {RequestedPerenualId} but response.id was {PerenualId} (server-side canonicalisation to a likely different species). Skipped images/pests/long-description/source-URL writes; gap-fill scalars + audit row kept. See issue #73.",
+                "Perenual canonical id mismatch for plant {PlantId}: requested {RequestedPerenualId} but response.id was {PerenualId} (server-side canonicalisation to a likely different species). Skipped images/pests/long-description/source-URL writes AND EdibleParts overwrite; gap-fill scalars + audit row kept. See issue #73.",
                 plantId, result.RequestedPerenualId, result.PerenualId);
         }
 
@@ -531,9 +533,10 @@ public class PlantPerenualController : ControllerBase
     /// destructive writes), not what the Perenual payload offered.
     /// </summary>
     /// <param name="CanonicalMismatchSkipped">
-    /// True when a Perenual canonical-id mismatch caused the four destructive
-    /// wrong-species writes to be skipped (issue #73). Lets the admin UI surface
-    /// a distinct toast. Defaults false on the happy path.
+    /// True when a Perenual canonical-id mismatch caused destructive
+    /// wrong-species writes (including the EdibleParts overwrite) to be skipped
+    /// (issue #73). Lets the admin UI surface a distinct toast. Defaults false
+    /// on the happy path.
     /// </param>
     public record EnrichMatchedResponse(
         bool Matched,

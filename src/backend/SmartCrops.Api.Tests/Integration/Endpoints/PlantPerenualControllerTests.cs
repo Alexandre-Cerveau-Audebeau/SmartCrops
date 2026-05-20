@@ -528,6 +528,39 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     }
 
     /// <summary>
+    /// CR round 3 hardening: when a canonical-id mismatch fires, the skip must
+    /// also PRESERVE an existing <c>EdibleParts</c> value set by another source
+    /// (Manual / GBIF / Trefle / seed / prior Perenual enrich pre-mismatch).
+    /// The companion test pins the "null stays null" branch; this one pins the
+    /// "populated stays populated" branch. Together they pin the full preservation
+    /// semantics of the skip (issue #73).
+    /// </summary>
+    [Fact]
+    public async Task Enrich_CanonicalMismatchDangerous_PreservesExistingEdibleParts()
+    {
+        var plantId = await SeedPlantAsync("Solanum lycopersicum", configure: p =>
+        {
+            p.EdibleParts = "[\"leaf\",\"root\"]"; // Prior value from another source
+        });
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 8758,
+            requestedPerenualId: 8759,
+            ediblePartsJson: "[\"fruit\"]", // Wrong-species payload — must NOT win
+            isCanonicalMismatchDangerous: true));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+
+        // Prior value preserved verbatim, wrong-species payload not applied.
+        Assert.Equal("[\"leaf\",\"root\"]", plant.EdibleParts);
+    }
+
+    /// <summary>
     /// Happy-path counterpart to the mismatch test: when the requested and
     /// canonical ids agree, all dual-write targets persist normally and
     /// <c>CanonicalMismatchSkipped</c> is false.
