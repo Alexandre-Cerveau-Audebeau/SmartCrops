@@ -370,6 +370,27 @@ public partial class PerenualResolver
     }
 
     /// <summary>
+    /// Derive the genus from a Perenual scientific name (the first
+    /// <c>scientific_name</c> entry, surfaced as
+    /// <see cref="PerenualEnrichmentResult.CanonicalScientificName"/>). Perenual
+    /// ships no dedicated genus field, so we take the first whitespace-delimited
+    /// token: <c>"Solanum lycopersicum"</c> → <c>"Solanum"</c>. Returns
+    /// <c>null</c> on null/blank input or when there is no whitespace separator
+    /// (a single token can't be split into genus + epithet reliably). Used by
+    /// the canonical-mismatch genus gate. See issue #75.
+    /// </summary>
+    public static string? DerivePerenualGenus(string? scientificName)
+    {
+        if (string.IsNullOrWhiteSpace(scientificName))
+        {
+            return null;
+        }
+        var trimmed = scientificName.Trim();
+        var spaceIdx = trimmed.IndexOf(' ');
+        return spaceIdx <= 0 ? null : trimmed[..spaceIdx];
+    }
+
+    /// <summary>
     /// Read an integer property from <paramref name="obj"/> tolerating both JSON
     /// number and numeric-string encodings. Returns <c>null</c> when the
     /// property is absent, unparseable, or outside <c>[min, max]</c>.

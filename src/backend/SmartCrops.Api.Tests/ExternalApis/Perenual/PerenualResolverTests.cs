@@ -891,4 +891,19 @@ public class PerenualResolverTests
         Assert.Equal("[\"Rainwater\",\"Distilled Water\"]", result.XWateringQualityJson);
         Assert.Equal("[\"Morning\",\"Evening\"]", result.XWateringPeriodJson);
     }
+
+    // ── DerivePerenualGenus (issue #75 genus gate) ────────────────────────
+
+    [Theory]
+    [InlineData("Solanum lycopersicum", "Solanum")]
+    [InlineData(" Aloe vera ", "Aloe")]                  // leading/trailing trimmed
+    [InlineData("Salvia rosmarinus 'Tuscan Blue'", "Salvia")]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("   ", null)]
+    [InlineData("Solanum", null)]                        // single token → can't split
+    public void DerivePerenualGenus_HandlesAllForms(string? input, string? expected)
+    {
+        Assert.Equal(expected, PerenualResolver.DerivePerenualGenus(input));
+    }
 }

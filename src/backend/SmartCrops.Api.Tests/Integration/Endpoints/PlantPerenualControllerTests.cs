@@ -476,10 +476,15 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     [Fact]
     public async Task Enrich_CanonicalMismatchDangerous_SkipsAllWrongSpeciesWrites()
     {
-        var plantId = await SeedPlantAsync("Solanum lycopersicum");
+        // Intra-genus mismatch (the real tomato/dulcamara case): GBIF genus
+        // "Solanum" matches the Perenual-derived genus, so the genus gate
+        // (issue #75) PASSES and scalars/xData apply, while the destructive
+        // collection writes stay skipped (issue #73).
+        var plantId = await SeedPlantAsync("Solanum lycopersicum", configure: p => p.Genus = "Solanum");
         Fixture.PerenualStub.Enqueue(SampleMatch(
-            perenualId: 8758,            // canonical (wrong species)
-            requestedPerenualId: 8759,   // what we asked for (tomato)
+            perenualId: 8758,                       // canonical (wrong species)
+            requestedPerenualId: 8759,              // what we asked for (tomato)
+            canonicalName: "Solanum dulcamara",     // same genus as the plant
             lifeCycle: PlantLifeCycle.Perennial,
             images:
             [
@@ -506,20 +511,24 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
 
-        // The four destructive writes were skipped.
+        // The destructive COLLECTION writes were skipped.
         Assert.Equal(0, await db.PlantImages.CountAsync(
             i => i.PlantId == plantId && i.Source == PlantSourceType.Perenual));
         Assert.Equal(0, await db.PlantPests.CountAsync(p => p.PlantId == plantId));
         Assert.Equal(0, await db.PlantLongDescriptions.CountAsync(d => d.PlantId == plantId));
-        Assert.Equal(0, await db.PlantSources.CountAsync(
-            s => s.PlantId == plantId && s.SourceType == PlantSourceType.Perenual));
+
+        // D5 exception: the Perenual source IS written even on a mismatch, using
+        // the REQUESTED id so the "View on Perenual" link lands on the right page.
+        var source = await db.PlantSources.SingleAsync(
+            s => s.PlantId == plantId && s.SourceType == PlantSourceType.Perenual);
+        Assert.EndsWith("/species/details/8759", source.Url);
 
         // The payload-owned EdibleParts OVERWRITE is also skipped (CR round 2):
         // the wrong-species "[\"fruit\"]" payload must not reach the read model.
         var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
         Assert.Null(plant.EdibleParts);
 
-        // Audit row + gap-fill scalars are still applied.
+        // Audit row + gap-fill scalars are still applied (genus validated).
         var perenualData = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
         Assert.Equal(8758, perenualData.PerenualId);
         Assert.Equal(PlantLifeCycle.Perennial, plant.LifeCycle);
@@ -558,6 +567,181 @@ public class PlantPerenualControllerTests : IntegrationTestBase
 
         // Prior value preserved verbatim, wrong-species payload not applied.
         Assert.Equal("[\"leaf\",\"root\"]", plant.EdibleParts);
+    }
+
+    /// <summary>
+    /// Issue #75 Étage 1: a CROSS-genus canonical mismatch (GBIF genus differs
+    /// from the Perenual-derived genus) skips ALL scalar + xData gap-fill so a
+    /// wrong-species payload can't seed the read model.
+    /// </summary>
+    [Fact]
+    public async Task Enrich_GenusMismatch_SkipsScalarsAndXData()
+    {
+        var plantId = await SeedPlantAsync("Rosa canina", configure: p => p.Genus = "Rosa");
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 8758,
+            requestedPerenualId: 8759,
+            canonicalName: "Solanum dulcamara",  // genus "Solanum" != "Rosa"
+            lifeCycle: PlantLifeCycle.Perennial,
+            xWateringBasedTempMinC: 18,
+            isCanonicalMismatchDangerous: true));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        var perenualData = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+
+        Assert.Null(plant.LifeCycle);                       // scalar skipped
+        Assert.Null(perenualData.XWateringBasedTempMinC);   // xData skipped
+        Assert.True(plant.EnrichmentStatus.HasFlag(EnrichmentStatus.PerenualEnriched));
+    }
+
+    /// <summary>
+    /// Issue #75 Étage 1: an INTRA-genus canonical mismatch (same genus,
+    /// different species — the tomato/dulcamara case) PASSES the genus gate, so
+    /// xData is persisted on PlantPerenualData while destructive collection
+    /// writes stay skipped.
+    /// </summary>
+    [Fact]
+    public async Task Enrich_GenusMatch_OnCanonicalMismatch_PersistsXData()
+    {
+        var plantId = await SeedPlantAsync("Solanum lycopersicum", configure: p => p.Genus = "Solanum");
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 8758,
+            requestedPerenualId: 8759,
+            canonicalName: "Solanum dulcamara",  // genus "Solanum" == "Solanum"
+            xWateringBasedTempMinC: 18,
+            xWateringBasedTempMaxC: 24,
+            xWateringPhMin: 6.0m,
+            isCanonicalMismatchDangerous: true));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var perenualData = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+
+        Assert.Equal(18, perenualData.XWateringBasedTempMinC);
+        Assert.Equal(24, perenualData.XWateringBasedTempMaxC);
+        Assert.Equal(6.0m, perenualData.XWateringPhMin);
+        // Destructive collections still skipped on the mismatch.
+        Assert.Equal(0, await db.PlantPests.CountAsync(p => p.PlantId == plantId));
+    }
+
+    /// <summary>
+    /// Issue #75 Étage 2: the admin <c>overrideMismatch=true</c> escape hatch
+    /// bypasses the genus gate, applying scalars + xData even on a cross-genus
+    /// mismatch. Destructive collection writes remain skipped regardless.
+    /// </summary>
+    [Fact]
+    public async Task Enrich_OverrideMismatch_AppliesScalarsAndXDataRegardlessOfGenus()
+    {
+        var plantId = await SeedPlantAsync("Rosa canina", configure: p => p.Genus = "Rosa");
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 8758,
+            requestedPerenualId: 8759,
+            canonicalName: "Solanum lycopersicum",  // cross-genus
+            lifeCycle: PlantLifeCycle.Perennial,
+            xWateringBasedTempMinC: 18,
+            images: [new PerenualImage("https://wasabi/x.jpg", null, null, null)],
+            isCanonicalMismatchDangerous: true));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(
+            $"/api/admin/perenual/enrich/{plantId}?overrideMismatch=true", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        var perenualData = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+
+        Assert.Equal(PlantLifeCycle.Perennial, plant.LifeCycle);      // scalar applied despite cross-genus
+        Assert.Equal(18, perenualData.XWateringBasedTempMinC);        // xData applied
+        // Destructive collections STILL skipped — override only frees scalars/xData.
+        Assert.Equal(0, await db.PlantImages.CountAsync(
+            i => i.PlantId == plantId && i.Source == PlantSourceType.Perenual));
+    }
+
+    /// <summary>
+    /// Issue #75 Étage 1 edge case: when Plant.Genus is null (never GBIF-enriched)
+    /// the genus gate can't validate, so it conservatively skips scalars + xData.
+    /// </summary>
+    [Fact]
+    public async Task Enrich_PlantGenusNull_ConservativeSkipOnMismatch()
+    {
+        var plantId = await SeedPlantAsync("Solanum lycopersicum"); // Genus left null
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 8758,
+            requestedPerenualId: 8759,
+            canonicalName: "Solanum dulcamara",
+            lifeCycle: PlantLifeCycle.Perennial,
+            xWateringBasedTempMinC: 18,
+            isCanonicalMismatchDangerous: true));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        var perenualData = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+
+        Assert.Null(plant.LifeCycle);
+        Assert.Null(perenualData.XWateringBasedTempMinC);
+    }
+
+    /// <summary>
+    /// Happy path (no mismatch): all 12 xData fields are persisted on
+    /// PlantPerenualData via the gap-fill writes (genus gate not engaged).
+    /// </summary>
+    [Fact]
+    public async Task Enrich_HappyPath_PersistsAllTwelveXDataFields()
+    {
+        var plantId = await SeedPlantAsync("Aloe vera");
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 728,
+            xWateringBasedTempMinC: 18,
+            xWateringBasedTempMaxC: 24,
+            xWateringPhMin: 6.0m,
+            xWateringPhMax: 8.0m,
+            xSunlightHoursMin: 4,
+            xSunlightHoursMax: 6,
+            xTemperatureToleranceMinC: -10,
+            xTemperatureToleranceMaxC: 38,
+            xPlantSpacingValue: 18,
+            xPlantSpacingUnit: "inches",
+            xWateringQualityJson: "[\"Rainwater\"]",
+            xWateringPeriodJson: "[\"Morning\"]",
+            isCanonicalMismatchDangerous: false));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var pd = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+
+        Assert.Equal(18, pd.XWateringBasedTempMinC);
+        Assert.Equal(24, pd.XWateringBasedTempMaxC);
+        Assert.Equal(6.0m, pd.XWateringPhMin);
+        Assert.Equal(8.0m, pd.XWateringPhMax);
+        Assert.Equal(4, pd.XSunlightHoursMin);
+        Assert.Equal(6, pd.XSunlightHoursMax);
+        Assert.Equal(-10, pd.XTemperatureToleranceMinC);
+        Assert.Equal(38, pd.XTemperatureToleranceMaxC);
+        Assert.Equal(18, pd.XPlantSpacingValue);
+        Assert.Equal("inches", pd.XPlantSpacingUnit);
+        Assert.Equal("[\"Rainwater\"]", pd.XWateringQualityJson);
+        Assert.Equal("[\"Morning\"]", pd.XWateringPeriodJson);
     }
 
     /// <summary>
