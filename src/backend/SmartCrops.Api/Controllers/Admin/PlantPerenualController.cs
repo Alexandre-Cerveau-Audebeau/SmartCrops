@@ -400,12 +400,38 @@ public class PlantPerenualController : ControllerBase
     /// overwritten by Perenual — Perenual only fills gaps. The
     /// <c>EdibleParts</c> JSON payload is owned by Perenual (no other source
     /// in D1 produces it) and is overwritten unconditionally when present.
+    ///
+    /// <para>Narrow exception to the null-coalesce contract: when the hardiness
+    /// guard fired upstream (<see cref="PerenualEnrichmentResult.HardinessRejectedAsSuspect"/>)
+    /// <em>and</em> the persisted value matches the exact corruption sentinel
+    /// (min == max == 2), we scrub it — repairing rows enriched before PR #70's
+    /// guard landed, which the plain coalesce would otherwise preserve. The
+    /// sentinel check keeps the scrub from destroying valid hardiness set by
+    /// another authoritative source (GBIF / Trefle / Manual), honouring the
+    /// "Perenual is complementary, not authoritative" contract. See issue #71.</para>
     /// </summary>
     private static void ApplyPlantDenormalisation(Plant plant, PerenualEnrichmentResult result)
     {
         // Audit trail (denormalised) — same idempotency rule as PerenualData:
         // preserve the first requestedId we ever recorded for this plant.
         plant.RequestedPerenualId ??= result.RequestedPerenualId;
+
+        // Scope the scrub to the EXACT corruption pattern the guard observed
+        // upstream. Without this sentinel check, valid hardiness set by another
+        // authoritative source (GBIF, Trefle, Manual) would be destroyed every
+        // time Perenual ships the corrupt 2-2 pattern — violating the ADR-0003
+        // "complementary, not authoritative" contract for Perenual.
+        if (result.HardinessRejectedAsSuspect
+            && plant.HardinessZoneMin == 2
+            && plant.HardinessZoneMax == 2)
+        {
+            // Guard fired upstream AND persisted value matches the corrupt
+            // sentinel → positive evidence the persisted value is the same
+            // corruption, not legitimate data from another source. Scrub
+            // safely. See issue #71.
+            plant.HardinessZoneMin = null;
+            plant.HardinessZoneMax = null;
+        }
 
         if (plant.LifeCycle is null) plant.LifeCycle = result.LifeCycle;
         if (plant.GrowthRate is null) plant.GrowthRate = result.GrowthRate;
