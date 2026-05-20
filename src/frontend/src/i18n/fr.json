@@ -345,13 +345,37 @@
       "adminActions": "Actions admin"
     },
     "scientificData": {
-      "comingSoon": "Des mesures scientifiques détaillées (besoins en eau, exposition lumineuse, températures optimales, exigences nutritives, distribution géographique, durée de croissance) seront disponibles dans une prochaine mise à jour.",
+      "comingSoon": "Des mesures scientifiques détaillées (besoins en eau en litres, exposition lumineuse en lumens, exigences nutritives, durée de croissance) seront disponibles dans une prochaine mise à jour.",
+      "title": "Données scientifiques (Perenual Supreme)",
+      "wateringPh": "pH d'arrosage",
+      "wateringIdealTemp": "Température d'arrosage idéale",
+      "sunlightHours": "Ensoleillement quotidien",
+      "temperatureTolerance": "Tolérance de température",
+      "spacing": "Espacement recommandé",
+      "waterQuality": "Qualité d'eau préférée",
+      "wateringPeriod": "Moment d'arrosage",
+      "waterQualityValues": {
+        "rainwater": "Eau de pluie",
+        "distilledWater": "Eau distillée",
+        "reverseOsmosisWater": "Eau osmosée",
+        "springWater": "Eau de source",
+        "wellWater": "Eau de puits",
+        "aquariumWater": "Eau d'aquarium",
+        "pondLakeWater": "Eau d'étang/lac",
+        "alkalineWater": "Eau alcaline",
+        "tapWater": "Eau du robinet",
+        "greywater": "Eaux grises"
+      },
+      "wateringPeriodValues": {
+        "morning": "Matin",
+        "evening": "Soir",
+        "afternoon": "Après-midi",
+        "night": "Nuit"
+      },
       "items": {
         "waterLiters": "Besoin en eau (L/semaine)",
         "lightLumens": "Exposition lumineuse (lumens/jour)",
-        "temperatureRange": "Plage de température optimale (°C)",
         "nutrientsNPK": "Nutriments requis (NPK)",
-        "geoDistribution": "Distribution géographique",
         "daysToGermination": "Jours jusqu'à germination et récolte"
       }
     },

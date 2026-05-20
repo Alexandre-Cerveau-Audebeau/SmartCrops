@@ -345,13 +345,37 @@
       "adminActions": "Admin actions"
     },
     "scientificData": {
-      "comingSoon": "Detailed scientific measurements (water needs, light exposure, optimal temperatures, nutrient requirements, geographic distribution, growth duration) will be available in an upcoming update.",
+      "comingSoon": "Detailed scientific measurements (water needs in litres, light exposure in lumens, nutrient requirements, growth duration) will be available in an upcoming update.",
+      "title": "Scientific data (Perenual Supreme)",
+      "wateringPh": "Watering pH range",
+      "wateringIdealTemp": "Ideal watering temperature",
+      "sunlightHours": "Daily sunlight",
+      "temperatureTolerance": "Temperature tolerance",
+      "spacing": "Recommended spacing",
+      "waterQuality": "Preferred water quality",
+      "wateringPeriod": "Watering time of day",
+      "waterQualityValues": {
+        "rainwater": "Rainwater",
+        "distilledWater": "Distilled water",
+        "reverseOsmosisWater": "Reverse osmosis water",
+        "springWater": "Spring water",
+        "wellWater": "Well water",
+        "aquariumWater": "Aquarium water",
+        "pondLakeWater": "Pond/lake water",
+        "alkalineWater": "Alkaline water",
+        "tapWater": "Tap water",
+        "greywater": "Greywater"
+      },
+      "wateringPeriodValues": {
+        "morning": "Morning",
+        "evening": "Evening",
+        "afternoon": "Afternoon",
+        "night": "Night"
+      },
       "items": {
         "waterLiters": "Water needs (L/week)",
         "lightLumens": "Light exposure (lumens/day)",
-        "temperatureRange": "Optimal temperature range (°C)",
         "nutrientsNPK": "Required nutrients (NPK)",
-        "geoDistribution": "Geographic distribution",
         "daysToGermination": "Days to germination and harvest"
       }
     },

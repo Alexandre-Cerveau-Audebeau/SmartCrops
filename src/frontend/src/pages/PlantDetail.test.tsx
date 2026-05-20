@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { AuthProvider } from '../contexts/AuthContext';
 import { LanguageProvider } from '../contexts/LanguageContext';
-import type { Plant } from '../types/Plant';
+import type { Plant, PlantPerenualData } from '../types/Plant';
 
 vi.mock('../services/plantApi', () => ({
   fetchPlantById: vi.fn(),
@@ -108,6 +108,45 @@ function makePlant(overrides: Partial<Plant> = {}): Plant {
   return { ...base, ...overrides };
 }
 
+function makePerenualData(overrides: Partial<PlantPerenualData> = {}): PlantPerenualData {
+  const base: PlantPerenualData = {
+    id: 'pd-1',
+    perenualId: 728,
+    requestedPerenualId: 728,
+    cultivar: null,
+    perenualType: null,
+    originCountries: null,
+    propagationMethods: null,
+    wateringBenchmark: null,
+    wateringBenchmarkUnit: null,
+    sunlightPreferences: null,
+    pruningMonths: null,
+    maintenance: null,
+    floweringSeason: null,
+    harvestSeason: null,
+    hasEdibleFruit: null,
+    hasEdibleLeaves: null,
+    isCulinary: null,
+    plantAnatomyJson: null,
+    apiVersion: 'v2',
+    hasSupremeData: false,
+    lastSyncAt: '2026-01-01T00:00:00Z',
+    xWateringBasedTempMinC: null,
+    xWateringBasedTempMaxC: null,
+    xWateringPhMin: null,
+    xWateringPhMax: null,
+    xSunlightHoursMin: null,
+    xSunlightHoursMax: null,
+    xTemperatureToleranceMinC: null,
+    xTemperatureToleranceMaxC: null,
+    xPlantSpacingValue: null,
+    xPlantSpacingUnit: null,
+    xWateringQualityJson: null,
+    xWateringPeriodJson: null,
+  };
+  return { ...base, ...overrides };
+}
+
 function renderAtPlant(plant: Plant) {
   vi.mocked(fetchPlantById).mockResolvedValue(plant);
   return render(
@@ -168,6 +207,61 @@ describe('PlantDetail', () => {
   it('always renders the "Scientific data (coming soon)" section regardless of enrichment state', async () => {
     renderAtPlant(makePlant());
     expect(await screen.findByRole('heading', { name: /Scientific data \(coming soon\)/ })).toBeInTheDocument();
+  });
+
+  it('renders Section F.6 when hasSupremeData and at least one xData field is present', async () => {
+    renderAtPlant(
+      makePlant({
+        enrichmentSources: ['Manual', 'GBIF', 'Perenual'],
+        perenualData: makePerenualData({
+          hasSupremeData: true,
+          xWateringBasedTempMinC: 18,
+          xWateringBasedTempMaxC: 24,
+          xWateringQualityJson: '["Rainwater"]',
+        }),
+      }),
+    );
+    expect(
+      await screen.findByRole('heading', { name: /Scientific data \(Perenual Supreme\)/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('18–24°C')).toBeInTheDocument();
+    // Water-quality chip is i18n-labelled via toCamelKey lookup.
+    expect(screen.getByText('Rainwater')).toBeInTheDocument();
+  });
+
+  it('hides individual F.6 rows whose xData field is null', async () => {
+    renderAtPlant(
+      makePlant({
+        perenualData: makePerenualData({
+          hasSupremeData: true,
+          // pH absent, temperature present.
+          xWateringPhMin: null,
+          xWateringPhMax: null,
+          xWateringBasedTempMinC: 18,
+          xWateringBasedTempMaxC: 24,
+        }),
+      }),
+    );
+    await screen.findByRole('heading', { name: /Scientific data \(Perenual Supreme\)/ });
+    expect(screen.queryByText('Watering pH range')).not.toBeInTheDocument();
+    expect(screen.getByText('Ideal watering temperature')).toBeInTheDocument();
+  });
+
+  it('does NOT render Section F.6 when hasSupremeData is true but every xData field is null', async () => {
+    renderAtPlant(makePlant({ perenualData: makePerenualData({ hasSupremeData: true }) }));
+    await screen.findByRole('heading', { name: 'Basil' });
+    expect(
+      screen.queryByRole('heading', { name: /Scientific data \(Perenual Supreme\)/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('drops the temperatureRange and geoDistribution items from the F.5 placeholder', async () => {
+    renderAtPlant(makePlant());
+    await screen.findByRole('heading', { name: 'Basil' });
+    expect(screen.queryByText('Optimal temperature range (°C)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Geographic distribution')).not.toBeInTheDocument();
+    // Kept items still present.
+    expect(screen.getByText('Required nutrients (NPK)')).toBeInTheDocument();
   });
 
   it('hides the Pests section when pests are empty', async () => {

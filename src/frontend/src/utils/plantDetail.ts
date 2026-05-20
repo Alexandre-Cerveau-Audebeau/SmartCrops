@@ -1,4 +1,10 @@
-import type { Plant, PlantCommonName, PlantImage, PlantLongDescription } from '../types/Plant';
+import type {
+  Plant,
+  PlantCommonName,
+  PlantImage,
+  PlantLongDescription,
+  PlantPerenualData,
+} from '../types/Plant';
 
 /**
  * Gallery priority (matches `PlantDetailMapper.ImageTypePriority` server-side).
@@ -189,4 +195,87 @@ export function groupCommonNamesByLanguage(
     return a.localeCompare(b);
   });
   return new Map(entries);
+}
+
+// ── Perenual Supreme xData (Section F.6, Sprint 1.5 PR B) ──────────────────
+
+/**
+ * Format a numeric xData range for Section F.6. Distinct from {@link formatRange}:
+ * uses a trailing `+` for half-open ranges (Perenual ships `max=""` frequently)
+ * and an em-dash (U+2013) separator.
+ *
+ * - `formatXDataRange(6, 8, '°C')` → `'6–8°C'`
+ * - `formatXDataRange(6, null, ' h')` → `'6+ h'` (half-open)
+ * - `formatXDataRange(null, 30, '°C')` → `'≤30°C'` (defensive, rare)
+ * - `formatXDataRange(18, 18, '°C')` → `'18°C'` (equal bounds collapse)
+ * - `formatXDataRange(null, null)` → `null` (caller hides the row)
+ */
+export function formatXDataRange(
+  min: number | null,
+  max: number | null,
+  suffix = '',
+): string | null {
+  if (min === null && max === null) return null;
+  if (min !== null && max === null) return `${min}+${suffix}`;
+  if (min === null && max !== null) return `≤${max}${suffix}`;
+  if (min === max) return `${min}${suffix}`;
+  return `${min}–${max}${suffix}`;
+}
+
+/**
+ * Parse a JSON-array string column (e.g. `xWateringQualityJson`) into a
+ * `string[]`. Returns `null` on null/empty/malformed input or an empty/non-array
+ * payload, so the caller can skip rendering the row entirely.
+ */
+export function parseStringArrayJson(json: string | null): string[] | null {
+  if (!json) return null;
+  try {
+    const parsed: unknown = JSON.parse(json);
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    const strings = parsed.filter((item): item is string => typeof item === 'string');
+    return strings.length === 0 ? null : strings;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compose a plant-spacing display value. Returns `null` unless BOTH the value
+ * and unit are present — a bare number has no meaningful display.
+ */
+export function formatPlantSpacing(value: number | null, unit: string | null): string | null {
+  if (value === null || !unit) return null;
+  return `${value} ${unit}`;
+}
+
+/**
+ * True when at least one Perenual Supreme xData field carries a value — the cue
+ * for whether Section F.6 is worth rendering at all (an empty section is worse
+ * than no section).
+ */
+export function hasAnyXData(pd: PlantPerenualData): boolean {
+  return (
+    pd.xWateringBasedTempMinC !== null ||
+    pd.xWateringBasedTempMaxC !== null ||
+    pd.xWateringPhMin !== null ||
+    pd.xWateringPhMax !== null ||
+    pd.xSunlightHoursMin !== null ||
+    pd.xSunlightHoursMax !== null ||
+    pd.xTemperatureToleranceMinC !== null ||
+    pd.xTemperatureToleranceMaxC !== null ||
+    pd.xPlantSpacingValue !== null ||
+    pd.xPlantSpacingUnit !== null ||
+    parseStringArrayJson(pd.xWateringQualityJson) !== null ||
+    parseStringArrayJson(pd.xWateringPeriodJson) !== null
+  );
+}
+
+/**
+ * Map a raw Perenual label (e.g. `"Reverse Osmosis Water"`, `"Pond/Lake Water"`)
+ * to its camelCase i18n key (`reverseOsmosisWater`, `pondLakeWater`). Whitespace
+ * and slashes are stripped; the first character is lower-cased. Callers pass the
+ * raw label as the i18n fallback so unknown values still render.
+ */
+export function toCamelKey(label: string): string {
+  return label.replace(/[\s/]+/g, '').replace(/^./, (c) => c.toLowerCase());
 }
