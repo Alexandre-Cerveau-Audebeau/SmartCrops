@@ -104,6 +104,7 @@ public sealed class StubPlantPerenualEnrichmentService : IPlantPerenualEnrichmen
         Pests: Array.Empty<PerenualPest>(),
         LongDescriptionEn: null,
         HardinessRejectedAsSuspect: false,
+        IsCanonicalMismatchDangerous: false,
         MatchType: "NONE");
 
     public Task<PerenualEnrichmentResult> ResolveAsync(string scientificName, CancellationToken ct)

@@ -92,23 +92,44 @@ public class PlantPerenualController : ControllerBase
         // ADR-0003 dual-write — five targets, one transaction. A CHECK or
         // unique-index violation anywhere rolls all writes back, preserving
         // the previous (consistent) state.
+        //
+        // When Perenual canonicalised the requested id to a likely-different
+        // species (IsCanonicalMismatchDangerous), every payload-derived
+        // DESTRUCTIVE write would persist wrong-species data: the four
+        // delete-then-insert / upsert-URL targets are skipped. The
+        // PlantPerenualData audit row (keeps RawResponseJson for diagnosis) and
+        // the null-coalesced scalar denormalisation (gap-fill only, often
+        // genus-shared, never overwrites curated values) are still applied.
+        // See issue #73.
+        var skipWrongSpeciesWrites = result.IsCanonicalMismatchDangerous;
+
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
         UpsertPerenualData(plant, result);
-        await ReplacePerenualImagesAsync(plantId, result.Images, ct);
-        await ReplacePerenualPestsAsync(plantId, result.Pests, ct);
-        await ReplacePerenualLongDescriptionAsync(plantId, result.LongDescriptionEn, ct);
-        await UpsertPerenualSourceAsync(plantId, result.PerenualId.Value, ct);
+        if (!skipWrongSpeciesWrites)
+        {
+            await ReplacePerenualImagesAsync(plantId, result.Images, ct);
+            await ReplacePerenualPestsAsync(plantId, result.Pests, ct);
+            await ReplacePerenualLongDescriptionAsync(plantId, result.LongDescriptionEn, ct);
+            await UpsertPerenualSourceAsync(plantId, result.PerenualId.Value, ct);
+        }
         ApplyPlantDenormalisation(plant, result);
 
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
+        // Report what was actually persisted, not what the payload offered —
+        // the skip branch writes none of the three collections (issue #73).
+        var imagesAdded = skipWrongSpeciesWrites ? 0 : result.Images.Count;
+        var pestsAdded = skipWrongSpeciesWrites ? 0 : result.Pests.Count;
+        var longDescriptionsAdded =
+            skipWrongSpeciesWrites || result.LongDescriptionEn is null ? 0 : 1;
+
         _logger.LogInformation(
-            "Perenual-enriched plant {PlantId}: id={PerenualId} cultivar={Cultivar} images={Images} pests={Pests} longDescriptions={Descs} supreme={Supreme}",
+            "Perenual-enriched plant {PlantId}: id={PerenualId} cultivar={Cultivar} images={Images} pests={Pests} longDescriptions={Descs} supreme={Supreme} mismatchSkipped={MismatchSkipped}",
             plantId, result.PerenualId, result.Cultivar,
-            result.Images.Count, result.Pests.Count,
-            result.LongDescriptionEn is null ? 0 : 1, result.HasSupremeData);
+            imagesAdded, pestsAdded, longDescriptionsAdded,
+            result.HasSupremeData, skipWrongSpeciesWrites);
 
         if (result.HardinessRejectedAsSuspect)
         {
@@ -119,15 +140,26 @@ public class PlantPerenualController : ControllerBase
                 plantId, result.PerenualId);
         }
 
+        if (skipWrongSpeciesWrites)
+        {
+            // Structured warning mirroring the hardiness-guard pattern: the
+            // operator can correlate per-plant and decide whether to remap the
+            // requested id. Both ids logged so the divergence is visible.
+            _logger.LogWarning(
+                "Perenual canonical id mismatch for plant {PlantId}: requested {RequestedPerenualId} but response.id was {PerenualId} (server-side canonicalisation to a likely different species). Skipped images/pests/long-description/source-URL writes; gap-fill scalars + audit row kept. See issue #73.",
+                plantId, result.RequestedPerenualId, result.PerenualId);
+        }
+
         return Ok(new EnrichMatchedResponse(
             Matched: true,
             PerenualId: result.PerenualId.Value,
             PerenualScientificName: result.CanonicalScientificName,
-            ImagesAdded: result.Images.Count,
-            PestsAdded: result.Pests.Count,
-            LongDescriptionsAdded: result.LongDescriptionEn is null ? 0 : 1,
+            ImagesAdded: imagesAdded,
+            PestsAdded: pestsAdded,
+            LongDescriptionsAdded: longDescriptionsAdded,
             IsExactScientificMatch: IsExactMatch(plant.ScientificName, result.CanonicalScientificName),
-            HasSupremeData: result.HasSupremeData));
+            HasSupremeData: result.HasSupremeData,
+            CanonicalMismatchSkipped: skipWrongSpeciesWrites));
     }
 
     /// <summary>
@@ -484,7 +516,11 @@ public class PlantPerenualController : ControllerBase
         int PestsAdded,
         int LongDescriptionsAdded,
         bool IsExactScientificMatch,
-        bool HasSupremeData);
+        bool HasSupremeData,
+        // True when a Perenual canonical-id mismatch caused the four
+        // destructive wrong-species writes to be skipped (issue #73). Lets the
+        // admin UI surface a distinct toast. Defaults false on the happy path.
+        bool CanonicalMismatchSkipped = false);
 
     public record EnrichNoMatchResponse(bool Matched, string MatchType, string Reason);
 

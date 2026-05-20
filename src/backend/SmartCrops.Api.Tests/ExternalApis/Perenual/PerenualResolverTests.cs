@@ -507,6 +507,78 @@ public class PerenualResolverTests
         Assert.True(result.HardinessRejectedAsSuspect);
         Assert.Null(result.HardinessZoneMin);
         Assert.Null(result.HardinessZoneMax);
+        // Free coverage: this fixture (id 8758 ≠ requested 8759) is also the
+        // canonical-mismatch case from issue #73 — the flag must fire here too.
+        Assert.True(result.IsCanonicalMismatchDangerous);
+    }
+
+    // ── Canonical id mismatch (issue #73) ─────────────────────────────────
+
+    /// <summary>
+    /// Issue #73: when Perenual canonicalises the requested id to a different
+    /// <c>response.id</c>, the payload may belong to a merged/different species.
+    /// Detection is on the id mismatch ALONE (Q2 audit showed the payload's
+    /// <c>scientific_name</c> can falsely match), so the flag fires regardless
+    /// of name agreement.
+    /// </summary>
+    [Fact]
+    public void Resolve_CanonicalIdMismatch_SetsFlag()
+    {
+        var response = new PerenualSpeciesResponse
+        {
+            Id = 8758,
+            // Same name as the request — Perenual's inconsistent record. Name
+            // comparison would NOT catch this; the id mismatch does.
+            ScientificName = ["Solanum lycopersicum"],
+        };
+
+        var result = Resolver.Resolve(response, "{}", requestedPerenualId: 8759);
+
+        Assert.True(result.IsCanonicalMismatchDangerous);
+    }
+
+    /// <summary>Happy path: <c>response.id</c> equals the requested id → no mismatch.</summary>
+    [Fact]
+    public void Resolve_CanonicalIdMatch_FlagFalse()
+    {
+        var response = new PerenualSpeciesResponse
+        {
+            Id = 728,
+            ScientificName = ["Aloe vera"],
+        };
+
+        var result = Resolver.Resolve(response, "{}", requestedPerenualId: 728);
+
+        Assert.False(result.IsCanonicalMismatchDangerous);
+    }
+
+    /// <summary>NoMatch (null response) has no canonical id to compare → flag false.</summary>
+    [Fact]
+    public void Resolve_NoMatchResponse_FlagFalse()
+    {
+        var result = Resolver.Resolve(null, "raw", requestedPerenualId: 8759);
+
+        Assert.Equal("NONE", result.MatchType);
+        Assert.False(result.IsCanonicalMismatchDangerous);
+    }
+
+    /// <summary>
+    /// Edge case: a null <c>requestedPerenualId</c> (no id was asked for) means
+    /// there is nothing to compare against, so no mismatch is detectable even
+    /// when the response carries an id.
+    /// </summary>
+    [Fact]
+    public void Resolve_NullRequestedPerenualId_FlagFalse()
+    {
+        var response = new PerenualSpeciesResponse
+        {
+            Id = 8758,
+            ScientificName = ["Solanum lycopersicum"],
+        };
+
+        var result = Resolver.Resolve(response, "{}", requestedPerenualId: null);
+
+        Assert.False(result.IsCanonicalMismatchDangerous);
     }
 
     /// <summary>

@@ -79,6 +79,17 @@ public record PerenualEnrichmentResult(
     // controller logs a warning when this fires. See issue #66.
     bool HardinessRejectedAsSuspect,
 
+    // True when Perenual canonicalised the requested id server-side to a
+    // DIFFERENT id (response.id != requestedPerenualId). Perenual has been
+    // observed shipping internally-inconsistent merged records (e.g. id 8758
+    // reports scientific_name "Solanum lycopersicum" but serves Solanum
+    // dulcamara images), so a name comparison is not a reliable detector — the
+    // id mismatch itself is. When set, the controller skips every destructive
+    // wrong-species write (images, pests, long-description, source URL) and
+    // keeps only the gap-fill scalar denormalisation + audit row. See issues
+    // #73 and #67.
+    bool IsCanonicalMismatchDangerous,
+
     string MatchType);
 
 /// <summary>An image returned by Perenual, ready for insert into <c>PlantImage</c>.</summary>

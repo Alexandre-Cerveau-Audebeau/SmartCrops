@@ -101,6 +101,12 @@ public partial class PerenualResolver
         }
 
         var canonicalName = response.ScientificName?.FirstOrDefault();
+        // Server-side canonicalisation: when the id Perenual returns differs
+        // from the one we asked for, the payload may belong to a different
+        // (merged/duplicate) species. We flag on the id mismatch alone — NOT a
+        // name comparison, which Perenual's inconsistent records defeat (see
+        // PerenualEnrichmentResult.IsCanonicalMismatchDangerous + issue #73).
+        var canonicalMismatch = requestedPerenualId is int reqId && response.Id != reqId;
         var hardinessSuspect = IsHardinessSuspect(response.Hardiness);
         // Guard fired → drop the (almost certainly wrong) values. The controller
         // gets a flag in the result and emits a structured warning post-commit.
@@ -165,6 +171,7 @@ public partial class PerenualResolver
             LongDescriptionEn: NullIfBlank(response.Description),
 
             HardinessRejectedAsSuspect: hardinessSuspect,
+            IsCanonicalMismatchDangerous: canonicalMismatch,
             MatchType: "EXACT");
     }
 
@@ -220,6 +227,8 @@ public partial class PerenualResolver
         Pests: Array.Empty<PerenualPest>(),
         LongDescriptionEn: null,
         HardinessRejectedAsSuspect: false,
+        // No response → no canonical id to compare → no detectable mismatch.
+        IsCanonicalMismatchDangerous: false,
         MatchType: "NONE");
 
     // ── Parsing helpers ───────────────────────────────────────────────────
