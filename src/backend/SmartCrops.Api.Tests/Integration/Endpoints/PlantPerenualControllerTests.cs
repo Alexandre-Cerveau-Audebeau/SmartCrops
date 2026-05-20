@@ -80,6 +80,114 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Assert.Empty(Fixture.PerenualStub.ReceivedIds);
     }
 
+    /// <summary>
+    /// Verify the issue #67 workaround end-to-end: when Perenual canonicalises
+    /// server-side (e.g. requested 8759 ↦ response.id 8758), both
+    /// <c>Plant.RequestedPerenualId</c> (denormalised) and
+    /// <c>PlantPerenualData.RequestedPerenualId</c> (audit) record the
+    /// originally-requested id so user-facing URLs can land on the correct page.
+    /// </summary>
+    [Fact]
+    public async Task Enrich_PersistsRequestedPerenualIdDistinctFromCanonical()
+    {
+        // Exercises issue #67's workaround: when Perenual canonicalises an id
+        // server-side (e.g. requested 8759 → response.id 8758), the audit
+        // trail must record both — denormalised on Plant.RequestedPerenualId
+        // for fast query and on PlantPerenualData.RequestedPerenualId for the
+        // source-of-truth view.
+        var plantId = await SeedPlantAsync("Solanum lycopersicum");
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 8758,
+            requestedPerenualId: 8759,
+            canonicalName: "Solanum lycopersicum"));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(
+            $"/api/admin/perenual/enrich/{plantId}?perenualId=8759", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        Assert.Equal(8759, plant.RequestedPerenualId);
+
+        var perenualData = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+        Assert.Equal(8758, perenualData.PerenualId);
+        Assert.Equal(8759, perenualData.RequestedPerenualId);
+    }
+
+    /// <summary>
+    /// Verifies the <c>??=</c> first-writer-wins contract on
+    /// <c>RequestedPerenualId</c> (design decision #3 from Sprint 1.5 PR A
+    /// audit): re-enriching with a different requestedPerenualId must NOT
+    /// overwrite the original — the audit trail of "what we ASKED for first"
+    /// is immutable. Pins this contract against accidental refactors
+    /// (<c>??=</c> → <c>=</c>). The canonical <c>PerenualId</c>, by contrast,
+    /// always reflects the latest response.
+    /// </summary>
+    [Fact]
+    public async Task Enrich_RequestedPerenualId_FirstWriterWinsOnReEnrich()
+    {
+        var plantId = await SeedPlantAsync("Solanum lycopersicum");
+        AuthAsAnyUser();
+
+        // (1) Initial enrich — requested 8759 canonicalises to 8758.
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 8758,
+            requestedPerenualId: 8759,
+            canonicalName: "Solanum lycopersicum"));
+        var first = await Client.PostAsync(
+            $"/api/admin/perenual/enrich/{plantId}?perenualId=8759", null);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        await AssertRequestedIdAsync(plantId, expectedRequested: 8759, expectedCanonical: 8758);
+
+        // (2) Re-enrich with the SAME requested id — idempotent, no change.
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 8758,
+            requestedPerenualId: 8759,
+            canonicalName: "Solanum lycopersicum"));
+        var second = await Client.PostAsync(
+            $"/api/admin/perenual/enrich/{plantId}?perenualId=8759&force=true", null);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+        await AssertRequestedIdAsync(plantId, expectedRequested: 8759, expectedCanonical: 8758);
+
+        // (3) Re-enrich with a DIFFERENT requested id (9999 → canonical 10000).
+        // RequestedPerenualId must stay 8759 (first-writer-wins); the canonical
+        // PerenualId tracks the latest response (10000).
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 10000,
+            requestedPerenualId: 9999,
+            canonicalName: "Solanum lycopersicum"));
+        var third = await Client.PostAsync(
+            $"/api/admin/perenual/enrich/{plantId}?perenualId=9999&force=true", null);
+        Assert.Equal(HttpStatusCode.OK, third.StatusCode);
+
+        await AssertRequestedIdAsync(plantId, expectedRequested: 8759, expectedCanonical: 10000);
+    }
+
+    /// <summary>
+    /// Fetch the plant + its Perenual data in a fresh scope and assert the
+    /// requested id (immutable audit) and canonical id (latest response) on
+    /// both the denormalised <c>Plant</c> column and the <c>PlantPerenualData</c>
+    /// row. Used by the first-writer-wins test to re-read after each enrich.
+    /// </summary>
+    private async Task AssertRequestedIdAsync(Guid plantId, int expectedRequested, int expectedCanonical)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        Assert.Equal(expectedRequested, plant.RequestedPerenualId);
+
+        var data = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+        Assert.Equal(expectedRequested, data.RequestedPerenualId);
+        Assert.Equal(expectedCanonical, data.PerenualId);
+    }
+
     [Fact]
     public async Task Enrich_Match_PerformsFullDualWrite()
     {
@@ -495,8 +603,11 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         int? hardinessMax = 9,
         IReadOnlyList<PerenualImage>? images = null,
         IReadOnlyList<PerenualPest>? pests = null,
-        string? longDescriptionEn = "Test description") => new(
+        string? longDescriptionEn = "Test description",
+        int? requestedPerenualId = null,
+        bool hardinessRejectedAsSuspect = false) => new(
             PerenualId: perenualId,
+            RequestedPerenualId: requestedPerenualId ?? perenualId,
             Cultivar: cultivar,
             PerenualType: perenualType,
             CanonicalScientificName: canonicalName ?? "Aloe vera",
@@ -539,6 +650,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             Images: images ?? Array.Empty<PerenualImage>(),
             Pests: pests ?? Array.Empty<PerenualPest>(),
             LongDescriptionEn: longDescriptionEn,
+            HardinessRejectedAsSuspect: hardinessRejectedAsSuspect,
             MatchType: "EXACT");
 
     private record MatchedDto(

@@ -14,8 +14,19 @@ public class PlantPerenualData : IHasUpdatedAt
     public Guid PlantId { get; set; }
     public Plant Plant { get; set; } = null!;
 
-    /// <summary>Perenual numeric ID — the upstream primary key.</summary>
+    /// <summary>Perenual numeric ID — the upstream primary key (canonical, as
+    /// returned by <c>response.id</c>).</summary>
     public int PerenualId { get; set; }
+
+    /// <summary>
+    /// Id originally passed to <c>/species/details/{id}</c> on the call that
+    /// produced this row. Differs from <see cref="PerenualId"/> when Perenual
+    /// canonicalises server-side (cf. issue #67). Set on every enrichment;
+    /// preserved by the controller's idempotent denormalisation so the audit
+    /// trail records the *first* id we knew about for this plant. Rows
+    /// enriched before this column existed stay <c>null</c>.
+    /// </summary>
+    public int? RequestedPerenualId { get; set; }
 
     /// <summary>Cultivar name (e.g. "Sungold").</summary>
     public string? Cultivar { get; set; }

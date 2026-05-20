@@ -110,6 +110,15 @@ public class PlantPerenualController : ControllerBase
             result.Images.Count, result.Pests.Count,
             result.LongDescriptionEn is null ? 0 : 1, result.HasSupremeData);
 
+        if (result.HardinessRejectedAsSuspect)
+        {
+            // Structured warning so the operator can correlate per-plant in the
+            // log stream and decide whether to widen the guard. See issue #66.
+            _logger.LogWarning(
+                "Perenual hardiness rejected as suspect for plant {PlantId} (perenualId {PerenualId}); upstream value min==max==2 likely corrupt, hardiness left null. See issue #66.",
+                plantId, result.PerenualId);
+        }
+
         return Ok(new EnrichMatchedResponse(
             Matched: true,
             PerenualId: result.PerenualId.Value,
@@ -206,6 +215,7 @@ public class PlantPerenualController : ControllerBase
             {
                 PlantId = plant.Id,
                 PerenualId = result.PerenualId!.Value,
+                RequestedPerenualId = result.RequestedPerenualId,
                 Cultivar = result.Cultivar,
                 PerenualType = result.PerenualType,
                 OriginCountries = result.OriginCountries,
@@ -231,6 +241,10 @@ public class PlantPerenualController : ControllerBase
         else
         {
             plant.PerenualData.PerenualId = result.PerenualId!.Value;
+            // Audit trail — only set the requestedId on the first enrichment so
+            // the original "what did we ASK for" record survives later re-runs
+            // that might be triggered with a different id.
+            plant.PerenualData.RequestedPerenualId ??= result.RequestedPerenualId;
             plant.PerenualData.Cultivar = result.Cultivar;
             plant.PerenualData.PerenualType = result.PerenualType;
             plant.PerenualData.OriginCountries = result.OriginCountries;
@@ -389,6 +403,10 @@ public class PlantPerenualController : ControllerBase
     /// </summary>
     private static void ApplyPlantDenormalisation(Plant plant, PerenualEnrichmentResult result)
     {
+        // Audit trail (denormalised) — same idempotency rule as PerenualData:
+        // preserve the first requestedId we ever recorded for this plant.
+        plant.RequestedPerenualId ??= result.RequestedPerenualId;
+
         if (plant.LifeCycle is null) plant.LifeCycle = result.LifeCycle;
         if (plant.GrowthRate is null) plant.GrowthRate = result.GrowthRate;
         if (plant.WateringNeedLevel is null) plant.WateringNeedLevel = result.WateringNeed;

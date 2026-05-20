@@ -430,7 +430,7 @@ public class PerenualResolverTests
     [Fact]
     public void Resolve_NullResponseReturnsNoMatch()
     {
-        var result = Resolver.Resolve(null, "raw");
+        var result = Resolver.Resolve(null, "raw", requestedPerenualId: null);
 
         Assert.Null(result.PerenualId);
         Assert.Equal("NONE", result.MatchType);
@@ -438,6 +438,7 @@ public class PerenualResolverTests
         Assert.Empty(result.Images);
         Assert.Empty(result.Pests);
         Assert.Null(result.LongDescriptionEn);
+        Assert.False(result.HardinessRejectedAsSuspect);
     }
 
     [Fact]
@@ -461,9 +462,10 @@ public class PerenualResolverTests
             Description = "Succulent plant.",
         };
 
-        var result = Resolver.Resolve(response, "{}");
+        var result = Resolver.Resolve(response, "{}", requestedPerenualId: 728);
 
         Assert.Equal(728, result.PerenualId);
+        Assert.Equal(728, result.RequestedPerenualId);
         Assert.Equal("Aloe vera", result.CanonicalScientificName);
         Assert.Equal("EXACT", result.MatchType);
         Assert.Equal(PlantLifeCycle.Perennial, result.LifeCycle);
@@ -475,8 +477,83 @@ public class PerenualResolverTests
         Assert.False(result.IsEdible);
         Assert.Equal(9, result.HardinessZoneMin);
         Assert.Equal(11, result.HardinessZoneMax);
+        Assert.False(result.HardinessRejectedAsSuspect);
         Assert.Equal(2, result.Pests.Count);
         Assert.Equal("Succulent plant.", result.LongDescriptionEn);
+    }
+
+    // ── Hardiness suspect guard (issue #66) ───────────────────────────────
+
+    /// <summary>
+    /// Direct evidence pattern from the tomato canonicalisation incident:
+    /// requesting <c>/species/details/8759</c> returns the Solanum dulcamara
+    /// entry (id 8758) which ships <c>{min:"2", max:"2"}</c>. The guard drops
+    /// the values and flags <c>HardinessRejectedAsSuspect</c>.
+    /// </summary>
+    [Fact]
+    public void Resolve_HardinessMinMax2_RejectsAsSuspectAndDropsValues()
+    {
+        // Direct evidence pattern from the Solanum dulcamara entry (Perenual id
+        // 8758) that the /species/details/8759 tomato request canonicalises into.
+        var response = new PerenualSpeciesResponse
+        {
+            Id = 8758,
+            ScientificName = ["Solanum lycopersicum"],
+            Hardiness = new PerenualHardinessDto { Min = "2", Max = "2" },
+        };
+
+        var result = Resolver.Resolve(response, "{}", requestedPerenualId: 8759);
+
+        Assert.True(result.HardinessRejectedAsSuspect);
+        Assert.Null(result.HardinessZoneMin);
+        Assert.Null(result.HardinessZoneMax);
+    }
+
+    /// <summary>
+    /// Sanity that legitimate USDA bands (Aloe vera 9-11) keep their values
+    /// untouched — the guard is opt-in to a single observed corruption
+    /// pattern, not a general post-filter.
+    /// </summary>
+    [Fact]
+    public void Resolve_HardinessNormalRange_DoesNotTriggerGuard()
+    {
+        var response = new PerenualSpeciesResponse
+        {
+            Id = 728,
+            ScientificName = ["Aloe vera"],
+            Hardiness = new PerenualHardinessDto { Min = "9a", Max = "11" },
+        };
+
+        var result = Resolver.Resolve(response, "{}", requestedPerenualId: 728);
+
+        Assert.False(result.HardinessRejectedAsSuspect);
+        Assert.Equal(9, result.HardinessZoneMin);
+        Assert.Equal(11, result.HardinessZoneMax);
+    }
+
+    /// <summary>
+    /// Anti-generalisation contract test. Zone 3-3 is a real alpine band and
+    /// must survive even though it shares the <c>min == max</c> shape with
+    /// the rejected zone 2-2 pattern.
+    /// </summary>
+    [Fact]
+    public void Resolve_HardinessMinMax3_DoesNotGeneraliseGuard()
+    {
+        // Sanity that the guard is stricty {min:"2", max:"2"} — other
+        // single-zone bands (zone 3, zone 5, …) are NOT rejected because we
+        // only have evidence the upstream record is wrong for the {2,2} case.
+        var response = new PerenualSpeciesResponse
+        {
+            Id = 999,
+            ScientificName = ["Picea glauca"],
+            Hardiness = new PerenualHardinessDto { Min = "3", Max = "3" },
+        };
+
+        var result = Resolver.Resolve(response, "{}", requestedPerenualId: 999);
+
+        Assert.False(result.HardinessRejectedAsSuspect);
+        Assert.Equal(3, result.HardinessZoneMin);
+        Assert.Equal(3, result.HardinessZoneMax);
     }
 
     // ── Enum parsers ──────────────────────────────────────────────────────

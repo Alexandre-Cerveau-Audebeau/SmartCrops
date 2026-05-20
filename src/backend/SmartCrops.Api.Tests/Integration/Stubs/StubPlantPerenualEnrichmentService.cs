@@ -60,6 +60,7 @@ public sealed class StubPlantPerenualEnrichmentService : IPlantPerenualEnrichmen
 
     public static PerenualEnrichmentResult NoMatch() => new(
         PerenualId: null,
+        RequestedPerenualId: null,
         Cultivar: null,
         PerenualType: null,
         CanonicalScientificName: null,
@@ -102,6 +103,7 @@ public sealed class StubPlantPerenualEnrichmentService : IPlantPerenualEnrichmen
         Images: Array.Empty<PerenualImage>(),
         Pests: Array.Empty<PerenualPest>(),
         LongDescriptionEn: null,
+        HardinessRejectedAsSuspect: false,
         MatchType: "NONE");
 
     public Task<PerenualEnrichmentResult> ResolveAsync(string scientificName, CancellationToken ct)

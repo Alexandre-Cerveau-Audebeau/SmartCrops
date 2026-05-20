@@ -193,6 +193,7 @@ public static class PlantDetailMapper
                 : new PlantPerenualDataDto(
                     plant.PerenualData.Id,
                     plant.PerenualData.PerenualId,
+                    plant.PerenualData.RequestedPerenualId,
                     plant.PerenualData.Cultivar,
                     plant.PerenualData.PerenualType,
                     plant.PerenualData.OriginCountries,

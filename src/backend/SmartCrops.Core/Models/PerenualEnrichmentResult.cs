@@ -21,6 +21,7 @@ namespace SmartCrops.Core.Models;
 /// </summary>
 public record PerenualEnrichmentResult(
     int? PerenualId,
+    int? RequestedPerenualId,
     string? Cultivar,
     string? PerenualType,
     string? CanonicalScientificName,
@@ -71,6 +72,12 @@ public record PerenualEnrichmentResult(
     IReadOnlyList<PerenualImage> Images,
     IReadOnlyList<PerenualPest> Pests,
     string? LongDescriptionEn,
+
+    // True when ParseHardiness rejected an upstream pattern as a suspected
+    // data-corruption artefact (currently: {min:"2", max:"2"}, observed on the
+    // Solanum dulcamara entry that 8759/Tomato canonicalises into). The
+    // controller logs a warning when this fires. See issue #66.
+    bool HardinessRejectedAsSuspect,
 
     string MatchType);
 

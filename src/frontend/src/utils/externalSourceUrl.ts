@@ -5,17 +5,30 @@
  * link. We rewrite the well-known patterns to the upstream's public
  * species page at render time; the database column stays untouched.
  *
- * <ul>
- *   <li>GBIF: <c>api.gbif.org/v1/species/{id}</c> → <c>www.gbif.org/species/{id}</c></li>
- *   <li>Perenual: <c>perenual.com/api/v{n}/species/details/{id}</c> →
- *       <c>perenual.com/plant-species-database-search-finder/species/{id}</c></li>
- * </ul>
+ * Recognised rewrites:
+ * - **GBIF**: `api.gbif.org/v1/species/{id}` → `www.gbif.org/species/{id}`
+ * - **Perenual**: `perenual.com/api/v{n}/species/details/{id}` →
+ *   `perenual.com/plant-species-database-search-finder/species/{id}`
  *
  * Unrecognised inputs pass through unchanged — better than dropping the
  * link entirely; the caller can use {@link isUserFacingUrl} to filter
  * out the API-looking residue when rendering.
+ *
+ * @param apiUrl
+ *   Raw API URL persisted on the source row, or `null` / `undefined` when
+ *   the source has no URL (returns `null` in that case).
+ * @param explicitPerenualId
+ *   Optional override for the id used in Perenual rewrites. Pass the
+ *   plant's `requestedPerenualId` here so links land on the species page
+ *   we originally asked about — not the canonical id Perenual rewrote to
+ *   server-side (issue #67). Falsy, non-integer, zero or negative values
+ *   are silently ignored and the helper falls back to the id embedded in
+ *   `apiUrl`. The override is intentionally ignored on non-Perenual URLs.
  */
-export function toUserFacingUrl(apiUrl: string | null | undefined): string | null {
+export function toUserFacingUrl(
+  apiUrl: string | null | undefined,
+  explicitPerenualId?: number | null,
+): string | null {
   if (!apiUrl) return null;
 
   const gbifMatch = apiUrl.match(/^https?:\/\/api\.gbif\.org\/v1\/species\/(\d+)/i);
@@ -27,7 +40,22 @@ export function toUserFacingUrl(apiUrl: string | null | undefined): string | nul
     /^https?:\/\/perenual\.com\/api\/v\d+\/species\/details\/(\d+)/i,
   );
   if (perenualMatch) {
-    return `https://perenual.com/plant-species-database-search-finder/species/${perenualMatch[1]}`;
+    // Prefer the caller-supplied id (typically `plant.perenualData.requestedPerenualId`)
+    // over the one embedded in the persisted API URL. The two diverge when
+    // Perenual canonicalises server-side (e.g. tomato request 8759 →
+    // response.id 8758 = Solanum dulcamara), and the requested id is what
+    // lands on the correct species page.
+    //
+    // Guard against malformed explicit ids (NaN, 0, negative, non-integer) —
+    // defense in depth even though the param normally comes from a nullable
+    // int? backend column. A future regression producing a broken value
+    // shouldn't generate Perenual links pointing at /species/NaN.
+    const validExplicit =
+      typeof explicitPerenualId === 'number' &&
+      Number.isInteger(explicitPerenualId) &&
+      explicitPerenualId > 0;
+    const id = validExplicit ? explicitPerenualId : perenualMatch[1];
+    return `https://perenual.com/plant-species-database-search-finder/species/${id}`;
   }
 
   return apiUrl;

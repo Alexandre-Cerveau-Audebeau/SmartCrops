@@ -83,15 +83,30 @@ public partial class PerenualResolver
     /// A <c>null</c> response collapses to a NONE result with empty collections
     /// so the controller can rely on a stable shape.
     /// </summary>
-    public PerenualEnrichmentResult Resolve(PerenualSpeciesResponse? response, string rawJson)
+    /// <param name="requestedPerenualId">
+    /// Id originally passed to <c>/species/details/{id}</c> on the call that
+    /// produced <paramref name="response"/>. Surfaces in
+    /// <see cref="PerenualEnrichmentResult.RequestedPerenualId"/> so the
+    /// controller can persist the audit trail when Perenual canonicalises
+    /// server-side (cf. issue #67).
+    /// </param>
+    public PerenualEnrichmentResult Resolve(
+        PerenualSpeciesResponse? response,
+        string rawJson,
+        int? requestedPerenualId)
     {
         if (response is null)
         {
-            return NoMatch(rawJson);
+            return NoMatch(rawJson, requestedPerenualId);
         }
 
         var canonicalName = response.ScientificName?.FirstOrDefault();
-        var hardiness = ParseHardiness(response.Hardiness);
+        var hardinessSuspect = IsHardinessSuspect(response.Hardiness);
+        // Guard fired → drop the (almost certainly wrong) values. The controller
+        // gets a flag in the result and emits a structured warning post-commit.
+        var hardiness = hardinessSuspect
+            ? (Min: (int?)null, Max: (int?)null)
+            : ParseHardiness(response.Hardiness);
         var heights = ConvertHeightToCm(response.Dimensions);
         var watering = ExtractWateringBenchmark(response.WateringGeneralBenchmark);
         var ediblePartsJson = SerialiseEdibleParts(response.EdibleFruit, response.EdibleLeaf);
@@ -101,6 +116,7 @@ public partial class PerenualResolver
 
         return new PerenualEnrichmentResult(
             PerenualId: response.Id,
+            RequestedPerenualId: requestedPerenualId,
             Cultivar: NullIfBlank(response.Cultivar),
             PerenualType: NullIfBlank(response.Type),
             CanonicalScientificName: canonicalName,
@@ -148,16 +164,19 @@ public partial class PerenualResolver
             Pests: pests,
             LongDescriptionEn: NullIfBlank(response.Description),
 
+            HardinessRejectedAsSuspect: hardinessSuspect,
             MatchType: "EXACT");
     }
 
     /// <summary>
     /// Empty-collection NONE result for the no-match path. Keeps the
     /// controller's per-field dispatch logic uniform — callers always see a
-    /// non-null record.
+    /// non-null record. <paramref name="requestedPerenualId"/> is preserved
+    /// so the audit trail still records what we tried to fetch, even on a miss.
     /// </summary>
-    public static PerenualEnrichmentResult NoMatch(string rawJson) => new(
+    public static PerenualEnrichmentResult NoMatch(string rawJson, int? requestedPerenualId = null) => new(
         PerenualId: null,
+        RequestedPerenualId: requestedPerenualId,
         Cultivar: null,
         PerenualType: null,
         CanonicalScientificName: null,
@@ -200,6 +219,7 @@ public partial class PerenualResolver
         Images: Array.Empty<PerenualImage>(),
         Pests: Array.Empty<PerenualPest>(),
         LongDescriptionEn: null,
+        HardinessRejectedAsSuspect: false,
         MatchType: "NONE");
 
     // ── Parsing helpers ───────────────────────────────────────────────────
@@ -226,6 +246,12 @@ public partial class PerenualResolver
         return int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : null;
     }
 
+    /// <summary>
+    /// Parse the upstream hardiness object into a <c>(min, max)</c> integer
+    /// pair via <see cref="ParseHardinessZone"/>. Does not apply the
+    /// suspect-pattern guard — callers run <see cref="IsHardinessSuspect"/>
+    /// first and skip this when it fires.
+    /// </summary>
     public static (int? Min, int? Max) ParseHardiness(PerenualHardinessDto? hardiness)
     {
         if (hardiness is null)
@@ -234,6 +260,29 @@ public partial class PerenualResolver
         }
 
         return (ParseHardinessZone(hardiness.Min), ParseHardinessZone(hardiness.Max));
+    }
+
+    /// <summary>
+    /// True when the upstream hardiness payload looks like a Perenual data
+    /// corruption artefact rather than a real USDA zone band. The Resolver
+    /// then drops the values and flags <see cref="PerenualEnrichmentResult.HardinessRejectedAsSuspect"/>
+    /// so the controller can surface a warning.
+    ///
+    /// <para>Currently guards exactly <c>{min:"2", max:"2"}</c> — the pattern
+    /// observed live on the Solanum dulcamara entry (Perenual id 8758) that
+    /// receives every <c>/species/details/8759</c> request thanks to the
+    /// upstream's server-side canonicalisation. We deliberately do not
+    /// generalise: zone 2-2 IS a valid alpine band for some species, and we
+    /// only reject it here because of the specific evidence we have on
+    /// tomato. Future patterns require explicit extension. See issue #66.</para>
+    /// </summary>
+    public static bool IsHardinessSuspect(PerenualHardinessDto? hardiness)
+    {
+        if (hardiness is null)
+        {
+            return false;
+        }
+        return hardiness.Min == "2" && hardiness.Max == "2";
     }
 
     /// <summary>
@@ -365,6 +414,7 @@ public partial class PerenualResolver
         return parts.Count == 0 ? null : JsonSerializer.Serialize(parts);
     }
 
+    /// <summary>Map Perenual's <c>cycle</c> string to <see cref="PlantLifeCycle"/>; unknown/blank → <c>null</c>.</summary>
     public static PlantLifeCycle? ParseLifeCycle(string? raw) => raw?.ToLowerInvariant().Trim() switch
     {
         null or "" => null,
@@ -375,6 +425,7 @@ public partial class PerenualResolver
         _ => null,
     };
 
+    /// <summary>Map Perenual's <c>growth_rate</c> string to <see cref="PlantGrowthRate"/>; unknown/blank → <c>null</c>.</summary>
     public static PlantGrowthRate? ParseGrowthRate(string? raw) => raw?.ToLowerInvariant().Trim() switch
     {
         null or "" => null,
@@ -384,6 +435,7 @@ public partial class PerenualResolver
         _ => null,
     };
 
+    /// <summary>Map Perenual's <c>watering</c> string to <see cref="PlantWateringNeed"/>; unknown/blank → <c>null</c>.</summary>
     public static PlantWateringNeed? ParseWateringNeed(string? raw) => raw?.ToLowerInvariant().Trim() switch
     {
         null or "" => null,
@@ -394,6 +446,7 @@ public partial class PerenualResolver
         _ => null,
     };
 
+    /// <summary>Map Perenual's <c>maintenance</c>/<c>care_level</c> string to <see cref="PlantCareLevel"/>; unknown/blank → <c>null</c>.</summary>
     public static PlantCareLevel? ParseCareLevel(string? raw) => raw?.ToLowerInvariant().Trim() switch
     {
         null or "" => null,
@@ -574,6 +627,12 @@ public partial class PerenualResolver
         return true;
     }
 
+    /// <summary>
+    /// Join a list with <paramref name="separator"/>, trimming entries and
+    /// dropping blanks. Returns <c>null</c> (not <c>""</c>) when the input is
+    /// null/empty or contains only blanks, so the persistence layer stores
+    /// <c>NULL</c> rather than an empty string.
+    /// </summary>
     public static string? JoinList(List<string>? items, string separator)
     {
         if (items is null || items.Count == 0)
@@ -584,6 +643,7 @@ public partial class PerenualResolver
         return filtered.Count == 0 ? null : string.Join(separator, filtered);
     }
 
+    /// <summary>Trim a string, collapsing null/whitespace-only input to <c>null</c>.</summary>
     public static string? NullIfBlank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
     /// <summary>

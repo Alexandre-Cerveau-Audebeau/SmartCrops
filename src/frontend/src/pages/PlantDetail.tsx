@@ -1063,7 +1063,12 @@ export default function PlantDetail() {
                     // drop the link entirely if the rewrite couldn't take it out of /api/ —
                     // sending the user to a JSON endpoint (or one that demands an API key)
                     // is worse than no link at all.
-                    const userUrl = toUserFacingUrl(s.url);
+                    //
+                    // For Perenual: prefer the requested id over the canonical one stored in
+                    // the API URL (issue #67 — Perenual canonicalises server-side). The
+                    // helper ignores the explicit id for non-Perenual sources, so passing
+                    // it unconditionally is safe and removes a per-source branch here.
+                    const userUrl = toUserFacingUrl(s.url, plant.perenualData?.requestedPerenualId);
                     if (!isUserFacingUrl(userUrl)) return [];
                     return [
                       <Link

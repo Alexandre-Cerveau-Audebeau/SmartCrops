@@ -206,6 +206,7 @@ public record PlantTrefleDataDto(
 public record PlantPerenualDataDto(
     Guid Id,
     int PerenualId,
+    int? RequestedPerenualId,
     string? Cultivar,
     string? PerenualType,
     string? OriginCountries,
