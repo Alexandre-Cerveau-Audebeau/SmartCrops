@@ -461,6 +461,147 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Assert.Equal(9, plant.HardinessZoneMax);
     }
 
+    /// <summary>
+    /// Issue #73: when the resolver flags a dangerous canonical-id mismatch
+    /// (<c>response.id != requestedPerenualId</c>, likely a different species),
+    /// the controller must SKIP every destructive wrong-species write — the four
+    /// collection/source targets (images, pests, long-description, source URL)
+    /// AND the payload-owned <c>EdibleParts</c> JSON overwrite (CodeRabbit round
+    /// 2: it lives in <c>ApplyPlantDenormalisation</c> but is a destructive write,
+    /// not gap-fill) — while still persisting the <c>PlantPerenualData</c> audit
+    /// row and the null-coalesced scalar denormalisation. The response surfaces
+    /// <c>CanonicalMismatchSkipped=true</c> and reports zero added rows
+    /// (Finding B: counts reflect what was persisted).
+    /// </summary>
+    [Fact]
+    public async Task Enrich_CanonicalMismatchDangerous_SkipsAllWrongSpeciesWrites()
+    {
+        var plantId = await SeedPlantAsync("Solanum lycopersicum");
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 8758,            // canonical (wrong species)
+            requestedPerenualId: 8759,   // what we asked for (tomato)
+            lifeCycle: PlantLifeCycle.Perennial,
+            images:
+            [
+                new PerenualImage("https://wasabi/8758_dulcamara.jpg", null, null, null),
+            ],
+            pests: [new PerenualPest("Aphids", PlantPestType.Insect)],
+            longDescriptionEn: "Wrong-species description.",
+            // Wrong-species edible-parts payload — must NOT reach the read model.
+            ediblePartsJson: "[\"fruit\"]",
+            isCanonicalMismatchDangerous: true));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<MatchedDto>();
+        Assert.NotNull(body);
+        Assert.True(body!.CanonicalMismatchSkipped);
+        // Finding B: reported counts reflect actual (zero) persistence.
+        Assert.Equal(0, body.ImagesAdded);
+        Assert.Equal(0, body.PestsAdded);
+        Assert.Equal(0, body.LongDescriptionsAdded);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+
+        // The four destructive writes were skipped.
+        Assert.Equal(0, await db.PlantImages.CountAsync(
+            i => i.PlantId == plantId && i.Source == PlantSourceType.Perenual));
+        Assert.Equal(0, await db.PlantPests.CountAsync(p => p.PlantId == plantId));
+        Assert.Equal(0, await db.PlantLongDescriptions.CountAsync(d => d.PlantId == plantId));
+        Assert.Equal(0, await db.PlantSources.CountAsync(
+            s => s.PlantId == plantId && s.SourceType == PlantSourceType.Perenual));
+
+        // The payload-owned EdibleParts OVERWRITE is also skipped (CR round 2):
+        // the wrong-species "[\"fruit\"]" payload must not reach the read model.
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        Assert.Null(plant.EdibleParts);
+
+        // Audit row + gap-fill scalars are still applied.
+        var perenualData = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+        Assert.Equal(8758, perenualData.PerenualId);
+        Assert.Equal(PlantLifeCycle.Perennial, plant.LifeCycle);
+        Assert.Equal(8759, plant.RequestedPerenualId);
+        Assert.True(plant.EnrichmentStatus.HasFlag(EnrichmentStatus.PerenualEnriched));
+    }
+
+    /// <summary>
+    /// CR round 3 hardening: when a canonical-id mismatch fires, the skip must
+    /// also PRESERVE an existing <c>EdibleParts</c> value set by another source
+    /// (Manual / GBIF / Trefle / seed / prior Perenual enrich pre-mismatch).
+    /// The companion test pins the "null stays null" branch; this one pins the
+    /// "populated stays populated" branch. Together they pin the full preservation
+    /// semantics of the skip (issue #73).
+    /// </summary>
+    [Fact]
+    public async Task Enrich_CanonicalMismatchDangerous_PreservesExistingEdibleParts()
+    {
+        var plantId = await SeedPlantAsync("Solanum lycopersicum", configure: p =>
+        {
+            p.EdibleParts = "[\"leaf\",\"root\"]"; // Prior value from another source
+        });
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 8758,
+            requestedPerenualId: 8759,
+            ediblePartsJson: "[\"fruit\"]", // Wrong-species payload — must NOT win
+            isCanonicalMismatchDangerous: true));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+
+        // Prior value preserved verbatim, wrong-species payload not applied.
+        Assert.Equal("[\"leaf\",\"root\"]", plant.EdibleParts);
+    }
+
+    /// <summary>
+    /// Happy-path counterpart to the mismatch test: when the requested and
+    /// canonical ids agree, all dual-write targets persist normally and
+    /// <c>CanonicalMismatchSkipped</c> is false.
+    /// </summary>
+    [Fact]
+    public async Task Enrich_CanonicalIdMatch_PersistsAllDualWrites()
+    {
+        var plantId = await SeedPlantAsync("Aloe vera");
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 728,
+            requestedPerenualId: 728,    // matches → no mismatch
+            images: [new PerenualImage("https://wasabi/aloe.jpg", null, null, null)],
+            pests: [new PerenualPest("Mealybugs", PlantPestType.Insect)],
+            longDescriptionEn: "Correct species description.",
+            ediblePartsJson: "[\"leaf\"]",
+            isCanonicalMismatchDangerous: false));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<MatchedDto>();
+        Assert.NotNull(body);
+        Assert.False(body!.CanonicalMismatchSkipped);
+        Assert.Equal(1, body.ImagesAdded);
+        Assert.Equal(1, body.PestsAdded);
+        Assert.Equal(1, body.LongDescriptionsAdded);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        Assert.Equal(1, await db.PlantImages.CountAsync(
+            i => i.PlantId == plantId && i.Source == PlantSourceType.Perenual));
+        Assert.Equal(1, await db.PlantPests.CountAsync(p => p.PlantId == plantId));
+        Assert.Equal(1, await db.PlantLongDescriptions.CountAsync(d => d.PlantId == plantId));
+        Assert.Equal(1, await db.PlantSources.CountAsync(
+            s => s.PlantId == plantId && s.SourceType == PlantSourceType.Perenual));
+        // Happy path: the payload-owned EdibleParts overwrite is applied normally.
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        Assert.Equal("[\"leaf\"]", plant.EdibleParts);
+    }
+
     [Fact]
     public async Task Enrich_PreservesTrefleSourcedImages_OnReplacePerenualImages()
     {
@@ -678,8 +819,10 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         IReadOnlyList<PerenualImage>? images = null,
         IReadOnlyList<PerenualPest>? pests = null,
         string? longDescriptionEn = "Test description",
+        string? ediblePartsJson = null,
         int? requestedPerenualId = null,
-        bool hardinessRejectedAsSuspect = false) => new(
+        bool hardinessRejectedAsSuspect = false,
+        bool isCanonicalMismatchDangerous = false) => new(
             PerenualId: perenualId,
             RequestedPerenualId: requestedPerenualId ?? perenualId,
             Cultivar: cultivar,
@@ -705,7 +848,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             IsMedicinal: isMedicinal,
             IsToxicToHumans: null,
             IsToxicToPets: null,
-            EdiblePartsJson: null,
+            EdiblePartsJson: ediblePartsJson,
             PropagationInstructions: null,
             SowingInstructions: null,
             OriginCountries: null,
@@ -725,6 +868,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             Pests: pests ?? Array.Empty<PerenualPest>(),
             LongDescriptionEn: longDescriptionEn,
             HardinessRejectedAsSuspect: hardinessRejectedAsSuspect,
+            IsCanonicalMismatchDangerous: isCanonicalMismatchDangerous,
             MatchType: "EXACT");
 
     private record MatchedDto(
@@ -735,7 +879,8 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         int PestsAdded,
         int LongDescriptionsAdded,
         bool IsExactScientificMatch,
-        bool HasSupremeData);
+        bool HasSupremeData,
+        bool CanonicalMismatchSkipped = false);
 
     private record NoMatchDto(bool Matched, string MatchType, string Reason);
 

@@ -92,23 +92,46 @@ public class PlantPerenualController : ControllerBase
         // ADR-0003 dual-write — five targets, one transaction. A CHECK or
         // unique-index violation anywhere rolls all writes back, preserving
         // the previous (consistent) state.
+        //
+        // When Perenual canonicalised the requested id to a likely-different
+        // species (IsCanonicalMismatchDangerous), every payload-derived
+        // DESTRUCTIVE write would persist wrong-species data: the four
+        // collection/source targets (images, pests, long-description, source
+        // URL) are skipped here, and the payload-owned EdibleParts overwrite is
+        // skipped inside ApplyPlantDenormalisation (same skip flag). The
+        // PlantPerenualData audit row (keeps RawResponseJson for diagnosis) and
+        // the null-coalesced scalar denormalisation (gap-fill only, often
+        // genus-shared, never overwrites curated values) are still applied.
+        // See issue #73.
+        var skipWrongSpeciesWrites = result.IsCanonicalMismatchDangerous;
+
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
         UpsertPerenualData(plant, result);
-        await ReplacePerenualImagesAsync(plantId, result.Images, ct);
-        await ReplacePerenualPestsAsync(plantId, result.Pests, ct);
-        await ReplacePerenualLongDescriptionAsync(plantId, result.LongDescriptionEn, ct);
-        await UpsertPerenualSourceAsync(plantId, result.PerenualId.Value, ct);
-        ApplyPlantDenormalisation(plant, result);
+        if (!skipWrongSpeciesWrites)
+        {
+            await ReplacePerenualImagesAsync(plantId, result.Images, ct);
+            await ReplacePerenualPestsAsync(plantId, result.Pests, ct);
+            await ReplacePerenualLongDescriptionAsync(plantId, result.LongDescriptionEn, ct);
+            await UpsertPerenualSourceAsync(plantId, result.PerenualId.Value, ct);
+        }
+        ApplyPlantDenormalisation(plant, result, skipWrongSpeciesWrites);
 
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
+        // Report what was actually persisted, not what the payload offered —
+        // the skip branch writes none of the three collections (issue #73).
+        var imagesAdded = skipWrongSpeciesWrites ? 0 : result.Images.Count;
+        var pestsAdded = skipWrongSpeciesWrites ? 0 : result.Pests.Count;
+        var longDescriptionsAdded =
+            skipWrongSpeciesWrites || result.LongDescriptionEn is null ? 0 : 1;
+
         _logger.LogInformation(
-            "Perenual-enriched plant {PlantId}: id={PerenualId} cultivar={Cultivar} images={Images} pests={Pests} longDescriptions={Descs} supreme={Supreme}",
+            "Perenual-enriched plant {PlantId}: id={PerenualId} cultivar={Cultivar} images={Images} pests={Pests} longDescriptions={Descs} supreme={Supreme} mismatchSkipped={MismatchSkipped}",
             plantId, result.PerenualId, result.Cultivar,
-            result.Images.Count, result.Pests.Count,
-            result.LongDescriptionEn is null ? 0 : 1, result.HasSupremeData);
+            imagesAdded, pestsAdded, longDescriptionsAdded,
+            result.HasSupremeData, skipWrongSpeciesWrites);
 
         if (result.HardinessRejectedAsSuspect)
         {
@@ -119,15 +142,26 @@ public class PlantPerenualController : ControllerBase
                 plantId, result.PerenualId);
         }
 
+        if (skipWrongSpeciesWrites)
+        {
+            // Structured warning mirroring the hardiness-guard pattern: the
+            // operator can correlate per-plant and decide whether to remap the
+            // requested id. Both ids logged so the divergence is visible.
+            _logger.LogWarning(
+                "Perenual canonical id mismatch for plant {PlantId}: requested {RequestedPerenualId} but response.id was {PerenualId} (server-side canonicalisation to a likely different species). Skipped images/pests/long-description/source-URL writes AND EdibleParts overwrite; gap-fill scalars + audit row kept. See issue #73.",
+                plantId, result.RequestedPerenualId, result.PerenualId);
+        }
+
         return Ok(new EnrichMatchedResponse(
             Matched: true,
             PerenualId: result.PerenualId.Value,
             PerenualScientificName: result.CanonicalScientificName,
-            ImagesAdded: result.Images.Count,
-            PestsAdded: result.Pests.Count,
-            LongDescriptionsAdded: result.LongDescriptionEn is null ? 0 : 1,
+            ImagesAdded: imagesAdded,
+            PestsAdded: pestsAdded,
+            LongDescriptionsAdded: longDescriptionsAdded,
             IsExactScientificMatch: IsExactMatch(plant.ScientificName, result.CanonicalScientificName),
-            HasSupremeData: result.HasSupremeData));
+            HasSupremeData: result.HasSupremeData,
+            CanonicalMismatchSkipped: skipWrongSpeciesWrites));
     }
 
     /// <summary>
@@ -397,9 +431,17 @@ public class PlantPerenualController : ControllerBase
     /// model. Scalars use the canonical null-coalesce contract aligned with
     /// PR #59 round 4: <c>if (plant.X is null) plant.X = result.X;</c> for
     /// every scalar. A curated value (Manual / GBIF / Trefle / seed) is never
-    /// overwritten by Perenual — Perenual only fills gaps. The
-    /// <c>EdibleParts</c> JSON payload is owned by Perenual (no other source
-    /// in D1 produces it) and is overwritten unconditionally when present.
+    /// overwritten by Perenual — Perenual only fills gaps.
+    ///
+    /// <para>The <c>EdibleParts</c> JSON payload is the exception: Perenual owns
+    /// it (no other source in D1 produces it) and it is an unconditional
+    /// OVERWRITE, not a gap-fill. That makes it a destructive payload-owned
+    /// write — logically part of the canonical-mismatch skip scope even though
+    /// it lives here rather than alongside the four collection writes. When
+    /// <paramref name="skipWrongSpeciesWrites"/> is set it is therefore skipped
+    /// too, so a mismatched (wrong-species) payload cannot poison the read model
+    /// (issue #73). The remaining scalars stay null-coalesced gap-fill and are
+    /// safe to apply on a mismatch (broader safety discussion: issue #75).</para>
     ///
     /// <para>Narrow exception to the null-coalesce contract: when the hardiness
     /// guard fired upstream (<see cref="PerenualEnrichmentResult.HardinessRejectedAsSuspect"/>)
@@ -410,7 +452,12 @@ public class PlantPerenualController : ControllerBase
     /// another authoritative source (GBIF / Trefle / Manual), honouring the
     /// "Perenual is complementary, not authoritative" contract. See issue #71.</para>
     /// </summary>
-    private static void ApplyPlantDenormalisation(Plant plant, PerenualEnrichmentResult result)
+    /// <param name="skipWrongSpeciesWrites">
+    /// When true (canonical-id mismatch, issue #73), skip the destructive
+    /// <c>EdibleParts</c> overwrite. Null-coalesced scalar gap-fill still runs.
+    /// </param>
+    private static void ApplyPlantDenormalisation(
+        Plant plant, PerenualEnrichmentResult result, bool skipWrongSpeciesWrites)
     {
         // Audit trail (denormalised) — same idempotency rule as PerenualData:
         // preserve the first requestedId we ever recorded for this plant.
@@ -461,7 +508,11 @@ public class PlantPerenualController : ControllerBase
         // Perenual owns EdibleParts in D1 (no other source produces this JSON)
         // — overwrite when present so re-enrichment after a Perenual data fix
         // reaches the read model. NULL result preserves whatever was there.
-        if (result.EdiblePartsJson is not null)
+        // This is a destructive payload-owned OVERWRITE (not gap-fill), so a
+        // canonical mismatch skips it alongside the four collection writes to
+        // avoid persisting wrong-species edible-parts data (issue #73). The
+        // null-coalesced scalars above stay (gap-fill safe; see issue #75).
+        if (!skipWrongSpeciesWrites && result.EdiblePartsJson is not null)
         {
             plant.EdibleParts = result.EdiblePartsJson;
         }
@@ -476,6 +527,17 @@ public class PlantPerenualController : ControllerBase
 
     // ── Response records ──────────────────────────────────────────────────
 
+    /// <summary>
+    /// Successful-match enrichment response. The <c>*Added</c> counts reflect
+    /// what was actually persisted (zero when a canonical mismatch skipped the
+    /// destructive writes), not what the Perenual payload offered.
+    /// </summary>
+    /// <param name="CanonicalMismatchSkipped">
+    /// True when a Perenual canonical-id mismatch caused destructive
+    /// wrong-species writes (including the EdibleParts overwrite) to be skipped
+    /// (issue #73). Lets the admin UI surface a distinct toast. Defaults false
+    /// on the happy path.
+    /// </param>
     public record EnrichMatchedResponse(
         bool Matched,
         int PerenualId,
@@ -484,7 +546,8 @@ public class PlantPerenualController : ControllerBase
         int PestsAdded,
         int LongDescriptionsAdded,
         bool IsExactScientificMatch,
-        bool HasSupremeData);
+        bool HasSupremeData,
+        bool CanonicalMismatchSkipped = false);
 
     public record EnrichNoMatchResponse(bool Matched, string MatchType, string Reason);
 
