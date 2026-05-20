@@ -119,6 +119,19 @@ export interface PlantPerenualData {
   apiVersion: string | null;
   hasSupremeData: boolean;
   lastSyncAt: string;
+  // Perenual Supreme xData (Sprint 1.5 PR B) — surfaced in Section F.6 (Phase 3).
+  xWateringBasedTempMinC: number | null;
+  xWateringBasedTempMaxC: number | null;
+  xWateringPhMin: number | null;
+  xWateringPhMax: number | null;
+  xSunlightHoursMin: number | null;
+  xSunlightHoursMax: number | null;
+  xTemperatureToleranceMinC: number | null;
+  xTemperatureToleranceMaxC: number | null;
+  xPlantSpacingValue: number | null;
+  xPlantSpacingUnit: string | null;
+  xWateringQualityJson: string | null;
+  xWateringPeriodJson: string | null;
 }
 
 /**
