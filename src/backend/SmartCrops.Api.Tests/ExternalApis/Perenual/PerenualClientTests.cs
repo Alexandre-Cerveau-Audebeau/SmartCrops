@@ -248,6 +248,18 @@ public class PerenualClientTests
             () => client.GetSpeciesDetailsAsync(728, cts.Token));
     }
 
+    [Fact]
+    public async Task GetSpeciesDetailsAsync_HtmlContentTypeOn200_TreatedAsNoMatch()
+    {
+        // D5 (Sprint 1.5 PR B): Perenual's bug at ids >=8574 returns 200 OK with
+        // an HTML error body for deleted ids. The Content-Type pre-check must
+        // short-circuit to null (NoMatch) rather than attempt JSON deserialise.
+        var handler = new HtmlHandler("<html><body>Species not found</body></html>");
+        var client = NewClient(handler);
+
+        Assert.Null(await client.GetSpeciesDetailsAsync(8600, CancellationToken.None));
+    }
+
     // ── Handlers ──────────────────────────────────────────────────────────
 
     private sealed class RecordingHandler : HttpMessageHandler

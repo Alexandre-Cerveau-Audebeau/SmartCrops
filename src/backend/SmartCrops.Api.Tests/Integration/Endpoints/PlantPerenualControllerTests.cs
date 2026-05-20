@@ -822,7 +822,19 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         string? ediblePartsJson = null,
         int? requestedPerenualId = null,
         bool hardinessRejectedAsSuspect = false,
-        bool isCanonicalMismatchDangerous = false) => new(
+        bool isCanonicalMismatchDangerous = false,
+        int? xWateringBasedTempMinC = null,
+        int? xWateringBasedTempMaxC = null,
+        decimal? xWateringPhMin = null,
+        decimal? xWateringPhMax = null,
+        int? xSunlightHoursMin = null,
+        int? xSunlightHoursMax = null,
+        int? xTemperatureToleranceMinC = null,
+        int? xTemperatureToleranceMaxC = null,
+        int? xPlantSpacingValue = null,
+        string? xPlantSpacingUnit = null,
+        string? xWateringQualityJson = null,
+        string? xWateringPeriodJson = null) => new(
             PerenualId: perenualId,
             RequestedPerenualId: requestedPerenualId ?? perenualId,
             Cultivar: cultivar,
@@ -869,7 +881,19 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             LongDescriptionEn: longDescriptionEn,
             HardinessRejectedAsSuspect: hardinessRejectedAsSuspect,
             IsCanonicalMismatchDangerous: isCanonicalMismatchDangerous,
-            MatchType: "EXACT");
+            MatchType: "EXACT",
+            XWateringBasedTempMinC: xWateringBasedTempMinC,
+            XWateringBasedTempMaxC: xWateringBasedTempMaxC,
+            XWateringPhMin: xWateringPhMin,
+            XWateringPhMax: xWateringPhMax,
+            XSunlightHoursMin: xSunlightHoursMin,
+            XSunlightHoursMax: xSunlightHoursMax,
+            XTemperatureToleranceMinC: xTemperatureToleranceMinC,
+            XTemperatureToleranceMaxC: xTemperatureToleranceMaxC,
+            XPlantSpacingValue: xPlantSpacingValue,
+            XPlantSpacingUnit: xPlantSpacingUnit,
+            XWateringQualityJson: xWateringQualityJson,
+            XWateringPeriodJson: xWateringPeriodJson);
 
     private record MatchedDto(
         bool Matched,

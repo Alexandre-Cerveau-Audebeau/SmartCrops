@@ -93,7 +93,46 @@ public record PerenualEnrichmentResult(
 
     bool IsCanonicalMismatchDangerous,
 
-    string MatchType);
+    string MatchType,
+
+    // ── Perenual Supreme xData (parsed in Phase 2b; persisted on PlantPerenualData) ──
+    // All optional — populated only on the happy match path, null otherwise.
+
+    /// <summary>Perenual Supreme xData — watering ideal temperature minimum (°C, parsed from xWateringBasedTemperature.min). Null if missing or polymorphic.</summary>
+    int? XWateringBasedTempMinC,
+
+    /// <summary>Perenual Supreme xData — watering ideal temperature maximum (°C).</summary>
+    int? XWateringBasedTempMaxC,
+
+    /// <summary>Perenual Supreme xData — water pH minimum (0-14, decimal precision preserved from API float).</summary>
+    decimal? XWateringPhMin,
+
+    /// <summary>Perenual Supreme xData — water pH maximum (0-14).</summary>
+    decimal? XWateringPhMax,
+
+    /// <summary>Perenual Supreme xData — daily sunlight minimum hours (parsed from xSunlightDuration.min string).</summary>
+    int? XSunlightHoursMin,
+
+    /// <summary>Perenual Supreme xData — daily sunlight maximum hours. Null when Perenual ships max="" (half-open range).</summary>
+    int? XSunlightHoursMax,
+
+    /// <summary>Perenual Supreme xData — temperature tolerance minimum (°C, from xTemperatureTolence.min_value). Null on polymorphic empty array.</summary>
+    int? XTemperatureToleranceMinC,
+
+    /// <summary>Perenual Supreme xData — temperature tolerance maximum (°C).</summary>
+    int? XTemperatureToleranceMaxC,
+
+    /// <summary>Perenual Supreme xData — planting spacing value. Null on polymorphic empty array.</summary>
+    int? XPlantSpacingValue,
+
+    /// <summary>Perenual Supreme xData — spacing unit (e.g. "inches", "cm"). Companion to XPlantSpacingValue.</summary>
+    string? XPlantSpacingUnit,
+
+    /// <summary>Perenual Supreme xData — water quality preferences as JSON array string (e.g. "[\"Rainwater\",\"Distilled Water\"]"). Null if empty.</summary>
+    string? XWateringQualityJson,
+
+    /// <summary>Perenual Supreme xData — watering time-of-day preferences as JSON array string. Null if empty (5/6 audit plants observed).</summary>
+    string? XWateringPeriodJson);
 
 /// <summary>An image returned by Perenual, ready for insert into <c>PlantImage</c>.</summary>
 public record PerenualImage(

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SmartCrops.Core.Enums;
 using SmartCrops.Infrastructure.ExternalApis.Perenual;
 
@@ -730,5 +731,164 @@ public class PerenualResolverTests
 
         Assert.Single(images);
         Assert.Equal("https://wasabi/other.jpg", images[0].Url);
+    }
+
+    // ── Perenual Supreme xData parsers (Sprint 1.5 PR B Phase 2b) ──────────
+
+    /// <summary>Parse a JSON literal into a lifetime-independent <see cref="JsonElement"/>.</summary>
+    private static JsonElement El(string json) => JsonDocument.Parse(json).RootElement.Clone();
+
+    [Fact]
+    public void Parse_XWateringBasedTemperature_HappyPath()
+    {
+        var (minC, maxC) = PerenualResolver.ParseWateringBasedTemperature(
+            El("{\"unit\":\"celcius\",\"min\":18,\"max\":24}"));
+
+        Assert.Equal(18, minC);
+        Assert.Equal(24, maxC);
+    }
+
+    [Fact]
+    public void Parse_XWateringBasedTemperature_MissingMin_PartialPair()
+    {
+        var (minC, maxC) = PerenualResolver.ParseWateringBasedTemperature(El("{\"max\":24}"));
+
+        Assert.Null(minC);
+        Assert.Equal(24, maxC);
+    }
+
+    [Fact]
+    public void Parse_XWateringBasedTemperature_PolymorphicArray_ReturnsNull()
+    {
+        var (minC, maxC) = PerenualResolver.ParseWateringBasedTemperature(El("[]"));
+
+        Assert.Null(minC);
+        Assert.Null(maxC);
+    }
+
+    [Fact]
+    public void Parse_XWateringPhLevel_FloatingPointPrecision()
+    {
+        // Tomato audit: max ships as 6.79999… — GetDecimal must preserve it,
+        // NOT GetDouble (which would lose precision).
+        var (min, max) = PerenualResolver.ParseWateringPhLevel(
+            El("{\"min\":6.0,\"max\":6.79999999999999982236431605997495353221893310546875}"));
+
+        Assert.Equal(6.0m, min);
+        Assert.NotNull(max);
+        Assert.True(max > 6.79m && max < 6.8m, $"expected ~6.7999…, got {max}");
+    }
+
+    [Fact]
+    public void Parse_XWateringPhLevel_OutOfRange_ReturnsNull()
+    {
+        var (min, max) = PerenualResolver.ParseWateringPhLevel(El("{\"min\":-1,\"max\":99}"));
+
+        Assert.Null(min);
+        Assert.Null(max);
+    }
+
+    [Fact]
+    public void Parse_XSunlightDuration_EmptyMaxString_HalfOpenRange()
+    {
+        // Bounds ship as STRINGS; empty max = half-open range (4/6 audit plants).
+        var (min, max) = PerenualResolver.ParseSunlightDuration(
+            El("{\"min\":\"6\",\"max\":\"\",\"unit\":\"hours\"}"));
+
+        Assert.Equal(6, min);
+        Assert.Null(max);
+    }
+
+    [Fact]
+    public void Parse_XTemperatureTolerance_PolymorphicArray_ReturnsNull()
+    {
+        // Tomato ships [] for this field — must not throw, returns (null, null).
+        var (minC, maxC) = PerenualResolver.ParseTemperatureTolerance(El("[]"));
+
+        Assert.Null(minC);
+        Assert.Null(maxC);
+    }
+
+    [Fact]
+    public void Parse_XTemperatureTolerance_PolymorphicObject_HappyPath()
+    {
+        // Note the underscore keys (min_value/max_value), distinct from xWateringBasedTemperature.
+        var (minC, maxC) = PerenualResolver.ParseTemperatureTolerance(
+            El("{\"unit\":\"Celcius\",\"min_value\":-10,\"max_value\":30}"));
+
+        Assert.Equal(-10, minC);
+        Assert.Equal(30, maxC);
+    }
+
+    [Fact]
+    public void Parse_XPlantSpacingRequirement_PolymorphicArray_ReturnsNull()
+    {
+        var (value, unit) = PerenualResolver.ParsePlantSpacing(El("[]"));
+
+        Assert.Null(value);
+        Assert.Null(unit);
+    }
+
+    [Fact]
+    public void Parse_XPlantSpacingRequirement_PolymorphicObject_HappyPath()
+    {
+        var (value, unit) = PerenualResolver.ParsePlantSpacing(
+            El("{\"unit\":\"inches\",\"value\":18}"));
+
+        Assert.Equal(18, value);
+        Assert.Equal("inches", unit);
+    }
+
+    [Fact]
+    public void Parse_XWateringQuality_NonEmptyArray_SerialisesCompact()
+    {
+        var json = PerenualResolver.ParseStringArrayElement(
+            El("[\"Rainwater\", \"Distilled Water\"]"));
+
+        Assert.Equal("[\"Rainwater\",\"Distilled Water\"]", json);
+    }
+
+    [Fact]
+    public void Parse_XWateringQuality_EmptyArray_ReturnsNull()
+    {
+        Assert.Null(PerenualResolver.ParseStringArrayElement(El("[]")));
+    }
+
+    [Fact]
+    public void Parse_StringArrayElement_NonArray_ReturnsNull()
+    {
+        Assert.Null(PerenualResolver.ParseStringArrayElement(El("{\"k\":\"v\"}")));
+    }
+
+    [Fact]
+    public void Resolve_XDataCompleteFlow_AloePayload_PopulatesAllFields()
+    {
+        var response = new PerenualSpeciesResponse
+        {
+            Id = 728,
+            ScientificName = ["Aloe vera"],
+            XWateringBasedTemperature = El("{\"unit\":\"celcius\",\"min\":18,\"max\":24}"),
+            XWateringPhLevel = El("{\"min\":6.0,\"max\":8.0}"),
+            XSunlightDuration = El("{\"min\":\"4\",\"max\":\"6\",\"unit\":\"hours\"}"),
+            XTemperatureTolence = El("{\"unit\":\"Celcius\",\"min_value\":-10,\"max_value\":38}"),
+            XPlantSpacingRequirement = El("{\"unit\":\"inches\",\"value\":18}"),
+            XWateringQuality = El("[\"Rainwater\",\"Distilled Water\"]"),
+            XWateringPeriod = El("[\"Morning\",\"Evening\"]"),
+        };
+
+        var result = Resolver.Resolve(response, "{}", requestedPerenualId: 728);
+
+        Assert.Equal(18, result.XWateringBasedTempMinC);
+        Assert.Equal(24, result.XWateringBasedTempMaxC);
+        Assert.Equal(6.0m, result.XWateringPhMin);
+        Assert.Equal(8.0m, result.XWateringPhMax);
+        Assert.Equal(4, result.XSunlightHoursMin);
+        Assert.Equal(6, result.XSunlightHoursMax);
+        Assert.Equal(-10, result.XTemperatureToleranceMinC);
+        Assert.Equal(38, result.XTemperatureToleranceMaxC);
+        Assert.Equal(18, result.XPlantSpacingValue);
+        Assert.Equal("inches", result.XPlantSpacingUnit);
+        Assert.Equal("[\"Rainwater\",\"Distilled Water\"]", result.XWateringQualityJson);
+        Assert.Equal("[\"Morning\",\"Evening\"]", result.XWateringPeriodJson);
     }
 }
