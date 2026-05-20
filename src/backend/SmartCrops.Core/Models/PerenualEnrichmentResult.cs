@@ -19,6 +19,16 @@ namespace SmartCrops.Core.Models;
 /// does not expose a match-type concept; we synthesise it after the resolver
 /// runs its cultivar-marker-aware scientific-name comparison.</para>
 /// </summary>
+/// <param name="IsCanonicalMismatchDangerous">
+/// True when Perenual canonicalised the requested id server-side to a
+/// DIFFERENT id (<c>response.id != requestedPerenualId</c>). Perenual has been
+/// observed shipping internally-inconsistent merged records (e.g. id 8758
+/// reports scientific_name <c>"Solanum lycopersicum"</c> but serves Solanum
+/// dulcamara images), so a name comparison is not a reliable detector — the id
+/// mismatch itself is. When set, the controller skips every destructive
+/// wrong-species write (images, pests, long-description, source URL) and keeps
+/// only the gap-fill scalar denormalisation + audit row. See issues #73 and #67.
+/// </param>
 public record PerenualEnrichmentResult(
     int? PerenualId,
     int? RequestedPerenualId,
@@ -79,15 +89,6 @@ public record PerenualEnrichmentResult(
     // controller logs a warning when this fires. See issue #66.
     bool HardinessRejectedAsSuspect,
 
-    // True when Perenual canonicalised the requested id server-side to a
-    // DIFFERENT id (response.id != requestedPerenualId). Perenual has been
-    // observed shipping internally-inconsistent merged records (e.g. id 8758
-    // reports scientific_name "Solanum lycopersicum" but serves Solanum
-    // dulcamara images), so a name comparison is not a reliable detector — the
-    // id mismatch itself is. When set, the controller skips every destructive
-    // wrong-species write (images, pests, long-description, source URL) and
-    // keeps only the gap-fill scalar denormalisation + audit row. See issues
-    // #73 and #67.
     bool IsCanonicalMismatchDangerous,
 
     string MatchType);

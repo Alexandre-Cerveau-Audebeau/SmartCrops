@@ -508,6 +508,16 @@ public class PlantPerenualController : ControllerBase
 
     // ── Response records ──────────────────────────────────────────────────
 
+    /// <summary>
+    /// Successful-match enrichment response. The <c>*Added</c> counts reflect
+    /// what was actually persisted (zero when a canonical mismatch skipped the
+    /// destructive writes), not what the Perenual payload offered.
+    /// </summary>
+    /// <param name="CanonicalMismatchSkipped">
+    /// True when a Perenual canonical-id mismatch caused the four destructive
+    /// wrong-species writes to be skipped (issue #73). Lets the admin UI surface
+    /// a distinct toast. Defaults false on the happy path.
+    /// </param>
     public record EnrichMatchedResponse(
         bool Matched,
         int PerenualId,
@@ -517,9 +527,6 @@ public class PlantPerenualController : ControllerBase
         int LongDescriptionsAdded,
         bool IsExactScientificMatch,
         bool HasSupremeData,
-        // True when a Perenual canonical-id mismatch caused the four
-        // destructive wrong-species writes to be skipped (issue #73). Lets the
-        // admin UI surface a distinct toast. Defaults false on the happy path.
         bool CanonicalMismatchSkipped = false);
 
     public record EnrichNoMatchResponse(bool Matched, string MatchType, string Reason);
