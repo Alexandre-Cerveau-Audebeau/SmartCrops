@@ -746,6 +746,55 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     }
 
     /// <summary>
+    /// Regression for CR PR #76 r2 (R2-2): xData OVERWRITES on re-enrich rather
+    /// than first-write-wins (??=). PlantPerenualData is Perenual-exclusive, so
+    /// a force=true re-enrich must refresh stale xData with the latest upstream
+    /// values (data drift observed in Phase 4 smoke).
+    /// </summary>
+    [Fact]
+    public async Task Enrich_ForceTrue_RefreshesXData_NotFirstWriteWins()
+    {
+        // Seed a plant already carrying STALE xData on its PerenualData row.
+        var plantId = await SeedPlantAsync("Aloe vera", alreadyPerenualEnriched: true, configure: p =>
+        {
+            p.Genus = "Aloe";
+            p.PerenualData = new PlantPerenualData
+            {
+                PerenualId = 728,
+                HasSupremeData = true,
+                XWateringPhMin = 5.0m,          // stale
+                XWateringPhMax = 7.0m,          // stale
+                XWateringBasedTempMinC = 15,    // stale
+                XWateringBasedTempMaxC = 22,    // stale
+                LastSyncAt = DateTime.UtcNow,
+            };
+        });
+        // Re-enrich returns FRESH xData (canonical match → genus gate not engaged).
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 728,
+            canonicalName: "Aloe vera",
+            xWateringPhMin: 6.0m,
+            xWateringPhMax: 8.0m,
+            xWateringBasedTempMinC: 18,
+            xWateringBasedTempMaxC: 24));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(
+            $"/api/admin/perenual/enrich/{plantId}?perenualId=728&force=true", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var pd = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+
+        // Fresh values applied (would stay stale under ??= first-write-wins).
+        Assert.Equal(6.0m, pd.XWateringPhMin);
+        Assert.Equal(8.0m, pd.XWateringPhMax);
+        Assert.Equal(18, pd.XWateringBasedTempMinC);
+        Assert.Equal(24, pd.XWateringBasedTempMaxC);
+    }
+
+    /// <summary>
     /// Happy-path counterpart to the mismatch test: when the requested and
     /// canonical ids agree, all dual-write targets persist normally and
     /// <c>CanonicalMismatchSkipped</c> is false.

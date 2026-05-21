@@ -581,25 +581,33 @@ public class PlantPerenualController : ControllerBase
             if (plant.SowingInstructions is null) plant.SowingInstructions = result.SowingInstructions;
         }
 
-        // Perenual Supreme xData → PlantPerenualData (issue #75 gate, design D1).
-        // Persisted via gap-fill ??=, on the same genus-mismatch gate as scalars
-        // (NOT the skipWrongSpeciesWrites/EdibleParts gate). PlantPerenualData is
-        // created by UpsertPerenualData earlier in the transaction, so it is
-        // non-null here on every match path; the guard is defensive.
+        // Perenual Supreme xData → PlantPerenualData (issue #75 gate, design D1),
+        // on the same genus-mismatch gate as scalars (NOT the
+        // skipWrongSpeciesWrites/EdibleParts gate). PlantPerenualData is created
+        // by UpsertPerenualData earlier in the transaction, so it is non-null
+        // here on every match path; the guard is defensive.
+        //
+        // Unlike the Plant scalars above (which use ??= first-writer-wins because
+        // Manual/GBIF/Trefle/Perenual all compete for them per ADR-0003), xData
+        // lives on the Perenual-EXCLUSIVE PlantPerenualData (design D1) — no
+        // cross-source collision is possible — so we OVERWRITE on every
+        // (re-)enrich, consistent with the rest of UpsertPerenualData. This lets
+        // force=true refresh stale xData when Perenual updates upstream (data
+        // drift observed in Phase 4 smoke). See CR PR #76 r2.
         if (!genusMismatch && plant.PerenualData is not null)
         {
-            plant.PerenualData.XWateringBasedTempMinC ??= result.XWateringBasedTempMinC;
-            plant.PerenualData.XWateringBasedTempMaxC ??= result.XWateringBasedTempMaxC;
-            plant.PerenualData.XWateringPhMin ??= result.XWateringPhMin;
-            plant.PerenualData.XWateringPhMax ??= result.XWateringPhMax;
-            plant.PerenualData.XSunlightHoursMin ??= result.XSunlightHoursMin;
-            plant.PerenualData.XSunlightHoursMax ??= result.XSunlightHoursMax;
-            plant.PerenualData.XTemperatureToleranceMinC ??= result.XTemperatureToleranceMinC;
-            plant.PerenualData.XTemperatureToleranceMaxC ??= result.XTemperatureToleranceMaxC;
-            plant.PerenualData.XPlantSpacingValue ??= result.XPlantSpacingValue;
-            plant.PerenualData.XPlantSpacingUnit ??= result.XPlantSpacingUnit;
-            plant.PerenualData.XWateringQualityJson ??= result.XWateringQualityJson;
-            plant.PerenualData.XWateringPeriodJson ??= result.XWateringPeriodJson;
+            plant.PerenualData.XWateringBasedTempMinC = result.XWateringBasedTempMinC;
+            plant.PerenualData.XWateringBasedTempMaxC = result.XWateringBasedTempMaxC;
+            plant.PerenualData.XWateringPhMin = result.XWateringPhMin;
+            plant.PerenualData.XWateringPhMax = result.XWateringPhMax;
+            plant.PerenualData.XSunlightHoursMin = result.XSunlightHoursMin;
+            plant.PerenualData.XSunlightHoursMax = result.XSunlightHoursMax;
+            plant.PerenualData.XTemperatureToleranceMinC = result.XTemperatureToleranceMinC;
+            plant.PerenualData.XTemperatureToleranceMaxC = result.XTemperatureToleranceMaxC;
+            plant.PerenualData.XPlantSpacingValue = result.XPlantSpacingValue;
+            plant.PerenualData.XPlantSpacingUnit = result.XPlantSpacingUnit;
+            plant.PerenualData.XWateringQualityJson = result.XWateringQualityJson;
+            plant.PerenualData.XWateringPeriodJson = result.XWateringPeriodJson;
         }
 
         // Perenual owns EdibleParts in D1 (no other source produces this JSON)
