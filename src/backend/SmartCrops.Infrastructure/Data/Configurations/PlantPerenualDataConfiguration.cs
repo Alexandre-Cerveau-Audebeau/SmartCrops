@@ -4,8 +4,14 @@ using SmartCrops.Core.Entities;
 
 namespace SmartCrops.Infrastructure.Data.Configurations;
 
+/// <summary>
+/// EF Core mapping for <see cref="PlantPerenualData"/>: 1-1 with Plant, the
+/// unique Perenual-id index, jsonb columns, and the Perenual Supreme xData
+/// columns + their range/order CHECK constraints (Sprint 1.5 PR B).
+/// </summary>
 public class PlantPerenualDataConfiguration : IEntityTypeConfiguration<PlantPerenualData>
 {
+    /// <summary>Apply the <see cref="PlantPerenualData"/> schema configuration.</summary>
     public void Configure(EntityTypeBuilder<PlantPerenualData> builder)
     {
         builder.HasKey(p => p.Id);
@@ -102,6 +108,9 @@ public class PlantPerenualDataConfiguration : IEntityTypeConfiguration<PlantPere
             t.HasCheckConstraint(
                 "CK_PlantPerenualData_XSunlightHoursMax_Range",
                 "\"XSunlightHoursMax\" IS NULL OR \"XSunlightHoursMax\" BETWEEN 0 AND 24");
+            t.HasCheckConstraint(
+                "CK_PlantPerenualData_XSunlightHours_Order",
+                "\"XSunlightHoursMin\" IS NULL OR \"XSunlightHoursMax\" IS NULL OR \"XSunlightHoursMin\" <= \"XSunlightHoursMax\"");
 
             t.HasCheckConstraint(
                 "CK_PlantPerenualData_XTemperatureTolerance_Range",

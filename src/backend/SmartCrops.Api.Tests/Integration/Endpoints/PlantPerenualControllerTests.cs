@@ -8,6 +8,7 @@ using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
 using SmartCrops.Core.Models;
 using SmartCrops.Infrastructure.Data;
+using SmartCrops.Infrastructure.ExternalApis.Perenual;
 
 namespace SmartCrops.Api.Tests.Integration.Endpoints;
 
@@ -1077,7 +1078,10 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             XPlantSpacingValue: xPlantSpacingValue,
             XPlantSpacingUnit: xPlantSpacingUnit,
             XWateringQualityJson: xWateringQualityJson,
-            XWateringPeriodJson: xWateringPeriodJson);
+            XWateringPeriodJson: xWateringPeriodJson,
+            // Mirror the resolver: genus is derived from the canonical name so the
+            // controller genus gate sees the same value it would in production.
+            PerenualGenus: PerenualResolver.DerivePerenualGenus(canonicalName ?? "Aloe vera"));
 
     private record MatchedDto(
         bool Matched,

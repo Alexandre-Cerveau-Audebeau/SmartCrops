@@ -117,7 +117,8 @@ public sealed class StubPlantPerenualEnrichmentService : IPlantPerenualEnrichmen
         XPlantSpacingValue: null,
         XPlantSpacingUnit: null,
         XWateringQualityJson: null,
-        XWateringPeriodJson: null);
+        XWateringPeriodJson: null,
+        PerenualGenus: null);
 
     public Task<PerenualEnrichmentResult> ResolveAsync(string scientificName, CancellationToken ct)
     {

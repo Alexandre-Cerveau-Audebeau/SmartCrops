@@ -244,8 +244,9 @@ export function parseStringArrayJson(json: string | null): string[] | null {
  * and unit are present — a bare number has no meaningful display.
  */
 export function formatPlantSpacing(value: number | null, unit: string | null): string | null {
-  if (value === null || !unit) return null;
-  return `${value} ${unit}`;
+  const trimmedUnit = unit?.trim();
+  if (value === null || !trimmedUnit) return null;
+  return `${value} ${trimmedUnit}`;
 }
 
 /**
@@ -263,8 +264,9 @@ export function hasAnyXData(pd: PlantPerenualData): boolean {
     pd.xSunlightHoursMax !== null ||
     pd.xTemperatureToleranceMinC !== null ||
     pd.xTemperatureToleranceMaxC !== null ||
-    pd.xPlantSpacingValue !== null ||
-    pd.xPlantSpacingUnit !== null ||
+    // Spacing needs BOTH value + unit to render a row (mirror formatPlantSpacing),
+    // else the gate would pass with no renderable spacing row (CR #76 r1).
+    formatPlantSpacing(pd.xPlantSpacingValue, pd.xPlantSpacingUnit) !== null ||
     parseStringArrayJson(pd.xWateringQualityJson) !== null ||
     parseStringArrayJson(pd.xWateringPeriodJson) !== null
   );

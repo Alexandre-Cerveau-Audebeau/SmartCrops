@@ -7,7 +7,6 @@ using SmartCrops.Core.Enums;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Core.Models;
 using SmartCrops.Infrastructure.Data;
-using SmartCrops.Infrastructure.ExternalApis.Perenual;
 
 namespace SmartCrops.Api.Controllers.Admin;
 
@@ -110,26 +109,29 @@ public class PlantPerenualController : ControllerBase
         // Genus gate (issue #75 Étage 1) — only meaningful on a canonical
         // mismatch, and bypassed by the admin overrideMismatch escape hatch
         // (Étage 2). When it fires, ApplyPlantDenormalisation skips all scalar +
-        // xData gap-fill. Computed here (not in the static helper) because it
-        // logs through the controller logger.
+        // xData gap-fill. The Perenual genus is computed in the resolver and
+        // surfaced on the result (CR #76 r1: keeps the API layer off the
+        // Infrastructure dependency path); both sides are whitespace-normalised
+        // so padded values can't poison the comparison.
         var genusMismatch = false;
         if (skipWrongSpeciesWrites && !overrideMismatch)
         {
-            var perenualGenus = PerenualResolver.DerivePerenualGenus(result.CanonicalScientificName);
-            if (string.IsNullOrEmpty(perenualGenus) || string.IsNullOrEmpty(plant.Genus))
+            var perenualGenus = result.PerenualGenus;
+            var plantGenus = plant.Genus?.Trim();
+            if (string.IsNullOrWhiteSpace(perenualGenus) || string.IsNullOrWhiteSpace(plantGenus))
             {
                 // Can't validate either side → conservative skip (issue #75 Option A).
                 genusMismatch = true;
                 _logger.LogWarning(
                     "Cannot validate Perenual genus for plant {PlantId} (plantGenus={PlantGenus}, perenualGenus={PerenualGenus}); conservative skip of scalar + xData denormalisation. See issue #75.",
-                    plantId, plant.Genus ?? "(null)", perenualGenus ?? "(null)");
+                    plantId, plantGenus ?? "(null)", perenualGenus ?? "(null)");
             }
-            else if (!string.Equals(perenualGenus, plant.Genus, StringComparison.OrdinalIgnoreCase))
+            else if (!string.Equals(perenualGenus, plantGenus, StringComparison.OrdinalIgnoreCase))
             {
                 genusMismatch = true;
                 _logger.LogWarning(
                     "Perenual genus mismatch for plant {PlantId}: GBIF genus '{PlantGenus}' vs Perenual-derived genus '{PerenualGenus}'; skipping scalar + xData denormalisation to avoid wrong-species data. See issue #75.",
-                    plantId, plant.Genus, perenualGenus);
+                    plantId, plantGenus, perenualGenus);
             }
         }
 
@@ -288,6 +290,12 @@ public class PlantPerenualController : ControllerBase
 
     // ── Dual-write helpers ────────────────────────────────────────────────
 
+    /// <summary>
+    /// Create or update the 1-1 <see cref="PlantPerenualData"/> audit row from
+    /// the resolved result (identity, raw JSON, scalar labels, and the Supreme
+    /// xData columns). Always runs — even on a canonical mismatch — since the
+    /// row is the diagnostic record of what Perenual returned.
+    /// </summary>
     private void UpsertPerenualData(Plant plant, PerenualEnrichmentResult result)
     {
         if (plant.PerenualData is null)
@@ -446,6 +454,12 @@ public class PlantPerenualController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Upsert the Perenual <see cref="PlantSource"/> row (one per source per
+    /// plant), recording the species-details URL and external id. Called with
+    /// the requested id (not the canonical one) so the user-facing link lands
+    /// on the correct species page even on a canonical mismatch (issue #73 D5).
+    /// </summary>
     private async Task UpsertPerenualSourceAsync(Guid plantId, int perenualId, CancellationToken ct)
     {
         var url = $"https://perenual.com/api/v2/species/details/{perenualId}";

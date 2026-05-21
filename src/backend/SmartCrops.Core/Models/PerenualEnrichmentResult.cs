@@ -132,7 +132,14 @@ public record PerenualEnrichmentResult(
     string? XWateringQualityJson,
 
     /// <summary>Perenual Supreme xData — watering time-of-day preferences as JSON array string. Null if empty (5/6 audit plants observed).</summary>
-    string? XWateringPeriodJson);
+    string? XWateringPeriodJson,
+
+    /// <summary>
+    /// Genus derived from the canonical scientific name (first token), computed
+    /// in the resolver so the API layer can run the issue #75 genus gate without
+    /// reaching into Infrastructure. Null when the name is absent or single-token.
+    /// </summary>
+    string? PerenualGenus);
 
 /// <summary>An image returned by Perenual, ready for insert into <c>PlantImage</c>.</summary>
 public record PerenualImage(

@@ -197,7 +197,8 @@ public partial class PerenualResolver
             XPlantSpacingValue: xSpacing.Value,
             XPlantSpacingUnit: xSpacing.Unit,
             XWateringQualityJson: xWateringQuality,
-            XWateringPeriodJson: xWateringPeriod);
+            XWateringPeriodJson: xWateringPeriod,
+            PerenualGenus: DerivePerenualGenus(canonicalName));
     }
 
     /// <summary>
@@ -268,7 +269,8 @@ public partial class PerenualResolver
         XPlantSpacingValue: null,
         XPlantSpacingUnit: null,
         XWateringQualityJson: null,
-        XWateringPeriodJson: null);
+        XWateringPeriodJson: null,
+        PerenualGenus: null);
 
     // ── Perenual Supreme xData parsers (Sprint 1.5 PR B) ────────────────────
     // All null-safe to the heterogeneous wire shapes confirmed in the Phase 1
@@ -288,7 +290,7 @@ public partial class PerenualResolver
         {
             return (null, null);
         }
-        return (ReadIntInRange(el, "min", -50, 60), ReadIntInRange(el, "max", -50, 60));
+        return EnsureOrderedRange(ReadIntInRange(el, "min", -50, 60), ReadIntInRange(el, "max", -50, 60));
     }
 
     /// <summary>
@@ -302,7 +304,7 @@ public partial class PerenualResolver
         {
             return (null, null);
         }
-        return (ReadDecimalInRange(el, "min", 0m, 14m), ReadDecimalInRange(el, "max", 0m, 14m));
+        return EnsureOrderedRange(ReadDecimalInRange(el, "min", 0m, 14m), ReadDecimalInRange(el, "max", 0m, 14m));
     }
 
     /// <summary>
@@ -317,7 +319,7 @@ public partial class PerenualResolver
         {
             return (null, null);
         }
-        return (ReadIntInRange(el, "min", 0, 24), ReadIntInRange(el, "max", 0, 24));
+        return EnsureOrderedRange(ReadIntInRange(el, "min", 0, 24), ReadIntInRange(el, "max", 0, 24));
     }
 
     /// <summary>
@@ -333,7 +335,7 @@ public partial class PerenualResolver
         {
             return (null, null);
         }
-        return (ReadIntInRange(el, "min_value", -50, 60), ReadIntInRange(el, "max_value", -50, 60));
+        return EnsureOrderedRange(ReadIntInRange(el, "min_value", -50, 60), ReadIntInRange(el, "max_value", -50, 60));
     }
 
     /// <summary>
@@ -388,6 +390,24 @@ public partial class PerenualResolver
         var trimmed = scientificName.Trim();
         var spaceIdx = trimmed.IndexOf(' ');
         return spaceIdx <= 0 ? null : trimmed[..spaceIdx];
+    }
+
+    /// <summary>
+    /// Validate that a parsed min/max pair is ordered (min ≤ max). When both
+    /// bounds are non-null and reversed (min &gt; max), null BOTH rather than
+    /// swap — we don't know the upstream semantics, so we refuse to impute a
+    /// guess (same conservative philosophy as the hardiness sentinel and genus
+    /// gate). Also prevents reversed-but-in-range pairs from violating the
+    /// PlantPerenualData min/max CHECK constraints on write. See CR PR #76 r1.
+    /// </summary>
+    private static (T? Min, T? Max) EnsureOrderedRange<T>(T? min, T? max)
+        where T : struct, IComparable<T>
+    {
+        if (min.HasValue && max.HasValue && min.Value.CompareTo(max.Value) > 0)
+        {
+            return (null, null);
+        }
+        return (min, max);
     }
 
     /// <summary>

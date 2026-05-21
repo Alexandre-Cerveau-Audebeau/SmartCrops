@@ -3,10 +3,51 @@ import {
   formatPlantSpacing,
   formatXDataRange,
   groupCommonNamesByLanguage,
+  hasAnyXData,
   parseStringArrayJson,
   toCamelKey,
 } from './plantDetail';
-import type { PlantCommonName } from '../types/Plant';
+import type { PlantCommonName, PlantPerenualData } from '../types/Plant';
+
+/** Build a PlantPerenualData with all xData null, overridable per field. */
+function makeXData(overrides: Partial<PlantPerenualData> = {}): PlantPerenualData {
+  return {
+    id: 'pd-1',
+    perenualId: 1,
+    requestedPerenualId: 1,
+    cultivar: null,
+    perenualType: null,
+    originCountries: null,
+    propagationMethods: null,
+    wateringBenchmark: null,
+    wateringBenchmarkUnit: null,
+    sunlightPreferences: null,
+    pruningMonths: null,
+    maintenance: null,
+    floweringSeason: null,
+    harvestSeason: null,
+    hasEdibleFruit: null,
+    hasEdibleLeaves: null,
+    isCulinary: null,
+    plantAnatomyJson: null,
+    apiVersion: 'v2',
+    hasSupremeData: true,
+    lastSyncAt: '2026-01-01T00:00:00Z',
+    xWateringBasedTempMinC: null,
+    xWateringBasedTempMaxC: null,
+    xWateringPhMin: null,
+    xWateringPhMax: null,
+    xSunlightHoursMin: null,
+    xSunlightHoursMax: null,
+    xTemperatureToleranceMinC: null,
+    xTemperatureToleranceMaxC: null,
+    xPlantSpacingValue: null,
+    xPlantSpacingUnit: null,
+    xWateringQualityJson: null,
+    xWateringPeriodJson: null,
+    ...overrides,
+  };
+}
 
 function name(
   id: number,
@@ -109,5 +150,25 @@ describe('toCamelKey', () => {
     expect(toCamelKey('Rainwater')).toBe('rainwater');
     expect(toCamelKey('Reverse Osmosis Water')).toBe('reverseOsmosisWater');
     expect(toCamelKey('Pond/Lake Water')).toBe('pondLakeWater');
+  });
+});
+
+describe('hasAnyXData', () => {
+  it('returns false when no xData field is set', () => {
+    expect(hasAnyXData(makeXData())).toBe(false);
+  });
+
+  it('returns false when only xPlantSpacingUnit is set (no value) — CR #76 r1', () => {
+    // Regression: unit alone has no renderable spacing row, so the gate must
+    // not pass and render an empty Section F.6.
+    expect(hasAnyXData(makeXData({ xPlantSpacingUnit: 'inches' }))).toBe(false);
+  });
+
+  it('returns true when both spacing value and unit are set', () => {
+    expect(hasAnyXData(makeXData({ xPlantSpacingValue: 18, xPlantSpacingUnit: 'inches' }))).toBe(true);
+  });
+
+  it('returns true when a scalar range field is set', () => {
+    expect(hasAnyXData(makeXData({ xWateringBasedTempMinC: 18 }))).toBe(true);
   });
 });

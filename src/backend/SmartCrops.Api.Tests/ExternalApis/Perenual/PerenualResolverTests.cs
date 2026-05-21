@@ -906,4 +906,43 @@ public class PerenualResolverTests
     {
         Assert.Equal(expected, PerenualResolver.DerivePerenualGenus(input));
     }
+
+    // ── Reversed min/max ranges (CR PR #76 r1 — EnsureOrderedRange) ────────
+    // A reversed-but-in-range pair (min > max) is nulled on BOTH bounds so it
+    // can't violate the PlantPerenualData min/max CHECK constraints on write.
+
+    [Fact]
+    public void Parse_XWateringBasedTemperature_ReversedRange_ReturnsBothNull()
+    {
+        var (minC, maxC) = PerenualResolver.ParseWateringBasedTemperature(
+            El("{\"unit\":\"celcius\",\"min\":24,\"max\":18}"));
+        Assert.Null(minC);
+        Assert.Null(maxC);
+    }
+
+    [Fact]
+    public void Parse_XWateringPhLevel_ReversedRange_ReturnsBothNull()
+    {
+        var (min, max) = PerenualResolver.ParseWateringPhLevel(El("{\"min\":8.0,\"max\":6.0}"));
+        Assert.Null(min);
+        Assert.Null(max);
+    }
+
+    [Fact]
+    public void Parse_XSunlightDuration_ReversedRange_ReturnsBothNull()
+    {
+        var (min, max) = PerenualResolver.ParseSunlightDuration(
+            El("{\"min\":\"12\",\"max\":\"6\",\"unit\":\"hours\"}"));
+        Assert.Null(min);
+        Assert.Null(max);
+    }
+
+    [Fact]
+    public void Parse_XTemperatureTolerance_ReversedRange_ReturnsBothNull()
+    {
+        var (minC, maxC) = PerenualResolver.ParseTemperatureTolerance(
+            El("{\"unit\":\"Celcius\",\"min_value\":30,\"max_value\":-10}"));
+        Assert.Null(minC);
+        Assert.Null(maxC);
+    }
 }

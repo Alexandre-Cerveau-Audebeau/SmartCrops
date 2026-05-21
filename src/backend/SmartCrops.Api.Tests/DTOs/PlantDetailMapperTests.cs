@@ -73,8 +73,14 @@ public class PlantDetailMapperTests
         Assert.NotNull(dto.PerenualData);
         var pd = dto.PerenualData!;
         Assert.Null(pd.XWateringBasedTempMinC);
+        Assert.Null(pd.XWateringBasedTempMaxC);
         Assert.Null(pd.XWateringPhMin);
+        Assert.Null(pd.XWateringPhMax);
+        Assert.Null(pd.XSunlightHoursMin);
         Assert.Null(pd.XSunlightHoursMax);
+        Assert.Null(pd.XTemperatureToleranceMinC);
+        Assert.Null(pd.XTemperatureToleranceMaxC);
+        Assert.Null(pd.XPlantSpacingValue);
         Assert.Null(pd.XPlantSpacingUnit);
         Assert.Null(pd.XWateringQualityJson);
         Assert.Null(pd.XWateringPeriodJson);
