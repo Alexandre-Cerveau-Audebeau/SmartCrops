@@ -61,14 +61,19 @@ import { isUserFacingUrl, toUserFacingUrl } from '../utils/externalSourceUrl';
 import { getTranslation } from '../utils/getTranslation';
 import {
   formatHardinessZone,
+  formatPlantSpacing,
   formatRange,
+  formatXDataRange,
   groupCommonNamesByLanguage,
+  hasAnyXData,
   hasDistinctImageTypes,
   isHardinessSuspicious,
   parseStringArray,
+  parseStringArrayJson,
   pickHeroImage,
   pickLongDescription,
   sortGalleryImages,
+  toCamelKey,
 } from '../utils/plantDetail';
 
 const languageLabels: Record<string, string> = {
@@ -883,6 +888,87 @@ export default function PlantDetail() {
         </Card>
       )}
 
+      {/* ── Section F.6: Perenual Supreme scientific data (Sprint 1.5 PR B) ── */}
+      {/* Rendered only when the plant carries Supreme-tier xData AND at least
+          one field is populated — an empty section is worse than no section.
+          IIFE keeps each formatted value computed once. */}
+      {(() => {
+        const pd = plant.perenualData;
+        if (!pd?.hasSupremeData || !hasAnyXData(pd)) return null;
+
+        const phRange = formatXDataRange(pd.xWateringPhMin, pd.xWateringPhMax);
+        const wateringTemp = formatXDataRange(pd.xWateringBasedTempMinC, pd.xWateringBasedTempMaxC, '°C');
+        const sunlight = formatXDataRange(pd.xSunlightHoursMin, pd.xSunlightHoursMax, ' h');
+        const tempTol = formatXDataRange(pd.xTemperatureToleranceMinC, pd.xTemperatureToleranceMaxC, '°C');
+        const spacing = formatPlantSpacing(pd.xPlantSpacingValue, pd.xPlantSpacingUnit);
+        const waterQuality = parseStringArrayJson(pd.xWateringQualityJson);
+        const wateringPeriod = parseStringArrayJson(pd.xWateringPeriodJson);
+
+        const row = (label: string, value: string) => (
+          <Stack direction="row" justifyContent="space-between" spacing={2}>
+            <Typography variant="body2" color="text.secondary">
+              {label}
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 500, textAlign: 'right' }}>
+              {value}
+            </Typography>
+          </Stack>
+        );
+
+        const chips = (label: string, values: string[], dict: string) => (
+          <Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+              {label}
+            </Typography>
+            <Stack direction="row" flexWrap="wrap" gap={0.5}>
+              {values.map((v) => (
+                <Chip
+                  key={v}
+                  size="small"
+                  label={t(`plantDetail.scientificData.${dict}.${toCamelKey(v)}`, v)}
+                />
+              ))}
+            </Stack>
+          </Box>
+        );
+
+        return (
+          <Card variant="outlined" sx={{ mb: 3, borderRadius: 3 }}>
+            <CardContent>
+              <Stack direction="row" spacing={2} alignItems="flex-start">
+                <ScienceIcon sx={{ color: 'success.main', mt: 0.5 }} />
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="h6" fontWeight={600} sx={{ mb: 1.5 }}>
+                    {t('plantDetail.scientificData.title')}
+                  </Typography>
+                  <Stack spacing={1.25}>
+                    {phRange && row(t('plantDetail.scientificData.wateringPh'), phRange)}
+                    {wateringTemp &&
+                      row(t('plantDetail.scientificData.wateringIdealTemp'), wateringTemp)}
+                    {sunlight && row(t('plantDetail.scientificData.sunlightHours'), sunlight)}
+                    {tempTol &&
+                      row(t('plantDetail.scientificData.temperatureTolerance'), tempTol)}
+                    {spacing && row(t('plantDetail.scientificData.spacing'), spacing)}
+                    {waterQuality &&
+                      chips(
+                        t('plantDetail.scientificData.waterQuality'),
+                        waterQuality,
+                        'waterQualityValues',
+                      )}
+                    {wateringPeriod &&
+                      chips(
+                        t('plantDetail.scientificData.wateringPeriod'),
+                        wateringPeriod,
+                        'wateringPeriodValues',
+                      )}
+                  </Stack>
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       {/* ── Section F.5: Scientific data (coming soon) placeholder ─────── */}
       {/* Always rendered — this is a promise to the user about what's next,
           not a graceful-degradation fallback. Surfaces between edible parts
@@ -907,9 +993,7 @@ export default function PlantDetail() {
               >
                 <li>{t('plantDetail.scientificData.items.waterLiters')}</li>
                 <li>{t('plantDetail.scientificData.items.lightLumens')}</li>
-                <li>{t('plantDetail.scientificData.items.temperatureRange')}</li>
                 <li>{t('plantDetail.scientificData.items.nutrientsNPK')}</li>
-                <li>{t('plantDetail.scientificData.items.geoDistribution')}</li>
                 <li>{t('plantDetail.scientificData.items.daysToGermination')}</li>
               </Box>
               <Typography

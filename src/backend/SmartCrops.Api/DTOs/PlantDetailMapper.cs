@@ -211,7 +211,19 @@ public static class PlantDetailMapper
                     plant.PerenualData.PlantAnatomyJson,
                     plant.PerenualData.ApiVersion,
                     plant.PerenualData.HasSupremeData,
-                    plant.PerenualData.LastSyncAt),
+                    plant.PerenualData.LastSyncAt,
+                    plant.PerenualData.XWateringBasedTempMinC,
+                    plant.PerenualData.XWateringBasedTempMaxC,
+                    plant.PerenualData.XWateringPhMin,
+                    plant.PerenualData.XWateringPhMax,
+                    plant.PerenualData.XSunlightHoursMin,
+                    plant.PerenualData.XSunlightHoursMax,
+                    plant.PerenualData.XTemperatureToleranceMinC,
+                    plant.PerenualData.XTemperatureToleranceMaxC,
+                    plant.PerenualData.XPlantSpacingValue,
+                    plant.PerenualData.XPlantSpacingUnit,
+                    plant.PerenualData.XWateringQualityJson,
+                    plant.PerenualData.XWateringPeriodJson),
         };
     }
 

@@ -224,4 +224,30 @@ public record PlantPerenualDataDto(
     string? PlantAnatomyJson,
     string? ApiVersion,
     bool HasSupremeData,
-    DateTime LastSyncAt);
+    DateTime LastSyncAt,
+
+    // ── Perenual Supreme xData (Sprint 1.5 PR B) ────────────────────────────
+    /// <summary>Perenual Supreme xData — watering ideal temperature minimum (°C). Null when absent or polymorphic.</summary>
+    int? XWateringBasedTempMinC,
+    /// <summary>Perenual Supreme xData — watering ideal temperature maximum (°C).</summary>
+    int? XWateringBasedTempMaxC,
+    /// <summary>Perenual Supreme xData — preferred watering pH minimum (0-14).</summary>
+    decimal? XWateringPhMin,
+    /// <summary>Perenual Supreme xData — preferred watering pH maximum (0-14).</summary>
+    decimal? XWateringPhMax,
+    /// <summary>Perenual Supreme xData — daily sunlight hours minimum.</summary>
+    int? XSunlightHoursMin,
+    /// <summary>Perenual Supreme xData — daily sunlight hours maximum (null = half-open range).</summary>
+    int? XSunlightHoursMax,
+    /// <summary>Perenual Supreme xData — temperature tolerance minimum (°C).</summary>
+    int? XTemperatureToleranceMinC,
+    /// <summary>Perenual Supreme xData — temperature tolerance maximum (°C).</summary>
+    int? XTemperatureToleranceMaxC,
+    /// <summary>Perenual Supreme xData — planting spacing value.</summary>
+    int? XPlantSpacingValue,
+    /// <summary>Perenual Supreme xData — planting spacing unit (e.g. "inches", "cm").</summary>
+    string? XPlantSpacingUnit,
+    /// <summary>Perenual Supreme xData — water quality preferences as JSON array string (or null if empty).</summary>
+    string? XWateringQualityJson,
+    /// <summary>Perenual Supreme xData — watering time-of-day preferences as JSON array string (or null if empty).</summary>
+    string? XWateringPeriodJson);

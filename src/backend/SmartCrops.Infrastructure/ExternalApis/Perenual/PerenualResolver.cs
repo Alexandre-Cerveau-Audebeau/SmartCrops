@@ -120,6 +120,18 @@ public partial class PerenualResolver
         var pests = ExtractPests(response.PestSusceptibility);
         var hasSupreme = DetectSupremeData(response);
 
+        // Perenual Supreme xData — parsed even on a canonical mismatch; the
+        // controller (Phase 2c) gates persistence. Each helper is null-safe to
+        // the heterogeneous wire shapes (polymorphic array vs object, empty
+        // string bounds, float pH artefacts) confirmed in the Phase 1 audit.
+        var xWateringTemp = ParseWateringBasedTemperature(response.XWateringBasedTemperature);
+        var xPh = ParseWateringPhLevel(response.XWateringPhLevel);
+        var xSunlight = ParseSunlightDuration(response.XSunlightDuration);
+        var xTempTol = ParseTemperatureTolerance(response.XTemperatureTolence);
+        var xSpacing = ParsePlantSpacing(response.XPlantSpacingRequirement);
+        var xWateringQuality = ParseStringArrayElement(response.XWateringQuality);
+        var xWateringPeriod = ParseStringArrayElement(response.XWateringPeriod);
+
         return new PerenualEnrichmentResult(
             PerenualId: response.Id,
             RequestedPerenualId: requestedPerenualId,
@@ -172,7 +184,21 @@ public partial class PerenualResolver
 
             HardinessRejectedAsSuspect: hardinessSuspect,
             IsCanonicalMismatchDangerous: canonicalMismatch,
-            MatchType: "EXACT");
+            MatchType: "EXACT",
+
+            XWateringBasedTempMinC: xWateringTemp.MinC,
+            XWateringBasedTempMaxC: xWateringTemp.MaxC,
+            XWateringPhMin: xPh.Min,
+            XWateringPhMax: xPh.Max,
+            XSunlightHoursMin: xSunlight.Min,
+            XSunlightHoursMax: xSunlight.Max,
+            XTemperatureToleranceMinC: xTempTol.MinC,
+            XTemperatureToleranceMaxC: xTempTol.MaxC,
+            XPlantSpacingValue: xSpacing.Value,
+            XPlantSpacingUnit: xSpacing.Unit,
+            XWateringQualityJson: xWateringQuality,
+            XWateringPeriodJson: xWateringPeriod,
+            PerenualGenus: DerivePerenualGenus(canonicalName));
     }
 
     /// <summary>
@@ -229,9 +255,202 @@ public partial class PerenualResolver
         HardinessRejectedAsSuspect: false,
         // No response → no canonical id to compare → no detectable mismatch.
         IsCanonicalMismatchDangerous: false,
-        MatchType: "NONE");
+        MatchType: "NONE",
 
-    // ── Parsing helpers ───────────────────────────────────────────────────
+        // No payload → no xData.
+        XWateringBasedTempMinC: null,
+        XWateringBasedTempMaxC: null,
+        XWateringPhMin: null,
+        XWateringPhMax: null,
+        XSunlightHoursMin: null,
+        XSunlightHoursMax: null,
+        XTemperatureToleranceMinC: null,
+        XTemperatureToleranceMaxC: null,
+        XPlantSpacingValue: null,
+        XPlantSpacingUnit: null,
+        XWateringQualityJson: null,
+        XWateringPeriodJson: null,
+        PerenualGenus: null);
+
+    // ── Perenual Supreme xData parsers (Sprint 1.5 PR B) ────────────────────
+    // All null-safe to the heterogeneous wire shapes confirmed in the Phase 1
+    // audit: polymorphic array-vs-object, empty-string bounds, float pH
+    // artefacts. Range guards mirror the PlantPerenualData CHECK constraints so
+    // a parsed value can never violate the DB on persistence.
+
+    /// <summary>
+    /// Parse <c>xWateringBasedTemperature {min, max}</c> (JSON numbers) into a
+    /// Celsius pair. The unit is the literal <c>"celcius"</c> (Perenual typo) on
+    /// every audited plant, so no conversion is applied. Non-object shapes and
+    /// out-of-range values (outside -50..60) collapse to <c>null</c>.
+    /// </summary>
+    public static (int? MinC, int? MaxC) ParseWateringBasedTemperature(JsonElement el)
+    {
+        if (el.ValueKind != JsonValueKind.Object)
+        {
+            return (null, null);
+        }
+        return EnsureOrderedRange(ReadIntInRange(el, "min", -50, 60), ReadIntInRange(el, "max", -50, 60));
+    }
+
+    /// <summary>
+    /// Parse <c>xWateringPhLevel {min, max}</c> into a decimal pair, using
+    /// <see cref="JsonElement.TryGetDecimal"/> to preserve precision on float
+    /// artefacts (e.g. <c>6.79999…</c>). Values outside 0..14 collapse to null.
+    /// </summary>
+    public static (decimal? Min, decimal? Max) ParseWateringPhLevel(JsonElement el)
+    {
+        if (el.ValueKind != JsonValueKind.Object)
+        {
+            return (null, null);
+        }
+        return EnsureOrderedRange(ReadDecimalInRange(el, "min", 0m, 14m), ReadDecimalInRange(el, "max", 0m, 14m));
+    }
+
+    /// <summary>
+    /// Parse <c>xSunlightDuration {min, max}</c> — bounds ship as STRINGS
+    /// (e.g. <c>"6"</c>) and the max is frequently the empty string <c>""</c>
+    /// (half-open range, observed on 4/6 audit plants) which yields a null max.
+    /// Values outside 0..24 collapse to null.
+    /// </summary>
+    public static (int? Min, int? Max) ParseSunlightDuration(JsonElement el)
+    {
+        if (el.ValueKind != JsonValueKind.Object)
+        {
+            return (null, null);
+        }
+        return EnsureOrderedRange(ReadIntInRange(el, "min", 0, 24), ReadIntInRange(el, "max", 0, 24));
+    }
+
+    /// <summary>
+    /// Parse <c>xTemperatureTolence {min_value, max_value}</c> (note the
+    /// underscore keys, distinct from xWateringBasedTemperature, and Perenual's
+    /// "Tolence" typo preserved on the DTO). Ships as a polymorphic empty array
+    /// <c>[]</c> on some plants (e.g. tomato) — any non-object shape → null.
+    /// Values outside -50..60 collapse to null.
+    /// </summary>
+    public static (int? MinC, int? MaxC) ParseTemperatureTolerance(JsonElement el)
+    {
+        if (el.ValueKind != JsonValueKind.Object)
+        {
+            return (null, null);
+        }
+        return EnsureOrderedRange(ReadIntInRange(el, "min_value", -50, 60), ReadIntInRange(el, "max_value", -50, 60));
+    }
+
+    /// <summary>
+    /// Parse <c>xPlantSpacingRequirement {value, unit}</c>. Ships as a
+    /// polymorphic empty array <c>[]</c> on some plants — any non-object shape
+    /// → (null, null). Negative values collapse to null (CHECK: value &gt;= 0).
+    /// </summary>
+    public static (int? Value, string? Unit) ParsePlantSpacing(JsonElement el)
+    {
+        if (el.ValueKind != JsonValueKind.Object)
+        {
+            return (null, null);
+        }
+        var value = ReadIntInRange(el, "value", 0, int.MaxValue);
+        string? unit = el.TryGetProperty("unit", out var u) && u.ValueKind == JsonValueKind.String
+            ? NullIfBlank(u.GetString())
+            : null;
+        return (value, unit);
+    }
+
+    /// <summary>
+    /// Serialise a Perenual xData string array (xWateringQuality /
+    /// xWateringPeriod) to a compact JSON-array string for jsonb storage.
+    /// Non-array shapes and empty arrays return <c>null</c> (no value to show).
+    /// Shared by both array-shaped xData fields — identical parse contract.
+    /// </summary>
+    public static string? ParseStringArrayElement(JsonElement el)
+    {
+        if (el.ValueKind != JsonValueKind.Array || el.GetArrayLength() == 0)
+        {
+            return null;
+        }
+        return JsonSerializer.Serialize(el);
+    }
+
+    /// <summary>
+    /// Derive the genus from a Perenual scientific name (the first
+    /// <c>scientific_name</c> entry, surfaced as
+    /// <see cref="PerenualEnrichmentResult.CanonicalScientificName"/>). Perenual
+    /// ships no dedicated genus field, so we take the first whitespace-delimited
+    /// token: <c>"Solanum lycopersicum"</c> → <c>"Solanum"</c>. Returns
+    /// <c>null</c> on null/blank input or when there is no whitespace separator
+    /// (a single token can't be split into genus + epithet reliably). Used by
+    /// the canonical-mismatch genus gate. See issue #75.
+    /// </summary>
+    public static string? DerivePerenualGenus(string? scientificName)
+    {
+        if (string.IsNullOrWhiteSpace(scientificName))
+        {
+            return null;
+        }
+        var trimmed = scientificName.Trim();
+        var spaceIdx = trimmed.IndexOf(' ');
+        return spaceIdx <= 0 ? null : trimmed[..spaceIdx];
+    }
+
+    /// <summary>
+    /// Validate that a parsed min/max pair is ordered (min ≤ max). When both
+    /// bounds are non-null and reversed (min &gt; max), null BOTH rather than
+    /// swap — we don't know the upstream semantics, so we refuse to impute a
+    /// guess (same conservative philosophy as the hardiness sentinel and genus
+    /// gate). Also prevents reversed-but-in-range pairs from violating the
+    /// PlantPerenualData min/max CHECK constraints on write. See CR PR #76 r1.
+    /// </summary>
+    private static (T? Min, T? Max) EnsureOrderedRange<T>(T? min, T? max)
+        where T : struct, IComparable<T>
+    {
+        if (min.HasValue && max.HasValue && min.Value.CompareTo(max.Value) > 0)
+        {
+            return (null, null);
+        }
+        return (min, max);
+    }
+
+    /// <summary>
+    /// Read an integer property from <paramref name="obj"/> tolerating both JSON
+    /// number and numeric-string encodings. Returns <c>null</c> when the
+    /// property is absent, unparseable, or outside <c>[min, max]</c>.
+    /// </summary>
+    private static int? ReadIntInRange(JsonElement obj, string name, int min, int max)
+    {
+        if (!obj.TryGetProperty(name, out var prop))
+        {
+            return null;
+        }
+        int? value = prop.ValueKind switch
+        {
+            JsonValueKind.Number when prop.TryGetInt32(out var n) => n,
+            JsonValueKind.String when int.TryParse(
+                prop.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var s) => s,
+            _ => null,
+        };
+        return value is null || value < min || value > max ? null : value;
+    }
+
+    /// <summary>
+    /// Read a decimal property from <paramref name="obj"/> tolerating both JSON
+    /// number and numeric-string encodings, preserving full decimal precision.
+    /// Returns <c>null</c> when absent, unparseable, or outside <c>[min, max]</c>.
+    /// </summary>
+    private static decimal? ReadDecimalInRange(JsonElement obj, string name, decimal min, decimal max)
+    {
+        if (!obj.TryGetProperty(name, out var prop))
+        {
+            return null;
+        }
+        decimal? value = prop.ValueKind switch
+        {
+            JsonValueKind.Number when prop.TryGetDecimal(out var n) => n,
+            JsonValueKind.String when decimal.TryParse(
+                prop.GetString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var s) => s,
+            _ => null,
+        };
+        return value is null || value < min || value > max ? null : value;
+    }
 
     /// <summary>
     /// Parse a USDA hardiness zone string like <c>"3a"</c>, <c>"10"</c>, or

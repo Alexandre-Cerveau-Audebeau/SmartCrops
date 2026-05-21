@@ -77,6 +77,84 @@ public class PlantPerenualData : IHasUpdatedAt
     /// <summary>True when xData (premium endpoint) was successfully fetched.</summary>
     public bool HasSupremeData { get; set; }
 
+    // ── Perenual Supreme xData (premium tier) ───────────────────────────────
+    // Denormalised onto PlantPerenualData (NOT Plant) so they don't collide
+    // with the Trefle-owned Plant scalars (MinTempC/MaxTempC, SoilPhMin/Max).
+    // All nullable; populated by the Phase 2b resolver. See Sprint 1.5 PR B.
+
+    /// <summary>
+    /// Perenual Supreme xData — ideal temperature range during watering, in degrees Celsius.
+    /// From xWateringBasedTemperature.min field. Null if Perenual returns absent or polymorphic array.
+    /// </summary>
+    public int? XWateringBasedTempMinC { get; set; }
+
+    /// <summary>
+    /// Perenual Supreme xData — upper bound of ideal temperature range during watering, in degrees Celsius.
+    /// From xWateringBasedTemperature.max field.
+    /// </summary>
+    public int? XWateringBasedTempMaxC { get; set; }
+
+    /// <summary>
+    /// Perenual Supreme xData — preferred water pH minimum (0-14). Decimal precision (4,2)
+    /// to handle floating point edge cases like 6.79999... observed in payload.
+    /// </summary>
+    public decimal? XWateringPhMin { get; set; }
+
+    /// <summary>
+    /// Perenual Supreme xData — preferred water pH maximum (0-14).
+    /// </summary>
+    public decimal? XWateringPhMax { get; set; }
+
+    /// <summary>
+    /// Perenual Supreme xData — recommended daily sunlight hours minimum.
+    /// From xSunlightDuration.min (parsed from string).
+    /// </summary>
+    public int? XSunlightHoursMin { get; set; }
+
+    /// <summary>
+    /// Perenual Supreme xData — recommended daily sunlight hours maximum.
+    /// Null when Perenual ships max="" empty string (half-open range, observed on 4/6 audit plants).
+    /// </summary>
+    public int? XSunlightHoursMax { get; set; }
+
+    /// <summary>
+    /// Perenual Supreme xData — survival temperature tolerance minimum, in degrees Celsius.
+    /// From xTemperatureTolence.min_value (note: Perenual typo "Tolence" preserved as JsonPropertyName upstream).
+    /// Null when Perenual ships [] empty array (polymorphism array vs object, observed on tomato).
+    /// </summary>
+    public int? XTemperatureToleranceMinC { get; set; }
+
+    /// <summary>
+    /// Perenual Supreme xData — survival temperature tolerance maximum, in degrees Celsius.
+    /// </summary>
+    public int? XTemperatureToleranceMaxC { get; set; }
+
+    /// <summary>
+    /// Perenual Supreme xData — recommended planting spacing value.
+    /// From xPlantSpacingRequirement.value. Null when Perenual ships [] empty array.
+    /// </summary>
+    public int? XPlantSpacingValue { get; set; }
+
+    /// <summary>
+    /// Perenual Supreme xData — unit of plant spacing requirement (e.g. "inches", "cm").
+    /// Companion to XPlantSpacingValue.
+    /// </summary>
+    public string? XPlantSpacingUnit { get; set; }
+
+    /// <summary>
+    /// Perenual Supreme xData — preferred water quality types as JSON array.
+    /// E.g. ["Rainwater","Distilled Water","Reverse Osmosis Water","Spring Water"].
+    /// Stored as jsonb. Empty array [] persisted as null (no value to display).
+    /// </summary>
+    public string? XWateringQualityJson { get; set; }
+
+    /// <summary>
+    /// Perenual Supreme xData — preferred time-of-day for watering as JSON array.
+    /// E.g. ["Morning","Evening"]. Often empty in Perenual payloads (5/6 audit plants).
+    /// Stored as jsonb. Empty array [] persisted as null.
+    /// </summary>
+    public string? XWateringPeriodJson { get; set; }
+
     /// <summary>Timestamp of the last successful sync from Perenual.</summary>
     public DateTime LastSyncAt { get; set; }
 

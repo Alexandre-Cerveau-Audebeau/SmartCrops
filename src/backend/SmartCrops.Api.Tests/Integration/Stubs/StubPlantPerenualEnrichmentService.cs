@@ -105,7 +105,20 @@ public sealed class StubPlantPerenualEnrichmentService : IPlantPerenualEnrichmen
         LongDescriptionEn: null,
         HardinessRejectedAsSuspect: false,
         IsCanonicalMismatchDangerous: false,
-        MatchType: "NONE");
+        MatchType: "NONE",
+        XWateringBasedTempMinC: null,
+        XWateringBasedTempMaxC: null,
+        XWateringPhMin: null,
+        XWateringPhMax: null,
+        XSunlightHoursMin: null,
+        XSunlightHoursMax: null,
+        XTemperatureToleranceMinC: null,
+        XTemperatureToleranceMaxC: null,
+        XPlantSpacingValue: null,
+        XPlantSpacingUnit: null,
+        XWateringQualityJson: null,
+        XWateringPeriodJson: null,
+        PerenualGenus: null);
 
     public Task<PerenualEnrichmentResult> ResolveAsync(string scientificName, CancellationToken ct)
     {

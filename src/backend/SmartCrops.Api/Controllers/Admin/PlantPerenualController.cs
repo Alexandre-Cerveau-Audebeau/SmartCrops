@@ -64,6 +64,7 @@ public class PlantPerenualController : ControllerBase
         Guid plantId,
         [FromQuery] int? perenualId = null,
         [FromQuery] bool force = false,
+        [FromQuery] bool overrideMismatch = false,
         CancellationToken ct = default)
     {
         var plant = await _db.Plants
@@ -105,6 +106,35 @@ public class PlantPerenualController : ControllerBase
         // See issue #73.
         var skipWrongSpeciesWrites = result.IsCanonicalMismatchDangerous;
 
+        // Genus gate (issue #75 Étage 1) — only meaningful on a canonical
+        // mismatch, and bypassed by the admin overrideMismatch escape hatch
+        // (Étage 2). When it fires, ApplyPlantDenormalisation skips all scalar +
+        // xData gap-fill. The Perenual genus is computed in the resolver and
+        // surfaced on the result (CR #76 r1: keeps the API layer off the
+        // Infrastructure dependency path); both sides are whitespace-normalised
+        // so padded values can't poison the comparison.
+        var genusMismatch = false;
+        if (skipWrongSpeciesWrites && !overrideMismatch)
+        {
+            var perenualGenus = result.PerenualGenus;
+            var plantGenus = plant.Genus?.Trim();
+            if (string.IsNullOrWhiteSpace(perenualGenus) || string.IsNullOrWhiteSpace(plantGenus))
+            {
+                // Can't validate either side → conservative skip (issue #75 Option A).
+                genusMismatch = true;
+                _logger.LogWarning(
+                    "Cannot validate Perenual genus for plant {PlantId} (plantGenus={PlantGenus}, perenualGenus={PerenualGenus}); conservative skip of scalar + xData denormalisation. See issue #75.",
+                    plantId, plantGenus ?? "(null)", perenualGenus ?? "(null)");
+            }
+            else if (!string.Equals(perenualGenus, plantGenus, StringComparison.OrdinalIgnoreCase))
+            {
+                genusMismatch = true;
+                _logger.LogWarning(
+                    "Perenual genus mismatch for plant {PlantId}: GBIF genus '{PlantGenus}' vs Perenual-derived genus '{PerenualGenus}'; skipping scalar + xData denormalisation to avoid wrong-species data. See issue #75.",
+                    plantId, plantGenus, perenualGenus);
+            }
+        }
+
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
         UpsertPerenualData(plant, result);
@@ -113,9 +143,17 @@ public class PlantPerenualController : ControllerBase
             await ReplacePerenualImagesAsync(plantId, result.Images, ct);
             await ReplacePerenualPestsAsync(plantId, result.Pests, ct);
             await ReplacePerenualLongDescriptionAsync(plantId, result.LongDescriptionEn, ct);
-            await UpsertPerenualSourceAsync(plantId, result.PerenualId.Value, ct);
         }
-        ApplyPlantDenormalisation(plant, result, skipWrongSpeciesWrites);
+
+        // Source URL is written UNCONDITIONALLY (D5 mini-fix): even on a
+        // canonical mismatch the user should keep a "View on Perenual" link.
+        // Build it from the REQUESTED id (the species the operator asked for),
+        // falling back to the canonical id — so the link lands on the correct
+        // page rather than the wrong-species canonical record (issue #73).
+        var sourceUrlId = result.RequestedPerenualId ?? result.PerenualId.Value;
+        await UpsertPerenualSourceAsync(plantId, sourceUrlId, ct);
+
+        ApplyPlantDenormalisation(plant, result, skipWrongSpeciesWrites, genusMismatch);
 
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
@@ -148,8 +186,19 @@ public class PlantPerenualController : ControllerBase
             // operator can correlate per-plant and decide whether to remap the
             // requested id. Both ids logged so the divergence is visible.
             _logger.LogWarning(
-                "Perenual canonical id mismatch for plant {PlantId}: requested {RequestedPerenualId} but response.id was {PerenualId} (server-side canonicalisation to a likely different species). Skipped images/pests/long-description/source-URL writes AND EdibleParts overwrite; gap-fill scalars + audit row kept. See issue #73.",
+                "Perenual canonical id mismatch for plant {PlantId}: requested {RequestedPerenualId} but response.id was {PerenualId} (server-side canonicalisation to a likely different species). Skipped images/pests/long-description writes AND EdibleParts overwrite; source URL written from requested id; gap-fill scalars + audit row kept (subject to genus gate). See issue #73.",
                 plantId, result.RequestedPerenualId, result.PerenualId);
+        }
+
+        if (overrideMismatch && result.IsCanonicalMismatchDangerous)
+        {
+            // AUDIT TRAIL (issue #75 Étage 2): a human deliberately bypassed the
+            // genus gate to apply scalars + xData from a mismatched canonical
+            // record. Destructive collection writes stayed skipped regardless.
+            var userId = User.FindFirst("sub")?.Value ?? User.Identity?.Name ?? "(unknown)";
+            _logger.LogWarning(
+                "Admin override mismatch ENABLED for plant {PlantId} by user {UserId}: applied scalars + xData from canonical id {PerenualId} (requested {RequestedPerenualId}) despite mismatch. AUDIT TRAIL. See issue #75.",
+                plantId, userId, result.PerenualId, result.RequestedPerenualId);
         }
 
         return Ok(new EnrichMatchedResponse(
@@ -194,7 +243,7 @@ public class PlantPerenualController : ControllerBase
             ct.ThrowIfCancellationRequested();
             try
             {
-                var resp = await Enrich(id, perenualId: null, force, ct);
+                var resp = await Enrich(id, perenualId: null, force, overrideMismatch: false, ct);
                 switch (resp)
                 {
                     case OkObjectResult { Value: EnrichMatchedResponse }:
@@ -241,6 +290,12 @@ public class PlantPerenualController : ControllerBase
 
     // ── Dual-write helpers ────────────────────────────────────────────────
 
+    /// <summary>
+    /// Create or update the 1-1 <see cref="PlantPerenualData"/> audit row from
+    /// the resolved result (identity, raw JSON, scalar labels, and the Supreme
+    /// xData columns). Always runs — even on a canonical mismatch — since the
+    /// row is the diagnostic record of what Perenual returned.
+    /// </summary>
     private void UpsertPerenualData(Plant plant, PerenualEnrichmentResult result)
     {
         if (plant.PerenualData is null)
@@ -399,6 +454,12 @@ public class PlantPerenualController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Upsert the Perenual <see cref="PlantSource"/> row (one per source per
+    /// plant), recording the species-details URL and external id. Called with
+    /// the requested id (not the canonical one) so the user-facing link lands
+    /// on the correct species page even on a canonical mismatch (issue #73 D5).
+    /// </summary>
     private async Task UpsertPerenualSourceAsync(Guid plantId, int perenualId, CancellationToken ct)
     {
         var url = $"https://perenual.com/api/v2/species/details/{perenualId}";
@@ -454,10 +515,19 @@ public class PlantPerenualController : ControllerBase
     /// </summary>
     /// <param name="skipWrongSpeciesWrites">
     /// When true (canonical-id mismatch, issue #73), skip the destructive
-    /// <c>EdibleParts</c> overwrite. Null-coalesced scalar gap-fill still runs.
+    /// <c>EdibleParts</c> overwrite. Null-coalesced scalar gap-fill still runs
+    /// unless <paramref name="genusMismatch"/> also fires.
+    /// </param>
+    /// <param name="genusMismatch">
+    /// When true (issue #75 Étage 1: a canonical mismatch where the Perenual
+    /// genus differs from the GBIF genus, or genus can't be validated), skip ALL
+    /// scalar + xData gap-fill so a wrong-species payload can't seed the read
+    /// model. The audit row (PlantPerenualData identity/raw) and the requested-id
+    /// audit still apply. Forced false by the admin <c>overrideMismatch</c> escape
+    /// hatch (Étage 2).
     /// </param>
     private static void ApplyPlantDenormalisation(
-        Plant plant, PerenualEnrichmentResult result, bool skipWrongSpeciesWrites)
+        Plant plant, PerenualEnrichmentResult result, bool skipWrongSpeciesWrites, bool genusMismatch)
     {
         // Audit trail (denormalised) — same idempotency rule as PerenualData:
         // preserve the first requestedId we ever recorded for this plant.
@@ -480,30 +550,65 @@ public class PlantPerenualController : ControllerBase
             plant.HardinessZoneMax = null;
         }
 
-        if (plant.LifeCycle is null) plant.LifeCycle = result.LifeCycle;
-        if (plant.GrowthRate is null) plant.GrowthRate = result.GrowthRate;
-        if (plant.WateringNeedLevel is null) plant.WateringNeedLevel = result.WateringNeed;
-        if (plant.CareLevel is null) plant.CareLevel = result.CareLevel;
+        // Scalar gap-fill — skipped wholesale on a genus mismatch (issue #75)
+        // so a wrong-species payload can't seed empty curated fields. The
+        // xData block below shares the same gate.
+        if (!genusMismatch)
+        {
+            if (plant.LifeCycle is null) plant.LifeCycle = result.LifeCycle;
+            if (plant.GrowthRate is null) plant.GrowthRate = result.GrowthRate;
+            if (plant.WateringNeedLevel is null) plant.WateringNeedLevel = result.WateringNeed;
+            if (plant.CareLevel is null) plant.CareLevel = result.CareLevel;
 
-        if (plant.HardinessZoneMin is null) plant.HardinessZoneMin = result.HardinessZoneMin;
-        if (plant.HardinessZoneMax is null) plant.HardinessZoneMax = result.HardinessZoneMax;
+            if (plant.HardinessZoneMin is null) plant.HardinessZoneMin = result.HardinessZoneMin;
+            if (plant.HardinessZoneMax is null) plant.HardinessZoneMax = result.HardinessZoneMax;
 
-        if (plant.MinHeightCm is null) plant.MinHeightCm = result.MinHeightCm;
-        if (plant.MaxHeightCm is null) plant.MaxHeightCm = result.MaxHeightCm;
+            if (plant.MinHeightCm is null) plant.MinHeightCm = result.MinHeightCm;
+            if (plant.MaxHeightCm is null) plant.MaxHeightCm = result.MaxHeightCm;
 
-        if (plant.IsEdible is null) plant.IsEdible = result.IsEdible;
-        if (plant.IsIndoor is null) plant.IsIndoor = result.IsIndoor;
-        if (plant.IsDroughtTolerant is null) plant.IsDroughtTolerant = result.IsDroughtTolerant;
-        if (plant.IsSaltTolerant is null) plant.IsSaltTolerant = result.IsSaltTolerant;
-        if (plant.IsThorny is null) plant.IsThorny = result.IsThorny;
-        if (plant.IsInvasive is null) plant.IsInvasive = result.IsInvasive;
-        if (plant.IsTropical is null) plant.IsTropical = result.IsTropical;
-        if (plant.IsMedicinal is null) plant.IsMedicinal = result.IsMedicinal;
-        if (plant.IsToxicToHumans is null) plant.IsToxicToHumans = result.IsToxicToHumans;
-        if (plant.IsToxicToPets is null) plant.IsToxicToPets = result.IsToxicToPets;
+            if (plant.IsEdible is null) plant.IsEdible = result.IsEdible;
+            if (plant.IsIndoor is null) plant.IsIndoor = result.IsIndoor;
+            if (plant.IsDroughtTolerant is null) plant.IsDroughtTolerant = result.IsDroughtTolerant;
+            if (plant.IsSaltTolerant is null) plant.IsSaltTolerant = result.IsSaltTolerant;
+            if (plant.IsThorny is null) plant.IsThorny = result.IsThorny;
+            if (plant.IsInvasive is null) plant.IsInvasive = result.IsInvasive;
+            if (plant.IsTropical is null) plant.IsTropical = result.IsTropical;
+            if (plant.IsMedicinal is null) plant.IsMedicinal = result.IsMedicinal;
+            if (plant.IsToxicToHumans is null) plant.IsToxicToHumans = result.IsToxicToHumans;
+            if (plant.IsToxicToPets is null) plant.IsToxicToPets = result.IsToxicToPets;
 
-        if (plant.PropagationInstructions is null) plant.PropagationInstructions = result.PropagationInstructions;
-        if (plant.SowingInstructions is null) plant.SowingInstructions = result.SowingInstructions;
+            if (plant.PropagationInstructions is null) plant.PropagationInstructions = result.PropagationInstructions;
+            if (plant.SowingInstructions is null) plant.SowingInstructions = result.SowingInstructions;
+        }
+
+        // Perenual Supreme xData → PlantPerenualData (issue #75 gate, design D1),
+        // on the same genus-mismatch gate as scalars (NOT the
+        // skipWrongSpeciesWrites/EdibleParts gate). PlantPerenualData is created
+        // by UpsertPerenualData earlier in the transaction, so it is non-null
+        // here on every match path; the guard is defensive.
+        //
+        // Unlike the Plant scalars above (which use ??= first-writer-wins because
+        // Manual/GBIF/Trefle/Perenual all compete for them per ADR-0003), xData
+        // lives on the Perenual-EXCLUSIVE PlantPerenualData (design D1) — no
+        // cross-source collision is possible — so we OVERWRITE on every
+        // (re-)enrich, consistent with the rest of UpsertPerenualData. This lets
+        // force=true refresh stale xData when Perenual updates upstream (data
+        // drift observed in Phase 4 smoke). See CR PR #76 r2.
+        if (!genusMismatch && plant.PerenualData is not null)
+        {
+            plant.PerenualData.XWateringBasedTempMinC = result.XWateringBasedTempMinC;
+            plant.PerenualData.XWateringBasedTempMaxC = result.XWateringBasedTempMaxC;
+            plant.PerenualData.XWateringPhMin = result.XWateringPhMin;
+            plant.PerenualData.XWateringPhMax = result.XWateringPhMax;
+            plant.PerenualData.XSunlightHoursMin = result.XSunlightHoursMin;
+            plant.PerenualData.XSunlightHoursMax = result.XSunlightHoursMax;
+            plant.PerenualData.XTemperatureToleranceMinC = result.XTemperatureToleranceMinC;
+            plant.PerenualData.XTemperatureToleranceMaxC = result.XTemperatureToleranceMaxC;
+            plant.PerenualData.XPlantSpacingValue = result.XPlantSpacingValue;
+            plant.PerenualData.XPlantSpacingUnit = result.XPlantSpacingUnit;
+            plant.PerenualData.XWateringQualityJson = result.XWateringQualityJson;
+            plant.PerenualData.XWateringPeriodJson = result.XWateringPeriodJson;
+        }
 
         // Perenual owns EdibleParts in D1 (no other source produces this JSON)
         // — overwrite when present so re-enrichment after a Perenual data fix

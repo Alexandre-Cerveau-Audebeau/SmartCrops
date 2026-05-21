@@ -101,7 +101,28 @@ public class PerenualClient
         var url = $"species/details/{perenualId}?key={Uri.EscapeDataString(_apiKey)}";
         try
         {
-            return await _http.GetFromJsonAsync<PerenualSpeciesResponse>(url, ct);
+            using var response = await _http.GetAsync(url, ct);
+            // Preserve the documented null-on-non-success contract: a 404
+            // (deleted species / wrong id) throws HttpRequestException here,
+            // caught below — same as the prior GetFromJsonAsync behaviour.
+            response.EnsureSuccessStatusCode();
+
+            // D5: Content-Type pre-check to discriminate "deleted id" (HTML
+            // response) from a genuine API-broken state. Perenual's bug at ids
+            // >=8574 causes deleted ids to return 200 OK with an HTML error body
+            // (Phase 1 Postman audit). Treat any non-JSON response as NoMatch
+            // rather than letting it crash deserialisation noisily.
+            var contentType = response.Content.Headers.ContentType?.MediaType;
+            if (!string.Equals(contentType, "application/json", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Perenual returned non-JSON content-type '{ContentType}' for species id {SpeciesId} (likely deleted id, see PR B). Treating as NoMatch.",
+                    contentType ?? "(none)",
+                    perenualId);
+                return null;
+            }
+
+            return await response.Content.ReadFromJsonAsync<PerenualSpeciesResponse>(ct);
         }
         catch (HttpRequestException ex)
         {

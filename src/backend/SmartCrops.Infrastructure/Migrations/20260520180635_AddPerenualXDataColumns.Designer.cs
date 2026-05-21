@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SmartCrops.Infrastructure.Data;
@@ -11,9 +12,11 @@ using SmartCrops.Infrastructure.Data;
 namespace SmartCrops.Infrastructure.Migrations
 {
     [DbContext(typeof(SmartCropsDbContext))]
-    partial class SmartCropsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260520180635_AddPerenualXDataColumns")]
+    partial class AddPerenualXDataColumns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -917,8 +920,6 @@ namespace SmartCrops.Infrastructure.Migrations
                             t.HasCheckConstraint("CK_PlantPerenualData_XPlantSpacing_Positive", "\"XPlantSpacingValue\" IS NULL OR \"XPlantSpacingValue\" >= 0");
 
                             t.HasCheckConstraint("CK_PlantPerenualData_XSunlightHoursMax_Range", "\"XSunlightHoursMax\" IS NULL OR \"XSunlightHoursMax\" BETWEEN 0 AND 24");
-
-                            t.HasCheckConstraint("CK_PlantPerenualData_XSunlightHours_Order", "\"XSunlightHoursMin\" IS NULL OR \"XSunlightHoursMax\" IS NULL OR \"XSunlightHoursMin\" <= \"XSunlightHoursMax\"");
 
                             t.HasCheckConstraint("CK_PlantPerenualData_XSunlightHours_Range", "\"XSunlightHoursMin\" IS NULL OR \"XSunlightHoursMin\" BETWEEN 0 AND 24");
 
