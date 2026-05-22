@@ -795,6 +795,43 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     }
 
     /// <summary>
+    /// Issue #77: after dropping the unique constraint on PerenualId, two
+    /// distinct plants that both canonicalize to the same Perenual id (e.g. via
+    /// the upstream off-by-one bug ≥8574) can both persist their
+    /// <c>PlantPerenualData</c> audit rows without a 23505 unique-violation 500.
+    /// </summary>
+    [Fact]
+    public async Task EnrichTwoPlants_SameCanonicalPerenualId_BothPersist()
+    {
+        // Plant A → canonical id 8758.
+        var plantAId = await SeedPlantAsync("Solanum lycopersicum", configure: p => p.Genus = "Solanum");
+        Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 8758, canonicalName: "Solanum lycopersicum"));
+        AuthAsAnyUser();
+        var respA = await Client.PostAsync(
+            $"/api/admin/perenual/enrich/{plantAId}?perenualId=8758&force=true", null);
+        Assert.Equal(HttpStatusCode.OK, respA.StatusCode);
+
+        // Plant B → a DIFFERENT plant resolving to the SAME canonical id 8758.
+        var plantBId = await SeedPlantAsync("Solanum melongena", configure: p => p.Genus = "Solanum");
+        Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 8758, canonicalName: "Solanum lycopersicum"));
+        var respB = await Client.PostAsync(
+            $"/api/admin/perenual/enrich/{plantBId}?perenualId=8758&force=true", null);
+
+        // Before #77 this second enrich 500'd (23505). Now both audit rows coexist.
+        Assert.Equal(HttpStatusCode.OK, respB.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var ownerPlantIds = await db.PlantPerenualData
+            .Where(d => d.PerenualId == 8758)
+            .Select(d => d.PlantId)
+            .ToListAsync();
+        Assert.Equal(2, ownerPlantIds.Count);
+        Assert.Contains(plantAId, ownerPlantIds);
+        Assert.Contains(plantBId, ownerPlantIds);
+    }
+
+    /// <summary>
     /// Happy-path counterpart to the mismatch test: when the requested and
     /// canonical ids agree, all dual-write targets persist normally and
     /// <c>CanonicalMismatchSkipped</c> is false.
