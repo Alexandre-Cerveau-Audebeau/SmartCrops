@@ -822,7 +822,13 @@ public class PlantPerenualControllerTests : IntegrationTestBase
 
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
-        Assert.Equal(2, await db.PlantPerenualData.CountAsync(d => d.PerenualId == 8758));
+        var ownerPlantIds = await db.PlantPerenualData
+            .Where(d => d.PerenualId == 8758)
+            .Select(d => d.PlantId)
+            .ToListAsync();
+        Assert.Equal(2, ownerPlantIds.Count);
+        Assert.Contains(plantAId, ownerPlantIds);
+        Assert.Contains(plantBId, ownerPlantIds);
     }
 
     /// <summary>
