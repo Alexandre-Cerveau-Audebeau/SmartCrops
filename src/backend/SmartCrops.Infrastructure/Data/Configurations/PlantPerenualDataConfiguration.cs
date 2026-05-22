@@ -74,8 +74,14 @@ public class PlantPerenualDataConfiguration : IEntityTypeConfiguration<PlantPere
         // Enforces 1-1 with Plant.
         builder.HasIndex(p => p.PlantId).IsUnique();
 
-        // PerenualId is the upstream PK — must be unique within our store.
-        builder.HasIndex(p => p.PerenualId).IsUnique();
+        // PerenualId is indexed for lookup but NOT unique: the Perenual upstream
+        // off-by-one bug (id >=8574, see PR #76 Findings.1) can make multiple
+        // plants legitimately canonicalize to the same wrong-species id. The
+        // genus gate (issue #75) already prevents wrong-species DATA from being
+        // written; the PlantPerenualData audit row should still be creatable for
+        // the diagnostic trail. Uniqueness is enforced on PlantId (1-1 with
+        // Plant) instead. See issue #77.
+        builder.HasIndex(p => p.PerenualId);
 
         // Perenual xData domain/range CHECK constraints — all NULL-tolerant
         // (columns are optional). Quoting follows PlantConfiguration's escaped
