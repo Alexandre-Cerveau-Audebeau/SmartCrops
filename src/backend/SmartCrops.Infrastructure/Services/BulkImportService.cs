@@ -70,14 +70,34 @@ public class BulkImportService : IBulkImportService
             t => t.Id,
             StringComparer.OrdinalIgnoreCase);
 
-        // Dedup is performed in-memory against the existing scientific names
-        // (case-insensitive — the DB unique index is case-sensitive but
-        // "Solanum lycopersicum" vs "solanum lycopersicum" would be a data
-        // hygiene incident, not two legitimate species). Single query up front
-        // keeps the per-item check O(1).
-        var existingNames = await _db.Plants
-            .Select(p => p.ScientificName)
-            .ToListAsync(ct);
+        // Collect distinct candidate names from the request (case-insensitive)
+        // so the existing-rows lookup only hits the names we're about to insert,
+        // not the full Plants table. Bulk-import is the scaling engine for this
+        // table (1000-3000 rows in the near term, more later), so preloading
+        // every row to dedup a batch of N items wouldn't scale — query bounded
+        // by request size instead. CR PR #80 r1.
+        var candidateNames = items
+            .Select(i => i?.ScientificName?.Trim())
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // NOTE on case sensitivity: the DB-side filter uses Postgres '='
+        // (case-sensitive), matching the unique index on ScientificName. If a
+        // row already exists under a different case than what the request
+        // shipped, this lookup misses it and the staged insert falls through to
+        // the unique-index guard at flush time — which lands the row in the
+        // Failed bucket via the catch below (with its per-item reason). That's
+        // an acceptable trade-off: ScientificNames are normalised at seed
+        // time, the in-memory HashSet keeps intra-request dedup
+        // case-insensitive, and the unique index remains the backstop.
+        var existingNames = candidateNames.Count == 0
+            ? new List<string>()
+            : await _db.Plants
+                .Where(p => candidateNames.Contains(p.ScientificName))
+                .Select(p => p.ScientificName)
+                .ToListAsync(ct);
         var existing = new HashSet<string>(existingNames, StringComparer.OrdinalIgnoreCase);
 
         // In-batch dedup: a caller that lists the same scientificName twice in
@@ -85,6 +105,12 @@ public class BulkImportService : IBulkImportService
         // already staged this call so the second occurrence Skips instead of
         // crashing the whole SaveChangesAsync.
         var stagedThisBatch = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Per-staged-item record so a batch-flush failure can emit one
+        // FailedReasons line per stagéd ScientificName (per the
+        // BulkImportResult contract) instead of a single generic message —
+        // diagnostics must identify which names actually failed. CR PR #80 r1.
+        var stagedNames = new List<string>();
 
         foreach (var item in items)
         {
@@ -127,6 +153,7 @@ public class BulkImportService : IBulkImportService
                 // EnrichmentStatus falls through to the Manual entity default. No
                 // common names or translations — those land later via Trefle.
             });
+            stagedNames.Add(name);
             created++;
         }
 
@@ -144,12 +171,21 @@ public class BulkImportService : IBulkImportService
                 // (none currently apply to the columns we touch). Roll the counts
                 // back so the response reflects what's actually in the DB: nothing
                 // from this batch persisted, since SaveChanges is all-or-nothing.
+                //
+                // Emit one FailedReasons line per staged ScientificName (not a
+                // single generic message) so the documented "one line per failed
+                // item" contract on BulkImportResult.FailedReasons holds for the
+                // flush-failure path too. CR PR #80 r1.
                 _logger.LogError(ex,
                     "Bulk-import flush failed; rolling staged inserts back into Failed bucket. Total staged: {Staged}",
-                    created);
-                failed += created;
-                failedReasons.Add($"(batch flush): {ex.GetBaseException().Message}");
-                created = 0;
+                    stagedNames.Count);
+                var baseMsg = ex.GetBaseException().Message;
+                foreach (var name in stagedNames)
+                {
+                    failedReasons.Add($"{name}: batch flush failed — {baseMsg}");
+                }
+                failed += stagedNames.Count;
+                created -= stagedNames.Count;
                 _db.ChangeTracker.Clear();
             }
         }

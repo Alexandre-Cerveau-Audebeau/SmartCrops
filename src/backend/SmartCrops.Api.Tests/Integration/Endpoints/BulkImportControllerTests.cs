@@ -183,6 +183,41 @@ public class BulkImportControllerTests : IntegrationTestBase
         Assert.False(await db.Plants.AnyAsync(p => p.ScientificName == "Rosa gallica"));
     }
 
+    [Fact]
+    public async Task Create_CaseVariantInSameRequest_DedupsToOne()
+    {
+        // CR PR #80 r1: two case-variant spellings of the same scientific name
+        // shipped in the SAME request must dedup in-memory (case-insensitive)
+        // to a single Created row — not crash the batch SaveChanges on the
+        // unique index. Pins the in-batch case-insensitive dedup behaviour
+        // introduced beyond the original prompt.
+        AuthAsAnyUser();
+        var request = new BulkImportRequest(new List<BulkImportItem>
+        {
+            new("Mentha piperita", "Herb"),
+            new("mentha piperita", "Herb"),  // same name, different case
+        });
+
+        var response = await Client.PostAsJsonAsync("/api/admin/bulk-import", request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<BulkImportResult>();
+        Assert.NotNull(body);
+        Assert.Equal(2, body!.Total);
+        Assert.Equal(1, body.Created);
+        Assert.Equal(1, body.Skipped);
+        Assert.Equal(0, body.Failed);
+        Assert.Equal(body.Total, body.Created + body.Skipped + body.Failed);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        // Exactly one row in the DB — proves the unique-index backstop never
+        // fired (we'd have rolled back instead, which would also be wrong here).
+        var count = await db.Plants
+            .CountAsync(p => EF.Functions.ILike(p.ScientificName, "mentha piperita"));
+        Assert.Equal(1, count);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────
 
     private async Task<Guid> SeedPlantAsync(string scientificName, int plantTypeId)
