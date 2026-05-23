@@ -8,6 +8,7 @@ using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure.Data;
 using SmartCrops.Infrastructure.Interceptors;
 using SmartCrops.Infrastructure.Repositories;
+using SmartCrops.Infrastructure.Services;
 
 namespace SmartCrops.Infrastructure;
 
@@ -33,6 +34,7 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IPlantRepository, PlantRepository>();
+        services.AddScoped<IBulkImportService, BulkImportService>();
 
         services.AddIdentity<ApplicationUser, IdentityRole>(options =>
         {
