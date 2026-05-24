@@ -218,6 +218,41 @@ public class BulkImportControllerTests : IntegrationTestBase
         Assert.Equal(1, count);
     }
 
+    [Fact]
+    public async Task Create_CaseVariantAlreadyInDb_Skips()
+    {
+        // CR bulk-create follow-up #2: a case-variant of a scientific name
+        // that ALREADY exists in the DB (seeded "Mentha piperita", request
+        // ships "mentha piperita") must be deduped to Skipped — not silently
+        // created as a second row. Before the LOWER-based dedup query +
+        // functional unique index on LOWER(ScientificName), the case-sensitive
+        // '=' lookup missed the existing row and the plain unique index
+        // treated the variant as distinct bytes, silently creating a
+        // duplicate. This test pins the fix.
+        await SeedPlantAsync("Mentha piperita", plantTypeId: 3); // Herb
+        AuthAsAnyUser();
+        var request = new BulkImportRequest(new List<BulkImportItem>
+        {
+            new("mentha piperita", "Herb"),  // lowercase variant of existing row
+        });
+
+        var response = await Client.PostAsJsonAsync("/api/admin/bulk-import", request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<BulkImportResult>();
+        Assert.NotNull(body);
+        Assert.Equal(1, body!.Total);
+        Assert.Equal(0, body.Created);
+        Assert.Equal(1, body.Skipped);
+        Assert.Equal(0, body.Failed);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var count = await db.Plants
+            .CountAsync(p => EF.Functions.ILike(p.ScientificName, "mentha piperita"));
+        Assert.Equal(1, count);  // still one row — no case-variant duplicate
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────
 
     private async Task<Guid> SeedPlantAsync(string scientificName, int plantTypeId)
