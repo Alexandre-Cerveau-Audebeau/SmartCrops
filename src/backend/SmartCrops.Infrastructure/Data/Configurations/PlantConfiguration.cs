@@ -94,8 +94,14 @@ public class PlantConfiguration : IEntityTypeConfiguration<Plant>
             .HasMaxLength(200);
 
         // A scientific name identifies a unique species — duplicates indicate a data error.
-        builder.HasIndex(p => p.ScientificName)
-            .IsUnique();
+        // Uniqueness is enforced CASE-INSENSITIVELY via a functional unique index on
+        // LOWER("ScientificName") created in raw SQL in migration
+        // AddCaseInsensitiveScientificNameIndex. Two binomial names differing only by
+        // case are the same species, so they must not coexist. EF Core can't model a
+        // functional index via the fluent API, hence the raw-SQL approach; this index
+        // is therefore invisible to the model snapshot (expected — probe-sync stays
+        // empty). See bulk-create CR follow-up.
+        // (no builder.HasIndex(p => p.ScientificName).IsUnique() here anymore)
 
         builder.Property(p => p.SunExposure).HasMaxLength(50);
         builder.Property(p => p.WaterNeeds).HasMaxLength(50);

@@ -9,7 +9,7 @@ namespace SmartCrops.Core.Models;
 /// <c>FailedReasons</c> for diagnostic purposes, but is not significant for
 /// dedup (the dedup check is global against the DB, not within the batch).
 /// </param>
-public record BulkImportRequest(List<BulkImportItem> Items);
+public record BulkImportRequest(IReadOnlyList<BulkImportItem> Items);
 
 /// <summary>
 /// One bulk-import item. Both fields are required from the caller's perspective:

@@ -83,19 +83,21 @@ public class BulkImportService : IBulkImportService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        // NOTE on case sensitivity: the DB-side filter uses Postgres '='
-        // (case-sensitive), matching the unique index on ScientificName. If a
-        // row already exists under a different case than what the request
-        // shipped, this lookup misses it and the staged insert falls through to
-        // the unique-index guard at flush time — which lands the row in the
-        // Failed bucket via the catch below (with its per-item reason). That's
-        // an acceptable trade-off: ScientificNames are normalised at seed
-        // time, the in-memory HashSet keeps intra-request dedup
-        // case-insensitive, and the unique index remains the backstop.
-        var existingNames = candidateNames.Count == 0
+        // Lowercase the candidate names and compare against LOWER(ScientificName)
+        // so the lookup is case-insensitive and uses the functional unique index
+        // (IX_Plants_ScientificName_Lower, created in migration
+        // AddCaseInsensitiveScientificNameIndex). This catches case variants
+        // already in the DB BEFORE staging an insert — the previous
+        // case-sensitive '=' lookup missed them, letting the row slip past the
+        // unique index as a distinct byte sequence and silently creating a
+        // duplicate. CR bulk-create follow-up #2.
+        var loweredCandidates = candidateNames
+            .Select(n => n.ToLowerInvariant())
+            .ToList();
+        var existingNames = loweredCandidates.Count == 0
             ? new List<string>()
             : await _db.Plants
-                .Where(p => candidateNames.Contains(p.ScientificName))
+                .Where(p => loweredCandidates.Contains(p.ScientificName.ToLower()))
                 .Select(p => p.ScientificName)
                 .ToListAsync(ct);
         var existing = new HashSet<string>(existingNames, StringComparer.OrdinalIgnoreCase);
