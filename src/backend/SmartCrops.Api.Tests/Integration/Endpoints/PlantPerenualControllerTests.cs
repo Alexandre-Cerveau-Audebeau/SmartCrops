@@ -1070,6 +1070,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Fixture.PerenualStub.Enqueue(SampleMatch(3));
         var chunk2 = await Client.PostAsync(
             $"/api/admin/perenual/enrich-all?limit=2&afterId={body.NextAfterId}", null);
+        Assert.Equal(HttpStatusCode.OK, chunk2.StatusCode);
         var body2 = await chunk2.Content.ReadFromJsonAsync<EnrichAllDto>();
         Assert.NotNull(body2);
         Assert.Equal(1, body2!.Total);
@@ -1097,6 +1098,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         AuthAsAnyUser();
 
         var chunk1 = await Client.PostAsync("/api/admin/perenual/enrich-all?limit=2", null);
+        Assert.Equal(HttpStatusCode.OK, chunk1.StatusCode);
         var body1 = await chunk1.Content.ReadFromJsonAsync<EnrichAllDto>();
         Assert.NotNull(body1);
         Assert.Equal(2, body1!.Total);
@@ -1109,6 +1111,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
 
         var chunk2 = await Client.PostAsync(
             $"/api/admin/perenual/enrich-all?limit=2&afterId={body1.NextAfterId}", null);
+        Assert.Equal(HttpStatusCode.OK, chunk2.StatusCode);
         var body2 = await chunk2.Content.ReadFromJsonAsync<EnrichAllDto>();
         Assert.NotNull(body2);
         Assert.Equal(2, body2!.Total);
@@ -1154,6 +1157,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         AuthAsAnyUser();
 
         var chunk1 = await Client.PostAsync("/api/admin/perenual/enrich-all?limit=2", null);
+        Assert.Equal(HttpStatusCode.OK, chunk1.StatusCode);
         var body1 = await chunk1.Content.ReadFromJsonAsync<EnrichAllDto>();
         Assert.NotNull(body1);
         Assert.Equal(2, body1!.Total);
@@ -1175,6 +1179,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 9301));
 
         var freshRun = await Client.PostAsync("/api/admin/perenual/enrich-all", null);
+        Assert.Equal(HttpStatusCode.OK, freshRun.StatusCode);
         var body2 = await freshRun.Content.ReadFromJsonAsync<EnrichAllDto>();
         Assert.NotNull(body2);
         Assert.Equal(1, body2!.Total);

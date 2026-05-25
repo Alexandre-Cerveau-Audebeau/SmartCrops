@@ -99,6 +99,10 @@ full driver run it counts plants no upstream source ever matched -- data
 variance, not a bug. Investigate per-plant via the single-plant `enrich/`
 endpoint if needed.
 
+The field is always present (non-nullable `int` in `EnrichAllResponse`);
+the driver's `PSObject.Properties.Name -contains 'notEnrichedRemaining'`
+check is purely defensive against a future schema regression.
+
 ## Auth
 
 The `enrich-all` endpoints are `[Authorize]`. Pass an admin bearer token
