@@ -136,7 +136,19 @@ function Invoke-EnrichPhase {
         )
 
         $phaseFailed += [int]$resp.failed
-        $afterId = $resp.nextAfterId
+        $previousAfterId = $afterId      # cursor SENT for this chunk
+        $afterId = $resp.nextAfterId     # cursor RECEIVED back
+
+        # Forward-progress guard: nextAfterId = max processed Id, which is
+        # strictly greater than the cursor we sent (the SQL is WHERE Id >
+        # previousAfterId). A repeated cursor on a full chunk means the
+        # backend's WHERE has regressed; without this guard the do/while
+        # would loop forever. This is the correct form of the removed
+        # stalled-remaining guard (watches the monotonic cursor instead of
+        # the NotEnrichedRemaining proxy that misfired on NoMatch fronts).
+        if ($total -eq $Limit -and $previousAfterId -and $afterId -and $afterId -eq $previousAfterId) {
+            throw "Cursor did not advance on chunk $chunkIndex for '$Route' (nextAfterId repeated: $afterId). Aborting to avoid an infinite loop."
+        }
 
         # A short chunk (fewer rows than $Limit) OR a null cursor means the
         # phase has scanned everything past the starting cursor. No need to

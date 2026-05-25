@@ -300,6 +300,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         AuthAsAnyUser();
 
         var chunk1 = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
+        Assert.Equal(HttpStatusCode.OK, chunk1.StatusCode);
         var body1 = await chunk1.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
         Assert.NotNull(body1);
         Assert.Equal(2, body1!.Total);
@@ -308,6 +309,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
 
         var chunk2 = await Client.PostAsync(
             $"/api/admin/taxonomy/enrich-all?limit=2&afterId={body1.NextAfterId}", null);
+        Assert.Equal(HttpStatusCode.OK, chunk2.StatusCode);
         var body2 = await chunk2.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
         Assert.NotNull(body2);
         Assert.Equal(2, body2!.Total);
@@ -369,6 +371,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         AuthAsAnyUser();
 
         var response = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
         Assert.NotNull(body);
         Assert.Equal(2, body!.Total);
@@ -411,6 +414,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         AuthAsAnyUser();
 
         var chunk1 = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
+        Assert.Equal(HttpStatusCode.OK, chunk1.StatusCode);
         var body1 = await chunk1.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
         Assert.NotNull(body1);
         Assert.Equal(2, body1!.Total);
@@ -423,6 +427,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
 
         var chunk2 = await Client.PostAsync(
             $"/api/admin/taxonomy/enrich-all?limit=2&afterId={body1.NextAfterId}", null);
+        Assert.Equal(HttpStatusCode.OK, chunk2.StatusCode);
         var body2 = await chunk2.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
         Assert.NotNull(body2);
         Assert.Equal(2, body2!.Total);

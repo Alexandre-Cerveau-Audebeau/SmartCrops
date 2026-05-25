@@ -142,6 +142,10 @@ $env:SMARTCROPS_TOKEN = "<jwt>"
 
 ## Scale note (runbook AI-5)
 
-`CREATE INDEX CONCURRENTLY` on `EnrichmentStatus` only becomes relevant at
-100k+ rows. At the current and PR 2b scales (tens to low thousands), the
-sequential scan on the `!flagged` filter is fast and unmeasurable.
+`CREATE INDEX CONCURRENTLY` on the composite `(EnrichmentStatus, Id)`
+only becomes relevant at 100k+ rows. The column order is deliberate: the
+keyset query is `WHERE (EnrichmentStatus & XxxEnriched) == 0 AND Id >
+afterId ORDER BY Id`, so the index is leading-column aligned on the
+filter and trailing-column aligned on the cursor's seek + ordering. At
+the current and PR 2b scales (tens to low thousands), the sequential
+scan on the `!flagged` filter is fast and unmeasurable.
