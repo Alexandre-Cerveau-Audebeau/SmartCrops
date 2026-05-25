@@ -11,9 +11,9 @@ Spinacia oleracea,Épinard,Spinach,vegetable
 Brassica oleracea,Chou,Cabbage,vegetable
 Allium cepa,Oignon,Onion,vegetable
 Allium sativum,Ail,Garlic,vegetable
-Allium porrum,Poireau,Leek,vegetable
+Allium ampeloprasum,Poireau,Leek,vegetable
 Phaseolus vulgaris,Haricot,Bean,vegetable
-Lathyrus oleraceus,Pois,Pea,vegetable
+Pisum sativum,Pois,Pea,vegetable
 Beta vulgaris,Betterave,Beet,vegetable
 Raphanus sativus,Radis,Radish,vegetable
 Cucurbita maxima,Potiron,Pumpkin,vegetable
@@ -51,7 +51,7 @@ Helianthus annuus,Tournesol,Sunflower,flower
 Tulipa gesneriana,Tulipe,Tulip,flower
 Lavandula angustifolia,Lavande,Lavender,flower
 Rosa gallica,Rosier,Rose,flower
-Tagetes erecta,Œillet d'Inde,French marigold,flower
+Tagetes patula,Œillet d'Inde,French marigold,flower
 Cosmos bipinnatus,Cosmos,Cosmos,flower
 Zinnia elegans,Zinnia,Zinnia,flower
 Papaver rhoeas,Coquelicot,Poppy,flower
@@ -72,5 +72,5 @@ Cornus alba,Cornouiller,Dogwood,shrub
 Aloe vera,Aloe vera,Aloe vera,indoor
 Ficus elastica,Caoutchouc,Rubber plant,indoor
 Monstera deliciosa,Monstera,Swiss cheese plant,indoor
-Dracaena trifasciata,Langue de belle-mère,Snake plant,indoor
+Sansevieria trifasciata,Langue de belle-mère,Snake plant,indoor
 Epipremnum aureum,Pothos,Golden pothos,indoor
