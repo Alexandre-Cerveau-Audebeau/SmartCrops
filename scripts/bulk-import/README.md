@@ -1,7 +1,8 @@
-# Bulk import — driver script
+# Bulk import -- driver script
 
 `Enrich-AllSources.ps1` walks every `Plant` row through the three
-`/enrich-all` endpoints in chunks and loops each phase until done.
+`/enrich-all` endpoints with keyset (seek) pagination and loops each phase
+until the cursor reaches the tail of the `!XxxEnriched` set.
 
 ## When to use
 
@@ -21,23 +22,42 @@ what turns those minimal rows into fully-enriched plants.
 - **Trefle is independent**, but slotting it second keeps the phase order
   monotonic with the dependency.
 
+## Cursor model (PR 2a-2 round 2)
+
+Each phase uses `?afterId=<Guid>` as a keyset cursor. The query is
+`WHERE Id > afterId AND (EnrichmentStatus & XxxEnriched) == 0 ORDER BY Id
+LIMIT N`, and the response returns `NextAfterId = max(processed Id)`. The
+driver advances the cursor each chunk, so **every plant is scanned exactly
+once per pass regardless of whether the upstream source matched it**.
+
+This replaces the original `OrderBy(Id).Take(limit)` design (CR r1 #2),
+which could stall: a front block of unmatchable plants (NoMatch never
+gets flagged) stayed at the head of every chunk, and the previous
+stalled-remaining guard would halt the phase before any larger Id was
+ever attempted.
+
+Termination is a short chunk (`Total < Limit`) or a null cursor. The
+stalled guard is no longer needed.
+
 ## Resumability
 
-There is no state file. The SQL filter `(EnrichmentStatus & XxxEnriched) == 0`
-is the state. Crash the script halfway through, fix the issue, re-run with
-the same `-Limit` — every plant already flagged is excluded by the next
-chunk's `Where` clause.
+No state file. The SQL filter `(EnrichmentStatus & XxxEnriched) == 0` IS
+the state. Crash the script halfway through, fix the issue, re-run with
+the same `-Limit` -- every plant already flagged is excluded by the next
+chunk's `Where` clause, and the cursor restarts from the head of the
+remaining `!flagged` set.
 
-## Stalled guard
+Plants the upstream source could not match (`NoMatch`) are never flagged,
+so they are retried on every re-run. If you want to stop retrying them,
+either fix the upstream input (rename the species, etc.) or pass
+`?force=true` to that phase's endpoint once the inputs are clean.
 
-A phase stops when `NotEnrichedRemaining` does NOT decrease between two
-consecutive chunks. That means the chunk processed only unmatchable plants
-(no upstream match found), so retrying would loop forever. The script
-prints the stalled count and moves to the next phase.
+## Final `NotEnrichedRemaining` interpretation
 
-If you want to retry the stalled plants later, use the per-plant endpoint
-or pass `?force=true` to that phase's `enrich-all` once you've cleaned up
-the inputs.
+The response includes `NotEnrichedRemaining` for observability. After a
+full driver run it counts plants no upstream source ever matched -- data
+variance, not a bug. Investigate per-plant via the single-plant `enrich/`
+endpoint if needed.
 
 ## Auth
 
@@ -64,8 +84,8 @@ $env:SMARTCROPS_TOKEN = "<jwt>"
 | Parameter         | Default                  | Notes                                                                    |
 | ----------------- | ------------------------ | ------------------------------------------------------------------------ |
 | `BaseUrl`         | `http://localhost:5000`  | Backend root, no trailing slash.                                         |
-| `Limit`           | `50`                     | Chunk size. Trefle (120 req/min) is the tightest quota; 50 is safe.      |
-| `ThrottleSeconds` | `2`                      | Sleep between successful chunks. Driver-side, not server-side.           |
+| `Limit`           | `50`                     | Chunk size. `[ValidateRange(1, MaxValue)]` at bind-time.                 |
+| `ThrottleSeconds` | `2`                      | Sleep between successful chunks. `[ValidateRange(0, MaxValue)]`.         |
 | `Cookie`          | `$env:SMARTCROPS_TOKEN`  | Auth bearer. Required.                                                   |
 
 ## Scale note (runbook AI-5)

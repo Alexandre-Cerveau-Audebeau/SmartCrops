@@ -283,18 +283,16 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task EnrichAll_TwoConsecutiveChunks_StableOrder_NoOverlap()
+    public async Task EnrichAll_TwoConsecutiveChunks_AdvancedByCursor_NoOverlap()
     {
-        // 4 pending plants × two limit=2 calls = all 4 enriched exactly once.
-        // OrderBy(Id) + the !flagged filter (filter narrows as chunks commit)
-        // guarantees the second chunk sees a disjoint slice.
+        // 4 pending plants x two limit=2 calls (cursor-driven) = all 4
+        // enriched exactly once. The second chunk uses afterId from the
+        // first response so the seek window strictly advances.
         await SeedPlantAsync("Aaa species");
         await SeedPlantAsync("Bbb species");
         await SeedPlantAsync("Ccc species");
         await SeedPlantAsync("Ddd species");
 
-        // Stub returns 4 unique matches in arbitrary call order; we only
-        // assert on the post-state, not on which-stub-fed-which-plant.
         Fixture.TaxonomyStub.Enqueue(MatchResult(1, "F1", "G1", "s1"));
         Fixture.TaxonomyStub.Enqueue(MatchResult(2, "F2", "G2", "s2"));
         Fixture.TaxonomyStub.Enqueue(MatchResult(3, "F3", "G3", "s3"));
@@ -306,17 +304,141 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         Assert.NotNull(body1);
         Assert.Equal(2, body1!.Total);
         Assert.Equal(2, body1.NotEnrichedRemaining);
+        Assert.NotNull(body1.NextAfterId);
 
-        var chunk2 = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
+        var chunk2 = await Client.PostAsync(
+            $"/api/admin/taxonomy/enrich-all?limit=2&afterId={body1.NextAfterId}", null);
         var body2 = await chunk2.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
         Assert.NotNull(body2);
         Assert.Equal(2, body2!.Total);
         Assert.Equal(0, body2.NotEnrichedRemaining);
+        Assert.NotNull(body2.NextAfterId);
 
-        // Sanity: stub saw each name exactly once across the two chunks.
         var seen = Fixture.TaxonomyStub.ReceivedNames;
         Assert.Equal(4, seen.Count);
         Assert.Equal(4, seen.Distinct().Count());
+    }
+
+    [Fact]
+    public async Task EnrichAll_WithAfterId_SkipsPlantsAtOrBeforeCursor()
+    {
+        // Seed 3 plants, then call with afterId = smallest seeded Id.
+        // The cursor must exclude that plant AND anything smaller, leaving
+        // exactly the 2 strictly-larger Ids in this chunk.
+        await SeedPlantAsync("AlphaSpecies one");
+        await SeedPlantAsync("AlphaSpecies two");
+        await SeedPlantAsync("AlphaSpecies three");
+
+        Guid cursor;
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            cursor = await db.Plants
+                .Where(p => p.ScientificName.StartsWith("AlphaSpecies "))
+                .OrderBy(p => p.Id)
+                .Select(p => p.Id)
+                .FirstAsync();
+        }
+
+        Fixture.TaxonomyStub.Enqueue(MatchResult(10, "F", "G", "s10"));
+        Fixture.TaxonomyStub.Enqueue(MatchResult(11, "F", "G", "s11"));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(
+            $"/api/admin/taxonomy/enrich-all?afterId={cursor}", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
+        Assert.NotNull(body);
+        Assert.Equal(2, body!.Total);
+        Assert.Equal(2, body.Matched);
+        // The plant at the cursor was never loaded, so it's still pending.
+        Assert.Equal(1, body.NotEnrichedRemaining);
+    }
+
+    [Fact]
+    public async Task EnrichAll_ReturnsNextAfterId_AsMaxProcessedId()
+    {
+        // NextAfterId must equal the largest Id the chunk actually processed
+        // -- the contract the driver relies on to advance.
+        await SeedPlantAsync("Beta one");
+        await SeedPlantAsync("Beta two");
+        await SeedPlantAsync("Beta three");
+
+        Fixture.TaxonomyStub.Enqueue(MatchResult(20, "F", "G", "s20"));
+        Fixture.TaxonomyStub.Enqueue(MatchResult(21, "F", "G", "s21"));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
+        var body = await response.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
+        Assert.NotNull(body);
+        Assert.Equal(2, body!.Total);
+        Assert.NotNull(body.NextAfterId);
+
+        Guid expectedMax;
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var firstTwo = await db.Plants
+                .OrderBy(p => p.Id)
+                .Select(p => p.Id)
+                .Take(2)
+                .ToListAsync();
+            expectedMax = firstTwo[^1];
+        }
+        Assert.Equal(expectedMax, body.NextAfterId);
+    }
+
+    [Fact]
+    public async Task EnrichAll_UnmatchableFrontBlock_StillReachesTail()
+    {
+        // REGRESSION for CR r1 #2: a front block of unmatchable plants must
+        // NOT stall the cursor. Pre-PR-2a-2-r2, OrderBy(Id).Take + a stalled
+        // guard halted the phase as soon as the head of the !flagged set
+        // returned only NoMatch -- larger Ids were never attempted. With
+        // keyset pagination, the cursor advances past the unmatchables and
+        // chunk 2 reaches the tail.
+        await SeedPlantAsync("Frontblock one");   // Id-sorted positions 1..4
+        await SeedPlantAsync("Frontblock two");
+        await SeedPlantAsync("Frontblock three");
+        await SeedPlantAsync("Frontblock four");
+
+        // FIFO stub. EnrichAll iterates plantIds in OrderBy(Id), so positions
+        // 1,2 see NoMatch and 3,4 see Match.
+        Fixture.TaxonomyStub.EnqueueNoMatch();
+        Fixture.TaxonomyStub.EnqueueNoMatch();
+        Fixture.TaxonomyStub.Enqueue(MatchResult(30, "F", "G", "s30"));
+        Fixture.TaxonomyStub.Enqueue(MatchResult(31, "F", "G", "s31"));
+        AuthAsAnyUser();
+
+        var chunk1 = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
+        var body1 = await chunk1.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
+        Assert.NotNull(body1);
+        Assert.Equal(2, body1!.Total);
+        Assert.Equal(0, body1.Matched);
+        Assert.Equal(2, body1.NotMatched);
+        Assert.NotNull(body1.NextAfterId);
+        // Critical: remaining did NOT decrease (4 -> 4), the symptom that
+        // tripped the old stalled guard. The cursor proceeds anyway.
+        Assert.Equal(4, body1.NotEnrichedRemaining);
+
+        var chunk2 = await Client.PostAsync(
+            $"/api/admin/taxonomy/enrich-all?limit=2&afterId={body1.NextAfterId}", null);
+        var body2 = await chunk2.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
+        Assert.NotNull(body2);
+        Assert.Equal(2, body2!.Total);
+        Assert.Equal(2, body2.Matched);
+        Assert.Equal(2, body2.NotEnrichedRemaining);
+
+        // The two tail plants are now flagged -- proof the cursor reached
+        // them.
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var tailFlagged = await db.Plants
+            .Where(p => p.ScientificName.StartsWith("Frontblock "))
+            .OrderBy(p => p.Id)
+            .Skip(2)
+            .CountAsync(p => (p.EnrichmentStatus & EnrichmentStatus.GbifEnriched) != 0);
+        Assert.Equal(2, tailFlagged);
     }
 
     [Fact]
@@ -392,5 +514,6 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         int NotMatched,
         int Skipped,
         int Failed,
-        int NotEnrichedRemaining);
+        int NotEnrichedRemaining,
+        Guid? NextAfterId);
 }

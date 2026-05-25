@@ -114,16 +114,22 @@ public class PlantTrefleController : ControllerBase
     /// <see cref="EnrichmentStatus.TrefleEnriched"/> flag are skipped via a
     /// SQL filter to avoid loading them at all.
     ///
-    /// The optional <paramref name="limit"/> caps the chunk size for the
-    /// driver script (PR 2a-2) — combined with the stable <c>OrderBy(Id)</c>
-    /// the endpoint is resumable without a state file. The response includes
-    /// <c>NotEnrichedRemaining</c> (plants still lacking the flag after this
-    /// chunk commits) so the caller knows whether to loop again.
+    /// The optional <paramref name="limit"/> caps the chunk size and
+    /// <paramref name="afterId"/> is a keyset cursor: when set, the query
+    /// adds <c>WHERE Id &gt; afterId</c>, so every plant is scanned exactly
+    /// once per pass regardless of match outcome (CR r1 #2 — the previous
+    /// <c>OrderBy(Id).Take</c> over the <c>!TrefleEnriched</c> set could
+    /// stall if a front block of unmatchable plants stayed at the head of
+    /// every chunk). The response includes <c>NextAfterId</c> (max processed
+    /// Id, null when the chunk is empty) for the driver to advance the
+    /// cursor, and <c>NotEnrichedRemaining</c> as a kept-for-observability
+    /// count of plants still lacking the flag.
     /// </summary>
     [HttpPost("enrich-all")]
     public async Task<IActionResult> EnrichAll(
         [FromQuery] bool force = false,
         [FromQuery] int? limit = null,
+        [FromQuery] Guid? afterId = null,
         CancellationToken ct = default)
     {
         var query = _db.Plants.AsQueryable();
@@ -132,9 +138,19 @@ public class PlantTrefleController : ControllerBase
             query = query.Where(p => (p.EnrichmentStatus & EnrichmentStatus.TrefleEnriched) == 0);
         }
 
-        // Stable order is load-bearing for the driver script: it guarantees
-        // two consecutive chunks of size N see disjoint, monotonic slices of
-        // the !flagged set (PR 2a-2). OrderBy on Id is cheap on a GUID PK.
+        if (afterId is { } cursor)
+        {
+            // Keyset/seek: Id comparison + OrderBy stay server-side (Npgsql
+            // translates uuid > and uuid ORDER BY natively), so both sides
+            // use the same PostgreSQL uuid ordering and the cursor is
+            // consistent across chunks.
+            query = query.Where(p => p.Id > cursor);
+        }
+
+        // OrderBy(Id) IS the cursor key — it MUST match the Id comparison
+        // above. Replacing it with a composite (e.g. CreatedAt.ThenBy(Id))
+        // would break the seek invariant since the WHERE Id > cursor would
+        // skip plants that should still appear in a later chunk.
         query = query.OrderBy(p => p.Id);
         if (limit is > 0)
         {
@@ -189,10 +205,17 @@ public class PlantTrefleController : ControllerBase
             }
         }
 
-        // Counted AFTER the loop's per-plant commits so the value reflects
-        // the post-chunk state. Driver script (PR 2a-2) loops while this is
-        // > 0 (with a no-progress guard for unmatchable plants stuck in the
-        // !flagged set — they never get TrefleEnriched, so remaining stalls).
+        // NextAfterId = max processed Id (last of the ordered list); null
+        // when the chunk is empty, signalling the cursor has reached the
+        // tail of the !flagged set. Termination of the driver loop is
+        // "short chunk OR nextAfterId is null", not a stalled-remaining
+        // guard (the cursor guarantees forward progress).
+        Guid? nextAfterId = plantIds.Count > 0 ? plantIds[^1] : (Guid?)null;
+
+        // NotEnrichedRemaining is kept for observability: at the end of a
+        // full driver run this counts plants no upstream source matched
+        // (data variance, not a bug). Computed AFTER the per-plant commits
+        // so it reflects the post-chunk state.
         var notEnrichedRemaining = await _db.Plants
             .CountAsync(p => (p.EnrichmentStatus & EnrichmentStatus.TrefleEnriched) == 0, ct);
 
@@ -202,7 +225,8 @@ public class PlantTrefleController : ControllerBase
             NotMatched: notMatched,
             Skipped: skipped,
             Failed: failed,
-            NotEnrichedRemaining: notEnrichedRemaining));
+            NotEnrichedRemaining: notEnrichedRemaining,
+            NextAfterId: nextAfterId));
     }
 
     // ── Dual-write helpers ────────────────────────────────────────────────
@@ -453,5 +477,6 @@ public class PlantTrefleController : ControllerBase
         int NotMatched,
         int Skipped,
         int Failed,
-        int NotEnrichedRemaining);
+        int NotEnrichedRemaining,
+        Guid? NextAfterId);
 }
