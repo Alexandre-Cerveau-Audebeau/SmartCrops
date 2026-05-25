@@ -1043,6 +1043,29 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Assert.Equal(0, body.Failed);
     }
 
+    [Fact]
+    public async Task EnrichAll_WithLimit_RespectsChunkAndReportsRemaining()
+    {
+        // Smoke for the PR 2a-2 chunked contract on this controller (full
+        // coverage lives on PlantTaxonomyController — the three endpoints
+        // are symmetric).
+        await SeedPlantAsync("Aloe vera");
+        await SeedPlantAsync("Solanum lycopersicum");
+        await SeedPlantAsync("Daucus carota");
+
+        Fixture.PerenualStub.Enqueue(SampleMatch(1));
+        Fixture.PerenualStub.Enqueue(SampleMatch(2));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync("/api/admin/perenual/enrich-all?limit=2", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<EnrichAllDto>();
+        Assert.NotNull(body);
+        Assert.Equal(2, body!.Total);
+        Assert.Equal(2, body.Matched);
+        Assert.Equal(1, body.NotEnrichedRemaining);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────
 
     private async Task<Guid> SeedPlantAsync(
@@ -1184,5 +1207,11 @@ public class PlantPerenualControllerTests : IntegrationTestBase
 
     private record SkippedDto(bool Skipped, string Reason);
 
-    private record EnrichAllDto(int Total, int Matched, int NotMatched, int Skipped, int Failed);
+    private record EnrichAllDto(
+        int Total,
+        int Matched,
+        int NotMatched,
+        int Skipped,
+        int Failed,
+        int NotEnrichedRemaining);
 }

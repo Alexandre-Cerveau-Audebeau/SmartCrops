@@ -260,6 +260,87 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         Assert.Equal(0, body.Skipped);
     }
 
+    [Fact]
+    public async Task EnrichAll_WithLimit_ProcessesOnlyChunkAndReportsRemaining()
+    {
+        // 3 pending plants, chunk of 2 → first call enriches 2 and reports
+        // 1 still in the !GbifEnriched filter (PR 2a-2 contract).
+        await SeedPlantAsync("Solanum lycopersicum");
+        await SeedPlantAsync("Daucus carota");
+        await SeedPlantAsync("Plantus inventicus");
+
+        Fixture.TaxonomyStub.Enqueue(MatchResult(2930137, "Solanaceae", "Solanum", "lycopersicum"));
+        Fixture.TaxonomyStub.Enqueue(MatchResult(2706302, "Apiaceae", "Daucus", "carota"));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
+        Assert.NotNull(body);
+        Assert.Equal(2, body!.Total);
+        Assert.Equal(2, body.Matched);
+        Assert.Equal(1, body.NotEnrichedRemaining);
+    }
+
+    [Fact]
+    public async Task EnrichAll_TwoConsecutiveChunks_StableOrder_NoOverlap()
+    {
+        // 4 pending plants × two limit=2 calls = all 4 enriched exactly once.
+        // OrderBy(Id) + the !flagged filter (filter narrows as chunks commit)
+        // guarantees the second chunk sees a disjoint slice.
+        await SeedPlantAsync("Aaa species");
+        await SeedPlantAsync("Bbb species");
+        await SeedPlantAsync("Ccc species");
+        await SeedPlantAsync("Ddd species");
+
+        // Stub returns 4 unique matches in arbitrary call order; we only
+        // assert on the post-state, not on which-stub-fed-which-plant.
+        Fixture.TaxonomyStub.Enqueue(MatchResult(1, "F1", "G1", "s1"));
+        Fixture.TaxonomyStub.Enqueue(MatchResult(2, "F2", "G2", "s2"));
+        Fixture.TaxonomyStub.Enqueue(MatchResult(3, "F3", "G3", "s3"));
+        Fixture.TaxonomyStub.Enqueue(MatchResult(4, "F4", "G4", "s4"));
+        AuthAsAnyUser();
+
+        var chunk1 = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
+        var body1 = await chunk1.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
+        Assert.NotNull(body1);
+        Assert.Equal(2, body1!.Total);
+        Assert.Equal(2, body1.NotEnrichedRemaining);
+
+        var chunk2 = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
+        var body2 = await chunk2.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
+        Assert.NotNull(body2);
+        Assert.Equal(2, body2!.Total);
+        Assert.Equal(0, body2.NotEnrichedRemaining);
+
+        // Sanity: stub saw each name exactly once across the two chunks.
+        var seen = Fixture.TaxonomyStub.ReceivedNames;
+        Assert.Equal(4, seen.Count);
+        Assert.Equal(4, seen.Distinct().Count());
+    }
+
+    [Fact]
+    public async Task EnrichAll_NoLimit_ReturnsRemainingZeroAfterFullRun()
+    {
+        // Regression: omitting ?limit preserves the pre-PR-2a-2 full-run
+        // behaviour. After the loop every pending plant is flagged, so
+        // NotEnrichedRemaining is 0.
+        await SeedPlantAsync("Solanum lycopersicum");
+        await SeedPlantAsync("Daucus carota");
+
+        Fixture.TaxonomyStub.Enqueue(MatchResult(2930137, "Solanaceae", "Solanum", "lycopersicum"));
+        Fixture.TaxonomyStub.Enqueue(MatchResult(2706302, "Apiaceae", "Daucus", "carota"));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync("/api/admin/taxonomy/enrich-all", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
+        Assert.NotNull(body);
+        Assert.Equal(2, body!.Total);
+        Assert.Equal(2, body.Matched);
+        Assert.Equal(0, body.NotEnrichedRemaining);
+    }
+
     // ── helpers ────────────────────────────────────────────────────────
 
     private static PlantTaxonomyResult MatchResult(int key, string family, string genus, string epithet) =>
@@ -305,5 +386,11 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
 
     private record SkippedResponseDto(bool Skipped, string Reason);
 
-    private record EnrichAllResponseDto(int Total, int Matched, int NotMatched, int Skipped, int Failed);
+    private record EnrichAllResponseDto(
+        int Total,
+        int Matched,
+        int NotMatched,
+        int Skipped,
+        int Failed,
+        int NotEnrichedRemaining);
 }

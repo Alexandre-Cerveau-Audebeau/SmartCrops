@@ -219,16 +219,34 @@ public class PlantPerenualController : ControllerBase
     /// budget. When <paramref name="force"/> is false, plants that already
     /// carry the <see cref="EnrichmentStatus.PerenualEnriched"/> flag are
     /// skipped via a SQL filter to avoid loading them at all.
+    ///
+    /// The optional <paramref name="limit"/> caps the chunk size for the
+    /// driver script (PR 2a-2) — combined with the stable <c>OrderBy(Id)</c>
+    /// the endpoint is resumable without a state file. The response includes
+    /// <c>NotEnrichedRemaining</c> (plants still lacking the flag after this
+    /// chunk commits) so the caller knows whether to loop again. Note the
+    /// driver script must enrich GBIF first: the genus gate above reads
+    /// <c>plant.Genus</c>, which only the taxonomy controller writes.
     /// </summary>
     [HttpPost("enrich-all")]
     public async Task<IActionResult> EnrichAll(
         [FromQuery] bool force = false,
+        [FromQuery] int? limit = null,
         CancellationToken ct = default)
     {
         var query = _db.Plants.AsQueryable();
         if (!force)
         {
             query = query.Where(p => (p.EnrichmentStatus & EnrichmentStatus.PerenualEnriched) == 0);
+        }
+
+        // Stable order is load-bearing for the driver script: it guarantees
+        // two consecutive chunks of size N see disjoint, monotonic slices of
+        // the !flagged set (PR 2a-2). OrderBy on Id is cheap on a GUID PK.
+        query = query.OrderBy(p => p.Id);
+        if (limit is > 0)
+        {
+            query = query.Take(limit.Value);
         }
 
         var plantIds = await query.Select(p => p.Id).ToListAsync(ct);
@@ -280,12 +298,20 @@ public class PlantPerenualController : ControllerBase
             }
         }
 
+        // Counted AFTER the loop's per-plant commits so the value reflects
+        // the post-chunk state. Driver script (PR 2a-2) loops while this is
+        // > 0 (with a no-progress guard for unmatchable plants stuck in the
+        // !flagged set — they never get PerenualEnriched, so remaining stalls).
+        var notEnrichedRemaining = await _db.Plants
+            .CountAsync(p => (p.EnrichmentStatus & EnrichmentStatus.PerenualEnriched) == 0, ct);
+
         return Ok(new EnrichAllResponse(
             Total: plantIds.Count,
             Matched: matched,
             NotMatched: notMatched,
             Skipped: skipped,
-            Failed: failed));
+            Failed: failed,
+            NotEnrichedRemaining: notEnrichedRemaining));
     }
 
     // ── Dual-write helpers ────────────────────────────────────────────────
@@ -663,5 +689,6 @@ public class PlantPerenualController : ControllerBase
         int Matched,
         int NotMatched,
         int Skipped,
-        int Failed);
+        int Failed,
+        int NotEnrichedRemaining);
 }

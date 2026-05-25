@@ -123,16 +123,32 @@ public class PlantTaxonomyController : ControllerBase
     /// at this scale. When <paramref name="force"/> is false, plants that
     /// already carry the <see cref="EnrichmentStatus.GbifEnriched"/> flag
     /// are skipped via a SQL filter to avoid loading them at all.
+    ///
+    /// The optional <paramref name="limit"/> caps the chunk size for the
+    /// driver script (PR 2a-2) — combined with the stable <c>OrderBy(Id)</c>
+    /// the endpoint is resumable without a state file. The response includes
+    /// <c>NotEnrichedRemaining</c> (plants still lacking the flag after this
+    /// chunk commits) so the caller knows whether to loop again.
     /// </summary>
     [HttpPost("enrich-all")]
     public async Task<IActionResult> EnrichAll(
         [FromQuery] bool force = false,
+        [FromQuery] int? limit = null,
         CancellationToken ct = default)
     {
         var query = _db.Plants.AsQueryable();
         if (!force)
         {
             query = query.Where(p => (p.EnrichmentStatus & EnrichmentStatus.GbifEnriched) == 0);
+        }
+
+        // Stable order is load-bearing for the driver script: it guarantees
+        // two consecutive chunks of size N see disjoint, monotonic slices of
+        // the !flagged set (PR 2a-2). OrderBy on Id is cheap on a GUID PK.
+        query = query.OrderBy(p => p.Id);
+        if (limit is > 0)
+        {
+            query = query.Take(limit.Value);
         }
 
         var plantIds = await query.Select(p => p.Id).ToListAsync(ct);
@@ -183,12 +199,20 @@ public class PlantTaxonomyController : ControllerBase
             }
         }
 
+        // Counted AFTER the loop's per-plant commits so the value reflects
+        // the post-chunk state. Driver script (PR 2a-2) loops while this is
+        // > 0 (with a no-progress guard for unmatchable plants stuck in the
+        // !flagged set — they never get GbifEnriched, so remaining stalls).
+        var notEnrichedRemaining = await _db.Plants
+            .CountAsync(p => (p.EnrichmentStatus & EnrichmentStatus.GbifEnriched) == 0, ct);
+
         return Ok(new EnrichAllResponse(
             Total: plantIds.Count,
             Matched: matched,
             NotMatched: notMatched,
             Skipped: skipped,
-            Failed: failed));
+            Failed: failed,
+            NotEnrichedRemaining: notEnrichedRemaining));
     }
 
     // Response DTOs are kept as records for cheap pattern-matching in EnrichAll
@@ -210,5 +234,6 @@ public class PlantTaxonomyController : ControllerBase
         int Matched,
         int NotMatched,
         int Skipped,
-        int Failed);
+        int Failed,
+        int NotEnrichedRemaining);
 }
