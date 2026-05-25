@@ -20,7 +20,11 @@ namespace SmartCrops.Api.Tests.Integration.Stubs;
 public sealed class StubPlantPerenualEnrichmentService : IPlantPerenualEnrichmentService
 {
     private readonly object _lock = new();
-    private readonly Queue<PerenualEnrichmentResult> _responses = new();
+    // Queue of factories so a queued item can also be an exception
+    // (EnqueueFailure) — mirrors the GBIF taxonomy stub. The same queue feeds
+    // both ResolveAsync (name path) and ResolveByIdAsync (id path), preserving
+    // FIFO across the two access paths.
+    private readonly Queue<Func<PerenualEnrichmentResult>> _responses = new();
     private readonly List<string> _receivedNames = [];
     private readonly List<int> _receivedIds = [];
 
@@ -51,12 +55,27 @@ public sealed class StubPlantPerenualEnrichmentService : IPlantPerenualEnrichmen
     {
         lock (_lock)
         {
-            _responses.Enqueue(result);
+            _responses.Enqueue(() => result);
         }
     }
 
     /// <summary>Enqueue a NONE result (no Perenual id) for the next call.</summary>
     public void EnqueueNoMatch() => Enqueue(NoMatch());
+
+    /// <summary>
+    /// Enqueue a failure that throws <paramref name="exception"/> on the
+    /// next call (name or id path). Used by the FailedPlant regression tests
+    /// to drive the controller's catch branch (Failed++ without setting
+    /// PerenualEnriched).
+    /// </summary>
+    public void EnqueueFailure(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        lock (_lock)
+        {
+            _responses.Enqueue(() => throw exception);
+        }
+    }
 
     public static PerenualEnrichmentResult NoMatch() => new(
         PerenualId: null,
@@ -122,21 +141,37 @@ public sealed class StubPlantPerenualEnrichmentService : IPlantPerenualEnrichmen
 
     public Task<PerenualEnrichmentResult> ResolveAsync(string scientificName, CancellationToken ct)
     {
+        Func<PerenualEnrichmentResult> factory;
         lock (_lock)
         {
             _receivedNames.Add(scientificName);
-            var next = _responses.Count > 0 ? _responses.Dequeue() : NoMatch();
-            return Task.FromResult(next);
+            factory = _responses.Count > 0 ? _responses.Dequeue() : NoMatch;
+        }
+        try
+        {
+            return Task.FromResult(factory());
+        }
+        catch (Exception ex)
+        {
+            return Task.FromException<PerenualEnrichmentResult>(ex);
         }
     }
 
     public Task<PerenualEnrichmentResult> ResolveByIdAsync(int perenualId, CancellationToken ct)
     {
+        Func<PerenualEnrichmentResult> factory;
         lock (_lock)
         {
             _receivedIds.Add(perenualId);
-            var next = _responses.Count > 0 ? _responses.Dequeue() : NoMatch();
-            return Task.FromResult(next);
+            factory = _responses.Count > 0 ? _responses.Dequeue() : NoMatch;
+        }
+        try
+        {
+            return Task.FromResult(factory());
+        }
+        catch (Exception ex)
+        {
+            return Task.FromException<PerenualEnrichmentResult>(ex);
         }
     }
 

@@ -52,6 +52,46 @@ so they are retried on every re-run. If you want to stop retrying them,
 either fix the upstream input (rename the species, etc.) or pass
 `?force=true` to that phase's endpoint once the inputs are clean.
 
+## Failure model (Failed vs NotMatched)
+
+`EnrichAll` walks every plant in the chunk through the per-plant
+`Enrich(id)` action wrapped in a `try/catch`. Two outcomes are distinct:
+
+- **`NotMatched`** — the upstream resolver returned `NONE` (the plant
+  name is not in GBIF/Trefle/Perenual, or no candidate cleared the
+  match thresholds). The plant stays `!XxxEnriched`. Re-running won't
+  change anything until you fix the input (rename the species, supply
+  an explicit Perenual id, etc.) or pass `?force=true`.
+
+- **`Failed`** — the enrichment threw (HTTP 5xx, transient network
+  blip, deadlock, a row that surfaced a defensive guard). The plant
+  also stays `!XxxEnriched`, but the cause is transient: a retry is
+  expected to succeed.
+
+**The cursor advances past failed plants within a single run.** This
+is deliberate. The two alternatives are both worse:
+
+- "Advance only to the last successful Id" re-introduces the head-of-set
+  stall the seek cursor was added to fix (PR 2a-2 r2): if an entire
+  chunk fails, the cursor doesn't move and the next chunk re-fetches
+  the same rows forever.
+- "Re-throw on first failure" turns one bad plant into a poison-pill
+  that aborts a 3000-plant run. The 2999 healthy plants must not pay
+  for one transient blip.
+
+A failed plant is **never lost**. The driver holds no state file:
+`-afterId` resets to `null` at the start of each run, so the next
+invocation re-queries `(EnrichmentStatus & XxxEnriched) == 0`, the
+failed plant is still in that set, and it's re-selected at the head
+of the remaining rows.
+
+**Mop-up recipe.** When the driver prints
+`WARNING: N plant(s) failed during <source>`, re-run the script.
+Repeat until `Failed = 0` on every phase or until the remaining
+plants are stable `NotMatched` (data variance — see above). If the
+same plants fail repeatedly, inspect the API logs — the per-plant
+exception is logged at `Error` with the plant Id.
+
 ## Final `NotEnrichedRemaining` interpretation
 
 The response includes `NotEnrichedRemaining` for observability. After a

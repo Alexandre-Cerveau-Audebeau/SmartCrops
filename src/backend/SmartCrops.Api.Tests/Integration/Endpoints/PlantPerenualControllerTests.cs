@@ -1076,6 +1076,120 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Assert.Equal(0, body2.NotEnrichedRemaining);
     }
 
+    [Fact]
+    public async Task EnrichAll_UnmatchableFrontBlock_StillReachesTail()
+    {
+        // Replica of the PlantTaxonomyControllerTests regression (CR r2 B-5):
+        // pins the seek-cursor contract on the Perenual controller against
+        // symmetry drift. A front block of unmatchable plants must NOT stall
+        // the cursor; chunk 2 with the advanced afterId must reach the tail.
+        await SeedPlantAsync("Perenual-front one");
+        await SeedPlantAsync("Perenual-front two");
+        await SeedPlantAsync("Perenual-front three");
+        await SeedPlantAsync("Perenual-front four");
+
+        // FIFO stub. EnrichAll iterates in OrderBy(Id), so the first two see
+        // NoMatch and the last two see Match.
+        Fixture.PerenualStub.EnqueueNoMatch();
+        Fixture.PerenualStub.EnqueueNoMatch();
+        Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 9201));
+        Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 9202));
+        AuthAsAnyUser();
+
+        var chunk1 = await Client.PostAsync("/api/admin/perenual/enrich-all?limit=2", null);
+        var body1 = await chunk1.Content.ReadFromJsonAsync<EnrichAllDto>();
+        Assert.NotNull(body1);
+        Assert.Equal(2, body1!.Total);
+        Assert.Equal(0, body1.Matched);
+        Assert.Equal(2, body1.NotMatched);
+        Assert.NotNull(body1.NextAfterId);
+        // Critical: remaining did NOT decrease (4 -> 4) -- the symptom the
+        // old stalled guard tripped on. The cursor proceeds anyway.
+        Assert.Equal(4, body1.NotEnrichedRemaining);
+
+        var chunk2 = await Client.PostAsync(
+            $"/api/admin/perenual/enrich-all?limit=2&afterId={body1.NextAfterId}", null);
+        var body2 = await chunk2.Content.ReadFromJsonAsync<EnrichAllDto>();
+        Assert.NotNull(body2);
+        Assert.Equal(2, body2!.Total);
+        Assert.Equal(2, body2.Matched);
+        Assert.Equal(2, body2.NotEnrichedRemaining);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var tailFlagged = await db.Plants
+            .Where(p => p.ScientificName.StartsWith("Perenual-front "))
+            .OrderBy(p => p.Id)
+            .Skip(2)
+            .CountAsync(p => (p.EnrichmentStatus & EnrichmentStatus.PerenualEnriched) != 0);
+        Assert.Equal(2, tailFlagged);
+    }
+
+    [Fact]
+    public async Task EnrichAll_FailedPlant_RemainsUnflagged_RetriedOnFreshRun()
+    {
+        // Replica of the PlantTaxonomyControllerTests regression (CR r2 B-5):
+        // pins the failure model on the Perenual controller. The cursor
+        // advances PAST a failed plant within a single run; the fresh re-run
+        // (no state file) picks it up at the head of the remaining set.
+        await SeedPlantAsync("Perenual-failed alpha");
+        await SeedPlantAsync("Perenual-failed beta");
+
+        Guid pSmallerId;
+        Guid pLargerId;
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var ordered = await db.Plants
+                .Where(p => p.ScientificName.StartsWith("Perenual-failed "))
+                .OrderBy(p => p.Id)
+                .Select(p => p.Id)
+                .ToListAsync();
+            pSmallerId = ordered[0];
+            pLargerId = ordered[1];
+        }
+
+        Fixture.PerenualStub.EnqueueFailure(new InvalidOperationException("transient upstream blip"));
+        Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 9300));
+        AuthAsAnyUser();
+
+        var chunk1 = await Client.PostAsync("/api/admin/perenual/enrich-all?limit=2", null);
+        var body1 = await chunk1.Content.ReadFromJsonAsync<EnrichAllDto>();
+        Assert.NotNull(body1);
+        Assert.Equal(2, body1!.Total);
+        Assert.Equal(1, body1.Matched);
+        Assert.Equal(1, body1.Failed);
+        Assert.Equal(pLargerId, body1.NextAfterId);
+        Assert.Equal(1, body1.NotEnrichedRemaining);
+
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var pSmaller = await db.Plants.SingleAsync(p => p.Id == pSmallerId);
+            var pLarger = await db.Plants.SingleAsync(p => p.Id == pLargerId);
+            Assert.False(pSmaller.EnrichmentStatus.HasFlag(EnrichmentStatus.PerenualEnriched));
+            Assert.True(pLarger.EnrichmentStatus.HasFlag(EnrichmentStatus.PerenualEnriched));
+        }
+
+        // Fresh run: no afterId, the failed plant is still in !PerenualEnriched.
+        Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 9301));
+
+        var freshRun = await Client.PostAsync("/api/admin/perenual/enrich-all", null);
+        var body2 = await freshRun.Content.ReadFromJsonAsync<EnrichAllDto>();
+        Assert.NotNull(body2);
+        Assert.Equal(1, body2!.Total);
+        Assert.Equal(1, body2.Matched);
+        Assert.Equal(0, body2.Failed);
+        Assert.Equal(0, body2.NotEnrichedRemaining);
+
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var pSmaller = await db.Plants.SingleAsync(p => p.Id == pSmallerId);
+            Assert.True(pSmaller.EnrichmentStatus.HasFlag(EnrichmentStatus.PerenualEnriched));
+        }
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────
 
     private async Task<Guid> SeedPlantAsync(

@@ -77,6 +77,7 @@ function Invoke-EnrichPhase {
 
     $afterId = $null
     $chunkIndex = 0
+    $phaseFailed = 0
 
     do {
         $chunkIndex++
@@ -109,6 +110,19 @@ function Invoke-EnrichPhase {
             throw "Processed $total rows but 'nextAfterId' is null from '$Route' on chunk $chunkIndex (cursor contract violation)."
         }
 
+        # Observability counters: each chunk MUST report matched/notMatched/
+        # skipped/failed as integers. A silent absence would obscure the
+        # post-run Failed-count warning below (and hide schema regressions).
+        foreach ($field in 'matched', 'notMatched', 'skipped', 'failed') {
+            if (-not ($resp.PSObject.Properties.Name -contains $field)) {
+                throw "Response missing required field '$field' from '$Route' on chunk $chunkIndex."
+            }
+            $parsed = 0
+            if (-not [int]::TryParse([string]$resp.$field, [ref]$parsed)) {
+                throw "Invalid '$field' value '$($resp.$field)' from '$Route' on chunk $chunkIndex (expected integer)."
+            }
+        }
+
         $remaining = -1
         if ($resp.PSObject.Properties.Name -contains 'notEnrichedRemaining') {
             if (-not [int]::TryParse([string]$resp.notEnrichedRemaining, [ref]$remaining)) {
@@ -121,6 +135,7 @@ function Invoke-EnrichPhase {
                 -f $chunkIndex, $total, $resp.matched, $resp.notMatched, $resp.skipped, $resp.failed, $remaining, $resp.nextAfterId
         )
 
+        $phaseFailed += [int]$resp.failed
         $afterId = $resp.nextAfterId
 
         # A short chunk (fewer rows than $Limit) OR a null cursor means the
@@ -133,6 +148,18 @@ function Invoke-EnrichPhase {
     } while ($more)
 
     Write-Host "=== $Source done ($chunkIndex chunk(s), final remaining=$remaining) ===" -ForegroundColor Green
+
+    # A plant that throws during enrichment is counted Failed and stays
+    # !XxxEnriched, but the cursor advances PAST it within this run (see
+    # README "Failure model"). Surfacing the count here prompts a re-run
+    # for mop-up; with no state file, afterId resets to null and the
+    # failed plant is re-selected from the head of the remaining set.
+    if ($phaseFailed -gt 0) {
+        Write-Host (
+            "  WARNING: {0} plant(s) failed during {1} (transient errors). They remain unflagged; re-run this script to retry them." `
+                -f $phaseFailed, $Source
+        ) -ForegroundColor Yellow
+    }
 }
 
 # ORDER IS NON-NEGOTIABLE -- see header.

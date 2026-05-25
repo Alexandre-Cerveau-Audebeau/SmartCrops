@@ -442,6 +442,90 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task EnrichAll_FailedPlant_RemainsUnflagged_RetriedOnFreshRun()
+    {
+        // Hardening proof for CR r2 B-1 (PR #82): the seek cursor advances
+        // PAST a plant that threw during enrichment (Failed++, no flag) -- by
+        // design, to avoid the "rethrow = poison-pill" and "last-successful-id =
+        // re-stall" failure modes. The guarantee that no failed plant is lost
+        // relies on (a) no state file in the driver, so afterId resets to null
+        // every run, and (b) the SQL filter still seeing the !flagged plant
+        // at the head of the remaining set on the next run.
+        await SeedPlantAsync("Failed alpha");
+        await SeedPlantAsync("Failed beta");
+
+        // The controller iterates plantIds in OrderBy(Id), but Guid.NewGuid()
+        // is randomized, so resolve which seeded id is smaller before queuing
+        // the FIFO outcomes.
+        Guid pSmallerId;
+        Guid pLargerId;
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var ordered = await db.Plants
+                .Where(p => p.ScientificName.StartsWith("Failed "))
+                .OrderBy(p => p.Id)
+                .Select(p => p.Id)
+                .ToListAsync();
+            pSmallerId = ordered[0];
+            pLargerId = ordered[1];
+        }
+
+        // Chunk 1 (limit=2): smaller throws -> Failed=1, no flag.
+        // Larger matches -> flagged.
+        Fixture.TaxonomyStub.EnqueueFailure(new InvalidOperationException("transient upstream blip"));
+        Fixture.TaxonomyStub.Enqueue(MatchResult(100, "F", "G", "s100"));
+        AuthAsAnyUser();
+
+        var chunk1 = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
+        Assert.Equal(HttpStatusCode.OK, chunk1.StatusCode);
+        var body1 = await chunk1.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
+        Assert.NotNull(body1);
+        Assert.Equal(2, body1!.Total);
+        Assert.Equal(1, body1.Matched);
+        Assert.Equal(0, body1.NotMatched);
+        Assert.Equal(1, body1.Failed);
+        // The cursor is the max processed Id, NOT the last successful Id --
+        // this is the trade-off the test pins.
+        Assert.Equal(pLargerId, body1.NextAfterId);
+        // One plant remains in !GbifEnriched: the failed one.
+        Assert.Equal(1, body1.NotEnrichedRemaining);
+
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var pSmaller = await db.Plants.SingleAsync(p => p.Id == pSmallerId);
+            var pLarger = await db.Plants.SingleAsync(p => p.Id == pLargerId);
+            Assert.False(pSmaller.EnrichmentStatus.HasFlag(EnrichmentStatus.GbifEnriched));
+            Assert.True(pLarger.EnrichmentStatus.HasFlag(EnrichmentStatus.GbifEnriched));
+        }
+
+        // "Fresh run": no afterId (the driver holds no state file). The
+        // SQL filter excludes the larger plant (now flagged) and re-selects
+        // the smaller one at the head of the remaining set.
+        Fixture.TaxonomyStub.Enqueue(MatchResult(101, "F", "G", "s101"));
+
+        var freshRun = await Client.PostAsync("/api/admin/taxonomy/enrich-all", null);
+        Assert.Equal(HttpStatusCode.OK, freshRun.StatusCode);
+        var body2 = await freshRun.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
+        Assert.NotNull(body2);
+        // Only the previously-failed plant is in the remaining set.
+        Assert.Equal(1, body2!.Total);
+        Assert.Equal(1, body2.Matched);
+        Assert.Equal(0, body2.Failed);
+        Assert.Equal(0, body2.NotEnrichedRemaining);
+
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var pSmaller = await db.Plants.SingleAsync(p => p.Id == pSmallerId);
+            // The proof: a plant that failed in chunk 1 is now enriched on
+            // the next run. Never lost.
+            Assert.True(pSmaller.EnrichmentStatus.HasFlag(EnrichmentStatus.GbifEnriched));
+        }
+    }
+
+    [Fact]
     public async Task EnrichAll_NoLimit_ReturnsRemainingZeroAfterFullRun()
     {
         // Regression: omitting ?limit preserves the pre-PR-2a-2 full-run
