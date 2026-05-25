@@ -1,0 +1,76 @@
+scientificName,commonNameFr,commonNameEn,category
+Solanum lycopersicum,Tomate,Tomato,vegetable
+Solanum melongena,Aubergine,Eggplant,vegetable
+Solanum tuberosum,Pomme de terre,Potato,vegetable
+Capsicum annuum,Poivron / Piment,Pepper,vegetable
+Cucumis sativus,Concombre,Cucumber,vegetable
+Cucurbita pepo,Courgette / Courge,Zucchini / Squash,vegetable
+Daucus carota,Carotte,Carrot,vegetable
+Lactuca sativa,Laitue,Lettuce,vegetable
+Spinacia oleracea,Épinard,Spinach,vegetable
+Brassica oleracea,Chou,Cabbage,vegetable
+Allium cepa,Oignon,Onion,vegetable
+Allium sativum,Ail,Garlic,vegetable
+Allium porrum,Poireau,Leek,vegetable
+Phaseolus vulgaris,Haricot,Bean,vegetable
+Lathyrus oleraceus,Pois,Pea,vegetable
+Beta vulgaris,Betterave,Beet,vegetable
+Raphanus sativus,Radis,Radish,vegetable
+Cucurbita maxima,Potiron,Pumpkin,vegetable
+Cynara scolymus,Artichaut,Artichoke,vegetable
+Asparagus officinalis,Asperge,Asparagus,vegetable
+Ocimum basilicum,Basilic,Basil,herb
+Mentha spicata,Menthe,Mint,herb
+Thymus vulgaris,Thym,Thyme,herb
+Salvia officinalis,Sauge,Sage,herb
+Petroselinum crispum,Persil,Parsley,herb
+Coriandrum sativum,Coriandre,Coriander,herb
+Salvia rosmarinus,Romarin,Rosemary,herb
+Origanum vulgare,Origan,Oregano,herb
+Thymus serpyllum,Serpolet,Wild thyme,herb
+Allium schoenoprasum,Ciboulette,Chives,herb
+Anethum graveolens,Aneth,Dill,herb
+Laurus nobilis,Laurier-sauce,Bay laurel,herb
+Melissa officinalis,Mélisse,Lemon balm,herb
+Foeniculum vulgare,Fenouil,Fennel,herb
+Artemisia dracunculus,Estragon,Tarragon,herb
+Fragaria × ananassa,Fraise,Strawberry,fruit
+Rubus idaeus,Framboise,Raspberry,fruit
+Ribes rubrum,Groseille,Redcurrant,fruit
+Ribes nigrum,Cassis,Blackcurrant,fruit
+Vaccinium corymbosum,Myrtille,Blueberry,fruit
+Vitis vinifera,Vigne / Raisin,Grape,fruit
+Olea europaea,Olivier,Olive,fruit
+Ficus carica,Figuier,Fig,fruit
+Malus domestica,Pommier,Apple,fruit
+Prunus avium,Cerisier,Cherry,fruit
+Calendula officinalis,Souci,Marigold,flower
+Echinacea purpurea,Échinacée,Coneflower,flower
+Dahlia pinnata,Dahlia,Dahlia,flower
+Helianthus annuus,Tournesol,Sunflower,flower
+Tulipa gesneriana,Tulipe,Tulip,flower
+Lavandula angustifolia,Lavande,Lavender,flower
+Rosa gallica,Rosier,Rose,flower
+Tagetes erecta,Œillet d'Inde,French marigold,flower
+Cosmos bipinnatus,Cosmos,Cosmos,flower
+Zinnia elegans,Zinnia,Zinnia,flower
+Papaver rhoeas,Coquelicot,Poppy,flower
+Narcissus pseudonarcissus,Narcisse / Jonquille,Daffodil,flower
+Hydrangea macrophylla,Hortensia,Hydrangea,flower
+Paeonia lactiflora,Pivoine,Peony,flower
+Iris germanica,Iris,Iris,flower
+Buxus sempervirens,Buis,Boxwood,shrub
+Hedera helix,Lierre,Ivy,shrub
+Wisteria sinensis,Glycine,Wisteria,shrub
+Hibiscus syriacus,Althéa,Rose of Sharon,shrub
+Syringa vulgaris,Lilas,Lilac,shrub
+Camellia japonica,Camélia,Camellia,shrub
+Rhododendron ferrugineum,Rhododendron,Rhododendron,shrub
+Viburnum opulus,Viorne obier,Guelder rose,shrub
+Forsythia × intermedia,Forsythia,Forsythia,shrub
+Cornus alba,Cornouiller,Dogwood,shrub
+Aloe vera,Aloe vera,Aloe vera,indoor
+Ficus elastica,Caoutchouc,Rubber plant,indoor
+Monstera deliciosa,Monstera,Swiss cheese plant,indoor
+Dracaena trifasciata,Langue de belle-mère,Snake plant,indoor
+Epipremnum aureum,Pothos,Golden pothos,indoor
