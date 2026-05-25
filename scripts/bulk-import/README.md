@@ -92,6 +92,14 @@ plants are stable `NotMatched` (data variance — see above). If the
 same plants fail repeatedly, inspect the API logs — the per-plant
 exception is logged at `Error` with the plant Id.
 
+**Bounded retry.** If the same plants keep failing across 3+
+consecutive runs, treat the failures as persistent (data-quality
+issue, a defensive validation guard firing, or a permanently-broken
+upstream record) rather than transient (network blip, deadlock).
+Stop re-running and inspect the per-plant exception in the API logs
+before any further attempt — retrying persistent failures only
+burns API quota.
+
 ## Final `NotEnrichedRemaining` interpretation
 
 The response includes `NotEnrichedRemaining` for observability. After a
