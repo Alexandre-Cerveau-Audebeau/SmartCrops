@@ -73,3 +73,6 @@ Thumbs.db
 # enrichment work (e.g. tomato-current.json). Never commit — they're
 # regenerable and tend to balloon with raw blob payloads.
 *-current.json
+
+# Bulk-import local exports (multi-MB dumps, never commit)
+scripts/bulk-import/exports/
