@@ -39,7 +39,15 @@ Endpoint: `POST /api/admin/bulk-import` with the `category → PlantType` mappin
 | Trefle | 9 | 0 | 9 | 0 | 9 |
 | Perenual | 13 | 0 | 12 | 1 | 13 |
 
-Run 2 was the second consecutive run with identical Failed counts → persistent failures, not transient. Stopped at 2 runs per the README bounded-retry policy (`Failed stable on 2 consecutive runs`); did not proceed to a 3rd run.
+### Run 3 (mop-up confirmation)
+
+| Phase | Total | Matched | NotMatched | Failed | Remaining |
+|---|---|---|---|---|---|
+| GBIF | 2 | 0 | 0 | 2 | 2 |
+| Trefle | 9 | 0 | 9 | 0 | 9 |
+| Perenual | 13 | 0 | 12 | 1 | 13 |
+
+Failed stable on **3 consecutive runs** (GBIF 2/2/2, Trefle 0/0/0, Perenual 1/1/1) → persistent failures, conforming to the README bounded-retry threshold (PR #82 r5 runbook, "3+ consecutive runs"). The 3 individually-identified plants in [Persistent failures](#persistent-failures-3-root-cause-analysed) are the same set across runs 1-3; no failure moved between transient and persistent classification on the third pass.
 
 ## Final counts (all 82 plants in DB, curated batch + pre-existing seed)
 
@@ -63,7 +71,7 @@ FROM "Plants";
 | **Allium ampeloprasum** (HIGHERRANK fix) | (none — GBIF failed) | Trefle+Perenual (13, no GBIF) | 66 across 19 langs (ar, ca, cy, cym, da, de, en, es, fr, he, hu, it, nb, nl, nn, nno, nob, pt, sv) | 31 | 665 (HasSupreme=true) — leek matched **as species**, vs the pre-fix `Allium porrum` which GBIF only resolved at GENUS rank |
 | **Sansevieria trifasciata** (SYNONYM kept as traditional) | **Dracaena** / Asparagaceae | GBIF+Perenual (11, no Trefle) | 0 (Trefle NotMatched) | 2 | 7171 (HasSupreme=true) |
 
-The Sansevieria case is the one the prompt flagged for surveillance and it landed exactly as predicted:
+`Sansevieria trifasciata` was identified during planning as a synonym-resolution case to verify, and resolved through GBIF's `acceptedUsageKey` to `Genus=Dracaena` as expected:
 - GBIF resolved via `acceptedUsageKey` → the canonical `Dracaena` was persisted as `Plant.Genus` (the synonym `Sansevieria` survives only in `ScientificName` because it's our human-facing label).
 - Perenual found it (id 7171, Supreme payload) — the path under either name reaches the upstream record.
 - Trefle did not match.
@@ -105,5 +113,5 @@ Upstream Perenual payload contained a string longer than the schema-side `varcha
 
 - Auth: a throwaway local user (`bulkimport-test+<ts>@localhost.dev`) was registered via `POST /api/auth/register`; the JWT cookie value was lifted into `$env:SMARTCROPS_TOKEN` for the run. Credentials live only in this session — no persistence.
 - Docker volume preserved throughout (no `down -v`; only `up --build -d` to refresh the API image to HEAD).
-- 2 mop-up runs total (initial + 1 retry); the 3rd run was skipped per the bounded-retry rule once Failed counts stabilised.
+- 3 runs total (initial + 2 mop-up retries). Failed counts were identical across runs 1, 2, and 3, satisfying the runbook's "3+ consecutive runs" persistence threshold. No further retries.
 - The follow-up shared-runner refactor flagged in PR #82 r6 is still tracked in #83 — independent of this PR.
