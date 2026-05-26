@@ -30,7 +30,11 @@ public class PlantPerenualDataConfiguration : IEntityTypeConfiguration<PlantPere
         builder.Property(p => p.WateringBenchmark).HasMaxLength(50);
         builder.Property(p => p.WateringBenchmarkUnit).HasMaxLength(20);
         builder.Property(p => p.SunlightPreferences).HasMaxLength(200);
-        builder.Property(p => p.PruningMonths).HasMaxLength(200);
+        // PruningMonths intentionally has no length cap: Perenual ships
+        // pruning_month as a variable-length array (38+ entries with duplicates
+        // observed) that can overflow any reasonable varchar bound. Stored as
+        // text; resolver-side Distinct() trims most of the bulk for display.
+        builder.Property(p => p.PruningMonths);
         builder.Property(p => p.Maintenance).HasMaxLength(50);
         builder.Property(p => p.FloweringSeason).HasMaxLength(50);
         builder.Property(p => p.HarvestSeason).HasMaxLength(50);
