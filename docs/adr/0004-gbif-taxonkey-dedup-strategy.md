@@ -45,10 +45,18 @@ The `IX_Plants_GbifTaxonKey` UNIQUE partial index is preserved as the authoritat
 
 - **Library / read-model surface implications.** Once duplicates are merged, the library may surface plants that have multiple historical aliases (e.g. a single row for `Salvia rosmarinus` that the user previously knew as `Rosmarinus officinalis`). Surfacing aliases is out of scope for this ADR but is tracked separately under SMA-7 (synonym display).
 
-- **Related work:**
-  - **ADR-0003** (Plant denormalized read model) — provides the dual-write context that gives raw enrichment rows their `1-1` relationship with `Plant`. Merging duplicates means raw enrichment data on the loser is discarded with the loser, accepted as a known cost.
-  - **Issue #83 / SMA-12** (shared EnrichAll chunk runner) — once the three GBIF/Trefle/Perenual enrichment controllers consolidate into one runner, layer (c)'s `23505` catch lands in one place rather than three.
-  - **Issue SMA-45** (pre-flight overlap detection) — layer (b) implementation.
-  - **Issue SMA-46** (runtime `DuplicateTaxonKey` classification) — layer (c) implementation.
-
 This PR (Issue #86 / SMA-11) ships layer (a) only.
+
+## When to revisit
+
+- **Observed collision rate at scale exceeds projection by ~2×.** The 10-50/1000 projection in Context is informed by current synonym/reclassification density. If the SMA-13 scale-up run measures collisions sustained above ~100/1000, the three-layer plan is under-resourced: re-evaluate whether layer (b) prevention is sufficient or whether automated reconciliation (a generalisation of layer (a)) needs to ship.
+- **GBIF contract / taxonomy change.** Either a breaking change to the `species/match` API surface (response shape, rank semantics, `acceptedUsageKey` resolution) or a public statement that GBIF accepted keys are not stable identifiers would invalidate the "accepted taxon = plant identity" assumption layer (a)/(b) rely on. The taxonomy-drift behaviour the leek case exhibits is already known; we're talking about a step-change beyond that.
+- **Pre-flight latency degrades at scale.** Layer (b) does a DB cross-check per resolved key. On batches in the low thousands this should stay well under a minute, but if the per-candidate `SELECT 1 FROM "Plants" WHERE "GbifTaxonKey" = …` lookup becomes a bottleneck (e.g. driver run wall-time dominated by pre-flight rather than upstream API calls), shift to a single bulk `WHERE … IN (…)` round-trip per batch and/or align with AI-5's `CREATE INDEX CONCURRENTLY` runbook at 100k+ rows.
+
+## Related
+
+- **ADR-0003** (Plant denormalized read model) — provides the dual-write context that gives raw enrichment rows their `1-1` relationship with `Plant`. Merging duplicates means raw enrichment data on the loser is discarded with the loser, accepted as a known cost.
+- **Issue #83 / SMA-12** (shared EnrichAll chunk runner) — once the three GBIF/Trefle/Perenual enrichment controllers consolidate into one runner, layer (c)'s `23505` catch lands in one place rather than three.
+- **SMA-45** (pre-flight overlap detection) — layer (b) implementation.
+- **SMA-46** (runtime `DuplicateTaxonKey` classification) — layer (c) implementation.
+- **SMA-7** (synonym display in the library) — read-model surface implication once duplicates are merged.
