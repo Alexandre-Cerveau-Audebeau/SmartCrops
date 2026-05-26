@@ -945,4 +945,70 @@ public class PerenualResolverTests
         Assert.Null(minC);
         Assert.Null(maxC);
     }
+
+    // ── PruningMonths order-preserving dedupe ─────────────────────────────
+
+    [Fact]
+    public void Resolve_PruningMonth_WithDuplicatesAcrossSeasons_DedupesPreservingOrder()
+    {
+        // Real Perenual payload shape for Spinacia oleracea (id 7468): the
+        // pruning_month array repeats months across recommended-seasons
+        // groups. The raw join is 226 chars (> the previous varchar(200) cap);
+        // dedup brings it down to the 7 distinct months in first-occurrence
+        // order. Pins the resolver behaviour against accidental removal of
+        // .Distinct() at the join site.
+        var response = new PerenualSpeciesResponse
+        {
+            Id = 7468,
+            ScientificName = new() { "Spinacia oleracea" },
+            PruningMonth = new()
+            {
+                "March", "April", "May", "June", "July", "August", "September",
+                "June", "July", "August",
+                "June", "July", "August",
+                "May", "March", "April", "May", "June", "July", "August", "September",
+                "June", "July", "August",
+                "March", "April", "May", "June", "July", "August", "September",
+                "March", "April", "May", "June", "July", "August", "September",
+            },
+        };
+
+        var result = Resolver.Resolve(response, rawJson: "{}", requestedPerenualId: 7468);
+
+        Assert.Equal("March,April,May,June,July,August,September", result.PruningMonths);
+        // Sanity: the dedup output stays comfortably under any reasonable
+        // varchar bound, but the column is now `text` so this just guards
+        // against a future regression that re-introduces a length cap.
+        Assert.True(result.PruningMonths!.Length < 100);
+    }
+
+    [Fact]
+    public void Resolve_PruningMonth_NullList_ReturnsNull()
+    {
+        var response = new PerenualSpeciesResponse
+        {
+            Id = 1,
+            ScientificName = new() { "Test" },
+            PruningMonth = null,
+        };
+
+        var result = Resolver.Resolve(response, rawJson: "{}", requestedPerenualId: 1);
+
+        Assert.Null(result.PruningMonths);
+    }
+
+    [Fact]
+    public void Resolve_PruningMonth_AllDistinct_PreservesOriginalList()
+    {
+        var response = new PerenualSpeciesResponse
+        {
+            Id = 1,
+            ScientificName = new() { "Test" },
+            PruningMonth = new() { "January", "February", "March" },
+        };
+
+        var result = Resolver.Resolve(response, rawJson: "{}", requestedPerenualId: 1);
+
+        Assert.Equal("January,February,March", result.PruningMonths);
+    }
 }

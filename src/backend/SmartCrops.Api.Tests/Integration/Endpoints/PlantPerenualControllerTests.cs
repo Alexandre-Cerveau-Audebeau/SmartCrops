@@ -996,6 +996,40 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Assert.Equal(1, await db.PlantPerenualData.CountAsync(d => d.PlantId == plantId));
     }
 
+    [Fact]
+    public async Task Enrich_LongPruningMonths_PersistsWithoutVarcharOverflow()
+    {
+        // Regression for the PR 2b batch-1 run failure on Spinacia oleracea
+        // (Perenual id 7468): the original varchar(200) cap on
+        // PlantPerenualData.PruningMonths rejected long upstream lists with a
+        // 22001 overflow, rolling back the entire enrichment transaction.
+        // After widening the column to text, even a heavily-padded value
+        // persists end-to-end and the PerenualEnriched flag lands. The
+        // resolver's order-preserving dedupe (PerenualResolverTests covers it)
+        // means production callers won't usually send strings this long, but
+        // the schema must still accept them defensively.
+        var plantId = await SeedPlantAsync("Spinacia oleracea");
+        // ~220 chars: longer than the removed varchar(200) cap, well within
+        // PostgreSQL text limits.
+        var longPruningMonths = string.Join(",", Enumerable.Repeat("September", 22));
+        Assert.True(longPruningMonths.Length > 200);
+        Fixture.PerenualStub.Enqueue(SampleMatch(
+            perenualId: 7468,
+            canonicalName: "Spinacia oleracea",
+            pruningMonths: longPruningMonths));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        Assert.True(plant.EnrichmentStatus.HasFlag(EnrichmentStatus.PerenualEnriched));
+        var perenualData = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+        Assert.Equal(longPruningMonths, perenualData.PruningMonths);
+    }
+
     // ── enrich-all ────────────────────────────────────────────────────────
 
     [Fact]
@@ -1257,7 +1291,8 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         int? xPlantSpacingValue = null,
         string? xPlantSpacingUnit = null,
         string? xWateringQualityJson = null,
-        string? xWateringPeriodJson = null) => new(
+        string? xWateringPeriodJson = null,
+        string? pruningMonths = null) => new(
             PerenualId: perenualId,
             RequestedPerenualId: requestedPerenualId ?? perenualId,
             Cultivar: cultivar,
@@ -1288,7 +1323,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             SowingInstructions: null,
             OriginCountries: null,
             SunlightPreferences: null,
-            PruningMonths: null,
+            PruningMonths: pruningMonths,
             Maintenance: null,
             FloweringSeason: null,
             HarvestSeason: null,

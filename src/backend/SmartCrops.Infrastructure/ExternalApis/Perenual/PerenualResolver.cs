@@ -166,7 +166,12 @@ public partial class PerenualResolver
 
             OriginCountries: JoinList(response.Origin, ", "),
             SunlightPreferences: JoinList(response.Sunlight, ", "),
-            PruningMonths: JoinList(response.PruningMonth, ","),
+            // Perenual ships pruning_month with heavy duplication (e.g. 38
+            // entries for spinach, joined string > 200 chars). Distinct() is
+            // order-preserving on the first occurrence, so the persisted list
+            // matches Perenual's intended chronology without the noise. Raw
+            // duplicates are kept in RawResponseJson for the audit trail.
+            PruningMonths: JoinList(response.PruningMonth?.Distinct().ToList(), ","),
             Maintenance: NullIfBlank(response.Maintenance),
             FloweringSeason: NullIfBlank(response.FloweringSeason),
             HarvestSeason: NullIfBlank(response.HarvestSeason),
