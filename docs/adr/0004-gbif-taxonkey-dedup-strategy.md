@@ -27,6 +27,10 @@ Three complementary layers, none of them load-bearing on its own:
 
 The `IX_Plants_GbifTaxonKey` UNIQUE partial index is preserved as the authoritative single-row-per-accepted-taxon guarantee at the DB layer. Multiple `NULL` values remain permitted via the existing `WHERE "GbifTaxonKey" IS NOT NULL` filter clause.
 
+## Rationale
+
+The three-layer approach is preferred because each layer covers a distinct angle the others cannot. **DB-level uniqueness on `IX_Plants_GbifTaxonKey`** stays as the cheapest final guard against silent duplicate writes from any source — demoting it (alternative d) would require defensive checks at every write site without protecting ad-hoc manual `INSERT`s during smoke testing. **GBIF resolution is deliberately kept out of the synchronous staging path** (alternative e) so bulk-create remains independent of upstream API availability, preserving the stage-first / enrich-later separation the seek-cursor enrich-all driver (PR #82) relies on. And the three layers themselves are complementary: (a) one-shot remediation of known duplicates, (b) scalable prevention at staging time for new batches, (c) runtime resilience to taxonomy drift that (b) cannot predict — the leek case is the canonical example of why (c) is load-bearing on top of (b). Each layer covers a blind spot of the others; none is sufficient alone.
+
 ## Alternatives considered and rejected
 
 - **(d) Demote `IX_Plants_GbifTaxonKey` to a non-unique index, dedup in application code.** Rejected. The DB-level uniqueness constraint is a cheap final guard against silent duplicate writes that originate from any path (admin UI, bulk import, future external integrations). Moving the guarantee into application code would require defensive checks at every write site and would not protect against ad-hoc manual `INSERT`s during smoke testing. The PostgreSQL `23505` error is loud and structured — a worse outcome than catching it and routing to `Skipped/DuplicateTaxonKey` is silent data divergence.
