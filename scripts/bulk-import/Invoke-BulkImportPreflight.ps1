@@ -37,7 +37,7 @@
 
 .PARAMETER ChunkSize
     Candidates per POST. Defaults to 250 (well under the server's per-request
-    cap of 500 enforced by BulkImportPreflightService.MaxCandidates).
+    cap of 500 enforced by BulkImportPreflightRequest.MaxCandidates).
 
 .PARAMETER Cookie
     Auth bearer token (admin session). Falls back to $env:SMARTCROPS_TOKEN.
