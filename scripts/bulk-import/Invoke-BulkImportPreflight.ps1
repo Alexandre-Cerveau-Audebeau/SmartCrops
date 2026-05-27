@@ -58,6 +58,11 @@ param(
 
     [string]$BaseUrl = "http://localhost:5000",
 
+    # The upper bound 500 mirrors BulkImportPreflightRequest.MaxCandidates in
+    # Core (src/backend/SmartCrops.Core/Models/BulkImportPreflightModels.cs).
+    # PowerShell can't import a C# const at parse time; if the backend cap
+    # changes, update this literal too. Server-side 400 is the authoritative
+    # enforcement — this attribute is fail-fast UX.
     [ValidateRange(1, 500)]
     [int]$ChunkSize = 250,
 
