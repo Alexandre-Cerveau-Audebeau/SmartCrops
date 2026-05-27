@@ -1,8 +1,121 @@
-# Bulk import -- driver script
+# Bulk import -- driver scripts
 
-`Enrich-AllSources.ps1` walks every `Plant` row through the three
-`/enrich-all` endpoints with keyset (seek) pagination and loops each phase
-until the cursor reaches the tail of the `!XxxEnriched` set.
+This directory holds the two scripts that bracket a bulk-import run:
+
+1. **`Invoke-BulkImportPreflight.ps1`** — pre-flight overlap gate. Run this
+   **before** posting the curated CSV to `/api/admin/bulk-import` so any
+   GBIF taxon-key collisions are flagged for human review.
+2. **`Enrich-AllSources.ps1`** — post-create enrichment driver. Walks every
+   newly-staged `Plant` row through the three `/enrich-all` endpoints.
+
+## Pre-flight overlap gate (SMA-45, ADR-0004 layer b)
+
+### Why
+
+`POST /api/admin/bulk-import` deduplicates on `ScientificName` only
+(case-insensitive). Two distinct names that resolve to the same accepted
+GBIF taxon (e.g. `Rosmarinus officinalis` / `Salvia rosmarinus`, both →
+`10902460`) will both be staged, and then collide on `IX_Plants_GbifTaxonKey`
+at enrichment time. PR #84's batch-1 run produced 2 such collisions on 75
+plants; the projection for the 1000-3000-plant SMA-13 scale-up is
+**10-50 collisions per 1000 rows** if no pre-flight runs.
+
+The pre-flight calls `POST /api/admin/bulk-import/preflight`, a read-only
+endpoint that resolves every candidate against GBIF (via the same
+`GbifDedupResolver` the runtime enrichment uses — single source of truth)
+and flags two classes of overlap:
+
+- **`intra_batch`** — two or more candidates in the same submission resolve
+  to the same accepted key.
+- **`db_existing`** — a candidate's resolved key already lives on a `Plant`
+  row carrying a *different* scientific name (case-insensitive).
+
+Candidates GBIF cannot resolve are counted as `NoMatch` and excluded from the
+overlap checks (a NoMatch row cannot collide on a key it doesn't have); the
+count is surfaced so the curator can investigate spelling / taxonomy issues
+before enrichment.
+
+### Auth
+
+The pre-flight endpoint is `[Authorize]` — same policy as bulk-import
+itself. Provide an admin bearer token via the environment variable
+(recommended, keeps it out of shell history):
+
+```powershell
+$env:SMARTCROPS_TOKEN = "<jwt>"
+```
+
+Or pass it once via `-Cookie`. **Never hardcode the token in the script or
+this doc**, and never commit it. The token follows the same lifecycle as for
+`Enrich-AllSources.ps1` (lift the JWT from the SPA's local storage, or hit
+the login endpoint directly).
+
+### Usage
+
+```powershell
+$env:SMARTCROPS_TOKEN = "<jwt>"
+.\Invoke-BulkImportPreflight.ps1 -CuratedCsv .\curated-batch1.csv
+```
+
+Parameters:
+
+| Parameter    | Default                  | Notes                                                                         |
+| ------------ | ------------------------ | ----------------------------------------------------------------------------- |
+| `CuratedCsv` | (required)               | Path to the curated CSV. Same schema as `curated-batch1.csv`.                 |
+| `BaseUrl`    | `http://localhost:5000`  | Backend root, no trailing slash.                                              |
+| `ChunkSize`  | `250`                    | Candidates per POST. Server cap is 500; chunks larger than 500 will 400.      |
+| `Cookie`     | `$env:SMARTCROPS_TOKEN`  | Admin bearer. Required.                                                       |
+
+Output: `exports/flagged-overlaps.csv` is always rewritten (the file's
+**row count** is the signal — header-only when the batch is clean). Schema:
+
+```
+candidate_scientific_name,candidate_category,resolved_accepted_key,
+resolved_match_type,conflict_type,conflicting_partner,suggested_action
+```
+
+Exit code: `1` when at least one overlap is flagged, `0` otherwise. The
+script prints a one-line per-chunk summary and a final aggregate.
+
+### Iterate to clean
+
+The intended loop is:
+
+1. Run the pre-flight against the curated CSV.
+2. If `flagged-overlaps.csv` has rows, the curator **edits the curated CSV**
+   to resolve them (drop the colliding candidate, replace with a non-
+   overlapping name, or flag for a planned merge per ADR-0004 layer a).
+3. Re-run the pre-flight. Repeat until `flagged-overlaps.csv` has 0 rows.
+4. Then `POST /api/admin/bulk-import` with the cleaned curated list.
+5. Then run `Enrich-AllSources.ps1` (next section).
+
+The pre-flight is read-only: it can be run any number of times against a
+hot DB without side effects.
+
+### Known limit: taxonomy drift (SMA-46)
+
+The pre-flight asks GBIF for **today's** accepted key. A plant enriched
+months ago may carry a key that, at the time, accepted a different name —
+GBIF's accepted-key assignments are not stable across multi-year horizons.
+The leek case from RUN_REPORT_batch1.md is the canonical example: the
+previously-enriched `Allium porrum` row was carrying `2856037`, which
+today's GBIF assigns to `Allium ampeloprasum`. The pre-flight will report
+this as a `db_existing` overlap, but it cannot tell the curator whether it
+is a genuine synonym collision or a drift artefact — the human still has
+to look. **Runtime resilience for collisions the pre-flight cannot
+predict** is layer (c) of ADR-0004, tracked under SMA-46: the GBIF
+enrichment path catches the `23505` on `IX_Plants_GbifTaxonKey` and routes
+the outcome to a `Skipped/DuplicateTaxonKey` classification instead of
+`Failed`.
+
+---
+
+## Enrichment driver: `Enrich-AllSources.ps1`
+
+The remaining sections describe the post-create enrichment driver. It walks
+every `Plant` row through the three `/enrich-all` endpoints with keyset
+(seek) pagination and loops each phase until the cursor reaches the tail of
+the `!XxxEnriched` set.
 
 ## When to use
 
