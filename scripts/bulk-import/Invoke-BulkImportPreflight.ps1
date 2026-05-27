@@ -133,7 +133,9 @@ for ($i = 0; $i -lt $candidates.Count; $i += $ChunkSize) {
 
     $uri = "$BaseUrl/api/admin/bulk-import/preflight"
     try {
-        $resp = Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Body $body -ContentType "application/json"
+        # -TimeoutSec 120 caps the wait at 2 minutes per chunk; a stalled
+        # backend would otherwise pin the script indefinitely.
+        $resp = Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Body $body -ContentType "application/json" -TimeoutSec 120
     }
     catch {
         Write-Host ("  [chunk {0}] HTTP error: {1}" -f $chunkIndex, $_.Exception.Message) -ForegroundColor Red
@@ -187,9 +189,20 @@ Write-Host ("Output CSV:         {0}" -f $outputCsv)
 if ($allOverlaps.Count -gt 0) {
     Write-Host ""
     Write-Host "Overlaps detected — review flagged-overlaps.csv before posting to /bulk-import." -ForegroundColor Yellow
-    exit 1
+    $exitCode = 1
+}
+else {
+    Write-Host ""
+    Write-Host "No overlaps — batch is safe to submit to POST /api/admin/bulk-import." -ForegroundColor Green
+    $exitCode = 0
 }
 
-Write-Host ""
-Write-Host "No overlaps — batch is safe to submit to POST /api/admin/bulk-import." -ForegroundColor Green
-exit 0
+# Dot-source-safe terminator: bare `exit` terminates the host process, which
+# is destructive when the script is dot-sourced (e.g. for testing or
+# composition). Set $LASTEXITCODE so downstream $? / chained checks still see
+# the result, then `return` under dot-sourcing or `exit` on direct invocation.
+$global:LASTEXITCODE = $exitCode
+if ($MyInvocation.InvocationName -eq '.') {
+    return $exitCode
+}
+exit $exitCode
