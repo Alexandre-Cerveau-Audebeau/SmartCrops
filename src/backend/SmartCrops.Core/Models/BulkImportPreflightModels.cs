@@ -31,10 +31,21 @@ public record PreflightCandidate(string ScientificName, string? Category);
 /// <param name="Candidates">
 /// One entry per candidate row. Order is preserved when producing
 /// <see cref="BulkImportPreflightResponse.Overlaps"/>. The service applies a
-/// max-size cap (see service implementation) to keep the synchronous round-trip
-/// bounded — clients chunk batches above the cap.
+/// max-size cap (<see cref="MaxCandidates"/>) to keep the synchronous
+/// round-trip bounded — clients chunk batches above the cap.
 /// </param>
-public record BulkImportPreflightRequest(IReadOnlyList<PreflightCandidate> Candidates);
+public record BulkImportPreflightRequest(IReadOnlyList<PreflightCandidate> Candidates)
+{
+    /// <summary>
+    /// Per-request cap on candidate count. Chosen to keep a single synchronous
+    /// pre-flight round-trip under the GBIF rate-limit budget and avoid
+    /// pathological request payloads. Clients chunk larger batches (the
+    /// PowerShell client defaults to chunks of 250). Lives on the request
+    /// record (Core) so the API controller can enforce the cap without taking
+    /// a dependency on the Infrastructure service class.
+    /// </summary>
+    public const int MaxCandidates = 500;
+}
 
 /// <summary>
 /// One detected overlap between a candidate and either an existing

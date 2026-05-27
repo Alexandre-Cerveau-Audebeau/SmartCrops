@@ -43,14 +43,6 @@ namespace SmartCrops.Infrastructure.Services;
 /// </summary>
 public class BulkImportPreflightService : IBulkImportPreflightService
 {
-    /// <summary>
-    /// Per-request cap on candidate count. Chosen to keep a single synchronous
-    /// pre-flight round-trip under the GBIF rate-limit budget and avoid
-    /// pathological request payloads. Clients chunk larger batches (the
-    /// PowerShell client defaults to chunks of 250).
-    /// </summary>
-    public const int MaxCandidates = 500;
-
     private readonly SmartCropsDbContext _db;
     private readonly IPlantTaxonomyService _taxonomy;
     private readonly ILogger<BulkImportPreflightService> _logger;

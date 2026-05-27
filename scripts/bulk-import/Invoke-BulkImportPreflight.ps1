@@ -81,7 +81,9 @@ $headers = @{
 
 # Output path lives under exports/ which is gitignored. Resolved relative to
 # the script directory so the script works regardless of caller's CWD.
-$scriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
+# $PSScriptRoot is the standard automatic variable for this — robust under
+# dot-sourced and module contexts where $MyInvocation.MyCommand.Path is null.
+$scriptDir   = $PSScriptRoot
 $exportsDir  = Join-Path $scriptDir "exports"
 $outputCsv   = Join-Path $exportsDir "flagged-overlaps.csv"
 if (-not (Test-Path $exportsDir)) {

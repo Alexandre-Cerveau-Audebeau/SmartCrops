@@ -69,7 +69,7 @@ Parameters:
 Output: `exports/flagged-overlaps.csv` is always rewritten (the file's
 **row count** is the signal — header-only when the batch is clean). Schema:
 
-```
+```csv
 candidate_scientific_name,candidate_category,resolved_accepted_key,
 resolved_match_type,conflict_type,conflicting_partner,suggested_action
 ```

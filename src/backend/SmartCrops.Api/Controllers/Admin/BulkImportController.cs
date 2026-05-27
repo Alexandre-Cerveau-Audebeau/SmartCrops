@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Core.Models;
-using SmartCrops.Infrastructure.Services;
 
 namespace SmartCrops.Api.Controllers.Admin;
 
@@ -82,10 +81,10 @@ public class BulkImportController : ControllerBase
             return BadRequest("Candidates list must not be empty.");
         }
 
-        if (request.Candidates.Count > BulkImportPreflightService.MaxCandidates)
+        if (request.Candidates.Count > BulkImportPreflightRequest.MaxCandidates)
         {
             return BadRequest(
-                $"Candidates list exceeds the per-request cap of {BulkImportPreflightService.MaxCandidates}. " +
+                $"Candidates list exceeds the per-request cap of {BulkImportPreflightRequest.MaxCandidates}. " +
                 "Chunk the input client-side.");
         }
 

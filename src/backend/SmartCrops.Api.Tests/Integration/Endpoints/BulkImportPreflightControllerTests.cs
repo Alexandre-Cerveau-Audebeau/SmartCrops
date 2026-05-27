@@ -6,7 +6,6 @@ using Microsoft.Extensions.DependencyInjection;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Models;
 using SmartCrops.Infrastructure.Data;
-using SmartCrops.Infrastructure.Services;
 
 namespace SmartCrops.Api.Tests.Integration.Endpoints;
 
@@ -53,7 +52,7 @@ public class BulkImportPreflightControllerTests : IntegrationTestBase
     public async Task Preflight_AboveMaxCandidates_Returns400()
     {
         AuthAsAnyUser();
-        var candidates = Enumerable.Range(0, BulkImportPreflightService.MaxCandidates + 1)
+        var candidates = Enumerable.Range(0, BulkImportPreflightRequest.MaxCandidates + 1)
             .Select(i => new PreflightCandidate($"Species number{i}", "vegetable"))
             .ToList();
         var request = new BulkImportPreflightRequest(candidates);
