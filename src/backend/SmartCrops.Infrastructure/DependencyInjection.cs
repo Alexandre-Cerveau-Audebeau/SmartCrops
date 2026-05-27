@@ -35,6 +35,7 @@ public static class DependencyInjection
 
         services.AddScoped<IPlantRepository, PlantRepository>();
         services.AddScoped<IBulkImportService, BulkImportService>();
+        services.AddScoped<IBulkImportPreflightService, BulkImportPreflightService>();
 
         services.AddIdentity<ApplicationUser, IdentityRole>(options =>
         {

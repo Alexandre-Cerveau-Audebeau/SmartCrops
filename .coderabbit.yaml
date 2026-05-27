@@ -26,6 +26,10 @@ reviews:
       instructions: "Architectural Decision Records. Focus on completeness of Status/Date/Deciders/Context/Decision/Rationale/Consequences/When to revisit/Related sections. Verify fenced code blocks have language identifiers (markdownlint MD040). Do not suggest restructuring unless ADR-0001 sets a different precedent."
     - path: "docs/coding-guidelines.md"
       instructions: "Canonical project conventions document linked from CodeRabbit's Knowledge Base. Focus on (1) internal consistency between sections, (2) accuracy with respect to current codebase practices, (3) completeness for new contributor onboarding. Do not suggest expanding scope beyond what already exists — this is a working conventions doc, not a comprehensive style guide."
+    - path: "scripts/**/*.ps1"
+      instructions: "Client-side admin/dev scripts (PowerShell). When the script mirrors a backend constant or sensible default (e.g., MaxCandidates, TimeoutSec, batch limits), prefer a hardcoded literal with a maintenance comment pointing at the C# const path. Do NOT propose (a) introducing a metadata endpoint or custom HTTP header (e.g., /metadata, X-MaxCandidates) to fetch the value at runtime, nor (b) parameterizing the value via a script parameter (e.g., [ValidateRange]) when no caller has asked for the knob. Authoritative enforcement is server-side (HTTP 400 / explicit error); client-side ValidateRange/defaults are fail-fast UX, not enforcement. PR #89 (SMA-45) rounds 3-5 confirmed this stance after 3 consecutive declines on MaxCandidates/TimeoutSec mirroring proposals."
+    - path: "scripts/**/*.sh"
+      instructions: "Same guidance as scripts/**/*.ps1 for bash scripts: prefer hardcoded literals + maintenance comment over runtime metadata fetches or unnecessary parameterization when mirroring backend constants. Server-side enforcement is authoritative; client-side validation is fail-fast UX."
   path_filters:
     - "!.postman/**"
     - "!postman/**"
