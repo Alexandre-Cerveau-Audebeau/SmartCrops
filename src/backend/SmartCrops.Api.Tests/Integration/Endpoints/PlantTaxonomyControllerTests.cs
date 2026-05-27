@@ -530,6 +530,145 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         }
     }
 
+    // ── SMA-46 layer (c): DuplicateTaxonKey resilience ───────────────────
+
+    [Fact]
+    public async Task Enrich_NoTaxonKeyConflict_ProceedsThroughTryCatch_Matches()
+    {
+        // Regression guard for the SMA-46 try/catch wrapper on SaveChangesAsync.
+        // A clean enrich must traverse the new try block, NOT enter the
+        // DuplicateTaxonKey catch, commit the transaction, persist the key,
+        // and return EnrichMatchedResponse. Existing happy-path test
+        // (Enrich_Match_PerformsDualWrite) verifies dual-write semantics;
+        // this one specifically pins that the catch wrapper is invisible
+        // on the no-conflict path.
+        var plantId = await SeedPlantAsync("Carum carvi");
+        Fixture.TaxonomyStub.Enqueue(MatchResult(2967319, "Apiaceae", "Carum", "carvi"));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync($"/api/admin/taxonomy/enrich/{plantId}", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<MatchedResponseDto>();
+        Assert.NotNull(body);
+        Assert.True(body!.Matched);
+        Assert.Equal(2967319, body.GbifTaxonKey);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        Assert.Equal(2967319, plant.GbifTaxonKey);
+        Assert.True(plant.EnrichmentStatus.HasFlag(EnrichmentStatus.GbifEnriched));
+    }
+
+    [Fact]
+    public async Task Enrich_KeyHeldByAnotherPlant_ReturnsSkippedDuplicateTaxonKey_AndRollsBack()
+    {
+        // ADR-0004 layer (c) — the canonical drift case: a previously-enriched
+        // plant (winner) owns GbifTaxonKey 2856037; a second plant (loser)
+        // with a different ScientificName resolves to the same key. The
+        // partial-unique index IX_Plants_GbifTaxonKey raises 23505 on flush;
+        // the new catch classifies the outcome as Skipped/DuplicateTaxonKey
+        // instead of Failed, rolls back the staged writes (loser stays
+        // !GbifEnriched, no orphan PlantSources row), and keeps the winner
+        // untouched.
+        var winnerId = await SeedPlantWithKeyAsync("Allium porrum", gbifTaxonKey: 2856037);
+        var loserId = await SeedPlantAsync("Allium ampeloprasum");
+        Fixture.TaxonomyStub.Enqueue(MatchResult(2856037, "Amaryllidaceae", "Allium", "ampeloprasum"));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync($"/api/admin/taxonomy/enrich/{loserId}", null);
+
+        // 200 OK with EnrichSkippedResponse(true, "DuplicateTaxonKey").
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<SkippedResponseDto>();
+        Assert.NotNull(body);
+        Assert.True(body!.Skipped);
+        Assert.Equal("DuplicateTaxonKey", body.Reason);
+
+        // The transaction rolled back: loser stays !GbifEnriched, has no
+        // GbifTaxonKey, no PlantSources row, and the winner is unchanged.
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+
+        var loser = await db.Plants.SingleAsync(p => p.Id == loserId);
+        Assert.Null(loser.GbifTaxonKey);
+        Assert.False(loser.EnrichmentStatus.HasFlag(EnrichmentStatus.GbifEnriched));
+        Assert.Equal(0, await db.PlantSources.CountAsync(s => s.PlantId == loserId));
+
+        var winner = await db.Plants.SingleAsync(p => p.Id == winnerId);
+        Assert.Equal(2856037, winner.GbifTaxonKey);
+    }
+
+    [Fact]
+    public async Task EnrichAll_OneDuplicateKeyMidBatch_CountsAsSkipped_NotFailed_BatchContinues()
+    {
+        // Batch-level pin for SMA-46: a 23505 mid-batch must not poison the
+        // remaining plants AND must aggregate to skipped++ (not failed++),
+        // so a single drift collision doesn't trigger the driver's "Failed"
+        // mop-up warning (Enrich-AllSources.ps1 L169).
+        var winnerId = await SeedPlantWithKeyAsync("Allium porrum", gbifTaxonKey: 2856037);
+        var loserId = await SeedPlantAsync("Allium ampeloprasum");
+        var bystanderId = await SeedPlantAsync("Daucus carota");
+
+        // Determine cursor order so we can queue stub outcomes in the right
+        // FIFO position (Enrich iterates plantIds in OrderBy(Id), and the
+        // winner is excluded upfront — it's already GbifEnriched).
+        Guid firstPendingId;
+        Guid secondPendingId;
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var ordered = await db.Plants
+                .Where(p => p.Id == loserId || p.Id == bystanderId)
+                .OrderBy(p => p.Id)
+                .Select(p => p.Id)
+                .ToListAsync();
+            firstPendingId = ordered[0];
+            secondPendingId = ordered[1];
+        }
+
+        // FIFO queue matches OrderBy(Id) iteration. Whichever of loser/bystander
+        // is first gets its outcome enqueued first.
+        if (firstPendingId == loserId)
+        {
+            Fixture.TaxonomyStub.Enqueue(MatchResult(2856037, "Amaryllidaceae", "Allium", "ampeloprasum"));
+            Fixture.TaxonomyStub.Enqueue(MatchResult(2706302, "Apiaceae", "Daucus", "carota"));
+        }
+        else
+        {
+            Fixture.TaxonomyStub.Enqueue(MatchResult(2706302, "Apiaceae", "Daucus", "carota"));
+            Fixture.TaxonomyStub.Enqueue(MatchResult(2856037, "Amaryllidaceae", "Allium", "ampeloprasum"));
+        }
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync("/api/admin/taxonomy/enrich-all", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<EnrichAllResponseDto>();
+        Assert.NotNull(body);
+        Assert.Equal(2, body!.Total);          // 2 pending (winner excluded upfront)
+        Assert.Equal(1, body.Matched);         // bystander
+        Assert.Equal(0, body.NotMatched);
+        Assert.Equal(1, body.Skipped);         // loser, classified DuplicateTaxonKey
+        Assert.Equal(0, body.Failed);          // NOT failed
+        Assert.Equal(body.Total, body.Matched + body.NotMatched + body.Skipped + body.Failed);
+
+        // Bystander committed; loser still pending. Block-scoped using to
+        // match the cursor-ordering scope above (mixing using-declaration
+        // and using-statement on the same name in one method is CS0136).
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var bystander = await db.Plants.SingleAsync(p => p.Id == bystanderId);
+            Assert.True(bystander.EnrichmentStatus.HasFlag(EnrichmentStatus.GbifEnriched));
+            var loser = await db.Plants.SingleAsync(p => p.Id == loserId);
+            Assert.False(loser.EnrichmentStatus.HasFlag(EnrichmentStatus.GbifEnriched));
+            Assert.Null(loser.GbifTaxonKey);
+        }
+        _ = winnerId; // referenced only by SeedPlantWithKeyAsync side effect
+    }
+
     [Fact]
     public async Task EnrichAll_NoLimit_ReturnsRemainingZeroAfterFullRun()
     {
@@ -569,6 +708,27 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
             EnrichmentStatus = alreadyGbifEnriched
                 ? EnrichmentStatus.Manual | EnrichmentStatus.GbifEnriched
                 : EnrichmentStatus.Manual,
+        };
+        db.Plants.Add(plant);
+        await db.SaveChangesAsync();
+        return plant.Id;
+    }
+
+    private async Task<Guid> SeedPlantWithKeyAsync(string scientificName, int gbifTaxonKey)
+    {
+        // Seed a row directly with GbifTaxonKey set + GbifEnriched flag, so the
+        // SMA-46 duplicate-key tests can drive a 23505 from a known winner
+        // without the test having to call the live enrichment path twice.
+        // Mirrors the factory pattern used by BulkImportPreflightControllerTests.
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var plant = new Plant
+        {
+            Id = Guid.NewGuid(),
+            ScientificName = scientificName,
+            PlantTypeId = 1,
+            GbifTaxonKey = gbifTaxonKey,
+            EnrichmentStatus = EnrichmentStatus.Manual | EnrichmentStatus.GbifEnriched,
         };
         db.Plants.Add(plant);
         await db.SaveChangesAsync();

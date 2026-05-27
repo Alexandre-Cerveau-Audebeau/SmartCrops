@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
 using SmartCrops.Core.Interfaces;
@@ -101,7 +102,42 @@ public class PlantTaxonomyController : ControllerBase
         plant.EnrichmentStatus |= EnrichmentStatus.GbifEnriched;
         plant.LastEnrichmentAt = DateTime.UtcNow;
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        // ADR-0004 layer (c): catch the specific 23505 on IX_Plants_GbifTaxonKey
+        // and classify as Skipped/DuplicateTaxonKey instead of letting it fall
+        // through to the generic catch in EnrichAll (which would count it as
+        // Failed). The literal index name mirrors the EF index defined in
+        // SmartCrops.Infrastructure/Migrations/20260509013833_AddPlantEnrichmentSchema.cs:487
+        // (and PlantConfiguration.cs HasIndex(p => p.GbifTaxonKey)). If the
+        // index is renamed in a future migration, update this literal accordingly.
+        // Server-side uniqueness enforcement remains authoritative; this catch
+        // only classifies the outcome. The `await using var tx` rolls back on
+        // exception via dispose, so the staged PlantSources upsert is undone too.
+        catch (DbUpdateException ex) when (
+            ex.InnerException is PostgresException pg
+            && pg.SqlState == "23505"
+            && pg.ConstraintName == "IX_Plants_GbifTaxonKey")
+        {
+            var winning = await _db.Plants
+                .AsNoTracking()
+                .Where(p => p.GbifTaxonKey == result.GbifTaxonKey)
+                .Select(p => new { p.Id, p.ScientificName })
+                .FirstOrDefaultAsync(ct);
+
+            _logger.LogWarning(
+                "[Skipped/DuplicateTaxonKey] Plant {LosingPlantId} '{LosingScientificName}' resolves to GbifTaxonKey {GbifTaxonKey} already held by Plant {WinningPlantId} '{WinningScientificName}'. Batch continues. Source={Source}.",
+                plant.Id,
+                plant.ScientificName,
+                result.GbifTaxonKey,
+                winning?.Id,
+                winning?.ScientificName,
+                "GBIF");
+
+            return Ok(new EnrichSkippedResponse(true, "DuplicateTaxonKey"));
+        }
         await tx.CommitAsync(ct);
 
         _logger.LogInformation(
