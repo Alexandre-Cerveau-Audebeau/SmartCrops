@@ -21,7 +21,7 @@
     script after editing the curated CSV is the intended iterative loop.
 
     LIMIT (drift): the pre-flight is blind to GBIF taxonomy drift on rows
-    already enriched against an older taxonomy snapshot — those collisions
+    already enriched against an older taxonomy snapshot - those collisions
     only surface at enrichment time. Runtime resilience for that case is
     tracked under SMA-46. See ADR-0004 Consequences.
 
@@ -62,7 +62,7 @@ param(
     # Core (src/backend/SmartCrops.Core/Models/BulkImportPreflightModels.cs).
     # PowerShell can't import a C# const at parse time; if the backend cap
     # changes, update this literal too. Server-side 400 is the authoritative
-    # enforcement — this attribute is fail-fast UX.
+    # enforcement - this attribute is fail-fast UX.
     [ValidateRange(1, 500)]
     [int]$ChunkSize = 250,
 
@@ -86,7 +86,7 @@ $headers = @{
 
 # Output path lives under exports/ which is gitignored. Resolved relative to
 # the script directory so the script works regardless of caller's CWD.
-# $PSScriptRoot is the standard automatic variable for this — robust under
+# $PSScriptRoot is the standard automatic variable for this - robust under
 # dot-sourced and module contexts where $MyInvocation.MyCommand.Path is null.
 $scriptDir   = $PSScriptRoot
 $exportsDir  = Join-Path $scriptDir "exports"
@@ -188,12 +188,12 @@ Write-Host ("Output CSV:         {0}" -f $outputCsv)
 
 if ($allOverlaps.Count -gt 0) {
     Write-Host ""
-    Write-Host "Overlaps detected — review flagged-overlaps.csv before posting to /bulk-import." -ForegroundColor Yellow
+    Write-Host "Overlaps detected - review flagged-overlaps.csv before posting to /bulk-import." -ForegroundColor Yellow
     $exitCode = 1
 }
 else {
     Write-Host ""
-    Write-Host "No overlaps — batch is safe to submit to POST /api/admin/bulk-import." -ForegroundColor Green
+    Write-Host "No overlaps - batch is safe to submit to POST /api/admin/bulk-import." -ForegroundColor Green
     $exitCode = 0
 }
 
