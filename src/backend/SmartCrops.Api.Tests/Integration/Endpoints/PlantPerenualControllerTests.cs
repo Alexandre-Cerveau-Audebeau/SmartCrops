@@ -1379,4 +1379,128 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         int Failed,
         int NotEnrichedRemaining,
         Guid? NextAfterId);
+
+    // ── species-list (SMA-13 catalog endpoint) ────────────────────────────
+
+    [Fact]
+    public async Task SpeciesList_NoAuth_Returns401()
+    {
+        // Same [Authorize] gate as the enrich endpoints — admin-only catalog
+        // enumeration must reject unauthenticated requests.
+        var response = await Client.GetAsync("/api/admin/perenual/species-list?page=1");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public async Task SpeciesList_NonPositivePage_Returns400(int page)
+    {
+        AuthAsAnyUser();
+        var response = await Client.GetAsync($"/api/admin/perenual/species-list?page={page}");
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SpeciesList_HappyPath_ReturnsPageWithStrategyAFields()
+    {
+        // Pin the JSON contract the SMA-13 PowerShell fetcher relies on:
+        // pagination meta + per-entry cultivar/variety/hybrid/subspecies
+        // fields round-trip through the admin endpoint unchanged.
+        AuthAsAnyUser();
+        Fixture.PerenualCatalogStub.SetPage(1, new PerenualCatalogPage(
+            Data: new[]
+            {
+                new PerenualCatalogPageEntry(
+                    Id: 1,
+                    ScientificName: new[] { "Abies alba" },
+                    CommonName: "European Silver Fir",
+                    OtherName: new[] { "Silver Fir" },
+                    Family: "Pinaceae",
+                    Cultivar: null,
+                    Variety: null,
+                    Hybrid: null,
+                    Subspecies: null),
+                new PerenualCatalogPageEntry(
+                    Id: 2,
+                    ScientificName: new[] { "Abies alba 'Pyramidalis'" },
+                    CommonName: "Pyramidalis Silver Fir",
+                    OtherName: null,
+                    Family: "Pinaceae",
+                    Cultivar: "Pyramidalis",
+                    Variety: null,
+                    Hybrid: null,
+                    Subspecies: null),
+            },
+            CurrentPage: 1,
+            PerPage: 30,
+            LastPage: 337,
+            Total: 10102,
+            From: 1,
+            To: 30));
+
+        var response = await Client.GetAsync("/api/admin/perenual/species-list?page=1");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<PerenualCatalogPage>();
+        Assert.NotNull(body);
+        Assert.Equal(1, body!.CurrentPage);
+        Assert.Equal(337, body.LastPage);
+        Assert.Equal(10102, body.Total);
+        Assert.Equal(2, body.Data.Count);
+
+        // Full Strategy A field round-trip — CR PR #92 R1 N3. The test name
+        // promises all four discriminator fields, so assert each one on both
+        // keeper and rejected, plus Family/OtherName which feed the
+        // PowerShell client's category heuristic.
+        var keeper = body.Data[0];
+        Assert.Equal(1, keeper.Id);
+        Assert.Equal(new[] { "Abies alba" }, keeper.ScientificName);
+        Assert.Equal("European Silver Fir", keeper.CommonName);
+        Assert.Equal(new[] { "Silver Fir" }, keeper.OtherName);
+        Assert.Equal("Pinaceae", keeper.Family);
+        Assert.Null(keeper.Cultivar);
+        Assert.Null(keeper.Variety);
+        Assert.Null(keeper.Hybrid);
+        Assert.Null(keeper.Subspecies);
+
+        var rejected = body.Data[1];
+        Assert.Equal(2, rejected.Id);
+        Assert.Equal("Pinaceae", rejected.Family);
+        Assert.Null(rejected.OtherName);
+        Assert.Equal("Pyramidalis", rejected.Cultivar);
+        Assert.Null(rejected.Variety);
+        Assert.Null(rejected.Hybrid);
+        Assert.Null(rejected.Subspecies);
+
+        Assert.Equal(new[] { 1 }, Fixture.PerenualCatalogStub.ReceivedPages);
+    }
+
+    [Fact]
+    public async Task SpeciesList_UpstreamFailure_Returns502()
+    {
+        // Stub returns null (page not pre-loaded) → controller maps to 502 so
+        // the PowerShell client distinguishes "page legitimately past end"
+        // (200 + Data=[]) from "fetch this again".
+        AuthAsAnyUser();
+
+        var response = await Client.GetAsync("/api/admin/perenual/species-list?page=42");
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        Assert.Equal(new[] { 42 }, Fixture.PerenualCatalogStub.ReceivedPages);
+    }
+
+    [Fact]
+    public async Task SpeciesList_PageDefaultsTo1_WhenNoQueryString()
+    {
+        AuthAsAnyUser();
+        Fixture.PerenualCatalogStub.SetPage(1, new PerenualCatalogPage(
+            Data: Array.Empty<PerenualCatalogPageEntry>(),
+            CurrentPage: 1, PerPage: 30, LastPage: 337, Total: 10102, From: null, To: null));
+
+        var response = await Client.GetAsync("/api/admin/perenual/species-list");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(new[] { 1 }, Fixture.PerenualCatalogStub.ReceivedPages);
+    }
 }

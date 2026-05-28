@@ -37,16 +37,54 @@ public class PlantPerenualController : ControllerBase
 {
     private readonly SmartCropsDbContext _db;
     private readonly IPlantPerenualEnrichmentService _perenual;
+    private readonly IPerenualCatalogService _catalog;
     private readonly ILogger<PlantPerenualController> _logger;
 
     public PlantPerenualController(
         SmartCropsDbContext db,
         IPlantPerenualEnrichmentService perenual,
+        IPerenualCatalogService catalog,
         ILogger<PlantPerenualController> logger)
     {
         _db = db;
         _perenual = perenual;
+        _catalog = catalog;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Read-only enumeration of the Perenual species catalog (SMA-13 batch 2
+    /// scale-up). Thin pass-through to <see cref="IPerenualCatalogService"/>;
+    /// the curation/filtering pipeline (<c>Fetch-PerenualCatalog.ps1</c>)
+    /// applies Strategy A (drop cultivar/variety/hybrid/subspecies) client-side
+    /// so the filter can be iterated without backend changes.
+    ///
+    /// <para>Page is 1-based. A page past <c>last_page</c> returns 200 with an
+    /// empty <c>Data</c> list. Upstream HTTP/timeout failures are absorbed by
+    /// the service and surface as 502 here so the script's retry pattern can
+    /// distinguish "no more pages" (200 + empty) from "fetch this again".</para>
+    /// </summary>
+    [HttpGet("species-list")]
+    public async Task<ActionResult<PerenualCatalogPage>> SpeciesList(
+        [FromQuery] int page = 1,
+        CancellationToken ct = default)
+    {
+        if (page < 1)
+        {
+            return BadRequest("Page must be >= 1.");
+        }
+
+        var result = await _catalog.GetPageAsync(page, ct);
+        if (result is null)
+        {
+            // Upstream transport / timeout / non-JSON / malformed payload —
+            // returning 502 lets the PowerShell client distinguish "page is
+            // legitimately empty" (200 + Data=[]) from "fetch failed, retry".
+            return StatusCode(StatusCodes.Status502BadGateway,
+                $"Perenual catalog fetch failed for page {page}.");
+        }
+
+        return Ok(result);
     }
 
     /// <summary>

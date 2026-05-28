@@ -260,6 +260,184 @@ public class PerenualClientTests
         Assert.Null(await client.GetSpeciesDetailsAsync(8600, CancellationToken.None));
     }
 
+    // ── GetSpeciesListAsync (SMA-13 catalog enumeration) ──────────────────
+
+    [Fact]
+    public async Task GetSpeciesListAsync_BuildsUrl_WithKeyAndPage()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, "{\"data\":[],\"current_page\":42,\"per_page\":30,\"last_page\":337,\"total\":10102}");
+        var client = NewClient(handler);
+
+        await client.GetSpeciesListAsync(42, CancellationToken.None);
+
+        Assert.Equal(
+            $"https://perenual.com/api/v2/species-list?key={TestKey}&page=42",
+            handler.LastRequestUri!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task GetSpeciesListAsync_ParsesPaginationMeta()
+    {
+        // Pin the catalog-fetcher contract: current_page/per_page/last_page/total
+        // round-trip from the JSON envelope so the script can detect the tail.
+        const string body = """
+            {
+              "data": [],
+              "current_page": 1,
+              "per_page": 30,
+              "last_page": 337,
+              "total": 10102,
+              "from": 1,
+              "to": 30
+            }
+            """;
+        var handler = new RecordingHandler(HttpStatusCode.OK, body);
+        var client = NewClient(handler);
+
+        var response = await client.GetSpeciesListAsync(1, CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Equal(1, response!.CurrentPage);
+        Assert.Equal(30, response.PerPage);
+        Assert.Equal(337, response.LastPage);
+        Assert.Equal(10102, response.Total);
+        Assert.Equal(1, response.From);
+        Assert.Equal(30, response.To);
+    }
+
+    [Fact]
+    public async Task GetSpeciesListAsync_ParsesStrategyAFilterFields()
+    {
+        // Pin the Strategy A field bindings: cultivar / variety / hybrid /
+        // subspecies must round-trip per entry so the SMA-13 catalog fetcher
+        // can drop cultivar/hybrid/etc. entries client-side.
+        const string body = """
+            {
+              "data": [
+                {
+                  "id": 1,
+                  "scientific_name": ["Abies alba"],
+                  "common_name": "European Silver Fir",
+                  "other_name": ["Silver Fir"],
+                  "family": "Pinaceae",
+                  "cultivar": null,
+                  "variety": null,
+                  "hybrid": null,
+                  "subspecies": null
+                },
+                {
+                  "id": 2,
+                  "scientific_name": ["Abies alba 'Pyramidalis'"],
+                  "common_name": "Pyramidalis Silver Fir",
+                  "family": "Pinaceae",
+                  "cultivar": "Pyramidalis",
+                  "variety": null,
+                  "hybrid": null,
+                  "subspecies": null
+                }
+              ],
+              "current_page": 1,
+              "last_page": 337
+            }
+            """;
+        var handler = new RecordingHandler(HttpStatusCode.OK, body);
+        var client = NewClient(handler);
+
+        var response = await client.GetSpeciesListAsync(1, CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Equal(2, response!.Data!.Count);
+
+        var keeper = response.Data[0];
+        Assert.Null(keeper.Cultivar);
+        Assert.Null(keeper.Variety);
+        Assert.Null(keeper.Hybrid);
+        Assert.Null(keeper.Subspecies);
+        Assert.Equal("Pinaceae", keeper.Family);
+        Assert.Equal(new[] { "Silver Fir" }, keeper.OtherName);
+
+        var rejected = response.Data[1];
+        Assert.Equal("Pyramidalis", rejected.Cultivar);
+    }
+
+    [Fact]
+    public async Task GetSpeciesListAsync_ReturnsNull_OnTransportFailure()
+    {
+        var handler = new ThrowingHandler(new HttpRequestException("dns failure"));
+        var client = NewClient(handler);
+
+        Assert.Null(await client.GetSpeciesListAsync(1, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    public async Task GetSpeciesListAsync_ReturnsNull_OnHttpError(HttpStatusCode status)
+    {
+        var handler = new RecordingHandler(status, "{}");
+        var client = NewClient(handler);
+
+        Assert.Null(await client.GetSpeciesListAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetSpeciesListAsync_ReturnsNull_OnHtmlContentType()
+    {
+        // Symmetric to GetSpeciesDetailsAsync (PR #76 Content-Type guard).
+        // The off-by-one ≥8574 bug was only observed on /species/details/{id}
+        // in production, but applying the same guard here is cheap and
+        // prevents a CDN-error HTML page from crashing the catalog fetcher.
+        var handler = new HtmlHandler("<html>error</html>");
+        var client = NewClient(handler);
+
+        Assert.Null(await client.GetSpeciesListAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetSpeciesListAsync_ReturnsNull_OnMalformedJson()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, "{ invalid json }");
+        var client = NewClient(handler);
+
+        Assert.Null(await client.GetSpeciesListAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetSpeciesListAsync_ReturnsNull_OnPollyTimeoutRejected()
+    {
+        var handler = new ThrowingHandler(new TimeoutRejectedException("polly total timeout"));
+        var client = NewClient(handler);
+
+        Assert.Null(await client.GetSpeciesListAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetSpeciesListAsync_ReturnsNull_OnTimeout()
+    {
+        // Parity with SearchAsync_ReturnsNull_OnTimeout and
+        // GetSpeciesDetailsAsync_ReturnsNull_OnTimeout — host-side HttpClient
+        // timeout surfaces as TaskCanceledException without caller-token
+        // cancellation, must degrade gracefully to null. CR PR #92 R1 N1.
+        var handler = new ThrowingHandler(new TaskCanceledException("request timed out"));
+        var client = NewClient(handler);
+
+        Assert.Null(await client.GetSpeciesListAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetSpeciesListAsync_PropagatesCallerCancellation()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, "{\"data\":[]}");
+        var client = NewClient(handler);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.GetSpeciesListAsync(1, cts.Token));
+    }
+
     // ── Handlers ──────────────────────────────────────────────────────────
 
     private sealed class RecordingHandler : HttpMessageHandler
