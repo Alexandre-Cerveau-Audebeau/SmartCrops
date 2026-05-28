@@ -29,7 +29,12 @@ public class PlantPerenualDataConfiguration : IEntityTypeConfiguration<PlantPere
         builder.Property(p => p.PropagationMethods).HasMaxLength(500);
         builder.Property(p => p.WateringBenchmark).HasMaxLength(50);
         builder.Property(p => p.WateringBenchmarkUnit).HasMaxLength(20);
-        builder.Property(p => p.SunlightPreferences).HasMaxLength(200);
+        // SunlightPreferences intentionally has no length cap (SMA-13 pre-flight,
+        // mirrors PR #87 for PruningMonths). Perenual ships sunlight as a
+        // comma-separated list of keys; multi-tolerance species (trees with
+        // sun/part shade/dappled light/etc.) can exceed any reasonable varchar
+        // bound at scale. Stored as text — overflow risk eliminated.
+        builder.Property(p => p.SunlightPreferences);
         // PruningMonths intentionally has no length cap: Perenual ships
         // pruning_month as a variable-length array (38+ entries with duplicates
         // observed) that can overflow any reasonable varchar bound. Stored as
