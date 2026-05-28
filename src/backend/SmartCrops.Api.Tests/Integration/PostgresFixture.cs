@@ -67,6 +67,13 @@ public sealed class PostgresFixture : IAsyncLifetime
     public StubPlantPerenualEnrichmentService PerenualStub =>
         Factory.Services.GetRequiredService<StubPlantPerenualEnrichmentService>();
 
+    /// <summary>
+    /// Shared stub for <see cref="IPerenualCatalogService"/> (SMA-13 catalog
+    /// enumeration). Same lifecycle as the other stubs — reset per test.
+    /// </summary>
+    public StubPerenualCatalogService PerenualCatalogStub =>
+        Factory.Services.GetRequiredService<StubPerenualCatalogService>();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
@@ -115,6 +122,11 @@ public sealed class PostgresFixture : IAsyncLifetime
                 services.AddSingleton<StubPlantPerenualEnrichmentService>();
                 services.AddSingleton<IPlantPerenualEnrichmentService>(sp =>
                     sp.GetRequiredService<StubPlantPerenualEnrichmentService>());
+
+                services.RemoveAll<IPerenualCatalogService>();
+                services.AddSingleton<StubPerenualCatalogService>();
+                services.AddSingleton<IPerenualCatalogService>(sp =>
+                    sp.GetRequiredService<StubPerenualCatalogService>());
             })
             .Build();
 

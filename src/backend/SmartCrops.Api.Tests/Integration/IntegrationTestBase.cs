@@ -34,6 +34,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         Fixture.TaxonomyStub.Reset();
         Fixture.TrefleStub.Reset();
         Fixture.PerenualStub.Reset();
+        Fixture.PerenualCatalogStub.Reset();
 
         Client = Fixture.Factory.CreateClient();
     }
