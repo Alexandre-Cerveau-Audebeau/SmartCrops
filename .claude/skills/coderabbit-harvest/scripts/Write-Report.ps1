@@ -130,6 +130,19 @@ end {
     [void]$sb.AppendLine("- PR: #$prNumber")
     [void]$sb.AppendLine("- Extension review: $($extensionMeta.title) (status=$($extensionMeta.status))")
     [void]$sb.AppendLine("- Review window: $($extensionMeta.startedAt) → $($extensionMeta.endedAt)")
+    # Surface-state flags (SMA-54 M2/M5). Get-SafeProp keeps older harvest JSONs
+    # (pre-these-fields) rendering cleanly with sensible defaults.
+    $extensionFound = Get-SafeProp -Object $data -Name 'extensionFound' -Default $null
+    if ($null -ne $extensionFound) {
+        [void]$sb.AppendLine("- Extension entry located: $extensionFound")
+    }
+    if (Get-SafeProp -Object $data -Name 'reviewSkipped' -Default $false) {
+        [void]$sb.AppendLine("- ⚠️ CodeRabbit review SKIPPED (path filters) — legitimate skip, nothing to harvest from the Extension.")
+    }
+    $marker = Get-SafeProp -Object $data -Name 'actionableMarker' -Default $null
+    if ($null -ne $marker) {
+        [void]$sb.AppendLine("- Marker: ""Actionable comments posted: $marker""")
+    }
     if ($data.comparisonMode) {
         [void]$sb.AppendLine("- Comparison mode: ENABLED")
     }
@@ -151,12 +164,17 @@ end {
     # (no reliable deterministic key — see classification-rules.md). Counts are
     # reported per-source; the same finding may appear in both.
     # @(...) forces an array so .Count is valid even for 0 matches.
+    # Per-surface counts (SMA-54 M5 — GitHub now has three distinct sub-sources).
     $extensionCount = @($commentsRaw | Where-Object source -eq 'extension').Count
-    $githubCount = @($commentsRaw | Where-Object source -eq 'github').Count
+    $ghInlineCount = @($commentsRaw | Where-Object source -eq 'github-inline').Count
+    $ghReviewCount = @($commentsRaw | Where-Object source -eq 'github-review').Count
+    $ghWalkCount = @($commentsRaw | Where-Object source -eq 'github-walkthrough').Count
     [void]$sb.AppendLine("## Cross-source surfaces")
     [void]$sb.AppendLine("- Extension: $extensionCount comment(s)")
-    [void]$sb.AppendLine("- GitHub: $githubCount comment(s)")
-    [void]$sb.AppendLine("- Overlap is not deterministically resolvable; the same finding may appear in both surfaces (see references/classification-rules.md). Counts are per-source.")
+    [void]$sb.AppendLine("- GitHub inline: $ghInlineCount comment(s)")
+    [void]$sb.AppendLine("- GitHub review body: $ghReviewCount comment(s)")
+    [void]$sb.AppendLine("- GitHub walkthrough: $ghWalkCount comment(s)")
+    [void]$sb.AppendLine("- Surfaces are NOT deduplicated against each other; the same finding may appear on more than one (see references/classification-rules.md). Counts are per-surface.")
     [void]$sb.AppendLine()
 
     # Substantive comments table (NITPICK / MAJOR / REVIEW_NEEDED + MODIFIED regardless)

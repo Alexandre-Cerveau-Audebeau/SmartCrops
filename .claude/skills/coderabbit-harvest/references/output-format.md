@@ -13,7 +13,10 @@ The JSON schema captures **all** raw data, including LGTM bodies that are omitte
 | `schemaVersion` | integer | Output schema version (currently `1`). Consumers should default to `1` when absent for backward compatibility with pre-versioned harvests. |
 | `targetCommit` | string | Full SHA of the commit harvested |
 | `prNumber` | integer | GitHub PR number associated with the branch |
-| `extensionMeta` | object | Metadata from the Extension review object |
+| `extensionFound` | boolean | `true` if a `completed` Extension review entry was located for this commit. `false` ⇒ unreviewed or legitimately skipped; the harvest ran on the GitHub surfaces alone (SMA-54 M2). |
+| `reviewSkipped` | boolean | `true` if a GitHub surface carries a "Review skipped" / "path filters" notice (CodeRabbit declined to review, e.g. a data-only PR). |
+| `actionableMarker` | integer \| null | The parsed `Actionable comments posted: N` value from the review body / walkthrough. **`null` when the marker is absent — absence is NOT zero** (a nitpicks-only review omits the marker yet still groups real nitpicks in its body, SMA-54 M5). |
+| `extensionMeta` | object | Metadata from the Extension review object (empty strings when `extensionFound` is `false`) |
 | `comments` | array | Classified comment array (see schema below) |
 | `resolved` | array | Comments present in previous harvest but absent here (comparison mode only) |
 | `counts` | object | Tally per classification bucket |
@@ -36,7 +39,7 @@ The JSON schema captures **all** raw data, including LGTM bodies that are omitte
 ```json
 {
   "id": "string | null (CodeRabbit comment UUID)",
-  "source": "extension | github",
+  "source": "extension | github-inline | github-review | github-walkthrough",
   "type": "actionable | assertive | additional | outsideDiffRange | duplicate | ''",
   "severity": "major | critical | minor | nitpick | low | '' (lowercase)",
   "path": "string (file path relative to repo root)",
@@ -75,7 +78,7 @@ The markdown summary is the human-readable rendering. Structure:
 1. **Header** — `# Harvest report — PR #N commit SHA`
 2. **Sanity** — commit, PR, review title/status, time window, comparison mode flag
 3. **Counts** — per-bucket counts and total
-4. **Cross-source surfaces** — per-source counts (Extension vs GitHub); the skill does not deduplicate across sources (see `classification-rules.md`)
+4. **Cross-source surfaces** — per-surface counts (Extension, GitHub inline, GitHub review body, GitHub walkthrough); the skill does not deduplicate across surfaces (see `classification-rules.md`)
 5. **Substantive comments** — table of NITPICK/MAJOR/REVIEW_NEEDED comments (+ MODIFIED in comparison mode)
 6. **Details** — per-comment expanded view: title, body, codegen instructions, transition
 7. **Resolved comments** — only in comparison mode, lists items absent vs previous harvest

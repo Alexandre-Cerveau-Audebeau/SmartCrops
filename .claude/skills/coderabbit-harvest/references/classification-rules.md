@@ -37,9 +37,9 @@ Compliment *prefixes* (`Excellent`/`Great`/etc.) are handled separately by **Rul
 
 CodeRabbit's prominent concerns. Almost always worth addressing in the same PR.
 
-### Rule 4 — `type='actionable'` AND `severity` in `{minor, nitpick, low}` → **NITPICK**
+### Rule 4 — `type='actionable'` AND `severity` in `{minor, nitpick, low, trivial}` → **NITPICK**
 
-Bread-and-butter style suggestions, naming improvements, small refactors.
+Bread-and-butter style suggestions, naming improvements, small refactors. (`trivial` is CodeRabbit's lowest actionable severity — e.g. the assertive-profile "translate this comment to English" note on PR #96; observed and added under SMA-54.)
 
 ### Rule 5 — `type='actionable'` AND `severity` unknown → **REVIEW_NEEDED**
 
@@ -49,7 +49,7 @@ Actionable without a clear severity label. Flag for Claude's judgment.
 
 Assertive comments with major severity signal real concerns.
 
-### Rule 7 — `type='assertive'` AND `severity` in `{'', none, low, minor, nitpick}` → **NITPICK**
+### Rule 7 — `type='assertive'` AND `severity` in `{'', none, low, minor, nitpick, trivial}` → **NITPICK**
 
 The most common case for assertive: lightweight architectural commentary worth reading but rarely action-required.
 
@@ -108,12 +108,24 @@ GitHub-source comments lack CodeRabbit's internal `type`/`severity`, so a non-LG
 
 Rich metadata (`type`, `severity`, `analysis.type`). Rules 1-10 apply directly.
 
-### GitHub API
+### GitHub API — three distinct surfaces (SMA-54 M5)
 
-Does not expose CodeRabbit's internal `type`/`severity`. Simplified classification:
+GitHub exposes CodeRabbit on three surfaces that the harvester reads separately and tags with a granular `source`. None expose CR's internal `type`/`severity`, so all use the simplified body heuristic:
 
-- Body matches LGTM rule → **LGTM**
+- Body matches an exact-LGTM marker or compliment prefix → **LGTM**
 - Otherwise → **REVIEW_NEEDED**
+
+| `source` | Endpoint | What it carries |
+|---|---|---|
+| `github-inline` | `pulls/<n>/comments` | Line-anchored review comments. |
+| `github-review` | `pulls/<n>/reviews[].body` | The review body that **groups nitpicks** and carries the `Actionable comments posted: N` marker. This is the surface the pre-SMA-54 skill never read — PR #95's only nitpick lived here and was silently missed. A grouped-nitpick body has no LGTM marker, so it classifies **REVIEW_NEEDED** and surfaces in the report for a human read. |
+| `github-walkthrough` | `issues/<n>/comments` | The summary/poem and "Review skipped"/"path filters" notice. Forced to **LGTM** (it is never a finding itself); its marker and skip flag are extracted into the top-level `actionableMarker` / `reviewSkipped` fields instead. |
+
+**The `Actionable comments posted: N` marker** is parsed from the review body and walkthrough into `actionableMarker`. **Its absence is not zero** — a nitpicks-only review omits the marker while still grouping real nitpicks, so the body is always read regardless of the marker.
+
+### Extension JSON — intra-source dedup (SMA-54 N1)
+
+A single Extension review entry can list the SAME finding twice: once under `additionalDetails.*Comments` and once under `fileReviewMap[<file>].comments`. The harvester collects from both, then **collapses duplicates within the Extension source** by fingerprint (CR `id`, else `path|startLine|endLine|body-prefix`). This intra-source dedup is distinct from — and does not violate — the cross-surface no-dedup rule below: Extension-vs-GitHub overlap is still kept (a finding legitimately appearing on two different surfaces is two entries); only the within-Extension double count is removed.
 
 ## Comparison mode (`--compare-with`)
 

@@ -1,6 +1,6 @@
 ---
 name: coderabbit-harvest
-description: Harvest CodeRabbit review comments from a commit or PR — reads both the VS Code Extension JSON workspace storage and GitHub API in parallel, classifies comments (LGTM/nitpick/major/REVIEW_NEEDED), and produces a JSON file plus markdown summary. Use this skill whenever Alexandre asks to "harvest the last commit", "check CodeRabbit", "récupérer les commentaires CodeRabbit", or any phrasing involving CodeRabbit review extraction. Also use proactively after any `git push` to a branch with an open PR.
+description: Harvest CodeRabbit review comments for a PR or commit across GitHub (inline, review body, walkthrough) and the VS Code Extension, classified by severity. Use when asked to harvest or check CodeRabbit, "récupérer les commentaires CodeRabbit", or after pushing to a branch with an open PR.
 ---
 
 # coderabbit-harvest
@@ -44,10 +44,10 @@ If no flag is provided, the skill harvests HEAD on the current branch.
 
 The skill runs in 4 stages:
 
-1. **Locate** — Compute the workspace JSON path from the SmartCrops repo path and current branch using SHA256 hashing. Verify the file exists and is fresh (post-push, within 5 minutes).
-2. **Read** — Parse the workspace JSON to extract the review object matching the target commit. In parallel, call `gh api /repos/<owner>/<repo>/pulls/<n>/reviews` and `/repos/<owner>/<repo>/pulls/<n>/comments` to get the GitHub-side view.
+1. **Locate** (`Locate-Review.ps1`) — Enumerate every CodeRabbit Extension JSON under `%APPDATA%\Code\User\workspaceStorage\*\coderabbit.coderabbit-vscode\`, parse each (single-object OR array shape), and select the entry whose `headCommitId` matches the target commit AND whose `status` is `completed` (cancelled/in_progress/failed excluded), newest by `endedAt`. The match key is the `headCommitId` field *inside* the JSON — never the file name (the name is an opaque content hash). No file-mtime freshness gate: `status == 'completed'` is the readiness signal. Exit 3 (not a hard error) when no completed entry exists — the commit is unreviewed or legitimately skipped, and the GitHub surfaces are harvested alone.
+2. **Read** (`Classify-Comments.ps1`) — Read the located Extension entry (if any) plus **three** GitHub surfaces: `pulls/<n>/comments` (inline), `pulls/<n>/reviews[].body` (grouped nitpicks + the `Actionable comments posted: N` marker), and `issues/<n>/comments` (walkthrough / `Review skipped` notices). Each comment is tagged with its surface: `extension`, `github-inline`, `github-review`, or `github-walkthrough`.
 3. **Classify** — Run rule-based classification on each comment to produce one of: `LGTM`, `NITPICK`, `MAJOR`, or `REVIEW_NEEDED`. See `references/classification-rules.md` for the rule set.
-4. **Report** — Write a JSON file at `/tmp/harvest-<sha-prefix>.json` (gitignored) containing the full raw data. Print a markdown summary inline.
+4. **Report** (`Write-Report.ps1`) — Write a JSON file at `/tmp/harvest-<sha-prefix>.json` (gitignored) containing the full raw data. Print a markdown summary inline.
 
 If `--compare-with` is set, stage 3 additionally tags each comment with a transition label (NEW/PERSISTED/MODIFIED/RESOLVED) by comparing against the previous harvest's JSON.
 
@@ -119,39 +119,34 @@ if (-not $prNumber) {
     exit 2
 }
 
-# Locate the Extension JSON for the current branch
-$repoPath = (Get-Location).Path
-$currentBranch = git branch --show-current
-$key = "$repoPath-$currentBranch-reviews"
-$sha = (Get-FileHash -Algorithm SHA256 -InputStream `
-    ([System.IO.MemoryStream]::new(
-        [System.Text.Encoding]::UTF8.GetBytes($key)
-    ))).Hash.ToLower()
-
-$workspaceStorage = "$env:APPDATA\Code\User\workspaceStorage"
-$crFolder = Get-ChildItem -Path $workspaceStorage -Directory -Force |
-    ForEach-Object {
-        $candidate = Join-Path $_.FullName "coderabbit.coderabbit-vscode"
-        if (Test-Path (Join-Path $candidate "$sha.json")) { $candidate }
-    } | Select-Object -First 1
-
-if (-not $crFolder) {
-    Write-Error "Extension JSON not found — STOPPING (workspace hash drift?)"
-    exit 2
-}
-
-$reviewsFile = Join-Path $crFolder "$sha.json"
-
-# Run classification + reporting in ONE pwsh 7 session. `pwsh -File A | pwsh -File B`
-# does NOT work: cross-process, A's stdout lands on B's raw process stdin, which a
-# `-File`-invoked script does not bind to a ValueFromPipeline parameter. Both
-# scripts must share a single session so the pipeline binds normally.
 $skillRoot = ".claude\skills\coderabbit-harvest"
 $shortSha = $targetCommit.Substring(0, 7)
 $outputPath = "/tmp/harvest-$shortSha.json"
 
+# Locate the Extension review ENTRY by parsing headCommitId inside each workspace
+# JSON (SMA-54 M1/M3/M4 — the old SHA256("<repo>-<branch>-reviews") file-name hash
+# never matched; the real file names are opaque content hashes). Locate-Review
+# runs as a SEPARATE process so its `exit 3` ("no completed review for this
+# commit") does not terminate this session — that's the legitimate-skip /
+# unreviewed case (M2), where we still harvest the GitHub surfaces alone.
+$entryPath = "/tmp/cr-entry-$shortSha.json"
+$entryJson = pwsh -NoProfile -File "$skillRoot\scripts\Locate-Review.ps1" -CommitSha $targetCommit
+if ($LASTEXITCODE -eq 0 -and $entryJson) {
+    $entryJson | Set-Content -Path $entryPath -Encoding UTF8
+} else {
+    # No completed Extension entry — GitHub-only harvest. Remove any stale file so
+    # Classify-Comments sees "no entry" rather than a previous commit's data.
+    if (Test-Path $entryPath) { Remove-Item $entryPath }
+}
+
+# Run classification + reporting in ONE pwsh 7 session. `pwsh -File A | pwsh -File B`
+# does NOT work: cross-process, A's stdout lands on B's raw process stdin, which a
+# `-File`-invoked script does not bind to a ValueFromPipeline parameter. Both
+# scripts must share a single session so the pipeline binds normally. The review
+# entry is passed by PATH (not inline) so this string never embeds a multi-KB blob.
+$entryArg = if (Test-Path $entryPath) { "-ReviewEntryPath '$entryPath' " } else { "" }
 $pipeline = "& '$skillRoot\scripts\Classify-Comments.ps1' " +
-    "-ReviewsFile '$reviewsFile' -GitHubPrNumber $prNumber -CommitSha '$targetCommit' " +
+    "$entryArg-GitHubPrNumber $prNumber -CommitSha '$targetCommit' " +
     "| & '$skillRoot\scripts\Write-Report.ps1' -OutputPath '$outputPath'"
 pwsh -NoProfile -Command $pipeline
 ```
@@ -164,15 +159,15 @@ For `--help`, just print this SKILL.md content. The `Classify-Comments.ps1` scri
 
 The skill STOPs and reports without producing output if any of these happens:
 
-- Extension JSON workspace file not found, or last written more than 5 minutes ago (configurable in `Classify-Comments.ps1` via the `$freshnessLimitMinutes` local). Stale data is treated as a STOP condition because the most likely cause is the Extension hasn't synced after the latest push — silently using stale data would produce a misleading harvest.
-- Review object for target commit absent from JSON
-- `gh` CLI not installed (precheck via `Get-Command gh`), not authenticated, or rate-limited (exit codes from `gh api`)
+- `gh` CLI not installed (precheck via `Get-Command gh`), not authenticated, or rate-limited — the **inline** GitHub surface is critical (exit 3). The review-body and walkthrough surfaces are additive: a transient there warns and continues rather than sinking the harvest.
 - Target PR closed/merged at harvest time (the harvest is for an in-progress PR; closed PRs should be queried via the JSON file from a prior harvest)
 - Target commit not part of any open PR (when not explicitly passed `--pr`)
 - `--compare-with <sha>` provided but `/tmp/harvest-<sha-prefix>.json` doesn't exist
 - PowerShell version < 7.0 (the script's `#requires` directive will block execution)
 
 Do not silently produce partial output. Report the edge case clearly with a non-zero exit code, and let the user decide whether to retry or work around.
+
+**Not a STOP (SMA-54 M2):** a target commit with no `completed` Extension review entry (`Locate-Review.ps1` exits 3) is the *unreviewed-or-legitimately-skipped* case — e.g. a CSV/data-only PR excluded by CodeRabbit's path filters — **not** an error. The harvest proceeds on the GitHub surfaces alone, and the report flags `extensionFound: false` (and `reviewSkipped: true` when the walkthrough carries a "Review skipped"/"path filters" notice). The old behavior conflated this with workspace-hash drift and hard-exited; both are now distinguished.
 
 ## Memory / state
 
