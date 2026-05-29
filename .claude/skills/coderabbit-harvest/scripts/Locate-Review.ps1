@@ -42,12 +42,17 @@
     PowerShell 7+ required. Windows-only by design (see .coderabbit.yaml
     path_instructions - do NOT port to bash/linux).
     Exit codes (this script): 0 = entry found (emitted on stdout),
-    1 = invalid input/environment (includes a blank/whitespace CommitSha and a
-    missing workspace storage root), 3 = no completed review entry for this commit
-    (NOT a hard error - the commit may be unreviewed, still in progress, or
-    legitimately skipped; the SKILL.md wrapper treats 3 as the GitHub-only
-    fallback and STOPs on 1). This script never emits 2; the wrapper reserves
-    exit 2 for its own "Locate exited 0 but emitted no JSON" contract violation.
+    1 = invalid input/environment: a blank/whitespace CommitSha, or a
+    WorkspaceStorageRoot path that does not exist at all.
+    3 = no usable completed entry: the root exists but contains no
+    coderabbit.coderabbit-vscode folder (the Extension never ran in this
+    workspace), OR no completed review entry matches the commit. Either way the
+    Extension has nothing for this commit, so 3 is NOT a hard error - the SKILL.md
+    wrapper treats 3 as the GitHub-only fallback and STOPs on 1.
+    Note the 1-vs-3 boundary: a MISSING root is a setup error (1); a PRESENT root
+    with no CR data is "no reviews here" (3). This script never emits 2; the
+    wrapper reserves exit 2 for its own "Locate exited 0 but emitted no JSON"
+    contract violation.
     Error reporting uses Write-Stderr (issue #50): $ErrorActionPreference='Stop'
     makes Write-Error terminating, which would collapse the documented exit codes.
 #>
