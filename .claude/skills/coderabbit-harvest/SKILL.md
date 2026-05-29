@@ -136,17 +136,18 @@ $locateRc = $LASTEXITCODE
 # "GitHub-only" would silently swallow a real failure (exit 1 = invalid
 # input/environment) and contradict the skill's STOP policy (CR PR #97).
 #   0 + entry  -> use it
-#   0 + empty  -> STOP: Locate claimed success but emitted nothing (anomaly)
+#   0 + empty  -> STOP with exit 2 (contract violation, distinct from 3)
 #   3          -> GitHub-only fallback (unreviewed / legitimately skipped, M2)
 #   else (1..) -> STOP, do not silently degrade
 if ($locateRc -eq 0 -and $entryJson) {
     $entryJson | Set-Content -Path $entryPath -Encoding UTF8
 } elseif ($locateRc -eq 0) {
-    # Success exit but no JSON on stdout — a contract violation, not a clean
-    # "no review". Do NOT fall through to exit 0 (that would signal success
-    # while harvesting nothing). STOP (CR PR #97 round 2).
-    Write-Error "Locate-Review.ps1 exited 0 but emitted no entry JSON — STOPPING (anomaly)."
-    exit 3
+    # Success exit but no JSON on stdout - a contract violation, not a clean
+    # "no review". Exit 2 (NOT 3): 3 is this flow's benign GitHub-only fallback
+    # signal, so reusing it here would mis-brand a hard STOP as a fallback. 2 is
+    # a distinct "contract violation" code (CR PR #97 round 3).
+    Write-Error "Locate-Review.ps1 exited 0 but emitted no entry JSON - STOPPING (contract violation)."
+    exit 2
 } elseif ($locateRc -eq 3) {
     # Remove any stale file so Classify-Comments sees "no entry" rather than a
     # previous commit's data, then proceed on the GitHub surfaces alone.

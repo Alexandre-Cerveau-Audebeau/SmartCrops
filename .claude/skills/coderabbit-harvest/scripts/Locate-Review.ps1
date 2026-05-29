@@ -41,11 +41,13 @@
 .NOTES
     PowerShell 7+ required. Windows-only by design (see .coderabbit.yaml
     path_instructions - do NOT port to bash/linux).
-    Exit codes: 0 = entry found (emitted on stdout), 1 = invalid input/environment
-    (includes a blank/whitespace CommitSha and a missing workspace storage root),
-    3 = no completed review entry for this commit (NOT a hard error - the commit
-    may be unreviewed, still in progress, or legitimately skipped; the caller
-    treats 3 as the GitHub-only fallback and STOPs on 1).
+    Exit codes (this script): 0 = entry found (emitted on stdout),
+    1 = invalid input/environment (includes a blank/whitespace CommitSha and a
+    missing workspace storage root), 3 = no completed review entry for this commit
+    (NOT a hard error - the commit may be unreviewed, still in progress, or
+    legitimately skipped; the SKILL.md wrapper treats 3 as the GitHub-only
+    fallback and STOPs on 1). This script never emits 2; the wrapper reserves
+    exit 2 for its own "Locate exited 0 but emitted no JSON" contract violation.
     Error reporting uses Write-Stderr (issue #50): $ErrorActionPreference='Stop'
     makes Write-Error terminating, which would collapse the documented exit codes.
 #>
