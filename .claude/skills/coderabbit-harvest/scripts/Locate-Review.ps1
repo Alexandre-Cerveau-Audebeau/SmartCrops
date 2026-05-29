@@ -41,9 +41,11 @@
 .NOTES
     PowerShell 7+ required. Windows-only by design (see .coderabbit.yaml
     path_instructions - do NOT port to bash/linux).
-    Exit codes: 0 = entry found (emitted on stdout), 1 = invalid input,
-    3 = no completed review entry for this commit (NOT an error - the commit may
-    be unreviewed, still in progress, or legitimately skipped; the caller decides).
+    Exit codes: 0 = entry found (emitted on stdout), 1 = invalid input/environment
+    (includes a blank/whitespace CommitSha and a missing workspace storage root),
+    3 = no completed review entry for this commit (NOT a hard error - the commit
+    may be unreviewed, still in progress, or legitimately skipped; the caller
+    treats 3 as the GitHub-only fallback and STOPs on 1).
     Error reporting uses Write-Stderr (issue #50): $ErrorActionPreference='Stop'
     makes Write-Error terminating, which would collapse the documented exit codes.
 #>
@@ -98,9 +100,13 @@ function ConvertTo-SortableDate {
 
 # Mandatory rejects $null and '' but NOT whitespace-only ("   "), which would
 # make "$CommitSha*" degenerate to "*" and match an unrelated completed entry.
-# Close that hole explicitly (CR PR #97). Exit 3 = same "no usable target" class.
+# Close that hole explicitly (CR PR #97). Exit 1 = invalid input, NOT 3: a blank
+# CommitSha is bad input, not a legitimate "no review for this commit". The
+# SKILL.md branching treats exit 3 as the GitHub-only fallback and only STOPs on
+# other codes; returning 3 here would silently degrade to a GitHub-only harvest
+# on bad input instead of stopping. Exit 1 -> STOP (CR PR #97 round 2, critical).
 if ([string]::IsNullOrWhiteSpace($CommitSha)) {
-    Write-Stderr -Message "CommitSha is blank/whitespace - refusing to match (would wildcard to '*')." -ExitCode 3
+    Write-Stderr -Message "CommitSha is blank/whitespace - invalid input, refusing to match (would wildcard to '*')." -ExitCode 1
 }
 
 if (-not (Test-Path $WorkspaceStorageRoot)) {

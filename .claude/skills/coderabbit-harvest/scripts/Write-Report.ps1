@@ -141,10 +141,17 @@ end {
     }
     if (Get-SafeProp -Object $data -Name 'githubPartialData' -Default $false) {
         $fetchStatus = Get-SafeProp -Object $data -Name 'githubSurfaceFetchStatus' -Default $null
-        $failed = if ($fetchStatus) {
-            ($fetchStatus.PSObject.Properties | Where-Object { $_.Value -ne 'ok' } | ForEach-Object { $_.Name }) -join ', '
-        } else { 'unknown' }
-        [void]$sb.AppendLine("- [!] PARTIAL HARVEST - GitHub surface(s) failed to fetch: $failed. Findings below may be INCOMPLETE (this is a degraded fetch, not a clean 'no comments').")
+        $failedNames = if ($fetchStatus) {
+            @($fetchStatus.PSObject.Properties | Where-Object { $_.Value -ne 'ok' } | ForEach-Object { $_.Name })
+        } else { @() }
+        if ($failedNames.Count -gt 0) {
+            [void]$sb.AppendLine("- [!] PARTIAL HARVEST - GitHub surface(s) failed to fetch: $($failedNames -join ', '). Findings below may be INCOMPLETE (this is a degraded fetch, not a clean 'no comments').")
+        } else {
+            # partialData flagged but no surface marked failed: data inconsistency
+            # (should be impossible - both fields derive from the same status map).
+            # Report the anomaly explicitly rather than printing "failed to fetch: ".
+            [void]$sb.AppendLine("- [!] PARTIAL HARVEST flagged but no failed surface recorded - data inconsistency in githubSurfaceFetchStatus; treat findings as possibly INCOMPLETE.")
+        }
     }
     $marker = Get-SafeProp -Object $data -Name 'actionableMarker' -Default $null
     if ($null -ne $marker) {
