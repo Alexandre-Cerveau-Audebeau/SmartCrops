@@ -1,8 +1,7 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
-# NE JAMAIS ajouter `knowledge_base.opt_out: true` — cela EFFACE IRRÉVERSIBLEMENT
-# tous les learnings CodeRabbit (doc officielle confirmée). Pour ajuster le
-# knowledge base, utiliser les champs de scope (ex. knowledge_base.learnings.scope),
-# jamais opt_out.
+# NEVER add `knowledge_base.opt_out: true` — it IRREVERSIBLY DELETES all CodeRabbit
+# learnings (confirmed in official documentation). To adjust the knowledge base,
+# use scope fields (e.g., knowledge_base.learnings.scope), never opt_out.
 reviews:
   profile: assertive
   high_level_summary: true
