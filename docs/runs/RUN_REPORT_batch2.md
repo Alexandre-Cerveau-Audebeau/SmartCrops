@@ -86,6 +86,37 @@ This is the result the whole curation pipeline was built to produce. `Skipped = 
 3. **Bulk-create** inserted with `GbifTaxonKey = NULL` (partial unique index `WHERE GbifTaxonKey IS NOT NULL` lets the NULLs coexist).
 4. **Enrichment** resolved keys per-plant; because the batch was collision-free, the SMA-46 23505 catch on `IX_Plants_GbifTaxonKey` never triggered.
 
+### Reproducibility checks
+
+The exact checks run to assert the claim — re-runnable for any future batch report:
+
+```bash
+# App logs: zero SMA-46 duplicate-key skips during the run window. Expect 0 lines.
+docker logs smartcrops-api --since 30m 2>&1 | grep -E "\[Skipped/DuplicateTaxonKey\]"
+# (returned 0 lines)
+```
+
+```sql
+-- DB-side uniqueness: no two plants share a non-NULL GbifTaxonKey. Expect 0 rows.
+SELECT "GbifTaxonKey", COUNT(*)
+FROM "Plants"
+WHERE "GbifTaxonKey" IS NOT NULL
+GROUP BY "GbifTaxonKey"
+HAVING COUNT(*) > 1;
+-- (returned 0 rows)
+```
+
+```sql
+-- EnrichmentStatus distribution backing the Final counts table above.
+SELECT "EnrichmentStatus", COUNT(*)
+FROM "Plants"
+GROUP BY "EnrichmentStatus"
+ORDER BY "EnrichmentStatus";
+-- 3:2  7:9  9:8  11:131  15:395
+```
+
+Driver-side, `Skipped = 0` was emitted on every one of the 30 chunks (10 per phase × GBIF/Trefle/Perenual) in the run log — the per-source counter that would carry a `DuplicateTaxonKey` skip.
+
 **Contrast with batch 1**, which used GBIF-accepted names without a pre-flight and hit **2 unhandled `IX_Plants_GbifTaxonKey` 23505 failures** (`Rosmarinus officinalis`/`Salvia rosmarinus`, `Allium ampeloprasum` vs seed). Batch 2 paid the curation cost up front and shipped clean.
 
 ## Data-limited outcomes (not bugs)
