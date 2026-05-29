@@ -8,7 +8,7 @@
     Reads CodeRabbit comments from the VS Code Extension JSON workspace storage and from
     the GitHub API in parallel. Applies rule-based classification (see
     references/classification-rules.md). Comments that don't match any deterministic rule
-    are flagged REVIEW_NEEDED — Claude Code finishes the classification in conversational
+    are flagged REVIEW_NEEDED - Claude Code finishes the classification in conversational
     context, where the LLM's judgment is the right tool for ambiguous cases.
 
     Output is a JSON object on stdout, intended for piping into Write-Report.ps1.
@@ -17,7 +17,7 @@
     Optional path to a file holding the located Extension review entry (JSON),
     as written from Locate-Review.ps1's stdout. Omit (or pass a missing/empty
     path) to harvest the GitHub surfaces alone when no completed Extension review
-    exists for the commit (unreviewed or legitimately skipped — SMA-54 M2).
+    exists for the commit (unreviewed or legitimately skipped - SMA-54 M2).
 
 .PARAMETER GitHubPrNumber
     PR number to fetch from GitHub via gh CLI.
@@ -41,7 +41,7 @@
 
 .NOTES
     PowerShell 7+ required (null-coalescing, ternary).
-    Windows-only by design — see ADR rationale and .coderabbit.yaml path_instructions.
+    Windows-only by design - see ADR rationale and .coderabbit.yaml path_instructions.
     Exit codes: 0 = OK, 1 = invalid input, 2 = data not found, 3 = parse/API error.
     Error reporting: error paths use the Write-Stderr helper, not Write-Error.
     Necessary because $ErrorActionPreference='Stop' makes Write-Error terminating,
@@ -53,7 +53,7 @@
 param(
     # Path to a file holding the located Extension review entry (JSON), as
     # written from Locate-Review.ps1's stdout. OPTIONAL: when Locate finds no
-    # completed entry (commit unreviewed or legitimately skipped — SMA-54 M2),
+    # completed entry (commit unreviewed or legitimately skipped - SMA-54 M2),
     # the caller passes nothing (or a missing/empty path) and we harvest the
     # GitHub surfaces alone. File-based (not an inline string) so SKILL.md's
     # string-pipeline doesn't have to embed a multi-KB JSON blob. Replaces the
@@ -82,7 +82,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 # ---------------------------------------------------------------------------
-# Error reporting helper — see issue #50
+# Error reporting helper - see issue #50
 # ---------------------------------------------------------------------------
 
 function Write-Stderr {
@@ -93,7 +93,7 @@ function Write-Stderr {
     .DESCRIPTION
     Workaround for $ErrorActionPreference='Stop' making Write-Error terminating
     (which short-circuits before any explicit `exit N` line is reached). Uses
-    [Console]::Error.WriteLine — writes to stderr without raising a terminating
+    [Console]::Error.WriteLine - writes to stderr without raising a terminating
     error, so the documented exit codes (0/1/2/3) are actually reachable.
     See issue #50 for the original analysis.
 
@@ -114,7 +114,7 @@ function Write-Stderr {
 }
 
 # ---------------------------------------------------------------------------
-# Help mode — print parent SKILL.md and exit
+# Help mode - print parent SKILL.md and exit
 # ---------------------------------------------------------------------------
 
 if ($Help) {
@@ -156,7 +156,7 @@ function Test-IsExactLgtmBody {
     [OutputType([bool])]
     param([string]$Body)
 
-    # Rule 2a — body (trimmed) exactly matches an unambiguous LGTM marker.
+    # Rule 2a - body (trimmed) exactly matches an unambiguous LGTM marker.
     # Safe to consult before the type-driven rules: these strings are pure
     # LGTM by construction, with no risk of masking an actionable finding.
     if ([string]::IsNullOrWhiteSpace($Body)) { return $false }
@@ -173,10 +173,10 @@ function Test-IsComplimentPrefixBody {
     [OutputType([bool])]
     param([string]$Body)
 
-    # Rule 10a — short body opening with a complimentary word (Excellent/Great/
+    # Rule 10a - short body opening with a complimentary word (Excellent/Great/
     # Nice/Well done), capped at 200 chars. This is a weaker heuristic than the
     # exact-match list, so Get-CommentClassification consults it only AFTER the
-    # type/severity rules — a major actionable finding that happens to start
+    # type/severity rules - a major actionable finding that happens to start
     # with "Excellent" must not be silently downgraded to LGTM.
     if ([string]::IsNullOrWhiteSpace($Body)) { return $false }
 
@@ -209,7 +209,7 @@ function Get-CommentClassification {
     }
 
     # Rule 2a: body exactly matches an unambiguous LGTM marker. Safe at the top
-    # of the chain — these are pure LGTM by construction.
+    # of the chain - these are pure LGTM by construction.
     if (Test-IsExactLgtmBody -Body $body) { return 'LGTM' }
 
     # Rules 3-5: actionable
@@ -236,7 +236,7 @@ function Get-CommentClassification {
     }
 
     # Rule 8: additional comments (CodeRabbit's compliments / observations)
-    # — LGTM no-op when severity is benign, otherwise needs review.
+    # - LGTM no-op when severity is benign, otherwise needs review.
     if ($type -eq 'additional') {
         switch ($severity) {
             'major' { return 'MAJOR' }
@@ -271,8 +271,8 @@ function Get-SafeProp {
 
     # Strict-mode-safe property access: returns $Default when the property is
     # absent or null, rather than throwing under Set-StrictMode -Version Latest.
-    # CodeRabbit comment objects are not uniformly shaped — not every comment
-    # carries every field — so direct `$obj.prop` access is unsafe here.
+    # CodeRabbit comment objects are not uniformly shaped - not every comment
+    # carries every field - so direct `$obj.prop` access is unsafe here.
     if ($Object -and $Object.PSObject.Properties[$Name]) {
         $value = $Object.PSObject.Properties[$Name].Value
         if ($null -ne $value) { return $value }
@@ -289,7 +289,7 @@ function ConvertTo-NormalizedComment {
         # surfaces that previously collapsed to one. 'github-inline' = line-anchored
         # PR review comments (pulls/{n}/comments); 'github-review' = the review
         # body that GROUPS nitpicks + the "Actionable comments posted: N" marker
-        # (pulls/{n}/reviews[].body — the surface the old skill never read, where
+        # (pulls/{n}/reviews[].body - the surface the old skill never read, where
         # PR #95's only nitpick lived); 'github-walkthrough' = the issue-comment
         # summary / "Review skipped" notice (issues/{n}/comments).
         [Parameter(Mandatory = $true)] [ValidateSet('extension', 'github-inline', 'github-review', 'github-walkthrough')] [string]$Source
@@ -311,7 +311,7 @@ function ConvertTo-NormalizedComment {
 
     if ($Source -eq 'extension') {
         # Extension comment objects key the file path as 'filename' (not 'path'),
-        # and not every comment carries every field — access defensively.
+        # and not every comment carries every field - access defensively.
         $normalized.id        = Get-SafeProp -Object $RawComment -Name 'id' -Default $null
         $normalized.type      = (Get-SafeProp -Object $RawComment -Name 'type').ToString()
         $normalized.severity  = (Get-SafeProp -Object $RawComment -Name 'severity').ToString()
@@ -335,12 +335,12 @@ function ConvertTo-NormalizedComment {
         $normalized.endLine   = [int](Get-SafeProp -Object $RawComment -Name 'line' -Default 0)
         $normalized.body      = (Get-SafeProp -Object $RawComment -Name 'body').ToString()
         $normalized.type      = 'actionable'  # GitHub doesn't expose CR internal type
-        $normalized.severity  = ''            # unknown → flows to REVIEW_NEEDED
+        $normalized.severity  = ''            # unknown -> flows to REVIEW_NEEDED
     }
     else {
         # github-review and github-walkthrough are prose blocks, not line-anchored.
         # Carry the whole body; classification falls to the body heuristics
-        # (exact-LGTM / compliment-prefix → LGTM, else REVIEW_NEEDED) so a grouped
+        # (exact-LGTM / compliment-prefix -> LGTM, else REVIEW_NEEDED) so a grouped
         # nitpick body surfaces as REVIEW_NEEDED for a human read instead of being
         # silently dropped. 'title' records which surface for the report.
         $normalized.id        = Get-SafeProp -Object $RawComment -Name 'id' -Default $null
@@ -371,7 +371,7 @@ function Get-TransitionLabel {
     }
 
     # Fallback: match by source + path + startLine + endLine.
-    # Restricting to the same source avoids cross-source false matches — the
+    # Restricting to the same source avoids cross-source false matches - the
     # same finding may appear on both Extension and GitHub with very different
     # rendered bodies, and must NOT be reported as MODIFIED across sources.
     $sameLocation = $PreviousComments | Where-Object {
@@ -417,7 +417,7 @@ function Get-ActionableMarker {
     # Parse CodeRabbit's "Actionable comments posted: N" marker from a body.
     # Returns the integer N, or $null if the marker is absent. ABSENCE IS NOT
     # ZERO (SMA-54 M5): on a nitpicks-only review the marker can be missing while
-    # the body still groups real nitpicks — the caller must read the body either way.
+    # the body still groups real nitpicks - the caller must read the body either way.
     [CmdletBinding()]
     [OutputType([object])]
     param([string]$Body)
@@ -442,7 +442,7 @@ function Test-IsReviewSkipped {
 # ---------------------------------------------------------------------------
 
 # Step 1: parse the located Extension review entry (from Locate-Review.ps1).
-# OPTIONAL — when empty, the commit has no completed Extension review (unreviewed
+# OPTIONAL - when empty, the commit has no completed Extension review (unreviewed
 # or legitimately skipped, SMA-54 M2); we proceed with the GitHub surfaces alone.
 # The old in-script headCommitId selection (M3), 5-min mtime freshness gate (M4),
 # and workspace-hash file resolution (M1) all moved to Locate-Review.ps1.
@@ -463,7 +463,7 @@ $extensionFound = [bool]$review
 $extensionComments = [System.Collections.Generic.List[PSCustomObject]]::new()
 if ($review) {
     $rawExtension = [System.Collections.Generic.List[PSCustomObject]]::new()
-    # Read additionalDetails defensively — the review shape isn't guaranteed to
+    # Read additionalDetails defensively - the review shape isn't guaranteed to
     # include it, and under strict mode a missing property throws on direct access.
     $ad = Get-SafeProp -Object $review -Name 'additionalDetails' -Default $null
     if ($ad) {
@@ -488,7 +488,7 @@ if ($review) {
     }
     # N1: dedup INTRA-Extension only. additionalDetails.*Comments and
     # fileReviewMap[].comments can carry the SAME finding twice. Cross-SURFACE
-    # dedup (Extension vs GitHub) is intentionally NOT done — see
+    # dedup (Extension vs GitHub) is intentionally NOT done - see
     # classification-rules.md "Cross-source handling". This collapses only the
     # within-Extension double count.
     $seenExt = [System.Collections.Generic.HashSet[string]]::new()
@@ -499,7 +499,7 @@ if ($review) {
     }
 }
 
-# Step 3: fetch GitHub surfaces (SMA-54 M5 — three distinct surfaces)
+# Step 3: fetch GitHub surfaces (SMA-54 M5 - three distinct surfaces)
 # Pre-check that the gh CLI is available. SKILL.md lists it as a requirement;
 # if it's missing, fail cleanly via the documented exit 3 path rather than
 # letting PowerShell raise an opaque native-command error.
@@ -510,21 +510,34 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
 $crLogins = @('coderabbitai', 'coderabbitai[bot]')
 
 # Helper: fetch + slurp + flatten a paginated gh api list endpoint. $Critical
-# controls failure handling — the inline surface is primary (hard exit 3 on
+# controls failure handling - the inline surface is primary (hard exit 3 on
 # failure, preserving the documented contract); the review/walkthrough surfaces
 # are additive (warn + continue so a transient there never sinks the harvest).
+# Per-surface fetch status (SMA-54, CR PR #97): a non-critical surface that
+# fails to fetch/parse returns @() and warns - but in the JSON output that would
+# look identical to "this surface genuinely had no comments". Record the status
+# here so a PARTIAL harvest is distinguishable from a complete one. Script scope
+# so Get-GhList can flip an entry on failure (mutating the referenced hashtable).
+$script:surfaceFetchStatus = [ordered]@{
+    'github-inline'      = 'ok'
+    'github-review'      = 'ok'
+    'github-walkthrough' = 'ok'
+}
+
 function Get-GhList {
     [CmdletBinding()]
     [OutputType([object[]])]
-    param([string]$Endpoint, [bool]$Critical)
+    param([string]$Endpoint, [bool]$Critical, [string]$Surface)
     $raw = gh api $Endpoint --paginate --slurp 2>$null
     if ($LASTEXITCODE -ne 0) {
         if ($Critical) { Write-Stderr -Message "Failed to fetch GitHub data: $Endpoint" -ExitCode 3 }
+        $script:surfaceFetchStatus[$Surface] = 'failed'
         [Console]::Error.WriteLine("WARN: failed to fetch $Endpoint (non-critical surface, continuing).")
         return @()
     }
     try { $pages = $raw | ConvertFrom-Json -Depth 100 } catch {
         if ($Critical) { Write-Stderr -Message "Failed to parse GitHub data: $Endpoint`n$($_.Exception.Message)" -ExitCode 3 }
+        $script:surfaceFetchStatus[$Surface] = 'failed'
         [Console]::Error.WriteLine("WARN: failed to parse $Endpoint (non-critical surface, continuing).")
         return @()
     }
@@ -532,18 +545,18 @@ function Get-GhList {
     return @($pages | ForEach-Object { $_ })
 }
 
-# Surface 1 — inline review comments (line-anchored). Primary/critical.
-$ghInline = @(Get-GhList -Endpoint "repos/{owner}/{repo}/pulls/$GitHubPrNumber/comments" -Critical $true) |
+# Surface 1 - inline review comments (line-anchored). Primary/critical.
+$ghInline = @(Get-GhList -Endpoint "repos/{owner}/{repo}/pulls/$GitHubPrNumber/comments" -Critical $true -Surface 'github-inline') |
     Where-Object { $_.user.login -in $crLogins }
 
-# Surface 2 — review bodies (grouped nitpicks + "Actionable comments posted: N").
-$ghReviewsAll = @(Get-GhList -Endpoint "repos/{owner}/{repo}/pulls/$GitHubPrNumber/reviews" -Critical $false) |
+# Surface 2 - review bodies (grouped nitpicks + "Actionable comments posted: N").
+$ghReviewsAll = @(Get-GhList -Endpoint "repos/{owner}/{repo}/pulls/$GitHubPrNumber/reviews" -Critical $false -Surface 'github-review') |
     Where-Object { $_.user.login -in $crLogins }
 # Keep only review bodies with substance (skip empty-body APPROVED/COMMENTED rows).
 $ghReviews = @($ghReviewsAll | Where-Object { -not [string]::IsNullOrWhiteSpace((Get-SafeProp -Object $_ -Name 'body')) })
 
-# Surface 3 — issue-comment walkthrough / skip notices.
-$ghWalkthrough = @(Get-GhList -Endpoint "repos/{owner}/{repo}/issues/$GitHubPrNumber/comments" -Critical $false) |
+# Surface 3 - issue-comment walkthrough / skip notices.
+$ghWalkthrough = @(Get-GhList -Endpoint "repos/{owner}/{repo}/issues/$GitHubPrNumber/comments" -Critical $false -Surface 'github-walkthrough') |
     Where-Object { $_.user.login -in $crLogins }
 
 # Marker + skip detection across the review bodies and the walkthrough.
@@ -585,10 +598,10 @@ foreach ($raw in $extensionComments) {
 }
 
 # GitHub surfaces carry no CR type/severity, so body heuristics are the only
-# signal. github-walkthrough is the summary/poem/skip-notice (informational →
+# signal. github-walkthrough is the summary/poem/skip-notice (informational ->
 # LGTM; its marker + skip flag are captured in meta, not as a finding). Inline
 # and review bodies classify LGTM only on an exact/compliment marker, otherwise
-# REVIEW_NEEDED — so a GROUPED nitpick body (the surface the old skill never
+# REVIEW_NEEDED - so a GROUPED nitpick body (the surface the old skill never
 # read, SMA-54 M5) surfaces for a human read instead of being dropped.
 $githubSurfaces = @(
     @{ Source = 'github-inline';      Items = $ghInline },
@@ -616,17 +629,17 @@ foreach ($surface in $githubSurfaces) {
 
 # Note: Extension and GitHub comments are intentionally NOT deduplicated across
 # SURFACES. The same finding renders with different bodies/titles/anchors per
-# surface and shares no reliable deterministic key — see
+# surface and shares no reliable deterministic key - see
 # references/classification-rules.md ("Cross-source handling"). Each surface is
 # classified independently; the same logical finding may appear once per surface.
-# (Intra-Extension double-counting IS collapsed earlier — SMA-54 N1.)
+# (Intra-Extension double-counting IS collapsed earlier - SMA-54 N1.)
 
 # Step 6: detect RESOLVED (in previous but not in current)
 $resolvedComments = [System.Collections.Generic.List[PSCustomObject]]::new()
 if ($PreviousJsonPath) {
     # Build per-source location keys so a finding resolved on one surface isn't
     # masked by the same finding still present on the other (source is part of
-    # the key — cross-source matches are intentionally never treated as the same).
+    # the key - cross-source matches are intentionally never treated as the same).
     $currentIds = $classified | ForEach-Object { $_.id }
     $currentLocations = $classified | ForEach-Object {
         "$($_.source):$($_.path):$($_.startLine):$($_.endLine):$($_.body)"
@@ -658,10 +671,15 @@ if (-not $NoOutput) {
         # SMA-54 M2 surface-state flags: distinguish "Extension review located"
         # from "GitHub review skipped (path filters)" from "desync (GitHub has a
         # review but no Extension entry)". actionableMarker is the parsed
-        # "Actionable comments posted: N" (null when absent — absence ≠ zero, M5).
+        # "Actionable comments posted: N" (null when absent - absence != zero, M5).
         extensionFound   = $extensionFound
         reviewSkipped    = $reviewSkipped
         actionableMarker = $actionableMarker
+        # Partial-harvest observability (CR PR #97): githubPartialData is true when
+        # any non-critical GitHub surface failed to fetch/parse, so a degraded
+        # harvest is not mistaken for a clean "no comments" result.
+        githubPartialData        = @($script:surfaceFetchStatus.Values | Where-Object { $_ -ne 'ok' }).Count -gt 0
+        githubSurfaceFetchStatus = $script:surfaceFetchStatus
         extensionMeta = @{
             startedAt = Get-SafeProp -Object $review -Name 'startedAt' -Default ''
             endedAt   = Get-SafeProp -Object $review -Name 'endedAt' -Default ''

@@ -39,7 +39,7 @@ begin {
     $inputLines = [System.Collections.Generic.List[string]]::new()
 
     # Duplicated from Classify-Comments.ps1 (parity with Get-SafeProp) to keep
-    # this script independently runnable. See issue #50 for the rationale —
+    # this script independently runnable. See issue #50 for the rationale -
     # Write-Error becomes terminating under strict mode, so the explicit
     # `exit N` lines below would never run without this workaround.
     function Write-Stderr {
@@ -121,7 +121,7 @@ end {
     $sb = [System.Text.StringBuilder]::new()
     $shortSha = $targetCommit.Substring(0, 7)
 
-    [void]$sb.AppendLine("# Harvest report — PR #$prNumber commit $shortSha")
+    [void]$sb.AppendLine("# Harvest report - PR #$prNumber commit $shortSha")
     [void]$sb.AppendLine()
 
     # Sanity
@@ -129,7 +129,7 @@ end {
     [void]$sb.AppendLine("- Commit: $targetCommit")
     [void]$sb.AppendLine("- PR: #$prNumber")
     [void]$sb.AppendLine("- Extension review: $($extensionMeta.title) (status=$($extensionMeta.status))")
-    [void]$sb.AppendLine("- Review window: $($extensionMeta.startedAt) → $($extensionMeta.endedAt)")
+    [void]$sb.AppendLine("- Review window: $($extensionMeta.startedAt) -> $($extensionMeta.endedAt)")
     # Surface-state flags (SMA-54 M2/M5). Get-SafeProp keeps older harvest JSONs
     # (pre-these-fields) rendering cleanly with sensible defaults.
     $extensionFound = Get-SafeProp -Object $data -Name 'extensionFound' -Default $null
@@ -137,7 +137,14 @@ end {
         [void]$sb.AppendLine("- Extension entry located: $extensionFound")
     }
     if (Get-SafeProp -Object $data -Name 'reviewSkipped' -Default $false) {
-        [void]$sb.AppendLine("- ⚠️ CodeRabbit review SKIPPED (path filters) — legitimate skip, nothing to harvest from the Extension.")
+        [void]$sb.AppendLine("- [!] CodeRabbit review SKIPPED (path filters) - legitimate skip, nothing to harvest from the Extension.")
+    }
+    if (Get-SafeProp -Object $data -Name 'githubPartialData' -Default $false) {
+        $fetchStatus = Get-SafeProp -Object $data -Name 'githubSurfaceFetchStatus' -Default $null
+        $failed = if ($fetchStatus) {
+            ($fetchStatus.PSObject.Properties | Where-Object { $_.Value -ne 'ok' } | ForEach-Object { $_.Name }) -join ', '
+        } else { 'unknown' }
+        [void]$sb.AppendLine("- [!] PARTIAL HARVEST - GitHub surface(s) failed to fetch: $failed. Findings below may be INCOMPLETE (this is a degraded fetch, not a clean 'no comments').")
     }
     $marker = Get-SafeProp -Object $data -Name 'actionableMarker' -Default $null
     if ($null -ne $marker) {
@@ -160,11 +167,11 @@ end {
     }
     [void]$sb.AppendLine()
 
-    # Cross-source surfaces — the skill does NOT deduplicate Extension vs GitHub
-    # (no reliable deterministic key — see classification-rules.md). Counts are
+    # Cross-source surfaces - the skill does NOT deduplicate Extension vs GitHub
+    # (no reliable deterministic key - see classification-rules.md). Counts are
     # reported per-source; the same finding may appear in both.
     # @(...) forces an array so .Count is valid even for 0 matches.
-    # Per-surface counts (SMA-54 M5 — GitHub now has three distinct sub-sources).
+    # Per-surface counts (SMA-54 M5 - GitHub now has three distinct sub-sources).
     $extensionCount = @($commentsRaw | Where-Object source -eq 'extension').Count
     $ghInlineCount = @($commentsRaw | Where-Object source -eq 'github-inline').Count
     $ghReviewCount = @($commentsRaw | Where-Object source -eq 'github-review').Count
@@ -207,7 +214,7 @@ end {
         [void]$sb.AppendLine()
         foreach ($c in $substantive) {
             $loc = if ($c.path) { "$($c.path):$($c.startLine)-$($c.endLine)" } else { '(no path)' }
-            [void]$sb.AppendLine("### $loc — $($c.classification)")
+            [void]$sb.AppendLine("### $loc - $($c.classification)")
             if ($c.title) { [void]$sb.AppendLine("**$($c.title)**") }
             if ($c.body) {
                 [void]$sb.AppendLine()
@@ -228,7 +235,7 @@ end {
     } else {
         [void]$sb.AppendLine("## Substantive comments")
         [void]$sb.AppendLine()
-        [void]$sb.AppendLine("None — all comments classified as LGTM no-ops.")
+        [void]$sb.AppendLine("None - all comments classified as LGTM no-ops.")
         [void]$sb.AppendLine()
     }
 
@@ -239,7 +246,7 @@ end {
         foreach ($r in $data.resolved) {
             $loc = if ($r.path) { "$($r.path):$($r.startLine)" } else { '(no path)' }
             $title = if ($r.title) { $r.title } else { '(no title)' }
-            [void]$sb.AppendLine("- $loc — $title")
+            [void]$sb.AppendLine("- $loc - $title")
         }
         [void]$sb.AppendLine()
     }

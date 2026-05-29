@@ -131,12 +131,22 @@ $outputPath = "/tmp/harvest-$shortSha.json"
 # unreviewed case (M2), where we still harvest the GitHub surfaces alone.
 $entryPath = "/tmp/cr-entry-$shortSha.json"
 $entryJson = pwsh -NoProfile -File "$skillRoot\scripts\Locate-Review.ps1" -CommitSha $targetCommit
-if ($LASTEXITCODE -eq 0 -and $entryJson) {
+$locateRc = $LASTEXITCODE
+# Branch explicitly on Locate's exit code — collapsing all non-zero into
+# "GitHub-only" would silently swallow a real failure (exit 1 = invalid
+# input/environment) and contradict the skill's STOP policy (CR PR #97).
+#   0 = entry located      -> use it
+#   3 = no completed entry -> GitHub-only fallback (unreviewed / legitimately skipped, M2)
+#   else (1, ...)          -> STOP, do not silently degrade
+if ($locateRc -eq 0 -and $entryJson) {
     $entryJson | Set-Content -Path $entryPath -Encoding UTF8
-} else {
-    # No completed Extension entry — GitHub-only harvest. Remove any stale file so
-    # Classify-Comments sees "no entry" rather than a previous commit's data.
+} elseif ($locateRc -eq 3) {
+    # Remove any stale file so Classify-Comments sees "no entry" rather than a
+    # previous commit's data, then proceed on the GitHub surfaces alone.
     if (Test-Path $entryPath) { Remove-Item $entryPath }
+} else {
+    Write-Error "Locate-Review.ps1 failed (exit $locateRc) — STOPPING (not a clean no-review case)."
+    exit $locateRc
 }
 
 # Run classification + reporting in ONE pwsh 7 session. `pwsh -File A | pwsh -File B`

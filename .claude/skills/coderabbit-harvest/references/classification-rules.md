@@ -110,7 +110,9 @@ Rich metadata (`type`, `severity`, `analysis.type`). Rules 1-10 apply directly.
 
 ### GitHub API — three distinct surfaces (SMA-54 M5)
 
-GitHub exposes CodeRabbit on three surfaces that the harvester reads separately and tags with a granular `source`. None expose CR's internal `type`/`severity`, so all use the simplified body heuristic:
+GitHub exposes CodeRabbit on three surfaces that the harvester reads separately and tags with a granular `source`. None expose CR's internal `type`/`severity`. The `github-inline` and `github-review` surfaces use the simplified body heuristic below; `github-walkthrough` is the exception — it is informational (summary/poem) and **always forced to LGTM** (see the table), never run through the heuristic.
+
+Body heuristic (inline and review surfaces only):
 
 - Body matches an exact-LGTM marker or compliment prefix → **LGTM**
 - Otherwise → **REVIEW_NEEDED**

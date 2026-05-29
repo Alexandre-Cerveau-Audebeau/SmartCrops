@@ -4,24 +4,24 @@
 .SYNOPSIS
     Locate the CodeRabbit Extension review entry for a target commit by scanning
     the VS Code workspace storage and matching on the headCommitId stored INSIDE
-    each JSON file — never on the file name.
+    each JSON file - never on the file name.
 
 .DESCRIPTION
     The CodeRabbit VS Code Extension writes one content-hashed JSON file per
     branch under %APPDATA%\Code\User\workspaceStorage\<ws>\coderabbit.coderabbit-vscode\.
     The file NAME is an opaque content hash and does NOT correspond to any
     derivable key (the prior SHA256("<repo>-<branch>-reviews") scheme never
-    matched — see SMA-54 M1). Each file holds either a single review object or an
+    matched - see SMA-54 M1). Each file holds either a single review object or an
     ARRAY of review entries accumulated over the branch's life; the only reliable
     locator is the `headCommitId` field inside each entry.
 
     This script enumerates every candidate file, normalizes single-object and
     array shapes to a flat entry list, keeps only entries whose `headCommitId`
     matches the target commit AND whose `status` is `completed` (cancelled /
-    in_progress / failed are excluded — SMA-54 M3), sorts by `endedAt` descending,
+    in_progress / failed are excluded - SMA-54 M3), sorts by `endedAt` descending,
     and emits the newest match as JSON on stdout with an added `_sourceFile`.
 
-    There is intentionally NO file-mtime freshness gate (the old 5-min check —
+    There is intentionally NO file-mtime freshness gate (the old 5-min check -
     SMA-54 M4): a per-branch file's mtime reflects the latest write for ANY commit
     on that branch, which is unrelated to whether THIS commit's review is done.
     `status == 'completed'` is the correct readiness signal.
@@ -40,9 +40,9 @@
 
 .NOTES
     PowerShell 7+ required. Windows-only by design (see .coderabbit.yaml
-    path_instructions — do NOT port to bash/linux).
+    path_instructions - do NOT port to bash/linux).
     Exit codes: 0 = entry found (emitted on stdout), 1 = invalid input,
-    3 = no completed review entry for this commit (NOT an error — the commit may
+    3 = no completed review entry for this commit (NOT an error - the commit may
     be unreviewed, still in progress, or legitimately skipped; the caller decides).
     Error reporting uses Write-Stderr (issue #50): $ErrorActionPreference='Stop'
     makes Write-Error terminating, which would collapse the documented exit codes.
@@ -50,7 +50,7 @@
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)] [string]$CommitSha,
+    [Parameter(Mandatory = $true)] [ValidateNotNullOrEmpty()] [string]$CommitSha,
     [Parameter(Mandatory = $false)] [string]$WorkspaceStorageRoot = (Join-Path $env:APPDATA 'Code\User\workspaceStorage'),
     [Parameter(Mandatory = $false)] [string]$ExpectedRepoPath
 )
@@ -59,7 +59,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 # Duplicated from Classify-Comments.ps1 to keep this script independently
-# runnable — the established pattern in this skill (Write-Report.ps1 does the
+# runnable - the established pattern in this skill (Write-Report.ps1 does the
 # same). See issue #50: Write-Error is terminating under EAP='Stop', so the
 # explicit `exit N` lines below would never run without this helper.
 function Write-Stderr {
@@ -96,11 +96,18 @@ function ConvertTo-SortableDate {
     return [datetime]::MinValue
 }
 
+# Mandatory rejects $null and '' but NOT whitespace-only ("   "), which would
+# make "$CommitSha*" degenerate to "*" and match an unrelated completed entry.
+# Close that hole explicitly (CR PR #97). Exit 3 = same "no usable target" class.
+if ([string]::IsNullOrWhiteSpace($CommitSha)) {
+    Write-Stderr -Message "CommitSha is blank/whitespace - refusing to match (would wildcard to '*')." -ExitCode 3
+}
+
 if (-not (Test-Path $WorkspaceStorageRoot)) {
     Write-Stderr -Message "Workspace storage root not found: $WorkspaceStorageRoot" -ExitCode 1
 }
 
-# ── Discover candidate coderabbit folders ──────────────────────────────────
+# -- Discover candidate coderabbit folders ----------------------------------
 # Optionally narrow to the workspace whose workspace.json folder URI matches
 # ExpectedRepoPath; otherwise scan every workspace's coderabbit folder.
 $crFolders = [System.Collections.Generic.List[string]]::new()
@@ -132,7 +139,7 @@ if ($crFolders.Count -eq 0) {
     Write-Stderr -Message "No coderabbit.coderabbit-vscode folder found under $WorkspaceStorageRoot." -ExitCode 3
 }
 
-# ── Enumerate, parse, flatten, filter ──────────────────────────────────────
+# -- Enumerate, parse, flatten, filter --------------------------------------
 $candidates = [System.Collections.Generic.List[PSCustomObject]]::new()
 
 foreach ($folder in $crFolders) {

@@ -16,6 +16,8 @@ The JSON schema captures **all** raw data, including LGTM bodies that are omitte
 | `extensionFound` | boolean | `true` if a `completed` Extension review entry was located for this commit. `false` ⇒ unreviewed or legitimately skipped; the harvest ran on the GitHub surfaces alone (SMA-54 M2). |
 | `reviewSkipped` | boolean | `true` if a GitHub surface carries a "Review skipped" / "path filters" notice (CodeRabbit declined to review, e.g. a data-only PR). |
 | `actionableMarker` | integer \| null | The parsed `Actionable comments posted: N` value from the review body / walkthrough. **`null` when the marker is absent — absence is NOT zero** (a nitpicks-only review omits the marker yet still groups real nitpicks in its body, SMA-54 M5). |
+| `githubPartialData` | boolean | `true` if any **non-critical** GitHub surface (review body or walkthrough) failed to fetch/parse. Distinguishes a degraded harvest from a clean "no comments" result — without it, a transient fetch failure would look identical to "this surface had nothing" (CR PR #97). |
+| `githubSurfaceFetchStatus` | object | Per-surface fetch outcome: `{ "github-inline": "ok\|failed", "github-review": "...", "github-walkthrough": "..." }`. The inline surface is critical (a failure there hard-exits 3 before this is emitted), so it is `ok` whenever output is produced. |
 | `extensionMeta` | object | Metadata from the Extension review object (empty strings when `extensionFound` is `false`) |
 | `comments` | array | Classified comment array (see schema below) |
 | `resolved` | array | Comments present in previous harvest but absent here (comparison mode only) |
