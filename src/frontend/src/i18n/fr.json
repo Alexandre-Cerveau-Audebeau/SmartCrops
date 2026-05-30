@@ -6,6 +6,11 @@
     "logout": "Déconnexion",
     "profile": "Mon Profil"
   },
+  "errorBoundary": {
+    "title": "Une erreur est survenue",
+    "message": "Une erreur inattendue s'est produite. Essayez de recharger la page.",
+    "retry": "Recharger la page"
+  },
   "footer": {
     "tagline": "Votre compagnon de jardin virtuel — découvrez, cultivez et partagez des plantes du monde entier.",
     "explore": "Explorer",

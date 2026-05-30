@@ -208,7 +208,10 @@ export interface Plant {
   // them as `readonly` here prevents callers from accidentally mutating
   // shared Plant state (e.g. via `plant.images.sort(...)`); use a spread
   // (`[...plant.images].sort()`) or array methods that return a new array.
-  translations: readonly PlantTranslation[];
+  // Optional: the neutral list DTO (PlantListItemResponse, PR #100) omits
+  // translations, so list-sourced Plant objects carry none at runtime. Marked
+  // optional so the type forces a guard at every access site (SMA-73).
+  translations?: readonly PlantTranslation[];
   images: readonly PlantImage[];
   longDescriptions: readonly PlantLongDescription[];
   commonNames: readonly PlantCommonName[];
