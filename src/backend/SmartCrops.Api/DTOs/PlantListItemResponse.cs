@@ -78,11 +78,17 @@ public static class PlantListItemMapper
     {
         ArgumentNullException.ThrowIfNull(plant);
 
-        // The list query filtered-includes only the Main image (one row per
-        // plant); fall back to the denormalised ImageUrl scalar when no image
-        // row was loaded. Attribution is only meaningful when an actual image row
-        // is present (the scalar carries no license metadata).
-        var primary = plant.Images.FirstOrDefault();
+        // The list query filtered-includes the Main image(s); pick one
+        // deterministically by DisplayOrder then Id. A plant may carry more than
+        // one Main row, and an unordered FirstOrDefault could flip the chosen
+        // image/attribution between requests — this mirrors the detail gallery's
+        // explicit ordering. Fall back to the denormalised ImageUrl scalar when no
+        // image row was loaded; attribution is only meaningful when an actual
+        // image row is present (the scalar carries no license metadata).
+        var primary = plant.Images
+            .OrderBy(i => i.DisplayOrder)
+            .ThenBy(i => i.Id)
+            .FirstOrDefault();
         var imageUrl = primary?.Url ?? plant.ImageUrl;
         var attribution = primary is null
             ? null

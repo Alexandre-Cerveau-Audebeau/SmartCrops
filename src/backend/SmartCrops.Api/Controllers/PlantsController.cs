@@ -9,11 +9,12 @@ using SmartCrops.Core.Interfaces;
 namespace SmartCrops.Api.Controllers;
 
 /// <summary>
-/// Public plant catalogue endpoints. <c>GetById</c> projects the loaded
-/// aggregate through <see cref="PlantDetailMapper"/> to a curated DTO; the
-/// other read endpoints (list / by-type / search) intentionally surface the
-/// raw <see cref="Plant"/> entity since they only need the lean projection
-/// loaded by the matching repository methods.
+/// Public plant catalogue endpoints. Every read endpoint projects through a
+/// curated DTO: <c>GetById</c> returns <see cref="PlantDetailResponse"/> via
+/// <see cref="PlantDetailMapper"/>, while the list endpoints (GetAll, GetByType,
+/// Search) return the neutral <see cref="PlantListItemResponse"/> via
+/// <see cref="PlantListItemMapper"/> so licensed source text never leaves the
+/// detail surface (SMA-70).
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]

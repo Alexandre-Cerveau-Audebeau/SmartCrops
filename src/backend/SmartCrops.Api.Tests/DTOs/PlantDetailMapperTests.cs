@@ -156,9 +156,18 @@ public class PlantDetailMapperTests
         Assert.Equal("Division; Root Cutting.", dto.PropagationInstructions);
         Assert.Single(dto.LongDescriptions);
         Assert.NotNull(dto.PerenualData);
+        // All seven gated PerenualData free-text fields survive on the expose
+        // path — mirrors the full set the false-path test pins, so a one-sided
+        // regression on either branch of the gating ternary fails the suite.
         Assert.Equal("full sun, part shade", dto.PerenualData!.SunlightPreferences);
         Assert.Equal("March,April", dto.PerenualData.PruningMonths);
+        Assert.Equal("Low", dto.PerenualData.Maintenance);
+        Assert.Equal("spring", dto.PerenualData.FloweringSeason);
+        Assert.Equal("summer", dto.PerenualData.HarvestSeason);
+        Assert.Equal("Division", dto.PerenualData.PropagationMethods);
         Assert.Equal("China", dto.PerenualData.OriginCountries);
+        // Factual data survives on both paths.
+        Assert.Equal(6, dto.PerenualData.XSunlightHoursMin);
     }
 
     [Fact]

@@ -55,6 +55,25 @@ public class PlantsControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task GetAll_IsMedicinalFalse_ReturnsOnlyNonMedicinal_ExcludingNullFlag()
+    {
+        await SeedAsync(
+            new Plant { Id = Guid.NewGuid(), ScientificName = "Medicinal One", PlantTypeId = OrnamentalTypeId, IsMedicinal = true },
+            new Plant { Id = Guid.NewGuid(), ScientificName = "NonMedicinal Two", PlantTypeId = OrnamentalTypeId, IsMedicinal = false },
+            new Plant { Id = Guid.NewGuid(), ScientificName = "Unknown Three", PlantTypeId = OrnamentalTypeId, IsMedicinal = null });
+
+        var filtered = await Client.GetFromJsonAsync<List<PlantListItemResponse>>("/api/plants?isMedicinal=false");
+
+        Assert.NotNull(filtered);
+        // Only the false-flag row; the true-flag AND the NULL-flag rows are excluded.
+        Assert.Single(filtered!);
+        Assert.All(filtered!, p => Assert.Equal(false, p.IsMedicinal));
+        Assert.Contains(filtered!, p => p.ScientificName == "NonMedicinal Two");
+        Assert.DoesNotContain(filtered!, p => p.ScientificName == "Medicinal One");
+        Assert.DoesNotContain(filtered!, p => p.ScientificName == "Unknown Three");
+    }
+
+    [Fact]
     public async Task GetAll_NeutralDto_DoesNotLeakPerenualSourceText()
     {
         // A plant carrying the denormalised Perenual source-text scalars in the DB.
