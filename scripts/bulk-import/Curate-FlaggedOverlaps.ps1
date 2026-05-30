@@ -84,8 +84,12 @@ function Get-CanonicityPenalty {
     }
     if ($Name.Contains('('))            { $p++ }
     if ($Name.Contains([char]0x00D7))   { $p++ }   # hybrid multiplication sign
-    if ($Name.Contains(' x '))          { $p++ }
-    if ($Name.Contains([char]0x27))     { $p++ }   # cultivar apostrophe
+    # Case-insensitive ' x ' / ' X ' for parity with the rank tokens above - a
+    # case-sensitive .Contains here would let "Genus X species" score a LOWER
+    # penalty than "Genus x species" and invert the ranking (CR PR #98).
+    if ($Name -imatch '\sx\s')          { $p++ }
+    # Cultivar apostrophe: ASCII U+0027 or Unicode right single quote U+2019.
+    if ($Name.Contains([char]0x27) -or $Name.Contains([char]0x2019)) { $p++ }
     return $p
 }
 

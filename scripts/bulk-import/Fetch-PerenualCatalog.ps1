@@ -184,13 +184,17 @@ function Get-InfraspecificMatch {
     # Cultivar group / parenthetical, e.g. "(Atropurpurea Group)".
     if ($Name.Contains('(')) { return '(' }
     # Hybrid multiplication sign U+00D7 (kept as a codepoint so this file stays
-    # ASCII), or a space-delimited lowercase x ("Genus x species"). The spaces
-    # avoid false positives on epithets that merely contain an x (e.g. "baccata").
+    # ASCII), or a space-delimited x of EITHER case ("Genus x species" /
+    # "Genus X species"). Case-insensitive for parity with the rank tokens above
+    # (CR PR #98). The surrounding whitespace avoids false positives on epithets
+    # that merely contain an x (e.g. "baccata").
     if ($Name.Contains([char]0x00D7)) { return 'multiplication-sign' }
-    if ($Name.Contains(' x ')) { return 'space-x-space' }
-    # Cultivar apostrophe, e.g. "Rosa 'Iceberg'". Aggressive by design - the GBIF
-    # pre-flight rescues the rare false positive.
-    if ($Name.Contains([char]0x27)) { return 'apostrophe' }
+    if ($Name -imatch '\sx\s') { return 'space-x-space' }
+    # Cultivar apostrophe: ASCII U+0027 or the Unicode right single quote U+2019
+    # ('smart quote') that upstream data may ship instead. Both kept as codepoints
+    # so this file stays ASCII. Aggressive by design - the GBIF pre-flight rescues
+    # the rare false positive. (CR PR #98)
+    if ($Name.Contains([char]0x27) -or $Name.Contains([char]0x2019)) { return 'apostrophe' }
 
     return $null
 }
