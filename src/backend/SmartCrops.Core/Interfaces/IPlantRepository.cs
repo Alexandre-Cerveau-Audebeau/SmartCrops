@@ -4,7 +4,14 @@ namespace SmartCrops.Core.Interfaces;
 
 public interface IPlantRepository
 {
-    Task<IEnumerable<Plant>> GetAllAsync();
+    /// <summary>
+    /// List plants for the catalogue. When <paramref name="isMedicinal"/> is
+    /// supplied, filter to rows whose <see cref="Plant.IsMedicinal"/> equals it
+    /// exactly — <c>true</c> returns only medicinal-flagged plants and NULL-flag
+    /// (unknown) rows are excluded. Omit it (default) for the full list
+    /// (backwards-compatible).
+    /// </summary>
+    Task<IEnumerable<Plant>> GetAllAsync(bool? isMedicinal = null);
     Task<Plant?> GetByIdAsync(Guid id);
     Task AddAsync(Plant plant);
     Task UpdateAsync(Plant plant);

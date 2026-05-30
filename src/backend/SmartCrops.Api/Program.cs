@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using SmartCrops.Api.Configuration;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure;
@@ -100,6 +101,12 @@ builder.Services.AddCors(options =>
 // circuit breaker + timeout). Resolver is a Singleton — pure logic, no I/O,
 // configured once from the bound options. Service is Scoped so it follows
 // the EF Core scope per request.
+// Public content-exposure policy (SMA-70): gates licensed Perenual source text
+// out of the public detail response unless explicitly enabled. No validation
+// attributes — a plain bool with a safe default (false).
+builder.Services.AddOptions<ContentExposureOptions>()
+    .Bind(builder.Configuration.GetSection(ContentExposureOptions.SectionName));
+
 builder.Services.AddOptions<GbifOptions>()
     .Bind(builder.Configuration.GetSection(GbifOptions.SectionName))
     .ValidateDataAnnotations()

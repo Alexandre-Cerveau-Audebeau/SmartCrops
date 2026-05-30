@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SmartCrops.Core.Entities;
+using SmartCrops.Core.Enums;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure.Data;
 
@@ -7,20 +8,30 @@ namespace SmartCrops.Infrastructure.Repositories;
 
 /// <summary>
 /// EF Core implementation of <see cref="IPlantRepository"/>. List/search paths
-/// stay lean (PlantType + Translations only) while <see cref="GetByIdAsync"/>
+/// stay lean (PlantType + the Main image only) while <see cref="GetByIdAsync"/>
 /// eagerly loads the full enrichment graph for the detail view — see the
 /// inline comment there for the split-query rationale.
 /// </summary>
 public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
 {
-    /// <summary>Return every plant with its type label and translations — used by the Library list and the planner sidebar.</summary>
-    public async Task<IEnumerable<Plant>> GetAllAsync()
+    /// <summary>
+    /// Return plants with their type label and the single <c>Main</c> image
+    /// (filtered include — one row per plant — so the list DTO can carry a
+    /// primary image + attribution without loading the whole gallery).
+    /// When <paramref name="isMedicinal"/> is supplied, filter to that exact flag
+    /// value (NULL-flag rows excluded). Used by the Library list / planner sidebar.
+    /// </summary>
+    public async Task<IEnumerable<Plant>> GetAllAsync(bool? isMedicinal = null)
     {
-        return await context.Plants
+        var query = context.Plants
             .Include(p => p.PlantType)
-            .Include(p => p.Translations)
-            .AsNoTracking()
-            .ToListAsync();
+            .Include(p => p.Images.Where(i => i.ImageType == PlantImageType.Main))
+            .AsNoTracking();
+
+        if (isMedicinal.HasValue)
+            query = query.Where(p => p.IsMedicinal == isMedicinal.Value);
+
+        return await query.ToListAsync();
     }
 
     /// <summary>
@@ -106,7 +117,7 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
     {
         return await context.Plants
             .Include(p => p.PlantType)
-            .Include(p => p.Translations)
+            .Include(p => p.Images.Where(i => i.ImageType == PlantImageType.Main))
             .AsNoTracking()
             .Where(p => p.PlantTypeId == plantTypeId)
             .ToListAsync();
@@ -124,9 +135,12 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
 
         // Search translated CommonName/Description for the requested language,
         // and always include ScientificName as a language-neutral fallback.
+        // Translations is referenced only in the Where below — EF translates the
+        // navigation predicate into a SQL EXISTS, so no eager .Include is needed
+        // (the neutral list DTO never materialises translations).
         return await context.Plants
             .Include(p => p.PlantType)
-            .Include(p => p.Translations)
+            .Include(p => p.Images.Where(i => i.ImageType == PlantImageType.Main))
             .AsNoTracking()
             .Where(p =>
                 p.ScientificName.ToLower().Contains(normalised) ||

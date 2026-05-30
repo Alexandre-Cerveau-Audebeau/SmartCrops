@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using SmartCrops.Api.Configuration;
 using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
@@ -7,22 +9,31 @@ using SmartCrops.Core.Interfaces;
 namespace SmartCrops.Api.Controllers;
 
 /// <summary>
-/// Public plant catalogue endpoints. <c>GetById</c> projects the loaded
-/// aggregate through <see cref="PlantDetailMapper"/> to a curated DTO; the
-/// other read endpoints (list / by-type / search) intentionally surface the
-/// raw <see cref="Plant"/> entity since they only need the lean projection
-/// loaded by the matching repository methods.
+/// Public plant catalogue endpoints. Every read endpoint projects through a
+/// curated DTO: <c>GetById</c> returns <see cref="PlantDetailResponse"/> via
+/// <see cref="PlantDetailMapper"/>, while the list endpoints (GetAll, GetByType,
+/// Search) return the neutral <see cref="PlantListItemResponse"/> via
+/// <see cref="PlantListItemMapper"/> so licensed source text never leaves the
+/// detail surface (SMA-70).
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-public class PlantsController(IPlantRepository repository) : ControllerBase
+public class PlantsController(
+    IPlantRepository repository,
+    IOptions<ContentExposureOptions> contentExposure) : ControllerBase
 {
-    /// <summary>List every plant for the Library grid and the planner sidebar.</summary>
+    /// <summary>
+    /// List plants for the Library grid and the planner sidebar, projected to the
+    /// neutral <see cref="PlantListItemResponse"/> (no licensed source text, no
+    /// empty navigations — SMA-70). Optional <paramref name="isMedicinal"/> filter
+    /// (SMA-63): <c>true</c> returns only medicinal-flagged plants (NULL-flag rows
+    /// excluded); omit for the full list.
+    /// </summary>
     [HttpGet]
-    public async Task<IActionResult> GetAll()
+    public async Task<IActionResult> GetAll([FromQuery] bool? isMedicinal = null)
     {
-        var plants = await repository.GetAllAsync();
-        return Ok(plants);
+        var plants = await repository.GetAllAsync(isMedicinal);
+        return Ok(plants.Select(PlantListItemMapper.ToListItem));
     }
 
     /// <summary>
@@ -34,7 +45,9 @@ public class PlantsController(IPlantRepository repository) : ControllerBase
     public async Task<IActionResult> GetById(Guid id)
     {
         var plant = await repository.GetByIdAsync(id);
-        return plant is null ? NotFound() : Ok(PlantDetailMapper.ToDto(plant));
+        return plant is null
+            ? NotFound()
+            : Ok(PlantDetailMapper.ToDto(plant, contentExposure.Value.ExposeSourceText));
     }
 
     /// <summary>Filter the catalogue by <see cref="PlantType"/> id (vegetable / fruit / …) — backs the Library category chips.</summary>
@@ -42,7 +55,7 @@ public class PlantsController(IPlantRepository repository) : ControllerBase
     public async Task<IActionResult> GetByType(int plantTypeId)
     {
         var plants = await repository.GetByTypeAsync(plantTypeId);
-        return Ok(plants);
+        return Ok(plants.Select(PlantListItemMapper.ToListItem));
     }
 
     /// <summary>
@@ -58,7 +71,7 @@ public class PlantsController(IPlantRepository repository) : ControllerBase
             return BadRequest("query parameter is required.");
 
         var plants = await repository.SearchAsync(query, language);
-        return Ok(plants);
+        return Ok(plants.Select(PlantListItemMapper.ToListItem));
     }
 
     /// <summary>Create a new plant. Used by ETL/seed flows; not exposed in the user UI.</summary>

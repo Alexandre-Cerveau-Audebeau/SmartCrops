@@ -137,7 +137,14 @@ public record PlantImageDto(
     string Source,
     string? SourceExternalId,
     int DisplayOrder,
-    bool IsFlagged);
+    bool IsFlagged,
+    /// <summary>
+    /// Server-composed, always-non-null attribution line for this image
+    /// (SMA-70). Derived from <c>Credit</c> / <c>LicenseName</c> / <c>Source</c>
+    /// via <see cref="ImageAttribution.Compose"/>; the frontend renders it
+    /// verbatim so a licensed image is never shown without attribution.
+    /// </summary>
+    string Attribution);
 
 /// <summary>Long-form description in a single language, one row per locale.</summary>
 public record PlantLongDescriptionDto(
