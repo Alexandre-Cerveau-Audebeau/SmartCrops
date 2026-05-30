@@ -6,7 +6,7 @@
 
 .DESCRIPTION
     Calls GET /api/admin/perenual/species-list?page=N through the local
-    SmartCrops backend (the backend holds the Perenual API key — this script
+    SmartCrops backend (the backend holds the Perenual API key - this script
     never touches Perenual directly). Applies Strategy A client-side: keep
     only entries where cultivar, variety, hybrid AND subspecies are all null.
 
@@ -14,12 +14,12 @@
     cultivar field carries 60% of the rejection signal; variety/hybrid/
     subspecies add belt-and-braces coverage for taxonomic edge cases. Sample
     showed Strategy A keeps 40% (36/90), implying ~42 pages fetched to reach
-    500 qualified entries — negligible on the Perenual Supreme 100k/day quota.
+    500 qualified entries - negligible on the Perenual Supreme 100k/day quota.
 
     Output CSV schema (matches scripts/bulk-import/curated-batch1.csv):
         scientificName,commonNameFr,commonNameEn,category
 
-    Category is a coarse client-side heuristic — refined post-merge by the
+    Category is a coarse client-side heuristic - refined post-merge by the
     Trefle/Perenual enrichment pipeline (IsVegetable, IsCulinary, etc.).
 
     AUTH: passes the bearer token through to the backend (the endpoint is
@@ -31,7 +31,7 @@
 
 .PARAMETER OutputPath
     Where to write the curated CSV. Default
-    scripts/bulk-import/curated-batch2.csv (NOT auto-committed — separate
+    scripts/bulk-import/curated-batch2.csv (NOT auto-committed - separate
     data-only commit, mirror of PR #84 pattern).
 
 .PARAMETER MaxPages
@@ -51,7 +51,7 @@
 .PARAMETER Cookie
     Auth bearer token (JWT). Falls back to $env:SMARTCROPS_TOKEN. Required.
 
-    Acquire via the SmartCrops auth endpoints — the JWT lives in a
+    Acquire via the SmartCrops auth endpoints - the JWT lives in a
     Set-Cookie 'smartcrops_token' on register/login. Smoke pattern:
 
         # Register a throwaway admin user (or use POST /api/auth/login with
@@ -70,14 +70,14 @@
     by Invoke-BulkImportPreflight.ps1 and Enrich-AllSources.ps1.
 
 .PARAMETER ThrottleSeconds
-    Sleep between successful pages. Default 1s — polite even though Perenual
+    Sleep between successful pages. Default 1s - polite even though Perenual
     quota (100k/day, Supreme tier) is comfortable for the ~42 pages expected.
 
 .PARAMETER MaxRetries
     Per-page retry budget for transient HTTP failures (502/503/504, gateway
     or timeout flaps from Perenual upstream). Default 3 with exponential
     backoff (1s, 2s, 4s); the script aborts the run after the budget is
-    exhausted. 400/401/403/404 are NOT retried — they signal a request
+    exhausted. 400/401/403/404 are NOT retried - they signal a request
     bug, not a transient flap.
 
 .EXAMPLE
@@ -122,7 +122,7 @@ if ([string]::IsNullOrWhiteSpace($Cookie)) {
 }
 
 # $PSScriptRoot resolves to the directory of this script even under
-# dot-sourcing — robustness lesson from CR R5 on PR #89.
+# dot-sourcing - robustness lesson from CR R5 on PR #89.
 $scriptDir = $PSScriptRoot
 if (-not $OutputPath) {
     $OutputPath = Join-Path $scriptDir "curated-batch2.csv"
@@ -133,7 +133,7 @@ $headers = @{
     "Accept"        = "application/json"
 }
 
-# Category heuristic — coarse client-side signal. The Trefle/Perenual
+# Category heuristic - coarse client-side signal. The Trefle/Perenual
 # enrichment pipeline refines this post-bulk-create via PlantGrowthHabit,
 # IsVegetable, IsCulinary, etc. Cooking-keyword and family lookups are
 # case-insensitive; the keyword sets are intentionally small (false negatives
@@ -163,11 +163,47 @@ function Get-Category {
     return 'Ornamental'
 }
 
+function Get-InfraspecificMatch {
+    # Strategy A v2 lexical pre-filter (SMA-53). Detects an infra-specific rank
+    # suffix or a cultivar marker embedded IN the scientificName string itself.
+    # This catches "type 1" ambiguity that Perenual's cultivar/variety/hybrid/
+    # subspecies fields leave NULL - e.g. "Abies nordmanniana subsp. equi-trojani",
+    # "Actaea simplex (Atropurpurea Group)", "Rosa 'Iceberg'", "Salix x sepulcralis".
+    # It does NOT catch "type 2" sibling-species GBIF synonymisation (pure binomials
+    # collapsing to one GbifTaxonKey, e.g. Abelia chinensis vs grandiflora -> 5599251);
+    # that is the GBIF pre-flight's job (Invoke-BulkImportPreflight.ps1, SMA-45).
+    # Returns the matched token (for the drop log) or $null when the name is clean.
+    param([string]$Name)
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $null }
+
+    # Alpha rank tokens, case-insensitive. The leading space + trailing dot make
+    # them word-boundary safe: " f." cannot match inside "officinalis".
+    foreach ($t in @(' subsp.', ' ssp.', ' var.', ' f.', ' cv.')) {
+        if ($Name -imatch [regex]::Escape($t)) { return $t.Trim() }
+    }
+    # Cultivar group / parenthetical, e.g. "(Atropurpurea Group)".
+    if ($Name.Contains('(')) { return '(' }
+    # Hybrid multiplication sign U+00D7 (kept as a codepoint so this file stays
+    # ASCII), or a space-delimited x of EITHER case ("Genus x species" /
+    # "Genus X species"). Case-insensitive for parity with the rank tokens above
+    # (CR PR #98). The surrounding whitespace avoids false positives on epithets
+    # that merely contain an x (e.g. "baccata").
+    if ($Name.Contains([char]0x00D7)) { return 'multiplication-sign' }
+    if ($Name -imatch '\sx\s') { return 'space-x-space' }
+    # Cultivar apostrophe: ASCII U+0027 or the Unicode right single quote U+2019
+    # ('smart quote') that upstream data may ship instead. Both kept as codepoints
+    # so this file stays ASCII. Aggressive by design - the GBIF pre-flight rescues
+    # the rare false positive. (CR PR #98)
+    if ($Name.Contains([char]0x27) -or $Name.Contains([char]0x2019)) { return 'apostrophe' }
+
+    return $null
+}
+
 function Invoke-CatalogPage {
     # Retry wrapper around Invoke-RestMethod for the species-list endpoint.
     # Retries on transient HTTP failures (502/503/504, gateway/timeout flaps
     # from Perenual upstream) with exponential backoff (1s, 2s, 4s, ...).
-    # 4xx-non-429 client errors are NOT retried — they signal a request bug.
+    # 4xx-non-429 client errors are NOT retried - they signal a request bug.
     # 429 is treated as transient (rate-limit, will clear on retry).
     # Returns the parsed response; throws if the retry budget is exhausted.
     # CR PR #92 R1 Angle A.
@@ -213,6 +249,10 @@ $rejectedByCultivar = 0
 $rejectedByVariety = 0
 $rejectedByHybrid = 0
 $rejectedBySubspecies = 0
+# Strategy A v2 (SMA-53): lexical pre-filter on scientificName. Count + log every
+# drop (name + matched token) for traceability of what the pre-filter removed.
+$rejectedByLexical = 0
+$lexicalDrops = [System.Collections.Generic.List[pscustomobject]]::new()
 $pagesFetched = 0
 $lastPageSeen = $null
 
@@ -250,6 +290,16 @@ for ($page = $StartPage; $page -lt $StartPage + $MaxPages; $page++) {
         # bulk-create's dedup key is the literal first one).
         $scientificName = if ($e.scientificName -and $e.scientificName.Count -gt 0) { $e.scientificName[0] } else { $null }
         if ([string]::IsNullOrWhiteSpace($scientificName)) { continue }
+
+        # Strategy A v2 lexical pre-filter (SMA-53): drop names carrying an
+        # infra-specific suffix / cultivar marker that the Perenual discriminator
+        # fields missed (type 1 ambiguity). Logged for traceability.
+        $lexToken = Get-InfraspecificMatch -Name $scientificName
+        if ($lexToken) {
+            $rejectedByLexical++
+            $lexicalDrops.Add([pscustomobject]@{ scientificName = $scientificName; token = $lexToken })
+            continue
+        }
 
         $qualified.Add([pscustomobject]@{
                 scientificName = $scientificName
@@ -297,7 +347,18 @@ Write-Host ("Rejected by cultivar:    {0}" -f $rejectedByCultivar)
 Write-Host ("Rejected by variety:     {0}" -f $rejectedByVariety)
 Write-Host ("Rejected by hybrid:      {0}" -f $rejectedByHybrid)
 Write-Host ("Rejected by subspecies:  {0}" -f $rejectedBySubspecies)
+Write-Host ("Rejected by lexical:     {0}  (Strategy A v2, SMA-53)" -f $rejectedByLexical)
 Write-Host ("Output CSV:              {0}" -f $OutputPath)
+
+# Full traceability of the lexical pre-filter: list every dropped name + the
+# token that matched, so a curator can audit what Strategy A v2 removed.
+if ($lexicalDrops.Count -gt 0) {
+    Write-Host ""
+    Write-Host ("--- Lexical pre-filter drops ({0}) ---" -f $lexicalDrops.Count) -ForegroundColor Yellow
+    foreach ($d in $lexicalDrops) {
+        Write-Host ("  [{0,-20}] {1}" -f $d.token, $d.scientificName)
+    }
+}
 
 # Dot-source-safe terminator (R4 lesson on PR #89): bare `exit` would kill
 # a dot-sourcing host. Set $LASTEXITCODE then `return` if dot-sourced or
