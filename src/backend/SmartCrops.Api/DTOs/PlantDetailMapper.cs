@@ -39,8 +39,15 @@ public static class PlantDetailMapper
     /// string array, collections are reordered for gallery / accessibility
     /// concerns, and audit blobs (<c>RawResponseJson</c>) are dropped.
     /// </summary>
+    /// <param name="exposeSourceText">
+    /// When <c>false</c> (default), gate the licensed Perenual source text out of
+    /// the response (SMA-70): long descriptions, sowing/propagation instructions,
+    /// edible parts, and the Perenual free-text care fields are omitted/nulled.
+    /// Factual, non-copyrightable data (hardiness, temperatures, pH, dimensions,
+    /// numeric xData, flags, taxonomy, images) is always returned.
+    /// </param>
     /// <exception cref="ArgumentNullException">when <paramref name="plant"/> is null.</exception>
-    public static PlantDetailResponse ToDto(Plant plant)
+    public static PlantDetailResponse ToDto(Plant plant, bool exposeSourceText = false)
     {
         ArgumentNullException.ThrowIfNull(plant);
 
@@ -102,9 +109,10 @@ public static class PlantDetailMapper
             FlowerColors = plant.FlowerColors,
             NativeRegions = plant.NativeRegions,
             IntroducedRegions = plant.IntroducedRegions,
-            EdibleParts = plant.EdibleParts,
-            SowingInstructions = plant.SowingInstructions,
-            PropagationInstructions = plant.PropagationInstructions,
+            // Gated Perenual source text (SMA-70): nulled when exposure is off.
+            EdibleParts = exposeSourceText ? plant.EdibleParts : null,
+            SowingInstructions = exposeSourceText ? plant.SowingInstructions : null,
+            PropagationInstructions = exposeSourceText ? plant.PropagationInstructions : null,
 
             EnrichmentSources = MapEnrichmentSources(plant.EnrichmentStatus),
             LastEnrichmentAt = plant.LastEnrichmentAt,
@@ -128,17 +136,23 @@ public static class PlantDetailMapper
                     i.Width,
                     i.Height,
                     i.LicenseName,
-                    i.LicenseUrl,
+                    // Fall back to the per-source license-terms URL when the row
+                    // has none, so the attribution always links its license (SMA-70).
+                    ImageAttribution.LicenseUrlOrFallback(i.LicenseUrl, i.Source),
                     i.Credit,
                     i.Source.ToString(),
                     i.SourceExternalId,
                     i.DisplayOrder,
-                    i.IsFlagged))
+                    i.IsFlagged,
+                    ImageAttribution.Compose(i.Credit, i.LicenseName, i.Source)))
                 .ToList(),
 
-            LongDescriptions = plant.LongDescriptions
-                .Select(d => new PlantLongDescriptionDto(d.Id, d.Language, d.LongDescription, d.SourceMethod))
-                .ToList(),
+            // Gated Perenual narrative (SMA-70): empty when exposure is off.
+            LongDescriptions = exposeSourceText
+                ? plant.LongDescriptions
+                    .Select(d => new PlantLongDescriptionDto(d.Id, d.Language, d.LongDescription, d.SourceMethod))
+                    .ToList()
+                : [],
 
             CommonNames = plant.CommonNames
                 .Select(c => new PlantCommonNameDto(c.Id, c.LanguageCode, c.Name, c.IsPrimary))
@@ -196,15 +210,16 @@ public static class PlantDetailMapper
                     plant.PerenualData.RequestedPerenualId,
                     plant.PerenualData.Cultivar,
                     plant.PerenualData.PerenualType,
-                    plant.PerenualData.OriginCountries,
-                    plant.PerenualData.PropagationMethods,
+                    // Gated Perenual free-text care fields (SMA-70).
+                    exposeSourceText ? plant.PerenualData.OriginCountries : null,
+                    exposeSourceText ? plant.PerenualData.PropagationMethods : null,
                     plant.PerenualData.WateringBenchmark,
                     plant.PerenualData.WateringBenchmarkUnit,
-                    plant.PerenualData.SunlightPreferences,
-                    plant.PerenualData.PruningMonths,
-                    plant.PerenualData.Maintenance,
-                    plant.PerenualData.FloweringSeason,
-                    plant.PerenualData.HarvestSeason,
+                    exposeSourceText ? plant.PerenualData.SunlightPreferences : null,
+                    exposeSourceText ? plant.PerenualData.PruningMonths : null,
+                    exposeSourceText ? plant.PerenualData.Maintenance : null,
+                    exposeSourceText ? plant.PerenualData.FloweringSeason : null,
+                    exposeSourceText ? plant.PerenualData.HarvestSeason : null,
                     plant.PerenualData.HasEdibleFruit,
                     plant.PerenualData.HasEdibleLeaves,
                     plant.PerenualData.IsCulinary,

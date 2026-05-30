@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SmartCrops.Core.Entities;
+using SmartCrops.Core.Enums;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure.Data;
 
@@ -13,14 +14,25 @@ namespace SmartCrops.Infrastructure.Repositories;
 /// </summary>
 public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
 {
-    /// <summary>Return every plant with its type label and translations — used by the Library list and the planner sidebar.</summary>
-    public async Task<IEnumerable<Plant>> GetAllAsync()
+    /// <summary>
+    /// Return plants with their type label, translations, and the single
+    /// <c>Main</c> image (filtered include — one row per plant — so the list DTO
+    /// can carry a primary image + attribution without loading the whole gallery).
+    /// When <paramref name="isMedicinal"/> is supplied, filter to that exact flag
+    /// value (NULL-flag rows excluded). Used by the Library list / planner sidebar.
+    /// </summary>
+    public async Task<IEnumerable<Plant>> GetAllAsync(bool? isMedicinal = null)
     {
-        return await context.Plants
+        var query = context.Plants
             .Include(p => p.PlantType)
             .Include(p => p.Translations)
-            .AsNoTracking()
-            .ToListAsync();
+            .Include(p => p.Images.Where(i => i.ImageType == PlantImageType.Main))
+            .AsNoTracking();
+
+        if (isMedicinal.HasValue)
+            query = query.Where(p => p.IsMedicinal == isMedicinal.Value);
+
+        return await query.ToListAsync();
     }
 
     /// <summary>
@@ -107,6 +119,7 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
         return await context.Plants
             .Include(p => p.PlantType)
             .Include(p => p.Translations)
+            .Include(p => p.Images.Where(i => i.ImageType == PlantImageType.Main))
             .AsNoTracking()
             .Where(p => p.PlantTypeId == plantTypeId)
             .ToListAsync();
@@ -127,6 +140,7 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
         return await context.Plants
             .Include(p => p.PlantType)
             .Include(p => p.Translations)
+            .Include(p => p.Images.Where(i => i.ImageType == PlantImageType.Main))
             .AsNoTracking()
             .Where(p =>
                 p.ScientificName.ToLower().Contains(normalised) ||
