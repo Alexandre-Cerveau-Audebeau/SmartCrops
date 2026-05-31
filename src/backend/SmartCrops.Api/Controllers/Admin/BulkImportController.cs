@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Core.Models;
 
@@ -12,12 +13,10 @@ namespace SmartCrops.Api.Controllers.Admin;
 /// beyond identity so the existing per-source enrichment endpoints (taxonomy,
 /// Trefle, Perenual) can fan out on them afterwards.
 ///
-/// <para>Bare <c>[Authorize]</c> matches the pattern set by the three
-/// enrichment controllers (PR #58 / PR #59) — Identity Roles aren't in place
-/// yet; tighten to an admin role when role-based authz lands.</para>
+/// <para>Gated to the Admin role (SMA-33/#68): admin-only bulk-import operation.</para>
 /// </summary>
 [ApiController]
-[Authorize]
+[Authorize(Roles = Roles.Admin)]
 [Route("api/admin/bulk-import")]
 public class BulkImportController : ControllerBase
 {

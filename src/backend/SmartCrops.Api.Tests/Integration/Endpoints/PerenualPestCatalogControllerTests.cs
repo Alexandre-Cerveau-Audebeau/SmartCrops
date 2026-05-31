@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Models;
 using SmartCrops.Infrastructure.Data;
 
@@ -32,6 +33,14 @@ public class PerenualPestCatalogControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Harvest_AuthenticatedNonAdmin_Returns403()
+    {
+        AuthAsNonAdmin();
+        var response = await Client.PostAsync(HarvestUrl, null);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Harvest_PaginatesAllPages_UpsertsEachEntry_AndDoesNotExposeLiterals()
     {
         Fixture.PerenualPestCatalogStub.SetPage(1, Page(2,
@@ -39,7 +48,7 @@ public class PerenualPestCatalogControllerTests : IntegrationTestBase
             (2, "Aphids", "Aphidoidea", "{\"id\":2}")));
         Fixture.PerenualPestCatalogStub.SetPage(2, Page(2,
             (3, "Powdery mildew", "Erysiphales", "{\"id\":3}")));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(HarvestUrl, null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -69,7 +78,7 @@ public class PerenualPestCatalogControllerTests : IntegrationTestBase
     {
         Fixture.PerenualPestCatalogStub.SetPage(1, Page(1,
             (1, "Fairy ring", "Agrocybe", "{\"id\":1}")));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var first = await Client.PostAsync(HarvestUrl, null);
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
@@ -87,7 +96,7 @@ public class PerenualPestCatalogControllerTests : IntegrationTestBase
     public async Task Harvest_Page1FetchFails_Returns502()
     {
         // No page pre-loaded → the stub returns null for page 1.
-        AuthAsAnyUser();
+        AuthAsAdmin();
         var response = await Client.PostAsync(HarvestUrl, null);
         Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
     }
@@ -99,7 +108,7 @@ public class PerenualPestCatalogControllerTests : IntegrationTestBase
         // (AssertRedacted throws before SaveChanges) and persist nothing.
         Fixture.PerenualPestCatalogStub.SetPage(1, Page(1,
             (1, "X", "Y", "{\"id\":1,\"u\":\"http://h?key=sk-LEAKED123\"}")));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         // The guard fails loud: TestServer surfaces the unhandled exception to the
         // caller; a pipeline with exception middleware would return 500 instead.
@@ -128,7 +137,7 @@ public class PerenualPestCatalogControllerTests : IntegrationTestBase
         Fixture.PerenualPestCatalogStub.SetPage(1, Page(2,
             (1, "Fairy ring", "Agrocybe", "{\"id\":1}")));
         // Page 2 intentionally not pre-loaded → the stub returns null → counted failure.
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(HarvestUrl, null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -154,7 +163,7 @@ public class PerenualPestCatalogControllerTests : IntegrationTestBase
             (7, "Aphids", "Aphidoidea", "{\"id\":7,\"v\":1}")));
         Fixture.PerenualPestCatalogStub.SetPage(2, Page(2,
             (7, "Aphids (updated)", "Aphidoidea", "{\"id\":7,\"v\":2}")));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(HarvestUrl, null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -167,7 +176,16 @@ public class PerenualPestCatalogControllerTests : IntegrationTestBase
         Assert.Equal("Aphids (updated)", row.CommonName);
     }
 
-    private void AuthAsAnyUser()
+    // SMA-33: admin-gated endpoint — AuthAsAdmin carries the Admin role,
+    // AuthAsNonAdmin is a plain authenticated user (for the 403 gate).
+    private void AuthAsAdmin()
+    {
+        var userId = $"u-{Guid.NewGuid():N}";
+        Client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId, Roles.Admin));
+    }
+
+    private void AuthAsNonAdmin()
     {
         var userId = $"u-{Guid.NewGuid():N}";
         Client.DefaultRequestHeaders.Authorization =

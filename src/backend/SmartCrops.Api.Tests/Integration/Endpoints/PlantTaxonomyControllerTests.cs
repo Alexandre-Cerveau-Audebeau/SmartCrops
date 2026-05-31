@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
 using SmartCrops.Core.Models;
@@ -26,7 +27,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
     [Fact]
     public async Task Enrich_NonExistentPlant_Returns404()
     {
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/taxonomy/enrich/{Guid.NewGuid()}", null);
 
@@ -42,11 +43,21 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Enrich_AuthenticatedNonAdmin_Returns403()
+    {
+        AuthAsNonAdmin();
+
+        var response = await Client.PostAsync($"/api/admin/taxonomy/enrich/{Guid.NewGuid()}", null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Enrich_Match_PerformsDualWrite()
     {
         var plantId = await SeedPlantAsync("Solanum lycopersicum");
         Fixture.TaxonomyStub.Enqueue(MatchResult(2930137, "Solanaceae", "Solanum", "lycopersicum"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/taxonomy/enrich/{plantId}", null);
 
@@ -80,7 +91,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
     {
         var plantId = await SeedPlantAsync("Solanum lycopersicum");
         Fixture.TaxonomyStub.Enqueue(MatchResult(2930137, "Solanaceae", "Solanum", "lycopersicum"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         // First call writes the row + sets the flag.
         await Client.PostAsync($"/api/admin/taxonomy/enrich/{plantId}", null);
@@ -107,7 +118,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
     {
         var plantId = await SeedPlantAsync("Solanum lycopersicum");
         Fixture.TaxonomyStub.Enqueue(MatchResult(2930137, "Solanaceae", "Solanum", "lycopersicum"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         await Client.PostAsync($"/api/admin/taxonomy/enrich/{plantId}", null);
 
@@ -143,7 +154,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         // leaving Url pointing at the stale taxon key. Both must move together.
         var plantId = await SeedPlantAsync("Solanum lycopersicum");
         Fixture.TaxonomyStub.Enqueue(MatchResult(2930137, "Solanaceae", "Solanum", "lycopersicum"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         await Client.PostAsync($"/api/admin/taxonomy/enrich/{plantId}", null);
 
@@ -164,7 +175,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
     {
         var plantId = await SeedPlantAsync("Plantus inventicus");
         Fixture.TaxonomyStub.EnqueueNoMatch();
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/taxonomy/enrich/{plantId}", null);
 
@@ -195,7 +206,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         var pendingId = await SeedPlantAsync("Daucus carota");
 
         Fixture.TaxonomyStub.Enqueue(MatchResult(2706302, "Apiaceae", "Daucus", "carota"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync("/api/admin/taxonomy/enrich-all", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -228,7 +239,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         Fixture.TaxonomyStub.Enqueue(MatchResult(2930137, "Solanaceae", "Solanum", "lycopersicum"));
         Fixture.TaxonomyStub.EnqueueNoMatch();
         Fixture.TaxonomyStub.Enqueue(MatchResult(2706302, "Apiaceae", "Daucus", "carota"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync("/api/admin/taxonomy/enrich-all", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -249,7 +260,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
 
         Fixture.TaxonomyStub.Enqueue(MatchResult(2930137, "Solanaceae", "Solanum", "lycopersicum"));
         Fixture.TaxonomyStub.Enqueue(MatchResult(2706302, "Apiaceae", "Daucus", "carota"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync("/api/admin/taxonomy/enrich-all?force=true", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -271,7 +282,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
 
         Fixture.TaxonomyStub.Enqueue(MatchResult(2930137, "Solanaceae", "Solanum", "lycopersicum"));
         Fixture.TaxonomyStub.Enqueue(MatchResult(2706302, "Apiaceae", "Daucus", "carota"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -297,7 +308,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         Fixture.TaxonomyStub.Enqueue(MatchResult(2, "F2", "G2", "s2"));
         Fixture.TaxonomyStub.Enqueue(MatchResult(3, "F3", "G3", "s3"));
         Fixture.TaxonomyStub.Enqueue(MatchResult(4, "F4", "G4", "s4"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var chunk1 = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
         Assert.Equal(HttpStatusCode.OK, chunk1.StatusCode);
@@ -344,7 +355,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
 
         Fixture.TaxonomyStub.Enqueue(MatchResult(10, "F", "G", "s10"));
         Fixture.TaxonomyStub.Enqueue(MatchResult(11, "F", "G", "s11"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(
             $"/api/admin/taxonomy/enrich-all?afterId={cursor}", null);
@@ -368,7 +379,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
 
         Fixture.TaxonomyStub.Enqueue(MatchResult(20, "F", "G", "s20"));
         Fixture.TaxonomyStub.Enqueue(MatchResult(21, "F", "G", "s21"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -411,7 +422,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         Fixture.TaxonomyStub.EnqueueNoMatch();
         Fixture.TaxonomyStub.Enqueue(MatchResult(30, "F", "G", "s30"));
         Fixture.TaxonomyStub.Enqueue(MatchResult(31, "F", "G", "s31"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var chunk1 = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
         Assert.Equal(HttpStatusCode.OK, chunk1.StatusCode);
@@ -480,7 +491,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         // Larger matches -> flagged.
         Fixture.TaxonomyStub.EnqueueFailure(new InvalidOperationException("transient upstream blip"));
         Fixture.TaxonomyStub.Enqueue(MatchResult(100, "F", "G", "s100"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var chunk1 = await Client.PostAsync("/api/admin/taxonomy/enrich-all?limit=2", null);
         Assert.Equal(HttpStatusCode.OK, chunk1.StatusCode);
@@ -544,7 +555,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         // on the no-conflict path.
         var plantId = await SeedPlantAsync("Carum carvi");
         Fixture.TaxonomyStub.Enqueue(MatchResult(2967319, "Apiaceae", "Carum", "carvi"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/taxonomy/enrich/{plantId}", null);
 
@@ -575,7 +586,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         var winnerId = await SeedPlantWithKeyAsync("Allium porrum", gbifTaxonKey: 2856037);
         var loserId = await SeedPlantAsync("Allium ampeloprasum");
         Fixture.TaxonomyStub.Enqueue(MatchResult(2856037, "Amaryllidaceae", "Allium", "ampeloprasum"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/taxonomy/enrich/{loserId}", null);
 
@@ -640,7 +651,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
             Fixture.TaxonomyStub.Enqueue(MatchResult(2706302, "Apiaceae", "Daucus", "carota"));
             Fixture.TaxonomyStub.Enqueue(MatchResult(2856037, "Amaryllidaceae", "Allium", "ampeloprasum"));
         }
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync("/api/admin/taxonomy/enrich-all", null);
 
@@ -680,7 +691,7 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
 
         Fixture.TaxonomyStub.Enqueue(MatchResult(2930137, "Solanaceae", "Solanum", "lycopersicum"));
         Fixture.TaxonomyStub.Enqueue(MatchResult(2706302, "Apiaceae", "Daucus", "carota"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync("/api/admin/taxonomy/enrich-all", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -735,11 +746,19 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         return plant.Id;
     }
 
-    private void AuthAsAnyUser()
+    // SMA-33: admin-gated controller — AuthAsAdmin carries the Admin role,
+    // AuthAsNonAdmin is a plain authenticated user (for the 403 gate). The JWT
+    // validation pipeline short-circuits the security-stamp check when no
+    // security_stamp claim is present (see PostgresFixture).
+    private void AuthAsAdmin()
     {
-        // The endpoint only enforces [Authorize] (any authenticated principal),
-        // and the JWT validation pipeline short-circuits the security-stamp
-        // check when no security_stamp claim is present (see PostgresFixture).
+        var userId = $"u-{Guid.NewGuid():N}";
+        Client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId, Roles.Admin));
+    }
+
+    private void AuthAsNonAdmin()
+    {
         var userId = $"u-{Guid.NewGuid():N}";
         Client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));

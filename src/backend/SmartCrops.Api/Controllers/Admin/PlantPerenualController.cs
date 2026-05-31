@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
 using SmartCrops.Core.Interfaces;
@@ -29,11 +30,10 @@ namespace SmartCrops.Api.Controllers.Admin;
 ///   Perenual and overwritten when present.</item>
 /// </list>
 ///
-/// <para>Bare <c>[Authorize]</c> matches PR #58 / PR #59 — Identity Roles
-/// aren't in place yet. Tighten to an admin role when role-based authz lands.</para>
+/// <para>Gated to the Admin role (SMA-33/#68): admin-only enrichment operations.</para>
 /// </summary>
 [ApiController]
-[Authorize]
+[Authorize(Roles = Roles.Admin)]
 [Route("api/admin/perenual")]
 public class PlantPerenualController : ControllerBase
 {

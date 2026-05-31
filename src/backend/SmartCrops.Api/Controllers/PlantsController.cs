@@ -1,8 +1,10 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SmartCrops.Api.Configuration;
 using SmartCrops.Api.DTOs;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 
@@ -75,6 +77,9 @@ public class PlantsController(
     }
 
     /// <summary>Create a new plant. Used by ETL/seed flows; not exposed in the user UI.</summary>
+    // SMA-33/#68: was anonymous (open catalogue mutation on the public internet) —
+    // now gated to the Admin role. GETs above stay public (catalogue reads).
+    [Authorize(Roles = Roles.Admin)]
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] Plant plant)
     {
@@ -89,6 +94,7 @@ public class PlantsController(
     /// endpoints). Validates that the route id matches the body, then
     /// returns 204 on success or 404 when the id misses.
     /// </summary>
+    [Authorize(Roles = Roles.Admin)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, [FromBody] Plant plant)
     {
@@ -118,6 +124,7 @@ public class PlantsController(
     /// frontend can surface the message to the user before they retry after
     /// emptying their gardens.
     /// </summary>
+    [Authorize(Roles = Roles.Admin)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {

@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SmartCrops.Api.Tests.Integration.Stubs;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
 using SmartCrops.Core.Models;
@@ -35,9 +36,19 @@ public class PlantTrefleControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Enrich_AuthenticatedNonAdmin_Returns403()
+    {
+        AuthAsNonAdmin();
+
+        var response = await Client.PostAsync($"/api/admin/trefle/enrich/{Guid.NewGuid()}", null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Enrich_NonExistentPlant_Returns404()
     {
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/trefle/enrich/{Guid.NewGuid()}", null);
 
@@ -67,7 +78,7 @@ public class PlantTrefleControllerTests : IntegrationTestBase
             [
                 new TrefleSynonym("Lycopersicon esculentum", "Mill."),
             ]));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/trefle/enrich/{plantId}", null);
 
@@ -139,7 +150,7 @@ public class PlantTrefleControllerTests : IntegrationTestBase
     {
         var plantId = await SeedPlantAsync("Solanum lycopersicum");
         Fixture.TrefleStub.Enqueue(SampleMatch(12345));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         await Client.PostAsync($"/api/admin/trefle/enrich/{plantId}", null);
 
@@ -163,7 +174,7 @@ public class PlantTrefleControllerTests : IntegrationTestBase
             images: [new TrefleImage("https://x/old-flower.jpg", PlantImageType.Flower, null, null)],
             commonNames: [new TrefleCommonName("en", "old-tomato")],
             synonyms: [new TrefleSynonym("Old synonym", null)]));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         await Client.PostAsync($"/api/admin/trefle/enrich/{plantId}", null);
 
@@ -204,7 +215,7 @@ public class PlantTrefleControllerTests : IntegrationTestBase
     {
         var plantId = await SeedPlantAsync("Solanum lycopersicum");
         Fixture.TrefleStub.Enqueue(SampleMatch(12345));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         await Client.PostAsync($"/api/admin/trefle/enrich/{plantId}", null);
 
@@ -243,7 +254,7 @@ public class PlantTrefleControllerTests : IntegrationTestBase
     {
         var plantId = await SeedPlantAsync("Plantus inventicus");
         Fixture.TrefleStub.EnqueueNoMatch();
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/trefle/enrich/{plantId}", null);
 
@@ -289,7 +300,7 @@ public class PlantTrefleControllerTests : IntegrationTestBase
             maxTempC: null,
             growthHabit: null,
             isVegetable: null));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         await Client.PostAsync($"/api/admin/trefle/enrich/{plantId}", null);
 
@@ -314,7 +325,7 @@ public class PlantTrefleControllerTests : IntegrationTestBase
             p.WfoId = "wfo-gbif-canonical";
         });
         Fixture.TrefleStub.Enqueue(SampleMatch(trefleId: 12345, wfoId: "wfo-trefle-different"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         await Client.PostAsync($"/api/admin/trefle/enrich/{plantId}", null);
 
@@ -331,7 +342,7 @@ public class PlantTrefleControllerTests : IntegrationTestBase
         // silently dropped, not propagated.
         var plantId = await SeedPlantAsync("Solanum lycopersicum");
         Fixture.TrefleStub.Enqueue(SampleMatch(trefleId: 12345, lightLevel: 0));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/trefle/enrich/{plantId}", null);
 
@@ -352,7 +363,7 @@ public class PlantTrefleControllerTests : IntegrationTestBase
         var pendingId = await SeedPlantAsync("Daucus carota");
 
         Fixture.TrefleStub.Enqueue(SampleMatch(trefleId: 7777));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync("/api/admin/trefle/enrich-all", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -382,7 +393,7 @@ public class PlantTrefleControllerTests : IntegrationTestBase
         Fixture.TrefleStub.Enqueue(SampleMatch(1));
         Fixture.TrefleStub.EnqueueNoMatch();
         Fixture.TrefleStub.Enqueue(SampleMatch(2));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync("/api/admin/trefle/enrich-all", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -407,7 +418,7 @@ public class PlantTrefleControllerTests : IntegrationTestBase
 
         Fixture.TrefleStub.Enqueue(SampleMatch(1));
         Fixture.TrefleStub.Enqueue(SampleMatch(2));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync("/api/admin/trefle/enrich-all?limit=2", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -447,7 +458,7 @@ public class PlantTrefleControllerTests : IntegrationTestBase
         Fixture.TrefleStub.EnqueueNoMatch();
         Fixture.TrefleStub.Enqueue(SampleMatch(trefleId: 9001));
         Fixture.TrefleStub.Enqueue(SampleMatch(trefleId: 9002));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var chunk1 = await Client.PostAsync("/api/admin/trefle/enrich-all?limit=2", null);
         Assert.Equal(HttpStatusCode.OK, chunk1.StatusCode);
@@ -506,7 +517,7 @@ public class PlantTrefleControllerTests : IntegrationTestBase
 
         Fixture.TrefleStub.EnqueueFailure(new InvalidOperationException("transient upstream blip"));
         Fixture.TrefleStub.Enqueue(SampleMatch(trefleId: 9100));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var chunk1 = await Client.PostAsync("/api/admin/trefle/enrich-all?limit=2", null);
         Assert.Equal(HttpStatusCode.OK, chunk1.StatusCode);
@@ -571,7 +582,16 @@ public class PlantTrefleControllerTests : IntegrationTestBase
         return plant.Id;
     }
 
-    private void AuthAsAnyUser()
+    // SMA-33: admin-gated controller — AuthAsAdmin carries the Admin role,
+    // AuthAsNonAdmin is a plain authenticated user (for the 403 gate).
+    private void AuthAsAdmin()
+    {
+        var userId = $"u-{Guid.NewGuid():N}";
+        Client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId, Roles.Admin));
+    }
+
+    private void AuthAsNonAdmin()
     {
         var userId = $"u-{Guid.NewGuid():N}";
         Client.DefaultRequestHeaders.Authorization =

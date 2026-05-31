@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SmartCrops.Api.Tests.Integration.Stubs;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
 using SmartCrops.Core.Models;
@@ -36,10 +37,23 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    // SMA-33: the class-level [Authorize(Roles = "Admin")] gates EVERY action on
+    // this controller; one 403 on a representative action proves the gate (the
+    // backfill endpoint additionally has its own no-auth 401 test below).
+    [Fact]
+    public async Task Enrich_AuthenticatedNonAdmin_Returns403()
+    {
+        AuthAsNonAdmin();
+
+        var response = await Client.PostAsync($"/api/admin/perenual/enrich/{Guid.NewGuid()}", null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
     [Fact]
     public async Task Enrich_NonExistentPlant_Returns404()
     {
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{Guid.NewGuid()}", null);
 
@@ -54,7 +68,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         // for cultivars and reclassified species where the index lookup fails.
         var plantId = await SeedPlantAsync("Rosmarinus officinalis");
         Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 7094));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(
             $"/api/admin/perenual/enrich/{plantId}?perenualId=7094", null);
@@ -71,7 +85,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     {
         var plantId = await SeedPlantAsync("Aloe vera");
         Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 728));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(
             $"/api/admin/perenual/enrich/{plantId}", null);
@@ -102,7 +116,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             perenualId: 8758,
             requestedPerenualId: 8759,
             canonicalName: "Solanum lycopersicum"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(
             $"/api/admin/perenual/enrich/{plantId}?perenualId=8759", null);
@@ -142,7 +156,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             LiteralResponseJson = literal,
             CareGuideResponseJson = careGuide,
         });
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(
             $"/api/admin/perenual/enrich/{plantId}?perenualId=728", null);
@@ -196,7 +210,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             LiteralResponseJson = literal,
             CareGuideResponseJson = careGuide,
         });
-        AuthAsAnyUser();
+        AuthAsAdmin();
         var first = await Client.PostAsync(
             $"/api/admin/perenual/enrich/{plantId}?perenualId=728", null);
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
@@ -242,7 +256,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     public async Task Enrich_RequestedPerenualId_FirstWriterWinsOnReEnrich()
     {
         var plantId = await SeedPlantAsync("Solanum lycopersicum");
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         // (1) Initial enrich — requested 8759 canonicalises to 8758.
         Fixture.PerenualStub.Enqueue(SampleMatch(
@@ -327,7 +341,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
                 new PerenualPest("Root rot", PlantPestType.Disease),
             ],
             longDescriptionEn: "Succulent perennial used for medicinal gel."));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
 
@@ -404,7 +418,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     {
         var plantId = await SeedPlantAsync("Aloe vera", alreadyPerenualEnriched: true);
         Fixture.PerenualStub.Enqueue(SampleMatch(728));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
 
@@ -423,7 +437,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     {
         var plantId = await SeedPlantAsync("Aloe vera", alreadyPerenualEnriched: true);
         Fixture.PerenualStub.Enqueue(SampleMatch(728));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(
             $"/api/admin/perenual/enrich/{plantId}?force=true", null);
@@ -441,7 +455,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     {
         var plantId = await SeedPlantAsync("Rosmarinus officinalis");
         Fixture.PerenualStub.EnqueueNoMatch();
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
 
@@ -484,7 +498,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             wateringNeed: null,
             isIndoor: null,
             hardinessMin: null));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -525,7 +539,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             hardinessMin: null,
             hardinessMax: null,
             hardinessRejectedAsSuspect: true));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -560,7 +574,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             hardinessMin: null,
             hardinessMax: null,
             hardinessRejectedAsSuspect: true));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -606,7 +620,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             // Wrong-species edible-parts payload — must NOT reach the read model.
             ediblePartsJson: "[\"fruit\"]",
             isCanonicalMismatchDangerous: true));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -667,7 +681,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             requestedPerenualId: 8759,
             ediblePartsJson: "[\"fruit\"]", // Wrong-species payload — must NOT win
             isCanonicalMismatchDangerous: true));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -696,7 +710,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             lifeCycle: PlantLifeCycle.Perennial,
             xWateringBasedTempMinC: 18,
             isCanonicalMismatchDangerous: true));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -729,7 +743,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             xWateringBasedTempMaxC: 24,
             xWateringPhMin: 6.0m,
             isCanonicalMismatchDangerous: true));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -762,7 +776,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             xWateringBasedTempMinC: 18,
             images: [new PerenualImage("https://wasabi/x.jpg", null, null, null)],
             isCanonicalMismatchDangerous: true));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(
             $"/api/admin/perenual/enrich/{plantId}?overrideMismatch=true", null);
@@ -795,7 +809,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             lifeCycle: PlantLifeCycle.Perennial,
             xWateringBasedTempMinC: 18,
             isCanonicalMismatchDangerous: true));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -832,7 +846,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             xWateringQualityJson: "[\"Rainwater\"]",
             xWateringPeriodJson: "[\"Morning\"]",
             isCanonicalMismatchDangerous: false));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -887,7 +901,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             xWateringPhMax: 8.0m,
             xWateringBasedTempMinC: 18,
             xWateringBasedTempMaxC: 24));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(
             $"/api/admin/perenual/enrich/{plantId}?perenualId=728&force=true", null);
@@ -934,7 +948,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
                 // PlantAnatomyJson/AttractsJson/SoilJson/OtherNamesJson left null.
             };
         });
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(
             "/api/admin/perenual/queryable-columns/backfill", null);
@@ -1002,7 +1016,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
                 LastSyncAt = DateTime.UtcNow,
             };
         });
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(
             "/api/admin/perenual/queryable-columns/backfill", null);
@@ -1047,7 +1061,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
                 LastSyncAt = DateTime.UtcNow,
             };
         });
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(
             "/api/admin/perenual/queryable-columns/backfill", null);
@@ -1083,7 +1097,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
                 LastSyncAt = DateTime.UtcNow,
             };
         });
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(
             "/api/admin/perenual/queryable-columns/backfill", null);
@@ -1110,7 +1124,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
                 LastSyncAt = DateTime.UtcNow,
             };
         });
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync(
             "/api/admin/perenual/queryable-columns/backfill", null);
@@ -1143,7 +1157,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         // Plant A → canonical id 8758.
         var plantAId = await SeedPlantAsync("Solanum lycopersicum", configure: p => p.Genus = "Solanum");
         Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 8758, canonicalName: "Solanum lycopersicum"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
         var respA = await Client.PostAsync(
             $"/api/admin/perenual/enrich/{plantAId}?perenualId=8758&force=true", null);
         Assert.Equal(HttpStatusCode.OK, respA.StatusCode);
@@ -1185,7 +1199,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             longDescriptionEn: "Correct species description.",
             ediblePartsJson: "[\"leaf\"]",
             isCanonicalMismatchDangerous: false));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -1234,7 +1248,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Fixture.PerenualStub.Enqueue(SampleMatch(
             perenualId: 728,
             images: [new PerenualImage("https://wasabi/aloe.jpg", null, null, null)]));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
 
@@ -1284,7 +1298,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Fixture.PerenualStub.Enqueue(SampleMatch(
             perenualId: 728,
             longDescriptionEn: "Perenual English description"));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
 
@@ -1310,7 +1324,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     {
         var plantId = await SeedPlantAsync("Aloe vera");
         Fixture.PerenualStub.Enqueue(SampleMatch(728));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var firstResponse = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
         Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
@@ -1354,7 +1368,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             perenualId: 7468,
             canonicalName: "Spinacia oleracea",
             pruningMonths: longPruningMonths));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync($"/api/admin/perenual/enrich/{plantId}", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -1376,7 +1390,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         await SeedPlantAsync("Solanum lycopersicum");
 
         Fixture.PerenualStub.Enqueue(SampleMatch(8759));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync("/api/admin/perenual/enrich-all", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -1401,7 +1415,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Fixture.PerenualStub.Enqueue(SampleMatch(1));
         Fixture.PerenualStub.EnqueueNoMatch();
         Fixture.PerenualStub.Enqueue(SampleMatch(2));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync("/api/admin/perenual/enrich-all", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -1426,7 +1440,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
 
         Fixture.PerenualStub.Enqueue(SampleMatch(1));
         Fixture.PerenualStub.Enqueue(SampleMatch(2));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.PostAsync("/api/admin/perenual/enrich-all?limit=2", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -1466,7 +1480,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Fixture.PerenualStub.EnqueueNoMatch();
         Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 9201));
         Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 9202));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var chunk1 = await Client.PostAsync("/api/admin/perenual/enrich-all?limit=2", null);
         Assert.Equal(HttpStatusCode.OK, chunk1.StatusCode);
@@ -1525,7 +1539,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
 
         Fixture.PerenualStub.EnqueueFailure(new InvalidOperationException("transient upstream blip"));
         Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 9300));
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var chunk1 = await Client.PostAsync("/api/admin/perenual/enrich-all?limit=2", null);
         Assert.Equal(HttpStatusCode.OK, chunk1.StatusCode);
@@ -1590,7 +1604,16 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         return plant.Id;
     }
 
-    private void AuthAsAnyUser()
+    // SMA-33: admin-gated controller — AuthAsAdmin carries the Admin role,
+    // AuthAsNonAdmin is a plain authenticated user (for the 403 gate).
+    private void AuthAsAdmin()
+    {
+        var userId = $"u-{Guid.NewGuid():N}";
+        Client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId, Roles.Admin));
+    }
+
+    private void AuthAsNonAdmin()
     {
         var userId = $"u-{Guid.NewGuid():N}";
         Client.DefaultRequestHeaders.Authorization =
@@ -1733,7 +1756,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     [InlineData(-5)]
     public async Task SpeciesList_NonPositivePage_Returns400(int page)
     {
-        AuthAsAnyUser();
+        AuthAsAdmin();
         var response = await Client.GetAsync($"/api/admin/perenual/species-list?page={page}");
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -1744,7 +1767,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         // Pin the JSON contract the SMA-13 PowerShell fetcher relies on:
         // pagination meta + per-entry cultivar/variety/hybrid/subspecies
         // fields round-trip through the admin endpoint unchanged.
-        AuthAsAnyUser();
+        AuthAsAdmin();
         Fixture.PerenualCatalogStub.SetPage(1, new PerenualCatalogPage(
             Data: new[]
             {
@@ -1819,7 +1842,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         // Stub returns null (page not pre-loaded) → controller maps to 502 so
         // the PowerShell client distinguishes "page legitimately past end"
         // (200 + Data=[]) from "fetch this again".
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var response = await Client.GetAsync("/api/admin/perenual/species-list?page=42");
 
@@ -1830,7 +1853,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
     [Fact]
     public async Task SpeciesList_PageDefaultsTo1_WhenNoQueryString()
     {
-        AuthAsAnyUser();
+        AuthAsAdmin();
         Fixture.PerenualCatalogStub.SetPage(1, new PerenualCatalogPage(
             Data: Array.Empty<PerenualCatalogPageEntry>(),
             CurrentPage: 1, PerPage: 30, LastPage: 337, Total: 10102, From: null, To: null));

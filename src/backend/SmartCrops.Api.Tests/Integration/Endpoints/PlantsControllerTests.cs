@@ -1,6 +1,10 @@
+using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SmartCrops.Api.DTOs;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Infrastructure.Data;
 
@@ -99,4 +103,126 @@ public class PlantsControllerTests : IntegrationTestBase
         Assert.Contains("scientificName", json, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("isMedicinal", json, StringComparison.OrdinalIgnoreCase);
     }
+
+    // ── Catalogue mutations — SMA-33/#68 ──────────────────────────────────
+    // These were ANONYMOUS (open catalogue mutation on the public internet) and
+    // are now gated to [Authorize(Roles = "Admin")]. The GET endpoints above stay
+    // public, proving the gate is method-level (mutations only), not class-wide.
+
+    [Fact]
+    public async Task Create_NoAuth_Returns401()
+    {
+        var response = await Client.PostAsJsonAsync("/api/plants",
+            new { scientificName = "Anon Created", plantTypeId = OrnamentalTypeId });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_AuthenticatedNonAdmin_Returns403()
+    {
+        AuthAsNonAdmin();
+
+        var response = await Client.PostAsJsonAsync("/api/plants",
+            new { scientificName = "NonAdmin Created", plantTypeId = OrnamentalTypeId });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_Admin_PassesAuthorizationGate()
+    {
+        // The admin IS authorized — proven by the absence of 401/403. The body
+        // here is a partial Plant, which the [ApiController] implicit-required
+        // validation on the non-nullable PlantType nav rejects with 400; that
+        // raw-entity binding (mass-assignment) is a separate, deferred concern.
+        // The full happy-path 2xx is covered by Delete_Admin_Returns204, which
+        // takes no body. This test isolates the authorization outcome.
+        AuthAsAdmin();
+
+        var response = await Client.PostAsJsonAsync("/api/plants",
+            new { scientificName = "Admin Created", plantTypeId = OrnamentalTypeId });
+
+        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_NoAuth_Returns401()
+    {
+        var id = Guid.NewGuid();
+        var response = await Client.PutAsJsonAsync($"/api/plants/{id}",
+            new { id, scientificName = "X", plantTypeId = OrnamentalTypeId });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_AuthenticatedNonAdmin_Returns403()
+    {
+        AuthAsNonAdmin();
+        var id = Guid.NewGuid();
+        var response = await Client.PutAsJsonAsync($"/api/plants/{id}",
+            new { id, scientificName = "X", plantTypeId = OrnamentalTypeId });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_Admin_PassesAuthorizationGate()
+    {
+        // As with Create: admin authorization is proven by the absence of
+        // 401/403. The partial-Plant body trips the same [ApiController]
+        // implicit-required validation (400) on the PlantType nav — the deferred
+        // raw-entity binding concern, not authorization.
+        var id = Guid.NewGuid();
+        await SeedAsync(new Plant { Id = id, ScientificName = "Before", PlantTypeId = OrnamentalTypeId });
+        AuthAsAdmin();
+
+        var response = await Client.PutAsJsonAsync($"/api/plants/{id}",
+            new { id, scientificName = "After", plantTypeId = OrnamentalTypeId });
+
+        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_NoAuth_Returns401()
+    {
+        var response = await Client.DeleteAsync($"/api/plants/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_AuthenticatedNonAdmin_Returns403()
+    {
+        AuthAsNonAdmin();
+
+        var response = await Client.DeleteAsync($"/api/plants/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_Admin_Returns204()
+    {
+        var id = Guid.NewGuid();
+        await SeedAsync(new Plant { Id = id, ScientificName = "ToDelete", PlantTypeId = OrnamentalTypeId });
+        AuthAsAdmin();
+
+        var response = await Client.DeleteAsync($"/api/plants/{id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        Assert.False(await db.Plants.AnyAsync(p => p.Id == id));
+    }
+
+    private void AuthAsAdmin() => SetBearer(Roles.Admin);
+    private void AuthAsNonAdmin() => SetBearer();
+
+    private void SetBearer(params string[] roles) =>
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", Fixture.GenerateToken($"u-{Guid.NewGuid():N}", roles));
 }

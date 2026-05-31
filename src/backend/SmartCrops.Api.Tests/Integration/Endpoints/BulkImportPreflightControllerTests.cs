@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Models;
 using SmartCrops.Infrastructure.Data;
@@ -38,9 +39,23 @@ public class BulkImportPreflightControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Preflight_AuthenticatedNonAdmin_Returns403()
+    {
+        AuthAsNonAdmin();
+        var request = new BulkImportPreflightRequest(new List<PreflightCandidate>
+        {
+            new("Solanum lycopersicum", "vegetable"),
+        });
+
+        var response = await Client.PostAsJsonAsync("/api/admin/bulk-import/preflight", request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Preflight_EmptyCandidates_Returns400()
     {
-        AuthAsAnyUser();
+        AuthAsAdmin();
         var request = new BulkImportPreflightRequest(new List<PreflightCandidate>());
 
         var response = await Client.PostAsJsonAsync("/api/admin/bulk-import/preflight", request);
@@ -51,7 +66,7 @@ public class BulkImportPreflightControllerTests : IntegrationTestBase
     [Fact]
     public async Task Preflight_AboveMaxCandidates_Returns400()
     {
-        AuthAsAnyUser();
+        AuthAsAdmin();
         var candidates = Enumerable.Range(0, BulkImportPreflightRequest.MaxCandidates + 1)
             .Select(i => new PreflightCandidate($"Species number{i}", "vegetable"))
             .ToList();
@@ -65,7 +80,7 @@ public class BulkImportPreflightControllerTests : IntegrationTestBase
     [Fact]
     public async Task Preflight_CleanBatch_NoOverlaps()
     {
-        AuthAsAnyUser();
+        AuthAsAdmin();
         // Two distinct names resolving to two distinct accepted keys — no
         // collision, no DB row to match against. CandidateCount=2,
         // NoMatchCount=0, Overlaps empty.
@@ -91,7 +106,7 @@ public class BulkImportPreflightControllerTests : IntegrationTestBase
     [Fact]
     public async Task Preflight_TwoCandidatesSameKey_EmitsIntraBatchOverlaps()
     {
-        AuthAsAnyUser();
+        AuthAsAdmin();
         // The rosemary case from ADR-0004 / batch-1: two distinct names that
         // both resolve to GBIF accepted key 10902460. The pre-flight must
         // emit ONE overlap per candidate (two rows total), both flagged
@@ -129,7 +144,7 @@ public class BulkImportPreflightControllerTests : IntegrationTestBase
     [Fact]
     public async Task Preflight_KeyAlreadyInDbUnderDifferentName_EmitsDbExistingOverlap()
     {
-        AuthAsAnyUser();
+        AuthAsAdmin();
         // Pre-seed a Plant carrying GbifTaxonKey 10902460 under the legacy
         // name "Rosmarinus officinalis" — same setup as the smoke duplicate
         // SMA-11 merged. The new candidate "Salvia rosmarinus" resolves to
@@ -161,7 +176,7 @@ public class BulkImportPreflightControllerTests : IntegrationTestBase
     [Fact]
     public async Task Preflight_NoMatchCandidate_CountedAndExcludedFromOverlapChecks()
     {
-        AuthAsAnyUser();
+        AuthAsAdmin();
         // One candidate GBIF cannot resolve (matchType=NONE → GbifTaxonKey=null).
         // It MUST count in NoMatchCount and MUST NOT generate any overlap row,
         // even though a DB row with the same name happens to exist.
@@ -201,7 +216,16 @@ public class BulkImportPreflightControllerTests : IntegrationTestBase
         return plant.Id;
     }
 
-    private void AuthAsAnyUser()
+    // SMA-33: admin-gated endpoint — AuthAsAdmin carries the Admin role,
+    // AuthAsNonAdmin is a plain authenticated user (for the 403 gate).
+    private void AuthAsAdmin()
+    {
+        var userId = $"u-{Guid.NewGuid():N}";
+        Client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId, Roles.Admin));
+    }
+
+    private void AuthAsNonAdmin()
     {
         var userId = $"u-{Guid.NewGuid():N}";
         Client.DefaultRequestHeaders.Authorization =

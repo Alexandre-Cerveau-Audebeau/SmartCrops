@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Core.Models;
@@ -14,11 +15,10 @@ namespace SmartCrops.Api.Controllers.Admin;
 /// catalogue (SMA-71 PR2). Separate from <c>PlantPerenualController</c> because
 /// this is a GLOBAL reference table, not per-plant enrichment.
 ///
-/// <para>Bare <c>[Authorize]</c> matches the other admin controllers — Identity
-/// Roles aren't in place yet (see issue #68).</para>
+/// <para>Gated to the Admin role (SMA-33/#68): admin-only harvest operation.</para>
 /// </summary>
 [ApiController]
-[Authorize]
+[Authorize(Roles = Roles.Admin)]
 [Route("api/admin/perenual/pest-catalog")]
 public class PerenualPestCatalogController : ControllerBase
 {

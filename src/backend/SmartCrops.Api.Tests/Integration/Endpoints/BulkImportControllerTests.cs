@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Models;
 using SmartCrops.Infrastructure.Data;
@@ -34,9 +35,23 @@ public class BulkImportControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Create_AuthenticatedNonAdmin_Returns403()
+    {
+        AuthAsNonAdmin();
+        var request = new BulkImportRequest(new List<BulkImportItem>
+        {
+            new("Solanum lycopersicum", "Vegetable"),
+        });
+
+        var response = await Client.PostAsJsonAsync("/api/admin/bulk-import", request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Create_ValidItems_CreatesPlants()
     {
-        AuthAsAnyUser();
+        AuthAsAdmin();
         var request = new BulkImportRequest(new List<BulkImportItem>
         {
             new("Solanum lycopersicum", "Vegetable"),
@@ -71,7 +86,7 @@ public class BulkImportControllerTests : IntegrationTestBase
         // Pre-seed the row so the dedup check fires against the existing-names
         // snapshot — bulk-create is additive, not destructive.
         await SeedPlantAsync("Solanum lycopersicum", plantTypeId: 1);
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var request = new BulkImportRequest(new List<BulkImportItem>
         {
@@ -96,7 +111,7 @@ public class BulkImportControllerTests : IntegrationTestBase
     [Fact]
     public async Task Create_UnknownPlantType_Fails()
     {
-        AuthAsAnyUser();
+        AuthAsAdmin();
         var request = new BulkImportRequest(new List<BulkImportItem>
         {
             new("Solanum lycopersicum", "Nonexistent"),
@@ -125,7 +140,7 @@ public class BulkImportControllerTests : IntegrationTestBase
         // No generic default exists (PlantTypes seeded: Vegetable/Fruit/Herb/
         // Ornamental/Medicinal). The caller MUST classify each row; a missing
         // PlantType yields Failed rather than a silent fallback.
-        AuthAsAnyUser();
+        AuthAsAdmin();
         var request = new BulkImportRequest(new List<BulkImportItem>
         {
             new("Solanum lycopersicum", null),
@@ -152,7 +167,7 @@ public class BulkImportControllerTests : IntegrationTestBase
         // missing-type = 1 created + 1 skipped + 2 failed (the second valid
         // exercises that one Failed doesn't poison the next item's create).
         await SeedPlantAsync("Solanum lycopersicum", plantTypeId: 1);
-        AuthAsAnyUser();
+        AuthAsAdmin();
 
         var request = new BulkImportRequest(new List<BulkImportItem>
         {
@@ -191,7 +206,7 @@ public class BulkImportControllerTests : IntegrationTestBase
         // to a single Created row — not crash the batch SaveChanges on the
         // unique index. Pins the in-batch case-insensitive dedup behaviour
         // introduced beyond the original prompt.
-        AuthAsAnyUser();
+        AuthAsAdmin();
         var request = new BulkImportRequest(new List<BulkImportItem>
         {
             new("Mentha piperita", "Herb"),
@@ -230,7 +245,7 @@ public class BulkImportControllerTests : IntegrationTestBase
         // treated the variant as distinct bytes, silently creating a
         // duplicate. This test pins the fix.
         await SeedPlantAsync("Mentha piperita", plantTypeId: 3); // Herb
-        AuthAsAnyUser();
+        AuthAsAdmin();
         var request = new BulkImportRequest(new List<BulkImportItem>
         {
             new("mentha piperita", "Herb"),  // lowercase variant of existing row
@@ -270,7 +285,17 @@ public class BulkImportControllerTests : IntegrationTestBase
         return plant.Id;
     }
 
-    private void AuthAsAnyUser()
+    // SMA-33: these endpoints are gated to the Admin role. AuthAsAdmin mints a
+    // token carrying the Admin role (happy path); AuthAsNonAdmin a plain
+    // authenticated user (used to prove the 403 forbidden gate).
+    private void AuthAsAdmin()
+    {
+        var userId = $"u-{Guid.NewGuid():N}";
+        Client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId, Roles.Admin));
+    }
+
+    private void AuthAsNonAdmin()
     {
         var userId = $"u-{Guid.NewGuid():N}";
         Client.DefaultRequestHeaders.Authorization =
