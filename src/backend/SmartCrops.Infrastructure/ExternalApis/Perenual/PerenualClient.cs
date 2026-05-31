@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly.Timeout;
+using SmartCrops.Core.Models;
 
 namespace SmartCrops.Infrastructure.ExternalApis.Perenual;
 
@@ -305,6 +306,95 @@ public class PerenualClient
             return null;
         }
     }
+
+    /// <summary>
+    /// Calls <c>/api/pest-disease-list?key=...&amp;page={page}</c> (the <c>/api/</c>
+    /// v1-level endpoint, like the care guide) and returns one redacted page of
+    /// the global pest/disease catalogue (SMA-71 PR2). The body is read as a
+    /// string, the API key is redacted, then parsed: <c>last_page</c> drives
+    /// pagination and each <c>data[]</c> item is surfaced with its verbatim
+    /// (redacted) JSON via <see cref="JsonElement.GetRawText"/>. Returns
+    /// <c>null</c> on transport failure, timeout, non-success status, non-JSON
+    /// Content-Type, or malformed JSON.
+    /// </summary>
+    public async Task<PerenualPestPage?> GetPestDiseaseListAsync(int page, CancellationToken ct)
+    {
+        var url = new Uri(ApiRootV1, $"pest-disease-list?key={Uri.EscapeDataString(_apiKey)}&page={page}");
+        try
+        {
+            using var response = await _http.GetAsync(url, ct);
+            response.EnsureSuccessStatusCode();
+
+            var contentType = response.Content.Headers.ContentType?.MediaType;
+            if (!string.Equals(contentType, "application/json", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Perenual pest-disease-list returned non-JSON content-type '{ContentType}' for page {Page}; treating as failure.",
+                    contentType ?? "(none)", page);
+                return null;
+            }
+
+            // Read the literal body, redact the key (defence-in-depth — this body
+            // has none today, but the contract is uniform), then parse the
+            // REDACTED text so the per-item GetRawText() is already scrubbed.
+            var rawBody = await response.Content.ReadAsStringAsync(ct);
+            var redacted = PerenualKeyRedactor.Redact(rawBody, _apiKey);
+
+            using var doc = JsonDocument.Parse(redacted);
+            var root = doc.RootElement;
+            var lastPage = root.TryGetProperty("last_page", out var lp) && lp.TryGetInt32(out var lpVal)
+                ? lpVal
+                : page;
+
+            var items = new List<PerenualPestCatalogEntry>();
+            if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in data.EnumerateArray())
+                {
+                    if (el.ValueKind != JsonValueKind.Object) continue;
+                    // Skip entries with no usable natural key.
+                    if (!(el.TryGetProperty("id", out var idEl) && idEl.TryGetInt32(out var id))) continue;
+                    items.Add(new PerenualPestCatalogEntry(
+                        PerenualPestId: id,
+                        CommonName: GetStringOrNull(el, "common_name"),
+                        ScientificName: GetStringOrNull(el, "scientific_name"),
+                        LiteralJson: el.GetRawText()));
+                }
+            }
+
+            return new PerenualPestPage(lastPage, items);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Perenual pest-disease-list transport failure for page {Page}", page);
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Perenual pest-disease-list returned malformed JSON for page {Page}", page);
+            return null;
+        }
+        catch (NotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Perenual pest-disease-list returned unsupported content for page {Page}", page);
+            return null;
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Perenual pest-disease-list timed out for page {Page}", page);
+            return null;
+        }
+        catch (TimeoutRejectedException ex)
+        {
+            _logger.LogWarning(ex, "Perenual pest-disease-list hit resilience-handler timeout for page {Page}", page);
+            return null;
+        }
+    }
+
+    private static string? GetStringOrNull(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var p) && p.ValueKind == JsonValueKind.String
+            ? p.GetString()
+            : null;
 }
 
 /// <summary>

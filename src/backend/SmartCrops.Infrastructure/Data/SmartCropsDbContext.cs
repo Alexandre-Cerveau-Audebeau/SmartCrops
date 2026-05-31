@@ -25,6 +25,8 @@ public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options)
     public DbSet<PlantSource> PlantSources => Set<PlantSource>();
     public DbSet<PlantPest> PlantPests => Set<PlantPest>();
 
+    public DbSet<PerenualPestCatalog> PerenualPestCatalog => Set<PerenualPestCatalog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
