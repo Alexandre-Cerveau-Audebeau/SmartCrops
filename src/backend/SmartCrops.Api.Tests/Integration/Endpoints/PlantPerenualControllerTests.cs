@@ -961,6 +961,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         // unchanged literal — same counts, same columns.
         var second = await Client.PostAsync(
             "/api/admin/perenual/queryable-columns/backfill", null);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
         var secondBody = await second.Content.ReadFromJsonAsync<BackfillResponse>();
         Assert.Equal(1, secondBody!.Processed);
         Assert.Equal(1, secondBody.Populated);
@@ -999,6 +1000,7 @@ public class PlantPerenualControllerTests : IntegrationTestBase
 
         var response = await Client.PostAsync(
             "/api/admin/perenual/queryable-columns/backfill", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<BackfillResponse>();
         Assert.Equal(1, body!.Processed);
         Assert.Equal(0, body.Populated);
