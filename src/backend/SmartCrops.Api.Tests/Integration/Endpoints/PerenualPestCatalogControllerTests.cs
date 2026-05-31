@@ -144,6 +144,29 @@ public class PerenualPestCatalogControllerTests : IntegrationTestBase
         Assert.Equal(1, await db.PerenualPestCatalog.CountAsync());
     }
 
+    [Fact]
+    public async Task Harvest_RepeatedPestIdAcrossPages_DedupesToOneRow_NoUniqueViolation()
+    {
+        // The same PerenualPestId on two pages (pagination drift). The shared
+        // cumulative dict must resolve the second occurrence to the first-added
+        // instance — a single row, no unique-index violation at SaveChanges. (CR PR #103 R2.)
+        Fixture.PerenualPestCatalogStub.SetPage(1, Page(2,
+            (7, "Aphids", "Aphidoidea", "{\"id\":7,\"v\":1}")));
+        Fixture.PerenualPestCatalogStub.SetPage(2, Page(2,
+            (7, "Aphids (updated)", "Aphidoidea", "{\"id\":7,\"v\":2}")));
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(HarvestUrl, null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        Assert.Equal(1, await db.PerenualPestCatalog.CountAsync());
+        // Last page wins — the second occurrence updates the same row, no duplicate.
+        var row = await db.PerenualPestCatalog.SingleAsync(c => c.PerenualPestId == 7);
+        Assert.Equal("Aphids (updated)", row.CommonName);
+    }
+
     private void AuthAsAnyUser()
     {
         var userId = $"u-{Guid.NewGuid():N}";

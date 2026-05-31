@@ -59,6 +59,12 @@ public class PerenualPestCatalogController : ControllerBase
         var failures = 0;
         var upserted = 0;
 
+        // One cumulative dict shared across ALL pages so a PerenualPestId that
+        // recurs on multiple pages (pagination drift) resolves to the same tracked
+        // instance rather than a second insert that would trip the unique index at
+        // SaveChanges. (CR PR #103 R2.)
+        var trackedById = new Dictionary<int, PerenualPestCatalog>();
+
         for (var page = 1; page <= first.LastPage; page++)
         {
             // Reuse the page-1 fetch; fetch the rest.
@@ -70,7 +76,7 @@ public class PerenualPestCatalogController : ControllerBase
                 continue;
             }
             pagesFetched++;
-            upserted += await UpsertPageAsync(pg, ct);
+            upserted += await UpsertPageAsync(pg, trackedById, ct);
         }
 
         await _db.SaveChangesAsync(ct);
@@ -82,17 +88,31 @@ public class PerenualPestCatalogController : ControllerBase
         return Ok(new PestCatalogHarvestResponse(pagesFetched, upserted, failures));
     }
 
-    private async Task<int> UpsertPageAsync(PerenualPestPage page, CancellationToken ct)
+    private async Task<int> UpsertPageAsync(
+        PerenualPestPage page,
+        Dictionary<int, PerenualPestCatalog> trackedById,
+        CancellationToken ct)
     {
-        // Batch-fetch the page's existing rows in ONE query (avoids an N+1 SELECT
-        // per item). The dictionary also dedupes a PerenualPestId that recurs
-        // within a run: a freshly-Added entity isn't yet queryable, so the prior
-        // per-item FirstOrDefaultAsync could Add a duplicate and trip the unique
-        // index at SaveChanges. (CR PR #103.)
-        var ids = page.Items.Select(i => i.PerenualPestId).ToList();
-        var existingById = await _db.PerenualPestCatalog
-            .Where(c => ids.Contains(c.PerenualPestId))
-            .ToDictionaryAsync(c => c.PerenualPestId, ct);
+        // Batch-fetch the page's existing DB rows in ONE query (avoids an N+1
+        // SELECT per item) — but only for ids we haven't already loaded or added
+        // this run, so the SHARED cumulative dict carries entities across pages.
+        // A PerenualPestId recurring on a later page then resolves to the same
+        // tracked instance (within-run + cross-page dedup) instead of a duplicate
+        // insert tripping the unique index at SaveChanges. (CR PR #103 R1+R2.)
+        var newIds = page.Items
+            .Select(i => i.PerenualPestId)
+            .Where(id => !trackedById.ContainsKey(id))
+            .Distinct()
+            .ToList();
+        if (newIds.Count > 0)
+        {
+            foreach (var row in await _db.PerenualPestCatalog
+                .Where(c => newIds.Contains(c.PerenualPestId))
+                .ToListAsync(ct))
+            {
+                trackedById[row.PerenualPestId] = row;
+            }
+        }
 
         var count = 0;
         foreach (var item in page.Items)
@@ -103,7 +123,7 @@ public class PerenualPestCatalogController : ControllerBase
             // back (no SaveChanges has run yet for this call).
             PerenualKeyRedactor.AssertRedacted(item.LiteralJson, "PerenualPestCatalog.LiteralResponseJson");
 
-            if (existingById.TryGetValue(item.PerenualPestId, out var existing))
+            if (trackedById.TryGetValue(item.PerenualPestId, out var existing))
             {
                 existing.CommonName = item.CommonName;
                 existing.ScientificName = item.ScientificName;
@@ -121,9 +141,7 @@ public class PerenualPestCatalogController : ControllerBase
                     FetchedAt = DateTime.UtcNow,
                 };
                 _db.PerenualPestCatalog.Add(added);
-                // Register it so a duplicate id later in THIS page updates the same
-                // tracked instance rather than Add-ing a second row.
-                existingById[item.PerenualPestId] = added;
+                trackedById[item.PerenualPestId] = added;
             }
             count++;
         }
