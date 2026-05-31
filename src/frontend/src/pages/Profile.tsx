@@ -6,16 +6,18 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import { useAuth } from '../hooks/useAuth';
 import { fetchProfile, updateProfile, changePassword } from '../services/profileApi';
 
 export default function Profile() {
   const { t } = useTranslation();
-  const { refreshUser, logout } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const navigate = useNavigate();
   const mountedRef = useRef(true);
 
@@ -113,9 +115,20 @@ export default function Profile() {
 
   return (
     <Container maxWidth="sm" sx={{ pt: 4, pb: 6 }}>
-      <Typography variant="h4" fontWeight={700} color="primary" sx={{ mb: 3 }}>
-        {t('profile.title')}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
+        <Typography variant="h4" fontWeight={700} color="primary">
+          {t('profile.title')}
+        </Typography>
+        {/* SMA-83: admin role badge — shown only for admins (data from /me.isAdmin). */}
+        {user?.isAdmin && (
+          <Chip
+            icon={<AdminPanelSettingsIcon />}
+            label={t('profile.adminBadge')}
+            color="primary"
+            size="small"
+          />
+        )}
+      </Box>
 
       {/* ── Profile Information ── */}
       <Card variant="outlined" sx={{ borderRadius: 3, mb: 3 }}>

@@ -233,6 +233,7 @@
   },
   "profile": {
     "title": "Mon Profil",
+    "adminBadge": "Admin",
     "profileInfo": "Informations du profil",
     "email": "E-mail",
     "displayName": "Nom d'affichage",

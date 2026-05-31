@@ -64,16 +64,43 @@ public class AdminRoleSeederTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task Seed_SkipsUnconfirmedUser()
+    public async Task Seed_AutoConfirmsListedUnconfirmedUser_AndGrants()
     {
+        // SMA-80: a listed account that is NOT email-confirmed (e.g. password
+        // registration) is auto-confirmed and then granted — no longer skipped.
         using var scope = CreateScope();
         var (roles, users) = await ManagersAsync(scope);
         var email = $"unconfirmed-{Guid.NewGuid():N}@example.com";
         var user = await CreateUserAsync(users, email, confirmed: false);
+        Assert.False(user.EmailConfirmed); // precondition
 
         await AdminRoleSeeder.SeedAsync(roles, users, [email], NullLogger.Instance);
 
-        Assert.False(await users.IsInRoleAsync(user, Roles.Admin));
+        // Re-fetch: ConfirmEmailAsync persisted the flag inside the seeder.
+        var refreshed = await users.FindByIdAsync(user.Id);
+        Assert.NotNull(refreshed);
+        Assert.True(refreshed!.EmailConfirmed);
+        Assert.True(await users.IsInRoleAsync(refreshed, Roles.Admin));
+    }
+
+    [Fact]
+    public async Task Seed_DoesNotConfirmOrGrant_UnlistedUnconfirmedUser()
+    {
+        // Security guard: an account NOT in AdminSeed:Emails must never be
+        // confirmed nor granted — the seeder only ever touches listed emails.
+        using var scope = CreateScope();
+        var (roles, users) = await ManagersAsync(scope);
+        var listed = $"listed-{Guid.NewGuid():N}@example.com";
+        var unlisted = $"unlisted-{Guid.NewGuid():N}@example.com";
+        await CreateUserAsync(users, listed, confirmed: true);
+        var outsider = await CreateUserAsync(users, unlisted, confirmed: false);
+
+        await AdminRoleSeeder.SeedAsync(roles, users, [listed], NullLogger.Instance);
+
+        var refreshed = await users.FindByIdAsync(outsider.Id);
+        Assert.NotNull(refreshed);
+        Assert.False(refreshed!.EmailConfirmed); // never auto-confirmed
+        Assert.False(await users.IsInRoleAsync(refreshed, Roles.Admin)); // never granted
     }
 
     [Fact]
