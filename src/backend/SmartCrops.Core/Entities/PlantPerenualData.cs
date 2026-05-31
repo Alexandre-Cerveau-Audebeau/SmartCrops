@@ -71,6 +71,24 @@ public class PlantPerenualData : IHasUpdatedAt
     /// <summary>Full Perenual API response, retained for re-derivation and audit.</summary>
     public string? RawResponseJson { get; set; }
 
+    /// <summary>
+    /// Verbatim <c>/species/details</c> HTTP response body, API key redacted.
+    /// Unlike <see cref="RawResponseJson"/> — a re-serialisation of the mapped
+    /// <c>PerenualSpeciesResponse</c> DTO that silently drops every field we do
+    /// not bind — this is the LITERAL upstream body, the loss-proof capture
+    /// (SMA-71) taken ahead of the Perenual subscription cancel. Internal/audit
+    /// only; deliberately never surfaced in the public API DTO.
+    /// </summary>
+    public string? LiteralResponseJson { get; set; }
+
+    /// <summary>
+    /// Verbatim <c>/species-care-guide-list</c> response body for this species,
+    /// API key redacted. The detailed pruning/sunlight/watering care sections it
+    /// carries are Perenual-exclusive and were never fetched before SMA-71.
+    /// Internal/audit only; deliberately never surfaced in the public API DTO.
+    /// </summary>
+    public string? CareGuideResponseJson { get; set; }
+
     /// <summary>Perenual API version this record was sourced from.</summary>
     public string? ApiVersion { get; set; }
 

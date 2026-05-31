@@ -260,6 +260,72 @@ public class PerenualClientTests
         Assert.Null(await client.GetSpeciesDetailsAsync(8600, CancellationToken.None));
     }
 
+    // ── SMA-71 literal capture + key redaction ────────────────────────────
+
+    [Fact]
+    public async Task GetSpeciesDetailsWithLiteralAsync_CapturesLiteral_WithKeyRedacted()
+    {
+        // The body echoes the caller's key inside care_guides — the literal must
+        // be captured but the key must NEVER survive to LiteralResponseJson.
+        const string body =
+            "{\"id\":728,\"scientific_name\":[\"Aloe vera\"],\"indoor\":true," +
+            "\"care_guides\":\"http://perenual.com/api/species-care-guide-list?species_id=728&key=" + TestKey + "\"}";
+        var handler = new RecordingHandler(HttpStatusCode.OK, body);
+        var client = NewClient(handler);
+
+        var fetch = await client.GetSpeciesDetailsWithLiteralAsync(728, CancellationToken.None);
+
+        Assert.NotNull(fetch.Species);
+        Assert.Equal(728, fetch.Species!.Id);
+        Assert.NotNull(fetch.LiteralJson);
+        Assert.DoesNotContain(TestKey, fetch.LiteralJson!);
+        Assert.Contains("key=REDACTED", fetch.LiteralJson!);
+    }
+
+    [Fact]
+    public async Task GetSpeciesDetailsWithLiteralAsync_OnHtmlBody_ReturnsNullSpeciesAndLiteral()
+    {
+        // A deleted-id HTML body (200 + text/html) must never be captured as the
+        // literal — both halves of the tuple stay null.
+        var handler = new HtmlHandler("<html>Species not found</html>");
+        var client = NewClient(handler);
+
+        var fetch = await client.GetSpeciesDetailsWithLiteralAsync(8600, CancellationToken.None);
+
+        Assert.Null(fetch.Species);
+        Assert.Null(fetch.LiteralJson);
+    }
+
+    [Fact]
+    public async Task GetCareGuideLiteralAsync_BuildsV1Url_AndRedactsKey()
+    {
+        // The care-guide endpoint lives at /api/ (NOT /api/v2/) — verify the URL
+        // is built one level above the base, and the key is redacted in the body.
+        const string body =
+            "{\"data\":[{\"id\":1,\"species_id\":728,\"section\":[]}]," +
+            "\"self\":\"http://perenual.com/api/species-care-guide-list?species_id=728&key=" + TestKey + "\"}";
+        var handler = new RecordingHandler(HttpStatusCode.OK, body);
+        var client = NewClient(handler);
+
+        var literal = await client.GetCareGuideLiteralAsync(728, CancellationToken.None);
+
+        Assert.Equal(
+            $"https://perenual.com/api/species-care-guide-list?key={TestKey}&species_id=728",
+            handler.LastRequestUri!.AbsoluteUri);
+        Assert.NotNull(literal);
+        Assert.DoesNotContain(TestKey, literal!);
+        Assert.Contains("REDACTED", literal!);
+    }
+
+    [Fact]
+    public async Task GetCareGuideLiteralAsync_OnHtmlBody_ReturnsNull()
+    {
+        var handler = new HtmlHandler("<html>error</html>");
+        var client = NewClient(handler);
+
+        Assert.Null(await client.GetCareGuideLiteralAsync(728, CancellationToken.None));
+    }
+
     // ── GetSpeciesListAsync (SMA-13 catalog enumeration) ──────────────────
 
     [Fact]

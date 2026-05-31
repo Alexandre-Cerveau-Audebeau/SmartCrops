@@ -409,6 +409,10 @@ public class PlantPerenualController : ControllerBase
                 IsCulinary = result.IsCulinary,
                 PlantAnatomyJson = result.PlantAnatomyJson,
                 RawResponseJson = result.RawResponseJson,
+                // SMA-71 loss-proof literal captures (API key already redacted in
+                // the client). Kept even on a canonical mismatch — diagnostic only.
+                LiteralResponseJson = result.LiteralResponseJson,
+                CareGuideResponseJson = result.CareGuideResponseJson,
                 ApiVersion = "v2",
                 HasSupremeData = result.HasSupremeData,
                 LastSyncAt = DateTime.UtcNow,
@@ -438,6 +442,8 @@ public class PlantPerenualController : ControllerBase
             plant.PerenualData.IsCulinary = result.IsCulinary;
             plant.PerenualData.PlantAnatomyJson = result.PlantAnatomyJson;
             plant.PerenualData.RawResponseJson = result.RawResponseJson;
+            plant.PerenualData.LiteralResponseJson = result.LiteralResponseJson;
+            plant.PerenualData.CareGuideResponseJson = result.CareGuideResponseJson;
             plant.PerenualData.ApiVersion = "v2";
             plant.PerenualData.HasSupremeData = result.HasSupremeData;
             plant.PerenualData.LastSyncAt = DateTime.UtcNow;
