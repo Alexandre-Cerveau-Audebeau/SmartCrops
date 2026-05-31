@@ -74,6 +74,13 @@ public sealed class PostgresFixture : IAsyncLifetime
     public StubPerenualCatalogService PerenualCatalogStub =>
         Factory.Services.GetRequiredService<StubPerenualCatalogService>();
 
+    /// <summary>
+    /// Shared stub for <see cref="IPerenualPestCatalogService"/> (SMA-71 PR2
+    /// pest-disease catalogue). Same lifecycle as the other stubs — reset per test.
+    /// </summary>
+    public StubPerenualPestCatalogService PerenualPestCatalogStub =>
+        Factory.Services.GetRequiredService<StubPerenualPestCatalogService>();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
@@ -127,6 +134,11 @@ public sealed class PostgresFixture : IAsyncLifetime
                 services.AddSingleton<StubPerenualCatalogService>();
                 services.AddSingleton<IPerenualCatalogService>(sp =>
                     sp.GetRequiredService<StubPerenualCatalogService>());
+
+                services.RemoveAll<IPerenualPestCatalogService>();
+                services.AddSingleton<StubPerenualPestCatalogService>();
+                services.AddSingleton<IPerenualPestCatalogService>(sp =>
+                    sp.GetRequiredService<StubPerenualPestCatalogService>());
             })
             .Build();
 

@@ -504,6 +504,125 @@ public class PerenualClientTests
             () => client.GetSpeciesListAsync(1, cts.Token));
     }
 
+    // ── SMA-71 PR2: pest-disease-list (catalogue) ─────────────────────────
+
+    [Fact]
+    public async Task GetPestDiseaseListAsync_BuildsV1Url_AndParsesPaginationAndItems()
+    {
+        const string body = """
+            {
+              "data": [
+                { "id": 1, "common_name": "Fairy ring", "scientific_name": "Agrocybe", "host": ["all lawn grasses"] },
+                { "id": 2, "common_name": "Aphids", "scientific_name": "Aphidoidea" }
+              ],
+              "current_page": 1, "per_page": 30, "last_page": 9, "total": 256
+            }
+            """;
+        var handler = new RecordingHandler(HttpStatusCode.OK, body);
+        var client = NewClient(handler);
+
+        var page = await client.GetPestDiseaseListAsync(1, CancellationToken.None);
+
+        // /api/ v1-level URL (one level above the /api/v2/ base), like the care guide.
+        Assert.Equal(
+            $"https://perenual.com/api/pest-disease-list?key={TestKey}&page=1",
+            handler.LastRequestUri!.AbsoluteUri);
+        Assert.NotNull(page);
+        Assert.Equal(9, page!.LastPage);
+        Assert.Equal(2, page.Items.Count);
+        Assert.Equal(1, page.Items[0].PerenualPestId);
+        Assert.Equal("Fairy ring", page.Items[0].CommonName);
+        Assert.Equal("Agrocybe", page.Items[0].ScientificName);
+        // The per-item literal is the verbatim entry object (preserves host[]).
+        Assert.Contains("all lawn grasses", page.Items[0].LiteralJson);
+    }
+
+    [Fact]
+    public async Task GetPestDiseaseListAsync_RedactsKeyInPerItemLiteral()
+    {
+        // A (hypothetical) key inside an item URL must be scrubbed from the literal.
+        const string body =
+            "{\"data\":[{\"id\":5,\"common_name\":\"X\",\"scientific_name\":\"Y\"," +
+            "\"u\":\"http://h?key=" + TestKey + "\"}],\"last_page\":1}";
+        var handler = new RecordingHandler(HttpStatusCode.OK, body);
+        var client = NewClient(handler);
+
+        var page = await client.GetPestDiseaseListAsync(1, CancellationToken.None);
+
+        Assert.NotNull(page);
+        Assert.Single(page!.Items);
+        Assert.DoesNotContain(TestKey, page.Items[0].LiteralJson);
+        Assert.Contains("key=REDACTED", page.Items[0].LiteralJson);
+    }
+
+    [Fact]
+    public async Task GetPestDiseaseListAsync_ReturnsNull_OnHtmlContentType()
+    {
+        var handler = new HtmlHandler("<html>error</html>");
+        var client = NewClient(handler);
+        Assert.Null(await client.GetPestDiseaseListAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetPestDiseaseListAsync_ReturnsNull_OnTransportFailure()
+    {
+        var handler = new ThrowingHandler(new HttpRequestException("dns failure"));
+        var client = NewClient(handler);
+        Assert.Null(await client.GetPestDiseaseListAsync(1, CancellationToken.None));
+    }
+
+    // Defensive-catch parity with GetSpeciesListAsync (CR PR #103): the harvest's
+    // "later-page null → counted failure" contract leans on the client degrading
+    // to null across ALL fault modes, so every catch branch is pinned.
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    public async Task GetPestDiseaseListAsync_ReturnsNull_OnHttpError(HttpStatusCode status)
+    {
+        var handler = new RecordingHandler(status, "{}");
+        var client = NewClient(handler);
+        Assert.Null(await client.GetPestDiseaseListAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetPestDiseaseListAsync_ReturnsNull_OnMalformedJson()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, "{ invalid json }");
+        var client = NewClient(handler);
+        Assert.Null(await client.GetPestDiseaseListAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetPestDiseaseListAsync_ReturnsNull_OnPollyTimeoutRejected()
+    {
+        var handler = new ThrowingHandler(new TimeoutRejectedException("polly total timeout"));
+        var client = NewClient(handler);
+        Assert.Null(await client.GetPestDiseaseListAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetPestDiseaseListAsync_ReturnsNull_OnTimeout()
+    {
+        var handler = new ThrowingHandler(new TaskCanceledException("request timed out"));
+        var client = NewClient(handler);
+        Assert.Null(await client.GetPestDiseaseListAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetPestDiseaseListAsync_PropagatesCallerCancellation()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, "{\"data\":[],\"last_page\":1}");
+        var client = NewClient(handler);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.GetPestDiseaseListAsync(1, cts.Token));
+    }
+
     // ── Handlers ──────────────────────────────────────────────────────────
 
     private sealed class RecordingHandler : HttpMessageHandler

@@ -175,6 +175,7 @@ builder.Services.AddHttpClient<PerenualClient>((sp, client) =>
 builder.Services.AddSingleton<PerenualResolver>();
 builder.Services.AddScoped<IPlantPerenualEnrichmentService, PlantPerenualEnrichmentService>();
 builder.Services.AddScoped<IPerenualCatalogService, PerenualCatalogService>();
+builder.Services.AddScoped<IPerenualPestCatalogService, PerenualPestCatalogService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

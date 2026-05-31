@@ -35,6 +35,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         Fixture.TrefleStub.Reset();
         Fixture.PerenualStub.Reset();
         Fixture.PerenualCatalogStub.Reset();
+        Fixture.PerenualPestCatalogStub.Reset();
 
         Client = Fixture.Factory.CreateClient();
     }
