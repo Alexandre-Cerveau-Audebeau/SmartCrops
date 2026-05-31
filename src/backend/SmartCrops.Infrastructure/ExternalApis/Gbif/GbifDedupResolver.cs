@@ -58,6 +58,11 @@ public class GbifDedupResolver
     /// remainder (<c>"L."</c>, may include the year) is the author. Returns
     /// <c>null</c> when either input is blank, the prefix doesn't match (defensive),
     /// or no authorship trails the binomial.
+    ///
+    /// <para>The prefix must end on a WORD BOUNDARY: GBIF always pads the canonical
+    /// with a space before the authorship, so a mid-word prefix match (e.g.
+    /// <c>canonical="Rosa"</c> vs <c>scientificName="Rosaceae Juss."</c>) is rejected
+    /// to <c>null</c> rather than leaking a partial epithet (<c>"ceae Juss."</c>).</para>
     /// </summary>
     private static string? ExtractAuthor(string? scientificName, string? canonicalName)
     {
@@ -69,6 +74,14 @@ public class GbifDedupResolver
         var sci = scientificName.Trim();
         var canon = canonicalName.Trim();
         if (!sci.StartsWith(canon, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        // Word-boundary guard: the char right after the canonical prefix must be
+        // whitespace (or the string ends with no author). Rejects a mid-word match
+        // that would otherwise extract a partial epithet as the author.
+        if (sci.Length > canon.Length && !char.IsWhiteSpace(sci[canon.Length]))
         {
             return null;
         }

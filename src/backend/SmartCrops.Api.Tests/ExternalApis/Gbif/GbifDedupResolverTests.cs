@@ -358,4 +358,21 @@ public class GbifDedupResolverTests
         });
         Assert.Null(absent.Author);
     }
+
+    [Fact]
+    public void Author_Null_WhenCanonicalPrefixMatchesMidWord()
+    {
+        // Word-boundary guard: a genus-only canonical that prefixes a longer word
+        // (e.g. "Rosa" inside "Rosaceae Juss.") must NOT leak the partial epithet
+        // "ceae Juss." as the author — it fails closed to null.
+        var result = NewResolver().Resolve(new GbifMatchResponse
+        {
+            MatchType = "EXACT",
+            AcceptedUsageKey = 1,
+            CanonicalName = "Rosa",
+            ScientificName = "Rosaceae Juss.",
+        });
+
+        Assert.Null(result.Author);
+    }
 }
