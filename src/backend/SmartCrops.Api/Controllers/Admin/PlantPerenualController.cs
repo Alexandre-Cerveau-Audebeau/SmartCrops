@@ -7,6 +7,7 @@ using SmartCrops.Core.Enums;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Core.Models;
 using SmartCrops.Infrastructure.Data;
+using SmartCrops.Infrastructure.ExternalApis.Perenual;
 
 namespace SmartCrops.Api.Controllers.Admin;
 
@@ -386,6 +387,13 @@ public class PlantPerenualController : ControllerBase
     /// </summary>
     private void UpsertPerenualData(Plant plant, PerenualEnrichmentResult result)
     {
+        // SMA-71 persistence-boundary guard: fail fast if a credential slipped
+        // past the client-side redaction rather than letting it become durable in
+        // the DB. Throws (does NOT silently re-scrub) so a redaction regression
+        // surfaces loudly. Covers both the create and update branches below.
+        PerenualKeyRedactor.AssertRedacted(result.LiteralResponseJson, "PlantPerenualData.LiteralResponseJson");
+        PerenualKeyRedactor.AssertRedacted(result.CareGuideResponseJson, "PlantPerenualData.CareGuideResponseJson");
+
         if (plant.PerenualData is null)
         {
             plant.PerenualData = new PlantPerenualData
@@ -409,6 +417,10 @@ public class PlantPerenualController : ControllerBase
                 IsCulinary = result.IsCulinary,
                 PlantAnatomyJson = result.PlantAnatomyJson,
                 RawResponseJson = result.RawResponseJson,
+                // SMA-71 loss-proof literal captures (API key already redacted in
+                // the client). Kept even on a canonical mismatch — diagnostic only.
+                LiteralResponseJson = result.LiteralResponseJson,
+                CareGuideResponseJson = result.CareGuideResponseJson,
                 ApiVersion = "v2",
                 HasSupremeData = result.HasSupremeData,
                 LastSyncAt = DateTime.UtcNow,
@@ -438,6 +450,11 @@ public class PlantPerenualController : ControllerBase
             plant.PerenualData.IsCulinary = result.IsCulinary;
             plant.PerenualData.PlantAnatomyJson = result.PlantAnatomyJson;
             plant.PerenualData.RawResponseJson = result.RawResponseJson;
+            // Loss-proof: keep a previously-captured literal if this (re-)enrich
+            // returned null (e.g. a transient care-guide miss) — do NOT wipe the
+            // audit row. The create branch assigns directly (first capture).
+            plant.PerenualData.LiteralResponseJson = result.LiteralResponseJson ?? plant.PerenualData.LiteralResponseJson;
+            plant.PerenualData.CareGuideResponseJson = result.CareGuideResponseJson ?? plant.PerenualData.CareGuideResponseJson;
             plant.PerenualData.ApiVersion = "v2";
             plant.PerenualData.HasSupremeData = result.HasSupremeData;
             plant.PerenualData.LastSyncAt = DateTime.UtcNow;

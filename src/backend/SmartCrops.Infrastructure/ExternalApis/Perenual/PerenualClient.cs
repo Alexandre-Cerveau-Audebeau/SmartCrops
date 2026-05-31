@@ -31,6 +31,15 @@ public class PerenualClient
     private readonly ILogger<PerenualClient> _logger;
     private readonly string _apiKey;
 
+    // Matches HttpClientJsonExtensions' default (web) deserialisation so the
+    // literal-capture path parses identically to the prior ReadFromJsonAsync.
+    private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
+
+    // The care-guide endpoint lives at /api/, one level above the configured
+    // /api/v2/ base. Derive it from the client's BaseAddress so the host stays
+    // single-sourced from PerenualOptions.BaseUrl rather than hard-coded here.
+    private Uri ApiRootV1 => new(_http.BaseAddress!, "../");
+
     public PerenualClient(HttpClient http, IOptions<PerenualOptions> options, ILogger<PerenualClient> logger)
     {
         _http = http;
@@ -89,14 +98,25 @@ public class PerenualClient
     }
 
     /// <summary>
-    /// Calls <c>/species/details/{id}?key=...</c>. Returns <c>null</c> on
-    /// transport failure, timeout, malformed JSON response, or unsupported
-    /// response Content-Type. A 404 from Perenual (deleted species or wrong id)
-    /// likewise surfaces as <c>null</c> since
-    /// <see cref="HttpClient.GetFromJsonAsync{T}(string, CancellationToken)"/>
-    /// throws <see cref="HttpRequestException"/> on non-success status codes.
+    /// Calls <c>/species/details/{id}?key=...</c> and returns only the parsed
+    /// DTO — a thin wrapper over <see cref="GetSpeciesDetailsWithLiteralAsync"/>
+    /// for callers that do not need the literal capture. Returns <c>null</c> on
+    /// transport failure, timeout, malformed JSON, non-success status, or a
+    /// non-JSON Content-Type.
     /// </summary>
     public async Task<PerenualSpeciesResponse?> GetSpeciesDetailsAsync(int perenualId, CancellationToken ct)
+        => (await GetSpeciesDetailsWithLiteralAsync(perenualId, ct)).Species;
+
+    /// <summary>
+    /// Calls <c>/species/details/{id}?key=...</c> and returns BOTH the parsed
+    /// <see cref="PerenualSpeciesResponse"/> and the verbatim HTTP body with the
+    /// API key redacted (<see cref="PerenualSpeciesFetch.LiteralJson"/>) — the
+    /// SMA-71 loss-proof capture. The body is read as a string FIRST and the DTO
+    /// is deserialised from it, so fields we do not bind survive in the literal.
+    /// Returns the <c>default</c> <c>(null, null)</c> tuple on transport failure,
+    /// timeout, malformed JSON, non-success status, or a non-JSON Content-Type.
+    /// </summary>
+    public async Task<PerenualSpeciesFetch> GetSpeciesDetailsWithLiteralAsync(int perenualId, CancellationToken ct)
     {
         var url = $"species/details/{perenualId}?key={Uri.EscapeDataString(_apiKey)}";
         try
@@ -104,7 +124,7 @@ public class PerenualClient
             using var response = await _http.GetAsync(url, ct);
             // Preserve the documented null-on-non-success contract: a 404
             // (deleted species / wrong id) throws HttpRequestException here,
-            // caught below — same as the prior GetFromJsonAsync behaviour.
+            // caught below.
             response.EnsureSuccessStatusCode();
 
             // D5: Content-Type pre-check to discriminate "deleted id" (HTML
@@ -119,34 +139,104 @@ public class PerenualClient
                     "Perenual returned non-JSON content-type '{ContentType}' for species id {SpeciesId} (likely deleted id, see PR B). Treating as NoMatch.",
                     contentType ?? "(none)",
                     perenualId);
-                return null;
+                return default;
             }
 
-            return await response.Content.ReadFromJsonAsync<PerenualSpeciesResponse>(ct);
+            // Read the literal body FIRST, then deserialise from the string. The
+            // API key is scrubbed before the body leaves this method so the secret
+            // never reaches PlantPerenualData.LiteralResponseJson — Perenual echoes
+            // it inside the care_guides / hardiness_location URLs.
+            var rawBody = await response.Content.ReadAsStringAsync(ct);
+            var species = JsonSerializer.Deserialize<PerenualSpeciesResponse>(rawBody, WebJsonOptions);
+            var literal = PerenualKeyRedactor.Redact(rawBody, _apiKey);
+            return new PerenualSpeciesFetch(species, literal);
         }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "Perenual species fetch transport failure for id {Id}", perenualId);
-            return null;
+            return default;
         }
         catch (JsonException ex)
         {
             _logger.LogWarning(ex, "Perenual species fetch returned malformed JSON for id {Id}", perenualId);
-            return null;
+            return default;
         }
         catch (NotSupportedException ex)
         {
             _logger.LogWarning(ex, "Perenual species fetch returned unsupported content for id {Id}", perenualId);
-            return null;
+            return default;
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Perenual species fetch timed out for id {Id}", perenualId);
-            return null;
+            return default;
         }
         catch (TimeoutRejectedException ex)
         {
             _logger.LogWarning(ex, "Perenual species fetch hit resilience-handler timeout for id {Id}", perenualId);
+            return default;
+        }
+    }
+
+    /// <summary>
+    /// Calls <c>/species-care-guide-list?key=...&amp;species_id={id}</c> (this
+    /// endpoint lives at <c>/api/</c>, NOT under the <c>/api/v2/</c> base) and
+    /// returns the verbatim response body with the API key redacted — the SMA-71
+    /// capture of Perenual's per-species pruning/sunlight/watering care sections,
+    /// which the rest of the ETL never consumes. Additive and NON-FATAL: returns
+    /// <c>null</c> on any transport failure, timeout, non-success status, non-JSON
+    /// Content-Type, or unparseable body, so a care-guide miss never blocks the
+    /// primary enrichment write.
+    /// </summary>
+    public async Task<string?> GetCareGuideLiteralAsync(int speciesId, CancellationToken ct)
+    {
+        var url = new Uri(ApiRootV1, $"species-care-guide-list?key={Uri.EscapeDataString(_apiKey)}&species_id={speciesId}");
+        try
+        {
+            using var response = await _http.GetAsync(url, ct);
+            response.EnsureSuccessStatusCode();
+
+            var contentType = response.Content.Headers.ContentType?.MediaType;
+            if (!string.Equals(contentType, "application/json", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Perenual care-guide returned non-JSON content-type '{ContentType}' for species id {SpeciesId}; skipping (non-fatal).",
+                    contentType ?? "(none)",
+                    speciesId);
+                return null;
+            }
+
+            var rawBody = await response.Content.ReadAsStringAsync(ct);
+            var literal = PerenualKeyRedactor.Redact(rawBody, _apiKey);
+
+            // The care-guide body is stored verbatim (not deserialised), so verify
+            // it is well-formed JSON before returning — the column is jsonb and a
+            // malformed insert would roll back the whole enrichment transaction.
+            try
+            {
+                using var _ = JsonDocument.Parse(literal);
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "Perenual care-guide body was not valid JSON for species id {SpeciesId}; skipping (non-fatal).", speciesId);
+                return null;
+            }
+
+            return literal;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Perenual care-guide transport failure for species id {Id}", speciesId);
+            return null;
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Perenual care-guide timed out for species id {Id}", speciesId);
+            return null;
+        }
+        catch (TimeoutRejectedException ex)
+        {
+            _logger.LogWarning(ex, "Perenual care-guide hit resilience-handler timeout for species id {Id}", speciesId);
             return null;
         }
     }
@@ -216,3 +306,13 @@ public class PerenualClient
         }
     }
 }
+
+/// <summary>
+/// Result of <see cref="PerenualClient.GetSpeciesDetailsWithLiteralAsync"/>:
+/// the parsed DTO plus the verbatim, key-redacted HTTP body. Both are
+/// <c>null</c> on any failure path (the <c>default</c> value), so callers branch
+/// on <see cref="Species"/> exactly as they did on the prior nullable return.
+/// </summary>
+/// <param name="Species">Parsed species response, or <c>null</c> on no-match/failure.</param>
+/// <param name="LiteralJson">Verbatim response body, API key redacted, or <c>null</c>.</param>
+public readonly record struct PerenualSpeciesFetch(PerenualSpeciesResponse? Species, string? LiteralJson);

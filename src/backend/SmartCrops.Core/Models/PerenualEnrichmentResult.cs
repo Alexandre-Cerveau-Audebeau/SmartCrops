@@ -139,7 +139,22 @@ public record PerenualEnrichmentResult(
     /// in the resolver so the API layer can run the issue #75 genus gate without
     /// reaching into Infrastructure. Null when the name is absent or single-token.
     /// </summary>
-    string? PerenualGenus);
+    string? PerenualGenus,
+
+    /// <summary>
+    /// SMA-71 loss-proof capture: the verbatim <c>/species/details</c> body with
+    /// the API key redacted. Optional/defaulted so existing constructions (NoMatch,
+    /// stubs, tests) compile unchanged; the enrichment service attaches it on the
+    /// match path. Internal/audit only — never surfaced in the public API DTO.
+    /// </summary>
+    string? LiteralResponseJson = null,
+
+    /// <summary>
+    /// SMA-71 loss-proof capture: the verbatim <c>/species-care-guide-list</c>
+    /// body with the API key redacted. <c>null</c> when the additive care-guide
+    /// fetch missed (non-fatal). Internal/audit only — never surfaced publicly.
+    /// </summary>
+    string? CareGuideResponseJson = null);
 
 /// <summary>An image returned by Perenual, ready for insert into <c>PlantImage</c>.</summary>
 public record PerenualImage(

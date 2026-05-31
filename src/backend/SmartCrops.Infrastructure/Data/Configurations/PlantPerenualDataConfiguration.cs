@@ -48,6 +48,10 @@ public class PlantPerenualDataConfiguration : IEntityTypeConfiguration<PlantPere
         builder.Property(p => p.PlantAnatomyJson).HasColumnType("jsonb");
         builder.Property(p => p.RawResponseJson).HasColumnType("jsonb");
 
+        // SMA-71 loss-proof literal capture (API key redacted before persistence).
+        builder.Property(p => p.LiteralResponseJson).HasColumnType("jsonb");
+        builder.Property(p => p.CareGuideResponseJson).HasColumnType("jsonb");
+
         builder.Property(p => p.HasSupremeData).HasDefaultValue(false);
 
         // ── Perenual Supreme xData columns (Sprint 1.5 PR B) ────────────────

@@ -76,8 +76,32 @@ public class PlantPerenualEnrichmentService : IPlantPerenualEnrichmentService
         // canonicalisation may overwrite the returned `response.id` with a
         // different value (cf. issue #67). Plumb the requested id into the
         // resolver so the audit trail records it on PerenualEnrichmentResult.
-        var species = await _client.GetSpeciesDetailsAsync(perenualId, ct);
-        var rawJson = species is not null ? JsonSerializer.Serialize(species) : string.Empty;
-        return _resolver.Resolve(species, rawJson, requestedPerenualId: perenualId);
+        var fetch = await _client.GetSpeciesDetailsWithLiteralAsync(perenualId, ct);
+        var rawJson = fetch.Species is not null ? JsonSerializer.Serialize(fetch.Species) : string.Empty;
+        var result = _resolver.Resolve(fetch.Species, rawJson, requestedPerenualId: perenualId);
+
+        // No acceptable match → nothing extra to capture (the literal was null or
+        // a non-JSON deleted-id body); return the resolver's NONE result as-is.
+        if (result.PerenualId is null)
+        {
+            return result;
+        }
+
+        // SMA-71 loss-proof capture. Attach the redacted literal /species/details
+        // body — kept even on a canonical mismatch, like RawResponseJson, since it
+        // is the diagnostic record of what Perenual actually returned — and fetch
+        // the per-species care-guide literal (one extra call, NON-FATAL: null on
+        // any miss). The key is already redacted inside the client, so nothing
+        // secret flows through here.
+        // Key the care-guide on the CANONICAL species id (result.PerenualId) so
+        // the captured guide matches the species we actually persist, not the
+        // (possibly server-canonicalised — issue #67/#73) requested id. Non-null
+        // here: we returned early above when result.PerenualId was null.
+        var careGuideJson = await _client.GetCareGuideLiteralAsync(result.PerenualId.Value, ct);
+        return result with
+        {
+            LiteralResponseJson = fetch.LiteralJson,
+            CareGuideResponseJson = careGuideJson,
+        };
     }
 }

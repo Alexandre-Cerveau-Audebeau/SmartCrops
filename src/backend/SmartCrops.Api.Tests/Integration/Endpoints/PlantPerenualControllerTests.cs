@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SmartCrops.Api.Tests.Integration.Stubs;
@@ -117,6 +118,115 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         var perenualData = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
         Assert.Equal(8758, perenualData.PerenualId);
         Assert.Equal(8759, perenualData.RequestedPerenualId);
+    }
+
+    /// <summary>
+    /// SMA-71: the controller persists the redacted literal <c>/species/details</c>
+    /// and care-guide bodies to <c>PlantPerenualData</c> (internal/audit), the
+    /// literal preserves fields the mapped DTO drops (e.g. <c>soil</c>), and none
+    /// of it leaks into the public detail DTO (gated-or-not, the columns are not
+    /// part of <c>PlantPerenualDataDto</c> at all).
+    /// </summary>
+    [Fact]
+    public async Task Enrich_PersistsRedactedLiteralCaptures_AndDoesNotExposeThemInDetailDto()
+    {
+        var plantId = await SeedPlantAsync("Aloe vera");
+        // Pre-redacted literal carrying an unmapped field (`soil`) that the DTO
+        // never captures — proves the loss-proof net actually preserves it.
+        const string literal =
+            "{\"id\":728,\"care_guides\":\"http://x?key=REDACTED\",\"soil\":[\"Well-drained\"]}";
+        const string careGuide =
+            "{\"data\":[{\"id\":1,\"section\":[{\"type\":\"watering\"}]}]}";
+        Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 728) with
+        {
+            LiteralResponseJson = literal,
+            CareGuideResponseJson = careGuide,
+        });
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(
+            $"/api/admin/perenual/enrich/{plantId}?perenualId=728", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var perenualData = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+
+        // Persisted (jsonb normalises formatting, so assert on parsed content).
+        Assert.NotNull(perenualData.LiteralResponseJson);
+        using (var litDoc = JsonDocument.Parse(perenualData.LiteralResponseJson!))
+        {
+            Assert.Equal(728, litDoc.RootElement.GetProperty("id").GetInt32());
+            Assert.Equal("Well-drained", litDoc.RootElement.GetProperty("soil")[0].GetString());
+        }
+        Assert.NotNull(perenualData.CareGuideResponseJson);
+        using (var cgDoc = JsonDocument.Parse(perenualData.CareGuideResponseJson!))
+        {
+            Assert.Equal(
+                "watering",
+                cgDoc.RootElement.GetProperty("data")[0].GetProperty("section")[0].GetProperty("type").GetString());
+        }
+
+        // Point 6: never surfaced in the public detail DTO. Drop the admin auth
+        // so this asserts the genuinely-anonymous public surface.
+        Client.DefaultRequestHeaders.Authorization = null;
+        var detailJson = await Client.GetStringAsync($"/api/plants/{plantId}");
+        Assert.DoesNotContain("literalResponseJson", detailJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("careGuideResponseJson", detailJson, StringComparison.OrdinalIgnoreCase);
+        // The literal-only `soil` value must not appear anywhere in the DTO.
+        Assert.DoesNotContain("Well-drained", detailJson, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// SMA-71 R2 (loss-proof): a forced re-enrich whose fetch returns null
+    /// literals (e.g. a transient care-guide miss) must PRESERVE the previously
+    /// captured literals on the audit row — the update branch null-coalesces
+    /// rather than wiping them.
+    /// </summary>
+    [Fact]
+    public async Task Enrich_ForceReEnrichWithNullLiterals_PreservesPriorCaptures()
+    {
+        var plantId = await SeedPlantAsync("Aloe vera");
+        const string literal = "{\"id\":728,\"soil\":[\"Well-drained\"]}";
+        const string careGuide = "{\"data\":[{\"id\":1}]}";
+
+        // First enrich captures both literals.
+        Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 728) with
+        {
+            LiteralResponseJson = literal,
+            CareGuideResponseJson = careGuide,
+        });
+        AuthAsAnyUser();
+        var first = await Client.PostAsync(
+            $"/api/admin/perenual/enrich/{plantId}?perenualId=728", null);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        // Forced re-enrich returns NULL literals — must not erase the prior ones.
+        Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 728) with
+        {
+            LiteralResponseJson = null,
+            CareGuideResponseJson = null,
+        });
+        var second = await Client.PostAsync(
+            $"/api/admin/perenual/enrich/{plantId}?perenualId=728&force=true", null);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var perenualData = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+
+        Assert.NotNull(perenualData.LiteralResponseJson);
+        using (var doc = JsonDocument.Parse(perenualData.LiteralResponseJson!))
+        {
+            Assert.Equal("Well-drained", doc.RootElement.GetProperty("soil")[0].GetString());
+        }
+        Assert.NotNull(perenualData.CareGuideResponseJson);
+        // Assert the CONTENT survived, not merely non-null — catches an accidental
+        // replacement with a different non-null value (CR R2 hardening).
+        using (var cgDoc = JsonDocument.Parse(perenualData.CareGuideResponseJson!))
+        {
+            Assert.Equal(1, cgDoc.RootElement.GetProperty("data")[0].GetProperty("id").GetInt32());
+        }
     }
 
     /// <summary>
