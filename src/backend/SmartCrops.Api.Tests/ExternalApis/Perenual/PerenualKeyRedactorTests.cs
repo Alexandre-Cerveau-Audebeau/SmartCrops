@@ -12,7 +12,9 @@ namespace SmartCrops.Api.Tests.ExternalApis.Perenual;
 /// </summary>
 public class PerenualKeyRedactorTests
 {
-    private const string Key = "sk-ZqdG6a0b6bd13f22217086";
+    // Synthetic, obviously-fake token — never a real credential (SMA-71 R2: the
+    // production key value previously lived here and is now scrubbed from source).
+    private const string Key = "sk-TEST-REDACT-DO-NOT-USE-FAKE";
 
     [Fact]
     public void Redact_RemovesExactKey_FromCareGuidesUrl()
@@ -75,5 +77,57 @@ public class PerenualKeyRedactorTests
     {
         Assert.Equal(string.Empty, PerenualKeyRedactor.Redact(null, Key));
         Assert.Equal(string.Empty, PerenualKeyRedactor.Redact(string.Empty, Key));
+    }
+
+    // ── AssertRedacted: persistence-boundary fail-fast guard (SMA-71 R2) ──────
+
+    [Fact]
+    public void AssertRedacted_Throws_WhenKeyParamSurvives_WithoutLeakingTheValue()
+    {
+        var leaked = "{\"care_guides\":\"http://x?species_id=728&key=sk-someLeakedKey123\"}";
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => PerenualKeyRedactor.AssertRedacted(leaked, "ctx"));
+
+        // Names the parameter but NEVER the secret value.
+        Assert.Contains("key=", ex.Message);
+        Assert.Contains("ctx", ex.Message);
+        Assert.DoesNotContain("sk-someLeakedKey123", ex.Message);
+    }
+
+    [Fact]
+    public void AssertRedacted_Throws_WhenApiKeyParamSurvives()
+    {
+        var leaked = "{\"u\":\"http://x?api_key=secretvalue\"}";
+
+        Assert.Throws<InvalidOperationException>(
+            () => PerenualKeyRedactor.AssertRedacted(leaked, "ctx"));
+    }
+
+    [Fact]
+    public void AssertRedacted_DoesNotThrow_WhenAlreadyRedacted()
+    {
+        PerenualKeyRedactor.AssertRedacted(
+            "{\"care_guides\":\"http://x?key=REDACTED\",\"id\":728}", "ctx");
+    }
+
+    [Fact]
+    public void AssertRedacted_DoesNotThrow_OnNullEmptyOrNoCredential()
+    {
+        PerenualKeyRedactor.AssertRedacted(null, "ctx");
+        PerenualKeyRedactor.AssertRedacted(string.Empty, "ctx");
+        PerenualKeyRedactor.AssertRedacted("{\"id\":728,\"soil\":[\"Well-drained\"]}", "ctx");
+    }
+
+    [Fact]
+    public void Redact_Then_AssertRedacted_PassesForAKeyBearingBody()
+    {
+        // End-to-end: a body carrying key=, once Redact'd, clears the guard.
+        var body = $"{{\"care_guides\":\"http://x?species_id=728&key={Key}\"}}";
+
+        var redacted = PerenualKeyRedactor.Redact(body, Key);
+
+        PerenualKeyRedactor.AssertRedacted(redacted, "ctx"); // must not throw
+        Assert.DoesNotContain(Key, redacted);
     }
 }

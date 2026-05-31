@@ -48,4 +48,34 @@ public static partial class PerenualKeyRedactor
 
         return KeyParamRegex().Replace(scrubbed, $"${{1}}{Placeholder}");
     }
+
+    // Detects a key= / api_key= parameter whose value did NOT get redacted —
+    // a credential that slipped past Redact. Group 1 captures the parameter NAME
+    // only (never the value), so it is safe to surface in an exception message.
+    [GeneratedRegex(@"\b((?:api_)?key)=(?!REDACTED\b)[^&""'\s<>\\]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ResidualKeyRegex();
+
+    /// <summary>
+    /// Persistence-boundary fail-fast guard (SMA-71 second line of defence).
+    /// Throws <see cref="InvalidOperationException"/> when <paramref name="json"/>
+    /// still carries a non-redacted <c>key=</c>/<c>api_key=</c> credential, so a
+    /// regression in the single-point client-side <see cref="Redact"/> can never
+    /// make a secret durable in the database. Deliberately throws rather than
+    /// re-scrubbing silently: a leak that reaches here is a BUG and must surface,
+    /// not be masked. The message names only the parameter, never its value.
+    /// </summary>
+    public static void AssertRedacted(string? json, string context)
+    {
+        if (string.IsNullOrEmpty(json))
+        {
+            return;
+        }
+
+        var match = ResidualKeyRegex().Match(json);
+        if (match.Success)
+        {
+            throw new InvalidOperationException(
+                $"Refusing to persist {context}: a non-redacted '{match.Groups[1].Value}=' credential parameter survived redaction — a PerenualKeyRedactor regression (SMA-71).");
+        }
+    }
 }

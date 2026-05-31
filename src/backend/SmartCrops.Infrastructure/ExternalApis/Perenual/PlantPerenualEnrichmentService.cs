@@ -93,7 +93,11 @@ public class PlantPerenualEnrichmentService : IPlantPerenualEnrichmentService
         // the per-species care-guide literal (one extra call, NON-FATAL: null on
         // any miss). The key is already redacted inside the client, so nothing
         // secret flows through here.
-        var careGuideJson = await _client.GetCareGuideLiteralAsync(perenualId, ct);
+        // Key the care-guide on the CANONICAL species id (result.PerenualId) so
+        // the captured guide matches the species we actually persist, not the
+        // (possibly server-canonicalised — issue #67/#73) requested id. Non-null
+        // here: we returned early above when result.PerenualId was null.
+        var careGuideJson = await _client.GetCareGuideLiteralAsync(result.PerenualId.Value, ct);
         return result with
         {
             LiteralResponseJson = fetch.LiteralJson,

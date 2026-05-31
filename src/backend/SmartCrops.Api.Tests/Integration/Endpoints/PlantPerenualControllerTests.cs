@@ -167,12 +167,60 @@ public class PlantPerenualControllerTests : IntegrationTestBase
                 cgDoc.RootElement.GetProperty("data")[0].GetProperty("section")[0].GetProperty("type").GetString());
         }
 
-        // Point 6: never surfaced in the public detail DTO.
+        // Point 6: never surfaced in the public detail DTO. Drop the admin auth
+        // so this asserts the genuinely-anonymous public surface.
+        Client.DefaultRequestHeaders.Authorization = null;
         var detailJson = await Client.GetStringAsync($"/api/plants/{plantId}");
         Assert.DoesNotContain("literalResponseJson", detailJson, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("careGuideResponseJson", detailJson, StringComparison.OrdinalIgnoreCase);
         // The literal-only `soil` value must not appear anywhere in the DTO.
         Assert.DoesNotContain("Well-drained", detailJson, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// SMA-71 R2 (loss-proof): a forced re-enrich whose fetch returns null
+    /// literals (e.g. a transient care-guide miss) must PRESERVE the previously
+    /// captured literals on the audit row — the update branch null-coalesces
+    /// rather than wiping them.
+    /// </summary>
+    [Fact]
+    public async Task Enrich_ForceReEnrichWithNullLiterals_PreservesPriorCaptures()
+    {
+        var plantId = await SeedPlantAsync("Aloe vera");
+        const string literal = "{\"id\":728,\"soil\":[\"Well-drained\"]}";
+        const string careGuide = "{\"data\":[{\"id\":1}]}";
+
+        // First enrich captures both literals.
+        Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 728) with
+        {
+            LiteralResponseJson = literal,
+            CareGuideResponseJson = careGuide,
+        });
+        AuthAsAnyUser();
+        var first = await Client.PostAsync(
+            $"/api/admin/perenual/enrich/{plantId}?perenualId=728", null);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        // Forced re-enrich returns NULL literals — must not erase the prior ones.
+        Fixture.PerenualStub.Enqueue(SampleMatch(perenualId: 728) with
+        {
+            LiteralResponseJson = null,
+            CareGuideResponseJson = null,
+        });
+        var second = await Client.PostAsync(
+            $"/api/admin/perenual/enrich/{plantId}?perenualId=728&force=true", null);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var perenualData = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+
+        Assert.NotNull(perenualData.LiteralResponseJson);
+        using (var doc = JsonDocument.Parse(perenualData.LiteralResponseJson!))
+        {
+            Assert.Equal("Well-drained", doc.RootElement.GetProperty("soil")[0].GetString());
+        }
+        Assert.NotNull(perenualData.CareGuideResponseJson);
     }
 
     /// <summary>
