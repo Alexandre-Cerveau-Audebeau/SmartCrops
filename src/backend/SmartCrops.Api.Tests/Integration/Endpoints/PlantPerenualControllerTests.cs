@@ -945,6 +945,12 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Assert.Equal(1, body.Populated);
         Assert.Equal(0, body.Failures);
 
+        // Core backfill contract: reprocess the STORED literal, never call the
+        // Perenual API. The enrichment service stub records every name/id it is
+        // asked for — both must stay empty.
+        Assert.Empty(Fixture.PerenualStub.ReceivedNames);
+        Assert.Empty(Fixture.PerenualStub.ReceivedIds);
+
         using (var scope = CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
@@ -1009,6 +1015,115 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
         var pd = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
         Assert.Null(pd.PlantAnatomyJson);
+        Assert.Null(pd.AttractsJson);
+        Assert.Null(pd.SoilJson);
+        Assert.Null(pd.OtherNamesJson);
+    }
+
+    [Fact]
+    public async Task BackfillQueryableColumns_TypeIncompatibleLiteral_CountsFailure_OtherRowsStillPopulated()
+    {
+        // A jsonb column CANNOT hold syntactically-invalid JSON (PostgreSQL rejects
+        // the insert), so the JsonException branch is reached via VALID jsonb that
+        // is incompatible with PerenualSpeciesResponse — here a JSON array, not an
+        // object. This also proves one bad row does NOT roll back the others: the
+        // deserialise throws before any column is mutated, so the good row's writes
+        // still commit in the single SaveChanges.
+        var badId = await SeedPlantAsync("Bad literal", alreadyPerenualEnriched: true, configure: p =>
+        {
+            p.PerenualData = new PlantPerenualData
+            {
+                PerenualId = 1,
+                LiteralResponseJson = "[1,2,3]",
+                LastSyncAt = DateTime.UtcNow,
+            };
+        });
+        var goodId = await SeedPlantAsync("Good literal", alreadyPerenualEnriched: true, configure: p =>
+        {
+            p.PerenualData = new PlantPerenualData
+            {
+                PerenualId = 2,
+                LiteralResponseJson = """{"id":2,"attracts":["Bees"]}""",
+                LastSyncAt = DateTime.UtcNow,
+            };
+        });
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(
+            "/api/admin/perenual/queryable-columns/backfill", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<BackfillResponse>();
+        Assert.Equal(2, body!.Candidates);
+        Assert.Equal(1, body.Processed);  // only the good row
+        Assert.Equal(1, body.Populated);
+        Assert.Equal(1, body.Failures);   // the array literal
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        // Good row populated despite the bad row's failure (no whole-run rollback).
+        var good = await db.PlantPerenualData.SingleAsync(d => d.PlantId == goodId);
+        Assert.Equal("[\"Bees\"]", Compact(good.AttractsJson));
+        // Failed row left untouched.
+        var bad = await db.PlantPerenualData.SingleAsync(d => d.PlantId == badId);
+        Assert.Null(bad.AttractsJson);
+    }
+
+    [Fact]
+    public async Task BackfillQueryableColumns_LiteralDeserialisesToNull_CountsFailure()
+    {
+        // The JSON value `null` (valid jsonb, distinct from SQL NULL so it stays a
+        // candidate) deserialises to a null PerenualSpeciesResponse → the
+        // species-is-null guard counts it as a failure and skips it.
+        var plantId = await SeedPlantAsync("Null literal", alreadyPerenualEnriched: true, configure: p =>
+        {
+            p.PerenualData = new PlantPerenualData
+            {
+                PerenualId = 3,
+                LiteralResponseJson = "null",
+                LastSyncAt = DateTime.UtcNow,
+            };
+        });
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(
+            "/api/admin/perenual/queryable-columns/backfill", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<BackfillResponse>();
+        Assert.Equal(1, body!.Candidates);
+        Assert.Equal(0, body.Processed);
+        Assert.Equal(0, body.Populated);
+        Assert.Equal(1, body.Failures);
+    }
+
+    [Fact]
+    public async Task BackfillQueryableColumns_PartialArrays_PopulatesPresent_LeavesAbsentNull()
+    {
+        // Only plant_anatomy present; attracts/soil/other_name absent → the present
+        // column is populated, absent ones stay null, and the row counts as
+        // populated (the "at least one non-null" threshold).
+        var plantId = await SeedPlantAsync("Partial arrays", alreadyPerenualEnriched: true, configure: p =>
+        {
+            p.PerenualData = new PlantPerenualData
+            {
+                PerenualId = 4,
+                LiteralResponseJson = """{"id":4,"plant_anatomy":[{"part":"stems","color":["green"]}]}""",
+                LastSyncAt = DateTime.UtcNow,
+            };
+        });
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(
+            "/api/admin/perenual/queryable-columns/backfill", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<BackfillResponse>();
+        Assert.Equal(1, body!.Processed);
+        Assert.Equal(1, body.Populated);
+        Assert.Equal(0, body.Failures);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var pd = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+        Assert.Equal("[{\"part\":\"stems\",\"color\":[\"green\"]}]", Compact(pd.PlantAnatomyJson));
         Assert.Null(pd.AttractsJson);
         Assert.Null(pd.SoilJson);
         Assert.Null(pd.OtherNamesJson);
