@@ -571,6 +571,58 @@ public class PerenualClientTests
         Assert.Null(await client.GetPestDiseaseListAsync(1, CancellationToken.None));
     }
 
+    // Defensive-catch parity with GetSpeciesListAsync (CR PR #103): the harvest's
+    // "later-page null → counted failure" contract leans on the client degrading
+    // to null across ALL fault modes, so every catch branch is pinned.
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    public async Task GetPestDiseaseListAsync_ReturnsNull_OnHttpError(HttpStatusCode status)
+    {
+        var handler = new RecordingHandler(status, "{}");
+        var client = NewClient(handler);
+        Assert.Null(await client.GetPestDiseaseListAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetPestDiseaseListAsync_ReturnsNull_OnMalformedJson()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, "{ invalid json }");
+        var client = NewClient(handler);
+        Assert.Null(await client.GetPestDiseaseListAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetPestDiseaseListAsync_ReturnsNull_OnPollyTimeoutRejected()
+    {
+        var handler = new ThrowingHandler(new TimeoutRejectedException("polly total timeout"));
+        var client = NewClient(handler);
+        Assert.Null(await client.GetPestDiseaseListAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetPestDiseaseListAsync_ReturnsNull_OnTimeout()
+    {
+        var handler = new ThrowingHandler(new TaskCanceledException("request timed out"));
+        var client = NewClient(handler);
+        Assert.Null(await client.GetPestDiseaseListAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetPestDiseaseListAsync_PropagatesCallerCancellation()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, "{\"data\":[],\"last_page\":1}");
+        var client = NewClient(handler);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.GetPestDiseaseListAsync(1, cts.Token));
+    }
+
     // ── Handlers ──────────────────────────────────────────────────────────
 
     private sealed class RecordingHandler : HttpMessageHandler

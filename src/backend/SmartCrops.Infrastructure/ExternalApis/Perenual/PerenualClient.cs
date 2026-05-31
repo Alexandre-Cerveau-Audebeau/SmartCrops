@@ -342,9 +342,20 @@ public class PerenualClient
 
             using var doc = JsonDocument.Parse(redacted);
             var root = doc.RootElement;
-            var lastPage = root.TryGetProperty("last_page", out var lp) && lp.TryGetInt32(out var lpVal)
-                ? lpVal
-                : page;
+            int lastPage;
+            if (root.TryGetProperty("last_page", out var lp) && lp.TryGetInt32(out var lpVal))
+            {
+                lastPage = lpVal;
+            }
+            else
+            {
+                // No parseable last_page → the harvest loop would treat this as a
+                // single-page catalogue and silently truncate. Leave a breadcrumb.
+                lastPage = page;
+                _logger.LogWarning(
+                    "Perenual pest-disease-list page {Page} omitted a parseable 'last_page'; falling back to single-page — harvest may truncate.",
+                    page);
+            }
 
             var items = new List<PerenualPestCatalogEntry>();
             if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
@@ -362,6 +373,9 @@ public class PerenualClient
                 }
             }
 
+            _logger.LogInformation(
+                "Perenual pest-disease-list page {Page}: lastPage={LastPage} items={Count}",
+                page, lastPage, items.Count);
             return new PerenualPestPage(lastPage, items);
         }
         catch (HttpRequestException ex)

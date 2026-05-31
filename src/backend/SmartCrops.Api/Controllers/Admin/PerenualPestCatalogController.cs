@@ -65,6 +65,7 @@ public class PerenualPestCatalogController : ControllerBase
             var pg = page == 1 ? first : await _catalog.GetPageAsync(page, ct);
             if (pg is null)
             {
+                _logger.LogWarning("Perenual pest-catalog page {Page} fetch failed; counted as a failure.", page);
                 failures++;
                 continue;
             }
@@ -83,6 +84,16 @@ public class PerenualPestCatalogController : ControllerBase
 
     private async Task<int> UpsertPageAsync(PerenualPestPage page, CancellationToken ct)
     {
+        // Batch-fetch the page's existing rows in ONE query (avoids an N+1 SELECT
+        // per item). The dictionary also dedupes a PerenualPestId that recurs
+        // within a run: a freshly-Added entity isn't yet queryable, so the prior
+        // per-item FirstOrDefaultAsync could Add a duplicate and trip the unique
+        // index at SaveChanges. (CR PR #103.)
+        var ids = page.Items.Select(i => i.PerenualPestId).ToList();
+        var existingById = await _db.PerenualPestCatalog
+            .Where(c => ids.Contains(c.PerenualPestId))
+            .ToDictionaryAsync(c => c.PerenualPestId, ct);
+
         var count = 0;
         foreach (var item in page.Items)
         {
@@ -92,26 +103,27 @@ public class PerenualPestCatalogController : ControllerBase
             // back (no SaveChanges has run yet for this call).
             PerenualKeyRedactor.AssertRedacted(item.LiteralJson, "PerenualPestCatalog.LiteralResponseJson");
 
-            var existing = await _db.PerenualPestCatalog
-                .FirstOrDefaultAsync(c => c.PerenualPestId == item.PerenualPestId, ct);
-
-            if (existing is null)
+            if (existingById.TryGetValue(item.PerenualPestId, out var existing))
             {
-                _db.PerenualPestCatalog.Add(new PerenualPestCatalog
+                existing.CommonName = item.CommonName;
+                existing.ScientificName = item.ScientificName;
+                existing.LiteralResponseJson = item.LiteralJson;
+                existing.FetchedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                var added = new PerenualPestCatalog
                 {
                     PerenualPestId = item.PerenualPestId,
                     CommonName = item.CommonName,
                     ScientificName = item.ScientificName,
                     LiteralResponseJson = item.LiteralJson,
                     FetchedAt = DateTime.UtcNow,
-                });
-            }
-            else
-            {
-                existing.CommonName = item.CommonName;
-                existing.ScientificName = item.ScientificName;
-                existing.LiteralResponseJson = item.LiteralJson;
-                existing.FetchedAt = DateTime.UtcNow;
+                };
+                _db.PerenualPestCatalog.Add(added);
+                // Register it so a duplicate id later in THIS page updates the same
+                // tracked instance rather than Add-ing a second row.
+                existingById[item.PerenualPestId] = added;
             }
             count++;
         }

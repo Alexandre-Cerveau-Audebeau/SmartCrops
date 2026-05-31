@@ -101,14 +101,47 @@ public class PerenualPestCatalogControllerTests : IntegrationTestBase
             (1, "X", "Y", "{\"id\":1,\"u\":\"http://h?key=sk-LEAKED123\"}")));
         AuthAsAnyUser();
 
-        // The guard throws; TestServer surfaces the unhandled exception to the
-        // caller (in production this is a 500). Either way the harvest aborts
-        // before any write reaches the database — fail loud, never persist.
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Client.PostAsync(HarvestUrl, null));
+        // The guard fails loud: TestServer surfaces the unhandled exception to the
+        // caller; a pipeline with exception middleware would return 500 instead.
+        // Tolerate either — the durable invariant is that NOTHING is persisted
+        // (asserting only the throw would be brittle to a middleware change). CR PR #103.
+        HttpResponseMessage? response = null;
+        try
+        {
+            response = await Client.PostAsync(HarvestUrl, null);
+        }
+        catch (InvalidOperationException)
+        {
+            // Expected: AssertRedacted threw and TestServer rethrew it here.
+        }
+
+        Assert.True(response is null || response.StatusCode == HttpStatusCode.InternalServerError);
 
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
         Assert.Equal(0, await db.PerenualPestCatalog.CountAsync());
+    }
+
+    [Fact]
+    public async Task Harvest_LaterPageFails_CountsFailure_AndPersistsFetchedPages()
+    {
+        Fixture.PerenualPestCatalogStub.SetPage(1, Page(2,
+            (1, "Fairy ring", "Agrocybe", "{\"id\":1}")));
+        // Page 2 intentionally not pre-loaded → the stub returns null → counted failure.
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(HarvestUrl, null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<HarvestResp>();
+        Assert.Equal(1, body!.PagesFetched);
+        Assert.True(body.Failures >= 1);
+        Assert.Equal(1, body.ItemsUpserted);
+
+        // The successfully-fetched page-1 rows are still persisted (partial progress).
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        Assert.Equal(1, await db.PerenualPestCatalog.CountAsync());
     }
 
     private void AuthAsAnyUser()
