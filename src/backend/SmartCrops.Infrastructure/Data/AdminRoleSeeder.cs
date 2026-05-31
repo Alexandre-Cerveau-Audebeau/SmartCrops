@@ -70,8 +70,9 @@ public static class AdminRoleSeeder
             }
         }
 
-        // 2. Grant the role to each configured email that ALREADY has a confirmed
-        //    account and doesn't have it yet. De-dup the input case-insensitively.
+        // 2. For each configured email with a registered account: auto-confirm it
+        //    if needed (SMA-80 — listed accounts are confirmed, not skipped) then
+        //    grant the role if it's missing. De-dup the input case-insensitively.
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var rawEmail in adminEmails)
         {
