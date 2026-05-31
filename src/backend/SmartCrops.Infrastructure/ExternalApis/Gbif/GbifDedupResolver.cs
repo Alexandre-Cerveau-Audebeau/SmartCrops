@@ -47,7 +47,34 @@ public class GbifDedupResolver
             SpeciesEpithet: speciesEpithet,
             MatchType: response.MatchType,
             Confidence: response.Confidence,
-            CanonicalName: response.CanonicalName);
+            CanonicalName: response.CanonicalName,
+            Author: ExtractAuthor(response.ScientificName, response.CanonicalName));
+    }
+
+    /// <summary>
+    /// SMA-71: parse the taxonomic authority from GBIF's <c>scientificName</c>
+    /// (canonical binomial + author, e.g. <c>"Solanum lycopersicum L."</c>) by
+    /// stripping the <paramref name="canonicalName"/> prefix — the trailing
+    /// remainder (<c>"L."</c>, may include the year) is the author. Returns
+    /// <c>null</c> when either input is blank, the prefix doesn't match (defensive),
+    /// or no authorship trails the binomial.
+    /// </summary>
+    private static string? ExtractAuthor(string? scientificName, string? canonicalName)
+    {
+        if (string.IsNullOrWhiteSpace(scientificName) || string.IsNullOrWhiteSpace(canonicalName))
+        {
+            return null;
+        }
+
+        var sci = scientificName.Trim();
+        var canon = canonicalName.Trim();
+        if (!sci.StartsWith(canon, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var author = sci[canon.Length..].Trim();
+        return string.IsNullOrWhiteSpace(author) ? null : author;
     }
 
     /// <summary>

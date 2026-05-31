@@ -32,6 +32,9 @@ public class PlantSourceConfiguration : IEntityTypeConfiguration<PlantSource>
 
         builder.Property(s => s.Url).HasMaxLength(1000);
         builder.Property(s => s.Notes).HasMaxLength(500);
+        // SMA-71 loss-proof capture — jsonb, same contract as PlantTrefleData /
+        // PlantPerenualData raw columns.
+        builder.Property(s => s.RawResponseJson).HasColumnType("jsonb");
 
         builder.Property(s => s.CreatedAt)
             .IsRequired()

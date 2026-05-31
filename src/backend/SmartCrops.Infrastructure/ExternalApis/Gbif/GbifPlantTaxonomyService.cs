@@ -22,7 +22,11 @@ public class GbifPlantTaxonomyService : IPlantTaxonomyService
 
     public async Task<PlantTaxonomyResult> ResolveAsync(string scientificName, CancellationToken ct)
     {
-        var response = await _client.MatchAsync(scientificName, ct);
-        return _resolver.Resolve(response);
+        // SMA-71: capture the verbatim GBIF body alongside the parsed match, then
+        // attach it to the (pure-logic) resolver result so the controller can
+        // persist the loss-proof audit row. Kept null on the no-match/failure path.
+        var fetch = await _client.MatchWithLiteralAsync(scientificName, ct);
+        var result = _resolver.Resolve(fetch.Match);
+        return result with { RawResponseJson = result.GbifTaxonKey is null ? null : fetch.LiteralJson };
     }
 }
