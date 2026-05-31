@@ -6,6 +6,11 @@
     "logout": "Logout",
     "profile": "My Profile"
   },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "message": "An unexpected error occurred. Try reloading the page.",
+    "retry": "Reload the page"
+  },
   "footer": {
     "tagline": "Your virtual garden companion — discover, grow, and share plants from around the world.",
     "explore": "Explore",

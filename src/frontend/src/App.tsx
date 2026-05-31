@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Layout from './components/Layout/Layout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
@@ -24,6 +25,7 @@ export default function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <LanguageProvider>
+      <ErrorBoundary>
       <AuthProvider>
       <BrowserRouter>
         <Layout>
@@ -45,6 +47,7 @@ export default function App() {
         </Layout>
       </BrowserRouter>
       </AuthProvider>
+      </ErrorBoundary>
       </LanguageProvider>
     </ThemeProvider>
   );
