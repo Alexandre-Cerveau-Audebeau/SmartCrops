@@ -12,20 +12,23 @@ namespace SmartCrops.Infrastructure.Data;
 /// (<c>AdminSeed:Emails</c>, CSV) — never hard-coded.
 ///
 /// <para>Idempotent and ADDITIVE ONLY: it creates the role if missing and grants
-/// it to each configured, already-registered, email-confirmed account that lacks
-/// it. It deliberately NEVER revokes the role for an account whose email is absent
-/// from the list — a misconfigured/empty list must not silently strip admin access;
-/// revocation stays an explicit operator action (a future SMA-34 endpoint).</para>
+/// it to each configured, already-registered account that lacks it — auto-confirming
+/// a listed-but-unconfirmed account first (SMA-80) so password-registered admins are
+/// not blocked. It deliberately NEVER revokes the role for an account whose email is
+/// absent from the list, NEVER creates an account, and NEVER confirms an unlisted one
+/// — a misconfigured/empty list must not silently strip admin access; revocation stays
+/// an explicit operator action (a future SMA-34 endpoint).</para>
 /// </summary>
 public static class AdminRoleSeeder
 {
     /// <summary>
     /// Ensures the <see cref="Roles.Admin"/> role exists and grants it to every
-    /// configured, already-registered, email-confirmed account that lacks it.
-    /// Idempotent and additive-only (never revokes). Safe to run on every boot and
-    /// across concurrent app instances: a lost role-creation race is treated as
-    /// success (the role exists either way) so the grant pass still runs. Email
-    /// addresses are masked before logging (PII minimisation).
+    /// configured, already-registered account that lacks it, auto-confirming a
+    /// listed-but-unconfirmed account first (SMA-80). Idempotent and additive-only
+    /// (never revokes; never creates/confirms an unlisted account). Safe to run on
+    /// every boot and across concurrent app instances: a lost role-creation race is
+    /// treated as success (the role exists either way) so the grant pass still runs.
+    /// Email addresses are masked before logging (PII minimisation).
     /// </summary>
     /// <param name="roleManager">Identity role manager used to create the role.</param>
     /// <param name="userManager">Identity user manager used to resolve and grant roles.</param>
@@ -67,8 +70,9 @@ public static class AdminRoleSeeder
             }
         }
 
-        // 2. Grant the role to each configured email that ALREADY has a confirmed
-        //    account and doesn't have it yet. De-dup the input case-insensitively.
+        // 2. For each configured email with a registered account: auto-confirm it
+        //    if needed (SMA-80 — listed accounts are confirmed, not skipped) then
+        //    grant the role if it's missing. De-dup the input case-insensitively.
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var rawEmail in adminEmails)
         {
@@ -89,16 +93,27 @@ public static class AdminRoleSeeder
                 continue;
             }
 
-            // Guard on email confirmation so a typo'd / unverified address can't be
-            // granted admin. NOTE: password registration leaves EmailConfirmed=false
-            // today (only Google OAuth sets it true), so a password-registered admin
-            // is skipped here until confirmation exists — surfaced as a warning.
+            // SMA-80: auto-confirm a listed-but-unconfirmed account. The email is
+            // an EXPLICITLY operator-listed admin (AdminSeed:Emails) — a designated
+            // trusted account — so password registration leaving EmailConfirmed=false
+            // (only Google OAuth sets it true) must not block the grant. STRICTLY
+            // scoped to listed emails (this loop only iterates AdminSeed:Emails): the
+            // seeder never creates an account and never confirms an unlisted one. Use
+            // the Identity confirmation-token flow rather than flipping the flag by
+            // hand. On a confirmation failure, skip the grant (don't grant unconfirmed).
             if (!user.EmailConfirmed)
             {
-                logger.LogWarning(
-                    "Admin seed: account '{Email}' exists but is not email-confirmed — skipping (no role granted).",
-                    MaskEmail(email));
-                continue;
+                var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
+                var confirm = await userManager.ConfirmEmailAsync(user, token);
+                if (!confirm.Succeeded)
+                {
+                    logger.LogError(
+                        "Admin seed: failed to auto-confirm listed admin '{Email}': {Errors} — skipping grant.",
+                        MaskEmail(email), string.Join("; ", confirm.Errors.Select(e => e.Description)));
+                    continue;
+                }
+                logger.LogInformation(
+                    "Admin seed: auto-confirmed listed admin account '{Email}' (SMA-80).", MaskEmail(email));
             }
 
             if (await userManager.IsInRoleAsync(user, Roles.Admin))
