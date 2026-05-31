@@ -19,6 +19,18 @@ namespace SmartCrops.Infrastructure.Data;
 /// </summary>
 public static class AdminRoleSeeder
 {
+    /// <summary>
+    /// Ensures the <see cref="Roles.Admin"/> role exists and grants it to every
+    /// configured, already-registered, email-confirmed account that lacks it.
+    /// Idempotent and additive-only (never revokes). Safe to run on every boot and
+    /// across concurrent app instances: a lost role-creation race is treated as
+    /// success (the role exists either way) so the grant pass still runs. Email
+    /// addresses are masked before logging (PII minimisation).
+    /// </summary>
+    /// <param name="roleManager">Identity role manager used to create the role.</param>
+    /// <param name="userManager">Identity user manager used to resolve and grant roles.</param>
+    /// <param name="adminEmails">Operator-configured admin emails (already split from the CSV config).</param>
+    /// <param name="logger">Sink for the (email-masked) audit/diagnostic messages.</param>
     public static async Task SeedAsync(
         RoleManager<IdentityRole> roleManager,
         UserManager<ApplicationUser> userManager,
@@ -31,12 +43,28 @@ public static class AdminRoleSeeder
             var created = await roleManager.CreateAsync(new IdentityRole(Roles.Admin));
             if (!created.Succeeded)
             {
-                logger.LogError(
-                    "Admin seed: failed to create role '{Role}': {Errors}",
-                    Roles.Admin, string.Join("; ", created.Errors.Select(e => e.Description)));
-                return;
+                // TOCTOU: a concurrent instance may have created the role between
+                // our RoleExistsAsync check and CreateAsync. Re-check — if the role
+                // now exists, the race was benign and we MUST still run the grant
+                // pass (returning here would skip every assignment for this boot).
+                if (await roleManager.RoleExistsAsync(Roles.Admin))
+                {
+                    logger.LogInformation(
+                        "Admin seed: role '{Role}' was created concurrently by another instance — continuing with grants.",
+                        Roles.Admin);
+                }
+                else
+                {
+                    logger.LogError(
+                        "Admin seed: failed to create role '{Role}': {Errors}",
+                        Roles.Admin, string.Join("; ", created.Errors.Select(e => e.Description)));
+                    return;
+                }
             }
-            logger.LogInformation("Admin seed: created Identity role '{Role}'.", Roles.Admin);
+            else
+            {
+                logger.LogInformation("Admin seed: created Identity role '{Role}'.", Roles.Admin);
+            }
         }
 
         // 2. Grant the role to each configured email that ALREADY has a confirmed
@@ -57,7 +85,7 @@ public static class AdminRoleSeeder
                 // registers; a later boot picks it up.
                 logger.LogInformation(
                     "Admin seed: no account for '{Email}' yet — will assign on a later boot once it registers.",
-                    email);
+                    MaskEmail(email));
                 continue;
             }
 
@@ -69,7 +97,7 @@ public static class AdminRoleSeeder
             {
                 logger.LogWarning(
                     "Admin seed: account '{Email}' exists but is not email-confirmed — skipping (no role granted).",
-                    email);
+                    MaskEmail(email));
                 continue;
             }
 
@@ -81,14 +109,31 @@ public static class AdminRoleSeeder
             var result = await userManager.AddToRoleAsync(user, Roles.Admin);
             if (result.Succeeded)
             {
-                logger.LogInformation("Admin seed: granted role '{Role}' to '{Email}'.", Roles.Admin, email);
+                logger.LogInformation("Admin seed: granted role '{Role}' to '{Email}'.", Roles.Admin, MaskEmail(email));
             }
             else
             {
                 logger.LogError(
                     "Admin seed: failed to grant role '{Role}' to '{Email}': {Errors}",
-                    Roles.Admin, email, string.Join("; ", result.Errors.Select(e => e.Description)));
+                    Roles.Admin, MaskEmail(email), string.Join("; ", result.Errors.Select(e => e.Description)));
             }
         }
+    }
+
+    /// <summary>
+    /// Masks an email for logging — keeps the first local-part character and the
+    /// full domain (e.g. <c>a***@example.com</c>) so log lines stay correlatable
+    /// without persisting the raw PII address. Falls back to <c>***</c> when the
+    /// local part is too short to partially reveal, or when there is no <c>@</c>.
+    /// </summary>
+    private static string MaskEmail(string email)
+    {
+        var at = email.IndexOf('@');
+        if (at <= 0)
+        {
+            return "***";
+        }
+        var local = at == 1 ? "***" : $"{email[0]}***";
+        return $"{local}{email[at..]}";
     }
 }

@@ -305,6 +305,17 @@ public class AuthController(
             _authCodes.TryRemove(key, out _);
     }
 
+    /// <summary>
+    /// Builds the signed JWT (+ expiry) for a user. Emits <c>sub</c>/<c>email</c>/
+    /// <c>jti</c>/<c>security_stamp</c> plus one <see cref="ClaimTypes.Role"/> claim
+    /// per entry in <paramref name="roles"/> (SMA-33), so <c>[Authorize(Roles = ...)]</c>
+    /// resolves server-side. Roles are baked in at issuance — see the body comment
+    /// on the security-stamp revocation contract for promotion/demotion (SMA-34).
+    /// </summary>
+    /// <param name="userId">Identity user id, emitted as the <c>sub</c> claim.</param>
+    /// <param name="email">User email, emitted as the <c>email</c> claim.</param>
+    /// <param name="securityStamp">Current security stamp, re-checked per request in Program.cs.</param>
+    /// <param name="roles">Role names to emit as role claims (empty for a non-privileged user).</param>
     private AuthResponse GenerateTokenResponse(string userId, string email, string? securityStamp, IEnumerable<string> roles)
     {
         var jwtKey = configuration["Jwt:Key"]

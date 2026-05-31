@@ -143,6 +143,9 @@ public class PlantsControllerTests : IntegrationTestBase
         var response = await Client.PostAsJsonAsync("/api/plants",
             new { scientificName = "Admin Created", plantTypeId = OrnamentalTypeId });
 
+        // Admin is authorized: not 401/403, and not a 5xx (so an authorization
+        // regression can't hide behind an unrelated server error).
+        Assert.True((int)response.StatusCode < 500, $"Authorized path should not 5xx; was {(int)response.StatusCode}.");
         Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -182,6 +185,9 @@ public class PlantsControllerTests : IntegrationTestBase
         var response = await Client.PutAsJsonAsync($"/api/plants/{id}",
             new { id, scientificName = "After", plantTypeId = OrnamentalTypeId });
 
+        // Admin is authorized: not 401/403, and not a 5xx (so an authorization
+        // regression can't hide behind an unrelated server error).
+        Assert.True((int)response.StatusCode < 500, $"Authorized path should not 5xx; was {(int)response.StatusCode}.");
         Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
     }

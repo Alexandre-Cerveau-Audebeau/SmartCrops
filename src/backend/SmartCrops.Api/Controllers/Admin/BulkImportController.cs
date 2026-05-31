@@ -61,9 +61,9 @@ public class BulkImportController : ControllerBase
     /// (<c>intra_batch</c>) or with an existing <c>Plant</c> row carrying a
     /// different name (<c>db_existing</c>). Implements layer (b) of ADR-0004.
     ///
-    /// <para>No DB writes. Same <c>[Authorize]</c> policy as the create
-    /// endpoint above — when admin-role authz lands (#68), both action methods
-    /// pick up the tightened attribute in one place.</para>
+    /// <para>No DB writes. Shares the controller-level admin-role authorization
+    /// (<c>[Authorize(Roles = "Admin")]</c>) with the create endpoint above
+    /// (SMA-33/#68).</para>
     /// </summary>
     [HttpPost("preflight")]
     public async Task<ActionResult<BulkImportPreflightResponse>> Preflight(
