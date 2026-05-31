@@ -748,6 +748,35 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         Assert.Equal("Existing Author", (await db2.Plants.SingleAsync(p => p.Id == plantId)).Author);
     }
 
+    [Fact]
+    public async Task Enrich_MatchWithNullRaw_DoesNotErasePreviouslyCapturedBody()
+    {
+        // Loss-proof guard (CR r1): a re-fetch that matches but returns a null
+        // body must PRESERVE a previously captured RawResponseJson, not null it.
+        var plantId = await SeedPlantWithGbifSourceAsync("Solanum lycopersicum");
+        using (var seed = CreateScope())
+        {
+            var db = seed.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var src = await db.PlantSources.SingleAsync(
+                s => s.PlantId == plantId && s.SourceType == PlantSourceType.GBIF);
+            src.RawResponseJson = "{\"matchType\":\"EXACT\",\"kingdom\":\"Plantae\"}";
+            await db.SaveChangesAsync();
+        }
+        // Force re-enrich returns a MATCH but a null literal (the edge case).
+        Fixture.TaxonomyStub.Enqueue(MatchResultRich(2930137, author: "L.", raw: null));
+        AuthAsAdmin();
+
+        var response = await Client.PostAsync($"/api/admin/taxonomy/enrich/{plantId}?force=true", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db2 = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var source = await db2.PlantSources.SingleAsync(
+            s => s.PlantId == plantId && s.SourceType == PlantSourceType.GBIF);
+        // Prior body survived the null re-fetch.
+        Assert.Contains("Plantae", source.RawResponseJson!);
+    }
+
     // ── gbif/raw-backfill ──────────────────────────────────────────────
 
     [Fact]
@@ -820,6 +849,35 @@ public class PlantTaxonomyControllerTests : IntegrationTestBase
         var source = await db.PlantSources.SingleAsync(
             s => s.PlantId == plantId && s.SourceType == PlantSourceType.GBIF);
         Assert.Null(source.RawResponseJson);
+    }
+
+    [Fact]
+    public async Task BackfillGbifRaw_MatchWithNullRaw_PreservesExistingBody_NotCountedPopulated()
+    {
+        // Loss-proof guard at the backfill write site too: a match with a null
+        // body keeps the prior capture; `populated` only counts fresh bodies.
+        var plantId = await SeedPlantWithGbifSourceAsync("Solanum lycopersicum");
+        using (var seed = CreateScope())
+        {
+            var db = seed.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var src = await db.PlantSources.SingleAsync(
+                s => s.PlantId == plantId && s.SourceType == PlantSourceType.GBIF);
+            src.RawResponseJson = "{\"matchType\":\"EXACT\",\"kingdom\":\"Plantae\"}";
+            await db.SaveChangesAsync();
+        }
+        Fixture.TaxonomyStub.Enqueue(MatchResultRich(2930137, author: "L.", raw: null));
+        AuthAsAdmin();
+
+        var response = await Client.PostAsync("/api/admin/taxonomy/gbif/raw-backfill", null);
+        var body = await response.Content.ReadFromJsonAsync<GbifRawBackfillDto>();
+        Assert.Equal(1, body!.Processed);  // matched
+        Assert.Equal(0, body.Populated);   // but no fresh body written
+
+        using var scope = CreateScope();
+        var db2 = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var source = await db2.PlantSources.SingleAsync(
+            s => s.PlantId == plantId && s.SourceType == PlantSourceType.GBIF);
+        Assert.Contains("Plantae", source.RawResponseJson!); // prior body preserved
     }
 
     private record GbifRawBackfillDto(int Candidates, int Processed, int Populated, int Failures);

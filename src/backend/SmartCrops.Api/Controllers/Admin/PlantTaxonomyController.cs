@@ -94,8 +94,9 @@ public class PlantTaxonomyController : ControllerBase
         {
             existingSource.ExternalId = result.GbifTaxonKey.Value.ToString();
             existingSource.Url = $"https://api.gbif.org/v1/species/{result.GbifTaxonKey.Value}";
-            // Overwrite with the latest fetch's body (it IS the newest GBIF audit).
-            existingSource.RawResponseJson = result.RawResponseJson;
+            // Loss-proof (pattern #102): only ever replace a body with another body —
+            // a re-fetch that returns null must not erase a previously captured audit.
+            existingSource.RawResponseJson = result.RawResponseJson ?? existingSource.RawResponseJson;
             existingSource.LastFetchedAt = DateTime.UtcNow;
         }
 
@@ -321,7 +322,9 @@ public class PlantTaxonomyController : ControllerBase
                     continue;
                 }
 
-                source.RawResponseJson = result.RawResponseJson;
+                // Loss-proof (pattern #102): never overwrite a captured body with
+                // null — mirror the Enrich write site so the two stay consistent.
+                source.RawResponseJson = result.RawResponseJson ?? source.RawResponseJson;
                 source.LastFetchedAt = DateTime.UtcNow;
                 source.Plant.Author ??= result.Author;
 
