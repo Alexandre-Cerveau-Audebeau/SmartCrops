@@ -119,6 +119,8 @@ public partial class PerenualResolver
         var images = ExtractImages(response);
         var pests = ExtractPests(response.PestSusceptibility);
         var hasSupreme = DetectSupremeData(response);
+        // SMA-71 queryable arrays (plant_anatomy/attracts/soil/other_name).
+        var arrays = ExtractQueryableArrays(response);
 
         // Perenual Supreme xData — parsed even on a canonical mismatch; the
         // controller (Phase 2c) gates persistence. Each helper is null-safe to
@@ -175,7 +177,10 @@ public partial class PerenualResolver
             Maintenance: NullIfBlank(response.Maintenance),
             FloweringSeason: NullIfBlank(response.FloweringSeason),
             HarvestSeason: NullIfBlank(response.HarvestSeason),
-            PlantAnatomyJson: null,
+            PlantAnatomyJson: arrays.PlantAnatomyJson,
+            AttractsJson: arrays.AttractsJson,
+            SoilJson: arrays.SoilJson,
+            OtherNamesJson: arrays.OtherNamesJson,
             HasEdibleFruit: response.EdibleFruit,
             HasEdibleLeaves: response.EdibleLeaf,
             IsCulinary: response.Cuisine,
@@ -248,6 +253,9 @@ public partial class PerenualResolver
         FloweringSeason: null,
         HarvestSeason: null,
         PlantAnatomyJson: null,
+        AttractsJson: null,
+        SoilJson: null,
+        OtherNamesJson: null,
         HasEdibleFruit: null,
         HasEdibleLeaves: null,
         IsCulinary: null,
@@ -362,10 +370,11 @@ public partial class PerenualResolver
     }
 
     /// <summary>
-    /// Serialise a Perenual xData string array (xWateringQuality /
-    /// xWateringPeriod) to a compact JSON-array string for jsonb storage.
-    /// Non-array shapes and empty arrays return <c>null</c> (no value to show).
-    /// Shared by both array-shaped xData fields — identical parse contract.
+    /// Serialise a Perenual JSON array to a compact JSON-array string for jsonb
+    /// storage. Non-array shapes and empty arrays return <c>null</c> (no value to
+    /// show). Element type-agnostic: used for the xData string arrays
+    /// (xWateringQuality / xWateringPeriod) AND the SMA-71 queryable arrays —
+    /// attracts/soil (strings) and plant_anatomy (<c>{part, color[]}</c> objects).
     /// </summary>
     public static string? ParseStringArrayElement(JsonElement el)
     {
@@ -375,6 +384,30 @@ public partial class PerenualResolver
         }
         return JsonSerializer.Serialize(el);
     }
+
+    /// <summary>
+    /// SMA-71 — extract the four Perenual-exclusive queryable arrays
+    /// (<c>plant_anatomy</c>, <c>attracts</c>, <c>soil</c>, <c>other_name</c>)
+    /// from a species response into compact jsonb-ready JSON strings (empty/absent
+    /// → <c>null</c>). Pure function of the response, so the live enrichment path
+    /// (<see cref="Resolve"/>) and the literal-reprocessing backfill share ONE
+    /// mapping — re-running it over the same stored literal is idempotent.
+    /// </summary>
+    public static PerenualQueryableArrays ExtractQueryableArrays(PerenualSpeciesResponse response) => new(
+        PlantAnatomyJson: ParseStringArrayElement(response.PlantAnatomy),
+        AttractsJson: ParseStringArrayElement(response.Attracts),
+        SoilJson: ParseStringArrayElement(response.Soil),
+        // other_name is mapped as List<string> (not JsonElement); serialise the
+        // same way — null on null/empty so the contract matches the array fields.
+        OtherNamesJson: SerialiseStringList(response.OtherName));
+
+    /// <summary>
+    /// Serialise a string list to a compact JSON-array string for jsonb storage,
+    /// returning <c>null</c> on a null or empty list (parity with
+    /// <see cref="ParseStringArrayElement"/> for the JsonElement-shaped arrays).
+    /// </summary>
+    public static string? SerialiseStringList(List<string>? items)
+        => items is { Count: > 0 } ? JsonSerializer.Serialize(items) : null;
 
     /// <summary>
     /// Derive the genus from a Perenual scientific name (the first
@@ -908,3 +941,16 @@ public partial class PerenualResolver
     [GeneratedRegex(@"\s+'[^']*'.*$", RegexOptions.IgnoreCase, "en-US")]
     private static partial Regex CultivarQuoteRegex();
 }
+
+/// <summary>
+/// SMA-71 — the four Perenual-exclusive queryable arrays serialised to
+/// jsonb-ready JSON strings (each <c>null</c> when the upstream array was
+/// empty/absent). Produced by <see cref="PerenualResolver.ExtractQueryableArrays"/>
+/// and consumed by both the live enrichment write and the literal-reprocessing
+/// backfill.
+/// </summary>
+public readonly record struct PerenualQueryableArrays(
+    string? PlantAnatomyJson,
+    string? AttractsJson,
+    string? SoilJson,
+    string? OtherNamesJson);

@@ -46,6 +46,10 @@ public class PlantPerenualDataConfiguration : IEntityTypeConfiguration<PlantPere
         builder.Property(p => p.ApiVersion).HasMaxLength(20);
 
         builder.Property(p => p.PlantAnatomyJson).HasColumnType("jsonb");
+        // SMA-71 queryable arrays — jsonb, same shape contract as PlantAnatomyJson.
+        builder.Property(p => p.AttractsJson).HasColumnType("jsonb");
+        builder.Property(p => p.SoilJson).HasColumnType("jsonb");
+        builder.Property(p => p.OtherNamesJson).HasColumnType("jsonb");
         builder.Property(p => p.RawResponseJson).HasColumnType("jsonb");
 
         // SMA-71 loss-proof literal capture (API key redacted before persistence).

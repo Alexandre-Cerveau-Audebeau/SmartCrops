@@ -904,6 +904,233 @@ public class PlantPerenualControllerTests : IntegrationTestBase
         Assert.Equal(24, pd.XWateringBasedTempMaxC);
     }
 
+    // ── queryable-columns/backfill (SMA-71) ────────────────────────────────
+
+    [Fact]
+    public async Task BackfillQueryableColumns_NoAuth_Returns401()
+    {
+        var response = await Client.PostAsync(
+            "/api/admin/perenual/queryable-columns/backfill", null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task BackfillQueryableColumns_ReparsesLiteral_PopulatesColumns_AndIsIdempotent()
+    {
+        // A row whose stored literal carries the four arrays but whose columns
+        // are still null (the state of all 534 rows before this PR). No API stub
+        // is enqueued — the endpoint must reprocess the LITERAL, not fetch.
+        const string literal = """
+            {"id":42,"plant_anatomy":[{"part":"leaves","color":["green"]}],"attracts":["Butterflies"],"soil":["Loamy Humus"],"other_name":["Wild Ginger","Snakeroot"]}
+            """;
+        var plantId = await SeedPlantAsync("Asarum canadense", alreadyPerenualEnriched: true, configure: p =>
+        {
+            p.PerenualData = new PlantPerenualData
+            {
+                PerenualId = 42,
+                LiteralResponseJson = literal,
+                LastSyncAt = DateTime.UtcNow,
+                // PlantAnatomyJson/AttractsJson/SoilJson/OtherNamesJson left null.
+            };
+        });
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(
+            "/api/admin/perenual/queryable-columns/backfill", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<BackfillResponse>();
+        Assert.Equal(1, body!.Candidates);
+        Assert.Equal(1, body.Processed);
+        Assert.Equal(1, body.Populated);
+        Assert.Equal(0, body.Failures);
+
+        // Core backfill contract: reprocess the STORED literal, never call the
+        // Perenual API. The enrichment service stub records every name/id it is
+        // asked for — both must stay empty.
+        Assert.Empty(Fixture.PerenualStub.ReceivedNames);
+        Assert.Empty(Fixture.PerenualStub.ReceivedIds);
+
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var pd = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+            // jsonb canonicalises with spaces on read (e.g. {"part": "leaves"});
+            // compare semantically by re-compacting both sides.
+            Assert.Equal("[{\"part\":\"leaves\",\"color\":[\"green\"]}]", Compact(pd.PlantAnatomyJson));
+            Assert.Equal("[\"Butterflies\"]", Compact(pd.AttractsJson));
+            Assert.Equal("[\"Loamy Humus\"]", Compact(pd.SoilJson));
+            Assert.Equal("[\"Wild Ginger\",\"Snakeroot\"]", Compact(pd.OtherNamesJson));
+        }
+
+        // Idempotent: a second run recomputes the identical values from the
+        // unchanged literal — same counts, same columns.
+        var second = await Client.PostAsync(
+            "/api/admin/perenual/queryable-columns/backfill", null);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var secondBody = await second.Content.ReadFromJsonAsync<BackfillResponse>();
+        Assert.Equal(1, secondBody!.Processed);
+        Assert.Equal(1, secondBody.Populated);
+
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var pd = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+            Assert.Equal("[\"Butterflies\"]", Compact(pd.AttractsJson));
+        }
+    }
+
+    // Re-compact a jsonb value (PostgreSQL stores/returns it space-normalised)
+    // so assertions compare JSON content, not jsonb's pretty formatting.
+    private static string? Compact(string? json)
+        => json is null ? null : JsonSerializer.Serialize(JsonDocument.Parse(json).RootElement);
+
+    [Fact]
+    public async Task BackfillQueryableColumns_EmptyArraysInLiteral_LeavesColumnsNull()
+    {
+        // Empty upstream arrays (the majority of rows) → columns stay null;
+        // the row still counts as processed, just not populated.
+        const string literal = """
+            {"id":7,"plant_anatomy":[],"attracts":[],"soil":[]}
+            """;
+        var plantId = await SeedPlantAsync("Empty arrays", alreadyPerenualEnriched: true, configure: p =>
+        {
+            p.PerenualData = new PlantPerenualData
+            {
+                PerenualId = 7,
+                LiteralResponseJson = literal,
+                LastSyncAt = DateTime.UtcNow,
+            };
+        });
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(
+            "/api/admin/perenual/queryable-columns/backfill", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<BackfillResponse>();
+        Assert.Equal(1, body!.Processed);
+        Assert.Equal(0, body.Populated);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var pd = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+        Assert.Null(pd.PlantAnatomyJson);
+        Assert.Null(pd.AttractsJson);
+        Assert.Null(pd.SoilJson);
+        Assert.Null(pd.OtherNamesJson);
+    }
+
+    [Fact]
+    public async Task BackfillQueryableColumns_TypeIncompatibleLiteral_CountsFailure_OtherRowsStillPopulated()
+    {
+        // A jsonb column CANNOT hold syntactically-invalid JSON (PostgreSQL rejects
+        // the insert), so the JsonException branch is reached via VALID jsonb that
+        // is incompatible with PerenualSpeciesResponse — here a JSON array, not an
+        // object. This also proves one bad row does NOT roll back the others: the
+        // deserialise throws before any column is mutated, so the good row's writes
+        // still commit in the single SaveChanges.
+        var badId = await SeedPlantAsync("Bad literal", alreadyPerenualEnriched: true, configure: p =>
+        {
+            p.PerenualData = new PlantPerenualData
+            {
+                PerenualId = 1,
+                LiteralResponseJson = "[1,2,3]",
+                LastSyncAt = DateTime.UtcNow,
+            };
+        });
+        var goodId = await SeedPlantAsync("Good literal", alreadyPerenualEnriched: true, configure: p =>
+        {
+            p.PerenualData = new PlantPerenualData
+            {
+                PerenualId = 2,
+                LiteralResponseJson = """{"id":2,"attracts":["Bees"]}""",
+                LastSyncAt = DateTime.UtcNow,
+            };
+        });
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(
+            "/api/admin/perenual/queryable-columns/backfill", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<BackfillResponse>();
+        Assert.Equal(2, body!.Candidates);
+        Assert.Equal(1, body.Processed);  // only the good row
+        Assert.Equal(1, body.Populated);
+        Assert.Equal(1, body.Failures);   // the array literal
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        // Good row populated despite the bad row's failure (no whole-run rollback).
+        var good = await db.PlantPerenualData.SingleAsync(d => d.PlantId == goodId);
+        Assert.Equal("[\"Bees\"]", Compact(good.AttractsJson));
+        // Failed row left untouched.
+        var bad = await db.PlantPerenualData.SingleAsync(d => d.PlantId == badId);
+        Assert.Null(bad.AttractsJson);
+    }
+
+    [Fact]
+    public async Task BackfillQueryableColumns_LiteralDeserialisesToNull_CountsFailure()
+    {
+        // The JSON value `null` (valid jsonb, distinct from SQL NULL so it stays a
+        // candidate) deserialises to a null PerenualSpeciesResponse → the
+        // species-is-null guard counts it as a failure and skips it.
+        var plantId = await SeedPlantAsync("Null literal", alreadyPerenualEnriched: true, configure: p =>
+        {
+            p.PerenualData = new PlantPerenualData
+            {
+                PerenualId = 3,
+                LiteralResponseJson = "null",
+                LastSyncAt = DateTime.UtcNow,
+            };
+        });
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(
+            "/api/admin/perenual/queryable-columns/backfill", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<BackfillResponse>();
+        Assert.Equal(1, body!.Candidates);
+        Assert.Equal(0, body.Processed);
+        Assert.Equal(0, body.Populated);
+        Assert.Equal(1, body.Failures);
+    }
+
+    [Fact]
+    public async Task BackfillQueryableColumns_PartialArrays_PopulatesPresent_LeavesAbsentNull()
+    {
+        // Only plant_anatomy present; attracts/soil/other_name absent → the present
+        // column is populated, absent ones stay null, and the row counts as
+        // populated (the "at least one non-null" threshold).
+        var plantId = await SeedPlantAsync("Partial arrays", alreadyPerenualEnriched: true, configure: p =>
+        {
+            p.PerenualData = new PlantPerenualData
+            {
+                PerenualId = 4,
+                LiteralResponseJson = """{"id":4,"plant_anatomy":[{"part":"stems","color":["green"]}]}""",
+                LastSyncAt = DateTime.UtcNow,
+            };
+        });
+        AuthAsAnyUser();
+
+        var response = await Client.PostAsync(
+            "/api/admin/perenual/queryable-columns/backfill", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<BackfillResponse>();
+        Assert.Equal(1, body!.Processed);
+        Assert.Equal(1, body.Populated);
+        Assert.Equal(0, body.Failures);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var pd = await db.PlantPerenualData.SingleAsync(d => d.PlantId == plantId);
+        Assert.Equal("[{\"part\":\"stems\",\"color\":[\"green\"]}]", Compact(pd.PlantAnatomyJson));
+        Assert.Null(pd.AttractsJson);
+        Assert.Null(pd.SoilJson);
+        Assert.Null(pd.OtherNamesJson);
+    }
+
+    private record BackfillResponse(int Candidates, int Processed, int Populated, int Failures);
+
     /// <summary>
     /// Issue #77: after dropping the unique constraint on PerenualId, two
     /// distinct plants that both canonicalize to the same Perenual id (e.g. via

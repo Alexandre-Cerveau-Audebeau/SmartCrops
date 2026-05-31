@@ -860,6 +860,104 @@ public class PerenualResolverTests
         Assert.Null(PerenualResolver.ParseStringArrayElement(El("{\"k\":\"v\"}")));
     }
 
+    // ── SMA-71 queryable arrays (plant_anatomy/attracts/soil/other_name) ───
+
+    [Fact]
+    public void ParseStringArrayElement_ObjectArray_SerialisesObjects()
+    {
+        // plant_anatomy ships as an array of {part, color[]} OBJECTS — the
+        // helper is element-type-agnostic, so it serialises them verbatim.
+        var json = PerenualResolver.ParseStringArrayElement(
+            El("[{\"part\":\"leaves\",\"color\":[\"green\"]}]"));
+
+        Assert.Equal("[{\"part\":\"leaves\",\"color\":[\"green\"]}]", json);
+    }
+
+    [Fact]
+    public void SerialiseStringList_NonEmpty_SerialisesCompact()
+    {
+        Assert.Equal(
+            "[\"Canada Wild Ginger\",\"Snakeroot\"]",
+            PerenualResolver.SerialiseStringList(new() { "Canada Wild Ginger", "Snakeroot" }));
+    }
+
+    [Theory]
+    [MemberData(nameof(EmptyStringLists))]
+    public void SerialiseStringList_NullOrEmpty_ReturnsNull(List<string>? input)
+    {
+        Assert.Null(PerenualResolver.SerialiseStringList(input));
+    }
+
+    public static IEnumerable<object?[]> EmptyStringLists()
+    {
+        yield return new object?[] { null };
+        yield return new object?[] { new List<string>() };
+    }
+
+    [Fact]
+    public void ExtractQueryableArrays_FullPayload_SerialisesAllFour()
+    {
+        var response = new PerenualSpeciesResponse
+        {
+            PlantAnatomy = El("[{\"part\":\"flowers\",\"color\":[\"blue\"]}]"),
+            Attracts = El("[\"Butterflies\"]"),
+            Soil = El("[\"Loamy Humus\"]"),
+            OtherName = new() { "Wild Ginger" },
+        };
+
+        var arrays = PerenualResolver.ExtractQueryableArrays(response);
+
+        Assert.Equal("[{\"part\":\"flowers\",\"color\":[\"blue\"]}]", arrays.PlantAnatomyJson);
+        Assert.Equal("[\"Butterflies\"]", arrays.AttractsJson);
+        Assert.Equal("[\"Loamy Humus\"]", arrays.SoilJson);
+        Assert.Equal("[\"Wild Ginger\"]", arrays.OtherNamesJson);
+    }
+
+    [Fact]
+    public void ExtractQueryableArrays_EmptyOrAbsent_AllNull()
+    {
+        // Empty arrays (the majority of the 534 stored literals) and an absent
+        // other_name collapse to null — distinguishable from "never fetched"
+        // by the row / LiteralResponseJson still being present.
+        var response = new PerenualSpeciesResponse
+        {
+            PlantAnatomy = El("[]"),
+            Attracts = El("[]"),
+            Soil = El("[]"),
+            OtherName = null,
+        };
+
+        var arrays = PerenualResolver.ExtractQueryableArrays(response);
+
+        Assert.Null(arrays.PlantAnatomyJson);
+        Assert.Null(arrays.AttractsJson);
+        Assert.Null(arrays.SoilJson);
+        Assert.Null(arrays.OtherNamesJson);
+    }
+
+    [Fact]
+    public void Resolve_PopulatesQueryableArrays_PlantAnatomyNoLongerNull()
+    {
+        // Regression guard: the resolver previously hardcoded PlantAnatomyJson
+        // to null (SMA-71 — the column existed but was never written).
+        var response = new PerenualSpeciesResponse
+        {
+            Id = 1,
+            ScientificName = new() { "Asarum canadense" },
+            PlantAnatomy = El("[{\"part\":\"leaves\",\"color\":[\"green\"]}]"),
+            Attracts = El("[\"Butterflies\"]"),
+            Soil = El("[\"Loamy Humus\"]"),
+            OtherName = new() { "Wild Ginger" },
+        };
+
+        var result = Resolver.Resolve(response, rawJson: "{}", requestedPerenualId: 1);
+
+        Assert.Equal("[{\"part\":\"leaves\",\"color\":[\"green\"]}]", result.PlantAnatomyJson);
+        Assert.Equal("[\"Butterflies\"]", result.AttractsJson);
+        Assert.Equal("[\"Loamy Humus\"]", result.SoilJson);
+        Assert.Equal("[\"Wild Ginger\"]", result.OtherNamesJson);
+    }
+
     [Fact]
     public void Resolve_XDataCompleteFlow_AloePayload_PopulatesAllFields()
     {

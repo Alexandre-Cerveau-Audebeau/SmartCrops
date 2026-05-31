@@ -65,8 +65,38 @@ public class PlantPerenualData : IHasUpdatedAt
     public bool? HasEdibleLeaves { get; set; }
     public bool? IsCulinary { get; set; }
 
-    /// <summary>Plant anatomy structured data, stored as JSON.</summary>
+    /// <summary>
+    /// Plant anatomy structured data, stored as a JSON array of
+    /// <c>{part, color[]}</c> objects (SMA-71 queryable column). Populated by
+    /// the resolver from the upstream <c>plant_anatomy</c> array; <c>null</c>
+    /// when Perenual ships an empty array. (The column predates SMA-71 but the
+    /// resolver wrote <c>null</c> until this PR started populating it.)
+    /// </summary>
     public string? PlantAnatomyJson { get; set; }
+
+    /// <summary>
+    /// What this plant attracts (e.g. <c>["Butterflies"]</c>), stored as a JSON
+    /// string array (SMA-71 queryable column). <c>null</c> when Perenual ships
+    /// an empty array.
+    /// </summary>
+    public string? AttractsJson { get; set; }
+
+    /// <summary>
+    /// Preferred soil types (e.g. <c>["Loamy Humus"]</c>), stored as a JSON
+    /// string array (SMA-71 queryable column). <c>null</c> when Perenual ships
+    /// an empty array.
+    /// </summary>
+    public string? SoilJson { get; set; }
+
+    /// <summary>
+    /// Alternative/vernacular names Perenual ships under <c>other_name</c>,
+    /// stored as a JSON string array (SMA-71 queryable column). Kept LOCAL to
+    /// PlantPerenualData rather than merged into <c>PlantCommonName</c> (which is
+    /// Trefle-owned via delete-then-insert with no Source column, and would also
+    /// need a language guess) — a multi-source merge is a separate ticket.
+    /// <c>null</c> when Perenual ships an empty array.
+    /// </summary>
+    public string? OtherNamesJson { get; set; }
 
     /// <summary>Full Perenual API response, retained for re-derivation and audit.</summary>
     public string? RawResponseJson { get; set; }
