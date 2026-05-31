@@ -85,6 +85,8 @@ public class PlantTaxonomyController : ControllerBase
                 SourceType = PlantSourceType.GBIF,
                 ExternalId = result.GbifTaxonKey.Value.ToString(),
                 Url = $"https://api.gbif.org/v1/species/{result.GbifTaxonKey.Value}",
+                // SMA-71 loss-proof capture (GBIF carries no key — no redaction).
+                RawResponseJson = result.RawResponseJson,
                 LastFetchedAt = DateTime.UtcNow,
             });
         }
@@ -92,6 +94,8 @@ public class PlantTaxonomyController : ControllerBase
         {
             existingSource.ExternalId = result.GbifTaxonKey.Value.ToString();
             existingSource.Url = $"https://api.gbif.org/v1/species/{result.GbifTaxonKey.Value}";
+            // Overwrite with the latest fetch's body (it IS the newest GBIF audit).
+            existingSource.RawResponseJson = result.RawResponseJson;
             existingSource.LastFetchedAt = DateTime.UtcNow;
         }
 
@@ -99,6 +103,9 @@ public class PlantTaxonomyController : ControllerBase
         plant.Family = result.Family;
         plant.Genus = result.Genus;
         plant.SpeciesEpithet = result.SpeciesEpithet;
+        // SMA-71: taxonomic authority. First-writer-wins per ADR-0003 — never
+        // overwrite an Author already set (by a future Manual/other source).
+        plant.Author ??= result.Author;
         plant.EnrichmentStatus |= EnrichmentStatus.GbifEnriched;
         plant.LastEnrichmentAt = DateTime.UtcNow;
 
@@ -275,6 +282,75 @@ public class PlantTaxonomyController : ControllerBase
             NextAfterId: nextAfterId));
     }
 
+    /// <summary>
+    /// SMA-71 — backfill the loss-proof GBIF capture for every plant that already
+    /// carries a Gbif <see cref="PlantSource"/>: RE-FETCH GBIF (free, no key) and
+    /// persist the verbatim response on the source row's <c>RawResponseJson</c> plus
+    /// the parsed authorship on <c>Plant.Author</c> (first-writer-wins). Unlike the
+    /// Trefle/Perenual backfills there is no stored body to re-parse — GBIF's was
+    /// never captured — so this re-fetches. Idempotent (a re-run rewrites identical
+    /// values). Sequential by design (GBIF doesn't reward parallelism at this scale;
+    /// the resilience handler covers retries). Counts-only response — the raw bodies
+    /// are internal/audit and never returned.
+    /// </summary>
+    [HttpPost("gbif/raw-backfill")]
+    public async Task<ActionResult<GbifRawBackfillResponse>> BackfillGbifRaw(CancellationToken ct = default)
+    {
+        var sources = await _db.PlantSources
+            .Where(s => s.SourceType == PlantSourceType.GBIF)
+            .Include(s => s.Plant)
+            .ToListAsync(ct);
+
+        var processed = 0;
+        var populated = 0;
+        var failures = 0;
+
+        foreach (var source in sources)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var result = await _taxonomy.ResolveAsync(source.Plant.ScientificName, ct);
+                if (result.GbifTaxonKey is null)
+                {
+                    // The species no longer resolves (data drift) — nothing to capture.
+                    failures++;
+                    _logger.LogWarning(
+                        "GBIF raw-backfill: re-fetch for plant {PlantId} returned no match ({MatchType}); skipped.",
+                        source.PlantId, result.MatchType);
+                    continue;
+                }
+
+                source.RawResponseJson = result.RawResponseJson;
+                source.LastFetchedAt = DateTime.UtcNow;
+                source.Plant.Author ??= result.Author;
+
+                processed++;
+                if (result.RawResponseJson is not null)
+                {
+                    populated++;
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                failures++;
+                _logger.LogError(ex, "GBIF raw-backfill failed for plant {PlantId}", source.PlantId);
+            }
+        }
+
+        await _db.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "GBIF raw-backfill complete: candidates={Candidates} processed={Processed} populated={Populated} failures={Failures}",
+            sources.Count, processed, populated, failures);
+
+        return Ok(new GbifRawBackfillResponse(sources.Count, processed, populated, failures));
+    }
+
     // Response DTOs are kept as records for cheap pattern-matching in EnrichAll
     // and so the JSON shape is stable for the future admin UI.
     public record EnrichMatchedResponse(
@@ -297,4 +373,12 @@ public class PlantTaxonomyController : ControllerBase
         int Failed,
         int NotEnrichedRemaining,
         Guid? NextAfterId);
+
+    /// <summary>
+    /// SMA-71 GBIF raw-backfill summary. Counts only — never the raw bodies.
+    /// <c>Candidates</c> = plants with a Gbif source; <c>Processed</c> = re-fetched
+    /// to a match; <c>Populated</c> = of those, rows where RawResponseJson was set;
+    /// <c>Failures</c> = no-match on re-fetch or an exception.
+    /// </summary>
+    public record GbifRawBackfillResponse(int Candidates, int Processed, int Populated, int Failures);
 }

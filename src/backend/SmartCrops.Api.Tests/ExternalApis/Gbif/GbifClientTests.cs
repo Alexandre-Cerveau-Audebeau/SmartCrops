@@ -62,6 +62,30 @@ public class GbifClientTests
     }
 
     [Fact]
+    public async Task MatchWithLiteralAsync_ReturnsParsedDto_AndVerbatimBody_PreservingUnboundFields()
+    {
+        // Body carries fields the DTO does NOT bind (kingdom, status) plus
+        // scientificName-with-author — the literal must preserve ALL of it.
+        const string body = """
+            {"usageKey":2930137,"scientificName":"Solanum lycopersicum L.","canonicalName":"Solanum lycopersicum","status":"ACCEPTED","matchType":"EXACT","confidence":98,"kingdom":"Plantae","family":"Solanaceae","genus":"Solanum","species":"Solanum lycopersicum","speciesKey":2930137}
+            """;
+        var handler = new RecordingHandler(HttpStatusCode.OK, body);
+        var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.gbif.org/") };
+        var client = new GbifClient(http, NullLogger<GbifClient>.Instance);
+
+        var fetch = await client.MatchWithLiteralAsync("Solanum lycopersicum", CancellationToken.None);
+
+        // Parsed surface: bound fields incl. the new scientificName.
+        Assert.NotNull(fetch.Match);
+        Assert.Equal("EXACT", fetch.Match!.MatchType);
+        Assert.Equal("Solanum lycopersicum L.", fetch.Match.ScientificName);
+        // Verbatim literal: unbound fields (kingdom, status) survive for the audit row.
+        Assert.Equal(body, fetch.LiteralJson);
+        Assert.Contains("\"kingdom\":\"Plantae\"", fetch.LiteralJson!);
+        Assert.Contains("\"status\":\"ACCEPTED\"", fetch.LiteralJson!);
+    }
+
+    [Fact]
     public async Task MatchAsync_ReturnsNull_OnTransportFailure()
     {
         // HttpClient surfaces transport problems as HttpRequestException; the

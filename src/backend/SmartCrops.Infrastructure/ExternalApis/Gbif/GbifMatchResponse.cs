@@ -22,6 +22,15 @@ public class GbifMatchResponse
     [JsonPropertyName("canonicalName")]
     public string? CanonicalName { get; set; }
 
+    /// <summary>
+    /// Full name WITH authorship (e.g. <c>"Solanum lycopersicum L."</c>). GBIF's
+    /// <c>/species/match</c> has no separate <c>authorship</c> field, so the author
+    /// is parsed as the remainder after the <see cref="CanonicalName"/> prefix
+    /// (SMA-71 → <c>Plant.Author</c>).
+    /// </summary>
+    [JsonPropertyName("scientificName")]
+    public string? ScientificName { get; set; }
+
     [JsonPropertyName("rank")]
     public string? Rank { get; set; }
 

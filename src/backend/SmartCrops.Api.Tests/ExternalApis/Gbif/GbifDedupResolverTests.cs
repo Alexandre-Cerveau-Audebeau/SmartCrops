@@ -292,4 +292,70 @@ public class GbifDedupResolverTests
         Assert.Equal("Solanum", result.Genus);
         Assert.Equal("Solanum lycopersicum", result.CanonicalName);
     }
+
+    // ── SMA-71: Author extracted from scientificName (− canonicalName prefix) ──
+
+    [Fact]
+    public void Author_ExtractedFromScientificName_StrippingCanonicalPrefix()
+    {
+        var result = NewResolver().Resolve(new GbifMatchResponse
+        {
+            MatchType = "EXACT",
+            AcceptedUsageKey = 1,
+            CanonicalName = "Solanum lycopersicum",
+            ScientificName = "Solanum lycopersicum L.",
+        });
+
+        Assert.Equal("L.", result.Author);
+    }
+
+    [Fact]
+    public void Author_PreservesComplexAuthorship_WithParensAndYear()
+    {
+        var result = NewResolver().Resolve(new GbifMatchResponse
+        {
+            MatchType = "EXACT",
+            AcceptedUsageKey = 1,
+            CanonicalName = "Mentha spicata",
+            ScientificName = "Mentha spicata (L.) Huds., 1762",
+        });
+
+        Assert.Equal("(L.) Huds., 1762", result.Author);
+    }
+
+    [Fact]
+    public void Author_Null_WhenNoAuthorshipTrailsTheBinomial()
+    {
+        var result = NewResolver().Resolve(new GbifMatchResponse
+        {
+            MatchType = "EXACT",
+            AcceptedUsageKey = 1,
+            CanonicalName = "Solanum lycopersicum",
+            ScientificName = "Solanum lycopersicum", // no author
+        });
+
+        Assert.Null(result.Author);
+    }
+
+    [Fact]
+    public void Author_Null_WhenPrefixMismatchOrScientificNameAbsent()
+    {
+        var mismatch = NewResolver().Resolve(new GbifMatchResponse
+        {
+            MatchType = "EXACT",
+            AcceptedUsageKey = 1,
+            CanonicalName = "Solanum lycopersicum",
+            ScientificName = "Totally Different L.",
+        });
+        Assert.Null(mismatch.Author);
+
+        var absent = NewResolver().Resolve(new GbifMatchResponse
+        {
+            MatchType = "EXACT",
+            AcceptedUsageKey = 1,
+            CanonicalName = "Solanum lycopersicum",
+            ScientificName = null,
+        });
+        Assert.Null(absent.Author);
+    }
 }
