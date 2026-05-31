@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
 using SmartCrops.Core.Interfaces;
@@ -15,12 +16,11 @@ namespace SmartCrops.Api.Controllers.Admin;
 /// <c>PlantSources</c> and the curated denormalized fields on <c>Plants</c>
 /// in a single transaction.
 ///
-/// Bare <c>[Authorize]</c> is intentional for D1 — Identity Roles aren't in
-/// place yet (tracked in project memory). Tighten to an admin role when the
-/// role-based authz lands.
+/// Gated to the Admin role (SMA-33/#68): every endpoint here is an admin/ETL
+/// operation, so the controller requires <c>[Authorize(Roles = "Admin")]</c>.
 /// </summary>
 [ApiController]
-[Authorize]
+[Authorize(Roles = Roles.Admin)]
 [Route("api/admin/taxonomy")]
 public class PlantTaxonomyController : ControllerBase
 {

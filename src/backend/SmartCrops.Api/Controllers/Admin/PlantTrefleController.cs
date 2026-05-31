@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
 using SmartCrops.Core.Interfaces;
@@ -25,12 +26,10 @@ namespace SmartCrops.Api.Controllers.Admin;
 ///   owns them entirely.</item>
 /// </list>
 ///
-/// <para>Bare <c>[Authorize]</c> matches PR #58 — Identity Roles aren't in
-/// place yet (tracked in project memory). Tighten to an admin role when the
-/// role-based authz lands.</para>
+/// <para>Gated to the Admin role (SMA-33/#68): admin-only enrichment operations.</para>
 /// </summary>
 [ApiController]
-[Authorize]
+[Authorize(Roles = Roles.Admin)]
 [Route("api/admin/trefle")]
 public class PlantTrefleController : ControllerBase
 {

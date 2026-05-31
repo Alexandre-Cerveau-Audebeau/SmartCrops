@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure.Data;
@@ -64,5 +65,21 @@ public static class DependencyInjection
         var context = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
         context.Database.Migrate();
         await DataSeeder.SeedAsync(context);
+
+        // SMA-33 / #68 — seed the Admin role and grant it to the operator-configured
+        // emails (AdminSeed:Emails, CSV; set via the AdminSeed__Emails env var in
+        // docker-compose.override.yml — never committed). Additive/idempotent: it
+        // never revokes a role for an absent email.
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AdminRoleSeeder");
+        await AdminRoleSeeder.SeedAsync(roleManager, userManager, ParseAdminEmails(configuration["AdminSeed:Emails"]), logger);
     }
+
+    // CSV → trimmed, blank-stripped list. Empty/absent config yields no emails.
+    private static IEnumerable<string> ParseAdminEmails(string? csv) =>
+        string.IsNullOrWhiteSpace(csv)
+            ? Array.Empty<string>()
+            : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }

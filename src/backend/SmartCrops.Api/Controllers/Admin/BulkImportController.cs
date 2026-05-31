@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Core.Models;
 
@@ -12,12 +13,10 @@ namespace SmartCrops.Api.Controllers.Admin;
 /// beyond identity so the existing per-source enrichment endpoints (taxonomy,
 /// Trefle, Perenual) can fan out on them afterwards.
 ///
-/// <para>Bare <c>[Authorize]</c> matches the pattern set by the three
-/// enrichment controllers (PR #58 / PR #59) — Identity Roles aren't in place
-/// yet; tighten to an admin role when role-based authz lands.</para>
+/// <para>Gated to the Admin role (SMA-33/#68): admin-only bulk-import operation.</para>
 /// </summary>
 [ApiController]
-[Authorize]
+[Authorize(Roles = Roles.Admin)]
 [Route("api/admin/bulk-import")]
 public class BulkImportController : ControllerBase
 {
@@ -62,9 +61,9 @@ public class BulkImportController : ControllerBase
     /// (<c>intra_batch</c>) or with an existing <c>Plant</c> row carrying a
     /// different name (<c>db_existing</c>). Implements layer (b) of ADR-0004.
     ///
-    /// <para>No DB writes. Same <c>[Authorize]</c> policy as the create
-    /// endpoint above — when admin-role authz lands (#68), both action methods
-    /// pick up the tightened attribute in one place.</para>
+    /// <para>No DB writes. Shares the controller-level admin-role authorization
+    /// (<c>[Authorize(Roles = "Admin")]</c>) with the create endpoint above
+    /// (SMA-33/#68).</para>
     /// </summary>
     [HttpPost("preflight")]
     public async Task<ActionResult<BulkImportPreflightResponse>> Preflight(

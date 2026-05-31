@@ -36,6 +36,11 @@ var authBuilder = builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? string.Empty)),
         NameClaimType = JwtRegisteredClaimNames.Sub,
+        // SMA-33: make the role claim type explicit so [Authorize(Roles = "Admin")]
+        // reads the ClaimTypes.Role claims emitted by GenerateTokenResponse. This is
+        // the framework default, but pinned here so a future NameClaimType tweak
+        // can't silently break role authorization.
+        RoleClaimType = ClaimTypes.Role,
     };
     options.Events = new JwtBearerEvents
     {

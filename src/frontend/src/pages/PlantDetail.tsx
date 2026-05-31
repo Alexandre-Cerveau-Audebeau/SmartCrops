@@ -56,7 +56,6 @@ import {
 } from '../services/adminApi';
 import type { Garden } from '../types/Garden';
 import type { Plant, PlantImage } from '../types/Plant';
-import { isAdminUser } from '../utils/admin';
 import { isUserFacingUrl, toUserFacingUrl } from '../utils/externalSourceUrl';
 import { getTranslation } from '../utils/getTranslation';
 import {
@@ -111,7 +110,10 @@ export default function PlantDetail() {
     : t('library.backToLibrary');
   const { language } = useLanguage();
   const { isAuthenticated, user } = useAuth();
-  const isAdmin = isAdminUser(user?.email);
+  // SMA-33: admin UI gated on the backend role surfaced via /me (was the
+  // VITE_ADMIN_EMAILS front whitelist). UX only — the real barrier is the
+  // backend [Authorize(Roles = "Admin")] on the admin endpoints.
+  const isAdmin = user?.isAdmin ?? false;
 
   const [plant, setPlant] = useState<Plant | null>(null);
   const [loading, setLoading] = useState(true);

@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
+using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 
 namespace SmartCrops.Api.Controllers;
@@ -17,6 +18,10 @@ namespace SmartCrops.Api.Controllers;
 public record RegisterRequest([Required, EmailAddress] string Email, [Required, MinLength(6)] string Password);
 public record LoginRequest([Required, EmailAddress] string Email, [Required] string Password);
 public record AuthResponse(string Token, DateTime Expiration);
+/// <summary>Shape returned by <c>GET /api/auth/me</c>. <see cref="IsAdmin"/> (SMA-33)
+/// lets the frontend hide admin-only UI; it is UX only — backend authorization is
+/// enforced by <c>[Authorize(Roles = "Admin")]</c>.</summary>
+public record MeResponse(string UserId, string? Email, string? DisplayName, bool IsAdmin);
 public record ExchangeCodeRequest([Required] string Code);
 public record UserProfileResponse(string Email, string? DisplayName, string? FirstName, string? LastName, string? City, bool HasPassword);
 public record UpdateProfileRequest(
@@ -49,7 +54,7 @@ public class AuthController(
         if (!result.Succeeded)
             return BadRequest(result.Errors);
 
-        var tokenResponse = GenerateTokenResponse(user.Id, request.Email, user.SecurityStamp);
+        var tokenResponse = GenerateTokenResponse(user.Id, request.Email, user.SecurityStamp, await userManager.GetRolesAsync(user));
         SetAuthCookie(tokenResponse.Token);
         return StatusCode(201);
     }
@@ -70,7 +75,7 @@ public class AuthController(
         if (string.IsNullOrEmpty(user.Email))
             return Unauthorized();
 
-        var tokenResponse = GenerateTokenResponse(user.Id, user.Email, user.SecurityStamp);
+        var tokenResponse = GenerateTokenResponse(user.Id, user.Email, user.SecurityStamp, await userManager.GetRolesAsync(user));
         SetAuthCookie(tokenResponse.Token);
         return NoContent();
     }
@@ -137,7 +142,7 @@ public class AuthController(
                 }
             }
 
-            var tokenResponse = GenerateTokenResponse(user.Id, email, user.SecurityStamp);
+            var tokenResponse = GenerateTokenResponse(user.Id, email, user.SecurityStamp, await userManager.GetRolesAsync(user));
             var code = Guid.NewGuid().ToString("N");
             var binding = Guid.NewGuid().ToString("N");
             _authCodes[code] = (tokenResponse.Token, DateTime.UtcNow.AddMinutes(1), binding);
@@ -202,7 +207,13 @@ public class AuthController(
         var email = User.FindFirstValue(ClaimTypes.Email);
         if (userId == null) return Unauthorized();
         var user = await userManager.FindByIdAsync(userId);
-        return Ok(new { userId, email, displayName = user?.DisplayName });
+        // SMA-33: surface the admin role so the frontend can hide admin-only UI.
+        // Authoritative source is the DB role membership (not the JWT claim) so a
+        // role granted after the current token was issued is reflected on the next
+        // /me without re-login. The real authorization barrier is the backend
+        // [Authorize(Roles = "Admin")] gating — this flag is UX only.
+        var isAdmin = user is not null && await userManager.IsInRoleAsync(user, Roles.Admin);
+        return Ok(new MeResponse(userId, email, user?.DisplayName, isAdmin));
     }
 
     [Authorize]
@@ -294,7 +305,18 @@ public class AuthController(
             _authCodes.TryRemove(key, out _);
     }
 
-    private AuthResponse GenerateTokenResponse(string userId, string email, string? securityStamp)
+    /// <summary>
+    /// Builds the signed JWT (+ expiry) for a user. Emits <c>sub</c>/<c>email</c>/
+    /// <c>jti</c>/<c>security_stamp</c> plus one <see cref="ClaimTypes.Role"/> claim
+    /// per entry in <paramref name="roles"/> (SMA-33), so <c>[Authorize(Roles = ...)]</c>
+    /// resolves server-side. Roles are baked in at issuance — see the body comment
+    /// on the security-stamp revocation contract for promotion/demotion (SMA-34).
+    /// </summary>
+    /// <param name="userId">Identity user id, emitted as the <c>sub</c> claim.</param>
+    /// <param name="email">User email, emitted as the <c>email</c> claim.</param>
+    /// <param name="securityStamp">Current security stamp, re-checked per request in Program.cs.</param>
+    /// <param name="roles">Role names to emit as role claims (empty for a non-privileged user).</param>
+    private AuthResponse GenerateTokenResponse(string userId, string email, string? securityStamp, IEnumerable<string> roles)
     {
         var jwtKey = configuration["Jwt:Key"]
             ?? throw new InvalidOperationException("JWT signing key is not configured");
@@ -303,13 +325,22 @@ public class AuthController(
         var jwtAudience = configuration["Jwt:Audience"]
             ?? throw new InvalidOperationException("JWT audience is not configured");
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, userId),
-            new Claim(JwtRegisteredClaimNames.Email, email),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new Claim("security_stamp", securityStamp ?? ""),
+            new(JwtRegisteredClaimNames.Sub, userId),
+            new(JwtRegisteredClaimNames.Email, email),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new("security_stamp", securityStamp ?? ""),
         };
+
+        // SMA-33: emit ASP.NET role claims so [Authorize(Roles = "Admin")] resolves
+        // the role server-side. ClaimTypes.Role matches the RoleClaimType made
+        // explicit in Program.cs's TokenValidationParameters. Roles are baked into
+        // the JWT at issuance — a later promotion/demotion endpoint (SMA-34) MUST
+        // call UserManager.UpdateSecurityStampAsync so the per-request security-stamp
+        // check (Program.cs OnTokenValidated) rejects the now-stale token on the next
+        // call; otherwise a revoked admin keeps the role until the 7-day token expires.
+        claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

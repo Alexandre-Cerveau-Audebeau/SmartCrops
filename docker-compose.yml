@@ -22,6 +22,11 @@ services:
       Jwt__Key: "SmartCrops-Dev-Secret-Key-Change-In-Production-Min32Chars!"
       Google__ClientId: ${GOOGLE_CLIENT_ID:-}
       Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
+      # SMA-33/#68 — CSV of emails granted the backend "Admin" role at boot
+      # (idempotent, additive-only; never auto-revokes). Each listed account must
+      # already exist AND be email-confirmed to be granted. Set the real value in
+      # docker-compose.override.yml (gitignored); empty default = no admin seeded.
+      AdminSeed__Emails: ${ADMIN_SEED_EMAILS:-}
     ports:
       - "5000:8080"
     depends_on:
@@ -35,14 +40,10 @@ services:
     environment:
       - VITE_API_URL=http://api:8080
       - VITE_AUTH_API_URL=http://localhost:5000
-      # Comma-separated emails (case-insensitive, no spaces around commas)
-      # granted access to the admin re-enrichment buttons in PlantDetail.
-      # Example: "alice@example.com,bob@example.com".
-      # UI-only gate — backend admin endpoints still authorise against
-      # [Authorize]. Set the real value in docker-compose.override.yml
-      # (gitignored) or via a host env var; empty default means "no admin UI".
-      # Replace with ASP.NET Identity Roles when available (#68).
-      - VITE_ADMIN_EMAILS=${VITE_ADMIN_EMAILS:-}
+      # SMA-33/#68: admin UI is now gated by the backend "Admin" role surfaced via
+      # GET /api/auth/me (user.isAdmin), not a front whitelist. The former
+      # VITE_ADMIN_EMAILS var was removed; configure AdminSeed__Emails on the api
+      # service instead.
     ports:
       - "3000:5173"
     depends_on:

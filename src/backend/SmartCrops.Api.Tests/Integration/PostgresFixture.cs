@@ -190,19 +190,23 @@ public sealed class PostgresFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Issues a JWT bearer for the given user id. Replicates the pattern used by
-    /// <c>GardensTestFactory</c>: only the <c>sub</c> claim is set, so the
-    /// <c>OnTokenValidated</c> security-stamp check in Program.cs short-circuits
-    /// (the production check returns early when no <c>security_stamp</c> claim is present).
+    /// Issues a JWT bearer for the given user id, optionally carrying role claims
+    /// (SMA-33). Only <c>sub</c> (+ any roles) is set, so the <c>OnTokenValidated</c>
+    /// security-stamp check in Program.cs short-circuits (it returns early when no
+    /// <c>security_stamp</c> claim is present). Role claims use
+    /// <see cref="ClaimTypes.Role"/>, matching the <c>RoleClaimType</c> configured
+    /// in Program.cs, so <c>[Authorize(Roles = "Admin")]</c> resolves them.
     /// </summary>
-    public string GenerateToken(string userId)
+    public string GenerateToken(string userId, params string[] roles)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var claims = new List<Claim> { new(JwtRegisteredClaimNames.Sub, userId) };
+        claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
         var token = new JwtSecurityToken(
             issuer: TestJwtIssuer,
             audience: TestJwtAudience,
-            claims: [new Claim(JwtRegisteredClaimNames.Sub, userId)],
+            claims: claims,
             expires: DateTime.UtcNow.AddHours(1),
             signingCredentials: creds);
         return new JwtSecurityTokenHandler().WriteToken(token);
