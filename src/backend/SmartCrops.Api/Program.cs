@@ -170,7 +170,21 @@ builder.Services.AddHttpClient<PerenualClient>((sp, client) =>
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
     client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
 })
-.AddStandardResilienceHandler();
+// SMA-71: the pest-disease-list catalogue endpoint is slow (page 1 ≈ 6s) and
+// large (pages up to ~850KB). The standard handler's defaults (AttemptTimeout
+// 10s, TotalRequestTimeout 30s) cut page 1 to null → 502 → empty catalogue.
+// Raise the ceilings so the harvest completes; these are upper bounds, not
+// fixed waits, so the fast enrichment/search calls are unaffected. Constraints:
+// TotalRequestTimeout > AttemptTimeout, and SamplingDuration >= 2×AttemptTimeout
+// (else the options validator rejects the config at startup). HttpClient.Timeout
+// (PerenualOptions.TimeoutSeconds, now 200s) must exceed TotalRequestTimeout or
+// it would re-cut the pipeline early.
+.AddStandardResilienceHandler(options =>
+{
+    options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(60);
+    options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(180);
+    options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(120);
+});
 
 builder.Services.AddSingleton<PerenualResolver>();
 builder.Services.AddScoped<IPlantPerenualEnrichmentService, PlantPerenualEnrichmentService>();

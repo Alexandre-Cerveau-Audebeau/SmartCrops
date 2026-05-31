@@ -31,8 +31,15 @@ public class PerenualOptions
     [Required]
     public string ApiKey { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Per-request <see cref="HttpClient.Timeout"/> ceiling (seconds). Set to
+    /// 200s — above the standard resilience handler's 180s TotalRequestTimeout
+    /// (SMA-71) — so the slow, large pest-disease-list catalogue harvest is
+    /// governed by the resilience pipeline rather than re-cut by HttpClient. A
+    /// ceiling, not a fixed wait: fast enrichment/search calls are unaffected.
+    /// </summary>
     [Range(1, int.MaxValue)]
-    public int TimeoutSeconds { get; set; } = 30;
+    public int TimeoutSeconds { get; set; } = 200;
 
     /// <summary>
     /// User-Agent header sent on every Perenual call. Identifies the SmartCrops
