@@ -221,6 +221,12 @@ public class PlantPerenualControllerTests : IntegrationTestBase
             Assert.Equal("Well-drained", doc.RootElement.GetProperty("soil")[0].GetString());
         }
         Assert.NotNull(perenualData.CareGuideResponseJson);
+        // Assert the CONTENT survived, not merely non-null — catches an accidental
+        // replacement with a different non-null value (CR R2 hardening).
+        using (var cgDoc = JsonDocument.Parse(perenualData.CareGuideResponseJson!))
+        {
+            Assert.Equal(1, cgDoc.RootElement.GetProperty("data")[0].GetProperty("id").GetInt32());
+        }
     }
 
     /// <summary>
