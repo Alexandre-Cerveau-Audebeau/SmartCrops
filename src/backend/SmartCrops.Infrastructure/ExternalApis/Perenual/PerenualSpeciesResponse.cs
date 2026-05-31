@@ -6,8 +6,8 @@ namespace SmartCrops.Infrastructure.ExternalApis.Perenual;
 /// <summary>
 /// Partial binding for <c>GET /species/details/{id}</c>. Only the fields
 /// SmartCrops writes somewhere are mapped — Perenual returns many more
-/// (care_guides URLs, hardiness_location URLs, plant_anatomy, attracts, etc.)
-/// which we deliberately ignore. The raw response is still retained verbatim
+/// (care_guides URLs, hardiness_location URLs, etc.) which we deliberately
+/// ignore. The raw response is still retained verbatim
 /// on <c>PlantPerenualData.RawResponseJson</c> for re-derivation.
 ///
 /// <para><b>Note on premium xData fields</b>: Supreme-tier subscribers receive
@@ -115,6 +115,20 @@ public class PerenualSpeciesResponse
     [JsonPropertyName("default_image")] public PerenualImageDto? DefaultImage { get; set; }
 
     [JsonPropertyName("other_images")] public List<PerenualImageDto>? OtherImages { get; set; }
+
+    // ── SMA-71 queryable arrays — promoted to PlantPerenualData columns ─────
+    // Perenual-exclusive descriptive arrays the ETL previously dropped. Bound
+    // to JsonElement (like the xData fields) so deserialisation cannot crash on
+    // a polymorphic/absent shape; the resolver serialises each non-empty array
+    // to a jsonb column (empty/absent → null). plant_anatomy is an array of
+    // {part, color[]} OBJECTS; attracts/soil are string arrays. other_name is
+    // mapped above as List&lt;string&gt; and serialised the same way.
+
+    [JsonPropertyName("plant_anatomy")] public JsonElement PlantAnatomy { get; set; }
+
+    [JsonPropertyName("attracts")] public JsonElement Attracts { get; set; }
+
+    [JsonPropertyName("soil")] public JsonElement Soil { get; set; }
 
     // ── xData premium (Supreme tier) — presence-only mapping ───────────────
     // Values are retained in RawResponseJson; not denormalised onto Plant in

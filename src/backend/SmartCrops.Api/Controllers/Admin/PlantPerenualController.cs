@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -377,6 +378,86 @@ public class PlantPerenualController : ControllerBase
             NextAfterId: nextAfterId));
     }
 
+    /// <summary>
+    /// SMA-71 — backfill the queryable array columns
+    /// (<c>PlantAnatomyJson</c>/<c>AttractsJson</c>/<c>SoilJson</c>/<c>OtherNamesJson</c>)
+    /// for every row that already has a stored <c>LiteralResponseJson</c>, by
+    /// RE-PARSING that literal — NO Perenual API call. The literal was captured
+    /// (key-redacted) in SMA-71 PR1 and holds every field, so the same resolver
+    /// mapping the live enrichment uses (<see cref="PerenualResolver.ExtractQueryableArrays"/>)
+    /// re-derives the columns deterministically. Idempotent: re-running recomputes
+    /// the identical values from the unchanged literal. Counts-only response — the
+    /// literals (and their parsed arrays) are internal/audit, never returned.
+    /// </summary>
+    [HttpPost("queryable-columns/backfill")]
+    public async Task<ActionResult<QueryableColumnsBackfillResponse>> BackfillQueryableColumns(
+        CancellationToken ct = default)
+    {
+        // Only rows with a stored literal can be reprocessed; rows without one
+        // (enriched before PR1, or a no-match audit row) are reported as skipped.
+        var rows = await _db.PlantPerenualData
+            .Where(d => d.LiteralResponseJson != null)
+            .ToListAsync(ct);
+
+        var processed = 0;
+        var populated = 0;
+        var failures = 0;
+
+        foreach (var row in rows)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var species = JsonSerializer.Deserialize<PerenualSpeciesResponse>(
+                    row.LiteralResponseJson!, WebJsonOptions);
+                if (species is null)
+                {
+                    failures++;
+                    _logger.LogWarning(
+                        "Queryable-columns backfill: literal for PlantPerenualData {Id} deserialised to null; skipping.",
+                        row.Id);
+                    continue;
+                }
+
+                var arrays = PerenualResolver.ExtractQueryableArrays(species);
+                row.PlantAnatomyJson = arrays.PlantAnatomyJson;
+                row.AttractsJson = arrays.AttractsJson;
+                row.SoilJson = arrays.SoilJson;
+                row.OtherNamesJson = arrays.OtherNamesJson;
+
+                processed++;
+                if (arrays.PlantAnatomyJson is not null || arrays.AttractsJson is not null
+                    || arrays.SoilJson is not null || arrays.OtherNamesJson is not null)
+                {
+                    populated++;
+                }
+            }
+            catch (JsonException ex)
+            {
+                failures++;
+                _logger.LogWarning(ex,
+                    "Queryable-columns backfill: literal for PlantPerenualData {Id} was not valid JSON; skipping.",
+                    row.Id);
+            }
+        }
+
+        await _db.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "Queryable-columns backfill complete: candidates={Candidates} processed={Processed} populated={Populated} failures={Failures}",
+            rows.Count, processed, populated, failures);
+
+        return Ok(new QueryableColumnsBackfillResponse(
+            Candidates: rows.Count,
+            Processed: processed,
+            Populated: populated,
+            Failures: failures));
+    }
+
+    // Matches PerenualClient's web-defaults deserialisation so reprocessing a
+    // stored literal parses identically to the original live enrichment.
+    private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
+
     // ── Dual-write helpers ────────────────────────────────────────────────
 
     /// <summary>
@@ -415,7 +496,14 @@ public class PlantPerenualController : ControllerBase
                 HasEdibleFruit = result.HasEdibleFruit,
                 HasEdibleLeaves = result.HasEdibleLeaves,
                 IsCulinary = result.IsCulinary,
+                // SMA-71 queryable arrays — on the audit row (like RawResponseJson),
+                // so they are written even on a canonical mismatch; wrong-species
+                // protection is enforced on the public Plant read model, which these
+                // Perenual-exclusive columns never touch.
                 PlantAnatomyJson = result.PlantAnatomyJson,
+                AttractsJson = result.AttractsJson,
+                SoilJson = result.SoilJson,
+                OtherNamesJson = result.OtherNamesJson,
                 RawResponseJson = result.RawResponseJson,
                 // SMA-71 loss-proof literal captures (API key already redacted in
                 // the client). Kept even on a canonical mismatch — diagnostic only.
@@ -448,7 +536,12 @@ public class PlantPerenualController : ControllerBase
             plant.PerenualData.HasEdibleFruit = result.HasEdibleFruit;
             plant.PerenualData.HasEdibleLeaves = result.HasEdibleLeaves;
             plant.PerenualData.IsCulinary = result.IsCulinary;
+            // SMA-71 queryable arrays — overwrite on re-enrich (Perenual-exclusive,
+            // no cross-source collision), consistent with the rest of this upsert.
             plant.PerenualData.PlantAnatomyJson = result.PlantAnatomyJson;
+            plant.PerenualData.AttractsJson = result.AttractsJson;
+            plant.PerenualData.SoilJson = result.SoilJson;
+            plant.PerenualData.OtherNamesJson = result.OtherNamesJson;
             plant.PerenualData.RawResponseJson = result.RawResponseJson;
             // Loss-proof: keep a previously-captured literal if this (re-)enrich
             // returned null (e.g. a transient care-guide miss) — do NOT wipe the
@@ -758,6 +851,19 @@ public class PlantPerenualController : ControllerBase
         bool IsExactScientificMatch,
         bool HasSupremeData,
         bool CanonicalMismatchSkipped = false);
+
+    /// <summary>
+    /// SMA-71 queryable-columns backfill summary. Counts only — never the
+    /// reprocessed literals or their parsed arrays. <c>Candidates</c> = rows with
+    /// a stored literal; <c>Processed</c> = literals parsed OK; <c>Populated</c> =
+    /// of those, rows where at least one array column became non-null;
+    /// <c>Failures</c> = literals that failed to parse.
+    /// </summary>
+    public record QueryableColumnsBackfillResponse(
+        int Candidates,
+        int Processed,
+        int Populated,
+        int Failures);
 
     public record EnrichNoMatchResponse(bool Matched, string MatchType, string Reason);
 

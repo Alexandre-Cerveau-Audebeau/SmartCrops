@@ -154,7 +154,22 @@ public record PerenualEnrichmentResult(
     /// body with the API key redacted. <c>null</c> when the additive care-guide
     /// fetch missed (non-fatal). Internal/audit only — never surfaced publicly.
     /// </summary>
-    string? CareGuideResponseJson = null);
+    string? CareGuideResponseJson = null,
+
+    // ── SMA-71 queryable arrays (Perenual-exclusive, persisted on PlantPerenualData) ──
+    // Each is the serialised non-empty upstream array, or null when empty/absent.
+    // Optional/defaulted so existing positional constructions (NoMatch, SampleMatch
+    // test helper, stubs) compile unchanged; Resolve sets them by name. See
+    // PerenualResolver.ExtractQueryableArrays.
+
+    /// <summary>SMA-71 — <c>attracts</c> string array as a jsonb string; null when empty.</summary>
+    string? AttractsJson = null,
+
+    /// <summary>SMA-71 — <c>soil</c> string array as a jsonb string; null when empty.</summary>
+    string? SoilJson = null,
+
+    /// <summary>SMA-71 — <c>other_name</c> string array as a jsonb string; null when empty.</summary>
+    string? OtherNamesJson = null);
 
 /// <summary>An image returned by Perenual, ready for insert into <c>PlantImage</c>.</summary>
 public record PerenualImage(
