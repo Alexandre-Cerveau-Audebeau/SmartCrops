@@ -131,16 +131,16 @@ public class PerenualClient
             // D5: Content-Type pre-check to discriminate "deleted id" (HTML
             // response) from a genuine API-broken state. Perenual's bug at ids
             // >=8574 causes deleted ids to return 200 OK with an HTML error body
-            // (Phase 1 Postman audit). Treat any non-JSON response as NoMatch
-            // rather than letting it crash deserialisation noisily.
+            // (Phase 1 Postman audit). A 2xx-non-JSON body is TERMINAL — the id is
+            // genuinely gone — distinct from a transient outage (SMA-94).
             var contentType = response.Content.Headers.ContentType?.MediaType;
             if (!string.Equals(contentType, "application/json", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogWarning(
-                    "Perenual returned non-JSON content-type '{ContentType}' for species id {SpeciesId} (likely deleted id, see PR B). Treating as NoMatch.",
+                    "Perenual returned non-JSON content-type '{ContentType}' for species id {SpeciesId} (likely deleted id, see PR B). Treating as terminal no-body.",
                     contentType ?? "(none)",
                     perenualId);
-                return default;
+                return new PerenualSpeciesFetch(null, null, PerenualFetchOutcome.TerminalNoBody);
             }
 
             // Read the literal body FIRST, then deserialise from the string. The
@@ -150,32 +150,35 @@ public class PerenualClient
             var rawBody = await response.Content.ReadAsStringAsync(ct);
             var species = JsonSerializer.Deserialize<PerenualSpeciesResponse>(rawBody, WebJsonOptions);
             var literal = PerenualKeyRedactor.Redact(rawBody, _apiKey);
-            return new PerenualSpeciesFetch(species, literal);
+            return new PerenualSpeciesFetch(species, literal, PerenualFetchOutcome.Success);
         }
+        // Every exception path is TRANSIENT (transport/5xx/timeout/malformed):
+        // the resource is not proven gone, so callers must be free to retry
+        // rather than burn a permanent skip (SMA-94).
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "Perenual species fetch transport failure for id {Id}", perenualId);
-            return default;
+            return new PerenualSpeciesFetch(null, null, PerenualFetchOutcome.TransientFailure);
         }
         catch (JsonException ex)
         {
             _logger.LogWarning(ex, "Perenual species fetch returned malformed JSON for id {Id}", perenualId);
-            return default;
+            return new PerenualSpeciesFetch(null, null, PerenualFetchOutcome.TransientFailure);
         }
         catch (NotSupportedException ex)
         {
             _logger.LogWarning(ex, "Perenual species fetch returned unsupported content for id {Id}", perenualId);
-            return default;
+            return new PerenualSpeciesFetch(null, null, PerenualFetchOutcome.TransientFailure);
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Perenual species fetch timed out for id {Id}", perenualId);
-            return default;
+            return new PerenualSpeciesFetch(null, null, PerenualFetchOutcome.TransientFailure);
         }
         catch (TimeoutRejectedException ex)
         {
             _logger.LogWarning(ex, "Perenual species fetch hit resilience-handler timeout for id {Id}", perenualId);
-            return default;
+            return new PerenualSpeciesFetch(null, null, PerenualFetchOutcome.TransientFailure);
         }
     }
 
@@ -184,12 +187,14 @@ public class PerenualClient
     /// endpoint lives at <c>/api/</c>, NOT under the <c>/api/v2/</c> base) and
     /// returns the verbatim response body with the API key redacted — the SMA-71
     /// capture of Perenual's per-species pruning/sunlight/watering care sections,
-    /// which the rest of the ETL never consumes. Additive and NON-FATAL: returns
-    /// <c>null</c> on any transport failure, timeout, non-success status, non-JSON
-    /// Content-Type, or unparseable body, so a care-guide miss never blocks the
-    /// primary enrichment write.
+    /// which the rest of the ETL never consumes. Additive and NON-FATAL: the
+    /// returned <see cref="PerenualCareGuideFetch.LiteralJson"/> is <c>null</c> on
+    /// any miss, so a care-guide miss never blocks the primary enrichment write.
+    /// The <see cref="PerenualCareGuideFetch.Outcome"/> distinguishes a 2xx-non-JSON
+    /// terminal miss from a transient one (SMA-94) so the raw-cache aspiration can
+    /// retry the latter.
     /// </summary>
-    public async Task<string?> GetCareGuideLiteralAsync(int speciesId, CancellationToken ct)
+    public async Task<PerenualCareGuideFetch> GetCareGuideLiteralAsync(int speciesId, CancellationToken ct)
     {
         var url = new Uri(ApiRootV1, $"species-care-guide-list?key={Uri.EscapeDataString(_apiKey)}&species_id={speciesId}");
         try
@@ -201,10 +206,10 @@ public class PerenualClient
             if (!string.Equals(contentType, "application/json", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogWarning(
-                    "Perenual care-guide returned non-JSON content-type '{ContentType}' for species id {SpeciesId}; skipping (non-fatal).",
+                    "Perenual care-guide returned non-JSON content-type '{ContentType}' for species id {SpeciesId}; terminal no-body (non-fatal).",
                     contentType ?? "(none)",
                     speciesId);
-                return null;
+                return new PerenualCareGuideFetch(PerenualFetchOutcome.TerminalNoBody, null);
             }
 
             var rawBody = await response.Content.ReadAsStringAsync(ct);
@@ -212,33 +217,35 @@ public class PerenualClient
 
             // The care-guide body is stored verbatim (not deserialised), so verify
             // it is well-formed JSON before returning — the column is jsonb and a
-            // malformed insert would roll back the whole enrichment transaction.
+            // malformed insert would roll back the whole enrichment transaction. A
+            // malformed body is treated as TRANSIENT (a re-fetch may return clean
+            // JSON) rather than terminal.
             try
             {
                 using var _ = JsonDocument.Parse(literal);
             }
             catch (JsonException ex)
             {
-                _logger.LogWarning(ex, "Perenual care-guide body was not valid JSON for species id {SpeciesId}; skipping (non-fatal).", speciesId);
-                return null;
+                _logger.LogWarning(ex, "Perenual care-guide body was not valid JSON for species id {SpeciesId}; transient (non-fatal).", speciesId);
+                return new PerenualCareGuideFetch(PerenualFetchOutcome.TransientFailure, null);
             }
 
-            return literal;
+            return new PerenualCareGuideFetch(PerenualFetchOutcome.Success, literal);
         }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "Perenual care-guide transport failure for species id {Id}", speciesId);
-            return null;
+            return new PerenualCareGuideFetch(PerenualFetchOutcome.TransientFailure, null);
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Perenual care-guide timed out for species id {Id}", speciesId);
-            return null;
+            return new PerenualCareGuideFetch(PerenualFetchOutcome.TransientFailure, null);
         }
         catch (TimeoutRejectedException ex)
         {
             _logger.LogWarning(ex, "Perenual care-guide hit resilience-handler timeout for species id {Id}", speciesId);
-            return null;
+            return new PerenualCareGuideFetch(PerenualFetchOutcome.TransientFailure, null);
         }
     }
 
@@ -276,9 +283,9 @@ public class PerenualClient
             if (!string.Equals(contentType, "application/json", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogWarning(
-                    "Perenual returned non-JSON content-type '{ContentType}' for species-list page {Page}. Treating as NoMatch.",
+                    "Perenual returned non-JSON content-type '{ContentType}' for species-list page {Page}. Terminal no-body.",
                     contentType ?? "(none)", page);
-                return default;
+                return new PerenualSpeciesListFetch(null, null, PerenualFetchOutcome.TerminalNoBody);
             }
 
             // Read the literal body FIRST, then deserialise from it. The key is
@@ -287,32 +294,33 @@ public class PerenualClient
             var rawBody = await response.Content.ReadAsStringAsync(ct);
             var list = JsonSerializer.Deserialize<PerenualSpeciesListResponse>(rawBody, WebJsonOptions);
             var literal = PerenualKeyRedactor.Redact(rawBody, _apiKey);
-            return new PerenualSpeciesListFetch(list, literal);
+            return new PerenualSpeciesListFetch(list, literal, PerenualFetchOutcome.Success);
         }
+        // Exception paths are TRANSIENT — the page is not proven gone (SMA-94).
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "Perenual species-list transport failure for page {Page}", page);
-            return default;
+            return new PerenualSpeciesListFetch(null, null, PerenualFetchOutcome.TransientFailure);
         }
         catch (JsonException ex)
         {
             _logger.LogWarning(ex, "Perenual species-list returned malformed JSON for page {Page}", page);
-            return default;
+            return new PerenualSpeciesListFetch(null, null, PerenualFetchOutcome.TransientFailure);
         }
         catch (NotSupportedException ex)
         {
             _logger.LogWarning(ex, "Perenual species-list returned unsupported content for page {Page}", page);
-            return default;
+            return new PerenualSpeciesListFetch(null, null, PerenualFetchOutcome.TransientFailure);
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Perenual species-list timed out for page {Page}", page);
-            return default;
+            return new PerenualSpeciesListFetch(null, null, PerenualFetchOutcome.TransientFailure);
         }
         catch (TimeoutRejectedException ex)
         {
             _logger.LogWarning(ex, "Perenual species-list hit resilience-handler timeout for page {Page}", page);
-            return default;
+            return new PerenualSpeciesListFetch(null, null, PerenualFetchOutcome.TransientFailure);
         }
     }
 
@@ -421,20 +429,63 @@ public class PerenualClient
 }
 
 /// <summary>
+/// Classifies the terminal disposition of a Perenual literal fetch (SMA-94):
+/// whether a missing body means the resource is GENUINELY gone or the fetch
+/// merely failed transiently and should be retried. Lets the raw-cache
+/// aspiration persist a permanent "no body" skip ONLY for terminal cases, so a
+/// transient outage can never burn a permanent cache hole.
+/// </summary>
+public enum PerenualFetchOutcome
+{
+    /// <summary>2xx + JSON body parsed and captured.</summary>
+    Success,
+
+    /// <summary>
+    /// 2xx with a non-JSON (HTML) body — the resource is genuinely gone (the
+    /// deleted-id ≥8574 placeholder). Safe to record as a permanent skip.
+    /// </summary>
+    TerminalNoBody,
+
+    /// <summary>
+    /// Transport failure / 5xx / timeout / malformed body — NOT proven gone.
+    /// Callers must retry rather than write a skip row.
+    /// </summary>
+    TransientFailure,
+}
+
+/// <summary>
 /// Result of <see cref="PerenualClient.GetSpeciesDetailsWithLiteralAsync"/>:
-/// the parsed DTO plus the verbatim, key-redacted HTTP body. Both are
-/// <c>null</c> on any failure path (the <c>default</c> value), so callers branch
-/// on <see cref="Species"/> exactly as they did on the prior nullable return.
+/// the parsed DTO plus the verbatim, key-redacted HTTP body. <see cref="Species"/>
+/// and <see cref="LiteralJson"/> stay <c>null</c> on every non-<see cref="PerenualFetchOutcome.Success"/>
+/// path, so existing callers branch on <see cref="Species"/> exactly as before;
+/// <see cref="Outcome"/> is the SMA-94 addition for callers that must tell a
+/// terminal miss from a transient one.
 /// </summary>
 /// <param name="Species">Parsed species response, or <c>null</c> on no-match/failure.</param>
 /// <param name="LiteralJson">Verbatim response body, API key redacted, or <c>null</c>.</param>
-public readonly record struct PerenualSpeciesFetch(PerenualSpeciesResponse? Species, string? LiteralJson);
+/// <param name="Outcome">Terminal disposition (SMA-94).</param>
+public readonly record struct PerenualSpeciesFetch(
+    PerenualSpeciesResponse? Species, string? LiteralJson, PerenualFetchOutcome Outcome);
 
 /// <summary>
 /// Result of <see cref="PerenualClient.GetSpeciesListWithLiteralAsync"/> (SMA-93):
-/// the parsed list page plus the verbatim, key-redacted HTTP body. Both are
-/// <c>null</c> on any failure path (the <c>default</c> value).
+/// the parsed list page plus the verbatim, key-redacted HTTP body. <see cref="List"/>
+/// and <see cref="LiteralJson"/> stay <c>null</c> on every non-Success path;
+/// <see cref="Outcome"/> is the SMA-94 terminal/transient discriminator.
 /// </summary>
 /// <param name="List">Parsed species-list page, or <c>null</c> on failure.</param>
 /// <param name="LiteralJson">Verbatim page body, API key redacted, or <c>null</c>.</param>
-public readonly record struct PerenualSpeciesListFetch(PerenualSpeciesListResponse? List, string? LiteralJson);
+/// <param name="Outcome">Terminal disposition (SMA-94).</param>
+public readonly record struct PerenualSpeciesListFetch(
+    PerenualSpeciesListResponse? List, string? LiteralJson, PerenualFetchOutcome Outcome);
+
+/// <summary>
+/// Result of <see cref="PerenualClient.GetCareGuideLiteralAsync"/> (SMA-94): the
+/// verbatim, key-redacted care-guide body (<c>null</c> on any non-Success path)
+/// plus its terminal/transient <see cref="Outcome"/>. The care guide was a bare
+/// <c>string?</c> before; it is wrapped here so the raw-cache aspiration can
+/// distinguish a genuinely-absent guide from a transient miss.
+/// </summary>
+/// <param name="Outcome">Terminal disposition (SMA-94).</param>
+/// <param name="LiteralJson">Verbatim care-guide body, API key redacted, or <c>null</c>.</param>
+public readonly record struct PerenualCareGuideFetch(PerenualFetchOutcome Outcome, string? LiteralJson);

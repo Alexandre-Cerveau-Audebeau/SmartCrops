@@ -97,11 +97,14 @@ public class PlantPerenualEnrichmentService : IPlantPerenualEnrichmentService
         // the captured guide matches the species we actually persist, not the
         // (possibly server-canonicalised — issue #67/#73) requested id. Non-null
         // here: we returned early above when result.PerenualId was null.
-        var careGuideJson = await _client.GetCareGuideLiteralAsync(result.PerenualId.Value, ct);
+        // SMA-94: care guide now returns an outcome-tagged struct; LiteralJson is
+        // null on any non-Success path, so this stays behaviourally identical to
+        // the prior `string?` (a miss → null → no care-guide captured, non-fatal).
+        var careGuide = await _client.GetCareGuideLiteralAsync(result.PerenualId.Value, ct);
         return result with
         {
             LiteralResponseJson = fetch.LiteralJson,
-            CareGuideResponseJson = careGuideJson,
+            CareGuideResponseJson = careGuide.LiteralJson,
         };
     }
 }

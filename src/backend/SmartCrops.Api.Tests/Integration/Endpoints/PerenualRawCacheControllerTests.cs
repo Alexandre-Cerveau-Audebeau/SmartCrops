@@ -98,27 +98,32 @@ public class PerenualRawCacheControllerTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task PhaseList_MultiPage_AdvancesCursor_AndResumesFromAfterId()
+    public async Task PhaseList_MultiPage_AdvancesCursor_ResumesFromAfterId_AndTerminatesAtLastPage()
     {
         // Two pages processed one-per-chunk (limit=1) so the keyset cursor
-        // (nextCursor → afterId) resumption contract is directly exercised.
+        // (nextCursor → afterId) resumption contract is directly exercised, AND the
+        // SMA-94 terminal-detection: the cursor goes null AT last_page and page 3 is
+        // never requested (no march-past-end / infinite resume).
         Fixture.PerenualHttpStub.SetList(1, ListPage(2, 11));
         Fixture.PerenualHttpStub.SetList(2, ListPage(2, 22));
         AuthAsAdmin();
 
-        // Chunk 1: caches page 1, returns the cursor to resume from.
+        // Chunk 1: caches page 1, returns the cursor to resume from (last_page=2 not reached).
         var r1 = await Client.PostAsync($"{Url}?phase=list&limit=1&delayMs=0", null);
         Assert.Equal(HttpStatusCode.OK, r1.StatusCode);
         var b1 = await r1.Content.ReadFromJsonAsync<CacheResp>();
         Assert.Equal(1, b1!.Processed);
         Assert.Equal("1", b1.NextCursor);
 
-        // Chunk 2: resume strictly past the cursor → caches page 2.
+        // Chunk 2: resume strictly past the cursor → caches page 2 = last_page → END.
         var r2 = await Client.PostAsync($"{Url}?phase=list&limit=1&delayMs=0&afterId={b1.NextCursor}", null);
         Assert.Equal(HttpStatusCode.OK, r2.StatusCode);
         var b2 = await r2.Content.ReadFromJsonAsync<CacheResp>();
         Assert.Equal(1, b2!.Processed);
-        Assert.Equal("2", b2.NextCursor);
+        Assert.Null(b2.NextCursor); // reached last_page → terminate, driver stops here
+
+        // The beyond-end page 3 was NEVER fetched (anti-infinite-loop).
+        Assert.DoesNotContain("species-list:3", Fixture.PerenualHttpStub.Received);
 
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
@@ -168,6 +173,52 @@ public class PerenualRawCacheControllerTests : IntegrationTestBase
         var html = await db.PerenualRawCache.SingleAsync(c => c.Endpoint == "species-details" && c.ResourceId == "99");
         Assert.Null(html.RawJson);          // no usable body kept
         Assert.Equal(0, html.HttpStatus);   // NoBody sentinel — not re-fetched next pass
+    }
+
+    [Fact]
+    public async Task PhaseDetails_TransientFailure_WritesNoRow_AndIsCapturedOnRetry()
+    {
+        // ids 11,12,13 from the cached list. id 12 fails TRANSIENTLY (200 + malformed
+        // JSON → JsonException → TransientFailure). SMA-94 invariant: NO skip row is
+        // written for it and the cursor resumes BELOW it, so a later run still
+        // captures it — a transient outage must never burn a permanent cache hole.
+        Fixture.PerenualHttpStub.SetList(1, ListPage(1, 11, 12, 13));
+        AuthAsAdmin();
+        await Client.PostAsync($"{Url}?phase=list&delayMs=0", null);
+
+        Fixture.PerenualHttpStub.SetDetails(11, "{\"id\":11}");
+        Fixture.PerenualHttpStub.SetDetails(12, "{ this is not valid json", HttpStatusCode.OK); // transient
+        Fixture.PerenualHttpStub.SetDetails(13, "{\"id\":13}");
+
+        var r1 = await Client.PostAsync($"{Url}?phase=details&delayMs=0", null);
+        Assert.Equal(HttpStatusCode.OK, r1.StatusCode);
+        var b1 = await r1.Content.ReadFromJsonAsync<CacheResp>();
+        Assert.Equal(2, b1!.Processed);    // 11 + 13
+        Assert.Equal(1, b1.Failures);      // 12 transient
+        Assert.Equal(0, b1.HtmlSkipped);   // NOT a terminal no-body
+        Assert.Equal("11", b1.NextCursor); // resume below the smallest transient id (12−1)
+
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            // No row of any kind for the transient id — not a permanent skip.
+            Assert.False(await db.PerenualRawCache.AnyAsync(c => c.Endpoint == "species-details" && c.ResourceId == "12"));
+            Assert.Equal(2, await db.PerenualRawCache.CountAsync(c => c.Endpoint == "species-details"));
+        }
+
+        // Retry from the resume cursor: id 12 now returns valid JSON → it IS captured.
+        Fixture.PerenualHttpStub.SetDetails(12, "{\"id\":12}");
+        var r2 = await Client.PostAsync($"{Url}?phase=details&delayMs=0&afterId={b1.NextCursor}", null);
+        Assert.Equal(HttpStatusCode.OK, r2.StatusCode);
+        var b2 = await r2.Content.ReadFromJsonAsync<CacheResp>();
+        Assert.Equal(1, b2!.Processed);    // 12 captured (13 already cached → idempotent skip)
+        Assert.Equal(0, b2.Failures);
+
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            Assert.True(await db.PerenualRawCache.AnyAsync(c => c.Endpoint == "species-details" && c.ResourceId == "12"));
+        }
     }
 
     // ── phase=careguide ───────────────────────────────────────────────────────

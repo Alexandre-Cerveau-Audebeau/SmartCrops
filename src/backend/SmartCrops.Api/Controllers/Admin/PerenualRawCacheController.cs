@@ -91,17 +91,18 @@ public class PerenualRawCacheController : ControllerBase
     {
         int processed = 0, cached = 0, htmlSkipped = 0, failures = 0;
         int? lastPage = null;
-        int? nextCursor = null;
         var start = (afterPage ?? 0) + 1;
+
+        // nextCursor = the page the next chunk resumes PAST; null once the end
+        // (last_page) is reached. Seeded with the input cursor so a failure before
+        // any progress still re-points the next chunk at this chunk's first page.
+        int? nextCursor = afterPage;
+        var reachedEnd = false;
 
         for (var page = start; page - start < limit; page++)
         {
             ct.ThrowIfCancellationRequested();
-            if (lastPage is int lp && page > lp)
-            {
-                nextCursor = null; // reached the end
-                break;
-            }
+            var stop = false;
 
             try
             {
@@ -111,26 +112,42 @@ public class PerenualRawCacheController : ControllerBase
                     cached++;
                     nextCursor = page;
                     lastPage ??= ExtractLastPage(existing.RawJson); // learn the bound even when skipping
+                    if (lastPage is int lpc && page >= lpc) { reachedEnd = true; break; }
                     continue;
                 }
 
                 var fetch = await _client.GetSpeciesListWithLiteralAsync(page, ct);
-                if (fetch.List is null)
+                switch (fetch.Outcome)
                 {
-                    await UpsertAsync(ListEndpoint, page.ToString(), null, NoBodyStatus, ct);
-                    htmlSkipped++;
-                    nextCursor = page;
-                }
-                else
-                {
-                    PerenualKeyRedactor.AssertRedacted(fetch.LiteralJson, "PerenualRawCache.species-list");
-                    await UpsertAsync(ListEndpoint, page.ToString(), fetch.LiteralJson, 200, ct);
-                    lastPage ??= fetch.List.LastPage;
-                    processed++;
-                    nextCursor = page;
-                }
+                    case PerenualFetchOutcome.Success:
+                        PerenualKeyRedactor.AssertRedacted(fetch.LiteralJson, "PerenualRawCache.species-list");
+                        await UpsertAsync(ListEndpoint, page.ToString(), fetch.LiteralJson, 200, ct);
+                        processed++;
+                        nextCursor = page;
+                        lastPage = fetch.List!.LastPage ?? lastPage;
+                        await PaceAsync(delayMs, ct);
+                        // End is detected from the RESPONSE BODY's last_page, so the
+                        // loop terminates ON the last page and never fetches
+                        // last_page+1 (SMA-94: no march-past-end / infinite resume).
+                        if (lastPage is int lp && page >= lp) { reachedEnd = true; }
+                        break;
 
-                await PaceAsync(delayMs, ct);
+                    case PerenualFetchOutcome.TerminalNoBody:
+                        // A genuinely-gone page (rare for list). Record + advance.
+                        await UpsertAsync(ListEndpoint, page.ToString(), null, NoBodyStatus, ct);
+                        htmlSkipped++;
+                        nextCursor = page;
+                        await PaceAsync(delayMs, ct);
+                        break;
+
+                    case PerenualFetchOutcome.TransientFailure:
+                        // Write no skip row and do NOT advance past this page — the
+                        // next chunk must retry it. Resume so its start == page.
+                        failures++;
+                        nextCursor = page - 1;
+                        stop = true;
+                        break;
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -138,13 +155,21 @@ public class PerenualRawCacheController : ControllerBase
             }
             catch (Exception ex)
             {
+                // Defensive: an unexpected throw (AssertRedacted / DB) is transient —
+                // count it, write nothing, and pin the resume at this page.
                 failures++;
                 _logger.LogError(ex, "Perenual raw-cache (list) failed for page {Page}", page);
                 _db.ChangeTracker.Clear();
+                nextCursor = page - 1;
+                stop = true;
             }
+
+            if (stop || reachedEnd) { break; }
         }
 
-        return Log(new CacheCatalogResponse("list", processed, cached, htmlSkipped, failures, nextCursor?.ToString()));
+        return Log(new CacheCatalogResponse(
+            "list", processed, cached, htmlSkipped, failures,
+            reachedEnd ? null : nextCursor?.ToString()));
     }
 
     // ── phase=details / careguide ────────────────────────────────────────────
@@ -155,7 +180,8 @@ public class PerenualRawCacheController : ControllerBase
         var ids = await GetSpeciesIdsFromListCacheAsync(afterId, limit, ct);
 
         int processed = 0, cached = 0, htmlSkipped = 0, failures = 0;
-        int? nextCursor = null;
+        int? minTransientId = null; // smallest transient-failed id (ids are ascending)
+        var maxId = afterId;        // largest id we are "done past"
 
         foreach (var id in ids)
         {
@@ -165,29 +191,40 @@ public class PerenualRawCacheController : ControllerBase
                 var existing = await FindAsync(endpoint, id.ToString(), ct);
                 if (existing is not null && !force)
                 {
+                    // Already captured (Success or terminal no-body). Transient
+                    // failures NEVER write a row, so an existing row is genuinely done.
                     cached++;
-                    nextCursor = id;
+                    maxId = id;
                     continue;
                 }
 
-                var literal = endpoint == DetailsEndpoint
-                    ? await FetchDetailsLiteralAsync(id, ct)
-                    : await _client.GetCareGuideLiteralAsync(id, ct);
+                var (outcome, literal) = endpoint == DetailsEndpoint
+                    ? await FetchDetailsAsync(id, ct)
+                    : await FetchCareGuideAsync(id, ct);
 
-                if (literal is null)
+                switch (outcome)
                 {
-                    // No usable body (deleted id HTML / non-JSON / miss). Record the
-                    // attempt so it isn't re-fetched; not a failure.
-                    await UpsertAsync(endpoint, id.ToString(), null, NoBodyStatus, ct);
-                    htmlSkipped++;
+                    case PerenualFetchOutcome.Success:
+                        PerenualKeyRedactor.AssertRedacted(literal, $"PerenualRawCache.{endpoint}");
+                        await UpsertAsync(endpoint, id.ToString(), literal, 200, ct);
+                        processed++;
+                        maxId = id;
+                        break;
+
+                    case PerenualFetchOutcome.TerminalNoBody:
+                        // Genuinely gone (deleted id ≥8574 HTML) — permanent skip is wanted.
+                        await UpsertAsync(endpoint, id.ToString(), null, NoBodyStatus, ct);
+                        htmlSkipped++;
+                        maxId = id;
+                        break;
+
+                    case PerenualFetchOutcome.TransientFailure:
+                        // Write NOTHING (no skip row) so the id stays re-fetchable, and
+                        // remember the smallest failed id so the cursor never jumps past it.
+                        failures++;
+                        minTransientId ??= id;
+                        break;
                 }
-                else
-                {
-                    PerenualKeyRedactor.AssertRedacted(literal, $"PerenualRawCache.{endpoint}");
-                    await UpsertAsync(endpoint, id.ToString(), literal, 200, ct);
-                    processed++;
-                }
-                nextCursor = id;
 
                 await PaceAsync(delayMs, ct);
             }
@@ -197,22 +234,38 @@ public class PerenualRawCacheController : ControllerBase
             }
             catch (Exception ex)
             {
+                // Defensive: an unexpected throw is transient — count it, keep the id
+                // re-fetchable (no skip row), and pin the resume below it.
                 failures++;
+                minTransientId ??= id;
                 _logger.LogError(ex, "Perenual raw-cache ({Endpoint}) failed for id {Id}", endpoint, id);
                 _db.ChangeTracker.Clear();
             }
         }
+
+        // RESUME INVARIANT (SMA-94): never skip a transient-failed id. If any failed,
+        // resume just BELOW the smallest failed id — already-cached higher ids
+        // re-visit as idempotent skips (a cheap DB check, no re-fetch). Otherwise
+        // advance past the largest id handled. Empty chunk ⇒ end (null).
+        int? nextCursor = ids.Count == 0
+            ? null
+            : (minTransientId is int mt ? mt - 1 : maxId);
 
         return Log(new CacheCatalogResponse(
             endpoint == DetailsEndpoint ? "details" : "careguide",
             processed, cached, htmlSkipped, failures, nextCursor?.ToString()));
     }
 
-    private async Task<string?> FetchDetailsLiteralAsync(int id, CancellationToken ct)
+    private async Task<(PerenualFetchOutcome Outcome, string? Literal)> FetchDetailsAsync(int id, CancellationToken ct)
     {
         var fetch = await _client.GetSpeciesDetailsWithLiteralAsync(id, ct);
-        // Species null ⇒ deleted-id HTML / non-JSON / failure ⇒ no body to keep.
-        return fetch.Species is null ? null : fetch.LiteralJson;
+        return (fetch.Outcome, fetch.LiteralJson);
+    }
+
+    private async Task<(PerenualFetchOutcome Outcome, string? Literal)> FetchCareGuideAsync(int id, CancellationToken ct)
+    {
+        var fetch = await _client.GetCareGuideLiteralAsync(id, ct);
+        return (fetch.Outcome, fetch.LiteralJson);
     }
 
     /// <summary>
