@@ -221,6 +221,76 @@ public class PerenualRawCacheControllerTests : IntegrationTestBase
         }
     }
 
+    [Fact]
+    public async Task PhaseDetails_Gap404_RecordedAsTerminalSkip_WithRealStatus_AndCursorAdvances()
+    {
+        // SMA-100 regression test for the catalogue-aspiration infinite loop. id 88 is
+        // a GAP in Perenual's id space — /species/details/88 returns 404 (NOT the
+        // 200+HTML deleted-id placeholder). It must be recorded as a TERMINAL skip
+        // (RawJson null, real HttpStatus 404) so the cursor ADVANCES past it to id 99,
+        // instead of pinning at 88 forever (the bug). The 404 row's real status keeps
+        // it auditable as a gap vs the 200+HTML placeholder (status 0).
+        Fixture.PerenualHttpStub.SetList(1, ListPage(1, 11, 88, 99));
+        AuthAsAdmin();
+        await Client.PostAsync($"{Url}?phase=list&delayMs=0", null);
+
+        Fixture.PerenualHttpStub.SetDetails(11, "{\"id\":11}");
+        Fixture.PerenualHttpStub.SetDetails(88, "{}", HttpStatusCode.NotFound); // id-space gap
+        Fixture.PerenualHttpStub.SetDetails(99, "{\"id\":99}");
+
+        var response = await Client.PostAsync($"{Url}?phase=details&delayMs=0", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<CacheResp>();
+        Assert.Equal(2, body!.Processed);     // 11 + 99 captured
+        Assert.Equal(1, body.HtmlSkipped);    // 88 recorded as terminal skip
+        Assert.Equal(0, body.Failures);       // a 404 is NOT a failure (no infinite retry)
+        Assert.Equal("99", body.NextCursor);  // advanced PAST the gap, not pinned at 88
+        Assert.Null(body.FailedIds);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var gap = await db.PerenualRawCache.SingleAsync(c => c.Endpoint == "species-details" && c.ResourceId == "88");
+        Assert.Null(gap.RawJson);             // no usable body
+        Assert.Equal(404, gap.HttpStatus);    // SMA-100: REAL status, not the NoBody sentinel 0
+        Assert.True(await db.PerenualRawCache.AnyAsync(c => c.Endpoint == "species-details" && c.ResourceId == "11"));
+        Assert.True(await db.PerenualRawCache.AnyAsync(c => c.Endpoint == "species-details" && c.ResourceId == "99"));
+    }
+
+    [Fact]
+    public async Task PhaseDetails_PersistentTransient_SurfacesFailedIds_AndPinsCursor()
+    {
+        // SMA-100 circuit-breaker SERVER contract (the driver's 5-chunk stall guard
+        // sits on top of this). A persistent 5xx on id 50 stays TRANSIENT: no row is
+        // written, the cursor PINS at 49 (minTransientId−1) so the id is never
+        // skipped, and the failed id is surfaced in FailedIds so the driver can name
+        // the blocker when it aborts a stalled phase. (No PowerShell test harness
+        // exists in-repo; the 5-chunk counter is exercised against this contract.)
+        Fixture.PerenualHttpStub.SetList(1, ListPage(1, 11, 50, 60));
+        AuthAsAdmin();
+        await Client.PostAsync($"{Url}?phase=list&delayMs=0", null);
+
+        Fixture.PerenualHttpStub.SetDetails(11, "{\"id\":11}");
+        Fixture.PerenualHttpStub.SetDetails(50, "{}", HttpStatusCode.InternalServerError); // persistent 5xx
+        Fixture.PerenualHttpStub.SetDetails(60, "{\"id\":60}");
+
+        var response = await Client.PostAsync($"{Url}?phase=details&delayMs=0", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<CacheResp>();
+        Assert.Equal(2, body!.Processed);      // 11 + 60
+        Assert.Equal(1, body.Failures);        // 50 transient
+        Assert.Equal(0, body.HtmlSkipped);     // NOT terminal
+        Assert.Equal("49", body.NextCursor);   // pinned below the transient id (50−1)
+        Assert.NotNull(body.FailedIds);
+        Assert.Equal(new[] { 50 }, body.FailedIds);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        // No skip row for the transient id — it stays re-fetchable.
+        Assert.False(await db.PerenualRawCache.AnyAsync(c => c.Endpoint == "species-details" && c.ResourceId == "50"));
+    }
+
     // ── phase=careguide ───────────────────────────────────────────────────────
 
     [Fact]
@@ -295,5 +365,5 @@ public class PerenualRawCacheControllerTests : IntegrationTestBase
             new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
     }
 
-    private record CacheResp(string Phase, int Processed, int Cached, int HtmlSkipped, int Failures, string? NextCursor);
+    private record CacheResp(string Phase, int Processed, int Cached, int HtmlSkipped, int Failures, string? NextCursor, int[]? FailedIds = null);
 }
