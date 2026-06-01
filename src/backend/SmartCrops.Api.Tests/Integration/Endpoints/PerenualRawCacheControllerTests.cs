@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SmartCrops.Core.Authorization;
 using SmartCrops.Infrastructure.Data;
+using SmartCrops.Infrastructure.ExternalApis.Perenual;
 
 namespace SmartCrops.Api.Tests.Integration.Endpoints;
 
@@ -96,6 +97,34 @@ public class PerenualRawCacheControllerTests : IntegrationTestBase
         Assert.Contains("plant-11", row.RawJson); // common_name preserved verbatim
     }
 
+    [Fact]
+    public async Task PhaseList_MultiPage_AdvancesCursor_AndResumesFromAfterId()
+    {
+        // Two pages processed one-per-chunk (limit=1) so the keyset cursor
+        // (nextCursor → afterId) resumption contract is directly exercised.
+        Fixture.PerenualHttpStub.SetList(1, ListPage(2, 11));
+        Fixture.PerenualHttpStub.SetList(2, ListPage(2, 22));
+        AuthAsAdmin();
+
+        // Chunk 1: caches page 1, returns the cursor to resume from.
+        var r1 = await Client.PostAsync($"{Url}?phase=list&limit=1&delayMs=0", null);
+        Assert.Equal(HttpStatusCode.OK, r1.StatusCode);
+        var b1 = await r1.Content.ReadFromJsonAsync<CacheResp>();
+        Assert.Equal(1, b1!.Processed);
+        Assert.Equal("1", b1.NextCursor);
+
+        // Chunk 2: resume strictly past the cursor → caches page 2.
+        var r2 = await Client.PostAsync($"{Url}?phase=list&limit=1&delayMs=0&afterId={b1.NextCursor}", null);
+        Assert.Equal(HttpStatusCode.OK, r2.StatusCode);
+        var b2 = await r2.Content.ReadFromJsonAsync<CacheResp>();
+        Assert.Equal(1, b2!.Processed);
+        Assert.Equal("2", b2.NextCursor);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        Assert.Equal(2, await db.PerenualRawCache.CountAsync(c => c.Endpoint == "species-list"));
+    }
+
     // ── phase=details ─────────────────────────────────────────────────────────
 
     [Fact]
@@ -132,7 +161,9 @@ public class PerenualRawCacheControllerTests : IntegrationTestBase
         Assert.NotNull(real.RawJson);
         Assert.Contains("Plant eleven", real.RawJson);
         Assert.DoesNotContain("test-perenual-key", real.RawJson); // redacted
-        Assert.Contains("REDACTED", real.RawJson);
+        // Derive the positive marker from the production redactor so the two layers
+        // can't drift if the sentinel ever changes.
+        Assert.Contains(PerenualKeyRedactor.Placeholder, real.RawJson);
 
         var html = await db.PerenualRawCache.SingleAsync(c => c.Endpoint == "species-details" && c.ResourceId == "99");
         Assert.Null(html.RawJson);          // no usable body kept
@@ -176,17 +207,20 @@ public class PerenualRawCacheControllerTests : IntegrationTestBase
         AuthAsAdmin();
 
         var first = await Client.PostAsync($"{Url}?phase=list&delayMs=0", null);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         var firstBody = await first.Content.ReadFromJsonAsync<CacheResp>();
         Assert.Equal(1, firstBody!.Processed);
 
         // Second run, same state: the already-cached page is skipped (idempotent).
         var second = await Client.PostAsync($"{Url}?phase=list&delayMs=0", null);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
         var secondBody = await second.Content.ReadFromJsonAsync<CacheResp>();
         Assert.Equal(0, secondBody!.Processed);
         Assert.Equal(1, secondBody.Cached);
 
         // force=true re-fetches and overwrites in place — still one row.
         var forced = await Client.PostAsync($"{Url}?phase=list&delayMs=0&force=true", null);
+        Assert.Equal(HttpStatusCode.OK, forced.StatusCode);
         var forcedBody = await forced.Content.ReadFromJsonAsync<CacheResp>();
         Assert.Equal(1, forcedBody!.Processed);
 

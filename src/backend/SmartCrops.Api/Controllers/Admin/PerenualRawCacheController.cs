@@ -170,9 +170,9 @@ public class PerenualRawCacheController : ControllerBase
                     continue;
                 }
 
-                var (literal, hadBody) = endpoint == DetailsEndpoint
+                var literal = endpoint == DetailsEndpoint
                     ? await FetchDetailsLiteralAsync(id, ct)
-                    : (await _client.GetCareGuideLiteralAsync(id, ct), null);
+                    : await _client.GetCareGuideLiteralAsync(id, ct);
 
                 if (literal is null)
                 {
@@ -187,7 +187,6 @@ public class PerenualRawCacheController : ControllerBase
                     await UpsertAsync(endpoint, id.ToString(), literal, 200, ct);
                     processed++;
                 }
-                _ = hadBody;
                 nextCursor = id;
 
                 await PaceAsync(delayMs, ct);
@@ -209,11 +208,11 @@ public class PerenualRawCacheController : ControllerBase
             processed, cached, htmlSkipped, failures, nextCursor?.ToString()));
     }
 
-    private async Task<(string? Literal, bool? HadBody)> FetchDetailsLiteralAsync(int id, CancellationToken ct)
+    private async Task<string?> FetchDetailsLiteralAsync(int id, CancellationToken ct)
     {
         var fetch = await _client.GetSpeciesDetailsWithLiteralAsync(id, ct);
         // Species null ⇒ deleted-id HTML / non-JSON / failure ⇒ no body to keep.
-        return (fetch.Species is null ? null : fetch.LiteralJson, fetch.Species is not null);
+        return fetch.Species is null ? null : fetch.LiteralJson;
     }
 
     /// <summary>

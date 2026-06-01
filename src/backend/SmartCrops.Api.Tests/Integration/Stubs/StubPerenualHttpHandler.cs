@@ -58,12 +58,17 @@ public sealed class StubPerenualHttpHandler : HttpMessageHandler
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var uri = request.RequestUri!;
         var path = uri.AbsolutePath;
 
+        // Match on stable trailing segments rather than free substrings so a future
+        // endpoint (e.g. species-list-v2) can't silently route to the wrong branch.
+        // species/details/{id} keeps a Contains check because the id trails the segment.
         string kind;
         string resourceId;
-        if (path.Contains("species-care-guide-list", StringComparison.OrdinalIgnoreCase))
+        if (path.EndsWith("species-care-guide-list", StringComparison.OrdinalIgnoreCase))
         {
             kind = "care-guide";
             resourceId = QueryValue(uri, "species_id") ?? "";
@@ -73,7 +78,7 @@ public sealed class StubPerenualHttpHandler : HttpMessageHandler
             kind = "species-details";
             resourceId = path.TrimEnd('/').Split('/')[^1];
         }
-        else if (path.Contains("species-list", StringComparison.OrdinalIgnoreCase))
+        else if (path.EndsWith("species-list", StringComparison.OrdinalIgnoreCase))
         {
             kind = "species-list";
             resourceId = QueryValue(uri, "page") ?? "";

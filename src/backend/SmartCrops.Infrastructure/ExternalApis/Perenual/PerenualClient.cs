@@ -243,69 +243,17 @@ public class PerenualClient
     }
 
     /// <summary>
-    /// Calls <c>/species-list?key=...&amp;page={page}</c> — catalog
-    /// enumeration path (SMA-13 batch 2 scale-up). Mirrors the defensive
-    /// posture of <see cref="GetSpeciesDetailsAsync"/>: <c>EnsureSuccessStatusCode</c>
-    /// + Content-Type pre-check so the off-by-one ≥8574 HTML responses
-    /// (PR #76) are absorbed as <c>null</c> rather than crashing
-    /// deserialisation. Returns <c>null</c> on transport failure, timeout,
-    /// malformed JSON, non-success status, or non-JSON Content-Type.
+    /// Calls <c>/species-list?key=...&amp;page={page}</c> (catalog enumeration
+    /// path, SMA-13 batch 2 scale-up) and returns only the parsed DTO — a thin
+    /// wrapper over <see cref="GetSpeciesListWithLiteralAsync"/> so the request,
+    /// Content-Type guard (the off-by-one ≥8574 HTML responses, PR #76), and
+    /// failure handling stay single-sourced (parallels how
+    /// <see cref="GetSpeciesDetailsAsync"/> delegates). Returns <c>null</c> on
+    /// transport failure, timeout, malformed JSON, non-success status, or a
+    /// non-JSON Content-Type.
     /// </summary>
     public async Task<PerenualSpeciesListResponse?> GetSpeciesListAsync(int page, CancellationToken ct)
-    {
-        var url = $"species-list?key={Uri.EscapeDataString(_apiKey)}&page={page}";
-        try
-        {
-            using var response = await _http.GetAsync(url, ct);
-            response.EnsureSuccessStatusCode();
-
-            // Same Content-Type guard as GetSpeciesDetailsAsync (PR #76). The
-            // off-by-one ≥8574 bug was only observed on /species/details/{id},
-            // but applying the guard symmetrically here costs nothing and
-            // prevents a future Perenual-CDN-error-page from crashing the
-            // catalog fetcher mid-pagination.
-            var contentType = response.Content.Headers.ContentType?.MediaType;
-            if (!string.Equals(contentType, "application/json", StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogWarning(
-                    "Perenual returned non-JSON content-type '{ContentType}' for species-list page {Page}. Treating as NoMatch.",
-                    contentType ?? "(none)",
-                    page);
-                return null;
-            }
-
-            var body = await response.Content.ReadFromJsonAsync<PerenualSpeciesListResponse>(ct);
-            _logger.LogInformation(
-                "Perenual species-list page {Page}: current={Current} total={Total} count={Count}",
-                page, body?.CurrentPage, body?.Total, body?.Data?.Count ?? 0);
-            return body;
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogWarning(ex, "Perenual species-list transport failure for page {Page}", page);
-            return null;
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogWarning(ex, "Perenual species-list returned malformed JSON for page {Page}", page);
-            return null;
-        }
-        catch (NotSupportedException ex)
-        {
-            _logger.LogWarning(ex, "Perenual species-list returned unsupported content for page {Page}", page);
-            return null;
-        }
-        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
-        {
-            _logger.LogWarning(ex, "Perenual species-list timed out for page {Page}", page);
-            return null;
-        }
-        catch (TimeoutRejectedException ex)
-        {
-            _logger.LogWarning(ex, "Perenual species-list hit resilience-handler timeout for page {Page}", page);
-            return null;
-        }
-    }
+        => (await GetSpeciesListWithLiteralAsync(page, ct)).List;
 
     /// <summary>
     /// Calls <c>/species-list?key=...&amp;page={page}</c> and returns BOTH the parsed

@@ -40,6 +40,14 @@ param(
 
     [string]$Token = $env:SMARTCROPS_TOKEN,
 
+    # DelayMs / Limit are intentionally operator-tunable knobs (NOT hardcoded
+    # literals, by design): the SMA-93 one-shot aspiration runs against a live
+    # quota days before the Perenual cancel, so the operator must be able to slow
+    # pacing if Perenual rate-limits and shrink the chunk if a run is interrupted.
+    # Both are forwarded verbatim to the backend cache-catalog endpoint
+    # (PerenualRawCacheController.CacheCatalog), which uses Limit as the per-chunk
+    # bound; the client-side ValidateRange here is fail-fast UX only.
+
     # Server-side pacing between Perenual calls (ms). Forwarded to the endpoint.
     [ValidateRange(0, 60000)]
     [int]$DelayMs = 700,
@@ -83,7 +91,11 @@ function Invoke-CacheChunk {
     $attempt = 0
     while ($true) {
         try {
-            # -TimeoutSec generous: a chunk may make up to $Limit paced API calls.
+            # -TimeoutSec generous: worst case is $Limit resources each paced by
+            # $DelayMs plus the per-call fetch + redaction. Default 200 * 700ms =
+            # 140s of pacing alone; 600s leaves ample margin for the slow/large
+            # Perenual details payloads (cf. the 180s backend resilience ceiling on
+            # PerenualClient in Program.cs).
             return Invoke-RestMethod -Method Post -Uri $Uri -Headers $Headers -TimeoutSec 600
         }
         catch {
