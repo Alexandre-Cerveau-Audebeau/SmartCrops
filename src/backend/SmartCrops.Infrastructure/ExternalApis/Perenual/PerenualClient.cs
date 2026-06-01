@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -150,15 +151,18 @@ public class PerenualClient
             var rawBody = await response.Content.ReadAsStringAsync(ct);
             var species = JsonSerializer.Deserialize<PerenualSpeciesResponse>(rawBody, WebJsonOptions);
             var literal = PerenualKeyRedactor.Redact(rawBody, _apiKey);
-            return new PerenualSpeciesFetch(species, literal, PerenualFetchOutcome.Success);
+            return new PerenualSpeciesFetch(species, literal, PerenualFetchOutcome.Success, 200);
         }
-        // Every exception path is TRANSIENT (transport/5xx/timeout/malformed):
-        // the resource is not proven gone, so callers must be free to retry
-        // rather than burn a permanent skip (SMA-94).
+        // A non-success STATUS lands here (EnsureSuccessStatusCode throws). SMA-100:
+        // 404/410 prove the id is genuinely gone (a gap in Perenual's id space, e.g.
+        // id 8799) → TERMINAL no-body; everything else (401/403/408/429/5xx) plus
+        // transport/timeout/malformed are NOT proof of absence → TRANSIENT, so a
+        // revoked key or quota exhaustion can never silently skip-write the catalogue.
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Perenual species fetch transport failure for id {Id}", perenualId);
-            return new PerenualSpeciesFetch(null, null, PerenualFetchOutcome.TransientFailure);
+            var (outcome, http) = ClassifyHttpError(ex.StatusCode);
+            _logger.LogWarning(ex, "Perenual species fetch HTTP error (status={Status}) for id {Id}; classified {Outcome}", ex.StatusCode, perenualId, outcome);
+            return new PerenualSpeciesFetch(null, null, outcome, http);
         }
         catch (JsonException ex)
         {
@@ -232,10 +236,13 @@ public class PerenualClient
 
             return new PerenualCareGuideFetch(literal, PerenualFetchOutcome.Success);
         }
+        // SMA-100: 404/410 = the guide id is genuinely gone → TERMINAL; every other
+        // status plus transport/timeout stays TRANSIENT (see GetSpeciesDetailsWithLiteralAsync).
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Perenual care-guide transport failure for species id {Id}", speciesId);
-            return new PerenualCareGuideFetch(null, PerenualFetchOutcome.TransientFailure);
+            var (outcome, http) = ClassifyHttpError(ex.StatusCode);
+            _logger.LogWarning(ex, "Perenual care-guide HTTP error (status={Status}) for species id {Id}; classified {Outcome}", ex.StatusCode, speciesId, outcome);
+            return new PerenualCareGuideFetch(null, outcome, http);
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
@@ -426,6 +433,21 @@ public class PerenualClient
         => element.TryGetProperty(propertyName, out var p) && p.ValueKind == JsonValueKind.String
             ? p.GetString()
             : null;
+
+    /// <summary>
+    /// SMA-100: maps a non-success HTTP status (from <c>EnsureSuccessStatusCode</c>)
+    /// to a fetch outcome. Only <c>404 Not Found</c> / <c>410 Gone</c> prove the
+    /// resource is genuinely absent (a gap in Perenual's id space) → terminal, with
+    /// the real status recorded so a cache row is auditable as a gap (404) vs the
+    /// 200+HTML placeholder (status 0). All other statuses (401/403/408/429/5xx) and
+    /// transport faults (null status) are NOT proof of absence and stay transient —
+    /// critically so a revoked key (401/403) or exhausted quota (429) can never
+    /// silently write permanent skips across the whole catalogue.
+    /// </summary>
+    private static (PerenualFetchOutcome Outcome, int? HttpStatus) ClassifyHttpError(HttpStatusCode? status)
+        => status is HttpStatusCode.NotFound or HttpStatusCode.Gone
+            ? (PerenualFetchOutcome.TerminalNoBody, (int)status.Value)
+            : (PerenualFetchOutcome.TransientFailure, status is { } s ? (int)s : null);
 }
 
 /// <summary>
@@ -464,8 +486,11 @@ public enum PerenualFetchOutcome
 /// <param name="Species">Parsed species response, or <c>null</c> on no-match/failure.</param>
 /// <param name="LiteralJson">Verbatim response body, API key redacted, or <c>null</c>.</param>
 /// <param name="Outcome">Terminal disposition (SMA-94).</param>
+/// <param name="HttpStatus">SMA-100: the real HTTP status for an auditable cache row
+/// — 200 on success, 404/410 on a terminal gap; <c>null</c> for the 200+HTML
+/// placeholder (recorded as the sentinel 0) and transient faults.</param>
 public readonly record struct PerenualSpeciesFetch(
-    PerenualSpeciesResponse? Species, string? LiteralJson, PerenualFetchOutcome Outcome);
+    PerenualSpeciesResponse? Species, string? LiteralJson, PerenualFetchOutcome Outcome, int? HttpStatus = null);
 
 /// <summary>
 /// Result of <see cref="PerenualClient.GetSpeciesListWithLiteralAsync"/> (SMA-93):
@@ -488,4 +513,6 @@ public readonly record struct PerenualSpeciesListFetch(
 /// </summary>
 /// <param name="LiteralJson">Verbatim care-guide body, API key redacted, or <c>null</c>.</param>
 /// <param name="Outcome">Terminal disposition (SMA-94).</param>
-public readonly record struct PerenualCareGuideFetch(string? LiteralJson, PerenualFetchOutcome Outcome);
+/// <param name="HttpStatus">SMA-100: the real HTTP status for an auditable cache row
+/// — 404/410 on a terminal gap; <c>null</c> otherwise (recorded as the sentinel 0).</param>
+public readonly record struct PerenualCareGuideFetch(string? LiteralJson, PerenualFetchOutcome Outcome, int? HttpStatus = null);

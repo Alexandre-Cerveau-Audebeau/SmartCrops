@@ -182,6 +182,7 @@ public class PerenualRawCacheController : ControllerBase
         int processed = 0, cached = 0, htmlSkipped = 0, failures = 0;
         int? minTransientId = null; // smallest transient-failed id (ids are ascending)
         var maxId = afterId;        // largest id we are "done past"
+        var failedIds = new List<int>(); // SMA-100: transient ids this chunk, for the driver's stall guard
 
         foreach (var id in ids)
         {
@@ -198,7 +199,7 @@ public class PerenualRawCacheController : ControllerBase
                     continue;
                 }
 
-                var (outcome, literal) = endpoint == DetailsEndpoint
+                var (outcome, literal, httpStatus) = endpoint == DetailsEndpoint
                     ? await FetchDetailsAsync(id, ct)
                     : await FetchCareGuideAsync(id, ct);
 
@@ -212,8 +213,12 @@ public class PerenualRawCacheController : ControllerBase
                         break;
 
                     case PerenualFetchOutcome.TerminalNoBody:
-                        // Genuinely gone (deleted id ≥8574 HTML) — permanent skip is wanted.
-                        await UpsertAsync(endpoint, id.ToString(), null, NoBodyStatus, ct);
+                        // Genuinely gone — a permanent skip is wanted so the cursor
+                        // advances past it. SMA-100: record the REAL status (404/410
+                        // for an id-space gap), falling back to the NoBody sentinel (0)
+                        // for the 200+HTML deleted-id placeholder, so the two are
+                        // distinguishable in the cache for audit.
+                        await UpsertAsync(endpoint, id.ToString(), null, httpStatus ?? NoBodyStatus, ct);
                         htmlSkipped++;
                         maxId = id;
                         break;
@@ -223,6 +228,7 @@ public class PerenualRawCacheController : ControllerBase
                         // remember the smallest failed id so the cursor never jumps past it.
                         failures++;
                         minTransientId ??= id;
+                        failedIds.Add(id);
                         break;
                 }
 
@@ -238,6 +244,7 @@ public class PerenualRawCacheController : ControllerBase
                 // re-fetchable (no skip row), and pin the resume below it.
                 failures++;
                 minTransientId ??= id;
+                failedIds.Add(id);
                 _logger.LogError(ex, "Perenual raw-cache ({Endpoint}) failed for id {Id}", endpoint, id);
                 _db.ChangeTracker.Clear();
             }
@@ -253,19 +260,20 @@ public class PerenualRawCacheController : ControllerBase
 
         return Log(new CacheCatalogResponse(
             endpoint == DetailsEndpoint ? "details" : "careguide",
-            processed, cached, htmlSkipped, failures, nextCursor?.ToString()));
+            processed, cached, htmlSkipped, failures, nextCursor?.ToString(),
+            failedIds.Count > 0 ? failedIds : null));
     }
 
-    private async Task<(PerenualFetchOutcome Outcome, string? Literal)> FetchDetailsAsync(int id, CancellationToken ct)
+    private async Task<(PerenualFetchOutcome Outcome, string? Literal, int? HttpStatus)> FetchDetailsAsync(int id, CancellationToken ct)
     {
         var fetch = await _client.GetSpeciesDetailsWithLiteralAsync(id, ct);
-        return (fetch.Outcome, fetch.LiteralJson);
+        return (fetch.Outcome, fetch.LiteralJson, fetch.HttpStatus);
     }
 
-    private async Task<(PerenualFetchOutcome Outcome, string? Literal)> FetchCareGuideAsync(int id, CancellationToken ct)
+    private async Task<(PerenualFetchOutcome Outcome, string? Literal, int? HttpStatus)> FetchCareGuideAsync(int id, CancellationToken ct)
     {
         var fetch = await _client.GetCareGuideLiteralAsync(id, ct);
-        return (fetch.Outcome, fetch.LiteralJson);
+        return (fetch.Outcome, fetch.LiteralJson, fetch.HttpStatus);
     }
 
     /// <summary>
@@ -368,18 +376,23 @@ public class PerenualRawCacheController : ControllerBase
     private CacheCatalogResponse Log(CacheCatalogResponse r)
     {
         _logger.LogInformation(
-            "Perenual raw-cache chunk: phase={Phase} processed={Processed} cached={Cached} htmlSkipped={HtmlSkipped} failures={Failures} nextCursor={NextCursor}",
-            r.Phase, r.Processed, r.Cached, r.HtmlSkipped, r.Failures, r.NextCursor ?? "(end)");
+            "Perenual raw-cache chunk: phase={Phase} processed={Processed} cached={Cached} htmlSkipped={HtmlSkipped} failures={Failures} nextCursor={NextCursor} failedIds={FailedIds}",
+            r.Phase, r.Processed, r.Cached, r.HtmlSkipped, r.Failures, r.NextCursor ?? "(end)",
+            r.FailedIds is { Count: > 0 } ? string.Join(",", r.FailedIds) : "(none)");
         return r;
     }
 
     /// <summary>
-    /// SMA-93 raw-cache chunk summary. Counts only — never the cached bodies.
+    /// SMA-93 raw-cache chunk summary. Counts only (plus the transient id list) —
+    /// never the cached bodies.
     /// <c>Processed</c> = freshly fetched + stored; <c>Cached</c> = skipped because
     /// already cached (idempotent); <c>HtmlSkipped</c> = fetches with no usable body
-    /// (deleted-id HTML / non-JSON), recorded so they aren't retried;
-    /// <c>Failures</c> = exceptions; <c>NextCursor</c> = last page/id processed
-    /// (null when the phase is exhausted).
+    /// (deleted-id HTML / 404 gap), recorded so they aren't retried;
+    /// <c>Failures</c> = transient failures (no row written, id stays re-fetchable);
+    /// <c>NextCursor</c> = last page/id processed (null when the phase is exhausted);
+    /// <c>FailedIds</c> = SMA-100: the transient ids this chunk (ids only, never
+    /// bodies/keys) so the driver can name the blockers when its stall guard trips.
+    /// Null for the list phase and whenever there were no transient failures.
     /// </summary>
     public record CacheCatalogResponse(
         string Phase,
@@ -387,5 +400,6 @@ public class PerenualRawCacheController : ControllerBase
         int Cached,
         int HtmlSkipped,
         int Failures,
-        string? NextCursor);
+        string? NextCursor,
+        IReadOnlyList<int>? FailedIds = null);
 }

@@ -296,6 +296,47 @@ public class PerenualClientTests
         Assert.Null(fetch.LiteralJson);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)] // 404 — id never existed / gap in Perenual's id space
+    [InlineData(HttpStatusCode.Gone)]     // 410 — explicitly removed
+    public async Task GetSpeciesDetailsWithLiteralAsync_On404Or410_ReturnsTerminalNoBody_WithRealStatus(HttpStatusCode status)
+    {
+        // SMA-100: a 404/410 proves the id is genuinely gone (e.g. id 8799 observed
+        // during the catalogue aspiration). It must be TERMINAL — recorded with its
+        // REAL status so the cursor advances past the gap instead of looping forever.
+        var handler = new RecordingHandler(status, "{}");
+        var client = NewClient(handler);
+
+        var fetch = await client.GetSpeciesDetailsWithLiteralAsync(8799, CancellationToken.None);
+
+        Assert.Equal(PerenualFetchOutcome.TerminalNoBody, fetch.Outcome);
+        Assert.Equal((int)status, fetch.HttpStatus);
+        Assert.Null(fetch.Species);
+        Assert.Null(fetch.LiteralJson);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]      // 401 — revoked key: NEVER terminal
+    [InlineData(HttpStatusCode.Forbidden)]         // 403 — quota/permission: NEVER terminal
+    [InlineData(HttpStatusCode.RequestTimeout)]    // 408
+    [InlineData(HttpStatusCode.TooManyRequests)]   // 429 — rate limit
+    [InlineData(HttpStatusCode.InternalServerError)] // 500
+    [InlineData(HttpStatusCode.BadGateway)]        // 502
+    public async Task GetSpeciesDetailsWithLiteralAsync_OnNon404HttpError_ReturnsTransientFailure(HttpStatusCode status)
+    {
+        // SMA-100: anything that is NOT 404/410 is NOT proof of absence. Classifying
+        // a revoked key (401/403) or rate-limit (429) as terminal would skip-write the
+        // entire catalogue — a silent data loss. These must stay TRANSIENT (re-fetchable).
+        var handler = new RecordingHandler(status, "{}");
+        var client = NewClient(handler);
+
+        var fetch = await client.GetSpeciesDetailsWithLiteralAsync(728, CancellationToken.None);
+
+        Assert.Equal(PerenualFetchOutcome.TransientFailure, fetch.Outcome);
+        Assert.Null(fetch.Species);
+        Assert.Null(fetch.LiteralJson);
+    }
+
     [Fact]
     public async Task GetCareGuideLiteralAsync_BuildsV1Url_AndRedactsKey()
     {
@@ -350,6 +391,40 @@ public class PerenualClientTests
     {
         // SMA-94 contract: a transport failure is TRANSIENT, never a terminal skip.
         var handler = new ThrowingHandler(new HttpRequestException("dns failure"));
+        var client = NewClient(handler);
+
+        var fetch = await client.GetCareGuideLiteralAsync(728, CancellationToken.None);
+
+        Assert.Equal(PerenualFetchOutcome.TransientFailure, fetch.Outcome);
+        Assert.Null(fetch.LiteralJson);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.Gone)]
+    public async Task GetCareGuideLiteralAsync_On404Or410_ReturnsTerminalNoBody_WithRealStatus(HttpStatusCode status)
+    {
+        // SMA-100: parity with details — a 404/410 care-guide id is genuinely gone →
+        // TERMINAL with its real status, so the careguide phase cursor advances.
+        var handler = new RecordingHandler(status, "{}");
+        var client = NewClient(handler);
+
+        var fetch = await client.GetCareGuideLiteralAsync(8799, CancellationToken.None);
+
+        Assert.Equal(PerenualFetchOutcome.TerminalNoBody, fetch.Outcome);
+        Assert.Equal((int)status, fetch.HttpStatus);
+        Assert.Null(fetch.LiteralJson);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task GetCareGuideLiteralAsync_OnNon404HttpError_ReturnsTransientFailure(HttpStatusCode status)
+    {
+        // SMA-100: a revoked key / rate-limit / 5xx on the care guide must stay
+        // TRANSIENT (non-fatal, re-fetchable), never a permanent skip.
+        var handler = new RecordingHandler(status, "{}");
         var client = NewClient(handler);
 
         var fetch = await client.GetCareGuideLiteralAsync(728, CancellationToken.None);

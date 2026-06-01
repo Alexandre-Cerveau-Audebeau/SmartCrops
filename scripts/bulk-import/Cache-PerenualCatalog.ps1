@@ -62,7 +62,15 @@ param(
 
     # Client-side retry budget for transient HTTP failures.
     [ValidateRange(0, 10)]
-    [int]$MaxRetries = 3
+    [int]$MaxRetries = 3,
+
+    # SMA-100 stall guard: abort a phase if it makes no progress (processed=0 AND an
+    # unchanged nextCursor) for this many consecutive chunks. A persistent upstream
+    # fault (5xx / 429) — or any future server-side resume bug — would otherwise loop
+    # forever (cf. the 404-as-transient infinite loop this PR fixes). The run stays
+    # fully resumable: re-launch once the upstream recovers and it picks up the gap.
+    [ValidateRange(2, 100)]
+    [int]$MaxStallChunks = 5
 )
 
 $ErrorActionPreference = "Stop"
@@ -128,6 +136,8 @@ function Invoke-Phase {
     $totProcessed = 0; $totCached = 0; $totHtmlSkipped = 0; $totFailures = 0
     $cursor = $null
     $chunk = 0
+    $prevCursor = $null   # nextCursor of the previous chunk (stall detection)
+    $stall = 0            # consecutive no-progress chunks at an unchanged cursor
 
     Write-Host ("=== phase={0} ===" -f $Phase) -ForegroundColor Cyan
 
@@ -148,6 +158,31 @@ function Invoke-Phase {
 
         Write-Host ("  chunk {0}: processed={1} cached={2} htmlSkipped={3} failures={4} nextCursor={5}" -f `
             $chunk, $resp.processed, $resp.cached, $resp.htmlSkipped, $resp.failures, ($resp.nextCursor ?? '(end)'))
+
+        # SMA-100 stall guard. A chunk that fetched nothing new (processed=0) AND
+        # returns the SAME nextCursor as the previous chunk is stuck re-trying the
+        # same blocked ids — a persistent upstream fault (5xx/429) the server keeps
+        # (correctly) classifying transient, so the cursor never advances. Abort the
+        # phase after $MaxStallChunks such chunks rather than loop forever, naming the
+        # blocked ids from the server's failedIds. A fully-cached re-visit is NOT a
+        # stall: its nextCursor advances (maxId), so this only trips on a true pin.
+        if ([int]$resp.processed -eq 0 -and -not [string]::IsNullOrEmpty($resp.nextCursor) -and $resp.nextCursor -eq $prevCursor) {
+            $stall++
+            # Surface the climbing stall to an operator watching the console (this runs
+            # against a live quota days before the cancel) so a forming 5xx/429 storm is
+            # visible as it builds, not only at the hard abort. Control flow unchanged.
+            Write-Host ("  [{0}] no progress at cursor={1} (stall {2}/{3})" -f `
+                $Phase, $resp.nextCursor, $stall, $MaxStallChunks) -ForegroundColor Yellow
+            if ($stall -ge $MaxStallChunks) {
+                $blocked = if ($resp.failedIds) { $resp.failedIds -join ', ' } else { '(none reported)' }
+                throw ("[{0}] STALLED: no progress for {1} consecutive chunks at cursor={2}. Blocked ids: {3}. Aborting phase — resumable once the upstream recovers (re-run this script)." -f `
+                    $Phase, $stall, $resp.nextCursor, $blocked)
+            }
+        }
+        else {
+            $stall = 0
+        }
+        $prevCursor = $resp.nextCursor
 
         if ([string]::IsNullOrEmpty($resp.nextCursor)) {
             break
