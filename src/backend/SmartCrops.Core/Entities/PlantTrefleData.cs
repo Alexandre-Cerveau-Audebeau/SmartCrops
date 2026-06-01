@@ -43,6 +43,12 @@ public class PlantTrefleData : IHasUpdatedAt
     /// <summary>Atmospheric humidity preference on a 1-10 scale.</summary>
     public int? AtmosphericHumidityLevel { get; set; }
 
+    /// <summary>SMA-71: average height in centimetres (Trefle <c>specifications.average_height.cm</c>).</summary>
+    public int? AverageHeightCm { get; set; }
+
+    /// <summary>SMA-71: growth-rate label (Trefle <c>specifications.growth_rate</c>, e.g. "Moderate").</summary>
+    public string? GrowthRate { get; set; }
+
     /// <summary>Full Trefle API response, retained for re-derivation and audit.</summary>
     public string? RawResponseJson { get; set; }
 

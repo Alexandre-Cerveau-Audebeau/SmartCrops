@@ -79,39 +79,73 @@ public class TrefleClient
         }
     }
 
+    // Matches GetFromJsonAsync's default (web) deserialisation so the literal-capture
+    // path parses identically to the prior ReadFromJsonAsync.
+    private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
+
     /// <summary>
-    /// Calls <c>/species/{id}?token=...</c>. Returns <c>null</c> on transport
-    /// failure, timeout, malformed JSON response, or unsupported response
-    /// Content-Type. A 404 from Trefle (deleted species) likewise surfaces as
-    /// <c>null</c> since <see cref="HttpClient.GetFromJsonAsync{T}(string, CancellationToken)"/>
-    /// throws <see cref="HttpRequestException"/> on non-success status codes.
+    /// Calls <c>/species/{id}?token=...</c> and returns only the parsed DTO — a thin
+    /// wrapper over <see cref="GetSpeciesWithLiteralAsync"/> for callers that do not
+    /// need the literal. Returns <c>null</c> on transport failure, timeout, malformed
+    /// JSON, non-success status, or unsupported Content-Type.
     /// </summary>
     public async Task<TrefleSpeciesResponse?> GetSpeciesAsync(int trefleId, CancellationToken ct)
+        => (await GetSpeciesWithLiteralAsync(trefleId, ct)).Species;
+
+    /// <summary>
+    /// Calls <c>/species/{id}?token=...</c> and returns BOTH the parsed
+    /// <see cref="TrefleSpeciesResponse"/> and the verbatim HTTP body with the token
+    /// redacted (<see cref="TrefleSpeciesFetch.LiteralJson"/>) — the SMA-71 loss-proof
+    /// capture. The body is read as a STRING first and the DTO is deserialised from
+    /// it, so fields we do not bind (e.g. <c>growth.soil_salinity</c>) survive in the
+    /// literal. Returns the <c>default</c> <c>(null, null)</c> tuple on transport
+    /// failure, timeout, malformed JSON, non-success status, or non-JSON Content-Type.
+    /// </summary>
+    public async Task<TrefleSpeciesFetch> GetSpeciesWithLiteralAsync(int trefleId, CancellationToken ct)
     {
         var url = $"species/{trefleId}?token={Uri.EscapeDataString(_token)}";
         try
         {
-            return await _http.GetFromJsonAsync<TrefleSpeciesResponse>(url, ct);
+            using var response = await _http.GetAsync(url, ct);
+            response.EnsureSuccessStatusCode();
+
+            // Read the literal body FIRST, then deserialise from the string. The
+            // token is scrubbed before the body leaves this method (defence-in-depth —
+            // the Trefle body has no token today, but the contract is uniform with #102).
+            var rawBody = await response.Content.ReadAsStringAsync(ct);
+            var species = JsonSerializer.Deserialize<TrefleSpeciesResponse>(rawBody, WebJsonOptions);
+            var literal = TrefleTokenRedactor.Redact(rawBody, _token);
+            return new TrefleSpeciesFetch(species, literal);
         }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "Trefle species fetch transport failure for id {Id}", trefleId);
-            return null;
+            return default;
         }
         catch (JsonException ex)
         {
             _logger.LogWarning(ex, "Trefle species fetch returned malformed JSON for id {Id}", trefleId);
-            return null;
+            return default;
         }
         catch (NotSupportedException ex)
         {
             _logger.LogWarning(ex, "Trefle species fetch returned unsupported content for id {Id}", trefleId);
-            return null;
+            return default;
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Trefle species fetch timed out for id {Id}", trefleId);
-            return null;
+            return default;
         }
     }
 }
+
+/// <summary>
+/// Result of <see cref="TrefleClient.GetSpeciesWithLiteralAsync"/>: the parsed DTO
+/// plus the verbatim, token-redacted HTTP body. Both are <c>null</c> on any failure
+/// path (the <c>default</c> value), so callers branch on <see cref="Species"/>
+/// exactly as they did on the prior nullable return.
+/// </summary>
+/// <param name="Species">Parsed species response, or <c>null</c> on no-match/failure.</param>
+/// <param name="LiteralJson">Verbatim response body, token redacted, or <c>null</c>.</param>
+public readonly record struct TrefleSpeciesFetch(TrefleSpeciesResponse? Species, string? LiteralJson);

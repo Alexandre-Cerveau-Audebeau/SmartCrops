@@ -46,7 +46,23 @@ public record TrefleEnrichmentResult(
     IReadOnlyList<TrefleCommonName> CommonNames,
     IReadOnlyList<TrefleSynonym> Synonyms,
 
-    string MatchType);
+    string MatchType,
+
+    // SMA-71: Trefle-EXCLUSIVE scalars persisted on PlantTrefleData (direct `=`
+    // overwrite, like GrowthHabit/SoilNutrimentsLevel). Trailing-optional so existing
+    // positional constructions (NoMatch, stubs, test helpers) compile unchanged.
+
+    /// <summary>SMA-71: soil-salinity tolerance (0-10) → PlantTrefleData.SoilSalinityLevel.</summary>
+    int? SoilSalinityLevel = null,
+
+    /// <summary>SMA-71: atmospheric-humidity preference (0-10) → PlantTrefleData.AtmosphericHumidityLevel.</summary>
+    int? AtmosphericHumidityLevel = null,
+
+    /// <summary>SMA-71: average height in cm → PlantTrefleData.AverageHeightCm.</summary>
+    int? AverageHeightCm = null,
+
+    /// <summary>SMA-71: growth-rate label → PlantTrefleData.GrowthRate.</summary>
+    string? GrowthRate = null);
 
 /// <summary>A categorized image as returned by Trefle, ready for insert into <c>PlantImage</c>.</summary>
 public record TrefleImage(

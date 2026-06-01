@@ -138,6 +138,47 @@ public class TrefleResolverTests
         Assert.Equal(35, result.MaxTempC);
     }
 
+    // ── SMA-71: the 4 newly-wired Trefle-exclusive scalars ─────────────────
+
+    [Fact]
+    public void Resolve_MapsSalinityHumidityHeightAndGrowthRate_WhenPresent()
+    {
+        var response = NewSpeciesResponse();
+        response.Data!.Growth = new TrefleGrowthDto
+        {
+            SoilSalinity = 4,
+            AtmosphericHumidity = 6,
+        };
+        response.Data.Specifications = new TrefleSpecificationsDto
+        {
+            AverageHeight = new TrefleHeightDto { Cm = 120 },
+            GrowthRate = "  Moderate  ", // trimmed
+        };
+
+        var result = NewResolver().Resolve(response, rawJson: "{\"ok\":true}");
+
+        Assert.Equal(4, result.SoilSalinityLevel);
+        Assert.Equal(6, result.AtmosphericHumidityLevel);
+        Assert.Equal(120, result.AverageHeightCm);
+        Assert.Equal("Moderate", result.GrowthRate);
+    }
+
+    [Fact]
+    public void Resolve_LeavesNewScalarsNull_WhenAbsentOrBlank()
+    {
+        var response = NewSpeciesResponse();
+        // Growth/Specifications present but without the new fields, growth_rate blank.
+        response.Data!.Growth = new TrefleGrowthDto { Light = 8 };
+        response.Data.Specifications = new TrefleSpecificationsDto { GrowthRate = "   " };
+
+        var result = NewResolver().Resolve(response, rawJson: string.Empty);
+
+        Assert.Null(result.SoilSalinityLevel);
+        Assert.Null(result.AtmosphericHumidityLevel);
+        Assert.Null(result.AverageHeightCm);
+        Assert.Null(result.GrowthRate);
+    }
+
     // ── WFO id extraction from sources ─────────────────────────────────────
 
     [Fact]

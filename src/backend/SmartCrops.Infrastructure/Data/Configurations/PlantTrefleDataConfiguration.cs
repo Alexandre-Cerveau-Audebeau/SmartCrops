@@ -18,6 +18,8 @@ public class PlantTrefleDataConfiguration : IEntityTypeConfiguration<PlantTrefle
         builder.Property(t => t.TrefleSlug).HasMaxLength(200);
         builder.Property(t => t.WfoId).HasMaxLength(50);
         builder.Property(t => t.GrowthHabit).HasMaxLength(100);
+        // SMA-71: Trefle growth-rate label (e.g. "Moderate"); AverageHeightCm is a plain int.
+        builder.Property(t => t.GrowthRate).HasMaxLength(50);
         builder.Property(t => t.FlowerColors).HasMaxLength(500);
         builder.Property(t => t.FoliageColors).HasMaxLength(500);
         builder.Property(t => t.ApiVersion).HasMaxLength(20);
