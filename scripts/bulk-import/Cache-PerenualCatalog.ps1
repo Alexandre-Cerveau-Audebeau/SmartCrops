@@ -168,6 +168,11 @@ function Invoke-Phase {
         # stall: its nextCursor advances (maxId), so this only trips on a true pin.
         if ([int]$resp.processed -eq 0 -and -not [string]::IsNullOrEmpty($resp.nextCursor) -and $resp.nextCursor -eq $prevCursor) {
             $stall++
+            # Surface the climbing stall to an operator watching the console (this runs
+            # against a live quota days before the cancel) so a forming 5xx/429 storm is
+            # visible as it builds, not only at the hard abort. Control flow unchanged.
+            Write-Host ("  [{0}] no progress at cursor={1} (stall {2}/{3})" -f `
+                $Phase, $resp.nextCursor, $stall, $MaxStallChunks) -ForegroundColor Yellow
             if ($stall -ge $MaxStallChunks) {
                 $blocked = if ($resp.failedIds) { $resp.failedIds -join ', ' } else { '(none reported)' }
                 throw ("[{0}] STALLED: no progress for {1} consecutive chunks at cursor={2}. Blocked ids: {3}. Aborting phase — resumable once the upstream recovers (re-run this script)." -f `

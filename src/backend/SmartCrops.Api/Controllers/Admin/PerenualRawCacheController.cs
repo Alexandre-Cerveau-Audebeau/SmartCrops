@@ -376,8 +376,9 @@ public class PerenualRawCacheController : ControllerBase
     private CacheCatalogResponse Log(CacheCatalogResponse r)
     {
         _logger.LogInformation(
-            "Perenual raw-cache chunk: phase={Phase} processed={Processed} cached={Cached} htmlSkipped={HtmlSkipped} failures={Failures} nextCursor={NextCursor}",
-            r.Phase, r.Processed, r.Cached, r.HtmlSkipped, r.Failures, r.NextCursor ?? "(end)");
+            "Perenual raw-cache chunk: phase={Phase} processed={Processed} cached={Cached} htmlSkipped={HtmlSkipped} failures={Failures} nextCursor={NextCursor} failedIds={FailedIds}",
+            r.Phase, r.Processed, r.Cached, r.HtmlSkipped, r.Failures, r.NextCursor ?? "(end)",
+            r.FailedIds is { Count: > 0 } ? string.Join(",", r.FailedIds) : "(none)");
         return r;
     }
 
