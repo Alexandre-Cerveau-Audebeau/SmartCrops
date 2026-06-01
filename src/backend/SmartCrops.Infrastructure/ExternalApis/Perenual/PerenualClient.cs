@@ -209,7 +209,7 @@ public class PerenualClient
                     "Perenual care-guide returned non-JSON content-type '{ContentType}' for species id {SpeciesId}; terminal no-body (non-fatal).",
                     contentType ?? "(none)",
                     speciesId);
-                return new PerenualCareGuideFetch(PerenualFetchOutcome.TerminalNoBody, null);
+                return new PerenualCareGuideFetch(null, PerenualFetchOutcome.TerminalNoBody);
             }
 
             var rawBody = await response.Content.ReadAsStringAsync(ct);
@@ -227,25 +227,25 @@ public class PerenualClient
             catch (JsonException ex)
             {
                 _logger.LogWarning(ex, "Perenual care-guide body was not valid JSON for species id {SpeciesId}; transient (non-fatal).", speciesId);
-                return new PerenualCareGuideFetch(PerenualFetchOutcome.TransientFailure, null);
+                return new PerenualCareGuideFetch(null, PerenualFetchOutcome.TransientFailure);
             }
 
-            return new PerenualCareGuideFetch(PerenualFetchOutcome.Success, literal);
+            return new PerenualCareGuideFetch(literal, PerenualFetchOutcome.Success);
         }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "Perenual care-guide transport failure for species id {Id}", speciesId);
-            return new PerenualCareGuideFetch(PerenualFetchOutcome.TransientFailure, null);
+            return new PerenualCareGuideFetch(null, PerenualFetchOutcome.TransientFailure);
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Perenual care-guide timed out for species id {Id}", speciesId);
-            return new PerenualCareGuideFetch(PerenualFetchOutcome.TransientFailure, null);
+            return new PerenualCareGuideFetch(null, PerenualFetchOutcome.TransientFailure);
         }
         catch (TimeoutRejectedException ex)
         {
             _logger.LogWarning(ex, "Perenual care-guide hit resilience-handler timeout for species id {Id}", speciesId);
-            return new PerenualCareGuideFetch(PerenualFetchOutcome.TransientFailure, null);
+            return new PerenualCareGuideFetch(null, PerenualFetchOutcome.TransientFailure);
         }
     }
 
@@ -486,6 +486,6 @@ public readonly record struct PerenualSpeciesListFetch(
 /// <c>string?</c> before; it is wrapped here so the raw-cache aspiration can
 /// distinguish a genuinely-absent guide from a transient miss.
 /// </summary>
-/// <param name="Outcome">Terminal disposition (SMA-94).</param>
 /// <param name="LiteralJson">Verbatim care-guide body, API key redacted, or <c>null</c>.</param>
-public readonly record struct PerenualCareGuideFetch(PerenualFetchOutcome Outcome, string? LiteralJson);
+/// <param name="Outcome">Terminal disposition (SMA-94).</param>
+public readonly record struct PerenualCareGuideFetch(string? LiteralJson, PerenualFetchOutcome Outcome);
