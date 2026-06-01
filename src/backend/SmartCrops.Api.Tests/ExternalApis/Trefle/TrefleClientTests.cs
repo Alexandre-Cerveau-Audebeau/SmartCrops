@@ -139,6 +139,33 @@ public class TrefleClientTests
     }
 
     [Fact]
+    public async Task GetSpeciesWithLiteralAsync_ReturnsParsedAndVerbatimBody_WithUnboundFieldsPreserved_AndTokenRedacted()
+    {
+        // Body carries an UNMAPPED field (must survive in the literal) plus the token
+        // inside a self-link (must be redacted before it leaves the client).
+        const string body =
+            "{\"data\":{\"id\":12345,\"scientific_name\":\"Solanum lycopersicum\"," +
+            "\"growth\":{\"soil_salinity\":4,\"unmapped_extra\":\"keepme\"}," +
+            "\"self\":\"/species/12345?token=secret-token\"},\"meta\":{}}";
+        var handler = new RecordingHandler(HttpStatusCode.OK, body);
+        var client = NewClient(handler);
+
+        var fetch = await client.GetSpeciesWithLiteralAsync(12345, CancellationToken.None);
+
+        // Parsed surface.
+        Assert.NotNull(fetch.Species);
+        Assert.Equal("Solanum lycopersicum", fetch.Species!.Data!.ScientificName);
+        Assert.Equal(4, fetch.Species.Data.Growth!.SoilSalinity);
+        // Verbatim literal: the unmapped field survives for the audit row.
+        Assert.NotNull(fetch.LiteralJson);
+        Assert.Contains("unmapped_extra", fetch.LiteralJson!);
+        Assert.Contains("keepme", fetch.LiteralJson!);
+        // Redaction: the token never lands in the captured body.
+        Assert.DoesNotContain("secret-token", fetch.LiteralJson!);
+        Assert.Contains("token=REDACTED", fetch.LiteralJson!);
+    }
+
+    [Fact]
     public async Task GetSpeciesAsync_ReturnsNull_OnTransportFailure()
     {
         var handler = new ThrowingHandler(new HttpRequestException("server fault"));

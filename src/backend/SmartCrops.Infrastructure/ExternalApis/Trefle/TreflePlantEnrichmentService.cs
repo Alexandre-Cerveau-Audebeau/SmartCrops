@@ -1,4 +1,3 @@
-using System.Text.Json;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Core.Models;
 
@@ -10,9 +9,11 @@ namespace SmartCrops.Infrastructure.ExternalApis.Trefle;
 /// (pure logic): search → pick first exact scientific-name match → fetch the
 /// full species record → flatten via the resolver.
 ///
-/// <para>The intermediate species response is re-serialised as the raw JSON
-/// retained on <c>PlantTrefleData</c>. This avoids carrying the original wire
-/// bytes through the call chain while preserving every consumed field.</para>
+/// <para>SMA-71: the VERBATIM <c>/species/{id}</c> body (token redacted) is
+/// captured string-first and retained on <c>PlantTrefleData.RawResponseJson</c> —
+/// the loss-proof filet, mirroring GBIF (#107) / Perenual (#102). This replaces the
+/// prior re-serialisation of the partial DTO, which silently dropped every field the
+/// DTO does not bind (e.g. <c>growth.soil_salinity</c>).</para>
 /// </summary>
 public class TreflePlantEnrichmentService : IPlantTrefleEnrichmentService
 {
@@ -34,8 +35,9 @@ public class TreflePlantEnrichmentService : IPlantTrefleEnrichmentService
             return _resolver.Resolve(speciesResponse: null, rawJson: string.Empty);
         }
 
-        var species = await _client.GetSpeciesAsync(trefleId.Value, ct);
-        var rawJson = species is not null ? JsonSerializer.Serialize(species) : string.Empty;
-        return _resolver.Resolve(species, rawJson);
+        // SMA-71: capture the VERBATIM (token-redacted) body, not a re-serialisation
+        // of the partial DTO — so unmapped fields survive in the loss-proof audit.
+        var fetch = await _client.GetSpeciesWithLiteralAsync(trefleId.Value, ct);
+        return _resolver.Resolve(fetch.Species, fetch.LiteralJson ?? string.Empty);
     }
 }

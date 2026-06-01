@@ -87,6 +87,12 @@ public class TrefleGrowthDto
     [JsonPropertyName("soil_nutriments")] public int? SoilNutriments { get; set; }
     [JsonPropertyName("minimum_temperature")] public TrefleTempDto? MinimumTemperature { get; set; }
     [JsonPropertyName("maximum_temperature")] public TrefleTempDto? MaximumTemperature { get; set; }
+
+    /// <summary>SMA-71: soil-salinity tolerance on Trefle's 0-10 scale (was ignored).</summary>
+    [JsonPropertyName("soil_salinity")] public int? SoilSalinity { get; set; }
+
+    /// <summary>SMA-71: atmospheric-humidity preference on Trefle's 0-10 scale (was ignored).</summary>
+    [JsonPropertyName("atmospheric_humidity")] public int? AtmosphericHumidity { get; set; }
 }
 
 public class TrefleTempDto
@@ -97,6 +103,17 @@ public class TrefleTempDto
 public class TrefleSpecificationsDto
 {
     [JsonPropertyName("growth_habit")] public string? GrowthHabit { get; set; }
+
+    /// <summary>SMA-71: average height; Trefle nests the value under <c>.cm</c> (was ignored).</summary>
+    [JsonPropertyName("average_height")] public TrefleHeightDto? AverageHeight { get; set; }
+
+    /// <summary>SMA-71: growth-rate label (e.g. "Slow"/"Moderate"/"Rapid"; was ignored).</summary>
+    [JsonPropertyName("growth_rate")] public string? GrowthRate { get; set; }
+}
+
+public class TrefleHeightDto
+{
+    [JsonPropertyName("cm")] public int? Cm { get; set; }
 }
 
 public class TrefleFlowerDto

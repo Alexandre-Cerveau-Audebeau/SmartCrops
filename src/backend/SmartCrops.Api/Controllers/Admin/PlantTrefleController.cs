@@ -7,6 +7,7 @@ using SmartCrops.Core.Enums;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Core.Models;
 using SmartCrops.Infrastructure.Data;
+using SmartCrops.Infrastructure.ExternalApis.Trefle;
 
 namespace SmartCrops.Api.Controllers.Admin;
 
@@ -228,10 +229,110 @@ public class PlantTrefleController : ControllerBase
             NextAfterId: nextAfterId));
     }
 
+    /// <summary>
+    /// SMA-71 — RE-FETCH Trefle for every already-enriched plant to recapture the
+    /// VERBATIM body (the old re-serialised raw dropped unmapped fields) and populate
+    /// the newly-wired scalars (soil_salinity, atmospheric_humidity, average_height,
+    /// growth_rate). Unlike the GBIF/Perenual re-parse backfills there is no stored
+    /// verbatim body to re-parse — Trefle's stored raw was a partial re-serialisation —
+    /// so this RE-FETCHES. Each plant is its own unit of work (per-plant
+    /// <c>SaveChangesAsync</c> + change-tracker isolation) so the run is resumable and
+    /// one bad row can't strand the rest. <paramref name="delayMs"/> paces requests
+    /// under Trefle's rate budget; <paramref name="limit"/>/<paramref name="afterId"/>
+    /// chunk the run (keyset cursor) so it can span multiple invocations. Counts-only;
+    /// the (token-redacted) raw bodies are internal/audit and never returned. The full
+    /// 406-row run is a deferred operator task (SMA-88) — this endpoint just exists.
+    /// </summary>
+    [HttpPost("raw-backfill")]
+    public async Task<ActionResult<TrefleRawBackfillResponse>> BackfillTrefleRaw(
+        [FromQuery] int? limit = null,
+        [FromQuery] Guid? afterId = null,
+        [FromQuery] int delayMs = 600,
+        CancellationToken ct = default)
+    {
+        var query = _db.Plants
+            .Include(p => p.TrefleData)
+            .Where(p => (p.EnrichmentStatus & EnrichmentStatus.TrefleEnriched) != 0);
+        if (afterId is { } cursor)
+        {
+            query = query.Where(p => p.Id > cursor);
+        }
+        query = query.OrderBy(p => p.Id);
+        if (limit is > 0)
+        {
+            query = query.Take(limit.Value);
+        }
+
+        var plants = await query.ToListAsync(ct);
+
+        var processed = 0;
+        var populated = 0;
+        var failures = 0;
+
+        foreach (var plant in plants)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                // RE-FETCH (search + species) — recaptures the verbatim raw + 4 fields.
+                var result = await _trefle.ResolveAsync(plant.ScientificName, ct);
+                if (result.TrefleId is null)
+                {
+                    failures++;
+                    _logger.LogWarning(
+                        "Trefle raw-backfill: re-fetch for plant {PlantId} returned no match ({MatchType}); skipped.",
+                        plant.Id, result.MatchType);
+                    continue;
+                }
+
+                UpsertTrefleData(plant, result); // writes verbatim raw + the 4 scalars
+                await _db.SaveChangesAsync(ct);  // per-plant unit of work (resumable)
+
+                processed++;
+                if (result.RawResponseJson is not null)
+                {
+                    populated++;
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                failures++;
+                _logger.LogError(ex, "Trefle raw-backfill failed for plant {PlantId}", plant.Id);
+                // Drop the failed plant's staged changes so the next plant isn't tainted.
+                _db.ChangeTracker.Clear();
+            }
+            finally
+            {
+                // Polite pacing under Trefle's rate budget. Skipped on cancellation.
+                if (delayMs > 0 && !ct.IsCancellationRequested)
+                {
+                    await Task.Delay(delayMs, ct);
+                }
+            }
+        }
+
+        var nextAfterId = plants.Count > 0 ? plants[^1].Id : (Guid?)null;
+
+        _logger.LogInformation(
+            "Trefle raw-backfill chunk complete: candidates={Candidates} processed={Processed} populated={Populated} failures={Failures}",
+            plants.Count, processed, populated, failures);
+
+        return Ok(new TrefleRawBackfillResponse(plants.Count, processed, populated, failures, nextAfterId));
+    }
+
     // ── Dual-write helpers ────────────────────────────────────────────────
 
     private void UpsertTrefleData(Plant plant, TrefleEnrichmentResult result)
     {
+        // SMA-71 persistence-boundary guard: fail fast if the Trefle token slipped
+        // past the client-side redaction rather than letting it become durable in the
+        // DB. Throws (does NOT silently re-scrub) so a redaction regression surfaces.
+        TrefleTokenRedactor.AssertRedacted(result.RawResponseJson, "PlantTrefleData.RawResponseJson");
+
         if (plant.TrefleData is null)
         {
             plant.TrefleData = new PlantTrefleData
@@ -245,6 +346,11 @@ public class PlantTrefleController : ControllerBase
                 NativeRegionsJson = result.NativeRegionsJson,
                 IntroducedRegionsJson = result.IntroducedRegionsJson,
                 SoilNutrimentsLevel = result.SoilNutriments,
+                // SMA-71: Trefle-exclusive scalars (direct `=`, newly wired).
+                SoilSalinityLevel = result.SoilSalinityLevel,
+                AtmosphericHumidityLevel = result.AtmosphericHumidityLevel,
+                AverageHeightCm = result.AverageHeightCm,
+                GrowthRate = result.GrowthRate,
                 RawResponseJson = result.RawResponseJson,
                 LastSyncAt = DateTime.UtcNow,
             };
@@ -260,6 +366,10 @@ public class PlantTrefleController : ControllerBase
             plant.TrefleData.NativeRegionsJson = result.NativeRegionsJson;
             plant.TrefleData.IntroducedRegionsJson = result.IntroducedRegionsJson;
             plant.TrefleData.SoilNutrimentsLevel = result.SoilNutriments;
+            plant.TrefleData.SoilSalinityLevel = result.SoilSalinityLevel;
+            plant.TrefleData.AtmosphericHumidityLevel = result.AtmosphericHumidityLevel;
+            plant.TrefleData.AverageHeightCm = result.AverageHeightCm;
+            plant.TrefleData.GrowthRate = result.GrowthRate;
             plant.TrefleData.RawResponseJson = result.RawResponseJson;
             plant.TrefleData.LastSyncAt = DateTime.UtcNow;
         }
@@ -477,5 +587,19 @@ public class PlantTrefleController : ControllerBase
         int Skipped,
         int Failed,
         int NotEnrichedRemaining,
+        Guid? NextAfterId);
+
+    /// <summary>
+    /// SMA-71 Trefle raw-backfill chunk summary. Counts only — never the raw bodies.
+    /// <c>Candidates</c> = Trefle-enriched plants in this chunk; <c>Processed</c> =
+    /// re-fetched to a match; <c>Populated</c> = of those, rows where a verbatim raw
+    /// was captured; <c>Failures</c> = no-match on re-fetch or an exception.
+    /// <c>NextAfterId</c> = keyset cursor for the next chunk (null when empty).
+    /// </summary>
+    public record TrefleRawBackfillResponse(
+        int Candidates,
+        int Processed,
+        int Populated,
+        int Failures,
         Guid? NextAfterId);
 }

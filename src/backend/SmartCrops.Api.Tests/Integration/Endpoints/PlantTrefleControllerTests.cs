@@ -598,6 +598,134 @@ public class PlantTrefleControllerTests : IntegrationTestBase
             new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
     }
 
+    // ── SMA-71: the 4 newly-wired Trefle scalars + raw-backfill ────────────
+
+    [Fact]
+    public async Task Enrich_PersistsNewTrefleScalars()
+    {
+        var plantId = await SeedPlantAsync("Solanum lycopersicum");
+        Fixture.TrefleStub.Enqueue(SampleMatch(12345)); // salinity 4 / humidity 6 / height 120 / "Moderate"
+        AuthAsAdmin();
+
+        var response = await Client.PostAsync($"/api/admin/trefle/enrich/{plantId}", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var t = await db.PlantTrefleData.SingleAsync(d => d.PlantId == plantId);
+        Assert.Equal(4, t.SoilSalinityLevel);
+        Assert.Equal(6, t.AtmosphericHumidityLevel);
+        Assert.Equal(120, t.AverageHeightCm);
+        Assert.Equal("Moderate", t.GrowthRate);
+    }
+
+    [Fact]
+    public async Task Enrich_UnredactedTokenInRaw_FailsFast_AndPersistsNothing()
+    {
+        // Defence-in-depth: simulate a redaction regression — the result's raw still
+        // carries a token. The UpsertTrefleData persistence-boundary AssertRedacted
+        // must abort BEFORE any write and persist nothing. Mirrors the Perenual
+        // precedent Harvest_FailFasts_AndPersistsNothing_WhenALiteralStillCarriesAKey.
+        var plantId = await SeedPlantAsync("Solanum lycopersicum");
+        Fixture.TrefleStub.Enqueue(SampleMatch(12345, rawJson: "{\"self\":\"/x?token=leaked-secret\"}"));
+        AuthAsAdmin();
+
+        // The guard fails loud: TestServer may rethrow the unhandled exception to the
+        // caller, or a pipeline with exception middleware would return 500. Tolerate
+        // either — the durable invariant is that NOTHING is persisted.
+        HttpResponseMessage? response = null;
+        try
+        {
+            response = await Client.PostAsync($"/api/admin/trefle/enrich/{plantId}", null);
+        }
+        catch (InvalidOperationException)
+        {
+            // Expected: AssertRedacted threw and TestServer rethrew it here.
+        }
+
+        Assert.True(response is null || response.StatusCode == HttpStatusCode.InternalServerError);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        Assert.Equal(0, await db.PlantTrefleData.CountAsync(t => t.PlantId == plantId));
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        Assert.False(plant.EnrichmentStatus.HasFlag(EnrichmentStatus.TrefleEnriched));
+    }
+
+    [Fact]
+    public async Task BackfillTrefleRaw_NoAuth_Returns401()
+    {
+        var response = await Client.PostAsync("/api/admin/trefle/raw-backfill", null);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task BackfillTrefleRaw_AuthenticatedNonAdmin_Returns403()
+    {
+        AuthAsNonAdmin();
+        var response = await Client.PostAsync("/api/admin/trefle/raw-backfill", null);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task BackfillTrefleRaw_Admin_RefetchesPopulatesScalars_AndIsIdempotent()
+    {
+        // A Trefle-enriched plant whose PlantTrefleData lacks the new scalars
+        // (pre-backfill state). delayMs=0 keeps the test fast.
+        var plantId = await SeedPlantAsync("Solanum lycopersicum", alreadyTrefleEnriched: true, configure: p =>
+        {
+            p.TrefleData = new PlantTrefleData { TrefleSlug = "pre-slug", LastSyncAt = DateTime.UtcNow };
+        });
+        // The backfill RE-FETCHES per plant → enqueue one stub result per run.
+        Fixture.TrefleStub.Enqueue(SampleMatch(12345));
+        AuthAsAdmin();
+
+        var response = await Client.PostAsync("/api/admin/trefle/raw-backfill?delayMs=0", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<TrefleRawBackfillDto>();
+        Assert.Equal(1, body!.Candidates);
+        Assert.Equal(1, body.Processed);
+        Assert.Equal(1, body.Populated);
+        Assert.Equal(0, body.Failures);
+
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var t = await db.PlantTrefleData.SingleAsync(d => d.PlantId == plantId);
+            Assert.Equal(4, t.SoilSalinityLevel);
+            Assert.Equal(6, t.AtmosphericHumidityLevel);
+            Assert.Equal(120, t.AverageHeightCm);
+            Assert.Equal("Moderate", t.GrowthRate);
+            Assert.NotNull(t.RawResponseJson);
+        }
+
+        // Idempotent: a second run re-fetches and rewrites the same values.
+        Fixture.TrefleStub.Enqueue(SampleMatch(12345));
+        var second = await Client.PostAsync("/api/admin/trefle/raw-backfill?delayMs=0", null);
+        var secondBody = await second.Content.ReadFromJsonAsync<TrefleRawBackfillDto>();
+        Assert.Equal(1, secondBody!.Populated);
+    }
+
+    [Fact]
+    public async Task BackfillTrefleRaw_NoMatchOnRefetch_CountsFailure()
+    {
+        var plantId = await SeedPlantAsync("Gone species", alreadyTrefleEnriched: true, configure: p =>
+        {
+            p.TrefleData = new PlantTrefleData { TrefleSlug = "pre-slug-2", LastSyncAt = DateTime.UtcNow };
+        });
+        Fixture.TrefleStub.EnqueueNoMatch();
+        AuthAsAdmin();
+
+        var response = await Client.PostAsync("/api/admin/trefle/raw-backfill?delayMs=0", null);
+        var body = await response.Content.ReadFromJsonAsync<TrefleRawBackfillDto>();
+        Assert.Equal(1, body!.Candidates);
+        Assert.Equal(0, body.Processed);
+        Assert.Equal(1, body.Failures);
+        _ = plantId;
+    }
+
+    private record TrefleRawBackfillDto(int Candidates, int Processed, int Populated, int Failures, Guid? NextAfterId);
+
     private static TrefleEnrichmentResult SampleMatch(
         int trefleId,
         string? slug = null,
@@ -613,14 +741,19 @@ public class PlantTrefleControllerTests : IntegrationTestBase
         int? soilNutriments = 7,
         IReadOnlyList<TrefleImage>? images = null,
         IReadOnlyList<TrefleCommonName>? commonNames = null,
-        IReadOnlyList<TrefleSynonym>? synonyms = null) => new(
+        IReadOnlyList<TrefleSynonym>? synonyms = null,
+        int? soilSalinityLevel = 4,
+        int? atmosphericHumidityLevel = 6,
+        int? averageHeightCm = 120,
+        string? growthRate = "Moderate",
+        string rawJson = "{\"stub\":true}") => new(
             TrefleId: trefleId,
             // PlantTrefleData has a filtered-unique index on TrefleSlug, so two
             // plants in the same test cannot share one. Default to a per-id slug.
             TrefleSlug: slug ?? $"slug-{trefleId}",
             WfoId: wfoId,
             CanonicalName: "Test species",
-            RawResponseJson: "{\"stub\":true}",
+            RawResponseJson: rawJson,
             GrowthHabit: growthHabit,
             IsEdible: isEdible,
             IsVegetable: isVegetable,
@@ -637,7 +770,11 @@ public class PlantTrefleControllerTests : IntegrationTestBase
             Images: images ?? Array.Empty<TrefleImage>(),
             CommonNames: commonNames ?? Array.Empty<TrefleCommonName>(),
             Synonyms: synonyms ?? Array.Empty<TrefleSynonym>(),
-            MatchType: "EXACT");
+            MatchType: "EXACT",
+            SoilSalinityLevel: soilSalinityLevel,
+            AtmosphericHumidityLevel: atmosphericHumidityLevel,
+            AverageHeightCm: averageHeightCm,
+            GrowthRate: growthRate);
 
     private record MatchedDto(
         bool Matched,

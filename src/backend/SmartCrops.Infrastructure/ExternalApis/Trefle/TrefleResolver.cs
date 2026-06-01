@@ -92,7 +92,15 @@ public class TrefleResolver
             Images: ExtractImages(data.Images),
             CommonNames: ExtractCommonNames(data.CommonNames),
             Synonyms: ExtractSynonyms(data.Synonyms),
-            MatchType: "EXACT");
+            MatchType: "EXACT",
+            // SMA-71: Trefle-exclusive scalars (was ignored). Persisted with direct
+            // `=` on PlantTrefleData, like GrowthHabit/SoilNutrimentsLevel.
+            SoilSalinityLevel: data.Growth?.SoilSalinity,
+            AtmosphericHumidityLevel: data.Growth?.AtmosphericHumidity,
+            AverageHeightCm: data.Specifications?.AverageHeight?.Cm,
+            GrowthRate: string.IsNullOrWhiteSpace(data.Specifications?.GrowthRate)
+                ? null
+                : data.Specifications.GrowthRate.Trim());
     }
 
     /// <summary>
