@@ -307,23 +307,55 @@ public class PerenualClientTests
         var handler = new RecordingHandler(HttpStatusCode.OK, body);
         var client = NewClient(handler);
 
-        var literal = await client.GetCareGuideLiteralAsync(728, CancellationToken.None);
+        var fetch = await client.GetCareGuideLiteralAsync(728, CancellationToken.None);
 
         Assert.Equal(
             $"https://perenual.com/api/species-care-guide-list?key={TestKey}&species_id=728",
             handler.LastRequestUri!.AbsoluteUri);
-        Assert.NotNull(literal);
-        Assert.DoesNotContain(TestKey, literal!);
-        Assert.Contains("REDACTED", literal!);
+        Assert.Equal(PerenualFetchOutcome.Success, fetch.Outcome);
+        Assert.NotNull(fetch.LiteralJson);
+        Assert.DoesNotContain(TestKey, fetch.LiteralJson!);
+        Assert.Contains("REDACTED", fetch.LiteralJson!);
     }
 
     [Fact]
-    public async Task GetCareGuideLiteralAsync_OnHtmlBody_ReturnsNull()
+    public async Task GetCareGuideLiteralAsync_OnHtmlBody_ReturnsTerminalNoBody()
     {
+        // A 2xx + non-JSON (HTML) body ⇒ the guide is genuinely absent → terminal.
         var handler = new HtmlHandler("<html>error</html>");
         var client = NewClient(handler);
 
-        Assert.Null(await client.GetCareGuideLiteralAsync(728, CancellationToken.None));
+        var fetch = await client.GetCareGuideLiteralAsync(728, CancellationToken.None);
+
+        Assert.Equal(PerenualFetchOutcome.TerminalNoBody, fetch.Outcome);
+        Assert.Null(fetch.LiteralJson);
+    }
+
+    [Fact]
+    public async Task GetCareGuideLiteralAsync_OnMalformedJson_ReturnsTransientFailure()
+    {
+        // SMA-94 contract: a 200 with a malformed JSON body is TRANSIENT (a re-fetch
+        // may return clean JSON) — must NOT be treated as a permanent terminal miss.
+        var handler = new RecordingHandler(HttpStatusCode.OK, "{ invalid json }");
+        var client = NewClient(handler);
+
+        var fetch = await client.GetCareGuideLiteralAsync(728, CancellationToken.None);
+
+        Assert.Equal(PerenualFetchOutcome.TransientFailure, fetch.Outcome);
+        Assert.Null(fetch.LiteralJson);
+    }
+
+    [Fact]
+    public async Task GetCareGuideLiteralAsync_OnTransportFailure_ReturnsTransientFailure()
+    {
+        // SMA-94 contract: a transport failure is TRANSIENT, never a terminal skip.
+        var handler = new ThrowingHandler(new HttpRequestException("dns failure"));
+        var client = NewClient(handler);
+
+        var fetch = await client.GetCareGuideLiteralAsync(728, CancellationToken.None);
+
+        Assert.Equal(PerenualFetchOutcome.TransientFailure, fetch.Outcome);
+        Assert.Null(fetch.LiteralJson);
     }
 
     // ── GetSpeciesListAsync (SMA-13 catalog enumeration) ──────────────────

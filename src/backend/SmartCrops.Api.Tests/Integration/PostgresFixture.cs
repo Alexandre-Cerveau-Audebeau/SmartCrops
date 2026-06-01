@@ -12,6 +12,7 @@ using SmartCrops.Api.Tests.Infrastructure;
 using SmartCrops.Api.Tests.Integration.Stubs;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure.Data;
+using SmartCrops.Infrastructure.ExternalApis.Perenual;
 using Testcontainers.PostgreSql;
 
 namespace SmartCrops.Api.Tests.Integration;
@@ -81,6 +82,15 @@ public sealed class PostgresFixture : IAsyncLifetime
     public StubPerenualPestCatalogService PerenualPestCatalogStub =>
         Factory.Services.GetRequiredService<StubPerenualPestCatalogService>();
 
+    /// <summary>
+    /// Shared programmable HTTP handler backing the <c>PerenualClient</c> typed
+    /// client (SMA-93). The <c>PerenualRawCacheController</c> injects the concrete
+    /// client, so its only seam is the transport — tests configure canned
+    /// species-list / details / care-guide bodies here. Reset per test.
+    /// </summary>
+    public StubPerenualHttpHandler PerenualHttpStub =>
+        Factory.Services.GetRequiredService<StubPerenualHttpHandler>();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
@@ -139,6 +149,17 @@ public sealed class PostgresFixture : IAsyncLifetime
                 services.AddSingleton<StubPerenualPestCatalogService>();
                 services.AddSingleton<IPerenualPestCatalogService>(sp =>
                     sp.GetRequiredService<StubPerenualPestCatalogService>());
+
+                // SMA-93: the raw-cache controller injects the concrete PerenualClient
+                // (no service interface to swap), so we stub the transport instead —
+                // override the typed client's primary handler with a programmable stub.
+                // Re-calling AddHttpClient<PerenualClient> reuses the production-named
+                // registration (base address + resilience preserved); only the primary
+                // handler is replaced, and ConfigureTestServices wins (runs last).
+                services.AddSingleton<StubPerenualHttpHandler>();
+                services.AddHttpClient<PerenualClient>()
+                    .ConfigurePrimaryHttpMessageHandler(sp =>
+                        sp.GetRequiredService<StubPerenualHttpHandler>());
             })
             .Build();
 

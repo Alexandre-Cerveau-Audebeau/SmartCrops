@@ -27,6 +27,8 @@ public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options)
 
     public DbSet<PerenualPestCatalog> PerenualPestCatalog => Set<PerenualPestCatalog>();
 
+    public DbSet<PerenualRawCache> PerenualRawCache => Set<PerenualRawCache>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
