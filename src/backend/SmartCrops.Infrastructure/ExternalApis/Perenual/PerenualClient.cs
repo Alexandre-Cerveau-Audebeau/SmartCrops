@@ -308,6 +308,67 @@ public class PerenualClient
     }
 
     /// <summary>
+    /// Calls <c>/species-list?key=...&amp;page={page}</c> and returns BOTH the parsed
+    /// <see cref="PerenualSpeciesListResponse"/> and the verbatim HTTP body with the
+    /// API key redacted (<see cref="PerenualSpeciesListFetch.LiteralJson"/>) — the
+    /// SMA-93 raw-cache capture. The body is read as a string FIRST and deserialised
+    /// from it, so the page is preserved byte-for-byte. Returns the <c>default</c>
+    /// <c>(null, null)</c> tuple on transport failure, timeout, malformed JSON,
+    /// non-success status, or a non-JSON Content-Type.
+    /// </summary>
+    public async Task<PerenualSpeciesListFetch> GetSpeciesListWithLiteralAsync(int page, CancellationToken ct)
+    {
+        var url = $"species-list?key={Uri.EscapeDataString(_apiKey)}&page={page}";
+        try
+        {
+            using var response = await _http.GetAsync(url, ct);
+            response.EnsureSuccessStatusCode();
+
+            var contentType = response.Content.Headers.ContentType?.MediaType;
+            if (!string.Equals(contentType, "application/json", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Perenual returned non-JSON content-type '{ContentType}' for species-list page {Page}. Treating as NoMatch.",
+                    contentType ?? "(none)", page);
+                return default;
+            }
+
+            // Read the literal body FIRST, then deserialise from it. The key is
+            // scrubbed before the body leaves this method — species-list has no key
+            // in its body today, but the redaction contract is uniform with #102.
+            var rawBody = await response.Content.ReadAsStringAsync(ct);
+            var list = JsonSerializer.Deserialize<PerenualSpeciesListResponse>(rawBody, WebJsonOptions);
+            var literal = PerenualKeyRedactor.Redact(rawBody, _apiKey);
+            return new PerenualSpeciesListFetch(list, literal);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Perenual species-list transport failure for page {Page}", page);
+            return default;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Perenual species-list returned malformed JSON for page {Page}", page);
+            return default;
+        }
+        catch (NotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "Perenual species-list returned unsupported content for page {Page}", page);
+            return default;
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Perenual species-list timed out for page {Page}", page);
+            return default;
+        }
+        catch (TimeoutRejectedException ex)
+        {
+            _logger.LogWarning(ex, "Perenual species-list hit resilience-handler timeout for page {Page}", page);
+            return default;
+        }
+    }
+
+    /// <summary>
     /// Calls <c>/api/pest-disease-list?key=...&amp;page={page}</c> (the <c>/api/</c>
     /// v1-level endpoint, like the care guide) and returns one redacted page of
     /// the global pest/disease catalogue (SMA-71 PR2). The body is read as a
@@ -420,3 +481,12 @@ public class PerenualClient
 /// <param name="Species">Parsed species response, or <c>null</c> on no-match/failure.</param>
 /// <param name="LiteralJson">Verbatim response body, API key redacted, or <c>null</c>.</param>
 public readonly record struct PerenualSpeciesFetch(PerenualSpeciesResponse? Species, string? LiteralJson);
+
+/// <summary>
+/// Result of <see cref="PerenualClient.GetSpeciesListWithLiteralAsync"/> (SMA-93):
+/// the parsed list page plus the verbatim, key-redacted HTTP body. Both are
+/// <c>null</c> on any failure path (the <c>default</c> value).
+/// </summary>
+/// <param name="List">Parsed species-list page, or <c>null</c> on failure.</param>
+/// <param name="LiteralJson">Verbatim page body, API key redacted, or <c>null</c>.</param>
+public readonly record struct PerenualSpeciesListFetch(PerenualSpeciesListResponse? List, string? LiteralJson);
