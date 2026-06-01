@@ -620,6 +620,39 @@ public class PlantTrefleControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Enrich_UnredactedTokenInRaw_FailsFast_AndPersistsNothing()
+    {
+        // Defence-in-depth: simulate a redaction regression — the result's raw still
+        // carries a token. The UpsertTrefleData persistence-boundary AssertRedacted
+        // must abort BEFORE any write and persist nothing. Mirrors the Perenual
+        // precedent Harvest_FailFasts_AndPersistsNothing_WhenALiteralStillCarriesAKey.
+        var plantId = await SeedPlantAsync("Solanum lycopersicum");
+        Fixture.TrefleStub.Enqueue(SampleMatch(12345, rawJson: "{\"self\":\"/x?token=leaked-secret\"}"));
+        AuthAsAdmin();
+
+        // The guard fails loud: TestServer may rethrow the unhandled exception to the
+        // caller, or a pipeline with exception middleware would return 500. Tolerate
+        // either — the durable invariant is that NOTHING is persisted.
+        HttpResponseMessage? response = null;
+        try
+        {
+            response = await Client.PostAsync($"/api/admin/trefle/enrich/{plantId}", null);
+        }
+        catch (InvalidOperationException)
+        {
+            // Expected: AssertRedacted threw and TestServer rethrew it here.
+        }
+
+        Assert.True(response is null || response.StatusCode == HttpStatusCode.InternalServerError);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        Assert.Equal(0, await db.PlantTrefleData.CountAsync(t => t.PlantId == plantId));
+        var plant = await db.Plants.SingleAsync(p => p.Id == plantId);
+        Assert.False(plant.EnrichmentStatus.HasFlag(EnrichmentStatus.TrefleEnriched));
+    }
+
+    [Fact]
     public async Task BackfillTrefleRaw_NoAuth_Returns401()
     {
         var response = await Client.PostAsync("/api/admin/trefle/raw-backfill", null);

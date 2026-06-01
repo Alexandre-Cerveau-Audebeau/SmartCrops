@@ -56,4 +56,17 @@ public class TrefleTokenRedactorTests
         TrefleTokenRedactor.AssertRedacted("{\"data\":{}}", "ctx");
         TrefleTokenRedactor.AssertRedacted(null, "ctx");
     }
+
+    [Fact]
+    public void RedactThenAssertRedacted_RoundTrips_NoPlaceholderDrift()
+    {
+        // The residual-guard lookahead is built FROM Placeholder, so anything Redact
+        // produces must always pass AssertRedacted — they can't drift apart if the
+        // const changes. Assert against the const itself, not a hardcoded literal.
+        var body = $"{{\"self\":\"/x?token={Token}\"}}";
+        var scrubbed = TrefleTokenRedactor.Redact(body, Token);
+
+        Assert.Contains($"token={TrefleTokenRedactor.Placeholder}", scrubbed);
+        TrefleTokenRedactor.AssertRedacted(scrubbed, "ctx"); // must not throw
+    }
 }

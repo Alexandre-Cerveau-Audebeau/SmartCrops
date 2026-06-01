@@ -18,6 +18,13 @@ public static partial class TrefleTokenRedactor
     /// <summary>Replacement substituted for the token.</summary>
     public const string Placeholder = "REDACTED";
 
+    // Residual-guard pattern built FROM Placeholder (not a hardcoded "REDACTED") so
+    // AssertRedacted can never drift out of sync with Redact if the placeholder
+    // changes. Const string concatenation is evaluated at compile time, so it is
+    // still a valid [GeneratedRegex] argument.
+    private const string ResidualTokenPattern =
+        @"\b(token)=(?!" + Placeholder + @"\b)[^&""'\s<>\\]+";
+
     // Matches a `token=<value>` query parameter, the value running until the next
     // URL/JSON delimiter. Covers `?token=`, `&token=`, and the `&amp;token=` form.
     [GeneratedRegex(@"(\btoken=)[^&""'\s<>\\]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
@@ -48,8 +55,9 @@ public static partial class TrefleTokenRedactor
 
     // Detects a token= parameter whose value did NOT get redacted — a credential
     // that slipped past Redact. Group 1 captures the parameter NAME only (never the
-    // value), so it is safe to surface in an exception message.
-    [GeneratedRegex(@"\b(token)=(?!REDACTED\b)[^&""'\s<>\\]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    // value), so it is safe to surface in an exception message. The negative
+    // lookahead references <see cref="Placeholder"/> via ResidualTokenPattern.
+    [GeneratedRegex(ResidualTokenPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ResidualTokenRegex();
 
     /// <summary>
