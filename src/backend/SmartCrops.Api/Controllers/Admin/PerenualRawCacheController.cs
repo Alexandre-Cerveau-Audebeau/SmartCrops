@@ -37,6 +37,13 @@ public class PerenualRawCacheController : ControllerBase
     // re-fetched on the next pass.
     private const int NoBodyStatus = 0;
 
+    // SMA-103: per-id pacing floor for the revisit drain. These are the ids that
+    // failed transiently under the forward sweep's faster pacing (a throttled /
+    // truncated cluster), so the drain deliberately spaces them out more — well
+    // above the forward sweep's default delay — regardless of the delayMs the
+    // driver passes. The long inter-PASS backoffs (30s/2m/10m) live in the driver.
+    private const int RevisitDelayFloorMs = 1500;
+
     private readonly SmartCropsDbContext _db;
     private readonly PerenualClient _client;
     private readonly ILogger<PerenualRawCacheController> _logger;
@@ -67,7 +74,7 @@ public class PerenualRawCacheController : ControllerBase
     /// <param name="delayMs">Polite pacing between API calls (default 700ms).</param>
     /// <param name="force">Re-fetch and overwrite already-cached resources.</param>
     [HttpPost("cache-catalog")]
-    public async Task<ActionResult<CacheCatalogResponse>> CacheCatalog(
+    public async Task<IActionResult> CacheCatalog(
         [FromQuery] string phase,
         [FromQuery] int limit = 200,
         [FromQuery] int? afterId = null,
@@ -80,7 +87,11 @@ public class PerenualRawCacheController : ControllerBase
             "list" => Ok(await CacheListAsync(afterId, limit, delayMs, force, ct)),
             "details" => Ok(await CacheBySpeciesIdAsync(DetailsEndpoint, afterId ?? 0, limit, delayMs, force, ct)),
             "careguide" => Ok(await CacheBySpeciesIdAsync(CareGuideEndpoint, afterId ?? 0, limit, delayMs, force, ct)),
-            _ => BadRequest("phase must be one of: list, details, careguide."),
+            // SMA-103: drain the persisted revisit queue for one endpoint, one id at a
+            // time with a higher per-id pacing floor (these are throttle-sensitive ids).
+            "revisit-details" => Ok(await DrainRevisitAsync(DetailsEndpoint, limit, delayMs, ct)),
+            "revisit-careguide" => Ok(await DrainRevisitAsync(CareGuideEndpoint, limit, delayMs, ct)),
+            _ => BadRequest("phase must be one of: list, details, careguide, revisit-details, revisit-careguide."),
         };
     }
 
@@ -180,9 +191,8 @@ public class PerenualRawCacheController : ControllerBase
         var ids = await GetSpeciesIdsFromListCacheAsync(afterId, limit, ct);
 
         int processed = 0, cached = 0, htmlSkipped = 0, failures = 0;
-        int? minTransientId = null; // smallest transient-failed id (ids are ascending)
-        var maxId = afterId;        // largest id we are "done past"
-        var failedIds = new List<int>(); // SMA-100: transient ids this chunk, for the driver's stall guard
+        var maxId = afterId;        // largest id handled — advances on EVERY outcome (SMA-103)
+        var failedIds = new List<int>(); // transient ids this chunk, surfaced for the driver's breaker + run report
 
         foreach (var id in ids)
         {
@@ -224,11 +234,17 @@ public class PerenualRawCacheController : ControllerBase
                         break;
 
                     case PerenualFetchOutcome.TransientFailure:
-                        // Write NOTHING (no skip row) so the id stays re-fetchable, and
-                        // remember the smallest failed id so the cursor never jumps past it.
+                        // SMA-103 skip-and-revisit: write NOTHING to the cache (no-loss — an
+                        // id is never recorded as "absent" on a transient fault), QUEUE it
+                        // for a spaced revisit pass, and let the cursor ADVANCE past it
+                        // (maxId = id below). This stops the forward sweep from re-hammering
+                        // a throttled cluster (the #111 cursor pin) so the phase completes;
+                        // the id is drained later, or re-fetched for free on a future forward
+                        // sweep (no cache row ⇒ re-included).
                         failures++;
-                        minTransientId ??= id;
                         failedIds.Add(id);
+                        maxId = id;
+                        await EnqueueRevisitAsync(endpoint, id, httpStatus, ct);
                         break;
                 }
 
@@ -241,27 +257,125 @@ public class PerenualRawCacheController : ControllerBase
             catch (Exception ex)
             {
                 // Defensive: an unexpected throw is transient — count it, keep the id
-                // re-fetchable (no skip row), and pin the resume below it.
+                // re-fetchable (no skip row), advance past it, and queue it for a revisit.
+                // Clear the tracker FIRST so the failed unit of work is discarded, then
+                // enqueue as its own clean unit of work.
                 failures++;
-                minTransientId ??= id;
                 failedIds.Add(id);
+                maxId = id;
                 _logger.LogError(ex, "Perenual raw-cache ({Endpoint}) failed for id {Id}", endpoint, id);
                 _db.ChangeTracker.Clear();
+                await EnqueueRevisitAsync(endpoint, id, null, ct);
             }
         }
 
-        // RESUME INVARIANT (SMA-94): never skip a transient-failed id. If any failed,
-        // resume just BELOW the smallest failed id — already-cached higher ids
-        // re-visit as idempotent skips (a cheap DB check, no re-fetch). Otherwise
-        // advance past the largest id handled. Empty chunk ⇒ end (null).
-        int? nextCursor = ids.Count == 0
-            ? null
-            : (minTransientId is int mt ? mt - 1 : maxId);
+        // SMA-103 cursor invariant: ALWAYS advance past the largest id handled,
+        // regardless of outcome — a transient id is accounted for via the revisit
+        // queue, not by pinning the sweep (the #111 pin re-hammered the throttled
+        // cluster and never completed). Empty chunk ⇒ phase exhausted (null).
+        int? nextCursor = ids.Count == 0 ? null : maxId;
 
         return Log(new CacheCatalogResponse(
             endpoint == DetailsEndpoint ? "details" : "careguide",
             processed, cached, htmlSkipped, failures, nextCursor?.ToString(),
             failedIds.Count > 0 ? failedIds : null));
+    }
+
+    // ── phase=revisit-details / revisit-careguide (SMA-103) ────────────────────
+
+    /// <summary>
+    /// Drain the persisted <see cref="PerenualRevisitQueue"/> for one endpoint:
+    /// re-fetch each still-pending id (<c>ResolvedAt IS NULL</c>) ONE AT A TIME with a
+    /// per-id pacing floor well above the forward sweep's (these are the
+    /// throttle-sensitive ids). A success writes the cache row AND marks the queue row
+    /// resolved; a real 404/410 records a terminal cache row AND resolves; a transient
+    /// failure just bumps the attempt and leaves the row pending for a later pass (the
+    /// driver spaces K passes with 30s/2m/10m backoff). Counts-only response; the ids
+    /// still pending after this chunk are surfaced in <c>FailedIds</c>.
+    /// </summary>
+    private async Task<RevisitDrainResponse> DrainRevisitAsync(string endpoint, int limit, int delayMs, CancellationToken ct)
+    {
+        var pacing = Math.Max(delayMs, RevisitDelayFloorMs);
+        var phase = endpoint == DetailsEndpoint ? "revisit-details" : "revisit-careguide";
+
+        // The pending set is the (tiny) throttled cluster; re-materialise it cheaply
+        // each pass, oldest-seen first so a long-stuck id is retried before newcomers.
+        var pending = await _db.PerenualRevisitQueue
+            .Where(q => q.Endpoint == endpoint && q.ResolvedAt == null)
+            .OrderBy(q => q.FirstSeenAt).ThenBy(q => q.Id)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        int drained = 0, resolved = 0;
+        var stillFailing = new List<int>();
+
+        foreach (var entry in pending)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (!int.TryParse(entry.ResourceId, out var id))
+            {
+                // Should never happen — the queue only holds numeric species ids. Leave
+                // it pending rather than spin; it surfaces in the stillPending count.
+                _logger.LogWarning(
+                    "Perenual revisit ({Endpoint}) skipping non-numeric queued resourceId '{ResourceId}'.",
+                    endpoint, entry.ResourceId);
+                continue;
+            }
+
+            drained++;
+            try
+            {
+                var (outcome, literal, httpStatus) = endpoint == DetailsEndpoint
+                    ? await FetchDetailsAsync(id, ct)
+                    : await FetchCareGuideAsync(id, ct);
+
+                switch (outcome)
+                {
+                    case PerenualFetchOutcome.Success:
+                        PerenualKeyRedactor.AssertRedacted(literal, $"PerenualRawCache.{endpoint}");
+                        await UpsertAsync(endpoint, entry.ResourceId, literal, 200, ct);
+                        await MarkRevisitResolvedAsync(endpoint, entry.ResourceId, 200, null, ct);
+                        resolved++;
+                        break;
+
+                    case PerenualFetchOutcome.TerminalNoBody:
+                        await UpsertAsync(endpoint, entry.ResourceId, null, httpStatus ?? NoBodyStatus, ct);
+                        await MarkRevisitResolvedAsync(endpoint, entry.ResourceId, httpStatus ?? NoBodyStatus, null, ct);
+                        resolved++;
+                        break;
+
+                    case PerenualFetchOutcome.TransientFailure:
+                        // Still failing — bump the attempt, leave ResolvedAt null so a
+                        // later pass (or a future forward sweep) retries it. No-loss.
+                        await BumpRevisitAttemptAsync(endpoint, entry.ResourceId, httpStatus, ct);
+                        stillFailing.Add(id);
+                        break;
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Defensive: an unexpected throw is transient — bump and leave pending.
+                // Clear the failed unit of work first, then bump as its own clean one.
+                _logger.LogError(ex, "Perenual revisit ({Endpoint}) failed for id {Id}", endpoint, id);
+                _db.ChangeTracker.Clear();
+                await BumpRevisitAttemptAsync(endpoint, entry.ResourceId, null, ct);
+                stillFailing.Add(id);
+            }
+
+            await PaceAsync(pacing, ct);
+        }
+
+        var stillPending = await _db.PerenualRevisitQueue
+            .CountAsync(q => q.Endpoint == endpoint && q.ResolvedAt == null, ct);
+
+        return LogRevisit(new RevisitDrainResponse(
+            phase, drained, resolved, stillPending,
+            stillFailing.Count > 0 ? stillFailing : null));
     }
 
     private async Task<(PerenualFetchOutcome Outcome, string? Literal, int? HttpStatus)> FetchDetailsAsync(int id, CancellationToken ct)
@@ -348,6 +462,83 @@ public class PerenualRawCacheController : ControllerBase
         await _db.SaveChangesAsync(ct);
     }
 
+    // ── revisit queue (SMA-103) ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Upsert a transiently-failed id into <see cref="PerenualRevisitQueue"/> (its own
+    /// resumable unit of work). Insert with <c>Attempts=1</c>, or bump an existing row's
+    /// attempt/diagnostics. ResolvedAt is (re-)set to null: an id we are enqueueing is, by
+    /// definition, currently failing and pending a revisit.
+    /// </summary>
+    private async Task EnqueueRevisitAsync(string endpoint, int id, int? httpStatus, CancellationToken ct)
+    {
+        var resourceId = id.ToString();
+        var now = DateTime.UtcNow;
+        var error = DescribeTransient(httpStatus);
+
+        var existing = await _db.PerenualRevisitQueue.FirstOrDefaultAsync(
+            q => q.Endpoint == endpoint && q.ResourceId == resourceId, ct);
+        if (existing is null)
+        {
+            _db.PerenualRevisitQueue.Add(new PerenualRevisitQueue
+            {
+                Endpoint = endpoint,
+                ResourceId = resourceId,
+                Attempts = 1,
+                LastHttpStatus = httpStatus,
+                LastError = error,
+                FirstSeenAt = now,
+                LastAttemptAt = now,
+                ResolvedAt = null,
+            });
+        }
+        else
+        {
+            existing.Attempts += 1;
+            existing.LastAttemptAt = now;
+            existing.LastHttpStatus = httpStatus;
+            existing.LastError = error;
+            existing.ResolvedAt = null;
+        }
+        await _db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Bump a queue row's attempt counter/diagnostics (re-query by key so it is
+    /// robust to a cleared change-tracker). Leaves <c>ResolvedAt</c> null — still pending.</summary>
+    private async Task BumpRevisitAttemptAsync(string endpoint, string resourceId, int? httpStatus, CancellationToken ct)
+    {
+        var row = await _db.PerenualRevisitQueue.FirstOrDefaultAsync(
+            q => q.Endpoint == endpoint && q.ResourceId == resourceId, ct);
+        if (row is null) { return; } // resolved/removed concurrently — nothing to bump
+        row.Attempts += 1;
+        row.LastAttemptAt = DateTime.UtcNow;
+        row.LastHttpStatus = httpStatus;
+        row.LastError = DescribeTransient(httpStatus);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Mark a queue row resolved (captured or proven gone) during a revisit pass.
+    /// Re-query by key so it is robust to a cleared change-tracker.</summary>
+    private async Task MarkRevisitResolvedAsync(string endpoint, string resourceId, int? httpStatus, string? lastError, CancellationToken ct)
+    {
+        var row = await _db.PerenualRevisitQueue.FirstOrDefaultAsync(
+            q => q.Endpoint == endpoint && q.ResourceId == resourceId, ct);
+        if (row is null) { return; }
+        var now = DateTime.UtcNow;
+        row.Attempts += 1;
+        row.LastAttemptAt = now;
+        row.LastHttpStatus = httpStatus;
+        row.LastError = lastError;
+        row.ResolvedAt = now;
+        await _db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Short, body-free diagnostic for a transient failure (never a body or key).</summary>
+    private static string DescribeTransient(int? httpStatus)
+        => httpStatus is int s
+            ? $"TransientFailure (HTTP {s})"
+            : "TransientFailure (no HTTP status: transport/timeout/malformed body)";
+
     private static int? ExtractLastPage(string? rawJson)
     {
         if (string.IsNullOrEmpty(rawJson))
@@ -382,6 +573,15 @@ public class PerenualRawCacheController : ControllerBase
         return r;
     }
 
+    private RevisitDrainResponse LogRevisit(RevisitDrainResponse r)
+    {
+        _logger.LogInformation(
+            "Perenual revisit drain: phase={Phase} drained={Drained} resolved={Resolved} stillPending={StillPending} failedIds={FailedIds}",
+            r.Phase, r.Drained, r.Resolved, r.StillPending,
+            r.FailedIds is { Count: > 0 } ? string.Join(",", r.FailedIds) : "(none)");
+        return r;
+    }
+
     /// <summary>
     /// SMA-93 raw-cache chunk summary. Counts only (plus the transient id list) —
     /// never the cached bodies.
@@ -401,5 +601,19 @@ public class PerenualRawCacheController : ControllerBase
         int HtmlSkipped,
         int Failures,
         string? NextCursor,
+        IReadOnlyList<int>? FailedIds = null);
+
+    /// <summary>
+    /// SMA-103 revisit-drain chunk summary. Counts only (plus the still-pending id list).
+    /// <c>Drained</c> = queue rows attempted this chunk; <c>Resolved</c> = captured or
+    /// proven-gone this chunk (ResolvedAt set); <c>StillPending</c> = queue rows for this
+    /// endpoint still unresolved AFTER the chunk; <c>FailedIds</c> = the ids that failed
+    /// again this chunk (still pending — retried on a later pass / future forward sweep).
+    /// </summary>
+    public record RevisitDrainResponse(
+        string Phase,
+        int Drained,
+        int Resolved,
+        int StillPending,
         IReadOnlyList<int>? FailedIds = null);
 }

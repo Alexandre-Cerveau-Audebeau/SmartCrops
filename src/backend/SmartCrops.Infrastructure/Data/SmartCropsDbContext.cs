@@ -29,6 +29,8 @@ public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options)
 
     public DbSet<PerenualRawCache> PerenualRawCache => Set<PerenualRawCache>();
 
+    public DbSet<PerenualRevisitQueue> PerenualRevisitQueue => Set<PerenualRevisitQueue>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

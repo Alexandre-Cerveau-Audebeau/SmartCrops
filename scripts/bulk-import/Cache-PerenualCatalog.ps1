@@ -14,6 +14,14 @@
                              from the cached list pages (key = id).
         3. phase=careguide — caches the care guide for those same ids.
 
+    SMA-103 skip-and-revisit: a forward id-based phase no longer pins its cursor on a
+    transient failure (which re-hammered a throttled cluster and never completed).
+    Instead the failed id is queued server-side (PerenualRevisitQueue) and the cursor
+    advances. After each forward phase this driver runs K=3 spaced revisit passes
+    (phase=revisit-details / revisit-careguide) with 30s / 2m / 10m inter-pass backoff,
+    draining the queue one id at a time. Ids still unresolved after the passes stay in
+    the queue (retried for free on a future run) and are listed in the docs/runs report.
+
     DECOUPLED capture: this creates no Plant and touches neither GBIF nor Trefle.
     The endpoint is idempotent — an already-cached resource is skipped unless
     -Force is passed. Every captured body is API-key-redacted server-side and
@@ -64,13 +72,17 @@ param(
     [ValidateRange(0, 10)]
     [int]$MaxRetries = 3,
 
-    # SMA-100 stall guard: abort a phase if it makes no progress (processed=0 AND an
-    # unchanged nextCursor) for this many consecutive chunks. A persistent upstream
-    # fault (5xx / 429) — or any future server-side resume bug — would otherwise loop
-    # forever (cf. the 404-as-transient infinite loop this PR fixes). The run stays
-    # fully resumable: re-launch once the upstream recovers and it picks up the gap.
+    # SMA-103 runaway net (replaces the SMA-100 stall-pin guard, now unreachable
+    # because the server cursor always advances). Abort a phase after this many
+    # CONSECUTIVE chunks that are ENTIRELY transient — fetches >= 1 but processed = 0
+    # AND htmlSkipped = 0 (every fetch failed). At limit=200 a local throttled cluster
+    # still leaves the chunk full of successes, so the streak resets and never trips on
+    # it (that cluster now flows into the revisit queue instead); only a globally-down
+    # upstream (mass 429/5xx, transport down) yields a 100%-transient chunk. 3 chunks
+    # (~600 calls) is a clear, bounded signal — kept low to spare the Supreme quota.
+    # The run stays fully resumable: re-launch once the upstream recovers.
     [ValidateRange(2, 100)]
-    [int]$MaxStallChunks = 5
+    [int]$MaxAllTransientChunks = 3
 )
 
 $ErrorActionPreference = "Stop"
@@ -136,8 +148,7 @@ function Invoke-Phase {
     $totProcessed = 0; $totCached = 0; $totHtmlSkipped = 0; $totFailures = 0
     $cursor = $null
     $chunk = 0
-    $prevCursor = $null   # nextCursor of the previous chunk (stall detection)
-    $stall = 0            # consecutive no-progress chunks at an unchanged cursor
+    $transientStreak = 0  # consecutive ENTIRELY-transient chunks (SMA-103 runaway net)
 
     Write-Host ("=== phase={0} ===" -f $Phase) -ForegroundColor Cyan
 
@@ -159,30 +170,33 @@ function Invoke-Phase {
         Write-Host ("  chunk {0}: processed={1} cached={2} htmlSkipped={3} failures={4} nextCursor={5}" -f `
             $chunk, $resp.processed, $resp.cached, $resp.htmlSkipped, $resp.failures, ($resp.nextCursor ?? '(end)'))
 
-        # SMA-100 stall guard. A chunk that fetched nothing new (processed=0) AND
-        # returns the SAME nextCursor as the previous chunk is stuck re-trying the
-        # same blocked ids — a persistent upstream fault (5xx/429) the server keeps
-        # (correctly) classifying transient, so the cursor never advances. Abort the
-        # phase after $MaxStallChunks such chunks rather than loop forever, naming the
-        # blocked ids from the server's failedIds. A fully-cached re-visit is NOT a
-        # stall: its nextCursor advances (maxId), so this only trips on a true pin.
-        if ([int]$resp.processed -eq 0 -and -not [string]::IsNullOrEmpty($resp.nextCursor) -and $resp.nextCursor -eq $prevCursor) {
-            $stall++
-            # Surface the climbing stall to an operator watching the console (this runs
-            # against a live quota days before the cancel) so a forming 5xx/429 storm is
-            # visible as it builds, not only at the hard abort. Control flow unchanged.
-            Write-Host ("  [{0}] no progress at cursor={1} (stall {2}/{3})" -f `
-                $Phase, $resp.nextCursor, $stall, $MaxStallChunks) -ForegroundColor Yellow
-            if ($stall -ge $MaxStallChunks) {
+        # SMA-103 runaway net. Count CONSECUTIVE chunks that are ENTIRELY transient:
+        # fetches (processed + htmlSkipped + failures; Cached excluded — an idempotent
+        # skip is not a fetch) >= 1, yet processed = 0 AND htmlSkipped = 0 (every id the
+        # chunk fetched failed). That is the signature of a globally-down upstream, not a
+        # local throttled cluster — at limit=200 a cluster still leaves the chunk full of
+        # successes (streak resets) and now flows into PerenualRevisitQueue instead. A
+        # chunk with >=1 success OR >=1 htmlSkipped resets the streak; an all-cached /
+        # empty chunk (fetches = 0) leaves it UNCHANGED. Abort after
+        # $MaxAllTransientChunks rather than hammer a dead upstream — fully resumable.
+        $fetches = [int]$resp.processed + [int]$resp.htmlSkipped + [int]$resp.failures
+        if ($fetches -ge 1 -and [int]$resp.processed -eq 0 -and [int]$resp.htmlSkipped -eq 0) {
+            $transientStreak++
+            # Surface the climbing streak to an operator watching the console (this runs
+            # against a live quota days before the cancel) so a forming 429/5xx storm is
+            # visible as it builds, not only at the hard abort.
+            Write-Host ("  [{0}] entirely-transient chunk (streak {1}/{2})" -f `
+                $Phase, $transientStreak, $MaxAllTransientChunks) -ForegroundColor Yellow
+            if ($transientStreak -ge $MaxAllTransientChunks) {
                 $blocked = if ($resp.failedIds) { $resp.failedIds -join ', ' } else { '(none reported)' }
-                throw ("[{0}] STALLED: no progress for {1} consecutive chunks at cursor={2}. Blocked ids: {3}. Aborting phase — resumable once the upstream recovers (re-run this script)." -f `
-                    $Phase, $stall, $resp.nextCursor, $blocked)
+                throw ("[{0}] ABORTED: {1} consecutive entirely-transient chunks — upstream appears globally down. Blocked (endpoint={0}) ids: {2}. Queued ids stay in PerenualRevisitQueue; resumable once the upstream recovers (re-run this script)." -f `
+                    $Phase, $transientStreak, $blocked)
             }
         }
-        else {
-            $stall = 0
+        elseif ([int]$resp.processed -ge 1 -or [int]$resp.htmlSkipped -ge 1) {
+            $transientStreak = 0
         }
-        $prevCursor = $resp.nextCursor
+        # else: fetches = 0 (all cached / empty chunk) → streak UNCHANGED.
 
         if ([string]::IsNullOrEmpty($resp.nextCursor)) {
             break
@@ -203,24 +217,138 @@ function Invoke-Phase {
     }
 }
 
+function Invoke-RevisitPasses {
+    # SMA-103: after a forward id-based phase completes, drain its PerenualRevisitQueue
+    # with K spaced passes. Each pass is one POST to phase=revisit-<endpoint>; the
+    # backend paces PER ID (>=1500ms floor) while the long inter-pass backoffs
+    # (30s / 2m / 10m) live HERE, giving the throttled cluster increasing time to
+    # recover — mimicking the spaced one-at-a-time manual probe that succeeds where the
+    # rapid forward sweep truncated. Stops early once nothing is pending. Ids still
+    # unresolved after the last pass stay in the queue (retried free on a future run).
+    param(
+        [Parameter(Mandatory)] [string]$RevisitPhase
+    )
+
+    $backoffs = @(30, 120, 600)   # seconds to wait before passes 1, 2, 3 (increasing)
+    $last = $null
+
+    Write-Host ("=== {0} (revisit, {1} passes) ===" -f $RevisitPhase, $backoffs.Count) -ForegroundColor Cyan
+
+    for ($pass = 1; $pass -le $backoffs.Count; $pass++) {
+        $wait = $backoffs[$pass - 1]
+        Write-Host ("  pass {0}/{1}: waiting {2}s for the upstream to recover before draining..." -f `
+            $pass, $backoffs.Count, $wait)
+        Start-Sleep -Seconds $wait
+
+        $uri = "{0}/api/admin/perenual/cache-catalog?phase={1}&limit={2}&delayMs={3}" -f `
+            $BaseUrl, $RevisitPhase, $Limit, $DelayMs
+        $resp = Invoke-CacheChunk -Uri $uri -Headers $headers -Label ("{0}#pass{1}" -f $RevisitPhase, $pass) -Retries $MaxRetries
+        $last = $resp
+
+        $stillPending = [int]$resp.stillPending
+        Write-Host ("  pass {0}: drained={1} resolved={2} stillPending={3} failedIds={4}" -f `
+            $pass, $resp.drained, $resp.resolved, $stillPending, (($resp.failedIds) -join ', '))
+
+        if ($stillPending -le 0) {
+            Write-Host ("  {0}: queue fully drained after pass {1}." -f $RevisitPhase, $pass) -ForegroundColor Green
+            break
+        }
+    }
+
+    $finalPending = if ($last) { [int]$last.stillPending } else { 0 }
+    $finalFailed = if ($last -and $last.failedIds) { @($last.failedIds) } else { @() }
+    if ($finalPending -gt 0) {
+        Write-Host ("  {0}: {1} id(s) STILL pending after {2} passes (left in queue, retried free on a future run): {3}" -f `
+            $RevisitPhase, $finalPending, $backoffs.Count, ($finalFailed -join ', ')) -ForegroundColor Yellow
+    }
+    Write-Host ""
+
+    return [pscustomobject]@{
+        Phase        = $RevisitPhase
+        StillPending = $finalPending
+        FailedIds    = $finalFailed
+    }
+}
+
+function Write-RunReport {
+    # STEP 4: persist a counts-only run report under docs/runs/ so the operator has a
+    # durable record of the forward totals and any ids left unresolved in the revisit
+    # queue. Never contains a body or key — counts and ids only.
+    param(
+        [Parameter(Mandatory)] [object[]]$Results,
+        [Parameter(Mandatory)] [object[]]$Revisits
+    )
+
+    $runsDir = Join-Path $PSScriptRoot "../../docs/runs"
+    if (-not (Test-Path $runsDir)) {
+        New-Item -ItemType Directory -Path $runsDir -Force | Out-Null
+    }
+    $reportPath = Join-Path $runsDir ("perenual-aspiration-{0}.md" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add(("# Perenual aspiration run — {0}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss")))
+    $lines.Add("")
+    $lines.Add(("Backend ``{0}`` · limit={1} · delayMs={2} · force={3}" -f $BaseUrl, $Limit, $DelayMs, $Force.IsPresent))
+    $lines.Add("")
+    $lines.Add("## Forward phases")
+    $lines.Add("")
+    $lines.Add("| phase | processed | cached | htmlSkipped | failures |")
+    $lines.Add("|---|---|---|---|---|")
+    foreach ($r in $Results) {
+        $lines.Add(("| {0} | {1} | {2} | {3} | {4} |" -f $r.Phase, $r.Processed, $r.Cached, $r.HtmlSkipped, $r.Failures))
+    }
+    $lines.Add("")
+    $lines.Add("## Revisit drains")
+    $lines.Add("")
+    $lines.Add("| phase | stillPending | unresolved ids |")
+    $lines.Add("|---|---|---|")
+    foreach ($v in $Revisits) {
+        $ids = if ($v.FailedIds -and $v.FailedIds.Count -gt 0) { $v.FailedIds -join ', ' } else { '(none)' }
+        $lines.Add(("| {0} | {1} | {2} |" -f $v.Phase, $v.StillPending, $ids))
+    }
+    $lines.Add("")
+    $totalPending = ($Revisits | Measure-Object -Property StillPending -Sum).Sum
+    if ($totalPending -gt 0) {
+        $lines.Add(("> {0} id(s) remain in PerenualRevisitQueue (ResolvedAt IS NULL). No data lost — they are re-fetched for free on the next forward sweep." -f $totalPending))
+    }
+    else {
+        $lines.Add("> Revisit queue fully drained — 0 ids unresolved.")
+    }
+
+    Set-Content -Path $reportPath -Value $lines -Encoding utf8
+    Write-Host ("Run report written: {0}" -f $reportPath) -ForegroundColor Cyan
+}
+
 Write-Host ("Perenual raw-cache aspiration — backend={0} limit={1} delayMs={2} force={3}" -f `
     $BaseUrl, $Limit, $DelayMs, $Force.IsPresent) -ForegroundColor Cyan
 Write-Host ""
 
-# Order matters: list must be cached first — details/careguide enumerate their
-# ids from the cached species-list pages.
-$results = @(
-    Invoke-Phase -Phase "list"
-    Invoke-Phase -Phase "details"
-    Invoke-Phase -Phase "careguide"
-)
+# Order matters: list must be cached first — details/careguide enumerate their ids
+# from the cached species-list pages. Each id-based forward phase is immediately
+# followed by spaced revisit passes that drain the transient queue it filled (SMA-103).
+$listResult = Invoke-Phase -Phase "list"
+$detailsResult = Invoke-Phase -Phase "details"
+$detailsRevisit = Invoke-RevisitPasses -RevisitPhase "revisit-details"
+$careguideResult = Invoke-Phase -Phase "careguide"
+$careguideRevisit = Invoke-RevisitPasses -RevisitPhase "revisit-careguide"
+
+$results = @($listResult, $detailsResult, $careguideResult)
+$revisits = @($detailsRevisit, $careguideRevisit)
 
 Write-Host "=== GRAND TOTAL ===" -ForegroundColor Cyan
 $results | Format-Table -AutoSize
 $grandFailures = ($results | Measure-Object -Property Failures -Sum).Sum
+$grandPending = ($revisits | Measure-Object -Property StillPending -Sum).Sum
+
+if ($grandPending -gt 0) {
+    Write-Host ("{0} id(s) remain unresolved in PerenualRevisitQueue after revisit — retried for free on a future forward sweep (no data lost)." -f $grandPending) -ForegroundColor Yellow
+}
 if ($grandFailures -gt 0) {
-    Write-Host ("Completed with {0} failure(s) — re-run to retry (idempotent; cached resources skip)." -f $grandFailures) -ForegroundColor Yellow
+    Write-Host ("Completed with {0} transient failure(s) this run (queued for revisit; idempotent re-run picks up the rest)." -f $grandFailures) -ForegroundColor Yellow
 }
 else {
-    Write-Host "Completed with 0 failures." -ForegroundColor Green
+    Write-Host "Completed with 0 transient failures." -ForegroundColor Green
 }
+
+# STEP 4: durable run report (counts + any unresolved ids) under docs/runs/.
+Write-RunReport -Results $results -Revisits $revisits
