@@ -180,10 +180,11 @@ const plannedTech: TechItem[] = [
 /**
  * SMA-55: render the live plant count as a rounded, suffixed figure ("500+").
  * Floors to the nearest hundred (≥100) or ten (≥10) so the headline stays stable
- * as the catalogue grows; exact for <10. Only called with n > 0 — the caller
- * handles the loading/empty/error cases with a neutral placeholder.
+ * as the catalogue grows; exact for <10. Returns "0" defensively for n ≤ 0; the
+ * caller still handles loading/empty/error with a neutral placeholder.
  */
 function formatPlantCount(n: number): string {
+  if (n <= 0) return '0';
   if (n >= 100) return `${Math.floor(n / 100) * 100}+`;
   if (n >= 10) return `${Math.floor(n / 10) * 10}+`;
   return `${n}`;
