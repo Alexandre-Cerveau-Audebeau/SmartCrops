@@ -418,6 +418,9 @@ export default function Home() {
                       key={plant.id}
                       component={RouterLink}
                       to={`/library/${plant.id}`}
+                      aria-label={t('home.previewCardAriaLabel', {
+                        name: translation?.commonName ?? plant.scientificName,
+                      })}
                       sx={{
                         textDecoration: 'none',
                         color: 'inherit',
