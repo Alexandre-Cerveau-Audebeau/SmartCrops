@@ -29,20 +29,20 @@ export const PLANT_HERO_PLACEHOLDER =
   'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><rect width="400" height="400" fill="%234CAF78"/><text x="50%25" y="50%25" font-family="Georgia,serif" font-size="220" font-weight="700" fill="white" text-anchor="middle" dominant-baseline="central">S</text></svg>';
 
 /**
- * Hero image fallback chain validated in Phase 1: prefer a `Main` image
- * (Perenual's `default_image` lands here), then `Habit`, then `Flower`, then
- * the first image of any other type, then the legacy `Plant.imageUrl` column,
- * finally the brand placeholder.
+ * Hero image selection (SMA-118). Perenual `Main` images are time-limited signed
+ * S3 URLs that expire (~24h) and now 403, so they are NO LONGER preferred:
+ * prefer a STABLE-source image (Trefle/PlantNet) by cover-type priority
+ * (`Habit` → `Flower` → `Leaf` → first stable). If the plant has no stable image,
+ * fall back to the legacy `Plant.imageUrl` scalar, then the brand placeholder —
+ * skipping the dead Perenual rows rather than rendering a broken image.
  */
 export function pickHeroImage(plant: Plant): string {
-  if (plant.images?.length) {
-    const byType = (type: string) => plant.images.find((i) => i.imageType === type);
-    return (
-      byType('Main')?.url ??
-      byType('Habit')?.url ??
-      byType('Flower')?.url ??
-      plant.images[0].url
-    );
+  const stable = (plant.images ?? []).filter(
+    (i) => i.source === 'Trefle' || i.source === 'PlantNet',
+  );
+  if (stable.length) {
+    const byType = (type: string) => stable.find((i) => i.imageType === type)?.url;
+    return byType('Habit') ?? byType('Flower') ?? byType('Leaf') ?? stable[0].url;
   }
   return plant.imageUrl ?? PLANT_HERO_PLACEHOLDER;
 }

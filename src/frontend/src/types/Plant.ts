@@ -150,6 +150,8 @@ export interface Plant {
   sowingPeriod: string | null;
   harvestPeriod: string | null;
   imageUrl: string | null;
+  /** Attribution line for {@link imageUrl} — only the list DTO carries it (the detail view attributes per gallery image), so optional. */
+  imageAttribution?: string | null;
 
   gbifTaxonKey: number | null;
   family: string | null;

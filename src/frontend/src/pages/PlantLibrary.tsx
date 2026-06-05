@@ -5,6 +5,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
+import CardMedia from '@mui/material/CardMedia';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
@@ -19,6 +20,7 @@ import { fetchPlants, fetchPlantTypes, searchPlants } from '../services/plantApi
 import type { Plant } from '../types/Plant';
 import type { PlantType } from '../types/PlantType';
 import { getTranslation } from '../utils/getTranslation';
+import { PLANT_HERO_PLACEHOLDER } from '../utils/plantDetail';
 
 export default function PlantLibrary() {
   const { t } = useTranslation();
@@ -173,6 +175,22 @@ export default function PlantLibrary() {
                     },
                   }}
                 >
+                  <CardMedia
+                    component="img"
+                    image={plant.imageUrl || PLANT_HERO_PLACEHOLDER}
+                    alt={tr?.commonName ?? plant.scientificName}
+                    onError={(e) => {
+                      // Filet (SMA-118/5a): if a "stable" URL still fails to load,
+                      // swap to the brand placeholder. The dataset flag prevents an
+                      // error loop (the placeholder is a data: URI that always loads).
+                      const img = e.currentTarget as HTMLImageElement & { dataset: DOMStringMap };
+                      if (!img.dataset.fallback) {
+                        img.dataset.fallback = '1';
+                        img.src = PLANT_HERO_PLACEHOLDER;
+                      }
+                    }}
+                    sx={{ height: 160, objectFit: 'cover', bgcolor: 'action.hover' }}
+                  />
                   <CardContent>
                     <Typography variant="h6" fontWeight={600}>
                       {tr?.commonName ?? plant.scientificName}
@@ -217,6 +235,16 @@ export default function PlantLibrary() {
                         {plant.sunExposure && `${t('library.sun')}: ${t(`plantValues.${plant.sunExposure}`, plant.sunExposure)}`}
                         {plant.sunExposure && plant.waterNeeds && ' · '}
                         {plant.waterNeeds && `${t('library.water')}: ${t(`plantValues.${plant.waterNeeds}`, plant.waterNeeds)}`}
+                      </Typography>
+                    )}
+
+                    {plant.imageAttribution && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', mt: 1, fontSize: '0.65rem', opacity: 0.7 }}
+                      >
+                        {plant.imageAttribution}
                       </Typography>
                     )}
                   </CardContent>

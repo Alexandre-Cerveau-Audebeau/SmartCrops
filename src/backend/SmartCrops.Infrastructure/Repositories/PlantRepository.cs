@@ -8,24 +8,31 @@ namespace SmartCrops.Infrastructure.Repositories;
 
 /// <summary>
 /// EF Core implementation of <see cref="IPlantRepository"/>. List/search paths
-/// stay lean (PlantType + the Main image only) while <see cref="GetByIdAsync"/>
-/// eagerly loads the full enrichment graph for the detail view — see the
-/// inline comment there for the split-query rationale.
+/// stay lean (PlantType + stable-source images only — Trefle/PlantNet; SMA-118)
+/// while <see cref="GetByIdAsync"/> eagerly loads the full enrichment graph for
+/// the detail view — see the inline comment there for the split-query rationale.
 /// </summary>
 public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
 {
     /// <summary>
-    /// Return plants with their type label and the single <c>Main</c> image
-    /// (filtered include — one row per plant — so the list DTO can carry a
-    /// primary image + attribution without loading the whole gallery).
-    /// When <paramref name="isMedicinal"/> is supplied, filter to that exact flag
-    /// value (NULL-flag rows excluded). Used by the Library list / planner sidebar.
+    /// Return plants with their type label and their stable-source images
+    /// (Trefle/PlantNet) so the list DTO can carry a working primary image +
+    /// attribution; the mapper picks one by type priority (SMA-118). Perenual
+    /// images are deliberately excluded (expired signed URLs). When
+    /// <paramref name="isMedicinal"/> is supplied, filter to that exact flag value
+    /// (NULL-flag rows excluded). Used by the Library list / planner sidebar.
     /// </summary>
     public async Task<IEnumerable<Plant>> GetAllAsync(bool? isMedicinal = null)
     {
         var query = context.Plants
             .Include(p => p.PlantType)
-            .Include(p => p.Images.Where(i => i.ImageType == PlantImageType.Main))
+            // SMA-118: load STABLE-source images (Trefle/PlantNet). Perenual `Main`
+            // images are time-limited signed S3 URLs that expire (~24h) and now 403,
+            // so the mapper must never surface them. AsSplitQuery: a collection include
+            // would otherwise cartesian-multiply the parent rows.
+            .Include(p => p.Images.Where(i =>
+                i.Source == PlantSourceType.Trefle || i.Source == PlantSourceType.PlantNet))
+            .AsSplitQuery()
             .AsNoTracking();
 
         if (isMedicinal.HasValue)
@@ -117,7 +124,13 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
     {
         return await context.Plants
             .Include(p => p.PlantType)
-            .Include(p => p.Images.Where(i => i.ImageType == PlantImageType.Main))
+            // SMA-118: load STABLE-source images (Trefle/PlantNet). Perenual `Main`
+            // images are time-limited signed S3 URLs that expire (~24h) and now 403,
+            // so the mapper must never surface them. AsSplitQuery: a collection include
+            // would otherwise cartesian-multiply the parent rows.
+            .Include(p => p.Images.Where(i =>
+                i.Source == PlantSourceType.Trefle || i.Source == PlantSourceType.PlantNet))
+            .AsSplitQuery()
             .AsNoTracking()
             .Where(p => p.PlantTypeId == plantTypeId)
             .ToListAsync();
@@ -140,7 +153,13 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
         // (the neutral list DTO never materialises translations).
         return await context.Plants
             .Include(p => p.PlantType)
-            .Include(p => p.Images.Where(i => i.ImageType == PlantImageType.Main))
+            // SMA-118: load STABLE-source images (Trefle/PlantNet). Perenual `Main`
+            // images are time-limited signed S3 URLs that expire (~24h) and now 403,
+            // so the mapper must never surface them. AsSplitQuery: a collection include
+            // would otherwise cartesian-multiply the parent rows.
+            .Include(p => p.Images.Where(i =>
+                i.Source == PlantSourceType.Trefle || i.Source == PlantSourceType.PlantNet))
+            .AsSplitQuery()
             .AsNoTracking()
             .Where(p =>
                 p.ScientificName.ToLower().Contains(normalised) ||
