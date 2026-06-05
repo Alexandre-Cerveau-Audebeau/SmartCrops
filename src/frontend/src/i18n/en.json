@@ -65,6 +65,7 @@
       "loading": "Loading plants...",
       "error": "Failed to load plants"
     },
+    "previewCardAriaLabel": "View details for {{name}}",
     "howItWorks": {
       "title": "How It Works",
       "step1Title": "Browse",

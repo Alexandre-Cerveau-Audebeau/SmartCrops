@@ -65,6 +65,7 @@
       "loading": "Chargement des plantes...",
       "error": "Impossible de charger les plantes"
     },
+    "previewCardAriaLabel": "Voir les détails de {{name}}",
     "howItWorks": {
       "title": "Comment ça marche",
       "step1Title": "Parcourez",

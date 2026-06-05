@@ -173,9 +173,22 @@ const plannedTech: TechItem[] = [
   { name: 'Kubernetes', logo: '/images/tech/kubernetes.svg', role: 'Orchestration' },
   { name: 'AWS', logo: '/images/tech/aws.svg', role: 'Cloud Platform' },
   { name: 'Redis', logo: '/images/tech/redis.svg', role: 'Caching' },
-  { name: 'Elasticsearch', logo: '/images/tech/elasticsearch.svg', role: 'Search Engine' },
+  { name: 'Typesense', logo: '/images/tech/typesense.svg', role: 'Search Engine' },
   { name: 'Terraform', logo: '/images/tech/terraform.svg', role: 'Infrastructure as Code' },
 ];
+
+/**
+ * SMA-55: render the live plant count as a rounded, suffixed figure ("500+").
+ * Floors to the nearest hundred (≥100) or ten (≥10) so the headline stays stable
+ * as the catalogue grows; exact for <10. Returns "0" defensively for n ≤ 0; the
+ * caller still handles loading/empty/error with a neutral placeholder.
+ */
+function formatPlantCount(n: number): string {
+  if (n <= 0) return '0';
+  if (n >= 100) return `${Math.floor(n / 100) * 100}+`;
+  if (n >= 10) return `${Math.floor(n / 10) * 10}+`;
+  return `${n}`;
+}
 
 export default function Home() {
   const { t } = useTranslation();
@@ -185,6 +198,7 @@ export default function Home() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [plants, setPlants] = useState<Plant[]>([]);
+  const [totalPlants, setTotalPlants] = useState<number | null>(null);
   const [plantsLoading, setPlantsLoading] = useState(true);
   const [plantsError, setPlantsError] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -199,7 +213,10 @@ export default function Home() {
   useEffect(() => {
     const controller = new AbortController();
     fetchPlants(controller.signal)
-      .then((data) => setPlants(data.slice(0, 3)))
+      .then((data) => {
+        setTotalPlants(data.length);
+        setPlants(data.slice(0, 3));
+      })
       .catch((err) => {
         if (err.name !== 'AbortError') setPlantsError(true);
       })
@@ -227,6 +244,15 @@ export default function Home() {
   );
   const currentPage = Math.floor(snappedIndex / itemsPerPage);
 
+  // SMA-55: live, rounded plant count for the stats bar. Neutral placeholder
+  // while loading and on empty/error so we never show a stale "30+" or an ugly
+  // "0+"/"NaN".
+  const plantsStatValue = plantsLoading
+    ? '…'
+    : totalPlants && totalPlants > 0
+      ? formatPlantCount(totalPlants)
+      : '—';
+
   return (
     <Box>
       {/* ==================== SECTION 1 — HERO ==================== */}
@@ -243,7 +269,7 @@ export default function Home() {
             }}
           >
             {[
-              { id: 'plants', icon: <LocalFloristIcon sx={{ fontSize: 24 }} />, value: '30+', label: t('home.stats.plants'), onClick: () => navigate('/library') },
+              { id: 'plants', icon: <LocalFloristIcon sx={{ fontSize: 24 }} />, value: plantsStatValue, label: t('home.stats.plants'), onClick: () => navigate('/library') },
               { id: 'languages', icon: <TranslateIcon sx={{ fontSize: 24 }} />, value: '2', label: t('home.stats.languages') },
               { id: 'tools', icon: <HandymanIcon sx={{ fontSize: 24 }} />, value: '5', label: t('home.stats.tools'), onClick: () => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }) },
               { id: 'gardens', icon: <GrassIcon sx={{ fontSize: 24 }} />, value: '∞', label: t('home.stats.gardens'), onClick: () => navigate('/gardens') },
@@ -388,51 +414,65 @@ export default function Home() {
               : plants.map((plant) => {
                   const translation = getTranslation(plant, language);
                   return (
-                    <Card
+                    <Box
                       key={plant.id}
-                      variant="outlined"
+                      component={RouterLink}
+                      to={`/library/${plant.id}`}
+                      aria-label={t('home.previewCardAriaLabel', {
+                        name: translation?.commonName ?? plant.scientificName,
+                      })}
                       sx={{
+                        textDecoration: 'none',
+                        color: 'inherit',
                         flex: '1 1 280px',
                         minWidth: 0,
-                        borderRadius: 3,
-                        transition: 'box-shadow 0.2s',
-                        '&:hover': { boxShadow: 4 },
+                        display: 'block',
                       }}
                     >
-                      <CardContent>
-                        <Typography variant="h6">
-                          {translation?.commonName ?? plant.scientificName}
-                        </Typography>
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ fontStyle: 'italic', mb: 1 }}
-                        >
-                          {plant.scientificName}
-                        </Typography>
-                        {plant.plantType && (
-                          <Chip
-                            label={plant.plantType.name}
-                            size="small"
-                            sx={{ mb: 1 }}
-                          />
-                        )}
-                        {translation?.description && (
+                      <Card
+                        variant="outlined"
+                        sx={{
+                          height: '100%',
+                          borderRadius: 3,
+                          transition: 'box-shadow 0.2s',
+                          '&:hover': { boxShadow: 4 },
+                        }}
+                      >
+                        <CardContent>
+                          <Typography variant="h6">
+                            {translation?.commonName ?? plant.scientificName}
+                          </Typography>
                           <Typography
                             variant="body2"
                             color="text.secondary"
-                            sx={{
-                              display: '-webkit-box',
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden',
-                            }}
+                            sx={{ fontStyle: 'italic', mb: 1 }}
                           >
-                            {translation.description}
+                            {plant.scientificName}
                           </Typography>
-                        )}
-                      </CardContent>
-                    </Card>
+                          {plant.plantType && (
+                            <Chip
+                              label={plant.plantType.name}
+                              size="small"
+                              sx={{ mb: 1 }}
+                            />
+                          )}
+                          {translation?.description && (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                              }}
+                            >
+                              {translation.description}
+                            </Typography>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </Box>
                   );
                 })
             }
