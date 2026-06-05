@@ -157,19 +157,36 @@ export default function PlantLibrary() {
             // old getTranslation (which needed the translations[] graph the list omits).
             const displayName = plant.commonName ?? plant.scientificName;
             const typeName = plantTypes.find((pt) => pt.id === plant.plantTypeId)?.name;
+            // SMA-5 (5c): prefer the broad Perenual wateringNeedLevel (~534 plants,
+            // enumValues.wateringNeed) over the sparse legacy waterNeeds (~30, plantValues)
+            // so most cards get a watering line — not just the seed set.
+            const wateringLabel = plant.wateringNeedLevel
+              ? t(`plantDetail.enumValues.wateringNeed.${plant.wateringNeedLevel}`, plant.wateringNeedLevel)
+              : plant.waterNeeds
+                ? t(`plantValues.${plant.waterNeeds}`, plant.waterNeeds)
+                : null;
+            // Sun: legacy sunExposure only (lightLevel is a raw 1-10 integer — not shown).
+            const sunLabel = plant.sunExposure
+              ? t(`plantValues.${plant.sunExposure}`, plant.sunExposure)
+              : null;
 
             return (
               <Grid key={plant.id} size={{ xs: 12, sm: 6, md: 4 }}>
                 <Box
                   component={RouterLink}
                   to={`/library/${plant.id}`}
-                  sx={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+                  sx={{ textDecoration: 'none', color: 'inherit', display: 'block', height: '100%' }}
                 >
                 <Card
                   variant="outlined"
                   sx={{
                     borderRadius: 3,
                     cursor: 'pointer',
+                    // SMA-5: uniform card height — fill the (stretched) grid cell and
+                    // lay the body out as a column so the info line can pin to the bottom.
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
                     transition: 'box-shadow 0.2s ease, transform 0.2s ease',
                     '&:hover': {
                       boxShadow: 3,
@@ -193,7 +210,7 @@ export default function PlantLibrary() {
                     }}
                     sx={{ height: 140, objectFit: 'cover', bgcolor: 'action.hover' }}
                   />
-                  <CardContent>
+                  <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                     <Typography variant="h6" fontWeight={600}>
                       {displayName}
                     </Typography>
@@ -232,23 +249,27 @@ export default function PlantLibrary() {
                       </Typography>
                     )}
 
-                    {(plant.sunExposure || plant.waterNeeds) && (
-                      <Typography variant="caption" color="text.secondary">
-                        {plant.sunExposure && `${t('library.sun')}: ${t(`plantValues.${plant.sunExposure}`, plant.sunExposure)}`}
-                        {plant.sunExposure && plant.waterNeeds && ' · '}
-                        {plant.waterNeeds && `${t('library.water')}: ${t(`plantValues.${plant.waterNeeds}`, plant.waterNeeds)}`}
-                      </Typography>
-                    )}
+                    {/* Footer pinned to the card bottom (mt:auto) so the info line +
+                        attribution align across cards regardless of description length. */}
+                    <Box sx={{ mt: 'auto', pt: 1 }}>
+                      {(wateringLabel || sunLabel) && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          {wateringLabel && `${t('library.water')}: ${wateringLabel}`}
+                          {wateringLabel && sunLabel && ' · '}
+                          {sunLabel && `${t('library.sun')}: ${sunLabel}`}
+                        </Typography>
+                      )}
 
-                    {plant.imageAttribution && (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ display: 'block', mt: 1, fontSize: '0.65rem', opacity: 0.7 }}
-                      >
-                        {plant.imageAttribution}
-                      </Typography>
-                    )}
+                      {plant.imageAttribution && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: 'block', mt: 0.5, fontSize: '0.65rem', opacity: 0.7 }}
+                        >
+                          {plant.imageAttribution}
+                        </Typography>
+                      )}
+                    </Box>
                   </CardContent>
                 </Card>
                 </Box>
