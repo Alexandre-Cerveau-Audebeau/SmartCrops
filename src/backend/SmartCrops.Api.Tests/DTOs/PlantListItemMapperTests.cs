@@ -73,4 +73,53 @@ public class PlantListItemMapperTests
 
         Assert.Equal("https://bs.plantnet.org/habit.jpg", dto.ImageUrl);
     }
+
+    [Fact]
+    public void ToListItem_SurfacesRequestedLanguageTranslation()
+    {
+        var plant = new Plant
+        {
+            Id = Guid.NewGuid(),
+            ScientificName = "Solanum lycopersicum",
+            PlantTypeId = 1,
+            Translations =
+            [
+                new PlantTranslation { Language = "en", CommonName = "Tomato", Description = "A red fruit." },
+                new PlantTranslation { Language = "fr", CommonName = "Tomate", Description = "Un fruit rouge." },
+            ],
+        };
+
+        var dto = PlantListItemMapper.ToListItem(plant, "fr");
+
+        Assert.Equal("Tomate", dto.CommonName);
+        Assert.Equal("Un fruit rouge.", dto.Description);
+    }
+
+    [Fact]
+    public void ToListItem_FallsBackToEnglish_WhenRequestedLanguageMissing()
+    {
+        var plant = new Plant
+        {
+            Id = Guid.NewGuid(),
+            ScientificName = "Solanum lycopersicum",
+            PlantTypeId = 1,
+            Translations =
+            [
+                new PlantTranslation { Language = "en", CommonName = "Tomato", Description = "A red fruit." },
+            ],
+        };
+
+        var dto = PlantListItemMapper.ToListItem(plant, "fr");
+
+        Assert.Equal("Tomato", dto.CommonName);
+    }
+
+    [Fact]
+    public void ToListItem_NoTranslations_YieldsNullCommonName()
+    {
+        var dto = PlantListItemMapper.ToListItem(PlantWith(), "en");
+
+        Assert.Null(dto.CommonName);
+        Assert.Null(dto.Description);
+    }
 }

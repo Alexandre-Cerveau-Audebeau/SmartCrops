@@ -22,10 +22,15 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
     /// <paramref name="isMedicinal"/> is supplied, filter to that exact flag value
     /// (NULL-flag rows excluded). Used by the Library list / planner sidebar.
     /// </summary>
-    public async Task<IEnumerable<Plant>> GetAllAsync(bool? isMedicinal = null)
+    public async Task<IEnumerable<Plant>> GetAllAsync(bool? isMedicinal = null, string language = "en")
     {
         var query = context.Plants
             .Include(p => p.PlantType)
+            // SMA-5: load the requested language's translation plus English as a
+            // fallback (<=2 rows/plant) so the list card can show a localised
+            // CommonName/Description. This deliberately narrows the SMA-70 "no
+            // translations in list" stance — bounded to a single display language.
+            .Include(p => p.Translations.Where(t => t.Language == language || t.Language == "en"))
             // SMA-118: load STABLE-source images (Trefle/PlantNet). Perenual `Main`
             // images are time-limited signed S3 URLs that expire (~24h) and now 403,
             // so the mapper must never surface them. AsSplitQuery: a collection include
@@ -120,10 +125,13 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
     }
 
     /// <summary>Filter the plant list by <see cref="PlantType"/> id — used by the Library category chips.</summary>
-    public async Task<IEnumerable<Plant>> GetByTypeAsync(int plantTypeId)
+    public async Task<IEnumerable<Plant>> GetByTypeAsync(int plantTypeId, string language = "en")
     {
         return await context.Plants
             .Include(p => p.PlantType)
+            // SMA-5: localised translation (+ English fallback), bounded to the
+            // display language — see GetAllAsync.
+            .Include(p => p.Translations.Where(t => t.Language == language || t.Language == "en"))
             // SMA-118: load STABLE-source images (Trefle/PlantNet). Perenual `Main`
             // images are time-limited signed S3 URLs that expire (~24h) and now 403,
             // so the mapper must never surface them. AsSplitQuery: a collection include
@@ -153,6 +161,10 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
         // (the neutral list DTO never materialises translations).
         return await context.Plants
             .Include(p => p.PlantType)
+            // SMA-5: surface the localised translation (+ English fallback) for the
+            // result card. Distinct from the search predicate below (an EXISTS) — this
+            // materialises <=2 rows/plant for display.
+            .Include(p => p.Translations.Where(t => t.Language == language || t.Language == "en"))
             // SMA-118: load STABLE-source images (Trefle/PlantNet). Perenual `Main`
             // images are time-limited signed S3 URLs that expire (~24h) and now 403,
             // so the mapper must never surface them. AsSplitQuery: a collection include

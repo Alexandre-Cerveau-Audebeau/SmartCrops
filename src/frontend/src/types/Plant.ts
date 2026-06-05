@@ -152,6 +152,10 @@ export interface Plant {
   imageUrl: string | null;
   /** Attribution line for {@link imageUrl} — only the list DTO carries it (the detail view attributes per gallery image), so optional. */
   imageAttribution?: string | null;
+  /** Localised common name (list DTO, `?lang=`); optional — detail uses {@link translations}/{@link commonNames} instead. */
+  commonName?: string | null;
+  /** Localised short description (list DTO, `?lang=`); optional. */
+  description?: string | null;
 
   gbifTaxonKey: number | null;
   family: string | null;

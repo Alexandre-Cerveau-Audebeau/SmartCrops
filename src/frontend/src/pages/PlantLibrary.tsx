@@ -19,7 +19,6 @@ import { useLanguage } from '../hooks/useLanguage';
 import { fetchPlants, fetchPlantTypes, searchPlants } from '../services/plantApi';
 import type { Plant } from '../types/Plant';
 import type { PlantType } from '../types/PlantType';
-import { getTranslation } from '../utils/getTranslation';
 import { PLANT_HERO_PLACEHOLDER } from '../utils/plantDetail';
 
 export default function PlantLibrary() {
@@ -33,7 +32,7 @@ export default function PlantLibrary() {
   const { language } = useLanguage();
 
   useEffect(() => {
-    Promise.all([fetchPlants(), fetchPlantTypes()])
+    Promise.all([fetchPlants(undefined, language), fetchPlantTypes()])
       .then(([plantsData, typesData]) => {
         setPlants(plantsData);
         setPlantTypes(typesData);
@@ -51,7 +50,7 @@ export default function PlantLibrary() {
     const controller = new AbortController();
 
     if (searchQuery.length === 0) {
-      fetchPlants(controller.signal)
+      fetchPlants(controller.signal, language)
         .then(setPlants)
         .catch((err) => {
           if (err.name !== 'AbortError') console.error(err);
@@ -153,7 +152,10 @@ export default function PlantLibrary() {
       {!loading && filteredPlants.length > 0 && (
         <Grid container spacing={3}>
           {filteredPlants.map((plant) => {
-            const tr = getTranslation(plant, language);
+            // SMA-5: the list DTO now carries the localised CommonName/Description
+            // flat (via ?lang=), so the card reads them directly instead of the
+            // old getTranslation (which needed the translations[] graph the list omits).
+            const displayName = plant.commonName ?? plant.scientificName;
             const typeName = plantTypes.find((pt) => pt.id === plant.plantTypeId)?.name;
 
             return (
@@ -178,7 +180,7 @@ export default function PlantLibrary() {
                   <CardMedia
                     component="img"
                     image={plant.imageUrl || PLANT_HERO_PLACEHOLDER}
-                    alt={tr?.commonName ?? plant.scientificName}
+                    alt={displayName}
                     onError={(e) => {
                       // Filet (SMA-118/5a): if a "stable" URL still fails to load,
                       // swap to the brand placeholder. The dataset flag prevents an
@@ -189,11 +191,11 @@ export default function PlantLibrary() {
                         img.src = PLANT_HERO_PLACEHOLDER;
                       }
                     }}
-                    sx={{ height: 160, objectFit: 'cover', bgcolor: 'action.hover' }}
+                    sx={{ height: 140, objectFit: 'cover', bgcolor: 'action.hover' }}
                   />
                   <CardContent>
                     <Typography variant="h6" fontWeight={600}>
-                      {tr?.commonName ?? plant.scientificName}
+                      {displayName}
                     </Typography>
                     <Typography
                       variant="body2"
@@ -213,7 +215,7 @@ export default function PlantLibrary() {
                       />
                     )}
 
-                    {tr?.description && (
+                    {plant.description && (
                       <Typography
                         variant="body2"
                         color="text.secondary"
@@ -226,7 +228,7 @@ export default function PlantLibrary() {
                           WebkitBoxOrient: 'vertical',
                         }}
                       >
-                        {tr.description}
+                        {plant.description}
                       </Typography>
                     )}
 

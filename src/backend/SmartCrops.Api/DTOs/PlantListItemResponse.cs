@@ -22,6 +22,12 @@ public record PlantListItemResponse
     public Guid Id { get; init; }
     public required string ScientificName { get; init; }
 
+    /// <summary>Localised common name for the requested language (SMA-5); null when no translation exists — the client falls back to <see cref="ScientificName"/>.</summary>
+    public string? CommonName { get; init; }
+
+    /// <summary>Localised short description for the requested language (SMA-5); null when absent.</summary>
+    public string? Description { get; init; }
+
     public int PlantTypeId { get; init; }
     public PlantTypeDto? PlantType { get; init; }
 
@@ -75,9 +81,16 @@ public record PlantListItemResponse
 /// </summary>
 public static class PlantListItemMapper
 {
-    public static PlantListItemResponse ToListItem(Plant plant)
+    public static PlantListItemResponse ToListItem(Plant plant, string language = "en")
     {
         ArgumentNullException.ThrowIfNull(plant);
+
+        // SMA-5: pick the requested language's translation, falling back to English,
+        // then any loaded translation. The list query filtered-includes only the
+        // requested language + English (<=2 rows), so this is a cheap in-memory pick.
+        var translation = plant.Translations.FirstOrDefault(t => t.Language == language)
+            ?? plant.Translations.FirstOrDefault(t => t.Language == "en")
+            ?? plant.Translations.FirstOrDefault();
 
         // SMA-118: pick a STABLE-source image (Trefle/PlantNet) only. Perenual
         // `Main` images are time-limited signed S3 URLs that expire (~24h) and now
@@ -103,6 +116,8 @@ public static class PlantListItemMapper
         {
             Id = plant.Id,
             ScientificName = plant.ScientificName,
+            CommonName = translation?.CommonName,
+            Description = translation?.Description,
             PlantTypeId = plant.PlantTypeId,
             PlantType = plant.PlantType is null
                 ? null

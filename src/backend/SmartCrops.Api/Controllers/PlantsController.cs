@@ -32,10 +32,10 @@ public class PlantsController(
     /// excluded); omit for the full list.
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] bool? isMedicinal = null)
+    public async Task<IActionResult> GetAll([FromQuery] bool? isMedicinal = null, [FromQuery] string lang = "en")
     {
-        var plants = await repository.GetAllAsync(isMedicinal);
-        return Ok(plants.Select(PlantListItemMapper.ToListItem));
+        var plants = await repository.GetAllAsync(isMedicinal, lang);
+        return Ok(plants.Select(p => PlantListItemMapper.ToListItem(p, lang)));
     }
 
     /// <summary>
@@ -54,10 +54,10 @@ public class PlantsController(
 
     /// <summary>Filter the catalogue by <see cref="PlantType"/> id (vegetable / fruit / …) — backs the Library category chips.</summary>
     [HttpGet("type/{plantTypeId:int}")]
-    public async Task<IActionResult> GetByType(int plantTypeId)
+    public async Task<IActionResult> GetByType(int plantTypeId, [FromQuery] string lang = "en")
     {
-        var plants = await repository.GetByTypeAsync(plantTypeId);
-        return Ok(plants.Select(PlantListItemMapper.ToListItem));
+        var plants = await repository.GetByTypeAsync(plantTypeId, lang);
+        return Ok(plants.Select(p => PlantListItemMapper.ToListItem(p, lang)));
     }
 
     /// <summary>
@@ -73,7 +73,7 @@ public class PlantsController(
             return BadRequest("query parameter is required.");
 
         var plants = await repository.SearchAsync(query, language);
-        return Ok(plants.Select(PlantListItemMapper.ToListItem));
+        return Ok(plants.Select(p => PlantListItemMapper.ToListItem(p, language)));
     }
 
     /// <summary>Create a new plant. Used by ETL/seed flows; not exposed in the user UI.</summary>

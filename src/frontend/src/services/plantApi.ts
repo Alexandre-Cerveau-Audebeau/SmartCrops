@@ -3,8 +3,9 @@ import type { PlantType } from '../types/PlantType';
 
 const API_BASE = '/api';
 
-export async function fetchPlants(signal?: AbortSignal): Promise<Plant[]> {
-  const res = await fetch(`${API_BASE}/plants`, { signal });
+export async function fetchPlants(signal?: AbortSignal, lang?: string): Promise<Plant[]> {
+  const qs = lang ? `?lang=${encodeURIComponent(lang)}` : '';
+  const res = await fetch(`${API_BASE}/plants${qs}`, { signal });
   if (!res.ok) throw new Error(`Failed to fetch plants: ${res.status}`);
   return res.json();
 }
