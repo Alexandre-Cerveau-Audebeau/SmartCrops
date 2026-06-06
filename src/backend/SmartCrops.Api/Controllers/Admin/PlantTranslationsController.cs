@@ -112,9 +112,13 @@ public class PlantTranslationsController : ControllerBase
 
         foreach (var plant in plants)
         {
-            var enName = nameByPlantLang.GetValueOrDefault((plant.Id, "en"))
-                ?? cacheCommonName.GetValueOrDefault(plant.Id);
-            var frName = nameByPlantLang.GetValueOrDefault((plant.Id, "fr"));
+            // Normalize both name sources to null-or-trimmed BEFORE the insert-only
+            // branch: a whitespace-only PlantCommonNames.Name must not beat the
+            // (already whitespace-guarded) cache fallback nor persist a blank,
+            // sticky CommonName. Keeps the two name sources symmetric.
+            var enName = NormalizeName(nameByPlantLang.GetValueOrDefault((plant.Id, "en")))
+                ?? NormalizeName(cacheCommonName.GetValueOrDefault(plant.Id));
+            var frName = NormalizeName(nameByPlantLang.GetValueOrDefault((plant.Id, "fr")));
             var enDesc = cacheDescription.GetValueOrDefault(plant.Id);
 
             if (frName is null) { plantsWithoutFrName++; }
@@ -181,6 +185,11 @@ public class PlantTranslationsController : ControllerBase
             PlantsWithoutFrName: plantsWithoutFrName,
             PlantsWithoutAnyName: plantsWithoutAnyName));
     }
+
+    /// <summary>Trim a source common name; treat blank/whitespace-only as absent (null)
+    /// so it never beats a fallback nor persists an empty, insert-only CommonName.</summary>
+    private static string? NormalizeName(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string? GetNonEmptyString(JsonElement root, string property)
         => root.TryGetProperty(property, out var el)

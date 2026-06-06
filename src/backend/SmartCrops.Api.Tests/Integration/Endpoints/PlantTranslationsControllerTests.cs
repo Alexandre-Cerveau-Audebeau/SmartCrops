@@ -165,6 +165,50 @@ public class PlantTranslationsControllerTests : IntegrationTestBase
         Assert.Equal("Gamma cache description.", enRow.Description); // description overwritten despite null name source
     }
 
+    /// <summary>Regression (CR Ⓔ): source common names are normalized (trimmed) before the
+    /// insert-only path so a padded name is not persisted with surrounding whitespace.
+    /// Note: an ALL-whitespace <c>PlantCommonNames.Name</c> can't occur (DB CHECK
+    /// <c>CK_PlantCommonName_Name_NotBlank</c> = <c>btrim("Name") &lt;&gt; ''</c>) and the cache
+    /// side is whitespace-guarded by <c>GetNonEmptyString</c> — so NormalizeName's reachable
+    /// effect is trimming padded-but-valid names on both EN and FR.</summary>
+    [Fact]
+    public async Task Backfill_TrimsPaddedCommonNames_BeforeInsert()
+    {
+        var d = Guid.NewGuid();
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            db.Plants.Add(new Plant { Id = d, ScientificName = "Plant Delta", PlantTypeId = OrnamentalTypeId });
+            // Padded-but-valid names (allowed by btrim("Name") <> '') must be trimmed on insert.
+            db.PlantCommonNames.AddRange(
+                new PlantCommonName { PlantId = d, LanguageCode = "en", Name = "  Padded En  ", IsPrimary = true },
+                new PlantCommonName { PlantId = d, LanguageCode = "fr", Name = "\tPadded Fr\t", IsPrimary = true });
+            db.PlantPerenualData.Add(new PlantPerenualData { PlantId = d, PerenualId = 1004, LastSyncAt = DateTime.UtcNow });
+            db.PerenualRawCache.Add(new PerenualRawCache { Endpoint = "species-details", ResourceId = "1004", HttpStatus = 200, FetchedAt = DateTime.UtcNow, RawJson = "{\"common_name\":\"Delta Cache\",\"description\":\"Delta cache description.\"}" });
+            await db.SaveChangesAsync();
+        }
+        AuthAsAdmin();
+
+        var res = await Client.PostAsync($"{Url}?dryRun=false", null);
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+
+        using var verify = CreateScope();
+        var vdb = verify.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+
+        // EN name inserted trimmed (the padded PlantCommonNames.en beats the cache, but trimmed).
+        var enRow = await vdb.PlantTranslations.SingleAsync(t => t.PlantId == d && t.Language == "en");
+        Assert.Equal("Padded En", enRow.CommonName);
+        Assert.Equal("Delta cache description.", enRow.Description);
+
+        // FR name inserted trimmed, no description.
+        var frRow = await vdb.PlantTranslations.SingleAsync(t => t.PlantId == d && t.Language == "fr");
+        Assert.Equal("Padded Fr", frRow.CommonName);
+        Assert.Null(frRow.Description);
+
+        // No row anywhere carries a blank/whitespace CommonName.
+        Assert.False(await vdb.PlantTranslations.AnyAsync(t => t.CommonName != null && t.CommonName.Trim() == ""));
+    }
+
     [Fact]
     public async Task Backfill_IsIdempotent()
     {
