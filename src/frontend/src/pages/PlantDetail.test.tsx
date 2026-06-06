@@ -323,7 +323,7 @@ describe('PlantDetail', () => {
     renderAtPlant(
       makePlant({
         images: [
-          { id: 1, imageType: 'Main', url: 'https://img.test/main.jpg', thumbnailUrl: null, width: null, height: null, licenseName: null, licenseUrl: null, credit: null, source: 'Perenual', sourceExternalId: null, displayOrder: 0, isFlagged: false },
+          { id: 1, imageType: 'Habit', url: 'https://img.test/habit.jpg', thumbnailUrl: null, width: null, height: null, licenseName: null, licenseUrl: null, credit: null, source: 'Trefle', sourceExternalId: null, displayOrder: 0, isFlagged: false },
         ],
       }),
     );

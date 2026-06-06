@@ -9,14 +9,15 @@ public interface IPlantRepository
     /// supplied, filter to rows whose <see cref="Plant.IsMedicinal"/> equals it
     /// exactly — <c>true</c> returns only medicinal-flagged plants and NULL-flag
     /// (unknown) rows are excluded. Omit it (default) for the full list
-    /// (backwards-compatible).
+    /// (backwards-compatible). <paramref name="language"/> selects the single
+    /// localised translation (CommonName/Description) the list DTO surfaces (SMA-5).
     /// </summary>
-    Task<IEnumerable<Plant>> GetAllAsync(bool? isMedicinal = null);
+    Task<IEnumerable<Plant>> GetAllAsync(bool? isMedicinal = null, string language = "en");
     Task<Plant?> GetByIdAsync(Guid id);
     Task AddAsync(Plant plant);
     Task UpdateAsync(Plant plant);
     Task DeleteAsync(Guid id);
-    Task<IEnumerable<Plant>> GetByTypeAsync(int plantTypeId);
+    Task<IEnumerable<Plant>> GetByTypeAsync(int plantTypeId, string language = "en");
 
     /// <summary>
     /// Full-text search against <see cref="PlantTranslation.CommonName"/> and

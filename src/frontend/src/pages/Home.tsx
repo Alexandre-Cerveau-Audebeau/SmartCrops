@@ -27,8 +27,8 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import HeroCarousel from '../components/HeroCarousel';
 import { fetchPlants } from '../services/plantApi';
-import { getTranslation } from '../utils/getTranslation';
 import { useLanguage } from '../hooks/useLanguage';
+import PlantCard from '../components/PlantCard';
 import type { Plant } from '../types/Plant';
 
 interface FeatureItem {
@@ -212,17 +212,24 @@ export default function Home() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchPlants(controller.signal)
+    // The effect re-runs on `language`. Clear any sticky error on a successful
+    // (re)fetch, and guard every state flip on `!aborted` so a superseded request
+    // never overwrites the newer one or leaves loading stale (CodeRabbit).
+    fetchPlants(controller.signal, language)
       .then((data) => {
+        if (controller.signal.aborted) return;
+        setPlantsError(false);
         setTotalPlants(data.length);
         setPlants(data.slice(0, 3));
       })
       .catch((err) => {
-        if (err.name !== 'AbortError') setPlantsError(true);
+        if (err.name !== 'AbortError' && !controller.signal.aborted) setPlantsError(true);
       })
-      .finally(() => setPlantsLoading(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setPlantsLoading(false);
+      });
     return () => controller.abort();
-  }, []);
+  }, [language]);
 
   const handlePrev = () => {
     setCurrentIndex((prev) =>
@@ -411,70 +418,17 @@ export default function Home() {
                     </CardContent>
                   </Card>
                 ))
-              : plants.map((plant) => {
-                  const translation = getTranslation(plant, language);
-                  return (
-                    <Box
-                      key={plant.id}
-                      component={RouterLink}
-                      to={`/library/${plant.id}`}
-                      aria-label={t('home.previewCardAriaLabel', {
-                        name: translation?.commonName ?? plant.scientificName,
+              : plants.map((plant) => (
+                  <Box key={plant.id} sx={{ flex: '1 1 280px', minWidth: 0 }}>
+                    <PlantCard
+                      plant={plant}
+                      typeName={plant.plantType?.name}
+                      ariaLabel={t('home.previewCardAriaLabel', {
+                        name: plant.commonName ?? plant.scientificName,
                       })}
-                      sx={{
-                        textDecoration: 'none',
-                        color: 'inherit',
-                        flex: '1 1 280px',
-                        minWidth: 0,
-                        display: 'block',
-                      }}
-                    >
-                      <Card
-                        variant="outlined"
-                        sx={{
-                          height: '100%',
-                          borderRadius: 3,
-                          transition: 'box-shadow 0.2s',
-                          '&:hover': { boxShadow: 4 },
-                        }}
-                      >
-                        <CardContent>
-                          <Typography variant="h6">
-                            {translation?.commonName ?? plant.scientificName}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{ fontStyle: 'italic', mb: 1 }}
-                          >
-                            {plant.scientificName}
-                          </Typography>
-                          {plant.plantType && (
-                            <Chip
-                              label={plant.plantType.name}
-                              size="small"
-                              sx={{ mb: 1 }}
-                            />
-                          )}
-                          {translation?.description && (
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              sx={{
-                                display: '-webkit-box',
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: 'vertical',
-                                overflow: 'hidden',
-                              }}
-                            >
-                              {translation.description}
-                            </Typography>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Box>
-                  );
-                })
+                    />
+                  </Box>
+                ))
             }
           </Box>
           <Box sx={{ textAlign: 'center', mt: 4 }}>

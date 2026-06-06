@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
@@ -18,7 +15,7 @@ import { useLanguage } from '../hooks/useLanguage';
 import { fetchPlants, fetchPlantTypes, searchPlants } from '../services/plantApi';
 import type { Plant } from '../types/Plant';
 import type { PlantType } from '../types/PlantType';
-import { getTranslation } from '../utils/getTranslation';
+import PlantCard from '../components/PlantCard';
 
 export default function PlantLibrary() {
   const { t } = useTranslation();
@@ -31,7 +28,7 @@ export default function PlantLibrary() {
   const { language } = useLanguage();
 
   useEffect(() => {
-    Promise.all([fetchPlants(), fetchPlantTypes()])
+    Promise.all([fetchPlants(undefined, language), fetchPlantTypes()])
       .then(([plantsData, typesData]) => {
         setPlants(plantsData);
         setPlantTypes(typesData);
@@ -49,7 +46,7 @@ export default function PlantLibrary() {
     const controller = new AbortController();
 
     if (searchQuery.length === 0) {
-      fetchPlants(controller.signal)
+      fetchPlants(controller.signal, language)
         .then(setPlants)
         .catch((err) => {
           if (err.name !== 'AbortError') console.error(err);
@@ -151,77 +148,10 @@ export default function PlantLibrary() {
       {!loading && filteredPlants.length > 0 && (
         <Grid container spacing={3}>
           {filteredPlants.map((plant) => {
-            const tr = getTranslation(plant, language);
             const typeName = plantTypes.find((pt) => pt.id === plant.plantTypeId)?.name;
-
             return (
               <Grid key={plant.id} size={{ xs: 12, sm: 6, md: 4 }}>
-                <Box
-                  component={RouterLink}
-                  to={`/library/${plant.id}`}
-                  sx={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-                >
-                <Card
-                  variant="outlined"
-                  sx={{
-                    borderRadius: 3,
-                    cursor: 'pointer',
-                    transition: 'box-shadow 0.2s ease, transform 0.2s ease',
-                    '&:hover': {
-                      boxShadow: 3,
-                      transform: 'translateY(-2px)',
-                    },
-                  }}
-                >
-                  <CardContent>
-                    <Typography variant="h6" fontWeight={600}>
-                      {tr?.commonName ?? plant.scientificName}
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ fontStyle: 'italic', mb: 1 }}
-                    >
-                      {plant.scientificName}
-                    </Typography>
-
-                    {typeName && (
-                      <Chip
-                        label={t(`plantTypes.${typeName}`, typeName)}
-                        size="small"
-                        color="primary"
-                        variant="outlined"
-                        sx={{ mb: 1 }}
-                      />
-                    )}
-
-                    {tr?.description && (
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{
-                          mb: 1,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                        }}
-                      >
-                        {tr.description}
-                      </Typography>
-                    )}
-
-                    {(plant.sunExposure || plant.waterNeeds) && (
-                      <Typography variant="caption" color="text.secondary">
-                        {plant.sunExposure && `${t('library.sun')}: ${t(`plantValues.${plant.sunExposure}`, plant.sunExposure)}`}
-                        {plant.sunExposure && plant.waterNeeds && ' · '}
-                        {plant.waterNeeds && `${t('library.water')}: ${t(`plantValues.${plant.waterNeeds}`, plant.waterNeeds)}`}
-                      </Typography>
-                    )}
-                  </CardContent>
-                </Card>
-                </Box>
+                <PlantCard plant={plant} typeName={typeName} />
               </Grid>
             );
           })}

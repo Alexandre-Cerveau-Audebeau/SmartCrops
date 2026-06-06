@@ -309,8 +309,17 @@ export default function PlantDetail() {
 
   // ── Memoised derived data ────────────────────────────────────────────────
   const heroImageUrl = useMemo(() => (plant ? pickHeroImage(plant) : ''), [plant]);
+  // SMA-118: the gallery (thumbnails, category-filter row, "+N" count, lightbox)
+  // all derive from this — filter to STABLE-source images only (Trefle/PlantNet)
+  // so no dead Perenual URL ever renders a broken tile, consistent with
+  // pickHeroImage. A category with no stable image simply drops out of the row.
   const galleryImages = useMemo<PlantImage[]>(
-    () => (plant ? sortGalleryImages(plant.images) : []),
+    () =>
+      plant
+        ? sortGalleryImages(
+            plant.images.filter((i) => i.source === 'Trefle' || i.source === 'PlantNet'),
+          )
+        : [],
     [plant],
   );
   const longDescription = useMemo(
@@ -486,9 +495,11 @@ export default function PlantDetail() {
           }}
         >
           {/* The hero is a focusable button so keyboard users can open the
-              lightbox; when no gallery exists we render a plain img instead
-              (a disabled button would be a confusing focus target). */}
-          {plant.images.length > 0 ? (
+              lightbox; when no STABLE gallery exists we render a plain img instead
+              (a disabled button would be a confusing focus target). Gated on the
+              filtered gallery (SMA-118) so a Perenual-only plant — whose hero is
+              the placeholder — never opens an empty lightbox. */}
+          {galleryImages.length > 0 ? (
             <Box
               component="button"
               type="button"
