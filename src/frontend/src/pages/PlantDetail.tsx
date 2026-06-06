@@ -57,7 +57,8 @@ import {
 import type { Garden } from '../types/Garden';
 import type { Plant, PlantImage } from '../types/Plant';
 import { isUserFacingUrl, toUserFacingUrl } from '../utils/externalSourceUrl';
-import { getTranslation } from '../utils/getTranslation';
+import { resolveTranslatedField } from '../utils/getTranslation';
+import { capitalizeFirst } from '../utils/capitalizeFirst';
 import {
   formatHardinessZone,
   formatPlantSpacing,
@@ -388,7 +389,12 @@ export default function PlantDetail() {
     );
   }
 
-  const tr = getTranslation(plant, language);
+  // SMA-120: resolve name + short description per-field (requested → en), so an FR
+  // row with only a name still shows the EN description (FR descriptions: SMA-61).
+  // The common name is sentence-cased for display (the ScientificName fallback is
+  // already capitalised); the description is never recased.
+  const displayName = capitalizeFirst(resolveTranslatedField(plant, language, 'commonName')) ?? plant.scientificName;
+  const shortDescription = resolveTranslatedField(plant, language, 'description');
 
   // Section D rows — characteristics column
   const characteristicRows: { label: string; value: string; warning?: boolean; tooltip?: string }[] = [];
@@ -519,7 +525,7 @@ export default function PlantDetail() {
               <Box
                 component="img"
                 src={heroImageUrl}
-                alt={tr?.commonName ?? plant.scientificName}
+                alt={displayName}
                 sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
               />
             </Box>
@@ -527,7 +533,7 @@ export default function PlantDetail() {
             <Box
               component="img"
               src={heroImageUrl}
-              alt={tr?.commonName ?? plant.scientificName}
+              alt={displayName}
               sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             />
           )}
@@ -536,7 +542,7 @@ export default function PlantDetail() {
           <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'flex-start' }} gap={2}>
             <Box sx={{ minWidth: 0, flex: 1 }}>
               <Typography variant="h3" fontWeight={700} sx={{ mb: 0.5 }}>
-                {tr?.commonName ?? plant.scientificName}
+                {displayName}
               </Typography>
               <Typography variant="h6" color="text.secondary" sx={{ fontStyle: 'italic' }}>
                 {plant.scientificName}
@@ -709,7 +715,7 @@ export default function PlantDetail() {
       )}
 
       {/* ── Section C: About / long description ────────────────────────── */}
-      {(longDescription || tr?.description) && (
+      {(longDescription || shortDescription) && (
         <Card variant="outlined" sx={{ mb: 3, borderRadius: 3 }}>
           <CardContent>
             <Typography variant="h6" fontWeight={600} sx={{ mb: 1.5 }}>
@@ -737,9 +743,9 @@ export default function PlantDetail() {
                   </Typography>
                 )}
               </>
-            ) : tr?.description ? (
+            ) : shortDescription ? (
               <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
-                {tr.description}
+                {shortDescription}
               </Typography>
             ) : null}
           </CardContent>

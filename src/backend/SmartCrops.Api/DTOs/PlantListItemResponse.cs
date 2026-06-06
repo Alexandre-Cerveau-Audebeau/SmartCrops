@@ -99,13 +99,14 @@ public static class PlantListItemMapper
     {
         ArgumentNullException.ThrowIfNull(plant);
 
-        // SMA-5: pick the requested language's translation, falling back to English,
-        // else null (the client then falls back to ScientificName). No arbitrary
-        // third-language fallback — that would contradict the DTO contract and mis-locale
-        // a fully-loaded Plant (CodeRabbit NEW-4). The list query filtered-includes only
-        // the requested language + English, so this is a cheap in-memory pick.
-        var translation = plant.Translations.FirstOrDefault(t => t.Language == language)
-            ?? plant.Translations.FirstOrDefault(t => t.Language == "en");
+        // SMA-120: resolve each field INDEPENDENTLY (requested language → English),
+        // so an FR row that carries only a name doesn't mask the EN description (FR
+        // descriptions are out of scope until SMA-61). When both are null the client
+        // falls back to ScientificName for the name. No arbitrary third-language
+        // fallback (CodeRabbit NEW-4). The list query filtered-includes only the
+        // requested language + English, so these are cheap in-memory picks.
+        var requested = plant.Translations.FirstOrDefault(t => t.Language == language);
+        var english = plant.Translations.FirstOrDefault(t => t.Language == "en");
 
         // SMA-118: pick a STABLE-source image (Trefle/PlantNet) only. Perenual
         // `Main` images are time-limited signed S3 URLs that expire (~24h) and now
@@ -131,8 +132,8 @@ public static class PlantListItemMapper
         {
             Id = plant.Id,
             ScientificName = plant.ScientificName,
-            CommonName = translation?.CommonName,
-            Description = translation?.Description,
+            CommonName = requested?.CommonName ?? english?.CommonName,
+            Description = requested?.Description ?? english?.Description,
             PlantTypeId = plant.PlantTypeId,
             PlantType = plant.PlantType is null
                 ? null
