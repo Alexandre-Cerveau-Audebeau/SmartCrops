@@ -100,11 +100,12 @@ public static class PlantListItemMapper
         ArgumentNullException.ThrowIfNull(plant);
 
         // SMA-5: pick the requested language's translation, falling back to English,
-        // then any loaded translation. The list query filtered-includes only the
-        // requested language + English (<=2 rows), so this is a cheap in-memory pick.
+        // else null (the client then falls back to ScientificName). No arbitrary
+        // third-language fallback — that would contradict the DTO contract and mis-locale
+        // a fully-loaded Plant (CodeRabbit NEW-4). The list query filtered-includes only
+        // the requested language + English, so this is a cheap in-memory pick.
         var translation = plant.Translations.FirstOrDefault(t => t.Language == language)
-            ?? plant.Translations.FirstOrDefault(t => t.Language == "en")
-            ?? plant.Translations.FirstOrDefault();
+            ?? plant.Translations.FirstOrDefault(t => t.Language == "en");
 
         // SMA-118: pick a STABLE-source image (Trefle/PlantNet) only. Perenual
         // `Main` images are time-limited signed S3 URLs that expire (~24h) and now
