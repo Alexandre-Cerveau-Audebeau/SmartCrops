@@ -24,27 +24,38 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
     /// </summary>
     public async Task<IEnumerable<Plant>> GetAllAsync(bool? isMedicinal = null, string language = "en")
     {
-        var query = context.Plants
-            .Include(p => p.PlantType)
-            // SMA-5: load the requested language's translation plus English as a
-            // fallback (<=2 rows/plant) so the list card can show a localised
-            // CommonName/Description. This deliberately narrows the SMA-70 "no
-            // translations in list" stance — bounded to a single display language.
-            .Include(p => p.Translations.Where(t => t.Language == language || t.Language == "en"))
-            // SMA-118: load STABLE-source images (Trefle/PlantNet). Perenual `Main`
-            // images are time-limited signed S3 URLs that expire (~24h) and now 403,
-            // so the mapper must never surface them. AsSplitQuery: a collection include
-            // would otherwise cartesian-multiply the parent rows.
-            .Include(p => p.Images.Where(i =>
-                i.Source == PlantSourceType.Trefle || i.Source == PlantSourceType.PlantNet))
-            .AsSplitQuery()
-            .AsNoTracking();
+        var query = ApplyListIncludes(context.Plants, language);
 
         if (isMedicinal.HasValue)
             query = query.Where(p => p.IsMedicinal == isMedicinal.Value);
 
         return await query.ToListAsync();
     }
+
+    /// <summary>
+    /// Shared lean-list eager load for the catalogue list/type/search paths
+    /// (CodeRabbit DRY). Loads:
+    /// <list type="bullet">
+    ///   <item>the plant type label;</item>
+    ///   <item><b>SMA-5</b>: the requested language's translation + English fallback
+    ///   (<=2 rows/plant) so the list card can show a localised CommonName/Description —
+    ///   deliberately narrowing the SMA-70 "no translations in list" stance to a single
+    ///   display language;</item>
+    ///   <item><b>SMA-118</b>: STABLE-source images only (Trefle/PlantNet) — Perenual
+    ///   <c>Main</c> images are time-limited signed S3 URLs that expire (~24h) and now
+    ///   403, so the mapper must never surface them.</item>
+    /// </list>
+    /// <c>AsSplitQuery</c> avoids cartesian-multiplying the parent rows across the two
+    /// collection includes; <c>AsNoTracking</c> since these are read-only projections.
+    /// </summary>
+    private static IQueryable<Plant> ApplyListIncludes(IQueryable<Plant> query, string language)
+        => query
+            .Include(p => p.PlantType)
+            .Include(p => p.Translations.Where(t => t.Language == language || t.Language == "en"))
+            .Include(p => p.Images.Where(i =>
+                i.Source == PlantSourceType.Trefle || i.Source == PlantSourceType.PlantNet))
+            .AsSplitQuery()
+            .AsNoTracking();
 
     /// <summary>
     /// Detail-view fetch for the Plant Detail page: eagerly loads every
@@ -127,19 +138,7 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
     /// <summary>Filter the plant list by <see cref="PlantType"/> id — used by the Library category chips.</summary>
     public async Task<IEnumerable<Plant>> GetByTypeAsync(int plantTypeId, string language = "en")
     {
-        return await context.Plants
-            .Include(p => p.PlantType)
-            // SMA-5: localised translation (+ English fallback), bounded to the
-            // display language — see GetAllAsync.
-            .Include(p => p.Translations.Where(t => t.Language == language || t.Language == "en"))
-            // SMA-118: load STABLE-source images (Trefle/PlantNet). Perenual `Main`
-            // images are time-limited signed S3 URLs that expire (~24h) and now 403,
-            // so the mapper must never surface them. AsSplitQuery: a collection include
-            // would otherwise cartesian-multiply the parent rows.
-            .Include(p => p.Images.Where(i =>
-                i.Source == PlantSourceType.Trefle || i.Source == PlantSourceType.PlantNet))
-            .AsSplitQuery()
-            .AsNoTracking()
+        return await ApplyListIncludes(context.Plants, language)
             .Where(p => p.PlantTypeId == plantTypeId)
             .ToListAsync();
     }
@@ -154,25 +153,10 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
     {
         var normalised = query.Trim().ToLower();
 
-        // Search translated CommonName/Description for the requested language,
-        // and always include ScientificName as a language-neutral fallback.
-        // Translations is referenced only in the Where below — EF translates the
-        // navigation predicate into a SQL EXISTS, so no eager .Include is needed
-        // (the neutral list DTO never materialises translations).
-        return await context.Plants
-            .Include(p => p.PlantType)
-            // SMA-5: surface the localised translation (+ English fallback) for the
-            // result card. Distinct from the search predicate below (an EXISTS) — this
-            // materialises <=2 rows/plant for display.
-            .Include(p => p.Translations.Where(t => t.Language == language || t.Language == "en"))
-            // SMA-118: load STABLE-source images (Trefle/PlantNet). Perenual `Main`
-            // images are time-limited signed S3 URLs that expire (~24h) and now 403,
-            // so the mapper must never surface them. AsSplitQuery: a collection include
-            // would otherwise cartesian-multiply the parent rows.
-            .Include(p => p.Images.Where(i =>
-                i.Source == PlantSourceType.Trefle || i.Source == PlantSourceType.PlantNet))
-            .AsSplitQuery()
-            .AsNoTracking()
+        // Shared lean-list includes (type + localised translation for display + stable
+        // images). The translation Include below is for DISPLAY; the search predicate is
+        // a separate navigation-EXISTS over Translations (no materialisation needed).
+        return await ApplyListIncludes(context.Plants, language)
             .Where(p =>
                 p.ScientificName.ToLower().Contains(normalised) ||
                 p.Translations.Any(t =>

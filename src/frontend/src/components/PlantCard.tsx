@@ -72,7 +72,7 @@ export default function PlantCard({ plant, typeName, ariaLabel }: PlantCardProps
             // Filet (SMA-118/5a): if a "stable" URL still fails to load, swap to the
             // brand placeholder. The dataset flag prevents an error loop (the
             // placeholder is a data: URI that always loads).
-            const img = e.currentTarget as HTMLImageElement & { dataset: DOMStringMap };
+            const img = e.currentTarget as HTMLImageElement;
             if (!img.dataset.fallback) {
               img.dataset.fallback = '1';
               img.src = PLANT_HERO_PLACEHOLDER;
