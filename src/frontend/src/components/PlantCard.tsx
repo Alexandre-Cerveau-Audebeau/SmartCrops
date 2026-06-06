@@ -8,6 +8,7 @@ import Chip from '@mui/material/Chip';
 import Typography from '@mui/material/Typography';
 import type { Plant } from '../types/Plant';
 import { PLANT_HERO_PLACEHOLDER } from '../utils/plantDetail';
+import { capitalizeFirst } from '../utils/capitalizeFirst';
 
 interface PlantCardProps {
   /** A list-DTO plant item (carries the flat commonName/description/imageUrl/wateringNeedLevel). */
@@ -32,7 +33,9 @@ interface PlantCardProps {
 export default function PlantCard({ plant, typeName, ariaLabel }: PlantCardProps) {
   const { t } = useTranslation();
 
-  const displayName = plant.commonName ?? plant.scientificName;
+  // SMA-120: sentence-case the common name for display only (Trefle/Perenual names
+  // are often lower-case). The ScientificName fallback is already capitalised.
+  const displayName = capitalizeFirst(plant.commonName) ?? plant.scientificName;
   const wateringLabel = plant.wateringNeedLevel
     ? t(`plantDetail.enumValues.wateringNeed.${plant.wateringNeedLevel}`, plant.wateringNeedLevel)
     : plant.waterNeeds

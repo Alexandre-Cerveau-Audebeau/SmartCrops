@@ -122,4 +122,28 @@ public class PlantListItemMapperTests
         Assert.Null(dto.CommonName);
         Assert.Null(dto.Description);
     }
+
+    [Fact]
+    public void ToListItem_ResolvesEachFieldIndependently_FrNamePlusEnDescription()
+    {
+        // SMA-120: the FR row carries only a name (FR descriptions are out of scope);
+        // the EN row carries the description. Per-field resolution must surface the FR
+        // name AND the EN description — not pick one translation and read both fields.
+        var plant = new Plant
+        {
+            Id = Guid.NewGuid(),
+            ScientificName = "Solanum lycopersicum",
+            PlantTypeId = 1,
+            Translations =
+            [
+                new PlantTranslation { Language = "en", CommonName = "Tomato", Description = "A red fruit." },
+                new PlantTranslation { Language = "fr", CommonName = "Tomate", Description = null },
+            ],
+        };
+
+        var dto = PlantListItemMapper.ToListItem(plant, "fr");
+
+        Assert.Equal("Tomate", dto.CommonName);      // FR name
+        Assert.Equal("A red fruit.", dto.Description); // EN description (FR has none)
+    }
 }
