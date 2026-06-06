@@ -209,6 +209,45 @@ public class PlantTranslationsControllerTests : IntegrationTestBase
         Assert.False(await vdb.PlantTranslations.AnyAsync(t => t.CommonName != null && t.CommonName.Trim() == ""));
     }
 
+    /// <summary>Regression (CR Ⓗ): the unique constraint on <c>PlantPerenualData.PerenualId</c>
+    /// was dropped (migration <c>DropPerenualIdUniqueConstraint</c>), so several plants may
+    /// share the same <c>(RequestedPerenualId ?? PerenualId)</c>. The backfill must NOT crash
+    /// (a plain ToDictionary would throw on the duplicate key) and must fan the shared cache
+    /// row's data out to EVERY mapped plant.</summary>
+    [Fact]
+    public async Task Backfill_DuplicatePerenualId_DoesNotCrash_FansCacheToAllPlants()
+    {
+        var p1 = Guid.NewGuid();
+        var p2 = Guid.NewGuid();
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            db.Plants.AddRange(
+                new Plant { Id = p1, ScientificName = "Shared One", PlantTypeId = OrnamentalTypeId },
+                new Plant { Id = p2, ScientificName = "Shared Two", PlantTypeId = OrnamentalTypeId });
+            // Two PlantPerenualData rows sharing the SAME PerenualId (now allowed).
+            db.PlantPerenualData.AddRange(
+                new PlantPerenualData { PlantId = p1, PerenualId = 2001, LastSyncAt = DateTime.UtcNow },
+                new PlantPerenualData { PlantId = p2, PerenualId = 2001, LastSyncAt = DateTime.UtcNow });
+            // One cache row for that shared id.
+            db.PerenualRawCache.Add(new PerenualRawCache { Endpoint = "species-details", ResourceId = "2001", HttpStatus = 200, FetchedAt = DateTime.UtcNow, RawJson = "{\"common_name\":\"Shared Cache\",\"description\":\"Shared cache description.\"}" });
+            await db.SaveChangesAsync();
+        }
+        AuthAsAdmin();
+
+        var res = await Client.PostAsync($"{Url}?dryRun=false", null);
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode); // no 500 on the duplicate key
+
+        using var verify = CreateScope();
+        var vdb = verify.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        foreach (var id in new[] { p1, p2 })
+        {
+            var enRow = await vdb.PlantTranslations.SingleAsync(t => t.PlantId == id && t.Language == "en");
+            Assert.Equal("Shared Cache", enRow.CommonName);          // cache name fanned to both
+            Assert.Equal("Shared cache description.", enRow.Description);
+        }
+    }
+
     [Fact]
     public async Task Backfill_IsIdempotent()
     {

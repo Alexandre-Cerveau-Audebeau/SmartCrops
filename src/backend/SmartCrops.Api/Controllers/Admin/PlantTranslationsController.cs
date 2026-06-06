@@ -28,7 +28,6 @@ namespace SmartCrops.Api.Controllers.Admin;
 public class PlantTranslationsController : ControllerBase
 {
     private const string DetailsEndpoint = "species-details";
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
     private readonly SmartCropsDbContext _db;
     private readonly ILogger<PlantTranslationsController> _logger;
@@ -74,11 +73,16 @@ public class PlantTranslationsController : ControllerBase
         var idToPlant = await _db.PlantPerenualData
             .Select(d => new { d.PlantId, d.PerenualId, d.RequestedPerenualId })
             .ToListAsync(ct);
-        var resourceToPlant = idToPlant.ToDictionary(
-            d => (d.RequestedPerenualId ?? d.PerenualId).ToString(),
-            d => d.PlantId);
+        // One-to-many: the unique constraint on PlantPerenualData.PerenualId was
+        // dropped (migration DropPerenualIdUniqueConstraint), so several plants may
+        // share the same (RequestedPerenualId ?? PerenualId). A plain ToDictionary
+        // would throw on the duplicate key — group instead and fan a shared id's
+        // cached data out to every plant that maps to it.
+        var resourceToPlants = idToPlant
+            .GroupBy(d => (d.RequestedPerenualId ?? d.PerenualId).ToString())
+            .ToDictionary(g => g.Key, g => g.Select(x => x.PlantId).ToList());
 
-        var resourceIds = resourceToPlant.Keys.ToList();
+        var resourceIds = resourceToPlants.Keys.ToList();
         var cacheRows = await _db.PerenualRawCache
             .Where(c => c.Endpoint == DetailsEndpoint && c.RawJson != null && resourceIds.Contains(c.ResourceId))
             .Select(c => new { c.ResourceId, c.RawJson })
@@ -88,19 +92,22 @@ public class PlantTranslationsController : ControllerBase
         var cacheDescription = new Dictionary<Guid, string>();
         foreach (var row in cacheRows)
         {
-            if (!resourceToPlant.TryGetValue(row.ResourceId, out var plantId)) { continue; }
+            if (!resourceToPlants.TryGetValue(row.ResourceId, out var plantIds)) { continue; }
             try
             {
                 using var doc = JsonDocument.Parse(row.RawJson!);
                 var root = doc.RootElement;
                 var cn = GetNonEmptyString(root, "common_name");
-                if (cn is not null) { cacheCommonName[plantId] = cn; }
                 var desc = GetNonEmptyString(root, "description");
-                if (desc is not null) { cacheDescription[plantId] = desc; }
+                foreach (var plantId in plantIds)
+                {
+                    if (cn is not null) { cacheCommonName[plantId] = cn; }
+                    if (desc is not null) { cacheDescription[plantId] = desc; }
+                }
             }
             catch (JsonException ex)
             {
-                _logger.LogWarning(ex, "Translations backfill: cached details for plant {PlantId} was not valid JSON; skipping.", plantId);
+                _logger.LogWarning(ex, "Translations backfill: cached details for resource {ResourceId} was not valid JSON; skipping.", row.ResourceId);
             }
         }
 
