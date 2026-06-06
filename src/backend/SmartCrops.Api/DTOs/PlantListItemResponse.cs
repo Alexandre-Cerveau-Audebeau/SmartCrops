@@ -22,10 +22,19 @@ public record PlantListItemResponse
     public Guid Id { get; init; }
     public required string ScientificName { get; init; }
 
-    /// <summary>Localised common name for the requested language (SMA-5); null when no translation exists — the client falls back to <see cref="ScientificName"/>.</summary>
+    /// <summary>
+    /// Localised common name (SMA-5). <c>null</c> when neither the requested language
+    /// nor the English fallback translation is loaded (the list query, via
+    /// <c>ApplyListIncludes</c>, materialises only those two languages) — the client
+    /// then falls back to <see cref="ScientificName"/>.
+    /// </summary>
     public string? CommonName { get; init; }
 
-    /// <summary>Localised short description for the requested language (SMA-5); null when absent.</summary>
+    /// <summary>
+    /// Localised short description (SMA-5). <c>null</c> when neither the requested
+    /// language nor the English fallback translation is loaded, or when that
+    /// translation simply has no description.
+    /// </summary>
     public string? Description { get; init; }
 
     public int PlantTypeId { get; init; }
