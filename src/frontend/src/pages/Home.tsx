@@ -212,15 +212,22 @@ export default function Home() {
 
   useEffect(() => {
     const controller = new AbortController();
+    // The effect re-runs on `language`. Clear any sticky error on a successful
+    // (re)fetch, and guard every state flip on `!aborted` so a superseded request
+    // never overwrites the newer one or leaves loading stale (CodeRabbit).
     fetchPlants(controller.signal, language)
       .then((data) => {
+        if (controller.signal.aborted) return;
+        setPlantsError(false);
         setTotalPlants(data.length);
         setPlants(data.slice(0, 3));
       })
       .catch((err) => {
-        if (err.name !== 'AbortError') setPlantsError(true);
+        if (err.name !== 'AbortError' && !controller.signal.aborted) setPlantsError(true);
       })
-      .finally(() => setPlantsLoading(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setPlantsLoading(false);
+      });
     return () => controller.abort();
   }, [language]);
 

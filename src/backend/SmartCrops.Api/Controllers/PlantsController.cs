@@ -40,11 +40,15 @@ public class PlantsController(
     }
 
     // CodeRabbit: normalise the user-supplied lang code (default gracefully to "en"
-    // for empty/whitespace or implausibly long input). No BadRequest/throw — the
-    // mapper + repository already tolerate an unknown code via the en→first fallback;
-    // this just keeps the input bounded and the behaviour consistent across endpoints.
+    // for empty/whitespace or implausibly long input). Trim + lowercase so "FR" / " fr "
+    // match the stored lower-case Language ("fr"). No BadRequest/throw — the mapper +
+    // repository already tolerate an unknown code via the en→first fallback; this just
+    // keeps the input bounded, canonical, and consistent across endpoints.
     private static string NormalizeLang(string? lang)
-        => string.IsNullOrWhiteSpace(lang) || lang.Length > 10 ? "en" : lang;
+    {
+        var v = lang?.Trim();
+        return string.IsNullOrEmpty(v) || v.Length > 10 ? "en" : v.ToLowerInvariant();
+    }
 
     /// <summary>
     /// Plant Detail endpoint — eager-loads the full enrichment graph and
@@ -72,18 +76,19 @@ public class PlantsController(
     /// <summary>
     /// Substring search against the localised common name / description, with
     /// the scientific name as a language-neutral fallback. <c>query</c> is
-    /// required; <c>language</c> defaults to <c>"en"</c>. Empty queries return
-    /// 400 to keep the result page from showing the entire catalogue.
+    /// required; <c>lang</c> defaults to <c>"en"</c> (same query key as the list
+    /// endpoints — CodeRabbit). Empty queries return 400 to keep the result page
+    /// from showing the entire catalogue.
     /// </summary>
     [HttpGet("search")]
-    public async Task<IActionResult> Search([FromQuery] string query, [FromQuery] string language = "en")
+    public async Task<IActionResult> Search([FromQuery] string query, [FromQuery] string lang = "en")
     {
         if (string.IsNullOrWhiteSpace(query))
             return BadRequest("query parameter is required.");
 
-        var lang = NormalizeLang(language);
-        var plants = await repository.SearchAsync(query, lang);
-        return Ok(plants.Select(p => PlantListItemMapper.ToListItem(p, lang)));
+        var language = NormalizeLang(lang);
+        var plants = await repository.SearchAsync(query, language);
+        return Ok(plants.Select(p => PlantListItemMapper.ToListItem(p, language)));
     }
 
     /// <summary>Create a new plant. Used by ETL/seed flows; not exposed in the user UI.</summary>

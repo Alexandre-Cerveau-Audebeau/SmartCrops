@@ -31,10 +31,15 @@ public record PlantListItemResponse
     public int PlantTypeId { get; init; }
     public PlantTypeDto? PlantType { get; init; }
 
-    /// <summary>Primary image URL (the <c>Main</c> image when present, else the denormalised <c>ImageUrl</c> scalar).</summary>
+    /// <summary>
+    /// Primary image URL: a STABLE-source image (Trefle/PlantNet) chosen by cover-type
+    /// priority, or <c>null</c> when the plant has none (SMA-118). Perenual <c>Main</c>
+    /// images are deliberately excluded — their signed S3 URLs expire (~24h) and 403 —
+    /// and the legacy denormalised scalar is no longer used as a fallback.
+    /// </summary>
     public string? ImageUrl { get; init; }
 
-    /// <summary>Non-null attribution for <see cref="ImageUrl"/> when it came from a loaded image row; null when only the bare scalar URL is available.</summary>
+    /// <summary>Attribution for the chosen <see cref="ImageUrl"/> image row; <c>null</c> when <see cref="ImageUrl"/> is null.</summary>
     public string? ImageAttribution { get; init; }
 
     public string? SunExposure { get; init; }

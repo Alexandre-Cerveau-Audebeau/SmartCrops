@@ -27,7 +27,8 @@ export async function fetchPlantById(id: string, signal?: AbortSignal): Promise<
 }
 
 export async function searchPlants(query: string, language: string, signal?: AbortSignal): Promise<Plant[]> {
-  const params = new URLSearchParams({ query, language });
+  // Query key is `lang` to match the list endpoints (CodeRabbit — unified locale key).
+  const params = new URLSearchParams({ query, lang: language });
   const res = await fetch(`${API_BASE}/plants/search?${params}`, { signal });
   if (!res.ok) throw new Error(`Failed to search plants: ${res.status}`);
   return res.json();
