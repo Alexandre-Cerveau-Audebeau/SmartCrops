@@ -132,6 +132,39 @@ public class PlantTranslationsControllerTests : IntegrationTestBase
         Assert.False(await db.PlantTranslations.AnyAsync(t => t.Language == "fr" && t.Description != null));
     }
 
+    /// <summary>Regression (CR Ⓐ): an existing EN row whose plant has NO EN name source
+    /// this run (no <c>PlantCommonNames.en</c>, cache <c>common_name</c> empty) must STILL
+    /// have its EN description overwritten from the cache — description overwrite is
+    /// decoupled from name presence.</summary>
+    [Fact]
+    public async Task Backfill_OverwritesEnDescription_WhenExistingRowHasNoEnNameSource()
+    {
+        var c = Guid.NewGuid();
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            db.Plants.Add(new Plant { Id = c, ScientificName = "Plant Gamma", PlantTypeId = OrnamentalTypeId });
+            // No en common name (fr only), so nameByPlantLang has no en entry.
+            db.PlantCommonNames.Add(new PlantCommonName { PlantId = c, LanguageCode = "fr", Name = "Gamma FR", IsPrimary = true });
+            db.PlantPerenualData.Add(new PlantPerenualData { PlantId = c, PerenualId = 1003, LastSyncAt = DateTime.UtcNow });
+            // Cache has a description but an empty common_name → no EN name source at all.
+            db.PerenualRawCache.Add(new PerenualRawCache { Endpoint = "species-details", ResourceId = "1003", HttpStatus = 200, FetchedAt = DateTime.UtcNow, RawJson = "{\"common_name\":\"\",\"description\":\"Gamma cache description.\"}" });
+            // Existing EN row (e.g. seed) — name kept, description must still be overwritten.
+            db.PlantTranslations.Add(new PlantTranslation { PlantId = c, Language = "en", CommonName = "Gamma Seed En", Description = "Old en desc" });
+            await db.SaveChangesAsync();
+        }
+        AuthAsAdmin();
+
+        var res = await Client.PostAsync($"{Url}?dryRun=false", null);
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+
+        using var verify = CreateScope();
+        var vdb = verify.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var enRow = await vdb.PlantTranslations.SingleAsync(t => t.PlantId == c && t.Language == "en");
+        Assert.Equal("Gamma Seed En", enRow.CommonName);           // name kept (insert-only)
+        Assert.Equal("Gamma cache description.", enRow.Description); // description overwritten despite null name source
+    }
+
     [Fact]
     public async Task Backfill_IsIdempotent()
     {

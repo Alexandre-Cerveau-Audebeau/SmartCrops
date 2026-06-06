@@ -20,5 +20,7 @@ describe('capitalizeFirst (SMA-120 display sentence-case)', () => {
     expect(capitalizeFirst(null)).toBeNull();
     expect(capitalizeFirst(undefined)).toBeNull();
     expect(capitalizeFirst('')).toBeNull();
+    expect(capitalizeFirst('   ')).toBeNull();
+    expect(capitalizeFirst('\t\n')).toBeNull();
   });
 });

@@ -9,7 +9,7 @@
  * and astral code points are handled correctly. Returns null for null/empty/whitespace.
  */
 export function capitalizeFirst(value: string | null | undefined): string | null {
-  if (!value) return null;
+  if (!value || value.trim().length === 0) return null;
   const chars = [...value];
   if (chars.length === 0) return null;
   return chars[0].toLocaleUpperCase() + chars.slice(1).join('');

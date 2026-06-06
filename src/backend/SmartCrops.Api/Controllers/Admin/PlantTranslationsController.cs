@@ -121,31 +121,32 @@ public class PlantTranslationsController : ControllerBase
             if (enName is null && frName is null) { plantsWithoutAnyName++; }
 
             // ── EN row (carries name + EN description) ──────────────────────────
-            if (enName is not null)
+            // Description overwrite is independent of the name source (policy: EN
+            // Description = overwrite from cache). An EXISTING row's description is
+            // refreshed even when no EN name resolves this run; a NEW row still
+            // needs a name (CommonName is NOT NULL) so insert is gated on enName.
+            if (existingByKey.TryGetValue((plant.Id, "en"), out var enRow))
             {
-                if (existingByKey.TryGetValue((plant.Id, "en"), out var enRow))
+                // CommonName insert-only (keep existing); Description overwrite.
+                if (enDesc is not null && enRow.Description != enDesc)
                 {
-                    // CommonName insert-only (keep existing); Description overwrite.
-                    if (enDesc is not null && enRow.Description != enDesc)
-                    {
-                        enDescriptionsToWrite++;
-                        if (!dryRun) { enRow.Description = enDesc; }
-                    }
+                    enDescriptionsToWrite++;
+                    if (!dryRun) { enRow.Description = enDesc; }
                 }
-                else
+            }
+            else if (enName is not null)
+            {
+                enNamesToInsert++;
+                if (enDesc is not null) { enDescriptionsToWrite++; }
+                if (!dryRun)
                 {
-                    enNamesToInsert++;
-                    if (enDesc is not null) { enDescriptionsToWrite++; }
-                    if (!dryRun)
+                    _db.PlantTranslations.Add(new PlantTranslation
                     {
-                        _db.PlantTranslations.Add(new PlantTranslation
-                        {
-                            PlantId = plant.Id,
-                            Language = "en",
-                            CommonName = enName,
-                            Description = enDesc,
-                        });
-                    }
+                        PlantId = plant.Id,
+                        Language = "en",
+                        CommonName = enName,
+                        Description = enDesc,
+                    });
                 }
             }
 
