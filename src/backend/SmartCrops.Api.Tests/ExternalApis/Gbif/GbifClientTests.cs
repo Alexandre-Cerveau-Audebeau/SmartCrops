@@ -127,6 +127,88 @@ public class GbifClientTests
             () => client.MatchAsync("Anything", cts.Token));
     }
 
+    [Fact]
+    public async Task GetVernacularNamesAsync_BuildsUrl_AndParsesResults()
+    {
+        const string body = """
+            {"offset":0,"limit":100,"endOfRecords":true,"results":[
+              {"vernacularName":"menthe poivrée","language":"fra","preferred":true,"source":"VASCAN"},
+              {"vernacularName":"Peppermint","language":"eng"}
+            ]}
+            """;
+        var handler = new RecordingHandler(HttpStatusCode.OK, body);
+        var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.gbif.org/") };
+        var client = new GbifClient(http, NullLogger<GbifClient>.Instance);
+
+        var result = await client.GetVernacularNamesAsync(8707933, CancellationToken.None);
+
+        Assert.Equal(
+            "https://api.gbif.org/v1/species/8707933/vernacularNames?limit=100&offset=0",
+            handler.LastRequestUri!.AbsoluteUri);
+        Assert.Equal(2, result.Count);
+        Assert.Equal("menthe poivrée", result[0].VernacularName);
+        Assert.Equal("fra", result[0].Language);
+        Assert.True(result[0].Preferred);
+    }
+
+    [Fact]
+    public async Task GetVernacularNamesAsync_FollowsPagination_UntilEndOfRecords()
+    {
+        // Page 0 (endOfRecords:false) → page 1 (endOfRecords:true); results accumulate.
+        var handler = new PagingHandler(new[]
+        {
+            "{\"offset\":0,\"limit\":100,\"endOfRecords\":false,\"results\":[{\"vernacularName\":\"un\",\"language\":\"fra\"}]}",
+            "{\"offset\":100,\"limit\":100,\"endOfRecords\":true,\"results\":[{\"vernacularName\":\"deux\",\"language\":\"fra\"}]}",
+        });
+        var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.gbif.org/") };
+        var client = new GbifClient(http, NullLogger<GbifClient>.Instance);
+
+        var result = await client.GetVernacularNamesAsync(123, CancellationToken.None);
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(new[] { "un", "deux" }, result.Select(r => r.VernacularName));
+        // Two pages requested at offset 0 then 100.
+        Assert.Equal(new[] { 0, 100 }, handler.RequestedOffsets);
+    }
+
+    [Fact]
+    public async Task GetVernacularNamesAsync_ReturnsEmpty_WhenResultsNull()
+    {
+        // GBIF returns "results": [] in practice, but an explicit "results": null
+        // must be treated as an empty page (not throw NRE on .Count).
+        var handler = new RecordingHandler(HttpStatusCode.OK, "{\"endOfRecords\":true,\"results\":null}");
+        var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.gbif.org/") };
+        var client = new GbifClient(http, NullLogger<GbifClient>.Instance);
+
+        var result = await client.GetVernacularNamesAsync(123, CancellationToken.None);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetVernacularNamesAsync_ReturnsEmpty_OnTransportFailure()
+    {
+        var handler = new ThrowingHandler(new HttpRequestException("connection refused"));
+        var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.gbif.org/") };
+        var client = new GbifClient(http, NullLogger<GbifClient>.Instance);
+
+        var result = await client.GetVernacularNamesAsync(123, CancellationToken.None);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetVernacularNamesAsync_ReturnsEmpty_OnTimeout()
+    {
+        var handler = new ThrowingHandler(new TaskCanceledException("request timed out"));
+        var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.gbif.org/") };
+        var client = new GbifClient(http, NullLogger<GbifClient>.Instance);
+
+        var result = await client.GetVernacularNamesAsync(123, CancellationToken.None);
+
+        Assert.Empty(result);
+    }
+
     private sealed class RecordingHandler : HttpMessageHandler
     {
         private readonly HttpStatusCode _status;
@@ -159,5 +241,37 @@ public class GbifClientTests
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
             => throw _ex;
+    }
+
+    /// <summary>Returns canned bodies keyed by the request's <c>offset</c> query value,
+    /// recording the offsets requested so the pagination loop can be asserted.</summary>
+    private sealed class PagingHandler : HttpMessageHandler
+    {
+        private readonly string[] _pagesByOffsetIndex;
+        public List<int> RequestedOffsets { get; } = [];
+
+        public PagingHandler(string[] pagesByOffsetIndex) => _pagesByOffsetIndex = pagesByOffsetIndex;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var query = request.RequestUri!.Query;
+            var offset = 0;
+            foreach (var part in query.TrimStart('?').Split('&'))
+            {
+                var kv = part.Split('=', 2);
+                if (kv.Length == 2 && kv[0] == "offset")
+                {
+                    offset = int.Parse(kv[1]);
+                }
+            }
+            RequestedOffsets.Add(offset);
+            var index = offset / 100;
+            var body = _pagesByOffsetIndex[index];
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json"),
+            });
+        }
     }
 }
