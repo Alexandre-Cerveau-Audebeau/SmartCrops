@@ -183,7 +183,8 @@
   },
   "common": {
     "cancel": "Cancel",
-    "close": "Close"
+    "close": "Close",
+    "backToTop": "Back to top"
   },
   "auth": {
     "login": "Login",
