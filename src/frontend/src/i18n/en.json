@@ -103,6 +103,8 @@
     "allTypes": "All",
     "noResults": "No plants match your search.",
     "noPlants": "No plants found yet — check back soon!",
+    "loadMore": "Load more",
+    "showing": "Showing {{shown}} of {{total}} plants",
     "loading": "Loading plants...",
     "error": "Failed to load data",
     "sunExposure": "Sun Exposure",
