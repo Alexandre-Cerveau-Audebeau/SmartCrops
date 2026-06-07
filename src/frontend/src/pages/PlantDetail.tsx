@@ -836,7 +836,7 @@ export default function PlantDetail() {
               <LifecycleStage
                 icon={<LocalFloristIcon />}
                 label={t('plantDetail.lifecycle.stages.flowering')}
-                value={plant.perenualData?.floweringSeason ?? null}
+                value={formatPeriod(plant.perenualData?.floweringSeason ?? null, t)}
               />
               <LifecycleStage
                 icon={<AgricultureIcon />}

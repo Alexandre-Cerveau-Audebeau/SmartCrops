@@ -11,9 +11,10 @@ import type { TFunction } from 'i18next';
  * - `"year-round"` → `periods.yearRound`.
  * - `"<month>-<month>"` with BOTH months known → `periods.range` ({{from}}/{{to}}).
  * - single known `"<month>"` → that month.
- * - anything else (unknown month, free-form like `"Spring"`, 3+ segments) → the
- *   ORIGINAL `raw` string verbatim, so an unmapped value never shows a raw i18n
- *   key and never throws.
+ * - single known season word (`"spring"`, `"fall"`…) → `periods.seasons.*`
+ *   (Perenual stores floweringSeason/harvestSeason this way).
+ * - anything else (unknown token, free-form, 3+ segments) → the ORIGINAL `raw`
+ *   string verbatim, so an unmapped value never shows a raw i18n key or throws.
  */
 const MONTHS = [
   'january',
@@ -31,6 +32,11 @@ const MONTHS = [
 ] as const;
 
 const MONTH_SET: ReadonlySet<string> = new Set(MONTHS);
+
+// Perenual stores floweringSeason/harvestSeason as season words (Spring, Fall…).
+// `fall` and `autumn` both map to "Automne" in FR (intentional).
+const SEASONS = ['spring', 'summer', 'autumn', 'fall', 'winter'] as const;
+const SEASON_SET: ReadonlySet<string> = new Set(SEASONS);
 
 export function formatPeriod(raw: string | null | undefined, t: TFunction): string | null {
   if (raw == null) return null;
@@ -52,6 +58,10 @@ export function formatPeriod(raw: string | null | undefined, t: TFunction): stri
     return t(`periods.months.${parts[0]}`);
   }
 
-  // Unknown month / free-form / unexpected shape: show the source verbatim.
+  if (parts.length === 1 && SEASON_SET.has(parts[0])) {
+    return t(`periods.seasons.${parts[0]}`);
+  }
+
+  // Unknown month/season / free-form / unexpected shape: show the source verbatim.
   return raw;
 }

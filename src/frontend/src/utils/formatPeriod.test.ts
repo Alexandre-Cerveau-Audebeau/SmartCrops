@@ -13,7 +13,7 @@ describe('formatPeriod', () => {
   });
 
   it('localises a month range (FR)', () => {
-    expect(formatPeriod('february-may', tFr)).toBe('de février à mai');
+    expect(formatPeriod('february-may', tFr)).toBe('Février – Mai');
   });
 
   it('localises year-round', () => {
@@ -23,17 +23,23 @@ describe('formatPeriod', () => {
 
   it('localises a single month', () => {
     expect(formatPeriod('june', tEn)).toBe('June');
-    expect(formatPeriod('june', tFr)).toBe('juin');
+    expect(formatPeriod('june', tFr)).toBe('Juin');
   });
 
   it('is case/whitespace tolerant', () => {
-    expect(formatPeriod('  February-May  ', tFr)).toBe('de février à mai');
+    expect(formatPeriod('  February-May  ', tFr)).toBe('Février – Mai');
+  });
+
+  it('localises season words (Perenual flowering/harvest season)', () => {
+    expect(formatPeriod('spring', tEn)).toBe('Spring');
+    expect(formatPeriod('spring', tFr)).toBe('Printemps');
+    // fall and autumn both map to "Automne" in FR (intentional).
+    expect(formatPeriod('fall', tEn)).toBe('Fall');
+    expect(formatPeriod('fall', tFr)).toBe('Automne');
+    expect(formatPeriod('autumn', tFr)).toBe('Automne');
   });
 
   it('returns the raw value for an unparsable / free-form period', () => {
-    // Season words are not month tokens — the ETL stores these on perenualData
-    // (harvestSeason/floweringSeason); the helper must not show a raw i18n key.
-    expect(formatPeriod('spring', tFr)).toBe('spring');
     expect(formatPeriod('early summer', tFr)).toBe('early summer');
     // A range with an unknown month falls back verbatim.
     expect(formatPeriod('march-sometime', tFr)).toBe('march-sometime');

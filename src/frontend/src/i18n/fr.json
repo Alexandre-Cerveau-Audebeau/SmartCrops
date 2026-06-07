@@ -561,20 +561,27 @@
   },
   "periods": {
     "yearRound": "Toute l'année",
-    "range": "de {{from}} à {{to}}",
+    "range": "{{from}} – {{to}}",
     "months": {
-      "january": "janvier",
-      "february": "février",
-      "march": "mars",
-      "april": "avril",
-      "may": "mai",
-      "june": "juin",
-      "july": "juillet",
-      "august": "août",
-      "september": "septembre",
-      "october": "octobre",
-      "november": "novembre",
-      "december": "décembre"
+      "january": "Janvier",
+      "february": "Février",
+      "march": "Mars",
+      "april": "Avril",
+      "may": "Mai",
+      "june": "Juin",
+      "july": "Juillet",
+      "august": "Août",
+      "september": "Septembre",
+      "october": "Octobre",
+      "november": "Novembre",
+      "december": "Décembre"
+    },
+    "seasons": {
+      "spring": "Printemps",
+      "summer": "Été",
+      "autumn": "Automne",
+      "fall": "Automne",
+      "winter": "Hiver"
     }
   }
 }

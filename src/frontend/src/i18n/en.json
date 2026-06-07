@@ -575,6 +575,13 @@
       "october": "October",
       "november": "November",
       "december": "December"
+    },
+    "seasons": {
+      "spring": "Spring",
+      "summer": "Summer",
+      "autumn": "Autumn",
+      "fall": "Fall",
+      "winter": "Winter"
     }
   }
 }
