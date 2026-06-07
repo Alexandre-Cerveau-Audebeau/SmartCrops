@@ -12,6 +12,7 @@ using SmartCrops.Api.Tests.Infrastructure;
 using SmartCrops.Api.Tests.Integration.Stubs;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure.Data;
+using SmartCrops.Infrastructure.ExternalApis.Gbif;
 using SmartCrops.Infrastructure.ExternalApis.Perenual;
 using Testcontainers.PostgreSql;
 
@@ -91,6 +92,15 @@ public sealed class PostgresFixture : IAsyncLifetime
     public StubPerenualHttpHandler PerenualHttpStub =>
         Factory.Services.GetRequiredService<StubPerenualHttpHandler>();
 
+    /// <summary>
+    /// Shared programmable HTTP handler backing the <c>GbifClient</c> typed client
+    /// (SMA-124). The <c>PlantTranslationsController</c> injects the concrete client
+    /// for the vernacular backfill, so its only seam is the transport — tests
+    /// configure canned <c>vernacularNames</c> bodies here. Reset per test.
+    /// </summary>
+    public StubGbifHttpHandler GbifHttpStub =>
+        Factory.Services.GetRequiredService<StubGbifHttpHandler>();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
@@ -160,6 +170,17 @@ public sealed class PostgresFixture : IAsyncLifetime
                 services.AddHttpClient<PerenualClient>()
                     .ConfigurePrimaryHttpMessageHandler(sp =>
                         sp.GetRequiredService<StubPerenualHttpHandler>());
+
+                // SMA-124: the translations controller injects the concrete GbifClient
+                // for the vernacular backfill, so stub the transport the same way —
+                // re-registering AddHttpClient<GbifClient> reuses the production-named
+                // registration (base address + resilience) and only swaps the primary
+                // handler. (Taxonomy tests stub IPlantTaxonomyService instead, so this
+                // handler is exercised only by the vernacular-backfill tests.)
+                services.AddSingleton<StubGbifHttpHandler>();
+                services.AddHttpClient<GbifClient>()
+                    .ConfigurePrimaryHttpMessageHandler(sp =>
+                        sp.GetRequiredService<StubGbifHttpHandler>());
             })
             .Build();
 

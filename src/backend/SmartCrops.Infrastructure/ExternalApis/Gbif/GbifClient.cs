@@ -23,6 +23,10 @@ public class GbifClient
     // parses identically to the prior ReadFromJsonAsync.
     private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
 
+    // GBIF's vernacularNames endpoint defaults to a page size of 100; we set it
+    // explicitly so the pagination loop's offset arithmetic is unambiguous.
+    private const int VernacularPageSize = 100;
+
     public GbifClient(HttpClient http, ILogger<GbifClient> logger)
     {
         _http = http;
@@ -80,6 +84,74 @@ public class GbifClient
             // per the contract; real caller cancellation falls through to propagate.
             _logger.LogWarning(ex, "GBIF request timed out for {Name}", scientificName);
             return default;
+        }
+    }
+
+    /// <summary>
+    /// SMA-124 — fetch ALL vernacular (common) names for a GBIF taxon via
+    /// <c>/v1/species/{taxonKey}/vernacularNames</c>, following the
+    /// <c>offset</c>/<c>limit</c> pagination until <c>endOfRecords</c>. Returns the
+    /// accumulated entries across every language (FR selection is the caller's job
+    /// via <see cref="GbifVernacularSelector"/>); the list is empty when the taxon
+    /// has no vernaculars.
+    ///
+    /// <para>Failure contract mirrors <see cref="MatchWithLiteralAsync"/>: transport
+    /// failure, malformed JSON, or HttpClient timeout return an EMPTY list (never
+    /// throw), so a single bad taxon degrades to "no FR name" in a batch backfill
+    /// rather than aborting the run. Genuine caller cancellation still propagates.
+    /// GBIF requires no API key, so nothing here is secret (no redaction).</para>
+    /// </summary>
+    public async Task<IReadOnlyList<GbifVernacularName>> GetVernacularNamesAsync(int taxonKey, CancellationToken ct)
+    {
+        var accumulated = new List<GbifVernacularName>();
+        var offset = 0;
+        try
+        {
+            while (true)
+            {
+                var url = $"v1/species/{taxonKey}/vernacularNames?limit={VernacularPageSize}&offset={offset}";
+                using var response = await _http.GetAsync(url, ct);
+                response.EnsureSuccessStatusCode();
+
+                var rawBody = await response.Content.ReadAsStringAsync(ct);
+                var page = JsonSerializer.Deserialize<GbifVernacularNamesResponse>(rawBody, WebJsonOptions);
+
+                if (page is null)
+                {
+                    break;
+                }
+                // GBIF returns "results": [] in practice, but guard against an
+                // explicit "results": null mapping to a null list — treating it as
+                // an empty page avoids a NullReferenceException on .Count below.
+                var results = page.Results ?? [];
+                if (results.Count > 0)
+                {
+                    accumulated.AddRange(results);
+                }
+                // Stop on the last page or an empty page — the empty-page guard is a
+                // backstop in case GBIF never flips endOfRecords, preventing a loop.
+                if (page.EndOfRecords || results.Count == 0)
+                {
+                    break;
+                }
+                offset += VernacularPageSize;
+            }
+            return accumulated;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "GBIF vernacularNames transport failure for taxon {TaxonKey}", taxonKey);
+            return [];
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "GBIF returned malformed vernacularNames JSON for taxon {TaxonKey}", taxonKey);
+            return [];
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "GBIF vernacularNames request timed out for taxon {TaxonKey}", taxonKey);
+            return [];
         }
     }
 }
