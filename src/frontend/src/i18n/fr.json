@@ -558,5 +558,30 @@
     "saveNotes": "Enregistrer les notes",
     "cancelEditing": "Annuler la modification",
     "failedToSave": "Impossible d'enregistrer les notes."
+  },
+  "periods": {
+    "yearRound": "Toute l'année",
+    "range": "{{from}} – {{to}}",
+    "months": {
+      "january": "Janvier",
+      "february": "Février",
+      "march": "Mars",
+      "april": "Avril",
+      "may": "Mai",
+      "june": "Juin",
+      "july": "Juillet",
+      "august": "Août",
+      "september": "Septembre",
+      "october": "Octobre",
+      "november": "Novembre",
+      "december": "Décembre"
+    },
+    "seasons": {
+      "spring": "Printemps",
+      "summer": "Été",
+      "autumn": "Automne",
+      "fall": "Automne",
+      "winter": "Hiver"
+    }
   }
 }

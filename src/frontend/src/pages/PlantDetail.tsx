@@ -59,6 +59,7 @@ import type { Plant, PlantImage } from '../types/Plant';
 import { isUserFacingUrl, toUserFacingUrl } from '../utils/externalSourceUrl';
 import { resolveTranslatedField } from '../utils/getTranslation';
 import { capitalizeFirst } from '../utils/capitalizeFirst';
+import { formatPeriod } from '../utils/formatPeriod';
 import {
   formatHardinessZone,
   formatPlantSpacing,
@@ -455,8 +456,8 @@ export default function PlantDetail() {
         label: t('library.waterNeeds'),
         value: plant.waterNeeds ? t(`plantValues.${plant.waterNeeds}`, plant.waterNeeds) : null,
       },
-      { icon: <CalendarMonthIcon />, label: t('library.sowingPeriod'), value: plant.sowingPeriod },
-      { icon: <AgricultureIcon />, label: t('library.harvestPeriod'), value: plant.harvestPeriod },
+      { icon: <CalendarMonthIcon />, label: t('library.sowingPeriod'), value: formatPeriod(plant.sowingPeriod, t) },
+      { icon: <AgricultureIcon />, label: t('library.harvestPeriod'), value: formatPeriod(plant.harvestPeriod, t) },
     ] as { icon: React.ReactNode; label: string; value: string | null }[]
   ).filter((c): c is { icon: React.ReactNode; label: string; value: string } => Boolean(c.value));
 
@@ -825,7 +826,7 @@ export default function PlantDetail() {
               <LifecycleStage
                 icon={<SpaIcon />}
                 label={t('plantDetail.lifecycle.stages.sowing')}
-                value={plant.sowingPeriod}
+                value={formatPeriod(plant.sowingPeriod, t)}
               />
               <LifecycleStage
                 icon={<YardIcon />}
@@ -835,12 +836,12 @@ export default function PlantDetail() {
               <LifecycleStage
                 icon={<LocalFloristIcon />}
                 label={t('plantDetail.lifecycle.stages.flowering')}
-                value={plant.perenualData?.floweringSeason ?? null}
+                value={formatPeriod(plant.perenualData?.floweringSeason ?? null, t)}
               />
               <LifecycleStage
                 icon={<AgricultureIcon />}
                 label={t('plantDetail.lifecycle.stages.harvest')}
-                value={plant.harvestPeriod ?? plant.perenualData?.harvestSeason ?? null}
+                value={formatPeriod(plant.harvestPeriod ?? plant.perenualData?.harvestSeason ?? null, t)}
               />
             </Grid>
             {plant.lifeCycle === 'Perennial' || plant.lifeCycle === 'HerbaceousPerennial' ? (
