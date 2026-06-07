@@ -103,6 +103,8 @@
     "allTypes": "Tous",
     "noResults": "Aucune plante ne correspond à votre recherche.",
     "noPlants": "Aucune plante trouvée — revenez bientôt !",
+    "loadMore": "Charger plus",
+    "showing": "{{shown}} plantes affichées sur {{total}}",
     "loading": "Chargement des plantes...",
     "error": "Impossible de charger les données",
     "sunExposure": "Exposition au soleil",

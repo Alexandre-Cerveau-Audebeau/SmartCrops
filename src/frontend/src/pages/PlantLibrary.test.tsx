@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -59,5 +60,99 @@ describe('PlantLibrary', () => {
     expect(
       await screen.findByRole('heading', { name: 'Achillea ptarmica' }),
     ).toBeInTheDocument();
+  });
+
+  // SMA-58 — front-pure infinite scroll. Each PlantCard renders the name as an
+  // <h6> (level-6 heading), so the count of level-6 headings == visible cards.
+  // IntersectionObserver isn't implemented in jsdom; the guard + Load more button
+  // cover the reveal logic deterministically here.
+  const makeMany = (n: number) =>
+    Array.from({ length: n }, (_, i) =>
+      makeListItem({ id: `id-${i}`, scientificName: `Plant ${String(i).padStart(2, '0')}` }),
+    );
+
+  it('renders only the initial slice (24) plus a Load more button when the list is larger', async () => {
+    vi.mocked(fetchPlants).mockResolvedValue(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+    vi.mocked(searchPlants).mockResolvedValue([]);
+
+    renderLibrary();
+
+    await screen.findByRole('heading', { name: 'Plant 00' });
+    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24);
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument();
+    // The 25th card (index 24) is not in the DOM yet.
+    expect(screen.queryByRole('heading', { name: 'Plant 24' })).not.toBeInTheDocument();
+  });
+
+  it('reveals the next slice (+24) when Load more is clicked', async () => {
+    vi.mocked(fetchPlants).mockResolvedValue(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+    vi.mocked(searchPlants).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24);
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(48);
+    // 50 total → after a second click the button disappears (all shown).
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(50);
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+  });
+
+  it('resets the visible slice to 24 when the search query changes', async () => {
+    vi.mocked(fetchPlants).mockResolvedValue(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+    vi.mocked(searchPlants).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(48);
+
+    // Typing resets the count immediately via the change handler (independent of
+    // the debounced fetch, which doesn't fire under the test's real timers).
+    await user.type(screen.getByRole('textbox'), 'ro');
+    await waitFor(() =>
+      expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24),
+    );
+  });
+
+  it('resets the visible slice to 24 when the type filter changes', async () => {
+    // 50 ornamentals (type 4) + a chip for type 4 so a click re-filters.
+    vi.mocked(fetchPlants).mockResolvedValue(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([{ id: 4, name: 'Ornamental', description: null }]);
+    vi.mocked(searchPlants).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(48);
+
+    // Click the Ornamental chip → activeType set → slice resets (all 50 still match).
+    await user.click(screen.getByRole('button', { name: 'Ornamental' }));
+    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24);
+  });
+
+  it('exposes a polite status region that tracks the visible/total count (a11y)', async () => {
+    vi.mocked(fetchPlants).mockResolvedValue(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+    vi.mocked(searchPlants).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('Showing 24 of 50 plants');
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(status).toHaveTextContent('Showing 48 of 50 plants');
   });
 });
