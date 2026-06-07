@@ -558,5 +558,23 @@
     "saveNotes": "Enregistrer les notes",
     "cancelEditing": "Annuler la modification",
     "failedToSave": "Impossible d'enregistrer les notes."
+  },
+  "periods": {
+    "yearRound": "Toute l'année",
+    "range": "de {{from}} à {{to}}",
+    "months": {
+      "january": "janvier",
+      "february": "février",
+      "march": "mars",
+      "april": "avril",
+      "may": "mai",
+      "june": "juin",
+      "july": "juillet",
+      "august": "août",
+      "september": "septembre",
+      "october": "octobre",
+      "november": "novembre",
+      "december": "décembre"
+    }
   }
 }
