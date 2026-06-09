@@ -232,6 +232,27 @@ public class PlantRepinControllerTests : IntegrationTestBase
         Assert.Single(sources);
         Assert.Equal(PlantSourceType.GBIF, sources[0].SourceType);
         Assert.Equal("5415040", sources[0].ExternalId); // unchanged seed value
+
+        // The "StillPurges" promise: Trefle/Perenual data + collections are gone
+        // even on the no-key branch.
+        Assert.Null(await db.PlantTrefleData.SingleOrDefaultAsync(t => t.PlantId == plantId));
+        Assert.Null(await db.PlantPerenualData.SingleOrDefaultAsync(p => p.PlantId == plantId));
+        Assert.Equal(0, await db.PlantPests.CountAsync(p => p.PlantId == plantId));
+        Assert.Equal(0, await db.PlantCommonNames.CountAsync(c => c.PlantId == plantId));
+        Assert.Equal(0, await db.PlantSynonyms.CountAsync(s => s.PlantId == plantId));
+    }
+
+    [Fact]
+    public async Task Repin_NumericTaxonRank_Returns400()
+    {
+        // A1 lock: "1" would parse to Species via Enum.TryParse — the name-based
+        // gate must reject numeric strings instead of silently accepting them.
+        var plantId = await SeedFullyEnrichedPlantAsync("Sourceus fullus");
+        AuthAsAdmin();
+        var response = await Client.PostAsJsonAsync(
+            $"/api/admin/plants/{plantId}/repin",
+            new { scientificName = "Lavandula", taxonRank = "1" });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     // ── transactional rollback ─────────────────────────────────────────

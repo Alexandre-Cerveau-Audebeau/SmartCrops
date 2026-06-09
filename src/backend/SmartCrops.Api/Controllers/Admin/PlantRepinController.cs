@@ -57,11 +57,19 @@ public class PlantRepinController : ControllerBase
             return BadRequest("scientificName is required.");
         }
 
-        if (!Enum.TryParse<PlantTaxonRank>(request.TaxonRank, ignoreCase: true, out var rank)
-            || !Enum.IsDefined(rank))
+        // Compare the rank by name (not Enum.TryParse) so numeric strings like
+        // "1"/"0" — which TryParse would silently accept as Species — and any
+        // future enum member the endpoint doesn't handle are both rejected.
+        var normalizedRank = request.TaxonRank?.Trim();
+        if (!string.Equals(normalizedRank, "Species", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(normalizedRank, "Genus", StringComparison.OrdinalIgnoreCase))
         {
             return BadRequest("taxonRank must be 'Species' or 'Genus'.");
         }
+
+        var rank = string.Equals(normalizedRank, "Genus", StringComparison.OrdinalIgnoreCase)
+            ? PlantTaxonRank.Genus
+            : PlantTaxonRank.Species;
 
         var plant = await _db.Plants
             .Include(p => p.TrefleData)
@@ -277,6 +285,9 @@ public class PlantRepinController : ControllerBase
                 s => s.PlantId == plantId && s.SourceType == PlantSourceType.GBIF,
                 ct);
 
+        // We're archiving a caller-supplied key, NOT re-fetching GBIF: null the
+        // RawResponseJson (any prior body belongs to the old species) and the
+        // LastFetchedAt so the audit row doesn't claim a fetch under the genus key.
         if (existing is null)
         {
             _db.PlantSources.Add(new PlantSource
@@ -285,14 +296,16 @@ public class PlantRepinController : ControllerBase
                 SourceType = PlantSourceType.GBIF,
                 ExternalId = idStr,
                 Url = url,
-                LastFetchedAt = DateTime.UtcNow,
+                RawResponseJson = null,
+                LastFetchedAt = null,
             });
         }
         else
         {
             existing.ExternalId = idStr;
             existing.Url = url;
-            existing.LastFetchedAt = DateTime.UtcNow;
+            existing.RawResponseJson = null;
+            existing.LastFetchedAt = null;
         }
     }
 
