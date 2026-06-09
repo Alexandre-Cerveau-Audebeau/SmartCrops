@@ -48,12 +48,17 @@ namespace SmartCrops.Infrastructure.Migrations
             // cached (Fragaria x ananassa = 8576, Matricaria recutita = 5167). Reads the
             // stored cache JSON — no licensed text is committed here; a no-op when the
             // PerenualRawCache row is absent (e.g. a fresh database).
+            // Guarded so a matching cache row whose JSON is NULL or lacks 'description' is
+            // skipped (a true no-op) rather than overwriting Description with NULL.
             migrationBuilder.Sql("""
                 UPDATE "PlantTranslations" t SET "Description" = c."RawJson"->>'description'
-                FROM "Plants" p, "PerenualRawCache" c
-                WHERE t."PlantId" = p."Id" AND t."Language" = 'en' AND c."Endpoint" = 'species-details'
+                FROM "Plants" p
+                INNER JOIN "PerenualRawCache" c ON c."Endpoint" = 'species-details'
                   AND ( (p."ScientificName" LIKE 'Fragaria%ananassa' AND c."ResourceId" = '8576')
-                     OR (p."ScientificName" = 'Matricaria chamomilla' AND c."ResourceId" = '5167') );
+                     OR (p."ScientificName" = 'Matricaria chamomilla' AND c."ResourceId" = '5167') )
+                WHERE t."PlantId" = p."Id" AND t."Language" = 'en'
+                  AND c."RawJson" IS NOT NULL
+                  AND c."RawJson"->>'description' IS NOT NULL;
                 """);
         }
 
