@@ -240,18 +240,41 @@ public class PlantRepinControllerTests : IntegrationTestBase
         Assert.Equal(0, await db.PlantPests.CountAsync(p => p.PlantId == plantId));
         Assert.Equal(0, await db.PlantCommonNames.CountAsync(c => c.PlantId == plantId));
         Assert.Equal(0, await db.PlantSynonyms.CountAsync(s => s.PlantId == plantId));
+
+        // Images: only the Manual one survives (Trefle/Perenual deleted).
+        var images = await db.PlantImages.Where(i => i.PlantId == plantId).ToListAsync();
+        Assert.Single(images);
+        Assert.Equal(PlantSourceType.Manual, images[0].Source);
+
+        // Long descriptions: the Perenual "en" row is gone; the manual "fr" row survives.
+        var descs = await db.PlantLongDescriptions.Where(d => d.PlantId == plantId).ToListAsync();
+        Assert.Single(descs);
+        Assert.Equal("fr", descs[0].Language);
     }
 
     [Fact]
     public async Task Repin_NumericTaxonRank_Returns400()
     {
-        // A1 lock: "1" would parse to Species via Enum.TryParse — the name-based
-        // gate must reject numeric strings instead of silently accepting them.
+        // Validation hardening: "1" would parse to Species via Enum.TryParse, so the
+        // name-based gate must reject numeric strings instead of silently accepting them.
         var plantId = await SeedFullyEnrichedPlantAsync("Sourceus fullus");
         AuthAsAdmin();
         var response = await Client.PostAsJsonAsync(
             $"/api/admin/plants/{plantId}/repin",
             new { scientificName = "Lavandula", taxonRank = "1" });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Repin_NonPositiveGbifKey_Returns400()
+    {
+        // gbifTaxonKey=0 would archive an impossible GBIF URL (.../species/0) and a
+        // bogus audit row — reject it before the transaction starts.
+        var plantId = await SeedFullyEnrichedPlantAsync("Sourceus fullus");
+        AuthAsAdmin();
+        var response = await Client.PostAsJsonAsync(
+            $"/api/admin/plants/{plantId}/repin",
+            new { scientificName = "Lavandula", taxonRank = "Genus", gbifTaxonKey = (long?)0 });
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 

@@ -71,6 +71,13 @@ public class PlantRepinController : ControllerBase
             ? PlantTaxonRank.Genus
             : PlantTaxonRank.Species;
 
+        // A null key is fine (key-less genus / species path); 0 or negative is not —
+        // it would archive an impossible GBIF URL (.../species/0) and a bogus audit row.
+        if (request.GbifTaxonKey is <= 0)
+        {
+            return BadRequest("gbifTaxonKey must be a positive integer when supplied.");
+        }
+
         var plant = await _db.Plants
             .Include(p => p.TrefleData)
             .Include(p => p.PerenualData)
@@ -318,8 +325,10 @@ public class PlantRepinController : ControllerBase
         return rows.Count;
     }
 
+    /// <summary>Re-pin request: the new identity name, its rank, and (genus path) the GBIF genus key to archive.</summary>
     public record RepinRequest(string ScientificName, string TaxonRank, long? GbifTaxonKey);
 
+    /// <summary>Re-pin result: the before/after identity plus the purge counters.</summary>
     public record RepinResponse(
         Guid PlantId,
         string OldScientificName,
@@ -329,5 +338,6 @@ public class PlantRepinController : ControllerBase
         bool IdentityNeedsReview,
         RepinPurgeCounts Purged);
 
+    /// <summary>How many rows the purge touched: scalars nulled, Trefle/Perenual sources deleted, collection rows deleted.</summary>
     public record RepinPurgeCounts(int ScalarsCleared, int PlantSourcesDeleted, int CollectionRowsDeleted);
 }
