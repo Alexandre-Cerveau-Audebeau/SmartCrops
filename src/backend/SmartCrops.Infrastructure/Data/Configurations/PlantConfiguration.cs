@@ -128,6 +128,15 @@ public class PlantConfiguration : IEntityTypeConfiguration<Plant>
         builder.Property(p => p.CareLevel).HasConversion<string>().HasMaxLength(20);
         builder.Property(p => p.GrowthHabit).HasConversion<string>().HasMaxLength(20);
 
+        // TaxonRank is stored as a string (same convention as the descriptive
+        // enums above) and is NOT NULL with a 'Species' default — existing rows
+        // backfill to Species, the overwhelming majority. Genus is the explicit
+        // opt-in for an intentional genus-level identity (SMA-135).
+        builder.Property(p => p.TaxonRank)
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .HasDefaultValue(PlantTaxonRank.Species);
+
         // ── Trefle structured + Perenual descriptive (added in PR #57) ──────────
         // JSON-bearing strings are left unbounded text — the natural shape is small
         // (arrays of short labels / TDWG codes) but JSON metadata can grow.
@@ -144,6 +153,11 @@ public class PlantConfiguration : IEntityTypeConfiguration<Plant>
         builder.Property(p => p.EnrichmentStatus)
             .HasConversion<int>()
             .HasDefaultValue(EnrichmentStatus.Manual);
+
+        // Provisional-identity flag (SMA-135) — NOT NULL, defaults false so every
+        // existing row backfills to "not flagged".
+        builder.Property(p => p.IdentityNeedsReview)
+            .HasDefaultValue(false);
 
         builder.Property(p => p.SoilPhMin).HasColumnType("decimal(4,2)");
         builder.Property(p => p.SoilPhMax).HasColumnType("decimal(4,2)");

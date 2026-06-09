@@ -84,6 +84,15 @@ public class Plant : IHasUpdatedAt
     /// </summary>
     public int? Year { get; set; }
 
+    /// <summary>
+    /// Rank at which this plant's identity is pinned. Defaults to
+    /// <see cref="PlantTaxonRank.Species"/>; set to <see cref="PlantTaxonRank.Genus"/>
+    /// when only a genus-level identity is defensible (horticultural group or
+    /// trade designation with no resolvable accepted species). Such rows usually
+    /// also carry <see cref="IdentityNeedsReview"/>.
+    /// </summary>
+    public PlantTaxonRank TaxonRank { get; set; } = PlantTaxonRank.Species;
+
     // ── Canonical READ MODEL (denormalized from sources) ────────────────────────
 
     public PlantLifeCycle? LifeCycle { get; set; }
@@ -178,6 +187,13 @@ public class Plant : IHasUpdatedAt
     public EnrichmentStatus EnrichmentStatus { get; set; } = EnrichmentStatus.Manual;
 
     public DateTime? LastEnrichmentAt { get; set; }
+
+    /// <summary>
+    /// Flags a plant whose taxonomic identity is provisional and needs an admin
+    /// to confirm or correct it — e.g. pinned at <see cref="PlantTaxonRank.Genus"/>,
+    /// or resolved from an ambiguous source name. Defaults to <c>false</c>.
+    /// </summary>
+    public bool IdentityNeedsReview { get; set; }
 
     /// <summary>
     /// Perenual id this plant was originally requested under, denormalised from
