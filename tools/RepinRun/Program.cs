@@ -91,7 +91,7 @@ var sql =
 // DB's IX_Plants_ScientificName_Lower unique index (which already precludes
 // case-variant duplicates — so this is consistency, not a behaviour change).
 var byName = new Dictionary<string, PlantRow>(StringComparer.OrdinalIgnoreCase);
-foreach (var line in RunPsql(sql))
+foreach (var line in await RunPsql(sql))
 {
     var parts = line.Split('|');
     if (parts.Length < 5) continue;
@@ -240,6 +240,7 @@ if (!apply)
 Console.WriteLine("\n!!! APPLY MODE — mutating the live database !!!\n");
 var token = MintAdminJwt(jwtKey, jwtIssuer, jwtAudience);
 using var http = new HttpClient { BaseAddress = new Uri(ApiBase) };
+http.Timeout = TimeSpan.FromSeconds(30); // fail-fast on a stuck network call
 http.DefaultRequestHeaders.Authorization = new("Bearer", token);
 
 // Enrich is TOLERANT (per-source external APIs can flake) — failures are logged
@@ -298,40 +299,66 @@ return 0;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
+// STRICT: a non-2xx OR a transport error (HttpRequestException / timeout) both
+// abort the run via RunFailure.
 static async Task Post(HttpClient http, string path, object? body, string label)
 {
-    using var resp = body is null
-        ? await http.PostAsync(path, null)
-        : await http.PostAsJsonAsync(path, body);
-    var text = await resp.Content.ReadAsStringAsync();
-    Console.WriteLine($"  POST {path}\n    → {(int)resp.StatusCode} {resp.StatusCode}  {Trim(text)}");
-    if (!resp.IsSuccessStatusCode)
-        throw new RunFailure($"{label}: {(int)resp.StatusCode} {Trim(text)}");
-}
-
-// Tolerant enrich POST: never throws — records non-2xx and continues.
-static async Task PostEnrich(HttpClient http, string path, string source, string plant,
-    Dictionary<string, int> totals, List<EnrichFail> failures)
-{
-    using var resp = await http.PostAsync(path, null);
-    var text = await resp.Content.ReadAsStringAsync();
-    Console.WriteLine($"  POST {path}\n    → {(int)resp.StatusCode} {resp.StatusCode}  {Trim(text)}");
-    if (resp.IsSuccessStatusCode)
-        totals[source]++;
-    else
+    try
     {
-        failures.Add(new EnrichFail(plant, source, (int)resp.StatusCode));
-        Console.WriteLine($"    ⚠ WARN: {source} enrich non-2xx for \"{plant}\" — continuing");
+        using var resp = body is null
+            ? await http.PostAsync(path, null)
+            : await http.PostAsJsonAsync(path, body);
+        var text = await resp.Content.ReadAsStringAsync();
+        Console.WriteLine($"  POST {path}\n    → {(int)resp.StatusCode} {resp.StatusCode}  {Trim(text)}");
+        if (!resp.IsSuccessStatusCode)
+            throw new RunFailure($"{label}: {(int)resp.StatusCode} {Trim(text)}");
+    }
+    catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+    {
+        throw new RunFailure($"{label}: transport error — {ex.Message}");
     }
 }
 
+// TOLERANT enrich POST: records failures (non-2xx OR transport error) and never
+// throws on HTTP/transport errors, so a flaky upstream never aborts the run.
+static async Task PostEnrich(HttpClient http, string path, string source, string plant,
+    Dictionary<string, int> totals, List<EnrichFail> failures)
+{
+    try
+    {
+        using var resp = await http.PostAsync(path, null);
+        var text = await resp.Content.ReadAsStringAsync();
+        Console.WriteLine($"  POST {path}\n    → {(int)resp.StatusCode} {resp.StatusCode}  {Trim(text)}");
+        if (resp.IsSuccessStatusCode)
+            totals[source]++;
+        else
+        {
+            failures.Add(new EnrichFail(plant, source, (int)resp.StatusCode));
+            Console.WriteLine($"    ⚠ WARN: {source} enrich non-2xx for \"{plant}\" — continuing");
+        }
+    }
+    catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+    {
+        failures.Add(new EnrichFail(plant, source, -1)); // sentinel: transport error
+        Console.WriteLine($"    ⚠ WARN: {source} enrich transport error for \"{plant}\" ({ex.Message}) — continuing");
+    }
+}
+
+// STRICT: non-2xx OR transport error aborts the run.
 static async Task Delete(HttpClient http, string path, string label)
 {
-    using var resp = await http.DeleteAsync(path);
-    var text = await resp.Content.ReadAsStringAsync();
-    Console.WriteLine($"  DELETE {path}\n    → {(int)resp.StatusCode} {resp.StatusCode}  {Trim(text)}");
-    if (!resp.IsSuccessStatusCode)
-        throw new RunFailure($"{label}: {(int)resp.StatusCode} {Trim(text)}");
+    try
+    {
+        using var resp = await http.DeleteAsync(path);
+        var text = await resp.Content.ReadAsStringAsync();
+        Console.WriteLine($"  DELETE {path}\n    → {(int)resp.StatusCode} {resp.StatusCode}  {Trim(text)}");
+        if (!resp.IsSuccessStatusCode)
+            throw new RunFailure($"{label}: {(int)resp.StatusCode} {Trim(text)}");
+    }
+    catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+    {
+        throw new RunFailure($"{label}: transport error — {ex.Message}");
+    }
 }
 
 static string Trim(string s) => s.Length > 300 ? s[..300] + "…" : s;
@@ -365,7 +392,7 @@ static string MintAdminJwt(string key, string issuer, string audience)
 static string B64Url(byte[] b) => Convert.ToBase64String(b).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
 // Read-only resolution via the db container (mirrors every other step in the run).
-static List<string> RunPsql(string sql)
+static async Task<List<string>> RunPsql(string sql)
 {
     var psi = new ProcessStartInfo("docker")
     {
@@ -376,9 +403,14 @@ static List<string> RunPsql(string sql)
     foreach (var a in new[] { "exec", DbContainer, "psql", "-U", "smartcrops", "-d", "smartcrops", "-tA", "-F", "|", "-c", sql })
         psi.ArgumentList.Add(a);
     using var proc = Process.Start(psi) ?? throw new RunFailure("could not start docker exec psql");
-    var stdout = proc.StandardOutput.ReadToEnd();
-    var stderr = proc.StandardError.ReadToEnd();
+    // Drain both pipes concurrently before WaitForExit — reading them one after
+    // the other can deadlock if the child fills the other pipe's buffer.
+    var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+    var stderrTask = proc.StandardError.ReadToEndAsync();
+    await Task.WhenAll(stdoutTask, stderrTask);
     proc.WaitForExit();
+    var stdout = stdoutTask.Result;
+    var stderr = stderrTask.Result;
     if (proc.ExitCode != 0)
         throw new RunFailure($"psql failed (exit {proc.ExitCode}): {stderr}");
     return stdout.Replace("\r", "").Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
