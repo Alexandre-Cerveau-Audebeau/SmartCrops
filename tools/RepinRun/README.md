@@ -16,6 +16,7 @@ Net: 545 → 536 plants.
 
 - **Dry-run by default** (`dotnet run --project tools/RepinRun`) — resolves every plant read-only and prints the planned actions; **mutates nothing**. `--apply` performs the run.
 - **Collision guards** in the dry-run: duplicate-target detection (two mapping entries aiming at the same name) + out-of-run collision (a target name already held by a plant outside the run).
+- **Anomaly gate**: `--apply` refuses to run (exit 1) if any preflight anomaly is present.
 - **Strict vs tolerant**: `/repin` and `DELETE` abort the run on any non-2xx; the three enrich calls are tolerant (warn + per-source summary) so a missing upstream species never blocks the run.
 - **Read-only resolution** via `docker exec … psql` (no ORM, no writes on the read path).
 - A **`pg_dump` custom backup** was taken immediately before `--apply`.

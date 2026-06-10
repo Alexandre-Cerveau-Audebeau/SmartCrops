@@ -8,8 +8,8 @@ using System.Text.Json;
 // SMA-135 — identity re-pin run (the 26, validated mapping). Two modes:
 //   default        → DRY-RUN: resolves every plant read-only, prints planned
 //                    actions, mutates NOTHING.
-//   --apply        → executes: 15 genus re-pins, then 7 species re-pins
-//                    (+ enrich GBIF→Trefle→Perenual force=true), then 4 deletes.
+//   --apply        → executes: 10 genus re-pins, then 7 species re-pins
+//                    (+ enrich GBIF→Trefle→Perenual force=true), then 9 deletes.
 // Targets the live API at http://localhost:5000; reads via docker exec psql.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -212,6 +212,15 @@ else
 {
     Console.WriteLine($"  anomalies      : {anomalies.Count}");
     foreach (var a in anomalies) Console.WriteLine($"     - {a}");
+}
+
+// Anomaly gate: --apply refuses to mutate when any preflight anomaly is present.
+// Placed before the dry-run early-return so it also guards the apply block below
+// (we exit here first). No override flag — this is an archived one-shot.
+if (apply && anomalies.Count > 0)
+{
+    Console.Error.WriteLine("\nRefusing --apply: preflight anomalies detected. Resolve them before mutation.");
+    return 1;
 }
 
 if (!apply)
