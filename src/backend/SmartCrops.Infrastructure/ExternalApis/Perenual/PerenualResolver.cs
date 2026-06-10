@@ -559,6 +559,14 @@ public partial class PerenualResolver
     /// least one of (min_value, max_value) populated is converted; others
     /// are dropped. Returns <c>(null, null)</c> when the list is empty or
     /// no entry has a usable unit.
+    ///
+    /// <para>The converted pair passes through <see cref="EnsureOrderedRange"/>
+    /// before return, so a reversed (min &gt; max) source — e.g. Perenual's
+    /// Anemone nemorosa <c>{feet, min:5, max:1.5}</c> → 152cm &gt; 46cm — is
+    /// nulled on BOTH bounds rather than propagated. This mirrors the xData
+    /// pairs and stops a reversed height from violating
+    /// <c>CK_Plants_Height_Range</c> on persistence (which would roll back the
+    /// whole Perenual enrichment). See SMA-64.</para>
     /// </summary>
     public static (int? Min, int? Max) ConvertHeightToCm(List<PerenualDimensionsDto>? dims)
     {
@@ -578,7 +586,7 @@ public partial class PerenualResolver
             {
                 if (TryConvertDimension(dim) is { } heightHit)
                 {
-                    return heightHit;
+                    return EnsureOrderedRange(heightHit.Min, heightHit.Max);
                 }
             }
         }
@@ -589,7 +597,7 @@ public partial class PerenualResolver
         {
             if (TryConvertDimension(dim) is { } anyHit)
             {
-                return anyHit;
+                return EnsureOrderedRange(anyHit.Min, anyHit.Max);
             }
         }
 
