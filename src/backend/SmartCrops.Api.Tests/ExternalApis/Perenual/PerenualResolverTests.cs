@@ -195,6 +195,43 @@ public class PerenualResolverTests
     }
 
     [Fact]
+    public void ConvertHeightToCm_ReversedRange_ReturnsBothNull()
+    {
+        // SMA-64: Perenual ships reversed height pairs (min > max) — the real
+        // Anemone nemorosa payload (cache 826) is {feet, min:5, max:1.5} →
+        // 152cm > 46cm. Propagated raw this violates CK_Plants_Height_Range and
+        // rolls back the whole Perenual enrichment. EnsureOrderedRange nulls
+        // BOTH bounds (not swap — these are aberrant, not merely inverted), so
+        // the height is dropped and the rest of the enrichment persists.
+        var dims = new List<PerenualDimensionsDto>
+        {
+            new() { Unit = "feet", MinValue = 5m, MaxValue = 1.5m },
+        };
+
+        var (min, max) = PerenualResolver.ConvertHeightToCm(dims);
+
+        Assert.Null(min);
+        Assert.Null(max);
+    }
+
+    [Fact]
+    public void ConvertHeightToCm_OrderedRange_IsPreserved()
+    {
+        // Companion to the reversed case: the order guard must NOT disturb a
+        // normal pair. The same Anemone values in the correct order
+        // (min:1.5, max:5) convert and survive untouched.
+        var dims = new List<PerenualDimensionsDto>
+        {
+            new() { Unit = "feet", MinValue = 1.5m, MaxValue = 5m },
+        };
+
+        var (min, max) = PerenualResolver.ConvertHeightToCm(dims);
+
+        Assert.Equal(46, min); // 1.5 ft = 45.72 cm → 46 (AwayFromZero)
+        Assert.Equal(152, max); // 5 ft = 152.4 cm → 152
+    }
+
+    [Fact]
     public void ExtractImages_SkipsNullEntries()
     {
         // CR round 1 REVIEW_NEEDED fix: System.Text.Json can produce null
