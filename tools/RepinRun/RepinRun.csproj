@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SMA-135 RUN: one-shot operator script for the identity re-pin run.
+    Deliberately NOT added to SmartCrops.sln (throwaway tool, must not touch
+    build/CI). Zero NuGet deps: JWT minted by hand (HMACSHA256), reads via
+    `docker exec psql` (read-only), mutations via HttpClient.
+    Dry-run (default):  dotnet run, project tools/RepinRun.
+    Apply (real):       same command, then pass the apply flag.
+    See Program.cs header for exact usage.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>RepinRun</AssemblyName>
+    <RootNamespace>RepinRun</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>
