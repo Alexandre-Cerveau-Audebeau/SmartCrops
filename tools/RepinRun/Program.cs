@@ -87,7 +87,10 @@ var sql =
     "COALESCE(\"GbifTaxonKey\"::text,'') || '|' || \"EnrichmentStatus\"::text || '|' || \"TaxonRank\" " +
     $"FROM \"Plants\" WHERE split_part(\"ScientificName\",' ',1) IN ({inList});";
 
-var byName = new Dictionary<string, PlantRow>(StringComparer.Ordinal);
+// Case-insensitive keying matches the collision-detection comparer below and the
+// DB's IX_Plants_ScientificName_Lower unique index (which already precludes
+// case-variant duplicates — so this is consistency, not a behaviour change).
+var byName = new Dictionary<string, PlantRow>(StringComparer.OrdinalIgnoreCase);
 foreach (var line in RunPsql(sql))
 {
     var parts = line.Split('|');
@@ -95,8 +98,11 @@ foreach (var line in RunPsql(sql))
     var row = new PlantRow(
         Id: parts[0],
         ScientificName: parts[1],
-        GbifTaxonKey: string.IsNullOrEmpty(parts[2]) ? null : long.Parse(parts[2]),
-        EnrichmentStatus: int.Parse(parts[3]),
+        GbifTaxonKey: string.IsNullOrEmpty(parts[2]) ? null
+            : long.TryParse(parts[2], out var key) ? key
+            : throw new RunFailure($"Invalid GbifTaxonKey in row: {line}"),
+        EnrichmentStatus: int.TryParse(parts[3], out var es) ? es
+            : throw new RunFailure($"Invalid EnrichmentStatus in row: {line}"),
         TaxonRank: parts[4]);
     byName[row.ScientificName] = row;
 }
