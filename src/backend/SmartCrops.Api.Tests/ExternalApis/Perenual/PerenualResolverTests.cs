@@ -232,6 +232,40 @@ public class PerenualResolverTests
     }
 
     [Fact]
+    public void ConvertHeightToCm_ReversedRange_HeightTypedEntry_ReturnsBothNull()
+    {
+        // Pass 1 (Height-typed) reversed range triggers the guard too, not just
+        // the Pass 2 fallback. The guard is applied at BOTH return sites; this
+        // locks the Height-typed call site against an accidental future removal.
+        var dims = new List<PerenualDimensionsDto>
+        {
+            new() { Type = "Height", Unit = "feet", MinValue = 5m, MaxValue = 1.5m },
+        };
+
+        var (min, max) = PerenualResolver.ConvertHeightToCm(dims);
+
+        Assert.Null(min);
+        Assert.Null(max);
+    }
+
+    [Fact]
+    public void ConvertHeightToCm_EqualMinMax_IsPreserved()
+    {
+        // Boundary: min == max is valid and must NOT trigger the reversed-range
+        // guard (CompareTo > 0 fires only on strict inequality). Locks the > 0
+        // threshold against a future change to >= 0.
+        var dims = new List<PerenualDimensionsDto>
+        {
+            new() { Unit = "feet", MinValue = 2m, MaxValue = 2m },
+        };
+
+        var (min, max) = PerenualResolver.ConvertHeightToCm(dims);
+
+        Assert.Equal(61, min); // 2 ft = 60.96 cm → round AwayFromZero = 61
+        Assert.Equal(61, max);
+    }
+
+    [Fact]
     public void ExtractImages_SkipsNullEntries()
     {
         // CR round 1 REVIEW_NEEDED fix: System.Text.Json can produce null
