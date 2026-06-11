@@ -41,8 +41,14 @@ public sealed class RedactingHttpClientLogger : IHttpClientLogger
     /// <c>token=</c> (Trefle) credential value replaced by
     /// <see cref="PerenualKeyRedactor.Placeholder"/>. A URI carrying no credential
     /// (e.g. a GBIF call) is returned unchanged. <c>null</c> → empty string.
+    ///
+    /// <para><c>internal</c> by design: this is an implementation detail of the
+    /// logger, not a shared redaction primitive (it covers only this logger's two
+    /// known credential parameters — unlike the public
+    /// <see cref="PerenualKeyRedactor"/> / <see cref="TrefleTokenRedactor"/>).
+    /// Exposed to the test assembly via <c>InternalsVisibleTo</c>.</para>
     /// </summary>
-    public static string RedactUri(Uri? uri)
+    internal static string RedactUri(Uri? uri)
     {
         if (uri is null)
         {

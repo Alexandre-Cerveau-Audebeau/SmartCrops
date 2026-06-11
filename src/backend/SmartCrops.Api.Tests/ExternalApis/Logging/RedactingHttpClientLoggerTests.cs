@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Logging;
 using SmartCrops.Infrastructure.ExternalApis.Logging;
 
@@ -86,6 +87,39 @@ public class RedactingHttpClientLoggerTests
         Assert.Contains("key=REDACTED", message);
         Assert.DoesNotContain(PerenualKey, message);
         Assert.Contains("GET", message);
+    }
+
+    [Fact]
+    public void LogRequestStop_EmitsRedactedUri_NotTheSecret()
+    {
+        var logger = new CapturingLogger<RedactingHttpClientLogger>();
+        var sut = new RedactingHttpClientLogger(logger);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"https://trefle.io/api/v1/species/123?token={TrefleToken}");
+        using var response = new HttpResponseMessage(HttpStatusCode.OK);
+
+        sut.LogRequestStop(null, request, response, TimeSpan.FromMilliseconds(25));
+
+        var message = Assert.Single(logger.Messages);
+        Assert.Contains("token=REDACTED", message);
+        Assert.DoesNotContain(TrefleToken, message);
+    }
+
+    [Fact]
+    public void LogRequestFailed_EmitsRedactedUri_NotTheSecret()
+    {
+        var logger = new CapturingLogger<RedactingHttpClientLogger>();
+        var sut = new RedactingHttpClientLogger(logger);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"https://perenual.com/api/v2/species-list?key={PerenualKey}&q=rose");
+
+        sut.LogRequestFailed(null, request, null, new HttpRequestException("boom"), TimeSpan.FromMilliseconds(25));
+
+        var message = Assert.Single(logger.Messages);
+        Assert.Contains("key=REDACTED", message);
+        Assert.DoesNotContain(PerenualKey, message);
     }
 
     /// <summary>
