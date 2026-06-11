@@ -10,6 +10,7 @@ using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure;
 using SmartCrops.Infrastructure.ExternalApis.Gbif;
+using SmartCrops.Infrastructure.ExternalApis.Logging;
 using SmartCrops.Infrastructure.ExternalApis.Perenual;
 using SmartCrops.Infrastructure.ExternalApis.Trefle;
 
@@ -117,6 +118,14 @@ builder.Services.AddOptions<GbifOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+// SMA-104: the default IHttpClientFactory loggers emit the full request URI
+// (incl. Perenual `key=` / Trefle `token=`) at Information level — a secret leak
+// into stdout on a public repo. Replace them on every external client with a
+// RedactingHttpClientLogger that scrubs the credential from the logged URI while
+// keeping method/status/elapsed diagnostics. GBIF carries no secret, but is wired
+// too for a single consistent log format and defence-in-depth.
+builder.Services.AddSingleton<RedactingHttpClientLogger>();
+
 builder.Services.AddHttpClient<GbifClient>((sp, client) =>
 {
     var options = sp.GetRequiredService<IOptions<GbifOptions>>().Value;
@@ -124,6 +133,8 @@ builder.Services.AddHttpClient<GbifClient>((sp, client) =>
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
     client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
 })
+.RemoveAllLoggers()
+.AddLogger<RedactingHttpClientLogger>()
 .AddStandardResilienceHandler();
 
 builder.Services.AddSingleton(sp =>
@@ -151,6 +162,8 @@ builder.Services.AddHttpClient<TrefleClient>((sp, client) =>
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
     client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
 })
+.RemoveAllLoggers()
+.AddLogger<RedactingHttpClientLogger>()
 .AddStandardResilienceHandler();
 
 builder.Services.AddSingleton<TrefleResolver>();
@@ -175,6 +188,8 @@ builder.Services.AddHttpClient<PerenualClient>((sp, client) =>
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
     client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
 })
+.RemoveAllLoggers()
+.AddLogger<RedactingHttpClientLogger>()
 // SMA-71: the pest-disease-list catalogue endpoint is slow (page 1 ≈ 6s) and
 // large (pages up to ~850KB). The standard handler's defaults (AttemptTimeout
 // 10s, TotalRequestTimeout 30s) cut page 1 to null → 502 → empty catalogue.
