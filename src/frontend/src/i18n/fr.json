@@ -15,16 +15,22 @@
     "tagline": "Votre compagnon de jardin virtuel — découvrez, cultivez et partagez des plantes du monde entier.",
     "explore": "Explorer",
     "library": "Bibliothèque",
-    "plantFinder": "Recherche de plantes",
-    "about": "À propos",
+    "myGardens": "Mes Jardins",
+    "shop": "Boutique",
+    "resources": "Ressources",
     "aboutUs": "À propos de nous",
+    "helpCenter": "Centre d'aide",
+    "news": "Actualités",
     "contact": "Contact",
-    "privacy": "Confidentialité",
+    "account": "Compte",
+    "myAccount": "Mon compte",
+    "logout": "Déconnexion",
+    "login": "Connexion",
+    "createAccount": "Créer un compte",
     "connect": "Restons connectés",
-    "connectDescription": "Recevez des conseils et des nouveautés directement dans votre boîte mail.",
-    "subscribe": "S'abonner",
-    "emailPlaceholder": "votre@email.com",
-    "emailAriaLabel": "Adresse e-mail pour la newsletter",
+    "followUs": "Suivez-nous",
+    "socialAriaLabel": "Réseaux sociaux (bientôt disponible)",
+    "privacy": "Confidentialité",
     "copyright": "© {{year}} SmartCrops. Tous droits réservés.",
     "legalNotice": "Mentions légales",
     "termsOfUse": "CGU"
@@ -970,5 +976,10 @@
       "faq": "FAQ",
       "privacyPolicy": "Politique de confidentialité"
     }
+  },
+  "shop": {
+    "title": "Boutique",
+    "teaser": "Bientôt : plantes, graines, terreaux et objets connectés compatibles SmartCrops.",
+    "cta": "Parcourir la bibliothèque"
   }
 }

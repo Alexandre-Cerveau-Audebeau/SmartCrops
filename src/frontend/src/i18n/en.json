@@ -15,16 +15,22 @@
     "tagline": "Your virtual garden companion — discover, grow, and share plants from around the world.",
     "explore": "Explore",
     "library": "Library",
-    "plantFinder": "Plant Finder",
-    "about": "About",
+    "myGardens": "My Gardens",
+    "shop": "Shop",
+    "resources": "Resources",
     "aboutUs": "About Us",
+    "helpCenter": "Help Center",
+    "news": "News",
     "contact": "Contact",
-    "privacy": "Privacy",
+    "account": "Account",
+    "myAccount": "My Account",
+    "logout": "Log out",
+    "login": "Login",
+    "createAccount": "Create account",
     "connect": "Connect",
-    "connectDescription": "Get plant tips and updates straight to your inbox.",
-    "subscribe": "Subscribe",
-    "emailPlaceholder": "your@email.com",
-    "emailAriaLabel": "Email address for newsletter",
+    "followUs": "Follow us",
+    "socialAriaLabel": "Social media (coming soon)",
+    "privacy": "Privacy",
     "copyright": "© {{year}} SmartCrops. All rights reserved.",
     "legalNotice": "Legal Notice",
     "termsOfUse": "Terms of Use"
@@ -970,5 +976,10 @@
       "faq": "FAQ",
       "privacyPolicy": "Privacy policy"
     }
+  },
+  "shop": {
+    "title": "Shop",
+    "teaser": "Coming soon: plants, seeds, growing media, and SmartCrops-compatible connected devices.",
+    "cta": "Browse the library"
   }
 }
