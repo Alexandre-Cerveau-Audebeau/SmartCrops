@@ -948,6 +948,7 @@
       "sending": "Sending…",
       "errors": {
         "nameRequired": "Please enter your name.",
+        "emailRequired": "Please enter your email address.",
         "emailInvalid": "Please enter a valid email address.",
         "reasonRequired": "Please choose a reason.",
         "messageRequired": "Please write a message."

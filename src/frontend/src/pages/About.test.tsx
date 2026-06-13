@@ -45,8 +45,9 @@ describe('About (SMA-36)', () => {
   it('renders in French', async () => {
     await i18next.changeLanguage('fr');
     renderAbout();
+    // findBy* retries until React flushes the language change (de-flakes R19).
     expect(
-      screen.getByRole('heading', {
+      await screen.findByRole('heading', {
         level: 1,
         name: 'Cultiver le jardin, en plus intelligent',
       })

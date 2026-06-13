@@ -51,8 +51,9 @@ describe('Contact (SMA-36)', () => {
   it('renders in French', async () => {
     await i18next.changeLanguage('fr');
     renderContact();
+    // findBy* retries until React flushes the language change (de-flakes R19).
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Nous contacter' })
+      await screen.findByRole('heading', { level: 1, name: 'Nous contacter' })
     ).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Données botaniques' })
@@ -71,12 +72,27 @@ describe('Contact (SMA-36)', () => {
     renderContact();
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
     expect(screen.getByText('Please enter your name.')).toBeInTheDocument();
+    // Empty email is "required", not "invalid" (E5).
     expect(
-      screen.getByText('Please enter a valid email address.')
+      screen.getByText('Please enter your email address.')
     ).toBeInTheDocument();
     expect(screen.getByText('Please choose a reason.')).toBeInTheDocument();
     expect(screen.getByText('Please write a message.')).toBeInTheDocument();
     expect(screen.queryByText('Message sent!')).not.toBeInTheDocument();
+  });
+
+  it('distinguishes a malformed email as "invalid" (E5)', () => {
+    renderContact();
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'not-an-email' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(
+      screen.getByText('Please enter a valid email address.')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Please enter your email address.')
+    ).not.toBeInTheDocument();
   });
 
   it('reaches the success state after a valid submit (simulated send)', () => {

@@ -948,6 +948,7 @@
       "sending": "Envoi en cours…",
       "errors": {
         "nameRequired": "Veuillez saisir votre nom.",
+        "emailRequired": "Veuillez saisir votre adresse e-mail.",
         "emailInvalid": "Veuillez saisir une adresse e-mail valide.",
         "reasonRequired": "Veuillez choisir un motif.",
         "messageRequired": "Veuillez écrire un message."

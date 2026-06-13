@@ -171,10 +171,24 @@ export function ContactServerError({ onRetry }: { onRetry: () => void }) {
 /** SMA-36: success panel (mockup B6). */
 function ContactSuccess() {
   const { t } = useTranslation();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  // Move focus to the success heading so screen readers announce the state
+  // change when the form is replaced by this panel.
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+
   return (
     <Box sx={{ textAlign: 'center', py: 4 }}>
       <CheckCircleIcon color="success" sx={{ fontSize: 56, mb: 1.5 }} />
-      <Typography variant="h5" component="h2" sx={{ fontWeight: 700, mb: 1 }}>
+      <Typography
+        ref={headingRef}
+        tabIndex={-1}
+        variant="h5"
+        component="h2"
+        sx={{ fontWeight: 700, mb: 1, outline: 'none' }}
+      >
         {t('contact.success.title')}
       </Typography>
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
@@ -216,7 +230,9 @@ export default function Contact() {
   const validate = (): FieldErrors => {
     const next: FieldErrors = {};
     if (!name.trim()) next.name = t('contact.form.errors.nameRequired');
-    if (!EMAIL_RE.test(email.trim()))
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) next.email = t('contact.form.errors.emailRequired');
+    else if (!EMAIL_RE.test(trimmedEmail))
       next.email = t('contact.form.errors.emailInvalid');
     if (!reason) next.reason = t('contact.form.errors.reasonRequired');
     if (!message.trim())

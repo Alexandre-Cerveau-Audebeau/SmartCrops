@@ -14,6 +14,7 @@ import TranslateIcon from '@mui/icons-material/Translate';
 import SensorsIcon from '@mui/icons-material/Sensors';
 import ComingSoonChip from '../components/ComingSoonChip';
 import LegalText from '../components/Legal/LegalText';
+import { TECH_STACK } from '../constants/techStack';
 
 interface Pillar {
   icon: ReactNode;
@@ -46,15 +47,8 @@ const pillars: Pillar[] = [
   },
 ];
 
-// Tech stack chips — kept in sync with Home's "Built with" current stack.
-const techChips = [
-  'React',
-  'TypeScript',
-  'Vite',
-  '.NET 8',
-  'PostgreSQL',
-  'Docker',
-];
+// Tech stack chip names, projected from the shared source of truth.
+const techChips = TECH_STACK.map((tech) => tech.name);
 
 // TODO: replace with Alexandre's garden photo. Reusing a vendored Unsplash hero
 // image (real asset, credit kept) as the placeholder background.
