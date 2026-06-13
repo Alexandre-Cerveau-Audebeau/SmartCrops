@@ -25,7 +25,9 @@
     "subscribe": "S'abonner",
     "emailPlaceholder": "votre@email.com",
     "emailAriaLabel": "Adresse e-mail pour la newsletter",
-    "copyright": "© {{year}} SmartCrops. Tous droits réservés."
+    "copyright": "© {{year}} SmartCrops. Tous droits réservés.",
+    "legalNotice": "Mentions légales",
+    "termsOfUse": "CGU"
   },
   "home": {
     "hero": {
@@ -583,5 +585,265 @@
       "fall": "Automne",
       "winter": "Hiver"
     }
+  },
+  "legal": {
+    "layout": {
+      "lastUpdated": "Dernière mise à jour :",
+      "updatedDate": "[À REMPLIR : date]",
+      "courtesy": "Version originale française — en cas de divergence avec la traduction, la version française fait foi."
+    },
+    "mentions": {
+      "title": "Mentions légales",
+      "subtitle": "Loi n° 2004-575 du 21 juin 2004 pour la confiance dans l'économie numérique (LCEN)",
+      "s01": {
+        "title": "Éditeur du site",
+        "intro": "**Choix à faire — deux options légales :**",
+        "optionA": {
+          "title": "Option A — Identité publiée (recommandée ici)",
+          "body": "Le site est édité à titre non professionnel par : [À REMPLIR : Prénom NOM] — particulier. Contact : [À REMPLIR : email de contact].",
+          "note": "L'adresse postale d'un particulier n'a pas à être publiée si un moyen de contact effectif est fourni ; elle doit en revanche être connue de l'hébergeur."
+        },
+        "optionB": {
+          "title": "Option B — Éditeur non professionnel anonyme (art. 6-III-2 LCEN)",
+          "body": "Un particulier éditant un site à titre non professionnel peut ne pas publier son identité, à condition d'avoir communiqué ses coordonnées complètes à l'hébergeur. La page indique alors seulement : « Le site est édité à titre non professionnel. Conformément à l'article 6-III-2 de la LCEN, l'éditeur a transmis ses éléments d'identification personnelle à l'hébergeur ci-dessous. »"
+        },
+        "recommendation": "**Recommandation** : Option A — le dépôt GitHub du projet est public et déjà au nom de son auteur ; l'anonymat n'apporterait rien et l'identité affichée sert l'objectif portfolio."
+      },
+      "s02": {
+        "title": "Directeur de la publication",
+        "body": "[À REMPLIR : Prénom NOM] (l'éditeur)."
+      },
+      "s03": {
+        "title": "Hébergement",
+        "body": "Le site est hébergé par : **OVH** [À CONFIRMER : dénomination exacte — OVH SAS / OVHcloud — et adresse du siège (Roubaix, France) sur https://www.ovhcloud.com]",
+        "option": "[OPTION : numéro de téléphone public de l'hébergeur]"
+      },
+      "s04": {
+        "title": "Propriété intellectuelle",
+        "p1": "La structure du site, ses textes originaux, son logo et sa charte graphique sont la propriété de l'éditeur, sauf mention contraire. Le code source du projet est publié sur GitHub sous licence [À CONFIRMER : licence du dépôt].",
+        "p2": "**Données et médias botaniques** : les fiches de plantes agrègent des données et images issues de sources tierces, utilisées conformément à leurs conditions et licences respectives :",
+        "credits": {
+          "gbif": "**GBIF** (Global Biodiversity Information Facility) — taxonomie ;",
+          "trefle": "**Trefle** — données botaniques et photographies (la licence propre à chaque image est affichée avec celle-ci) ;",
+          "perenual": "**Perenual** — données de culture et d'entretien ;",
+          "unsplash": "**Unsplash** — photographies d'illustration (crédit photographe affiché)."
+        },
+        "p3": "Ces contenus tiers restent la propriété de leurs auteurs/éditeurs respectifs. Toute réutilisation doit respecter la licence indiquée à la source."
+      },
+      "s05": {
+        "title": "Contact",
+        "body": "Pour toute question relative au site : [À REMPLIR : email de contact] (ou via la page Contact)."
+      }
+    },
+    "privacy": {
+      "title": "Politique de confidentialité",
+      "s01": {
+        "title": "Qui est responsable du traitement ?",
+        "body": "Le responsable du traitement des données personnelles collectées sur **SmartCrops** est l'éditeur du site : [À REMPLIR : Prénom NOM], joignable à [À REMPLIR : email]. **SmartCrops** est un projet personnel, gratuit et sans finalité commerciale."
+      },
+      "s02": {
+        "title": "Quelles données sont collectées, et pourquoi ?",
+        "tableAriaLabel": "Données collectées, finalités et bases légales",
+        "cols": {
+          "processing": "Traitement",
+          "data": "Données",
+          "purpose": "Finalité",
+          "basis": "Base légale (RGPD art. 6)"
+        },
+        "rows": {
+          "account": {
+            "name": "Compte utilisateur",
+            "data": "Email, mot de passe (stocké **haché**, jamais en clair)",
+            "purpose": "Création et gestion du compte, authentification",
+            "basis": "Exécution du contrat (CGU)"
+          },
+          "google": {
+            "name": "Connexion Google (optionnelle)",
+            "data": "Identifiant de compte Google, email, nom transmis par Google lors de l'authentification OAuth",
+            "purpose": "Authentification sans mot de passe",
+            "basis": "Exécution du contrat"
+          },
+          "profile": {
+            "name": "Profil (facultatif)",
+            "data": "Nom d'affichage, prénom, nom, ville",
+            "purpose": "Personnalisation du compte",
+            "basis": "Exécution du contrat"
+          },
+          "content": {
+            "name": "Contenus créés",
+            "data": "Jardins (nom, description, plan, plantes placées), notes, suggestions de plantes",
+            "purpose": "Fourniture du service (sauvegarde et affichage de vos jardins)",
+            "basis": "Exécution du contrat"
+          },
+          "session": {
+            "name": "Cookies de session",
+            "data": "Cookie d'authentification (technique, **HttpOnly**)",
+            "purpose": "Maintien de la session connectée",
+            "basis": "Intérêt légitime (fonctionnement du service) — cookie strictement nécessaire"
+          },
+          "language": {
+            "name": "Préférence de langue",
+            "data": "Choix FR/EN [À CONFIRMER : stocké en localStorage du navigateur]",
+            "purpose": "Affichage dans votre langue",
+            "basis": "Intérêt légitime"
+          },
+          "logs": {
+            "name": "Journaux techniques",
+            "data": "Adresse IP, user-agent, horodatage des requêtes",
+            "purpose": "Sécurité, prévention des abus, diagnostic",
+            "basis": "Intérêt légitime"
+          },
+          "contact": {
+            "name": "Formulaire de contact [À ACTIVER quand le backend contact sera livré]",
+            "data": "Nom, email, sujet, message",
+            "purpose": "Répondre à votre demande",
+            "basis": "Intérêt légitime / consentement"
+          },
+          "newsletter": {
+            "name": "Newsletter [À ACTIVER quand le backend newsletter sera livré]",
+            "data": "Email",
+            "purpose": "Envoi d'astuces et d'actualités du projet",
+            "basis": "**Consentement** (désinscription possible à tout moment via le lien de chaque email)"
+          }
+        },
+        "note": "**SmartCrops** **ne collecte pas** de données dites « sensibles », **ne vend pas** vos données, et **n'affiche pas** de publicité.",
+        "futureProfile": "[OPTION — à publier quand le profil enrichi existera] Si le profil est étendu (zone climatique, coordonnées GPS, type de jardin…), ce tableau sera complété — finalité : recommandations personnalisées ; base légale : exécution du contrat et/ou consentement pour la géolocalisation."
+      },
+      "s03": {
+        "title": "Qui a accès à vos données ?",
+        "editor": "**L'éditeur** du site, seul administrateur.",
+        "subcontractorsIntro": "**Sous-traitants techniques** :",
+        "ovh": "**OVH** (hébergement du serveur et de la base de données, en France/UE) ;",
+        "google": "**Google** (uniquement si vous choisissez la connexion Google : Google traite alors vos données d'authentification selon sa propre politique de confidentialité).",
+        "noThirdParties": "Aucune transmission à des tiers à des fins commerciales ou publicitaires."
+      },
+      "s04": {
+        "title": "Vos données quittent-elles l'Union européenne ?",
+        "body": "Les données du service sont hébergées **en France (OVH)**. Si vous utilisez la connexion Google, l'authentification implique Google LLC, susceptible de traiter des données hors UE dans le cadre des mécanismes de transfert reconnus [À CONFIRMER : encadrement actuel des transferts Google (clauses contractuelles types / cadre UE–États-Unis)]."
+      },
+      "s05": {
+        "title": "Combien de temps vos données sont-elles conservées ?",
+        "intro": "Durées proposées (à trancher) :",
+        "items": {
+          "account": "**Compte et contenus associés** — durée de vie du compte ; suppression effective dans un délai de [À REMPLIR : ex. 30 jours] après suppression du compte.",
+          "logs": "**Journaux techniques** — [À REMPLIR : ex. 12 mois maximum].",
+          "contact": "**Messages de contact** — [À REMPLIR : ex. 12 mois après le dernier échange].",
+          "newsletter": "**Email newsletter** — jusqu'à désinscription."
+        }
+      },
+      "s06": {
+        "title": "Comment vos données sont-elles protégées ?",
+        "body": "Mesures en place : mots de passe stockés sous forme hachée ; cookie de session **HttpOnly** (inaccessible aux scripts) ; chiffrement des échanges via HTTPS [À CONFIRMER : en production] ; accès administrateur restreint ; secrets de configuration tenus hors du dépôt public."
+      },
+      "s07": {
+        "title": "Quels sont vos droits ?",
+        "p1": "Conformément au RGPD et à la loi Informatique et Libertés, vous disposez des droits suivants sur vos données : **accès**, **rectification**, **effacement**, **limitation du traitement**, **opposition**, **portabilité**, ainsi que du droit de définir des directives post-mortem.",
+        "p2": "**Pour exercer ces droits** : écrivez à **contact@smartcrops.fr** [À CONFIRMER : adresse email définitive] depuis l'adresse associée à votre compte (une vérification d'identité pourra être demandée). Réponse sous un mois. Vous pouvez aussi supprimer vous-même vos contenus (jardins) depuis l'application [À CONFIRMER : et le compte lui-même, selon les fonctionnalités disponibles].",
+        "p3": "Si vous estimez que vos droits ne sont pas respectés, vous pouvez introduire une réclamation auprès de la **CNIL** (www.cnil.fr)."
+      },
+      "s08": {
+        "title": "Mineurs [OPTION]",
+        "body": "Le service ne s'adresse pas aux enfants de moins de 15 ans sans l'accord du titulaire de l'autorité parentale (article 45 de la loi Informatique et Libertés)."
+      },
+      "s09": {
+        "title": "Cookies",
+        "intro": "État actuel de **SmartCrops** : un **cookie d'authentification HttpOnly** (strictement nécessaire) et une préférence de langue [À CONFIRMER : localStorage]. **Aucun cookie publicitaire ni de mesure d'audience.** Les traceurs strictement nécessaires sont exemptés de consentement (CNIL) : une information claire suffit.",
+        "tableAriaLabel": "Cookies et stockage local utilisés",
+        "cols": {
+          "name": "Nom",
+          "type": "Type",
+          "purpose": "Finalité",
+          "duration": "Durée"
+        },
+        "rows": {
+          "auth": {
+            "name": "[À CONFIRMER : nom du cookie d'auth]",
+            "type": "Strictement nécessaire (HttpOnly)",
+            "purpose": "Maintien de la session connectée",
+            "duration": "[À CONFIRMER : durée du jeton/session]"
+          },
+          "language": {
+            "name": "Préférence de langue",
+            "type": "Stockage local",
+            "purpose": "Mémoriser FR/EN",
+            "duration": "Persistant (jusqu'à effacement par l'utilisateur)"
+          },
+          "choice": {
+            "name": "Choix cookies",
+            "type": "Stockage local",
+            "purpose": "Mémoriser votre choix sur le bandeau",
+            "duration": "[À REMPLIR : ex. 6 mois]"
+          }
+        }
+      },
+      "s10": {
+        "title": "Évolution de cette politique",
+        "body": "Cette politique peut évoluer avec le service (nouvelles fonctionnalités, nouveaux traitements). La date de dernière mise à jour figure en tête de page ; en cas de changement substantiel, une information sera affichée sur le site."
+      }
+    },
+    "terms": {
+      "title": "Conditions générales d'utilisation (CGU)",
+      "s01": {
+        "title": "Objet",
+        "body": "Les présentes CGU encadrent l'utilisation de **SmartCrops** (le « Service »), application web de gestion de jardins virtuels : bibliothèque de plantes, planification de jardin et fonctionnalités associées. L'utilisation du Service vaut acceptation des présentes CGU."
+      },
+      "s02": {
+        "title": "Accès au Service",
+        "items": {
+          "free": "Le Service est **gratuit**. La consultation de la bibliothèque est libre ; certaines fonctionnalités (création de jardins, profil, suggestions) nécessitent un compte.",
+          "asIs": "Le Service est un **projet personnel en développement actif** : il est fourni « en l'état », sans engagement de disponibilité, de pérennité ni de niveau de service. Des fonctionnalités peuvent évoluer, être ajoutées ou retirées."
+        }
+      },
+      "s03": {
+        "title": "Compte utilisateur",
+        "items": {
+          "accuracy": "Vous vous engagez à fournir des informations exactes et à maintenir la confidentialité de vos identifiants. Toute activité réalisée via votre compte est réputée effectuée par vous.",
+          "signup": "L'inscription peut s'effectuer par email/mot de passe ou via Google. Vous pouvez demander la suppression de votre compte à tout moment (voir Politique de confidentialité)."
+        }
+      },
+      "s04": {
+        "title": "Contenus utilisateur",
+        "items": {
+          "ownership": "Les contenus que vous créez (jardins, notes, suggestions de plantes) **restent les vôtres**. Vous concédez à l'éditeur la licence technique strictement nécessaire pour les héberger, les sauvegarder et vous les afficher.",
+          "conduct": "Vous vous interdisez de publier des contenus illicites, offensants ou portant atteinte aux droits de tiers. Les **suggestions de plantes** sont soumises à modération et peuvent être acceptées, modifiées ou refusées sans justification.",
+          "removal": "L'éditeur peut retirer tout contenu manifestement contraire aux présentes CGU."
+        }
+      },
+      "s05": {
+        "title": "Données botaniques — information, pas prescription ⚠️",
+        "p1": "Les informations botaniques (dont comestibilité, toxicité, usages dits médicinaux, périodes de culture) sont **agrégées automatiquement depuis des sources tierces** (GBIF, Trefle, Perenual) et fournies **à titre purement informatif et indicatif**. Malgré le soin apporté, elles peuvent être **incomplètes, obsolètes ou erronées**.",
+        "p2": "**Elles ne constituent en aucun cas un avis médical, vétérinaire, alimentaire ou professionnel.** Ne consommez jamais une plante et n'en faites aucun usage thérapeutique sur la seule foi des informations du Service ; vérifiez systématiquement auprès de sources qualifiées. L'éditeur décline toute responsabilité quant aux décisions prises sur la base de ces informations."
+      },
+      "s06": {
+        "title": "Propriété intellectuelle",
+        "body": "Voir les Mentions légales (section « Propriété intellectuelle ») : éléments propres au Service d'une part, données et médias tiers sous leurs licences respectives d'autre part. L'utilisation du Service ne confère aucun droit sur ces éléments au-delà de la consultation personnelle."
+      },
+      "s07": {
+        "title": "Responsabilité",
+        "items": {
+          "bestEffort": "L'éditeur s'efforce d'assurer le bon fonctionnement du Service mais ne garantit ni l'absence d'erreurs, ni la disponibilité continue, ni la conservation des données : pensez à conserver une copie de ce qui vous est précieux [OPTION : jusqu'à la disponibilité d'une fonction d'export].",
+          "links": "Le Service peut contenir des liens vers des sites tiers, dont l'éditeur ne contrôle pas le contenu.",
+          "liability": "La responsabilité de l'éditeur ne saurait être engagée qu'en cas de faute prouvée, et dans les limites permises par la loi pour un service gratuit."
+        }
+      },
+      "s08": {
+        "title": "Suspension et résiliation",
+        "body": "L'éditeur peut suspendre ou supprimer un compte en cas de violation des présentes CGU (notamment la section « Contenus utilisateur »), après avertissement sauf urgence. Vous pouvez cesser d'utiliser le Service et demander la suppression de votre compte à tout moment."
+      },
+      "s09": {
+        "title": "Modification des CGU",
+        "body": "Les CGU peuvent être modifiées pour suivre l'évolution du Service. La version applicable est celle en ligne, datée en tête de page. En cas de modification substantielle, une information sera affichée ; la poursuite de l'utilisation vaut acceptation."
+      },
+      "s10": {
+        "title": "Droit applicable",
+        "body": "Les présentes CGU sont régies par le **droit français**. Tout litige relatif à leur exécution relève des juridictions françaises compétentes, après recherche d'une solution amiable."
+      }
+    }
+  },
+  "cookies": {
+    "message": "🍪 **SmartCrops** utilise uniquement des cookies **strictement nécessaires** au fonctionnement du site (connexion à votre compte) et mémorise votre langue. Aucun cookie publicitaire ou de suivi.",
+    "learnMore": "En savoir plus",
+    "ok": "OK",
+    "ariaLabel": "Information sur les cookies"
   }
 }
