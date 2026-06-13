@@ -590,7 +590,7 @@
     "layout": {
       "lastUpdated": "Dernière mise à jour :",
       "updatedDate": "[À REMPLIR : date]",
-      "courtesy": "Traduction de courtoisie — en cas de divergence, la version française fait foi."
+      "courtesy": "Version originale française — en cas de divergence avec la traduction, la version française fait foi."
     },
     "mentions": {
       "title": "Mentions légales",
@@ -639,7 +639,7 @@
       "title": "Politique de confidentialité",
       "s01": {
         "title": "Qui est responsable du traitement ?",
-        "body": "Le responsable du traitement des données personnelles collectées sur SmartCrops est l'éditeur du site : [À REMPLIR : Prénom NOM], joignable à [À REMPLIR : email]. SmartCrops est un projet personnel, gratuit et sans finalité commerciale."
+        "body": "Le responsable du traitement des données personnelles collectées sur **SmartCrops** est l'éditeur du site : [À REMPLIR : Prénom NOM], joignable à [À REMPLIR : email]. **SmartCrops** est un projet personnel, gratuit et sans finalité commerciale."
       },
       "s02": {
         "title": "Quelles données sont collectées, et pourquoi ?",
@@ -706,7 +706,7 @@
             "basis": "**Consentement** (désinscription possible à tout moment via le lien de chaque email)"
           }
         },
-        "note": "SmartCrops **ne collecte pas** de données dites « sensibles », **ne vend pas** vos données, et **n'affiche pas** de publicité.",
+        "note": "**SmartCrops** **ne collecte pas** de données dites « sensibles », **ne vend pas** vos données, et **n'affiche pas** de publicité.",
         "futureProfile": "[OPTION — à publier quand le profil enrichi existera] Si le profil est étendu (zone climatique, coordonnées GPS, type de jardin…), ce tableau sera complété — finalité : recommandations personnalisées ; base légale : exécution du contrat et/ou consentement pour la géolocalisation."
       },
       "s03": {
@@ -747,7 +747,7 @@
       },
       "s09": {
         "title": "Cookies",
-        "intro": "État actuel de SmartCrops : un **cookie d'authentification HttpOnly** (strictement nécessaire) et une préférence de langue [À CONFIRMER : localStorage]. **Aucun cookie publicitaire ni de mesure d'audience.** Les traceurs strictement nécessaires sont exemptés de consentement (CNIL) : une information claire suffit.",
+        "intro": "État actuel de **SmartCrops** : un **cookie d'authentification HttpOnly** (strictement nécessaire) et une préférence de langue [À CONFIRMER : localStorage]. **Aucun cookie publicitaire ni de mesure d'audience.** Les traceurs strictement nécessaires sont exemptés de consentement (CNIL) : une information claire suffit.",
         "tableAriaLabel": "Cookies et stockage local utilisés",
         "cols": {
           "name": "Nom",
@@ -841,7 +841,7 @@
     }
   },
   "cookies": {
-    "message": "🍪 SmartCrops utilise uniquement des cookies **strictement nécessaires** au fonctionnement du site (connexion à votre compte) et mémorise votre langue. Aucun cookie publicitaire ou de suivi.",
+    "message": "🍪 **SmartCrops** utilise uniquement des cookies **strictement nécessaires** au fonctionnement du site (connexion à votre compte) et mémorise votre langue. Aucun cookie publicitaire ou de suivi.",
     "learnMore": "En savoir plus",
     "ok": "OK",
     "ariaLabel": "Information sur les cookies"

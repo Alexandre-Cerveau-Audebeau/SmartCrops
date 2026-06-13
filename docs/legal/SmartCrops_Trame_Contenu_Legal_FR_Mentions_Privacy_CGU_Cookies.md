@@ -1,5 +1,5 @@
 # SmartCrops — Trame de contenu légal (FR)
-### Mentions légales · Politique de confidentialité (RGPD) · CGU · Bannière cookies
+## Mentions légales · Politique de confidentialité (RGPD) · CGU · Bannière cookies
 
 > **Note d'usage.** Trame de travail rédigée pour SmartCrops v2 (projet personnel/portfolio, service gratuit, hébergé en France). Elle est ancrée dans le fonctionnement **réel** de l'application (données effectivement collectées, cookie d'auth HttpOnly, sources botaniques tierces). Ce n'est **pas un avis juridique** : avant mise en production publique, une relecture par un professionnel du droit est recommandée.
 >

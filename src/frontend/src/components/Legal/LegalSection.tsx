@@ -24,7 +24,6 @@ export default function LegalSection({
       <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, mb: 1.5 }}>
         <Typography
           component="span"
-          aria-hidden="true"
           sx={{
             color: 'primary.main',
             fontWeight: 700,

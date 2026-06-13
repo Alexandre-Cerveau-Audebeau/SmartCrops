@@ -8,13 +8,16 @@ import Typography from '@mui/material/Typography';
 import CookieIcon from '@mui/icons-material/Cookie';
 import LegalText from './Legal/LegalText';
 
-const STORAGE_KEY = 'sc_cookie_notice_ack';
+export const COOKIE_NOTICE_STORAGE_KEY = 'sc_cookie_notice_ack';
 // Bump when the notice text changes substantially so the banner reappears.
-const ACK_VALUE = 'v1';
+export const COOKIE_NOTICE_ACK_VALUE = 'v1';
 
 function hasAcknowledged(): boolean {
   try {
-    return localStorage.getItem(STORAGE_KEY) === ACK_VALUE;
+    return (
+      localStorage.getItem(COOKIE_NOTICE_STORAGE_KEY) ===
+      COOKIE_NOTICE_ACK_VALUE
+    );
   } catch {
     return false;
   }
@@ -36,7 +39,7 @@ export default function CookieBanner() {
 
   const acknowledge = () => {
     try {
-      localStorage.setItem(STORAGE_KEY, ACK_VALUE);
+      localStorage.setItem(COOKIE_NOTICE_STORAGE_KEY, COOKIE_NOTICE_ACK_VALUE);
     } catch {
       // localStorage unavailable — the banner will simply show again next load.
     }

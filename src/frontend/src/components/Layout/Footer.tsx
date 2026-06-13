@@ -158,6 +158,7 @@ export default function Footer() {
           <Typography
             variant="body2"
             component="span"
+            aria-hidden="true"
             sx={{ color: 'rgba(255,255,255,0.35)' }}
           >
             ·
@@ -173,6 +174,7 @@ export default function Footer() {
           <Typography
             variant="body2"
             component="span"
+            aria-hidden="true"
             sx={{ color: 'rgba(255,255,255,0.35)' }}
           >
             ·

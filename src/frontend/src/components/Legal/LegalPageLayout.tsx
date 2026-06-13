@@ -70,6 +70,7 @@ export default function LegalPageLayout({
             }}
           >
             <TranslateIcon
+              aria-hidden="true"
               sx={{ color: '#4A6B8A', fontSize: 20, flexShrink: 0 }}
             />
             <Typography variant="body2" sx={{ color: '#3D5A75' }}>

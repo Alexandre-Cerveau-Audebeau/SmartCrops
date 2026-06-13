@@ -30,6 +30,19 @@ export default function ResponsiveLegalTable({
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
 
+  // Dev-only guard: the mobile layout labels row.slice(1) with columns[j + 1],
+  // so a row/columns length mismatch silently renders unlabeled values.
+  if (import.meta.env.DEV) {
+    rows.forEach((row, i) => {
+      if (row.length !== columns.length) {
+        console.error(
+          `ResponsiveLegalTable ("${ariaLabel}"): row ${i} has ${row.length} cells ` +
+            `but there are ${columns.length} columns — mobile labels would misalign.`
+        );
+      }
+    });
+  }
+
   if (isDesktop) {
     return (
       <TableContainer>

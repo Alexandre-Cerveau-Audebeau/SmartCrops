@@ -3,9 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it } from 'vitest';
 import i18next from '../i18n/i18n';
-import CookieBanner from './CookieBanner';
-
-const STORAGE_KEY = 'sc_cookie_notice_ack';
+import CookieBanner, {
+  COOKIE_NOTICE_ACK_VALUE,
+  COOKIE_NOTICE_STORAGE_KEY,
+} from './CookieBanner';
 
 function renderBanner() {
   return render(
@@ -40,11 +41,13 @@ describe('CookieBanner (SMA-35)', () => {
     expect(
       screen.queryByRole('button', { name: 'OK' })
     ).not.toBeInTheDocument();
-    expect(localStorage.getItem(STORAGE_KEY)).toBe('v1');
+    expect(localStorage.getItem(COOKIE_NOTICE_STORAGE_KEY)).toBe(
+      COOKIE_NOTICE_ACK_VALUE
+    );
   });
 
   it('does not render on mount when the ack key is already stored', () => {
-    localStorage.setItem(STORAGE_KEY, 'v1');
+    localStorage.setItem(COOKIE_NOTICE_STORAGE_KEY, COOKIE_NOTICE_ACK_VALUE);
     renderBanner();
     expect(
       screen.queryByRole('button', { name: 'OK' })

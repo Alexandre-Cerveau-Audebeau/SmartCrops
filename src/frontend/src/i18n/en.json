@@ -639,7 +639,7 @@
       "title": "Privacy Policy",
       "s01": {
         "title": "Who is the data controller?",
-        "body": "The controller of the personal data collected on SmartCrops is the site's publisher: [À REMPLIR : Prénom NOM], reachable at [À REMPLIR : email]. SmartCrops is a personal, free project with no commercial purpose."
+        "body": "The controller of the personal data collected on **SmartCrops** is the site's publisher: [À REMPLIR : Prénom NOM], reachable at [À REMPLIR : email]. **SmartCrops** is a personal, free project with no commercial purpose."
       },
       "s02": {
         "title": "What data is collected, and why?",
@@ -706,7 +706,7 @@
             "basis": "**Consent** (you can unsubscribe at any time via the link in each email)"
           }
         },
-        "note": "SmartCrops **does not collect** so-called “sensitive” data, **does not sell** your data, and **does not display** advertising.",
+        "note": "**SmartCrops** **does not collect** so-called “sensitive” data, **does not sell** your data, and **does not display** advertising.",
         "futureProfile": "[OPTION — à publier quand le profil enrichi existera] If the profile is extended (climate zone, GPS coordinates, garden type…), this table will be completed — purpose: personalised recommendations; legal basis: performance of the contract and/or consent for geolocation."
       },
       "s03": {
@@ -747,7 +747,7 @@
       },
       "s09": {
         "title": "Cookies",
-        "intro": "Current state of SmartCrops: one **HttpOnly authentication cookie** (strictly necessary) and a language preference [À CONFIRMER : localStorage]. **No advertising or audience-measurement cookies.** Strictly necessary trackers are exempt from consent (CNIL): clear information is sufficient.",
+        "intro": "Current state of **SmartCrops**: one **HttpOnly authentication cookie** (strictly necessary) and a language preference [À CONFIRMER : localStorage]. **No advertising or audience-measurement cookies.** Strictly necessary trackers are exempt from consent (CNIL): clear information is sufficient.",
         "tableAriaLabel": "Cookies and local storage used",
         "cols": {
           "name": "Name",
@@ -841,7 +841,7 @@
     }
   },
   "cookies": {
-    "message": "🍪 SmartCrops only uses cookies that are **strictly necessary** to run the site (keeping you signed in) and remembers your language. No advertising or tracking cookies.",
+    "message": "🍪 **SmartCrops** only uses cookies that are **strictly necessary** to run the site (keeping you signed in) and remembers your language. No advertising or tracking cookies.",
     "learnMore": "Learn more",
     "ok": "OK",
     "ariaLabel": "Cookie information"
