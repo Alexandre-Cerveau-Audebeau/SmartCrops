@@ -186,7 +186,8 @@
   "common": {
     "cancel": "Cancel",
     "close": "Close",
-    "backToTop": "Back to top"
+    "backToTop": "Back to top",
+    "comingSoon": "Coming Soon"
   },
   "auth": {
     "login": "Login",
@@ -845,5 +846,128 @@
     "learnMore": "Learn more",
     "ok": "OK",
     "ariaLabel": "Cookie information"
+  },
+  "about": {
+    "hero": {
+      "title": "Growing a smarter way to garden",
+      "subtitle": "One place to discover plants, plan your garden, and learn as you grow.",
+      "imageAlt": "Garden at sunrise with morning light",
+      "photoCredit": "Photo by {{author}} on Unsplash"
+    },
+    "mission": {
+      "title": "Our mission",
+      "body": "Gardening knowledge is scattered across dozens of sites, forums, and seed packets. SmartCrops brings it together in one place — a detailed plant library and practical tools — so you can spend less time searching and more time growing."
+    },
+    "project": {
+      "title": "The project",
+      "p1": "**SmartCrops** is an open, portfolio-driven project — a real, working application rather than a demo. Everything you see runs on a live backend, with public source code.",
+      "p2": "At its core: a botanical library aggregating multiple sources (GBIF, Trefle, Perenual), a drag-and-drop garden planner, and — on the roadmap — AI-, weather-, and IoT-assisted recommendations to tailor advice to your garden."
+    },
+    "pillars": {
+      "title": "What SmartCrops is made of",
+      "subtitle": "Four pillars, from today's library to tomorrow's intelligence.",
+      "library": {
+        "title": "Plant Library",
+        "desc": "Hundreds of plants with growing conditions, seasonal info, and bilingual descriptions, aggregated from trusted botanical sources."
+      },
+      "planner": {
+        "title": "Garden Planner",
+        "desc": "Design your garden layout with drag-and-drop. Place plants on a virtual grid and plan your space."
+      },
+      "bilingual": {
+        "title": "Bilingual",
+        "desc": "Full English and French support across the library and interface, with more languages planned."
+      },
+      "intelligence": {
+        "title": "Intelligence to come",
+        "desc": "AI, weather data, and IoT sensors will turn the library into personalised, garden-specific advice."
+      }
+    },
+    "builtWith": {
+      "title": "Built with modern tools"
+    },
+    "cta": {
+      "title": "Ready to dig in?",
+      "browseLibrary": "Browse Library",
+      "createAccount": "Create Account"
+    }
+  },
+  "contact": {
+    "title": "Contact Us",
+    "subtitle": "A question, an idea, a bug? Tell us everything.",
+    "cards": {
+      "plantData": {
+        "title": "Plant data",
+        "desc": "An error on a plant page? A missing plant? Help us improve the library.",
+        "cta": "Suggest a change"
+      },
+      "support": {
+        "title": "Technical support",
+        "desc": "A bug, an account or sign-in problem?",
+        "hint": "Check the Help Center first",
+        "cta": "Contact support"
+      },
+      "partnership": {
+        "title": "Partnerships",
+        "desc": "A nursery, garden centre, connected-device brand or botanical data source? Let's build together.",
+        "cta": "Propose a partnership"
+      },
+      "api": {
+        "title": "SmartCrops API",
+        "desc": "A public API is under consideration, subject to our data sources' licences.",
+        "cta": "Register my interest"
+      },
+      "privacy": {
+        "title": "Personal data",
+        "desc": "Exercise your GDPR rights: access, rectification, erasure…",
+        "privacyLink": "Privacy policy",
+        "cta": "Make a request"
+      },
+      "other": {
+        "title": "Other question",
+        "desc": "Everything else — we read it all.",
+        "cta": "Write a message"
+      }
+    },
+    "form": {
+      "title": "Send us a message",
+      "name": "Name",
+      "email": "Email",
+      "reason": "Reason",
+      "reasons": {
+        "plantData": "Plant data",
+        "support": "Technical support",
+        "partnership": "Partnership",
+        "api": "SmartCrops API",
+        "privacy": "Personal data",
+        "other": "Other question"
+      },
+      "subject": "Subject",
+      "message": "Message",
+      "send": "Send message",
+      "sending": "Sending…",
+      "errors": {
+        "nameRequired": "Please enter your name.",
+        "emailInvalid": "Please enter a valid email address.",
+        "reasonRequired": "Please choose a reason.",
+        "messageRequired": "Please write a message."
+      }
+    },
+    "success": {
+      "title": "Message sent!",
+      "body": "Thanks for writing — we'll get back to you soon.",
+      "backHome": "Back to Home"
+    },
+    "serverError": {
+      "message": "Something went wrong on our side.",
+      "tryAgain": "Try again"
+    },
+    "goodToKnow": {
+      "title": "Good to know",
+      "emailLabel": "Email us directly:",
+      "replyTime": "We usually reply within 48 hours.",
+      "faq": "FAQ",
+      "privacyPolicy": "Privacy policy"
+    }
   }
 }

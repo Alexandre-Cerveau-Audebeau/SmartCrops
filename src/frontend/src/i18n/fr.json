@@ -186,7 +186,8 @@
   "common": {
     "cancel": "Annuler",
     "close": "Fermer",
-    "backToTop": "Revenir en haut"
+    "backToTop": "Revenir en haut",
+    "comingSoon": "Bientôt disponible"
   },
   "auth": {
     "login": "Connexion",
@@ -845,5 +846,128 @@
     "learnMore": "En savoir plus",
     "ok": "OK",
     "ariaLabel": "Information sur les cookies"
+  },
+  "about": {
+    "hero": {
+      "title": "Cultiver le jardin, en plus intelligent",
+      "subtitle": "Un seul endroit pour découvrir les plantes, planifier votre jardin et apprendre en cultivant.",
+      "imageAlt": "Jardin au lever du soleil dans la lumière du matin",
+      "photoCredit": "Photo par {{author}} sur Unsplash"
+    },
+    "mission": {
+      "title": "Notre mission",
+      "body": "Le savoir du jardinage est dispersé entre des dizaines de sites, forums et sachets de graines. SmartCrops le rassemble en un seul endroit — une bibliothèque de plantes détaillée et des outils pratiques — pour passer moins de temps à chercher et plus de temps à cultiver."
+    },
+    "project": {
+      "title": "Le projet",
+      "p1": "**SmartCrops** est un projet ouvert, à vocation portfolio — une vraie application qui fonctionne, pas une démo. Tout ce que vous voyez tourne sur un backend réel, avec un code source public.",
+      "p2": "Au cœur du projet : une bibliothèque botanique agrégeant plusieurs sources (GBIF, Trefle, Perenual), un planificateur de jardin en glisser-déposer, et — sur la feuille de route — des recommandations assistées par IA, météo et IoT pour adapter les conseils à votre jardin."
+    },
+    "pillars": {
+      "title": "Ce qui compose SmartCrops",
+      "subtitle": "Quatre piliers, de la bibliothèque d'aujourd'hui à l'intelligence de demain.",
+      "library": {
+        "title": "Bibliothèque de plantes",
+        "desc": "Des centaines de plantes avec conditions de culture, informations saisonnières et descriptions bilingues, agrégées depuis des sources botaniques fiables."
+      },
+      "planner": {
+        "title": "Planificateur de jardin",
+        "desc": "Concevez l'agencement de votre jardin en glisser-déposer. Placez les plantes sur une grille virtuelle et planifiez votre espace."
+      },
+      "bilingual": {
+        "title": "Bilingue",
+        "desc": "Support complet en français et en anglais dans toute la bibliothèque et l'interface, d'autres langues sont prévues."
+      },
+      "intelligence": {
+        "title": "L'intelligence à venir",
+        "desc": "IA, données météo et capteurs IoT transformeront la bibliothèque en conseils personnalisés, adaptés à votre jardin."
+      }
+    },
+    "builtWith": {
+      "title": "Construit avec des outils modernes"
+    },
+    "cta": {
+      "title": "Prêt à mettre les mains dans la terre ?",
+      "browseLibrary": "Parcourir la bibliothèque",
+      "createAccount": "Créer un compte"
+    }
+  },
+  "contact": {
+    "title": "Nous contacter",
+    "subtitle": "Une question, une idée, un bug ? Dites-nous tout.",
+    "cards": {
+      "plantData": {
+        "title": "Données botaniques",
+        "desc": "Une erreur sur une fiche de plante ? Une plante manquante ? Aidez-nous à améliorer la bibliothèque.",
+        "cta": "Suggérer une correction"
+      },
+      "support": {
+        "title": "Support technique",
+        "desc": "Un bug, un problème de compte ou de connexion ?",
+        "hint": "Consultez d'abord le centre d'aide",
+        "cta": "Contacter le support"
+      },
+      "partnership": {
+        "title": "Partenariats",
+        "desc": "Une pépinière, une jardinerie, une marque d'objets connectés ou une source de données botaniques ? Construisons ensemble.",
+        "cta": "Proposer un partenariat"
+      },
+      "api": {
+        "title": "API SmartCrops",
+        "desc": "Une API publique est à l'étude, sous réserve des licences de nos sources de données.",
+        "cta": "Manifester mon intérêt"
+      },
+      "privacy": {
+        "title": "Données personnelles",
+        "desc": "Exercez vos droits RGPD : accès, rectification, effacement…",
+        "privacyLink": "Politique de confidentialité",
+        "cta": "Faire une demande"
+      },
+      "other": {
+        "title": "Autre question",
+        "desc": "Tout le reste — on lit tout.",
+        "cta": "Écrire un message"
+      }
+    },
+    "form": {
+      "title": "Envoyez-nous un message",
+      "name": "Nom",
+      "email": "E-mail",
+      "reason": "Motif",
+      "reasons": {
+        "plantData": "Données botaniques",
+        "support": "Support technique",
+        "partnership": "Partenariat",
+        "api": "API SmartCrops",
+        "privacy": "Données personnelles",
+        "other": "Autre question"
+      },
+      "subject": "Sujet",
+      "message": "Message",
+      "send": "Envoyer le message",
+      "sending": "Envoi en cours…",
+      "errors": {
+        "nameRequired": "Veuillez saisir votre nom.",
+        "emailInvalid": "Veuillez saisir une adresse e-mail valide.",
+        "reasonRequired": "Veuillez choisir un motif.",
+        "messageRequired": "Veuillez écrire un message."
+      }
+    },
+    "success": {
+      "title": "Message envoyé !",
+      "body": "Merci de nous avoir écrit — nous vous répondrons bientôt.",
+      "backHome": "Retour à l'accueil"
+    },
+    "serverError": {
+      "message": "Un problème est survenu de notre côté.",
+      "tryAgain": "Réessayer"
+    },
+    "goodToKnow": {
+      "title": "Bon à savoir",
+      "emailLabel": "Écrivez-nous directement :",
+      "replyTime": "Nous répondons généralement sous 48 heures.",
+      "faq": "FAQ",
+      "privacyPolicy": "Politique de confidentialité"
+    }
   }
 }
