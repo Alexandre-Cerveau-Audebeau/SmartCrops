@@ -9,7 +9,9 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
+import About from './pages/About';
 import AuthCallback from './pages/AuthCallback';
+import Contact from './pages/Contact';
 import GardenDetail from './pages/GardenDetail';
 import GardenPlanner from './pages/GardenPlanner';
 import Home from './pages/Home';
@@ -37,6 +39,8 @@ export default function App() {
               <Layout>
                 <Routes>
                   <Route path="/" element={<Home />} />
+                  <Route path="/about" element={<About />} />
+                  <Route path="/contact" element={<Contact />} />
                   <Route path="/auth/callback" element={<AuthCallback />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />

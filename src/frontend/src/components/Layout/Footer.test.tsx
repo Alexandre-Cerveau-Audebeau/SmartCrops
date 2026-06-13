@@ -28,4 +28,20 @@ describe('Footer legal links (SMA-35)', () => {
       '/terms'
     );
   });
+
+  it('points About Us / Contact to their routes (SMA-36)', () => {
+    render(
+      <MemoryRouter>
+        <Footer />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('link', { name: 'About Us' })).toHaveAttribute(
+      'href',
+      '/about'
+    );
+    expect(screen.getByRole('link', { name: 'Contact' })).toHaveAttribute(
+      'href',
+      '/contact'
+    );
+  });
 });

@@ -26,6 +26,7 @@ import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import HeroCarousel from '../components/HeroCarousel';
+import { TECH_STACK } from '../constants/techStack';
 import { fetchPlants } from '../services/plantApi';
 import { useLanguage } from '../hooks/useLanguage';
 import PlantCard from '../components/PlantCard';
@@ -62,13 +63,19 @@ const features: FeatureItem[] = [
     descKey: 'home.features.bilingualSupportDesc',
   },
   {
-    icon: <GridOnIcon sx={{ fontSize: 48, color: 'primary.main', opacity: 0.85 }} />,
+    icon: (
+      <GridOnIcon sx={{ fontSize: 48, color: 'primary.main', opacity: 0.85 }} />
+    ),
     titleKey: 'home.features.gardenPlanner',
     descKey: 'home.features.gardenPlannerDesc',
     comingSoon: true,
   },
   {
-    icon: <SensorsIcon sx={{ fontSize: 48, color: 'primary.main', opacity: 0.85 }} />,
+    icon: (
+      <SensorsIcon
+        sx={{ fontSize: 48, color: 'primary.main', opacity: 0.85 }}
+      />
+    ),
     titleKey: 'home.features.smartMonitoring',
     descKey: 'home.features.smartMonitoringDesc',
     comingSoon: true,
@@ -76,9 +83,21 @@ const features: FeatureItem[] = [
 ];
 
 const steps = [
-  { number: '1', titleKey: 'home.howItWorks.step1Title', descKey: 'home.howItWorks.step1Desc' },
-  { number: '2', titleKey: 'home.howItWorks.step2Title', descKey: 'home.howItWorks.step2Desc' },
-  { number: '3', titleKey: 'home.howItWorks.step3Title', descKey: 'home.howItWorks.step3Desc' },
+  {
+    number: '1',
+    titleKey: 'home.howItWorks.step1Title',
+    descKey: 'home.howItWorks.step1Desc',
+  },
+  {
+    number: '2',
+    titleKey: 'home.howItWorks.step2Title',
+    descKey: 'home.howItWorks.step2Desc',
+  },
+  {
+    number: '3',
+    titleKey: 'home.howItWorks.step3Title',
+    descKey: 'home.howItWorks.step3Desc',
+  },
 ];
 
 const testimonials = [
@@ -157,24 +176,39 @@ const testimonials = [
 ];
 
 const currentTech: TechItem[] = [
-  { name: 'React', logo: '/images/tech/react.svg', role: 'Frontend UI' },
-  { name: 'TypeScript', logo: '/images/tech/typescript.svg', role: 'Type Safety' },
-  { name: 'Vite', logo: '/images/tech/vite.svg', role: 'Build Tool' },
-  { name: '.NET 8', logo: '/images/tech/dotnet.svg', role: 'Backend API' },
-  { name: 'PostgreSQL', logo: '/images/tech/postgresql.svg', role: 'Database' },
-  { name: 'Docker', logo: '/images/tech/docker.svg', role: 'Containers' },
-  { name: 'GitHub Actions', logo: '/images/tech/githubactions.svg', role: 'CI/CD' },
-  { name: 'CodeRabbit', logo: '/images/tech/coderabbit.svg', role: 'AI Code Review' },
+  ...TECH_STACK,
+  {
+    name: 'GitHub Actions',
+    logo: '/images/tech/githubactions.svg',
+    role: 'CI/CD',
+  },
+  {
+    name: 'CodeRabbit',
+    logo: '/images/tech/coderabbit.svg',
+    role: 'AI Code Review',
+  },
   { name: 'Claude', logo: '/images/tech/claude.svg', role: 'AI Assistant' },
   { name: 'OVH', logo: '/images/tech/ovh.svg', role: 'Domain & DNS' },
 ];
 
 const plannedTech: TechItem[] = [
-  { name: 'Kubernetes', logo: '/images/tech/kubernetes.svg', role: 'Orchestration' },
+  {
+    name: 'Kubernetes',
+    logo: '/images/tech/kubernetes.svg',
+    role: 'Orchestration',
+  },
   { name: 'AWS', logo: '/images/tech/aws.svg', role: 'Cloud Platform' },
   { name: 'Redis', logo: '/images/tech/redis.svg', role: 'Caching' },
-  { name: 'Typesense', logo: '/images/tech/typesense.svg', role: 'Search Engine' },
-  { name: 'Terraform', logo: '/images/tech/terraform.svg', role: 'Infrastructure as Code' },
+  {
+    name: 'Typesense',
+    logo: '/images/tech/typesense.svg',
+    role: 'Search Engine',
+  },
+  {
+    name: 'Terraform',
+    logo: '/images/tech/terraform.svg',
+    role: 'Infrastructure as Code',
+  },
 ];
 
 /**
@@ -207,7 +241,7 @@ export default function Home() {
   const totalPages = Math.ceil(testimonials.length / itemsPerPage);
   const snappedIndex = useMemo(
     () => Math.floor(currentIndex / itemsPerPage) * itemsPerPage,
-    [currentIndex, itemsPerPage],
+    [currentIndex, itemsPerPage]
   );
 
   useEffect(() => {
@@ -223,7 +257,8 @@ export default function Home() {
         setPlants(data.slice(0, 3));
       })
       .catch((err) => {
-        if (err.name !== 'AbortError' && !controller.signal.aborted) setPlantsError(true);
+        if (err.name !== 'AbortError' && !controller.signal.aborted)
+          setPlantsError(true);
       })
       .finally(() => {
         if (!controller.signal.aborted) setPlantsLoading(false);
@@ -235,19 +270,19 @@ export default function Home() {
     setCurrentIndex((prev) =>
       prev - itemsPerPage < 0
         ? (totalPages - 1) * itemsPerPage
-        : prev - itemsPerPage,
+        : prev - itemsPerPage
     );
   };
 
   const handleNext = () => {
     setCurrentIndex((prev) =>
-      prev + itemsPerPage >= testimonials.length ? 0 : prev + itemsPerPage,
+      prev + itemsPerPage >= testimonials.length ? 0 : prev + itemsPerPage
     );
   };
 
   const visibleTestimonials = testimonials.slice(
     snappedIndex,
-    snappedIndex + itemsPerPage,
+    snappedIndex + itemsPerPage
   );
   const currentPage = Math.floor(snappedIndex / itemsPerPage);
 
@@ -276,10 +311,36 @@ export default function Home() {
             }}
           >
             {[
-              { id: 'plants', icon: <LocalFloristIcon sx={{ fontSize: 24 }} />, value: plantsStatValue, label: t('home.stats.plants'), onClick: () => navigate('/library') },
-              { id: 'languages', icon: <TranslateIcon sx={{ fontSize: 24 }} />, value: '2', label: t('home.stats.languages') },
-              { id: 'tools', icon: <HandymanIcon sx={{ fontSize: 24 }} />, value: '5', label: t('home.stats.tools'), onClick: () => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }) },
-              { id: 'gardens', icon: <GrassIcon sx={{ fontSize: 24 }} />, value: '∞', label: t('home.stats.gardens'), onClick: () => navigate('/gardens') },
+              {
+                id: 'plants',
+                icon: <LocalFloristIcon sx={{ fontSize: 24 }} />,
+                value: plantsStatValue,
+                label: t('home.stats.plants'),
+                onClick: () => navigate('/library'),
+              },
+              {
+                id: 'languages',
+                icon: <TranslateIcon sx={{ fontSize: 24 }} />,
+                value: '2',
+                label: t('home.stats.languages'),
+              },
+              {
+                id: 'tools',
+                icon: <HandymanIcon sx={{ fontSize: 24 }} />,
+                value: '5',
+                label: t('home.stats.tools'),
+                onClick: () =>
+                  document
+                    .getElementById('features')
+                    ?.scrollIntoView({ behavior: 'smooth' }),
+              },
+              {
+                id: 'gardens',
+                icon: <GrassIcon sx={{ fontSize: 24 }} />,
+                value: '∞',
+                label: t('home.stats.gardens'),
+                onClick: () => navigate('/gardens'),
+              },
             ].map((stat) => (
               <Box
                 key={stat.id}
@@ -318,7 +379,12 @@ export default function Home() {
 
       {/* ==================== SECTION 3 — FEATURES ==================== */}
       <Container id="features" maxWidth="lg" sx={{ py: 8 }}>
-        <Typography variant="h4" textAlign="center" color="primary" gutterBottom>
+        <Typography
+          variant="h4"
+          textAlign="center"
+          color="primary"
+          gutterBottom
+        >
           {t('home.features.title')}
         </Typography>
         <Typography
@@ -394,49 +460,49 @@ export default function Home() {
           </Typography>
           <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
             {plantsError ? (
-              <Typography color="text.secondary" sx={{ width: '100%', textAlign: 'center' }}>
+              <Typography
+                color="text.secondary"
+                sx={{ width: '100%', textAlign: 'center' }}
+              >
                 {t('home.libraryPreview.error')}
               </Typography>
-            ) : plantsLoading
-              ? Array.from({ length: 3 }).map((_, i) => (
-                  <Card
-                    key={i}
-                    variant="outlined"
-                    sx={{ flex: '1 1 280px', minWidth: 0, borderRadius: 3 }}
-                  >
-                    <CardContent>
-                      <Skeleton variant="text" width="60%" height={32} />
-                      <Skeleton variant="text" width="80%" height={20} />
-                      <Skeleton
-                        variant="rectangular"
-                        width={60}
-                        height={24}
-                        sx={{ borderRadius: 1, my: 1 }}
-                      />
-                      <Skeleton variant="text" width="100%" />
-                      <Skeleton variant="text" width="90%" />
-                    </CardContent>
-                  </Card>
-                ))
-              : plants.map((plant) => (
-                  <Box key={plant.id} sx={{ flex: '1 1 280px', minWidth: 0 }}>
-                    <PlantCard
-                      plant={plant}
-                      typeName={plant.plantType?.name}
-                      ariaLabel={t('home.previewCardAriaLabel', {
-                        name: plant.commonName ?? plant.scientificName,
-                      })}
+            ) : plantsLoading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <Card
+                  key={i}
+                  variant="outlined"
+                  sx={{ flex: '1 1 280px', minWidth: 0, borderRadius: 3 }}
+                >
+                  <CardContent>
+                    <Skeleton variant="text" width="60%" height={32} />
+                    <Skeleton variant="text" width="80%" height={20} />
+                    <Skeleton
+                      variant="rectangular"
+                      width={60}
+                      height={24}
+                      sx={{ borderRadius: 1, my: 1 }}
                     />
-                  </Box>
-                ))
-            }
+                    <Skeleton variant="text" width="100%" />
+                    <Skeleton variant="text" width="90%" />
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              plants.map((plant) => (
+                <Box key={plant.id} sx={{ flex: '1 1 280px', minWidth: 0 }}>
+                  <PlantCard
+                    plant={plant}
+                    typeName={plant.plantType?.name}
+                    ariaLabel={t('home.previewCardAriaLabel', {
+                      name: plant.commonName ?? plant.scientificName,
+                    })}
+                  />
+                </Box>
+              ))
+            )}
           </Box>
           <Box sx={{ textAlign: 'center', mt: 4 }}>
-            <Button
-              variant="outlined"
-              component={RouterLink}
-              to="/library"
-            >
+            <Button variant="outlined" component={RouterLink} to="/library">
               {t('home.libraryPreview.viewAll')}
             </Button>
           </Box>
@@ -516,7 +582,10 @@ export default function Home() {
                         key={i}
                         sx={{
                           fontSize: 16,
-                          color: i < testimonial.rating ? '#EF9F27' : 'action.disabled',
+                          color:
+                            i < testimonial.rating
+                              ? '#EF9F27'
+                              : 'action.disabled',
                         }}
                       />
                     ))}
@@ -591,7 +660,8 @@ export default function Home() {
                   width: 8,
                   height: 8,
                   borderRadius: '50%',
-                  bgcolor: i === currentPage ? 'primary.main' : 'action.disabled',
+                  bgcolor:
+                    i === currentPage ? 'primary.main' : 'action.disabled',
                   transition: 'background-color 0.2s',
                   cursor: 'pointer',
                 }}
@@ -652,7 +722,12 @@ export default function Home() {
             ))}
           </Box>
           <Divider sx={{ my: 4 }} />
-          <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mb: 3 }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            textAlign="center"
+            sx={{ mb: 3 }}
+          >
             {t('home.builtWith.roadmap')}
           </Typography>
           <Box
@@ -745,7 +820,11 @@ export default function Home() {
               {t('home.newsletter.subscribe')}
             </Button>
           </Box>
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: 'block' }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ mt: 1.5, display: 'block' }}
+          >
             {t('home.newsletter.disclaimer')}
           </Typography>
         </Container>
