@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import {
+  afterAll,
   afterEach,
   beforeAll,
   beforeEach,
@@ -20,9 +21,13 @@ function renderContact() {
   );
 }
 
+// jsdom doesn't implement scrollIntoView; the card CTA scrolls to the form.
+const originalScrollIntoView = Element.prototype.scrollIntoView;
 beforeAll(() => {
-  // jsdom doesn't implement scrollIntoView; the card CTA scrolls to the form.
   Element.prototype.scrollIntoView = vi.fn();
+});
+afterAll(() => {
+  Element.prototype.scrollIntoView = originalScrollIntoView;
 });
 
 describe('Contact (SMA-36)', () => {

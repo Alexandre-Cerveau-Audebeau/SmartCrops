@@ -187,7 +187,7 @@ function ContactSuccess() {
         tabIndex={-1}
         variant="h5"
         component="h2"
-        sx={{ fontWeight: 700, mb: 1, outline: 'none' }}
+        sx={{ fontWeight: 700, mb: 1 }}
       >
         {t('contact.success.title')}
       </Typography>

@@ -16,3 +16,6 @@ export const TECH_STACK = [
   { name: 'PostgreSQL', logo: '/images/tech/postgresql.svg', role: 'Database' },
   { name: 'Docker', logo: '/images/tech/docker.svg', role: 'Containers' },
 ] as const;
+
+/** Shape of a single tech-stack entry, derived from the constant (single source). */
+export type TechStackEntry = (typeof TECH_STACK)[number];
