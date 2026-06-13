@@ -36,10 +36,11 @@ function FooterLink({
       to={to}
       underline="hover"
       sx={{
-        color: inline ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.75)',
+        color: inline ? 'rgba(255,255,255,0.78)' : 'rgba(255,255,255,0.75)',
         display: inline ? 'inline' : 'block',
         mb: inline ? 0 : 0.75,
         fontSize: 14,
+        '&:hover': { color: '#fff' },
       }}
     >
       {label}
