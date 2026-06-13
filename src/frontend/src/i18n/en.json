@@ -25,7 +25,9 @@
     "subscribe": "Subscribe",
     "emailPlaceholder": "your@email.com",
     "emailAriaLabel": "Email address for newsletter",
-    "copyright": "© {{year}} SmartCrops. All rights reserved."
+    "copyright": "© {{year}} SmartCrops. All rights reserved.",
+    "legalNotice": "Legal Notice",
+    "termsOfUse": "Terms of Use"
   },
   "home": {
     "hero": {
@@ -583,5 +585,265 @@
       "fall": "Fall",
       "winter": "Winter"
     }
+  },
+  "legal": {
+    "layout": {
+      "lastUpdated": "Last updated:",
+      "updatedDate": "[À REMPLIR : date]",
+      "courtesy": "Courtesy translation — in case of any discrepancy, the French version prevails."
+    },
+    "mentions": {
+      "title": "Legal Notice",
+      "subtitle": "French Act No. 2004-575 of 21 June 2004 on confidence in the digital economy (LCEN)",
+      "s01": {
+        "title": "Website publisher",
+        "intro": "**A choice to be made — two lawful options:**",
+        "optionA": {
+          "title": "Option A — Published identity (recommended here)",
+          "body": "The site is published on a non-professional basis by: [À REMPLIR : Prénom NOM] — private individual. Contact: [À REMPLIR : email de contact].",
+          "note": "A private individual's postal address does not have to be published as long as an effective means of contact is provided; it must however be known to the hosting provider."
+        },
+        "optionB": {
+          "title": "Option B — Anonymous non-professional publisher (art. 6-III-2 LCEN)",
+          "body": "A private individual publishing a site on a non-professional basis may withhold their identity, provided their full contact details have been communicated to the hosting provider. The page then only states: “The site is published on a non-professional basis. In accordance with article 6-III-2 of the LCEN, the publisher has provided their personal identification details to the hosting provider below.”"
+        },
+        "recommendation": "**Recommendation**: Option A — the project's GitHub repository is public and already under its author's name; anonymity would bring nothing and the displayed identity serves the portfolio purpose."
+      },
+      "s02": {
+        "title": "Publication director",
+        "body": "[À REMPLIR : Prénom NOM] (the publisher)."
+      },
+      "s03": {
+        "title": "Hosting",
+        "body": "The site is hosted by: **OVH** [À CONFIRMER : dénomination exacte — OVH SAS / OVHcloud — et adresse du siège (Roubaix, France) sur https://www.ovhcloud.com]",
+        "option": "[OPTION : numéro de téléphone public de l'hébergeur]"
+      },
+      "s04": {
+        "title": "Intellectual property",
+        "p1": "The site's structure, its original texts, its logo and its visual identity are the property of the publisher, unless otherwise stated. The project's source code is published on GitHub under licence [À CONFIRMER : licence du dépôt].",
+        "p2": "**Botanical data and media**: the plant sheets aggregate data and images from third-party sources, used in accordance with their respective terms and licences:",
+        "credits": {
+          "gbif": "**GBIF** (Global Biodiversity Information Facility) — taxonomy;",
+          "trefle": "**Trefle** — botanical data and photographs (each image's own licence is displayed alongside it);",
+          "perenual": "**Perenual** — growing and care data;",
+          "unsplash": "**Unsplash** — illustrative photographs (photographer credit displayed)."
+        },
+        "p3": "These third-party contents remain the property of their respective authors/publishers. Any reuse must comply with the licence stated at the source."
+      },
+      "s05": {
+        "title": "Contact",
+        "body": "For any question about the site: [À REMPLIR : email de contact] (or via the Contact page)."
+      }
+    },
+    "privacy": {
+      "title": "Privacy Policy",
+      "s01": {
+        "title": "Who is the data controller?",
+        "body": "The controller of the personal data collected on SmartCrops is the site's publisher: [À REMPLIR : Prénom NOM], reachable at [À REMPLIR : email]. SmartCrops is a personal, free project with no commercial purpose."
+      },
+      "s02": {
+        "title": "What data is collected, and why?",
+        "tableAriaLabel": "Data collected, purposes and legal bases",
+        "cols": {
+          "processing": "Processing",
+          "data": "Data",
+          "purpose": "Purpose",
+          "basis": "Legal basis (GDPR art. 6)"
+        },
+        "rows": {
+          "account": {
+            "name": "User account",
+            "data": "Email, password (stored **hashed**, never in plain text)",
+            "purpose": "Account creation and management, authentication",
+            "basis": "Performance of the contract (Terms of Use)"
+          },
+          "google": {
+            "name": "Google sign-in (optional)",
+            "data": "Google account identifier, email and name passed by Google during OAuth authentication",
+            "purpose": "Passwordless authentication",
+            "basis": "Performance of the contract"
+          },
+          "profile": {
+            "name": "Profile (optional)",
+            "data": "Display name, first name, last name, city",
+            "purpose": "Account personalisation",
+            "basis": "Performance of the contract"
+          },
+          "content": {
+            "name": "Created content",
+            "data": "Gardens (name, description, layout, placed plants), notes, plant suggestions",
+            "purpose": "Provision of the service (saving and displaying your gardens)",
+            "basis": "Performance of the contract"
+          },
+          "session": {
+            "name": "Session cookies",
+            "data": "Authentication cookie (technical, **HttpOnly**)",
+            "purpose": "Keeping you signed in",
+            "basis": "Legitimate interest (operation of the service) — strictly necessary cookie"
+          },
+          "language": {
+            "name": "Language preference",
+            "data": "FR/EN choice [À CONFIRMER : stocké en localStorage du navigateur]",
+            "purpose": "Displaying the site in your language",
+            "basis": "Legitimate interest"
+          },
+          "logs": {
+            "name": "Technical logs",
+            "data": "IP address, user-agent, request timestamps",
+            "purpose": "Security, abuse prevention, diagnostics",
+            "basis": "Legitimate interest"
+          },
+          "contact": {
+            "name": "Contact form [À ACTIVER quand le backend contact sera livré]",
+            "data": "Name, email, subject, message",
+            "purpose": "Answering your request",
+            "basis": "Legitimate interest / consent"
+          },
+          "newsletter": {
+            "name": "Newsletter [À ACTIVER quand le backend newsletter sera livré]",
+            "data": "Email",
+            "purpose": "Sending project tips and news",
+            "basis": "**Consent** (you can unsubscribe at any time via the link in each email)"
+          }
+        },
+        "note": "SmartCrops **does not collect** so-called “sensitive” data, **does not sell** your data, and **does not display** advertising.",
+        "futureProfile": "[OPTION — à publier quand le profil enrichi existera] If the profile is extended (climate zone, GPS coordinates, garden type…), this table will be completed — purpose: personalised recommendations; legal basis: performance of the contract and/or consent for geolocation."
+      },
+      "s03": {
+        "title": "Who has access to your data?",
+        "editor": "**The publisher** of the site, sole administrator.",
+        "subcontractorsIntro": "**Technical processors**:",
+        "ovh": "**OVH** (hosting of the server and database, in France/EU);",
+        "google": "**Google** (only if you choose Google sign-in: Google then processes your authentication data under its own privacy policy).",
+        "noThirdParties": "No transfer to third parties for commercial or advertising purposes."
+      },
+      "s04": {
+        "title": "Does your data leave the European Union?",
+        "body": "Service data is hosted **in France (OVH)**. If you use Google sign-in, authentication involves Google LLC, which may process data outside the EU under recognised transfer mechanisms [À CONFIRMER : encadrement actuel des transferts Google (clauses contractuelles types / cadre UE–États-Unis)]."
+      },
+      "s05": {
+        "title": "How long is your data kept?",
+        "intro": "Proposed durations (to be decided):",
+        "items": {
+          "account": "**Account and associated content** — lifetime of the account; effective deletion within [À REMPLIR : ex. 30 jours] after account deletion.",
+          "logs": "**Technical logs** — [À REMPLIR : ex. 12 mois maximum].",
+          "contact": "**Contact messages** — [À REMPLIR : ex. 12 mois après le dernier échange].",
+          "newsletter": "**Newsletter email** — until you unsubscribe."
+        }
+      },
+      "s06": {
+        "title": "How is your data protected?",
+        "body": "Measures in place: passwords stored in hashed form; **HttpOnly** session cookie (inaccessible to scripts); exchanges encrypted over HTTPS [À CONFIRMER : en production]; restricted administrator access; configuration secrets kept out of the public repository."
+      },
+      "s07": {
+        "title": "What are your rights?",
+        "p1": "Under the GDPR and the French Data Protection Act, you have the following rights over your data: **access**, **rectification**, **erasure**, **restriction of processing**, **objection**, **portability**, as well as the right to set post-mortem directives.",
+        "p2": "**To exercise these rights**: write to **contact@smartcrops.fr** [À CONFIRMER : adresse email définitive] from the address associated with your account (identity verification may be requested). Answer within one month. You can also delete your own content (gardens) from the application [À CONFIRMER : et le compte lui-même, selon les fonctionnalités disponibles].",
+        "p3": "If you believe your rights are not being respected, you can lodge a complaint with the **CNIL** (www.cnil.fr), the French data protection authority."
+      },
+      "s08": {
+        "title": "Minors [OPTION]",
+        "body": "The service is not intended for children under 15 without the consent of the holder of parental authority (article 45 of the French Data Protection Act)."
+      },
+      "s09": {
+        "title": "Cookies",
+        "intro": "Current state of SmartCrops: one **HttpOnly authentication cookie** (strictly necessary) and a language preference [À CONFIRMER : localStorage]. **No advertising or audience-measurement cookies.** Strictly necessary trackers are exempt from consent (CNIL): clear information is sufficient.",
+        "tableAriaLabel": "Cookies and local storage used",
+        "cols": {
+          "name": "Name",
+          "type": "Type",
+          "purpose": "Purpose",
+          "duration": "Duration"
+        },
+        "rows": {
+          "auth": {
+            "name": "[À CONFIRMER : nom du cookie d'auth]",
+            "type": "Strictly necessary (HttpOnly)",
+            "purpose": "Keeping you signed in",
+            "duration": "[À CONFIRMER : durée du jeton/session]"
+          },
+          "language": {
+            "name": "Language preference",
+            "type": "Local storage",
+            "purpose": "Remembering FR/EN",
+            "duration": "Persistent (until cleared by the user)"
+          },
+          "choice": {
+            "name": "Cookie choice",
+            "type": "Local storage",
+            "purpose": "Remembering your choice on the banner",
+            "duration": "[À REMPLIR : ex. 6 mois]"
+          }
+        }
+      },
+      "s10": {
+        "title": "Changes to this policy",
+        "body": "This policy may evolve with the service (new features, new processing). The last-updated date appears at the top of the page; in case of substantial change, a notice will be displayed on the site."
+      }
+    },
+    "terms": {
+      "title": "Terms of Use",
+      "s01": {
+        "title": "Purpose",
+        "body": "These Terms of Use govern the use of **SmartCrops** (the “Service”), a web application for managing virtual gardens: plant library, garden planning and related features. Using the Service constitutes acceptance of these Terms."
+      },
+      "s02": {
+        "title": "Access to the Service",
+        "items": {
+          "free": "The Service is **free of charge**. Browsing the library is open to everyone; some features (garden creation, profile, suggestions) require an account.",
+          "asIs": "The Service is a **personal project under active development**: it is provided “as is”, with no commitment of availability, continuity or service level. Features may evolve, be added or removed."
+        }
+      },
+      "s03": {
+        "title": "User account",
+        "items": {
+          "accuracy": "You agree to provide accurate information and to keep your credentials confidential. Any activity carried out through your account is deemed to be yours.",
+          "signup": "You can sign up with email/password or via Google. You may request the deletion of your account at any time (see the Privacy Policy)."
+        }
+      },
+      "s04": {
+        "title": "User content",
+        "items": {
+          "ownership": "The content you create (gardens, notes, plant suggestions) **remains yours**. You grant the publisher the technical licence strictly necessary to host it, back it up and display it to you.",
+          "conduct": "You agree not to publish unlawful or offensive content, or content infringing third-party rights. **Plant suggestions** are subject to moderation and may be accepted, edited or declined without justification.",
+          "removal": "The publisher may remove any content manifestly contrary to these Terms."
+        }
+      },
+      "s05": {
+        "title": "Botanical data — information, not prescription ⚠️",
+        "p1": "Botanical information (including edibility, toxicity, so-called medicinal uses and growing periods) is **automatically aggregated from third-party sources** (GBIF, Trefle, Perenual) and provided **for purely informational and indicative purposes**. Despite the care taken, it may be **incomplete, outdated or incorrect**.",
+        "p2": "**Under no circumstances does it constitute medical, veterinary, dietary or professional advice.** Never eat a plant or make any therapeutic use of it on the sole basis of the Service's information; always double-check with qualified sources. The publisher declines all liability for decisions made on the basis of this information."
+      },
+      "s06": {
+        "title": "Intellectual property",
+        "body": "See the Legal Notice (“Intellectual property” section): elements specific to the Service on the one hand, third-party data and media under their respective licences on the other. Using the Service grants no rights over these elements beyond personal consultation."
+      },
+      "s07": {
+        "title": "Liability",
+        "items": {
+          "bestEffort": "The publisher strives to keep the Service running properly but guarantees neither the absence of errors, nor continuous availability, nor data retention: keep a copy of anything you value [OPTION : jusqu'à la disponibilité d'une fonction d'export].",
+          "links": "The Service may contain links to third-party sites whose content the publisher does not control.",
+          "liability": "The publisher's liability can only be engaged in case of proven fault, and within the limits permitted by law for a free service."
+        }
+      },
+      "s08": {
+        "title": "Suspension and termination",
+        "body": "The publisher may suspend or delete an account in case of breach of these Terms (notably the “User content” section), after a warning except in urgent cases. You may stop using the Service and request the deletion of your account at any time."
+      },
+      "s09": {
+        "title": "Changes to the Terms",
+        "body": "These Terms may be amended to follow the evolution of the Service. The applicable version is the one online, dated at the top of the page. In case of substantial change, a notice will be displayed; continued use constitutes acceptance."
+      },
+      "s10": {
+        "title": "Governing law",
+        "body": "These Terms are governed by **French law**. Any dispute relating to their performance falls under the jurisdiction of the competent French courts, after seeking an amicable solution."
+      }
+    }
+  },
+  "cookies": {
+    "message": "🍪 SmartCrops only uses cookies that are **strictly necessary** to run the site (keeping you signed in) and remembers your language. No advertising or tracking cookies.",
+    "learnMore": "Learn more",
+    "ok": "OK",
+    "ariaLabel": "Cookie information"
   }
 }
