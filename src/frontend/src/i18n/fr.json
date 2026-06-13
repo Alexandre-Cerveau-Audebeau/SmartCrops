@@ -2,9 +2,12 @@
   "nav": {
     "library": "Bibliothèque",
     "myGardens": "Mes Jardins",
+    "shop": "Boutique",
     "login": "Connexion",
     "logout": "Déconnexion",
-    "profile": "Mon Profil"
+    "editProfile": "Modifier le profil",
+    "notifications": "Notifications",
+    "settings": "Paramètres"
   },
   "errorBoundary": {
     "title": "Une erreur est survenue",

@@ -26,9 +26,10 @@ describe('App', () => {
     expect(screen.getAllByText('SmartCrops').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders the Library nav link', () => {
+  it('renders the Library and Shop nav links (navbar + footer)', () => {
     render(<App />);
-    // "Library" appears in both Navbar and Footer
+    // Both Library and Shop appear once in the Navbar and once in the Footer.
     expect(screen.getAllByRole('link', { name: 'Library' })).toHaveLength(2);
+    expect(screen.getAllByRole('link', { name: 'Shop' })).toHaveLength(2);
   });
 });

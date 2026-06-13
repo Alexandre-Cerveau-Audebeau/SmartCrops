@@ -2,9 +2,12 @@
   "nav": {
     "library": "Library",
     "myGardens": "My Gardens",
+    "shop": "Shop",
     "login": "Login",
     "logout": "Logout",
-    "profile": "My Profile"
+    "editProfile": "Edit profile",
+    "notifications": "Notifications",
+    "settings": "Settings"
   },
   "errorBoundary": {
     "title": "Something went wrong",
