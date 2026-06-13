@@ -24,6 +24,7 @@ import PlantLibrary from './pages/PlantLibrary';
 import Privacy from './pages/Privacy';
 import Profile from './pages/Profile';
 import Register from './pages/Register';
+import Shop from './pages/Shop';
 import Terms from './pages/Terms';
 import theme from './theme';
 
@@ -41,6 +42,7 @@ export default function App() {
                   <Route path="/" element={<Home />} />
                   <Route path="/about" element={<About />} />
                   <Route path="/contact" element={<Contact />} />
+                  <Route path="/shop" element={<Shop />} />
                   <Route path="/auth/callback" element={<AuthCallback />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
