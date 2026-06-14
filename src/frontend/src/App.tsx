@@ -6,6 +6,7 @@ import CookieBanner from './components/CookieBanner';
 import Layout from './components/Layout/Layout';
 import ScrollToTop from './components/ScrollToTop';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import GuestRoute from './components/GuestRoute';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
@@ -44,8 +45,10 @@ export default function App() {
                   <Route path="/contact" element={<Contact />} />
                   <Route path="/shop" element={<Shop />} />
                   <Route path="/auth/callback" element={<AuthCallback />} />
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/register" element={<Register />} />
+                  <Route element={<GuestRoute />}>
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/register" element={<Register />} />
+                  </Route>
                   <Route path="/library/:id" element={<PlantDetail />} />
                   <Route path="/library" element={<PlantLibrary />} />
                   <Route path="/legal-notice" element={<LegalNotice />} />
