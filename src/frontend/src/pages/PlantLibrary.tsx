@@ -14,7 +14,11 @@ import { visuallyHidden } from '@mui/utils';
 import SearchIcon from '@mui/icons-material/Search';
 import SpaIcon from '@mui/icons-material/Spa';
 import { useLanguage } from '../hooks/useLanguage';
-import { fetchPlants, fetchPlantTypes, searchPlants } from '../services/plantApi';
+import {
+  fetchPlants,
+  fetchPlantTypes,
+  searchPlants,
+} from '../services/plantApi';
 import type { Plant } from '../types/Plant';
 import type { PlantType } from '../types/PlantType';
 import PlantCard from '../components/PlantCard';
@@ -68,8 +72,11 @@ export default function PlantLibrary() {
         if (signal.aborted) return;
         setPlants(data);
         setError(null);
-        // Restart the slice on every new result set (covers search + language).
-        setVisibleCount(INITIAL_VISIBLE);
+        // SMA-153: do NOT reset the visible slice here. The reset is owned by the
+        // filter handlers (search / type) — the only inputs that change the
+        // displayed SET. A language re-fetch re-localises the same plants in the
+        // same order, so the slice is preserved and the cards reconcile in place
+        // by id (text swaps; no unmount, page collapse, or scroll jump).
       } catch (err) {
         if (!signal.aborted && (err as Error).name !== 'AbortError') {
           setError(err instanceof Error ? err.message : t('library.error'));
@@ -94,7 +101,9 @@ export default function PlantLibrary() {
   }, [searchQuery, language, t]);
 
   const filteredPlants =
-    activeType === null ? plants : plants.filter((p) => p.plantTypeId === activeType);
+    activeType === null
+      ? plants
+      : plants.filter((p) => p.plantTypeId === activeType);
 
   const visiblePlants = filteredPlants.slice(0, visibleCount);
   const hasMore = visibleCount < filteredPlants.length;
@@ -111,21 +120,23 @@ export default function PlantLibrary() {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          setVisibleCount((c) => Math.min(c + VISIBLE_STEP, filteredPlants.length));
+          setVisibleCount((c) =>
+            Math.min(c + VISIBLE_STEP, filteredPlants.length)
+          );
         }
       },
       // Preload the next slice ~100px before the sentinel reaches the viewport so
       // the new cards are there before the user hits the bottom (no visible pop).
-      { rootMargin: '100px' },
+      { rootMargin: '100px' }
     );
     observer.observe(el);
     return () => observer.disconnect();
   }, [hasMore, filteredPlants.length]);
 
-  // Reset the slice on the inputs that change the displayed set. Search +
-  // language are also reset inside `run` when their fetch resolves; the type
-  // chip is a pure client-side filter (no fetch) so it resets here. Resetting in
-  // handlers (not an effect) keeps clear of react-hooks/set-state-in-effect.
+  // Reset the slice on the inputs that change the displayed SET — the search text
+  // and the type chip. NOT language: a language change re-localises the same
+  // plants in place, so the slice is preserved (SMA-153). Resetting in handlers
+  // (not an effect) keeps clear of react-hooks/set-state-in-effect.
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
     setVisibleCount(INITIAL_VISIBLE);
@@ -215,7 +226,9 @@ export default function PlantLibrary() {
         <>
           <Grid container spacing={3}>
             {visiblePlants.map((plant) => {
-              const typeName = plantTypes.find((pt) => pt.id === plant.plantTypeId)?.name;
+              const typeName = plantTypes.find(
+                (pt) => pt.id === plant.plantTypeId
+              )?.name;
               return (
                 <Grid key={plant.id} size={{ xs: 12, sm: 6, md: 4 }}>
                   <PlantCard plant={plant} typeName={typeName} />
@@ -228,7 +241,12 @@ export default function PlantLibrary() {
               (gated by !loading && filteredPlants.length > 0). It announces the
               visible/total count as the slice grows (Load more / scroll); some
               screen readers may also announce the initial count when it appears. */}
-          <Box role="status" aria-live="polite" aria-atomic="true" sx={visuallyHidden}>
+          <Box
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            sx={visuallyHidden}
+          >
             {t('library.showing', {
               shown: visiblePlants.length,
               total: filteredPlants.length,
