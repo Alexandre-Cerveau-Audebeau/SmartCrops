@@ -2,8 +2,9 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import '../i18n/i18n';
+import i18next from '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import { useLanguage } from '../hooks/useLanguage';
 import type { Plant } from '../types/Plant';
 
 vi.mock('../services/plantApi', () => ({
@@ -13,12 +14,34 @@ vi.mock('../services/plantApi', () => ({
 }));
 
 import PlantLibrary from './PlantLibrary';
-import { fetchPlants, fetchPlantTypes, searchPlants } from '../services/plantApi';
+import {
+  fetchPlants,
+  fetchPlantTypes,
+  searchPlants,
+} from '../services/plantApi';
 
-afterEach(() => {
+afterEach(async () => {
   vi.clearAllMocks();
   localStorage.clear();
+  // A test below flips the language; reset the shared i18next singleton so the
+  // English-label assertions in the other tests stay deterministic.
+  await i18next.changeLanguage('en');
 });
+
+// Minimal in-provider control that flips the language exactly like the real
+// Navbar toggle does (via useLanguage().setLanguage), so PlantLibrary sees the
+// context change and re-fetches — without pulling the whole Navbar into the test.
+function LangSwitch() {
+  const { language, setLanguage } = useLanguage();
+  return (
+    <button
+      type="button"
+      onClick={() => setLanguage(language === 'en' ? 'fr' : 'en')}
+    >
+      switch language
+    </button>
+  );
+}
 
 // Shape returned by GET /api/plants since PR #100 (PlantListItemResponse):
 // identity + type + factual scalars, and crucially NO `translations` array.
@@ -42,7 +65,7 @@ function renderLibrary() {
       <MemoryRouter initialEntries={['/library']}>
         <PlantLibrary />
       </MemoryRouter>
-    </LanguageProvider>,
+    </LanguageProvider>
   );
 }
 
@@ -58,7 +81,7 @@ describe('PlantLibrary', () => {
     // list DTO — restoring common names is a separate decision; SMA-73 is
     // resilience only). Before the fix, the render threw a TypeError here.
     expect(
-      await screen.findByRole('heading', { name: 'Achillea ptarmica' }),
+      await screen.findByRole('heading', { name: 'Achillea ptarmica' })
     ).toBeInTheDocument();
   });
 
@@ -68,7 +91,10 @@ describe('PlantLibrary', () => {
   // cover the reveal logic deterministically here.
   const makeMany = (n: number) =>
     Array.from({ length: n }, (_, i) =>
-      makeListItem({ id: `id-${i}`, scientificName: `Plant ${String(i).padStart(2, '0')}` }),
+      makeListItem({
+        id: `id-${i}`,
+        scientificName: `Plant ${String(i).padStart(2, '0')}`,
+      })
     );
 
   it('renders only the initial slice (24) plus a Load more button when the list is larger', async () => {
@@ -80,9 +106,13 @@ describe('PlantLibrary', () => {
 
     await screen.findByRole('heading', { name: 'Plant 00' });
     expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24);
-    expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Load more' })
+    ).toBeInTheDocument();
     // The 25th card (index 24) is not in the DOM yet.
-    expect(screen.queryByRole('heading', { name: 'Plant 24' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Plant 24' })
+    ).not.toBeInTheDocument();
   });
 
   it('reveals the next slice (+24) when Load more is clicked', async () => {
@@ -100,7 +130,9 @@ describe('PlantLibrary', () => {
     // 50 total → after a second click the button disappears (all shown).
     await user.click(screen.getByRole('button', { name: 'Load more' }));
     expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(50);
-    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Load more' })
+    ).not.toBeInTheDocument();
   });
 
   it('resets the visible slice to 24 when the search query changes', async () => {
@@ -119,14 +151,16 @@ describe('PlantLibrary', () => {
     // the debounced fetch, which doesn't fire under the test's real timers).
     await user.type(screen.getByRole('textbox'), 'ro');
     await waitFor(() =>
-      expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24),
+      expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24)
     );
   });
 
   it('resets the visible slice to 24 when the type filter changes', async () => {
     // 50 ornamentals (type 4) + a chip for type 4 so a click re-filters.
     vi.mocked(fetchPlants).mockResolvedValue(makeMany(50));
-    vi.mocked(fetchPlantTypes).mockResolvedValue([{ id: 4, name: 'Ornamental', description: null }]);
+    vi.mocked(fetchPlantTypes).mockResolvedValue([
+      { id: 4, name: 'Ornamental', description: null },
+    ]);
     vi.mocked(searchPlants).mockResolvedValue([]);
 
     const user = userEvent.setup();
@@ -139,6 +173,45 @@ describe('PlantLibrary', () => {
     // Click the Ornamental chip → activeType set → slice resets (all 50 still match).
     await user.click(screen.getByRole('button', { name: 'Ornamental' }));
     expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24);
+  });
+
+  it('keeps the visible slice on a language change, but still resets it on a new search (SMA-153)', async () => {
+    vi.mocked(fetchPlants).mockResolvedValue(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+    vi.mocked(searchPlants).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    render(
+      <LanguageProvider>
+        <MemoryRouter initialEntries={['/library']}>
+          <LangSwitch />
+          <PlantLibrary />
+        </MemoryRouter>
+      </LanguageProvider>
+    );
+
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    // Grow the slice past the initial page (24 → 48).
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(48);
+
+    // Switching language re-fetches the (re-localised) catalogue with the new lang…
+    await user.click(screen.getByRole('button', { name: 'switch language' }));
+    await waitFor(() =>
+      expect(vi.mocked(fetchPlants)).toHaveBeenCalledWith(
+        expect.anything(),
+        'fr'
+      )
+    );
+    // …but the visible slice is preserved — no collapse back to 24 (SMA-153).
+    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(48);
+
+    // Lock: a genuine new search still resets the slice (reset intent intact).
+    await user.type(screen.getByRole('textbox'), 'ro');
+    await waitFor(() =>
+      expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24)
+    );
   });
 
   it('exposes a polite status region that tracks the visible/total count (a11y)', async () => {
