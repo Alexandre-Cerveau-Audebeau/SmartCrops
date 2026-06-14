@@ -7,7 +7,11 @@
     "logout": "Logout",
     "editProfile": "Edit profile",
     "notifications": "Notifications",
-    "settings": "Settings"
+    "settings": "Settings",
+    "homeAriaLabel": "SmartCrops home",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "switchLanguage": "Switch language (current: {{lang}})"
   },
   "errorBoundary": {
     "title": "Something went wrong",

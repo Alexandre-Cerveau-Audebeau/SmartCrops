@@ -7,7 +7,11 @@
     "logout": "Déconnexion",
     "editProfile": "Modifier le profil",
     "notifications": "Notifications",
-    "settings": "Paramètres"
+    "settings": "Paramètres",
+    "homeAriaLabel": "Accueil SmartCrops",
+    "openMenu": "Ouvrir le menu",
+    "closeMenu": "Fermer le menu",
+    "switchLanguage": "Changer de langue (actuelle : {{lang}})"
   },
   "errorBoundary": {
     "title": "Une erreur est survenue",

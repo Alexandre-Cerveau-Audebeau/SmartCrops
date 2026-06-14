@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
+  afterAll,
   afterEach,
   beforeAll,
   beforeEach,
@@ -68,9 +69,14 @@ function renderNavbar(
   );
 }
 
+// MUI Menu focuses items via scrollIntoView, which jsdom doesn't implement.
+let originalScrollIntoView: typeof Element.prototype.scrollIntoView;
 beforeAll(() => {
-  // MUI Menu focuses items via scrollIntoView, which jsdom doesn't implement.
+  originalScrollIntoView = Element.prototype.scrollIntoView;
   Element.prototype.scrollIntoView = vi.fn();
+});
+afterAll(() => {
+  Element.prototype.scrollIntoView = originalScrollIntoView;
 });
 
 describe('Navbar v2 (SMA-152 / SMA-150)', () => {

@@ -96,12 +96,14 @@ export default function Navbar() {
   };
 
   const handleDrawerLogout = async () => {
+    // Close the drawer first so a slow logout never leaves it stuck open
+    // (mirrors the desktop menu's close-then-logout order).
+    setDrawerOpen(false);
     try {
       await logout();
     } catch {
       /* user sees logged-out state regardless */
     }
-    setDrawerOpen(false);
   };
 
   const profileLabel = user?.displayName || user?.email || '';
@@ -121,7 +123,7 @@ export default function Navbar() {
         <Box
           component={RouterLink}
           to="/"
-          aria-label="SmartCrops home"
+          aria-label={t('nav.homeAriaLabel')}
           onClick={toggleDrawer(false)}
           sx={{
             display: 'flex',
@@ -139,7 +141,7 @@ export default function Navbar() {
         <IconButton
           onClick={toggleDrawer(false)}
           sx={{ color: '#fff' }}
-          aria-label="Close menu"
+          aria-label={t('nav.closeMenu')}
         >
           <CloseIcon />
         </IconButton>
@@ -225,7 +227,7 @@ export default function Navbar() {
           variant="outlined"
           fullWidth
           onClick={toggleLanguage}
-          aria-label={`Switch language (current: ${language.toUpperCase()})`}
+          aria-label={t('nav.switchLanguage', { lang: language.toUpperCase() })}
         >
           <Box
             component="span"
@@ -273,7 +275,7 @@ export default function Navbar() {
           <Box
             component={RouterLink}
             to="/"
-            aria-label="SmartCrops home"
+            aria-label={t('nav.homeAriaLabel')}
             sx={{
               display: 'flex',
               alignItems: 'center',
@@ -295,7 +297,7 @@ export default function Navbar() {
             <IconButton
               onClick={toggleDrawer(true)}
               sx={{ color: '#fff' }}
-              aria-label="Open menu"
+              aria-label={t('nav.openMenu')}
             >
               <MenuIcon />
             </IconButton>
@@ -353,7 +355,9 @@ export default function Navbar() {
                   variant="outlined"
                   size="small"
                   onClick={toggleLanguage}
-                  aria-label={`Switch language (current: ${language.toUpperCase()})`}
+                  aria-label={t('nav.switchLanguage', {
+                    lang: language.toUpperCase(),
+                  })}
                   sx={{
                     color: '#fff',
                     borderColor: 'rgba(255,255,255,0.5)',
@@ -412,6 +416,7 @@ export default function Navbar() {
                       anchorEl={profileAnchor}
                       open={profileMenuOpen}
                       onClose={closeProfileMenu}
+                      disableScrollLock
                       anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                       transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                       slotProps={{
