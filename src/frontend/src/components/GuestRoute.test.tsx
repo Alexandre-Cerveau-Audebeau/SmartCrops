@@ -72,10 +72,11 @@ describe('GuestRoute (SMA-123)', () => {
 
   it('shows the loading fallback without form or redirect while the session resolves', () => {
     renderAt('/login', makeAuth({ loading: true }));
-    // The spinner carries a translated accessible name (SMA-123 a11y fix).
-    expect(
-      screen.getByRole('progressbar', { name: 'Loading' })
-    ).toBeInTheDocument();
+    // The spinner carries a translated accessible name (SMA-123 a11y fix);
+    // assert one exists without pinning the locale.
+    const spinner = screen.getByRole('progressbar');
+    expect(spinner).toBeInTheDocument();
+    expect(spinner).toHaveAccessibleName();
     expect(screen.queryByText('LOGIN FORM')).toBeNull();
     expect(screen.queryByText('HOME PAGE')).toBeNull();
   });
