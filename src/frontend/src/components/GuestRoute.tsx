@@ -4,7 +4,10 @@ import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useAuth } from '../hooks/useAuth';
 
-export default function ProtectedRoute() {
+// Anonymous-only route guard — the mirror of ProtectedRoute. Keeps already
+// authenticated users away from /login and /register (UX consistency only;
+// the endpoints themselves are protected regardless).
+export default function GuestRoute() {
   const { t } = useTranslation();
   const { isAuthenticated, loading } = useAuth();
 
@@ -16,7 +19,7 @@ export default function ProtectedRoute() {
     );
   }
 
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (isAuthenticated) return <Navigate to="/" replace />;
 
   return <Outlet />;
 }

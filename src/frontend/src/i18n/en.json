@@ -200,7 +200,8 @@
     "cancel": "Cancel",
     "close": "Close",
     "backToTop": "Back to top",
-    "comingSoon": "Coming Soon"
+    "comingSoon": "Coming Soon",
+    "loading": "Loading"
   },
   "auth": {
     "login": "Login",
