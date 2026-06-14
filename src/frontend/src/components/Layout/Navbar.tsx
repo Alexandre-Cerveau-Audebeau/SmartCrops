@@ -21,20 +21,20 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import CloseIcon from '@mui/icons-material/Close';
-import EditIcon from '@mui/icons-material/Edit';
 import GrassIcon from '@mui/icons-material/Grass';
 import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import PersonIcon from '@mui/icons-material/Person';
-import SettingsIcon from '@mui/icons-material/Settings';
 import StorefrontIcon from '@mui/icons-material/Storefront';
+import TuneIcon from '@mui/icons-material/Tune';
 import { NAV_BG } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
 import ComingSoonChip from '../ComingSoonChip';
 import LogoButton from '../LogoButton';
+import ProfileMenuHeader from './ProfileMenuHeader';
 
 interface NavLink {
   key: string;
@@ -107,6 +107,10 @@ export default function Navbar() {
   };
 
   const profileLabel = user?.displayName || user?.email || '';
+  // Show the email line only when it differs from the displayed name (avoids
+  // duplicating it when there's no separate display name).
+  const profileEmail =
+    user?.email && user.email !== profileLabel ? user.email : '';
 
   const drawer = (
     <Box sx={{ width: 260 }} role="presentation">
@@ -186,13 +190,12 @@ export default function Navbar() {
                 to="/profile"
                 onClick={toggleDrawer(false)}
                 aria-label={t('nav.editProfile')}
+                sx={{ bgcolor: '#F2F7EE', py: 1.5 }}
               >
-                <ListItemIcon sx={{ minWidth: 36 }}>
-                  <EditIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText
-                  primary={profileLabel}
-                  secondary={t('nav.editProfile')}
+                <ProfileMenuHeader
+                  name={profileLabel}
+                  email={profileEmail}
+                  avatarSize={40}
                 />
               </ListItemButton>
             </ListItem>
@@ -214,7 +217,7 @@ export default function Navbar() {
               sx={{ px: 2, py: 1 }}
             >
               <ListItemIcon sx={{ minWidth: 36 }}>
-                <SettingsIcon fontSize="small" />
+                <TuneIcon fontSize="small" />
               </ListItemIcon>
               <ListItemText primary={t('nav.settings')} />
             </ListItem>
@@ -428,13 +431,16 @@ export default function Navbar() {
                         to="/profile"
                         onClick={closeProfileMenu}
                         aria-label={t('nav.editProfile')}
+                        sx={{
+                          bgcolor: '#F2F7EE',
+                          py: 1.5,
+                          '&:hover': { bgcolor: '#EAF3E4' },
+                        }}
                       >
-                        <ListItemIcon>
-                          <EditIcon fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={profileLabel}
-                          secondary={t('nav.editProfile')}
+                        <ProfileMenuHeader
+                          name={profileLabel}
+                          email={profileEmail}
+                          avatarSize={38}
                         />
                       </MenuItem>
                       <MenuItem onClick={closeProfileMenu}>
@@ -446,7 +452,7 @@ export default function Navbar() {
                       </MenuItem>
                       <MenuItem onClick={closeProfileMenu}>
                         <ListItemIcon>
-                          <SettingsIcon fontSize="small" />
+                          <TuneIcon fontSize="small" />
                         </ListItemIcon>
                         <ListItemText primary={t('nav.settings')} />
                         <ComingSoonChip sx={{ ml: 1.5 }} />
