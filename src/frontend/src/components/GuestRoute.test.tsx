@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
+import '../i18n/i18n';
 import { AuthContext } from '../contexts/authContextValue';
 import type { AuthContextValue } from '../contexts/authContextValue';
 import type { AuthUser } from '../types/Auth';
@@ -71,7 +72,10 @@ describe('GuestRoute (SMA-123)', () => {
 
   it('shows the loading fallback without form or redirect while the session resolves', () => {
     renderAt('/login', makeAuth({ loading: true }));
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    // The spinner carries a translated accessible name (SMA-123 a11y fix).
+    expect(
+      screen.getByRole('progressbar', { name: 'Loading' })
+    ).toBeInTheDocument();
     expect(screen.queryByText('LOGIN FORM')).toBeNull();
     expect(screen.queryByText('HOME PAGE')).toBeNull();
   });

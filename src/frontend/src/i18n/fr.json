@@ -200,7 +200,8 @@
     "cancel": "Annuler",
     "close": "Fermer",
     "backToTop": "Revenir en haut",
-    "comingSoon": "Bientôt disponible"
+    "comingSoon": "Bientôt disponible",
+    "loading": "Chargement"
   },
   "auth": {
     "login": "Connexion",
