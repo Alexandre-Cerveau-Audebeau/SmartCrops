@@ -2,9 +2,16 @@
   "nav": {
     "library": "Bibliothèque",
     "myGardens": "Mes Jardins",
+    "shop": "Boutique",
     "login": "Connexion",
     "logout": "Déconnexion",
-    "profile": "Mon Profil"
+    "editProfile": "Modifier le profil",
+    "notifications": "Notifications",
+    "settings": "Paramètres",
+    "homeAriaLabel": "Accueil SmartCrops",
+    "openMenu": "Ouvrir le menu",
+    "closeMenu": "Fermer le menu",
+    "switchLanguage": "Changer de langue (actuelle : {{lang}})"
   },
   "errorBoundary": {
     "title": "Une erreur est survenue",

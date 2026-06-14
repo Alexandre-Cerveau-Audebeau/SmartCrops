@@ -2,9 +2,16 @@
   "nav": {
     "library": "Library",
     "myGardens": "My Gardens",
+    "shop": "Shop",
     "login": "Login",
     "logout": "Logout",
-    "profile": "My Profile"
+    "editProfile": "Edit profile",
+    "notifications": "Notifications",
+    "settings": "Settings",
+    "homeAriaLabel": "SmartCrops home",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "switchLanguage": "Switch language (current: {{lang}})"
   },
   "errorBoundary": {
     "title": "Something went wrong",
