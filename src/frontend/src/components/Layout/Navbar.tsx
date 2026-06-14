@@ -66,6 +66,13 @@ const navLinks: NavLink[] = [
   },
 ];
 
+// SMA-152 (W2): a clearer-than-default hover for the plain profile-menu rows
+// (Notifications/Settings/Logout) — a translucent brand green ~2.5x the MUI
+// default. The header row keeps its own (darker) green hover.
+const menuRowHoverSx = {
+  '&:hover': { bgcolor: 'rgba(46,139,87,0.10)' },
+} as const;
+
 export default function Navbar() {
   const { t } = useTranslation();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -423,7 +430,11 @@ export default function Navbar() {
                       anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                       transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                       slotProps={{
-                        list: { 'aria-labelledby': 'profile-menu-button' },
+                        paper: { sx: { overflow: 'hidden' } },
+                        list: {
+                          'aria-labelledby': 'profile-menu-button',
+                          sx: { py: 0 },
+                        },
                       }}
                     >
                       <MenuItem
@@ -434,7 +445,7 @@ export default function Navbar() {
                         sx={{
                           bgcolor: '#F2F7EE',
                           py: 1.5,
-                          '&:hover': { bgcolor: '#EAF3E4' },
+                          '&:hover': { bgcolor: '#E0EDD4' },
                         }}
                       >
                         <ProfileMenuHeader
@@ -443,14 +454,14 @@ export default function Navbar() {
                           avatarSize={38}
                         />
                       </MenuItem>
-                      <MenuItem onClick={closeProfileMenu}>
+                      <MenuItem onClick={closeProfileMenu} sx={menuRowHoverSx}>
                         <ListItemIcon>
                           <NotificationsIcon fontSize="small" />
                         </ListItemIcon>
                         <ListItemText primary={t('nav.notifications')} />
                         <ComingSoonChip sx={{ ml: 1.5 }} />
                       </MenuItem>
-                      <MenuItem onClick={closeProfileMenu}>
+                      <MenuItem onClick={closeProfileMenu} sx={menuRowHoverSx}>
                         <ListItemIcon>
                           <TuneIcon fontSize="small" />
                         </ListItemIcon>
@@ -458,7 +469,7 @@ export default function Navbar() {
                         <ComingSoonChip sx={{ ml: 1.5 }} />
                       </MenuItem>
                       <Divider />
-                      <MenuItem onClick={handleLogout}>
+                      <MenuItem onClick={handleLogout} sx={menuRowHoverSx}>
                         <ListItemIcon>
                           <LogoutIcon fontSize="small" />
                         </ListItemIcon>
