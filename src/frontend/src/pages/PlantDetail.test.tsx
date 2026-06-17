@@ -385,7 +385,7 @@ describe('PlantDetail', () => {
     const warningEls = charSection!.querySelectorAll(
       'svg[data-testid="WarningAmberIcon"]'
     );
-    expect(warningEls.length).toBeGreaterThan(0);
+    expect(warningEls.length).toBe(1);
   });
 
   it('does not show the hardiness warning for a normal zone range', async () => {

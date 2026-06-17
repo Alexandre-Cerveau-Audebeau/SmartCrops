@@ -28,15 +28,27 @@ export function useScrollSpy(ids: string[]): string {
       .filter((el): el is HTMLElement => el !== null);
     if (elements.length === 0) return;
 
+    const intersectingIds = new Set<string>();
     const observer = new IntersectionObserver(
       (entries) => {
-        // Among the sections intersecting the spy band, pick the one highest on
-        // the page (smallest top) so the active item tracks the section the
-        // reader has reached.
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible[0]) setActiveId(visible[0].target.id);
+        // `entries` only includes targets whose intersection state CHANGED, so we
+        // accumulate the full set of currently-intersecting ids across callbacks,
+        // then highlight the one highest on the page (smallest top). This avoids
+        // prematurely deselecting a higher section that is still intersecting when
+        // a lower section enters the spy band.
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).id;
+          if (entry.isIntersecting) intersectingIds.add(id);
+          else intersectingIds.delete(id);
+        }
+        const next = Array.from(intersectingIds)
+          .map((id) => document.getElementById(id))
+          .filter((el): el is HTMLElement => el !== null)
+          .sort(
+            (a, b) =>
+              a.getBoundingClientRect().top - b.getBoundingClientRect().top
+          )[0];
+        if (next) setActiveId(next.id);
       },
       // Band sits just under the fixed navbar and ignores the bottom 65% of the
       // viewport, so the active section is the one entering the upper area.
