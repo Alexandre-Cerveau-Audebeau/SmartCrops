@@ -49,6 +49,9 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import WaterDropIcon from '@mui/icons-material/WaterDrop';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import YardIcon from '@mui/icons-material/Yard';
+import ZoomInIcon from '@mui/icons-material/ZoomIn';
+import ZoomOutIcon from '@mui/icons-material/ZoomOut';
+import { NAV_BG } from '../constants/colors';
 import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../hooks/useLanguage';
 import { addPlantToGarden, fetchGardens } from '../services/gardenApi';
@@ -68,6 +71,7 @@ import PlantGallerySection from '../components/plantDetail/PlantGallerySection';
 import { isUserFacingUrl, toUserFacingUrl } from '../utils/externalSourceUrl';
 import { resolveTranslatedField } from '../utils/getTranslation';
 import { capitalizeFirst } from '../utils/capitalizeFirst';
+import { composeImageAttribution } from '../utils/imageAttribution';
 import { formatPeriod } from '../utils/formatPeriod';
 import {
   formatHardinessZone,
@@ -1984,6 +1988,29 @@ function LifecycleStage({
  * license caption. Rendered only while `index` is non-null, so callers can
  * mount/unmount it via a single state variable.
  */
+// Zoom bounds for the lightbox (1× → 3× in 0.5 steps), shared by the +/- buttons.
+const LIGHTBOX_ZOOM_MIN = 1;
+const LIGHTBOX_ZOOM_MAX = 3;
+const LIGHTBOX_ZOOM_STEP = 0.5;
+
+// Translucent-light circular control used for every lightbox overlay button
+// (close, prev/next, zoom) so they stay legible over a dark photo.
+const lightboxControlSx = {
+  color: 'white',
+  bgcolor: 'rgba(255,255,255,0.15)',
+  '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' },
+  '&.Mui-disabled': { color: 'rgba(255,255,255,0.35)' },
+} as const;
+
+/**
+ * Full-screen photo viewer matching the Plant Detail v2 design: a dark overlay
+ * with the photo centred (contain), a localized type badge top-left, a close
+ * button top-right, circular prev/next arrows on the edges, the composed
+ * attribution bottom-left, and the counter + zoom controls bottom-right. Zoom is
+ * stepped (1×–3×) and resets whenever the shown image changes or the viewer
+ * (re)opens. Keyboard: ← previous, → next (Escape close + focus-trap come from
+ * the MUI Dialog). Descriptive per-photo captions are deferred (SMA-177).
+ */
 function PhotoLightbox({
   images,
   index,
@@ -1998,23 +2025,107 @@ function PhotoLightbox({
   onNext: () => void;
 }) {
   const { t } = useTranslation();
+  const [zoom, setZoom] = useState(LIGHTBOX_ZOOM_MIN);
+
+  // Reset zoom when the shown image changes (prev/next) or the viewer reopens.
+  // Adjust-during-render (the React-recommended "reset on prop change" pattern)
+  // rather than an effect, so it never trips `react-hooks/set-state-in-effect`.
+  const [zoomedIndex, setZoomedIndex] = useState(index);
+  if (index !== zoomedIndex) {
+    setZoomedIndex(index);
+    setZoom(LIGHTBOX_ZOOM_MIN);
+  }
+
+  // Arrow keys navigate; the MUI Dialog already wires Escape → onClose. Only
+  // listen while the viewer is open so a closed lightbox never intercepts keys.
+  useEffect(() => {
+    if (index == null) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') onPrev();
+      else if (e.key === 'ArrowRight') onNext();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [index, onPrev, onNext]);
+
   if (index == null) return null;
   const img = images[index];
   if (!img) return null;
+
+  const attribution = composeImageAttribution(img);
+  const zoomIn = () =>
+    setZoom((z) => Math.min(LIGHTBOX_ZOOM_MAX, z + LIGHTBOX_ZOOM_STEP));
+  const zoomOut = () =>
+    setZoom((z) => Math.max(LIGHTBOX_ZOOM_MIN, z - LIGHTBOX_ZOOM_STEP));
+
   return (
-    <Dialog open onClose={onClose} maxWidth="lg" fullWidth>
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="lg"
+      fullWidth
+      slotProps={{
+        paper: { sx: { bgcolor: 'black', backgroundImage: 'none' } },
+      }}
+    >
       <Box sx={{ position: 'relative', bgcolor: 'black' }}>
+        {/* Image viewport — overflow hidden so a zoomed photo is clipped to the
+            frame rather than overflowing the dialog. */}
         <Box
-          component="img"
-          src={img.url}
-          alt={img.imageType}
           sx={{
+            position: 'relative',
             width: '100%',
-            maxHeight: '80vh',
-            objectFit: 'contain',
-            display: 'block',
+            height: '80vh',
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
-        />
+        >
+          <Box
+            component="img"
+            src={img.url}
+            alt={img.imageType}
+            sx={{
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain',
+              display: 'block',
+              transform: `scale(${zoom})`,
+              transition: 'transform 0.2s ease',
+            }}
+          />
+        </Box>
+
+        {/* Type badge — top-left, solid brand-green pill (same as the tiles). */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 12,
+            left: 12,
+            px: 1,
+            py: 0.5,
+            borderRadius: 1.5,
+            bgcolor: NAV_BG,
+            color: '#fff',
+            fontSize: 12,
+            fontWeight: 600,
+            pointerEvents: 'none',
+          }}
+        >
+          {t(`plantDetail.gallery.types.${img.imageType}`, img.imageType)}
+        </Box>
+
+        {/* Close — top-right. */}
+        <IconButton
+          onClick={onClose}
+          aria-label={t('plantDetail.gallery.lightboxClose')}
+          sx={{ position: 'absolute', top: 8, right: 8, ...lightboxControlSx }}
+        >
+          <CloseIcon />
+        </IconButton>
+
+        {/* Prev / next — circular edge arrows (only when there's more than one). */}
         {images.length > 1 && (
           <>
             <IconButton
@@ -2025,8 +2136,7 @@ function PhotoLightbox({
                 top: '50%',
                 left: 8,
                 transform: 'translateY(-50%)',
-                color: 'white',
-                bgcolor: 'rgba(0,0,0,0.4)',
+                ...lightboxControlSx,
               }}
             >
               <ChevronLeftIcon />
@@ -2039,50 +2149,74 @@ function PhotoLightbox({
                 top: '50%',
                 right: 8,
                 transform: 'translateY(-50%)',
-                color: 'white',
-                bgcolor: 'rgba(0,0,0,0.4)',
+                ...lightboxControlSx,
               }}
             >
               <ChevronRightIcon />
             </IconButton>
           </>
         )}
-        <IconButton
-          onClick={onClose}
-          aria-label={t('plantDetail.gallery.lightboxClose')}
+
+        {/* Attribution — bottom-left, monospace, legible over the dark photo. */}
+        {attribution && (
+          <Typography
+            variant="body2"
+            sx={{
+              position: 'absolute',
+              bottom: 12,
+              left: 12,
+              maxWidth: '55%',
+              color: 'rgba(255,255,255,0.92)',
+              fontFamily: 'monospace',
+              textShadow: '0 1px 3px rgba(0,0,0,0.9)',
+              pointerEvents: 'none',
+            }}
+          >
+            {attribution}
+          </Typography>
+        )}
+
+        {/* Counter + zoom controls — bottom-right. */}
+        <Stack
+          direction="row"
+          spacing={0.5}
+          alignItems="center"
           sx={{
             position: 'absolute',
-            top: 8,
-            right: 8,
-            color: 'white',
-            bgcolor: 'rgba(0,0,0,0.4)',
+            bottom: 12,
+            right: 12,
+            bgcolor: 'rgba(0,0,0,0.45)',
+            borderRadius: 2,
+            px: 1,
+            py: 0.25,
           }}
         >
-          <CloseIcon />
-        </IconButton>
+          <Typography
+            variant="body2"
+            sx={{ color: 'white', mr: 0.5, fontVariantNumeric: 'tabular-nums' }}
+          >
+            {`${index + 1} / ${images.length}`}
+          </Typography>
+          <IconButton
+            size="small"
+            onClick={zoomOut}
+            disabled={zoom <= LIGHTBOX_ZOOM_MIN}
+            aria-label={t('plantDetail.gallery.zoomOut')}
+            sx={lightboxControlSx}
+          >
+            <ZoomOutIcon fontSize="small" />
+          </IconButton>
+          <IconButton
+            size="small"
+            onClick={zoomIn}
+            disabled={zoom >= LIGHTBOX_ZOOM_MAX}
+            aria-label={t('plantDetail.gallery.zoomIn')}
+            sx={lightboxControlSx}
+          >
+            <ZoomInIcon fontSize="small" />
+          </IconButton>
+        </Stack>
       </Box>
-      {(img.credit || img.licenseName) && (
-        <Box sx={{ p: 2 }}>
-          {img.credit && (
-            <Typography
-              variant="caption"
-              display="block"
-              color="text.secondary"
-            >
-              {t('plantDetail.gallery.credit', { name: img.credit })}
-            </Typography>
-          )}
-          {img.licenseName && (
-            <Typography
-              variant="caption"
-              display="block"
-              color="text.secondary"
-            >
-              {t('plantDetail.gallery.license', { name: img.licenseName })}
-            </Typography>
-          )}
-        </Box>
-      )}
     </Dialog>
   );
 }

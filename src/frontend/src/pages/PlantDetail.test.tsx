@@ -1,4 +1,11 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -498,5 +505,94 @@ describe('PlantDetail', () => {
     expect(
       screen.getByText('© Photographer · Trefle · CC BY-SA')
     ).toBeInTheDocument();
+  });
+
+  it('opens the lightbox with a type badge, counter, composed attribution, and bounded zoom (SMA-154)', async () => {
+    const user = userEvent.setup();
+    renderAtPlant(
+      makePlant({
+        images: [
+          {
+            id: 1,
+            imageType: 'Flower',
+            url: 'https://img.test/flower.jpg',
+            thumbnailUrl: 'https://img.test/flower-thumb.jpg',
+            width: 100,
+            height: 100,
+            licenseName: 'CC BY-SA',
+            licenseUrl: null,
+            credit: 'Photographer',
+            source: 'Trefle',
+            sourceExternalId: null,
+            displayOrder: 0,
+            isFlagged: false,
+            attribution: '© Photographer — CC BY-SA',
+          },
+        ],
+      })
+    );
+    await screen.findByRole('heading', { name: 'Basil' });
+
+    await user.click(
+      screen.getByRole('button', { name: 'Open photo gallery' })
+    );
+    const dialog = within(screen.getByRole('dialog'));
+
+    // Type badge, counter, and composed attribution — scoped to the lightbox.
+    expect(dialog.getByText('Flower')).toBeInTheDocument();
+    expect(dialog.getByText('1 / 1')).toBeInTheDocument();
+    expect(
+      dialog.getByText('© Photographer · Trefle · CC BY-SA')
+    ).toBeInTheDocument();
+
+    // Zoom is clamped: out is disabled at 1×, in is disabled at the 3× ceiling.
+    const zoomIn = dialog.getByRole('button', { name: 'Zoom in' });
+    const zoomOut = dialog.getByRole('button', { name: 'Zoom out' });
+    expect(zoomOut).toBeDisabled();
+    await user.click(zoomIn); // 1.5×
+    expect(zoomOut).toBeEnabled();
+    await user.click(zoomIn); // 2×
+    await user.click(zoomIn); // 2.5×
+    await user.click(zoomIn); // 3× — ceiling
+    expect(zoomIn).toBeDisabled();
+  });
+
+  it('navigates the lightbox with the arrow keys (SMA-154)', async () => {
+    const user = userEvent.setup();
+    const stable = (id: number, imageType: string) => ({
+      id,
+      imageType,
+      url: `https://img.test/${id}.jpg`,
+      thumbnailUrl: null,
+      width: null,
+      height: null,
+      licenseName: null,
+      licenseUrl: null,
+      credit: null,
+      source: 'Trefle',
+      sourceExternalId: null,
+      displayOrder: id,
+      isFlagged: false,
+      attribution: '© Trefle',
+    });
+    renderAtPlant(
+      makePlant({ images: [stable(1, 'Flower'), stable(2, 'Fruit')] })
+    );
+    await screen.findByRole('heading', { name: 'Basil' });
+
+    await user.click(
+      screen.getByRole('button', { name: 'Open photo gallery' })
+    );
+    const dialog = within(screen.getByRole('dialog'));
+    expect(dialog.getByText('1 / 2')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(dialog.getByText('2 / 2')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' }); // wraps to the first
+    expect(dialog.getByText('1 / 2')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' }); // wraps back to the last
+    expect(dialog.getByText('2 / 2')).toBeInTheDocument();
   });
 });

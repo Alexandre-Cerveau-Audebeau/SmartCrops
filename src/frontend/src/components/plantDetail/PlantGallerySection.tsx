@@ -7,6 +7,7 @@ import Typography from '@mui/material/Typography';
 import HideImageIcon from '@mui/icons-material/HideImage';
 import { NAV_BG } from '../../constants/colors';
 import type { PlantImage } from '../../types/Plant';
+import { composeImageAttribution } from '../../utils/imageAttribution';
 
 interface PlantGallerySectionProps {
   /** The stable (non-Perenual), canonically-sorted gallery images. */
@@ -19,18 +20,6 @@ interface PlantGallerySectionProps {
 }
 
 const ALL = 'all';
-
-// Compose the gallery attribution line from the raw image fields, in the design
-// format "© credit · source · license" (3 parts, middle-dot). We deliberately do
-// NOT use the server-composed `PlantImage.attribution` here: it uses a different
-// shape ("© credit — license", 2 parts, no source) than the approved design.
-// Aligning the backend `ImageAttribution.Compose` to this format is tracked in
-// SMA-180; until then the gallery owns its own format.
-function composeAttribution(img: PlantImage): string {
-  return [img.credit ? `© ${img.credit}` : null, img.source, img.licenseName]
-    .filter(Boolean)
-    .join(' · ');
-}
 
 /**
  * One attribution line under a thumbnail: monospace, truncated with an ellipsis,
@@ -239,7 +228,7 @@ export default function PlantGallerySection({
                 {t(`plantDetail.gallery.types.${img.imageType}`, img.imageType)}
               </Box>
             </Box>
-            <GalleryAttribution text={composeAttribution(img)} />
+            <GalleryAttribution text={composeImageAttribution(img)} />
           </Box>
         ))}
       </Box>
