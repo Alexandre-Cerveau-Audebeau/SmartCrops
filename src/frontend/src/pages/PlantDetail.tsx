@@ -37,7 +37,6 @@ import AgricultureIcon from '@mui/icons-material/Agriculture';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CloseIcon from '@mui/icons-material/Close';
-import HideImageIcon from '@mui/icons-material/HideImage';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
@@ -65,7 +64,7 @@ import type { Plant, PlantImage } from '../types/Plant';
 import PlantDetailToc from '../components/plantDetail/PlantDetailToc';
 import type { TocSection } from '../components/plantDetail/PlantDetailToc';
 import PlantHeroGauges from '../components/plantDetail/PlantHeroGauges';
-import PlantGalleryDialog from '../components/plantDetail/PlantGalleryDialog';
+import PlantGallerySection from '../components/plantDetail/PlantGallerySection';
 import { isUserFacingUrl, toUserFacingUrl } from '../utils/externalSourceUrl';
 import { resolveTranslatedField } from '../utils/getTranslation';
 import { capitalizeFirst } from '../utils/capitalizeFirst';
@@ -77,7 +76,6 @@ import {
   formatXDataRange,
   groupCommonNamesByLanguage,
   hasAnyXData,
-  hasDistinctImageTypes,
   isHardinessSuspicious,
   parseStringArray,
   parseStringArrayJson,
@@ -95,7 +93,6 @@ const languageLabels: Record<string, string> = {
 const DESCRIPTION_TRUNCATE_CHARS = 360;
 const PESTS_PREVIEW_COUNT = 10;
 const COMMON_NAMES_PREVIEW_LANGUAGES = 6;
-const GALLERY_PREVIEW_COUNT = 6;
 
 type PlantDetailNavState = {
   from?: string;
@@ -156,11 +153,10 @@ export default function PlantDetail() {
   const [commonNamesExpanded, setCommonNamesExpanded] = useState(false);
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  // The lightbox can be driven by the full gallery (hero / preview strip) OR by
-  // the filtered subset shown in the "all photos" dialog (SMA-154), so its source
-  // list is held in state and set at open time, not hard-wired to galleryImages.
+  // The lightbox can be driven by the full gallery (hero) OR by the filtered
+  // subset shown in the inline gallery section (SMA-154), so its source list is
+  // held in state and set at open time, not hard-wired to galleryImages.
   const [lightboxImages, setLightboxImages] = useState<PlantImage[]>([]);
-  const [galleryDialogOpen, setGalleryDialogOpen] = useState(false);
   const openLightbox = (imgs: PlantImage[], index: number) => {
     setLightboxImages(imgs);
     setLightboxIndex(index);
@@ -616,9 +612,9 @@ export default function PlantDetail() {
   // sommaire never links to an absent section. Anchors target each section's id.
   const tocSections: TocSection[] = [
     { id: 'overview', label: t('plantDetail.sections.overview') },
-    ...(galleryImages.length > 0
-      ? [{ id: 'gallery', label: t('plantDetail.sections.gallery') }]
-      : []),
+    // SMA-154: the gallery section always renders (grid or empty state), so it is
+    // always listed in the TOC.
+    { id: 'gallery', label: t('plantDetail.sections.gallery') },
     ...(longDescription || shortDescription
       ? [{ id: 'about', label: t('plantDetail.sections.about') }]
       : []),
@@ -909,131 +905,22 @@ export default function PlantDetail() {
             </CardContent>
           </Card>
 
-          {/* ── Section B: Photo gallery ───────────────────────────────────── */}
-          {galleryImages.length > 0 ? (
-            <Card
-              id="gallery"
-              variant="outlined"
-              sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
-            >
-              <CardContent>
-                <Grid container spacing={1.5}>
-                  {galleryImages
-                    .slice(0, GALLERY_PREVIEW_COUNT)
-                    .map((img, idx) => {
-                      const isLastTile =
-                        idx === GALLERY_PREVIEW_COUNT - 1 &&
-                        galleryImages.length > GALLERY_PREVIEW_COUNT;
-                      // The overlay tile is itself one of the preview slots — so the
-                      // remaining count is the gallery total minus the preview slots,
-                      // not minus (preview - 1). Aloe vera (31 images, 6 preview slots)
-                      // should display "+25 more", not "+26".
-                      const remaining =
-                        galleryImages.length - GALLERY_PREVIEW_COUNT;
-                      return (
-                        <Grid key={img.id} size={{ xs: 4, sm: 4, md: 2 }}>
-                          <Tooltip
-                            title={
-                              [img.credit, img.licenseName]
-                                .filter(Boolean)
-                                .join(' · ') || ''
-                            }
-                            placement="top"
-                            arrow
-                          >
-                            <Box
-                              component="button"
-                              type="button"
-                              onClick={() => openLightbox(galleryImages, idx)}
-                              aria-label={t('plantDetail.gallery.openTile', {
-                                index: idx + 1,
-                              })}
-                              sx={{
-                                position: 'relative',
-                                aspectRatio: '1 / 1',
-                                borderRadius: 2,
-                                overflow: 'hidden',
-                                cursor: 'pointer',
-                                bgcolor: 'grey.100',
-                                p: 0,
-                                border: 0,
-                                width: '100%',
-                                display: 'block',
-                                '&:hover .overlay': { opacity: 1 },
-                              }}
-                            >
-                              <Box
-                                component="img"
-                                src={img.thumbnailUrl ?? img.url}
-                                alt={img.imageType}
-                                sx={{
-                                  width: '100%',
-                                  height: '100%',
-                                  objectFit: 'cover',
-                                  display: 'block',
-                                }}
-                              />
-                              {isLastTile && (
-                                <Box
-                                  sx={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    bgcolor: 'rgba(0,0,0,0.55)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: '#fff',
-                                    fontWeight: 600,
-                                    fontSize: '1.1rem',
-                                  }}
-                                >
-                                  +{remaining}
-                                </Box>
-                              )}
-                            </Box>
-                          </Tooltip>
-                        </Grid>
-                      );
-                    })}
-                </Grid>
-                {hasDistinctImageTypes(galleryImages) && (
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ mt: 1.5, display: 'block' }}
-                  >
-                    {galleryImages
-                      .map((i) => i.imageType)
-                      .filter((v, i, a) => a.indexOf(v) === i)
-                      .join(' · ')}
-                  </Typography>
-                )}
-                <Box sx={{ mt: 2 }}>
-                  <Button
-                    variant="outlined"
-                    onClick={() => setGalleryDialogOpen(true)}
-                  >
-                    {t('plantDetail.gallery.showAll', {
-                      count: galleryImages.length,
-                    })}
-                  </Button>
-                </Box>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card
-              id="gallery"
-              variant="outlined"
-              sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
-            >
-              <CardContent
-                sx={{ textAlign: 'center', py: 6, color: 'text.secondary' }}
-              >
-                <HideImageIcon sx={{ fontSize: 40, opacity: 0.5, mb: 1 }} />
-                <Typography>{t('plantDetail.gallery.empty')}</Typography>
-              </CardContent>
-            </Card>
-          )}
+          {/* ── Section B: Photo gallery (SMA-154, inline) ─────────────────── */}
+          <Card
+            id="gallery"
+            variant="outlined"
+            sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
+          >
+            <CardContent>
+              <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+                {t('plantDetail.sections.gallery')}
+              </Typography>
+              <PlantGallerySection
+                images={galleryImages}
+                onSelect={openLightbox}
+              />
+            </CardContent>
+          </Card>
 
           {/* ── Section C: About / long description ────────────────────────── */}
           {(longDescription || shortDescription) && (
@@ -1868,14 +1755,6 @@ export default function PlantDetail() {
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Full gallery view (SMA-154) — grid + type filter over the stable pool. */}
-      <PlantGalleryDialog
-        open={galleryDialogOpen}
-        onClose={() => setGalleryDialogOpen(false)}
-        images={galleryImages}
-        onSelect={openLightbox}
-      />
 
       {/* Photo lightbox */}
       <PhotoLightbox

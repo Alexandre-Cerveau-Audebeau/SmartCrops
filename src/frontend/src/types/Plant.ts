@@ -23,6 +23,11 @@ export interface PlantImage {
   sourceExternalId: string | null;
   displayOrder: number;
   isFlagged: boolean;
+  /**
+   * Server-composed, always-non-null attribution line (credit / license / source)
+   * — the detail DTO ships it via `ImageAttribution.Compose`; rendered verbatim.
+   */
+  attribution: string;
 }
 
 /** Long-form rich description in a single language, one row per locale. */

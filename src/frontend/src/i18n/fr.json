@@ -536,8 +536,6 @@
       }
     },
     "gallery": {
-      "showAll": "Voir toutes les photos ({{count}})",
-      "remaining": "+{{count}} de plus",
       "lightboxClose": "Fermer",
       "lightboxPrev": "Photo précédente",
       "lightboxNext": "Photo suivante",
@@ -545,7 +543,6 @@
       "license": "Licence : {{name}}",
       "openHero": "Ouvrir la galerie photo",
       "openTile": "Ouvrir la photo {{index}} dans la visionneuse",
-      "dialogTitle": "Toutes les photos",
       "empty": "Pas encore de photos pour cette plante.",
       "types": {
         "all": "Tout",

@@ -1,5 +1,4 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -219,6 +218,7 @@ describe('PlantDetail', () => {
             sourceExternalId: null,
             displayOrder: 0,
             isFlagged: false,
+            attribution: '© Photographer — CC BY-SA 4.0',
           },
         ],
         longDescriptions: [
@@ -433,6 +433,7 @@ describe('PlantDetail', () => {
             sourceExternalId: null,
             displayOrder: 0,
             isFlagged: false,
+            attribution: '© Trefle',
           },
         ],
       })
@@ -446,20 +447,21 @@ describe('PlantDetail', () => {
     expect(heroButton.tagName).toBe('BUTTON');
   });
 
-  it('shows the gallery empty state when the plant has no stable images (SMA-154)', async () => {
+  it('shows the gallery empty state, still listed in the TOC, when the plant has no stable images (SMA-154)', async () => {
     // Base plant has images: [] → no stable gallery pool.
     renderAtPlant(makePlant());
     await screen.findByRole('heading', { name: 'Basil' });
     expect(
       screen.getByText('No photos yet for this plant.')
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: /View all photos/ })
-    ).toBeNull();
+    // The gallery section always renders now, so the TOC always links to it.
+    expect(screen.getByRole('link', { name: 'Gallery' })).toHaveAttribute(
+      'href',
+      '#gallery'
+    );
   });
 
-  it('opens the full gallery dialog from the "View all photos" button (SMA-154)', async () => {
-    const user = userEvent.setup();
+  it('renders the gallery inline (grid tile + attribution, no modal) for a plant with stable images (SMA-154)', async () => {
     renderAtPlant(
       makePlant({
         images: [
@@ -477,40 +479,22 @@ describe('PlantDetail', () => {
             sourceExternalId: null,
             displayOrder: 0,
             isFlagged: false,
+            attribution: '© Photographer — CC BY-SA',
           },
         ],
       })
     );
     await screen.findByRole('heading', { name: 'Basil' });
 
-    const viewAll = screen.getByRole('button', { name: /View all photos/ });
-    await user.click(viewAll);
-    // The gallery dialog opens with its title.
-    expect(await screen.findByText('All photos')).toBeInTheDocument();
-  });
-
-  it('shows the correct "+N more" count on the gallery overlay (31 images → +25, not +26)', async () => {
-    // Mirror Aloe vera's gallery shape from the production smoke matrix.
-    const images = Array.from({ length: 31 }, (_, i) => ({
-      id: i + 1,
-      imageType: i === 0 ? 'Main' : 'Other',
-      url: `https://img.test/aloe-${i}.jpg`,
-      thumbnailUrl: `https://img.test/aloe-${i}-thumb.jpg`,
-      width: null,
-      height: null,
-      licenseName: null,
-      licenseUrl: null,
-      credit: null,
-      source: 'Trefle',
-      sourceExternalId: null,
-      displayOrder: i,
-      isFlagged: false,
-    }));
-    renderAtPlant(makePlant({ images }));
-    await screen.findByRole('heading', { name: 'Basil' });
-    // GALLERY_PREVIEW_COUNT is 6, so 31 - 6 = 25 remaining (NOT 26 — the
-    // overlay tile counts as one of the 6 preview slots).
-    expect(screen.getByText('+25')).toBeInTheDocument();
-    expect(screen.queryByText('+26')).not.toBeInTheDocument();
+    // Tile rendered inline — no "view all" button, no modal. (The hero is also a
+    // button labelled "Open photo gallery"; match the tile's lightbox label.)
+    expect(
+      screen.getByRole('button', { name: /Open photo 1 in lightbox/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /View all photos/ })
+    ).toBeNull();
+    // Server-composed attribution shows under the tile.
+    expect(screen.getByText('© Photographer — CC BY-SA')).toBeInTheDocument();
   });
 });
