@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -93,8 +93,18 @@ function makePlant(overrides: Partial<Plant> = {}): Plant {
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     translations: [
-      { id: 1, language: 'en', commonName: 'Basil', description: 'Sweet basil short description.' },
-      { id: 2, language: 'fr', commonName: 'Basilic', description: 'Description courte du basilic.' },
+      {
+        id: 1,
+        language: 'en',
+        commonName: 'Basil',
+        description: 'Sweet basil short description.',
+      },
+      {
+        id: 2,
+        language: 'fr',
+        commonName: 'Basilic',
+        description: 'Description courte du basilic.',
+      },
     ],
     images: [],
     longDescriptions: [],
@@ -108,7 +118,9 @@ function makePlant(overrides: Partial<Plant> = {}): Plant {
   return { ...base, ...overrides };
 }
 
-function makePerenualData(overrides: Partial<PlantPerenualData> = {}): PlantPerenualData {
+function makePerenualData(
+  overrides: Partial<PlantPerenualData> = {}
+): PlantPerenualData {
   const base: PlantPerenualData = {
     id: 'pd-1',
     perenualId: 728,
@@ -158,7 +170,7 @@ function renderAtPlant(plant: Plant) {
           </Routes>
         </MemoryRouter>
       </AuthProvider>
-    </LanguageProvider>,
+    </LanguageProvider>
   );
 }
 
@@ -166,12 +178,20 @@ describe('PlantDetail', () => {
   it('renders a minimal (non-enriched) plant without crashing and falls back to the short translation description', async () => {
     renderAtPlant(makePlant());
 
-    expect(await screen.findByRole('heading', { name: 'Basil' })).toBeInTheDocument();
-    expect(screen.getByText('Sweet basil short description.')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Basil' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Sweet basil short description.')
+    ).toBeInTheDocument();
     // Empty collections → conditional sections must be absent.
     expect(screen.queryByText(/Pests & diseases \(/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Common names' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Botanical synonyms' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Common names' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Botanical synonyms' })
+    ).not.toBeInTheDocument();
   });
 
   it('renders the rich (tomato-shaped) plant with images and pests', async () => {
@@ -184,21 +204,64 @@ describe('PlantDetail', () => {
           { id: 11, language: 'fr', commonName: 'Tomate', description: null },
         ],
         images: [
-          { id: 1, imageType: 'Main', url: 'https://img.test/main.jpg', thumbnailUrl: 'https://img.test/thumb.jpg', width: 800, height: 600, licenseName: 'CC BY-SA 4.0', licenseUrl: null, credit: 'Photographer', source: 'Perenual', sourceExternalId: null, displayOrder: 0, isFlagged: false },
+          {
+            id: 1,
+            imageType: 'Main',
+            url: 'https://img.test/main.jpg',
+            thumbnailUrl: 'https://img.test/thumb.jpg',
+            width: 800,
+            height: 600,
+            licenseName: 'CC BY-SA 4.0',
+            licenseUrl: null,
+            credit: 'Photographer',
+            source: 'Perenual',
+            sourceExternalId: null,
+            displayOrder: 0,
+            isFlagged: false,
+          },
         ],
         longDescriptions: [
-          { id: 5, language: 'en', longDescription: 'Tomato is a warm-season crop.', sourceMethod: 'perenual' },
+          {
+            id: 5,
+            language: 'en',
+            longDescription: 'Tomato is a warm-season crop.',
+            sourceMethod: 'perenual',
+          },
         ],
         pests: [
-          { id: 1, name: 'Aphids', type: 'Insect', description: null, symptoms: null, solutions: null, imageUrl: null, source: 'perenual', sourceExternalId: null },
-          { id: 2, name: 'Powdery Mildew', type: 'Fungus', description: null, symptoms: null, solutions: null, imageUrl: null, source: 'perenual', sourceExternalId: null },
+          {
+            id: 1,
+            name: 'Aphids',
+            type: 'Insect',
+            description: null,
+            symptoms: null,
+            solutions: null,
+            imageUrl: null,
+            source: 'perenual',
+            sourceExternalId: null,
+          },
+          {
+            id: 2,
+            name: 'Powdery Mildew',
+            type: 'Fungus',
+            description: null,
+            symptoms: null,
+            solutions: null,
+            imageUrl: null,
+            source: 'perenual',
+            sourceExternalId: null,
+          },
         ],
         enrichmentSources: ['Manual', 'GBIF', 'Perenual'],
-      }),
+      })
     );
 
-    expect(await screen.findByRole('heading', { name: 'Tomato' })).toBeInTheDocument();
-    expect(screen.getByText('Tomato is a warm-season crop.')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Tomato' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Tomato is a warm-season crop.')
+    ).toBeInTheDocument();
     expect(screen.getByText(/Pests & diseases \(2\)/)).toBeInTheDocument();
     expect(screen.getByText('Aphids')).toBeInTheDocument();
     expect(screen.getByText('Powdery Mildew')).toBeInTheDocument();
@@ -206,7 +269,11 @@ describe('PlantDetail', () => {
 
   it('always renders the "Scientific data (coming soon)" section regardless of enrichment state', async () => {
     renderAtPlant(makePlant());
-    expect(await screen.findByRole('heading', { name: /Scientific data \(coming soon\)/ })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', {
+        name: /Scientific data \(coming soon\)/,
+      })
+    ).toBeInTheDocument();
   });
 
   it('renders Section F.6 when hasSupremeData and at least one xData field is present', async () => {
@@ -219,12 +286,18 @@ describe('PlantDetail', () => {
           xWateringBasedTempMaxC: 24,
           xWateringQualityJson: '["Rainwater"]',
         }),
-      }),
+      })
     );
     expect(
-      await screen.findByRole('heading', { name: /Scientific data \(Perenual Supreme\)/ }),
+      await screen.findByRole('heading', {
+        name: /Scientific data \(Perenual Supreme\)/,
+      })
     ).toBeInTheDocument();
-    expect(screen.getByText('18–24°C')).toBeInTheDocument();
+    // Scoped to the F.6 section — the same value also appears in the hero gauge
+    // row now (SMA-169, temporary hero/Characteristics duplication).
+    expect(
+      within(document.getElementById('scientific-data')!).getByText('18–24°C')
+    ).toBeInTheDocument();
     // Water-quality chip is i18n-labelled via toCamelKey lookup.
     expect(screen.getByText('Rainwater')).toBeInTheDocument();
   });
@@ -240,26 +313,36 @@ describe('PlantDetail', () => {
           xWateringBasedTempMinC: 18,
           xWateringBasedTempMaxC: 24,
         }),
-      }),
+      })
     );
-    await screen.findByRole('heading', { name: /Scientific data \(Perenual Supreme\)/ });
+    await screen.findByRole('heading', {
+      name: /Scientific data \(Perenual Supreme\)/,
+    });
     expect(screen.queryByText('Watering pH range')).not.toBeInTheDocument();
     expect(screen.getByText('Ideal watering temperature')).toBeInTheDocument();
   });
 
   it('does NOT render Section F.6 when hasSupremeData is true but every xData field is null', async () => {
-    renderAtPlant(makePlant({ perenualData: makePerenualData({ hasSupremeData: true }) }));
+    renderAtPlant(
+      makePlant({ perenualData: makePerenualData({ hasSupremeData: true }) })
+    );
     await screen.findByRole('heading', { name: 'Basil' });
     expect(
-      screen.queryByRole('heading', { name: /Scientific data \(Perenual Supreme\)/ }),
+      screen.queryByRole('heading', {
+        name: /Scientific data \(Perenual Supreme\)/,
+      })
     ).not.toBeInTheDocument();
   });
 
   it('drops the temperatureRange and geoDistribution items from the F.5 placeholder', async () => {
     renderAtPlant(makePlant());
     await screen.findByRole('heading', { name: 'Basil' });
-    expect(screen.queryByText('Optimal temperature range (°C)')).not.toBeInTheDocument();
-    expect(screen.queryByText('Geographic distribution')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Optimal temperature range (°C)')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Geographic distribution')
+    ).not.toBeInTheDocument();
     // Kept items still present.
     expect(screen.getByText('Required nutrients (NPK)')).toBeInTheDocument();
   });
@@ -276,10 +359,12 @@ describe('PlantDetail', () => {
         commonNames: [
           { id: 1, languageCode: 'en', name: 'Sweet basil', isPrimary: true },
         ],
-      }),
+      })
     );
     await screen.findByRole('heading', { name: 'Basil' });
-    expect(screen.queryByRole('heading', { name: 'Common names' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Common names' })
+    ).not.toBeInTheDocument();
   });
 
   it('shows a hardiness warning chip when zone min === max === 2', async () => {
@@ -287,14 +372,19 @@ describe('PlantDetail', () => {
       makePlant({
         hardinessZoneMin: 2,
         hardinessZoneMax: 2,
-      }),
+      })
     );
     await screen.findByRole('heading', { name: 'Basil' });
     // The warning icon's aria-label is the warning string; the chip itself reads "2".
-    expect(screen.getByText('2')).toBeInTheDocument();
+    // Scoped to Characteristics — the hardiness gauge also shows "2" now (SMA-169).
+    expect(
+      within(document.getElementById('characteristics')!).getByText('2')
+    ).toBeInTheDocument();
     // The warning icon (WarningAmber) renders with role="img" via testid-less material.
     // We test that the suspicious-flag path triggered by querying the warning tooltip title.
-    const warningEls = document.querySelectorAll('svg[data-testid="WarningAmberIcon"]');
+    const warningEls = document.querySelectorAll(
+      'svg[data-testid="WarningAmberIcon"]'
+    );
     expect(warningEls.length).toBeGreaterThan(0);
   });
 
@@ -303,18 +393,23 @@ describe('PlantDetail', () => {
       makePlant({
         hardinessZoneMin: 5,
         hardinessZoneMax: 7,
-      }),
+      })
     );
     await screen.findByRole('heading', { name: 'Basil' });
-    expect(screen.getByText('5-7')).toBeInTheDocument();
-    const warningEls = document.querySelectorAll('svg[data-testid="WarningAmberIcon"]');
+    // Scoped to Characteristics — the hardiness gauge also shows "5-7" now (SMA-169).
+    expect(
+      within(document.getElementById('characteristics')!).getByText('5-7')
+    ).toBeInTheDocument();
+    const warningEls = document.querySelectorAll(
+      'svg[data-testid="WarningAmberIcon"]'
+    );
     expect(warningEls.length).toBe(0);
   });
 
   it('uses the inline SVG placeholder when the plant has no images and no legacy imageUrl', async () => {
     renderAtPlant(makePlant());
-    const heroImg = await waitFor(() =>
-      screen.getByAltText('Basil') as HTMLImageElement,
+    const heroImg = await waitFor(
+      () => screen.getByAltText('Basil') as HTMLImageElement
     );
     expect(heroImg.src.startsWith('data:image/svg+xml')).toBe(true);
   });
@@ -323,14 +418,30 @@ describe('PlantDetail', () => {
     renderAtPlant(
       makePlant({
         images: [
-          { id: 1, imageType: 'Habit', url: 'https://img.test/habit.jpg', thumbnailUrl: null, width: null, height: null, licenseName: null, licenseUrl: null, credit: null, source: 'Trefle', sourceExternalId: null, displayOrder: 0, isFlagged: false },
+          {
+            id: 1,
+            imageType: 'Habit',
+            url: 'https://img.test/habit.jpg',
+            thumbnailUrl: null,
+            width: null,
+            height: null,
+            licenseName: null,
+            licenseUrl: null,
+            credit: null,
+            source: 'Trefle',
+            sourceExternalId: null,
+            displayOrder: 0,
+            isFlagged: false,
+          },
         ],
-      }),
+      })
     );
     await screen.findByRole('heading', { name: 'Basil' });
     // The hero is exposed as a <button> with the openHero aria-label; tab order
     // therefore reaches it and Enter / Space triggers the lightbox.
-    const heroButton = screen.getByRole('button', { name: 'Open photo gallery' });
+    const heroButton = screen.getByRole('button', {
+      name: 'Open photo gallery',
+    });
     expect(heroButton.tagName).toBe('BUTTON');
   });
 

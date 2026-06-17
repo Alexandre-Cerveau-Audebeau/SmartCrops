@@ -369,7 +369,24 @@
       "commonNames": "Common names",
       "synonyms": "Botanical synonyms",
       "sources": "External sources",
-      "adminActions": "Admin actions"
+      "adminActions": "Admin actions",
+      "overview": "Overview",
+      "gallery": "Gallery"
+    },
+    "toc": {
+      "title": "Summary",
+      "ariaLabel": "Section navigation"
+    },
+    "gauges": {
+      "title": "Growing conditions",
+      "sun": "Sun",
+      "water": "Water",
+      "hardiness": "Hardiness",
+      "height": "Height",
+      "ph": "pH",
+      "temperature": "Temperature",
+      "spacing": "Spacing",
+      "care": "Maintenance"
     },
     "scientificData": {
       "comingSoon": "Detailed scientific measurements (water needs in litres, light exposure in lumens, nutrient requirements, growth duration) will be available in an upcoming update.",
