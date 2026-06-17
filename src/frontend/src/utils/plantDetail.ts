@@ -5,6 +5,7 @@ import type {
   PlantLongDescription,
   PlantPerenualData,
 } from '../types/Plant';
+import type { UnitSystem } from '../contexts/unitSystemContextValue';
 
 /**
  * Gallery priority (matches `PlantDetailMapper.ImageTypePriority` server-side).
@@ -38,11 +39,14 @@ export const PLANT_HERO_PLACEHOLDER =
  */
 export function pickHeroImage(plant: Plant): string {
   const stable = (plant.images ?? []).filter(
-    (i) => i.source === 'Trefle' || i.source === 'PlantNet',
+    (i) => i.source === 'Trefle' || i.source === 'PlantNet'
   );
   if (stable.length) {
-    const byType = (type: string) => stable.find((i) => i.imageType === type)?.url;
-    return byType('Habit') ?? byType('Flower') ?? byType('Leaf') ?? stable[0].url;
+    const byType = (type: string) =>
+      stable.find((i) => i.imageType === type)?.url;
+    return (
+      byType('Habit') ?? byType('Flower') ?? byType('Leaf') ?? stable[0].url
+    );
   }
   return plant.imageUrl ?? PLANT_HERO_PLACEHOLDER;
 }
@@ -56,7 +60,8 @@ export function sortGalleryImages(images: readonly PlantImage[]): PlantImage[] {
     const pa = IMAGE_TYPE_PRIORITY[a.imageType] ?? 99;
     const pb = IMAGE_TYPE_PRIORITY[b.imageType] ?? 99;
     if (pa !== pb) return pa - pb;
-    if (a.displayOrder !== b.displayOrder) return a.displayOrder - b.displayOrder;
+    if (a.displayOrder !== b.displayOrder)
+      return a.displayOrder - b.displayOrder;
     return a.id - b.id;
   });
 }
@@ -85,7 +90,7 @@ export function hasDistinctImageTypes(images: readonly PlantImage[]): boolean {
  */
 export function isHardinessSuspicious(
   min: number | null | undefined,
-  max: number | null | undefined,
+  max: number | null | undefined
 ): boolean {
   if (min == null || max == null) return false;
   if (min === 2 && max === 2) return true;
@@ -101,7 +106,7 @@ export function isHardinessSuspicious(
  */
 export function formatHardinessZone(
   min: number | null | undefined,
-  max: number | null | undefined,
+  max: number | null | undefined
 ): string | null {
   if (min == null && max == null) return null;
   if (min != null && max != null) {
@@ -110,23 +115,70 @@ export function formatHardinessZone(
   return min != null ? `${min}+` : `≤${max}`;
 }
 
+// ── Unit conversion (SMA-178) ─────────────────────────────────────────────
+// Pure conversions; the system is always passed in as a parameter (never read
+// from a context here), so these stay testable and side-effect-free. Display
+// rounds to the nearest integer — see formatLength / formatTemperature.
+
+export const cmToInches = (cm: number): number => cm / 2.54;
+export const inchesToCm = (inch: number): number => inch * 2.54;
+export const celsiusToFahrenheit = (c: number): number => (c * 9) / 5 + 32;
+
 /**
- * Generic min/max range formatter for height, spread, temperature, etc.
- * Mirrors {@link formatHardinessZone}'s contract: returns `null` when both
- * bounds are null, collapses equal bounds, and emits half-open forms when
- * one side is missing. The `unit` suffix (e.g. `"cm"`, `"°C"`) follows the
- * numeric value.
+ * Assemble a min/max range with a trailing unit in the shared display
+ * convention: `min–max unit` (en-dash), `min unit` when the bounds collapse,
+ * half-open `≥min unit` / `≤max unit`, and `null` when both bounds are absent.
+ * `display` maps each raw numeric bound to the number actually shown (identity
+ * for metric, the rounded conversion for imperial).
  */
-export function formatRange(
+function assembleRange(
   min: number | null | undefined,
   max: number | null | undefined,
   unit: string,
+  display: (n: number) => number
 ): string | null {
   if (min == null && max == null) return null;
   if (min != null && max != null) {
-    return min === max ? `${min} ${unit}` : `${min}–${max} ${unit}`;
+    const lo = display(min);
+    const hi = display(max);
+    return lo === hi ? `${lo} ${unit}` : `${lo}–${hi} ${unit}`;
   }
-  return min != null ? `≥${min} ${unit}` : `≤${max} ${unit}`;
+  return min != null ? `≥${display(min)} ${unit}` : `≤${display(max!)} ${unit}`;
+}
+
+/**
+ * Format a length range stored in centimetres for the chosen system. Metric
+ * shows the raw cm value (`30–120 cm`); imperial converts to whole inches
+ * (`12–47 in`). Half-open / equal-bound / null-bound handling matches
+ * {@link assembleRange}. US lengths are simple inches by product decision
+ * (no feet+inches).
+ */
+export function formatLength(
+  minCm: number | null | undefined,
+  maxCm: number | null | undefined,
+  system: UnitSystem
+): string | null {
+  if (system === 'imperial') {
+    return assembleRange(minCm, maxCm, 'in', (n) => Math.round(cmToInches(n)));
+  }
+  return assembleRange(minCm, maxCm, 'cm', (n) => n);
+}
+
+/**
+ * Format a temperature range stored in Celsius for the chosen system. Metric
+ * `18–24 °C`; imperial converts to whole Fahrenheit `64–75 °F`.
+ */
+export function formatTemperature(
+  minC: number | null | undefined,
+  maxC: number | null | undefined,
+  system: UnitSystem
+): string | null {
+  if (system === 'imperial') {
+    return assembleRange(minC, maxC, '°F', (n) =>
+      Math.round(celsiusToFahrenheit(n))
+    );
+  }
+  return assembleRange(minC, maxC, '°C', (n) => n);
 }
 
 /**
@@ -138,7 +190,9 @@ export function parseStringArray(json: string | null | undefined): string[] {
   if (!json) return [];
   try {
     const parsed = JSON.parse(json);
-    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === 'string')
+      : [];
   } catch {
     return [];
   }
@@ -150,7 +204,7 @@ export function parseStringArray(json: string | null | undefined): string[] {
  */
 export function pickLongDescription(
   longDescriptions: readonly PlantLongDescription[],
-  language: string,
+  language: string
 ): PlantLongDescription | null {
   if (!longDescriptions?.length) return null;
   const exact = longDescriptions.find((d) => d.language === language);
@@ -167,7 +221,7 @@ export function pickLongDescription(
  */
 export function groupCommonNamesByLanguage(
   commonNames: Plant['commonNames'],
-  uiLanguage: string,
+  uiLanguage: string
 ): Map<string, Plant['commonNames']> {
   const grouped = new Map<string, Plant['commonNames']>();
   for (const cn of commonNames) {
@@ -184,7 +238,8 @@ export function groupCommonNamesByLanguage(
   // contract); ties break alphabetically so the order is deterministic.
   for (const [, names] of grouped) {
     (names as PlantCommonName[]).sort((a, b) => {
-      if (a.isPrimary !== b.isPrimary) return Number(b.isPrimary) - Number(a.isPrimary);
+      if (a.isPrimary !== b.isPrimary)
+        return Number(b.isPrimary) - Number(a.isPrimary);
       return a.name.localeCompare(b.name);
     });
   }
@@ -200,20 +255,22 @@ export function groupCommonNamesByLanguage(
 // ── Perenual Supreme xData (Section F.6, Sprint 1.5 PR B) ──────────────────
 
 /**
- * Format a numeric xData range for Section F.6. Distinct from {@link formatRange}:
- * uses a trailing `+` for half-open ranges (Perenual ships `max=""` frequently)
- * and an em-dash (U+2013) separator.
+ * Format a numeric xData range with a decorative suffix, for the NON-convertible
+ * Section F.6 / hero quantities only (sun hours, watering pH). Convertible
+ * measures use the unit-aware {@link formatLength} / {@link formatTemperature}
+ * instead. Uses a trailing `+` for half-open ranges (Perenual ships `max=""`
+ * frequently) and an en-dash (U+2013) separator.
  *
- * - `formatXDataRange(6, 8, '°C')` → `'6–8°C'`
+ * - `formatXDataRange(6, 8, ' h')` → `'6–8 h'`
  * - `formatXDataRange(6, null, ' h')` → `'6+ h'` (half-open)
- * - `formatXDataRange(null, 30, '°C')` → `'≤30°C'` (defensive, rare)
- * - `formatXDataRange(18, 18, '°C')` → `'18°C'` (equal bounds collapse)
+ * - `formatXDataRange(null, 30)` → `'≤30'` (defensive, rare)
+ * - `formatXDataRange(6, 6)` → `'6'` (equal bounds collapse)
  * - `formatXDataRange(null, null)` → `null` (caller hides the row)
  */
 export function formatXDataRange(
   min: number | null,
   max: number | null,
-  suffix = '',
+  suffix = ''
 ): string | null {
   if (min === null && max === null) return null;
   if (min !== null && max === null) return `${min}+${suffix}`;
@@ -232,7 +289,9 @@ export function parseStringArrayJson(json: string | null): string[] | null {
   try {
     const parsed: unknown = JSON.parse(json);
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
-    const strings = parsed.filter((item): item is string => typeof item === 'string');
+    const strings = parsed.filter(
+      (item): item is string => typeof item === 'string'
+    );
     return strings.length === 0 ? null : strings;
   } catch {
     return null;
@@ -240,13 +299,43 @@ export function parseStringArrayJson(json: string | null): string[] | null {
 }
 
 /**
- * Compose a plant-spacing display value. Returns `null` unless BOTH the value
- * and unit are present — a bare number has no meaningful display.
+ * True when a spacing value is renderable — BOTH the value and a source unit
+ * must be present (a bare number has no meaningful display). Unit-agnostic, so
+ * the Section F.6 presence gate ({@link hasAnyXData}) never depends on the UI
+ * unit system.
  */
-export function formatPlantSpacing(value: number | null, unit: string | null): string | null {
-  const trimmedUnit = unit?.trim();
+export function hasSpacing(value: number | null, unit: string | null): boolean {
+  return value !== null && !!unit?.trim();
+}
+
+/** Parse the Perenual source spacing unit to centimetres; null if unrecognized. */
+function spacingToCm(value: number, sourceUnit: string): number | null {
+  const u = sourceUnit.trim().toLowerCase();
+  if (u.startsWith('inch') || u === 'in') return inchesToCm(value);
+  if (u.startsWith('cm') || u.startsWith('centim')) return value;
+  return null;
+}
+
+/**
+ * Compose a plant-spacing display value (SMA-178). The source unit is whatever
+ * Perenual stored (`XPlantSpacingUnit`, observed as `"inches"`; `"cm"` handled
+ * defensively): it is parsed to centimetres, then shown in the chosen system —
+ * `46 cm` (metric) or `18 in` (imperial), rounded to a whole number. Returns
+ * `null` when value/unit are absent; an unrecognized source unit falls back to
+ * the raw `value unit` verbatim rather than guessing a conversion.
+ */
+export function formatSpacing(
+  value: number | null,
+  sourceUnit: string | null,
+  system: UnitSystem
+): string | null {
+  const trimmedUnit = sourceUnit?.trim();
   if (value === null || !trimmedUnit) return null;
-  return `${value} ${trimmedUnit}`;
+  const cm = spacingToCm(value, trimmedUnit);
+  if (cm === null) return `${value} ${trimmedUnit}`;
+  return system === 'imperial'
+    ? `${Math.round(cmToInches(cm))} in`
+    : `${Math.round(cm)} cm`;
 }
 
 /**
@@ -264,9 +353,9 @@ export function hasAnyXData(pd: PlantPerenualData): boolean {
     pd.xSunlightHoursMax !== null ||
     pd.xTemperatureToleranceMinC !== null ||
     pd.xTemperatureToleranceMaxC !== null ||
-    // Spacing needs BOTH value + unit to render a row (mirror formatPlantSpacing),
+    // Spacing needs BOTH value + unit to render a row (mirror hasSpacing),
     // else the gate would pass with no renderable spacing row (CR #76 r1).
-    formatPlantSpacing(pd.xPlantSpacingValue, pd.xPlantSpacingUnit) !== null ||
+    hasSpacing(pd.xPlantSpacingValue, pd.xPlantSpacingUnit) ||
     parseStringArrayJson(pd.xWateringQualityJson) !== null ||
     parseStringArrayJson(pd.xWateringPeriodJson) !== null
   );

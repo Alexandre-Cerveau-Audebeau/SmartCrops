@@ -377,6 +377,11 @@
       "title": "Summary",
       "ariaLabel": "Section navigation"
     },
+    "units": {
+      "label": "Unit system",
+      "metric": "Europe",
+      "imperial": "US"
+    },
     "gauges": {
       "title": "Growing conditions",
       "sun": "Sun",

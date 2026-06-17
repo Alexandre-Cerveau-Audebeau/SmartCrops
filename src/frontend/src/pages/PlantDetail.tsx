@@ -55,6 +55,7 @@ import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import { NAV_BG } from '../constants/colors';
 import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../hooks/useLanguage';
+import { useUnitSystem } from '../hooks/useUnitSystem';
 import { addPlantToGarden, fetchGardens } from '../services/gardenApi';
 import { fetchPlantById } from '../services/plantApi';
 import {
@@ -69,6 +70,7 @@ import PlantDetailToc from '../components/plantDetail/PlantDetailToc';
 import type { TocSection } from '../components/plantDetail/PlantDetailToc';
 import PlantHeroGauges from '../components/plantDetail/PlantHeroGauges';
 import PlantGallerySection from '../components/plantDetail/PlantGallerySection';
+import UnitSystemToggle from '../components/plantDetail/UnitSystemToggle';
 import { isUserFacingUrl, toUserFacingUrl } from '../utils/externalSourceUrl';
 import { resolveTranslatedField } from '../utils/getTranslation';
 import { capitalizeFirst } from '../utils/capitalizeFirst';
@@ -76,8 +78,9 @@ import { composeImageAttribution } from '../utils/imageAttribution';
 import { formatPeriod } from '../utils/formatPeriod';
 import {
   formatHardinessZone,
-  formatPlantSpacing,
-  formatRange,
+  formatLength,
+  formatSpacing,
+  formatTemperature,
   formatXDataRange,
   groupCommonNamesByLanguage,
   hasAnyXData,
@@ -129,6 +132,7 @@ export default function PlantDetail() {
     ? t('plantDetail.backToGarden', { name: navState!.gardenName ?? '' })
     : t('library.backToLibrary');
   const { language } = useLanguage();
+  const { system } = useUnitSystem();
   const { isAuthenticated, user } = useAuth();
   // SMA-33: admin UI gated on the backend role surfaced via /me (was the
   // VITE_ADMIN_EMAILS front whitelist). UX only — the real barrier is the
@@ -552,13 +556,13 @@ export default function PlantDetail() {
         : undefined,
     });
   }
-  const height = formatRange(plant.minHeightCm, plant.maxHeightCm, 'cm');
+  const height = formatLength(plant.minHeightCm, plant.maxHeightCm, system);
   if (height)
     characteristicRows.push({
       label: t('plantDetail.labels.height'),
       value: height,
     });
-  const spread = formatRange(plant.minSpreadCm, plant.maxSpreadCm, 'cm');
+  const spread = formatLength(plant.minSpreadCm, plant.maxSpreadCm, system);
   if (spread)
     characteristicRows.push({
       label: t('plantDetail.labels.spread'),
@@ -705,7 +709,25 @@ export default function PlantDetail() {
           alignItems: { md: 'flex-start' },
         }}
       >
-        <PlantDetailToc sections={tocSections} />
+        {/* SMA-178 — left column: unit toggle above the TOC. The wrapper is the
+            single sticky element (desktop top 80 / mobile top 56) and the inner
+            TOC <nav> is forced static, so the toggle + TOC pin together without a
+            nested-sticky overlap. */}
+        <Box
+          sx={{
+            width: { xs: '100%', md: 288 },
+            flexShrink: { md: 0 },
+            alignSelf: { md: 'flex-start' },
+            position: 'sticky',
+            top: { xs: 56, md: 80 },
+            zIndex: 2,
+            bgcolor: '#FAFDF7',
+            '& > nav': { position: 'static', top: 'auto' },
+          }}
+        >
+          <UnitSystemToggle />
+          <PlantDetailToc sections={tocSections} />
+        </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           {/* ── Section A: Hero header ───────────────────────────────────── */}
           <Card
@@ -1277,24 +1299,25 @@ export default function PlantDetail() {
               pd.xWateringPhMin,
               pd.xWateringPhMax
             );
-            const wateringTemp = formatXDataRange(
+            const wateringTemp = formatTemperature(
               pd.xWateringBasedTempMinC,
               pd.xWateringBasedTempMaxC,
-              '°C'
+              system
             );
             const sunlight = formatXDataRange(
               pd.xSunlightHoursMin,
               pd.xSunlightHoursMax,
               ' h'
             );
-            const tempTol = formatXDataRange(
+            const tempTol = formatTemperature(
               pd.xTemperatureToleranceMinC,
               pd.xTemperatureToleranceMaxC,
-              '°C'
+              system
             );
-            const spacing = formatPlantSpacing(
+            const spacing = formatSpacing(
               pd.xPlantSpacingValue,
-              pd.xPlantSpacingUnit
+              pd.xPlantSpacingUnit,
+              system
             );
             const waterQuality = parseStringArrayJson(pd.xWateringQualityJson);
             const wateringPeriod = parseStringArrayJson(pd.xWateringPeriodJson);

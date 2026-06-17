@@ -377,6 +377,11 @@
       "title": "Sommaire",
       "ariaLabel": "Navigation des sections"
     },
+    "units": {
+      "label": "Système d'unités",
+      "metric": "Europe",
+      "imperial": "US"
+    },
     "gauges": {
       "title": "Conditions de culture",
       "sun": "Soleil",
