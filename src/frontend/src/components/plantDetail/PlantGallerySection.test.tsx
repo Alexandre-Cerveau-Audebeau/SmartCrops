@@ -113,7 +113,12 @@ describe('PlantGallerySection (SMA-154)', () => {
       name: '© A. Photographer · Trefle · CC BY-SA',
     });
     expect(attribution).toHaveAttribute('aria-expanded', 'false');
-    await user.click(attribution);
+
+    // Drive it from the keyboard (focus + Enter), not a pointer click, so the
+    // test actually proves the control is keyboard-operable (WCAG 2.1.1).
+    attribution.focus();
+    expect(attribution).toHaveFocus();
+    await user.keyboard('{Enter}');
     expect(attribution).toHaveAttribute('aria-expanded', 'true');
   });
 });

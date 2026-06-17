@@ -541,6 +541,7 @@
       "lightboxNext": "Next photo",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
+      "zoomLevel": "Zoom {{percent}}%",
       "openHero": "Open photo gallery",
       "openTile": "Open photo {{index}} in lightbox",
       "empty": "No photos yet for this plant.",

@@ -586,8 +586,15 @@ describe('PlantDetail', () => {
     const dialog = within(screen.getByRole('dialog'));
     expect(dialog.getByText('1 / 2')).toBeInTheDocument();
 
+    // Zoom in, then navigate — zoom must reset to 1× on the new image, which we
+    // observe via the zoom-out button going back to disabled.
+    const zoomOut = dialog.getByRole('button', { name: 'Zoom out' });
+    await user.click(dialog.getByRole('button', { name: 'Zoom in' }));
+    expect(zoomOut).toBeEnabled();
+
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     expect(dialog.getByText('2 / 2')).toBeInTheDocument();
+    expect(zoomOut).toBeDisabled();
 
     fireEvent.keyDown(window, { key: 'ArrowRight' }); // wraps to the first
     expect(dialog.getByText('1 / 2')).toBeInTheDocument();

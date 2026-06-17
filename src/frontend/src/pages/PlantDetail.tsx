@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Link as RouterLink,
@@ -32,6 +32,7 @@ import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { visuallyHidden } from '@mui/utils';
 import AddIcon from '@mui/icons-material/Add';
 import AgricultureIcon from '@mui/icons-material/Agriculture';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -165,6 +166,26 @@ export default function PlantDetail() {
     setLightboxImages(imgs);
     setLightboxIndex(index);
   };
+  // Stable handlers for PhotoLightbox: its keyboard-nav effect depends on these,
+  // so memoizing them stops it from re-subscribing the window `keydown` listener
+  // on every PlantDetail render while the lightbox is open.
+  const closeLightbox = useCallback(() => setLightboxIndex(null), []);
+  const prevLightbox = useCallback(
+    () =>
+      setLightboxIndex((i) =>
+        i == null
+          ? null
+          : (i - 1 + lightboxImages.length) % lightboxImages.length
+      ),
+    [lightboxImages.length]
+  );
+  const nextLightbox = useCallback(
+    () =>
+      setLightboxIndex((i) =>
+        i == null ? null : (i + 1) % lightboxImages.length
+      ),
+    [lightboxImages.length]
+  );
   const [adminMenuAnchor, setAdminMenuAnchor] = useState<null | HTMLElement>(
     null
   );
@@ -1769,19 +1790,9 @@ export default function PlantDetail() {
       <PhotoLightbox
         images={lightboxImages}
         index={lightboxIndex}
-        onClose={() => setLightboxIndex(null)}
-        onPrev={() =>
-          setLightboxIndex((i) =>
-            i == null
-              ? null
-              : (i - 1 + lightboxImages.length) % lightboxImages.length
-          )
-        }
-        onNext={() =>
-          setLightboxIndex((i) =>
-            i == null ? null : (i + 1) % lightboxImages.length
-          )
-        }
+        onClose={closeLightbox}
+        onPrev={prevLightbox}
+        onNext={nextLightbox}
       />
 
       {/* Admin toast */}
@@ -2053,6 +2064,12 @@ function PhotoLightbox({
   if (!img) return null;
 
   const attribution = composeImageAttribution(img);
+  // Localized type label — reused for the image alt text, the badge, and the
+  // dialog so screen readers never hear the raw enum (e.g. "Habit").
+  const imageTypeLabel = t(
+    `plantDetail.gallery.types.${img.imageType}`,
+    img.imageType
+  );
   const zoomIn = () =>
     setZoom((z) => Math.min(LIGHTBOX_ZOOM_MAX, z + LIGHTBOX_ZOOM_STEP));
   const zoomOut = () =>
@@ -2062,6 +2079,7 @@ function PhotoLightbox({
     <Dialog
       open
       onClose={onClose}
+      aria-label={t('plantDetail.sections.gallery')}
       maxWidth="lg"
       fullWidth
       slotProps={{
@@ -2085,7 +2103,7 @@ function PhotoLightbox({
           <Box
             component="img"
             src={img.url}
-            alt={img.imageType}
+            alt={imageTypeLabel}
             sx={{
               maxWidth: '100%',
               maxHeight: '100%',
@@ -2095,6 +2113,17 @@ function PhotoLightbox({
               transition: 'transform 0.2s ease',
             }}
           />
+          {/* Screen-reader-only zoom announcement (E4) — visual is unchanged. */}
+          <Box
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            sx={visuallyHidden}
+          >
+            {t('plantDetail.gallery.zoomLevel', {
+              percent: Math.round(zoom * 100),
+            })}
+          </Box>
         </Box>
 
         {/* Type badge — top-left, solid brand-green pill (same as the tiles). */}
@@ -2113,7 +2142,7 @@ function PhotoLightbox({
             pointerEvents: 'none',
           }}
         >
-          {t(`plantDetail.gallery.types.${img.imageType}`, img.imageType)}
+          {imageTypeLabel}
         </Box>
 
         {/* Close — top-right. */}
