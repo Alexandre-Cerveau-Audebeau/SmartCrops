@@ -13,9 +13,14 @@ export function useScrollSpy(ids: string[]): string {
   const [activeId, setActiveId] = useState(ids[0] ?? '');
   // The id list is rebuilt on every render; key the effect on its contents
   // rather than the array identity so it only re-subscribes when ids change.
-  const key = ids.join('|');
+  // JSON.stringify (vs join('|')) avoids collisions if an id ever contains '|'.
+  const key = JSON.stringify(ids);
 
   useEffect(() => {
+    // Re-seed the fallback active id whenever `ids` changes, so a stale id never
+    // lingers — covers the case where IntersectionObserver is unavailable
+    // (jsdom / SSR) and the effect early-returns below.
+    setActiveId(ids[0] ?? '');
     if (typeof IntersectionObserver === 'undefined') return;
     const elements = ids
       .map((id) => document.getElementById(id))

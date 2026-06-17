@@ -55,7 +55,7 @@ describe('PlantDetailToc (SMA-169)', () => {
 
     expect(screen.getByRole('link', { name: 'About' })).toHaveAttribute(
       'aria-current',
-      'true'
+      'location'
     );
     expect(screen.getByRole('link', { name: 'Overview' })).not.toHaveAttribute(
       'aria-current'
@@ -72,7 +72,7 @@ describe('PlantDetailToc (SMA-169)', () => {
     );
     expect(screen.getByRole('link', { name: 'About' })).toHaveAttribute(
       'aria-current',
-      'true'
+      'location'
     );
   });
 

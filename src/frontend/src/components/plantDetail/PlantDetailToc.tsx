@@ -69,17 +69,17 @@ export default function PlantDetailToc({
               key={s.id}
               component="a"
               href={`#${s.id}`}
-              aria-current={active ? 'true' : undefined}
+              aria-current={active ? 'location' : undefined}
               sx={{
                 flexShrink: 0,
                 px: 1.5,
-                py: 0.75,
+                py: 0.9,
                 borderRadius: 999,
                 border: '1px solid',
                 borderColor: active ? ACTIVE_GREEN : '#d8e0d6',
                 bgcolor: active ? ACTIVE_GREEN : '#fff',
                 color: active ? '#fff' : IDLE_TEXT,
-                fontSize: 12.5,
+                fontSize: 13.5,
                 fontWeight: 600,
                 whiteSpace: 'nowrap',
                 textDecoration: 'none',
@@ -102,7 +102,7 @@ export default function PlantDetailToc({
       component="nav"
       aria-label={t('plantDetail.toc.ariaLabel')}
       sx={{
-        width: 256,
+        width: 288,
         flexShrink: 0,
         position: 'sticky',
         top: 80,
@@ -119,7 +119,7 @@ export default function PlantDetailToc({
       <Typography
         component="div"
         sx={{
-          fontSize: 11,
+          fontSize: 12,
           textTransform: 'uppercase',
           letterSpacing: '0.07em',
           color: '#7a857f',
@@ -138,20 +138,20 @@ export default function PlantDetailToc({
             key={s.id}
             component="a"
             href={`#${s.id}`}
-            aria-current={active ? 'true' : undefined}
+            aria-current={active ? 'location' : undefined}
             sx={{
               display: 'flex',
               alignItems: 'center',
               gap: 1,
               px: 1.25,
-              py: 0.75,
+              py: 1.1,
               borderRadius: 2,
               borderLeft: '3px solid',
               borderLeftColor: active ? ACTIVE_GREEN : 'transparent',
               bgcolor: active ? ACTIVE_BG : 'transparent',
               color: active ? ACTIVE_TEXT : IDLE_TEXT,
               fontWeight: active ? 700 : 500,
-              fontSize: 13,
+              fontSize: 14,
               textDecoration: 'none',
               '&:hover': { bgcolor: active ? ACTIVE_BG : '#F2F6F0' },
               '&:focus-visible': {

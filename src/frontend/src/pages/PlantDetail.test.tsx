@@ -295,9 +295,9 @@ describe('PlantDetail', () => {
     ).toBeInTheDocument();
     // Scoped to the F.6 section — the same value also appears in the hero gauge
     // row now (SMA-169, temporary hero/Characteristics duplication).
-    expect(
-      within(document.getElementById('scientific-data')!).getByText('18–24°C')
-    ).toBeInTheDocument();
+    const sciSection = document.getElementById('scientific-data');
+    expect(sciSection).toBeTruthy();
+    expect(within(sciSection!).getByText('18–24°C')).toBeInTheDocument();
     // Water-quality chip is i18n-labelled via toCamelKey lookup.
     expect(screen.getByText('Rainwater')).toBeInTheDocument();
   });
@@ -377,9 +377,9 @@ describe('PlantDetail', () => {
     await screen.findByRole('heading', { name: 'Basil' });
     // The warning icon's aria-label is the warning string; the chip itself reads "2".
     // Scoped to Characteristics — the hardiness gauge also shows "2" now (SMA-169).
-    expect(
-      within(document.getElementById('characteristics')!).getByText('2')
-    ).toBeInTheDocument();
+    const charSection = document.getElementById('characteristics');
+    expect(charSection).toBeTruthy();
+    expect(within(charSection!).getByText('2')).toBeInTheDocument();
     // The warning icon (WarningAmber) renders with role="img" via testid-less material.
     // We test that the suspicious-flag path triggered by querying the warning tooltip title.
     const warningEls = document.querySelectorAll(
@@ -397,9 +397,9 @@ describe('PlantDetail', () => {
     );
     await screen.findByRole('heading', { name: 'Basil' });
     // Scoped to Characteristics — the hardiness gauge also shows "5-7" now (SMA-169).
-    expect(
-      within(document.getElementById('characteristics')!).getByText('5-7')
-    ).toBeInTheDocument();
+    const charSection = document.getElementById('characteristics');
+    expect(charSection).toBeTruthy();
+    expect(within(charSection!).getByText('5-7')).toBeInTheDocument();
     const warningEls = document.querySelectorAll(
       'svg[data-testid="WarningAmberIcon"]'
     );
