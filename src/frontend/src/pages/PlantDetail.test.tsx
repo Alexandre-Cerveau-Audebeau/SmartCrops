@@ -1,4 +1,11 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -218,6 +225,7 @@ describe('PlantDetail', () => {
             sourceExternalId: null,
             displayOrder: 0,
             isFlagged: false,
+            attribution: '© Photographer — CC BY-SA 4.0',
           },
         ],
         longDescriptions: [
@@ -432,6 +440,7 @@ describe('PlantDetail', () => {
             sourceExternalId: null,
             displayOrder: 0,
             isFlagged: false,
+            attribution: '© Trefle',
           },
         ],
       })
@@ -445,13 +454,116 @@ describe('PlantDetail', () => {
     expect(heroButton.tagName).toBe('BUTTON');
   });
 
-  it('shows the correct "+N more" count on the gallery overlay (31 images → +25, not +26)', async () => {
-    // Mirror Aloe vera's gallery shape from the production smoke matrix.
-    const images = Array.from({ length: 31 }, (_, i) => ({
-      id: i + 1,
-      imageType: i === 0 ? 'Main' : 'Other',
-      url: `https://img.test/aloe-${i}.jpg`,
-      thumbnailUrl: `https://img.test/aloe-${i}-thumb.jpg`,
+  it('shows the gallery empty state, still listed in the TOC, when the plant has no stable images (SMA-154)', async () => {
+    // Base plant has images: [] → no stable gallery pool.
+    renderAtPlant(makePlant());
+    await screen.findByRole('heading', { name: 'Basil' });
+    expect(
+      screen.getByText('No photos yet for this plant.')
+    ).toBeInTheDocument();
+    // The gallery section always renders now, so the TOC always links to it.
+    expect(screen.getByRole('link', { name: 'Gallery' })).toHaveAttribute(
+      'href',
+      '#gallery'
+    );
+  });
+
+  it('renders the gallery inline (grid tile + attribution, no modal) for a plant with stable images (SMA-154)', async () => {
+    renderAtPlant(
+      makePlant({
+        images: [
+          {
+            id: 1,
+            imageType: 'Flower',
+            url: 'https://img.test/flower.jpg',
+            thumbnailUrl: 'https://img.test/flower-thumb.jpg',
+            width: 100,
+            height: 100,
+            licenseName: 'CC BY-SA',
+            licenseUrl: null,
+            credit: 'Photographer',
+            source: 'Trefle',
+            sourceExternalId: null,
+            displayOrder: 0,
+            isFlagged: false,
+            attribution: '© Photographer — CC BY-SA',
+          },
+        ],
+      })
+    );
+    await screen.findByRole('heading', { name: 'Basil' });
+
+    // Tile rendered inline — no "view all" button, no modal. (The hero is also a
+    // button labelled "Open photo gallery"; match the tile's lightbox label.)
+    expect(
+      screen.getByRole('button', { name: /Open photo 1 in lightbox/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /View all photos/ })
+    ).toBeNull();
+    // Attribution composed from credit · source · license shows under the tile.
+    expect(
+      screen.getByText('© Photographer · Trefle · CC BY-SA')
+    ).toBeInTheDocument();
+  });
+
+  it('opens the lightbox with a type badge, counter, composed attribution, and bounded zoom (SMA-154)', async () => {
+    const user = userEvent.setup();
+    renderAtPlant(
+      makePlant({
+        images: [
+          {
+            id: 1,
+            imageType: 'Flower',
+            url: 'https://img.test/flower.jpg',
+            thumbnailUrl: 'https://img.test/flower-thumb.jpg',
+            width: 100,
+            height: 100,
+            licenseName: 'CC BY-SA',
+            licenseUrl: null,
+            credit: 'Photographer',
+            source: 'Trefle',
+            sourceExternalId: null,
+            displayOrder: 0,
+            isFlagged: false,
+            attribution: '© Photographer — CC BY-SA',
+          },
+        ],
+      })
+    );
+    await screen.findByRole('heading', { name: 'Basil' });
+
+    await user.click(
+      screen.getByRole('button', { name: 'Open photo gallery' })
+    );
+    const dialog = within(screen.getByRole('dialog'));
+
+    // Type badge, counter, and composed attribution — scoped to the lightbox.
+    expect(dialog.getByText('Flower')).toBeInTheDocument();
+    expect(dialog.getByText('1 / 1')).toBeInTheDocument();
+    expect(
+      dialog.getByText('© Photographer · Trefle · CC BY-SA')
+    ).toBeInTheDocument();
+
+    // Zoom is clamped: out is disabled at 1×, in is disabled at the 3× ceiling.
+    const zoomIn = dialog.getByRole('button', { name: 'Zoom in' });
+    const zoomOut = dialog.getByRole('button', { name: 'Zoom out' });
+    expect(zoomOut).toBeDisabled();
+    await user.click(zoomIn); // 1.5×
+    expect(zoomOut).toBeEnabled();
+    await user.click(zoomIn); // 2×
+    await user.click(zoomIn); // 2.5×
+    await user.click(zoomIn); // 3× — ceiling
+    expect(zoomIn).toBeDisabled();
+  });
+
+  it('navigates the lightbox with the arrow keys (SMA-154)', async () => {
+    const user = userEvent.setup();
+    const stable = (id: number, imageType: string) => ({
+      id,
+      imageType,
+      url: `https://img.test/${id}.jpg`,
+      thumbnailUrl: null,
       width: null,
       height: null,
       licenseName: null,
@@ -459,14 +571,35 @@ describe('PlantDetail', () => {
       credit: null,
       source: 'Trefle',
       sourceExternalId: null,
-      displayOrder: i,
+      displayOrder: id,
       isFlagged: false,
-    }));
-    renderAtPlant(makePlant({ images }));
+      attribution: '© Trefle',
+    });
+    renderAtPlant(
+      makePlant({ images: [stable(1, 'Flower'), stable(2, 'Fruit')] })
+    );
     await screen.findByRole('heading', { name: 'Basil' });
-    // GALLERY_PREVIEW_COUNT is 6, so 31 - 6 = 25 remaining (NOT 26 — the
-    // overlay tile counts as one of the 6 preview slots).
-    expect(screen.getByText('+25')).toBeInTheDocument();
-    expect(screen.queryByText('+26')).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Open photo gallery' })
+    );
+    const dialog = within(screen.getByRole('dialog'));
+    expect(dialog.getByText('1 / 2')).toBeInTheDocument();
+
+    // Zoom in, then navigate — zoom must reset to 1× on the new image, which we
+    // observe via the zoom-out button going back to disabled.
+    const zoomOut = dialog.getByRole('button', { name: 'Zoom out' });
+    await user.click(dialog.getByRole('button', { name: 'Zoom in' }));
+    expect(zoomOut).toBeEnabled();
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(dialog.getByText('2 / 2')).toBeInTheDocument();
+    expect(zoomOut).toBeDisabled();
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' }); // wraps to the first
+    expect(dialog.getByText('1 / 2')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' }); // wraps back to the last
+    expect(dialog.getByText('2 / 2')).toBeInTheDocument();
   });
 });

@@ -536,15 +536,25 @@
       }
     },
     "gallery": {
-      "showAll": "View all photos ({{count}})",
-      "remaining": "+{{count}} more",
       "lightboxClose": "Close",
       "lightboxPrev": "Previous photo",
       "lightboxNext": "Next photo",
-      "credit": "Credit: {{name}}",
-      "license": "License: {{name}}",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "zoomLevel": "Zoom {{percent}}%",
       "openHero": "Open photo gallery",
-      "openTile": "Open photo {{index}} in lightbox"
+      "openTile": "Open photo {{index}} in lightbox",
+      "empty": "No photos yet for this plant.",
+      "types": {
+        "all": "All",
+        "Habit": "Habit",
+        "Flower": "Flower",
+        "Leaf": "Leaf",
+        "Fruit": "Fruit",
+        "Bark": "Bark",
+        "Other": "Other",
+        "Main": "Main"
+      }
     },
     "description": {
       "readMore": "Read more",

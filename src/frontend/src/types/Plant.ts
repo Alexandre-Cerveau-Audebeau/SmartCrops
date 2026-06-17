@@ -23,6 +23,14 @@ export interface PlantImage {
   sourceExternalId: string | null;
   displayOrder: number;
   isFlagged: boolean;
+  /**
+   * Server-composed, always-non-null attribution line shipped by the detail DTO
+   * via `ImageAttribution.Compose` (format "© credit — license"). NOT rendered
+   * verbatim by the gallery: its format differs from the approved design
+   * ("© credit · source · license"), so `PlantGallerySection` composes its own
+   * line from credit/source/licenseName. Aligning the backend format is SMA-180.
+   */
+  attribution: string;
 }
 
 /** Long-form rich description in a single language, one row per locale. */

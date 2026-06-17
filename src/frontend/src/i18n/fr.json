@@ -536,15 +536,25 @@
       }
     },
     "gallery": {
-      "showAll": "Voir toutes les photos ({{count}})",
-      "remaining": "+{{count}} de plus",
       "lightboxClose": "Fermer",
       "lightboxPrev": "Photo précédente",
       "lightboxNext": "Photo suivante",
-      "credit": "Crédit : {{name}}",
-      "license": "Licence : {{name}}",
+      "zoomIn": "Zoom avant",
+      "zoomOut": "Zoom arrière",
+      "zoomLevel": "Zoom {{percent}} %",
       "openHero": "Ouvrir la galerie photo",
-      "openTile": "Ouvrir la photo {{index}} dans la visionneuse"
+      "openTile": "Ouvrir la photo {{index}} dans la visionneuse",
+      "empty": "Pas encore de photos pour cette plante.",
+      "types": {
+        "all": "Tout",
+        "Habit": "Port",
+        "Flower": "Fleur",
+        "Leaf": "Feuille",
+        "Fruit": "Fruit",
+        "Bark": "Écorce",
+        "Other": "Autre",
+        "Main": "Principale"
+      }
     },
     "description": {
       "readMore": "Lire plus",

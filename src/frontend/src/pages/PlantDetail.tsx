@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Link as RouterLink,
@@ -32,6 +32,7 @@ import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { visuallyHidden } from '@mui/utils';
 import AddIcon from '@mui/icons-material/Add';
 import AgricultureIcon from '@mui/icons-material/Agriculture';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -49,6 +50,9 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import WaterDropIcon from '@mui/icons-material/WaterDrop';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import YardIcon from '@mui/icons-material/Yard';
+import ZoomInIcon from '@mui/icons-material/ZoomIn';
+import ZoomOutIcon from '@mui/icons-material/ZoomOut';
+import { NAV_BG } from '../constants/colors';
 import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../hooks/useLanguage';
 import { addPlantToGarden, fetchGardens } from '../services/gardenApi';
@@ -64,9 +68,11 @@ import type { Plant, PlantImage } from '../types/Plant';
 import PlantDetailToc from '../components/plantDetail/PlantDetailToc';
 import type { TocSection } from '../components/plantDetail/PlantDetailToc';
 import PlantHeroGauges from '../components/plantDetail/PlantHeroGauges';
+import PlantGallerySection from '../components/plantDetail/PlantGallerySection';
 import { isUserFacingUrl, toUserFacingUrl } from '../utils/externalSourceUrl';
 import { resolveTranslatedField } from '../utils/getTranslation';
 import { capitalizeFirst } from '../utils/capitalizeFirst';
+import { composeImageAttribution } from '../utils/imageAttribution';
 import { formatPeriod } from '../utils/formatPeriod';
 import {
   formatHardinessZone,
@@ -75,7 +81,6 @@ import {
   formatXDataRange,
   groupCommonNamesByLanguage,
   hasAnyXData,
-  hasDistinctImageTypes,
   isHardinessSuspicious,
   parseStringArray,
   parseStringArrayJson,
@@ -93,7 +98,6 @@ const languageLabels: Record<string, string> = {
 const DESCRIPTION_TRUNCATE_CHARS = 360;
 const PESTS_PREVIEW_COUNT = 10;
 const COMMON_NAMES_PREVIEW_LANGUAGES = 6;
-const GALLERY_PREVIEW_COUNT = 6;
 
 type PlantDetailNavState = {
   from?: string;
@@ -154,6 +158,34 @@ export default function PlantDetail() {
   const [commonNamesExpanded, setCommonNamesExpanded] = useState(false);
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // The lightbox can be driven by the full gallery (hero) OR by the filtered
+  // subset shown in the inline gallery section (SMA-154), so its source list is
+  // held in state and set at open time, not hard-wired to galleryImages.
+  const [lightboxImages, setLightboxImages] = useState<PlantImage[]>([]);
+  const openLightbox = (imgs: PlantImage[], index: number) => {
+    setLightboxImages(imgs);
+    setLightboxIndex(index);
+  };
+  // Stable handlers for PhotoLightbox: its keyboard-nav effect depends on these,
+  // so memoizing them stops it from re-subscribing the window `keydown` listener
+  // on every PlantDetail render while the lightbox is open.
+  const closeLightbox = useCallback(() => setLightboxIndex(null), []);
+  const prevLightbox = useCallback(
+    () =>
+      setLightboxIndex((i) =>
+        i == null
+          ? null
+          : (i - 1 + lightboxImages.length) % lightboxImages.length
+      ),
+    [lightboxImages.length]
+  );
+  const nextLightbox = useCallback(
+    () =>
+      setLightboxIndex((i) =>
+        i == null ? null : (i + 1) % lightboxImages.length
+      ),
+    [lightboxImages.length]
+  );
   const [adminMenuAnchor, setAdminMenuAnchor] = useState<null | HTMLElement>(
     null
   );
@@ -256,6 +288,10 @@ export default function PlantDetail() {
   // ── Plant fetch with abort + reload trigger after admin re-enrich ─────────
   useEffect(() => {
     mountedRef.current = true;
+    // SMA-154: clear any open lightbox so a previous plant's photos never linger
+    // while navigating to another /library/:id.
+    setLightboxIndex(null);
+    setLightboxImages([]);
     setPlant(null);
     setError(null);
     if (!id) {
@@ -605,9 +641,9 @@ export default function PlantDetail() {
   // sommaire never links to an absent section. Anchors target each section's id.
   const tocSections: TocSection[] = [
     { id: 'overview', label: t('plantDetail.sections.overview') },
-    ...(galleryImages.length > 0
-      ? [{ id: 'gallery', label: t('plantDetail.sections.gallery') }]
-      : []),
+    // SMA-154: the gallery section always renders (grid or empty state), so it is
+    // always listed in the TOC.
+    { id: 'gallery', label: t('plantDetail.sections.gallery') },
     ...(longDescription || shortDescription
       ? [{ id: 'about', label: t('plantDetail.sections.about') }]
       : []),
@@ -699,7 +735,7 @@ export default function PlantDetail() {
                 <Box
                   component="button"
                   type="button"
-                  onClick={() => setLightboxIndex(0)}
+                  onClick={() => openLightbox(galleryImages, 0)}
                   aria-label={t('plantDetail.gallery.openHero')}
                   sx={{
                     p: 0,
@@ -898,108 +934,23 @@ export default function PlantDetail() {
             </CardContent>
           </Card>
 
-          {/* ── Section B: Photo gallery ───────────────────────────────────── */}
-          {galleryImages.length > 0 && (
-            <Card
-              id="gallery"
-              variant="outlined"
-              sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
-            >
-              <CardContent>
-                <Grid container spacing={1.5}>
-                  {galleryImages
-                    .slice(0, GALLERY_PREVIEW_COUNT)
-                    .map((img, idx) => {
-                      const isLastTile =
-                        idx === GALLERY_PREVIEW_COUNT - 1 &&
-                        galleryImages.length > GALLERY_PREVIEW_COUNT;
-                      // The overlay tile is itself one of the preview slots — so the
-                      // remaining count is the gallery total minus the preview slots,
-                      // not minus (preview - 1). Aloe vera (31 images, 6 preview slots)
-                      // should display "+25 more", not "+26".
-                      const remaining =
-                        galleryImages.length - GALLERY_PREVIEW_COUNT;
-                      return (
-                        <Grid key={img.id} size={{ xs: 4, sm: 4, md: 2 }}>
-                          <Tooltip
-                            title={
-                              [img.credit, img.licenseName]
-                                .filter(Boolean)
-                                .join(' · ') || ''
-                            }
-                            placement="top"
-                            arrow
-                          >
-                            <Box
-                              component="button"
-                              type="button"
-                              onClick={() => setLightboxIndex(idx)}
-                              aria-label={t('plantDetail.gallery.openTile', {
-                                index: idx + 1,
-                              })}
-                              sx={{
-                                position: 'relative',
-                                aspectRatio: '1 / 1',
-                                borderRadius: 2,
-                                overflow: 'hidden',
-                                cursor: 'pointer',
-                                bgcolor: 'grey.100',
-                                p: 0,
-                                border: 0,
-                                width: '100%',
-                                display: 'block',
-                                '&:hover .overlay': { opacity: 1 },
-                              }}
-                            >
-                              <Box
-                                component="img"
-                                src={img.thumbnailUrl ?? img.url}
-                                alt={img.imageType}
-                                sx={{
-                                  width: '100%',
-                                  height: '100%',
-                                  objectFit: 'cover',
-                                  display: 'block',
-                                }}
-                              />
-                              {isLastTile && (
-                                <Box
-                                  sx={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    bgcolor: 'rgba(0,0,0,0.55)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: '#fff',
-                                    fontWeight: 600,
-                                    fontSize: '1.1rem',
-                                  }}
-                                >
-                                  +{remaining}
-                                </Box>
-                              )}
-                            </Box>
-                          </Tooltip>
-                        </Grid>
-                      );
-                    })}
-                </Grid>
-                {hasDistinctImageTypes(galleryImages) && (
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ mt: 1.5, display: 'block' }}
-                  >
-                    {galleryImages
-                      .map((i) => i.imageType)
-                      .filter((v, i, a) => a.indexOf(v) === i)
-                      .join(' · ')}
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-          )}
+          {/* ── Section B: Photo gallery (SMA-154, inline) ─────────────────── */}
+          <Card
+            id="gallery"
+            variant="outlined"
+            sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
+          >
+            <CardContent>
+              <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+                {t('plantDetail.sections.gallery')}
+              </Typography>
+              <PlantGallerySection
+                key={plant.id}
+                images={galleryImages}
+                onSelect={openLightbox}
+              />
+            </CardContent>
+          </Card>
 
           {/* ── Section C: About / long description ────────────────────────── */}
           {(longDescription || shortDescription) && (
@@ -1837,21 +1788,11 @@ export default function PlantDetail() {
 
       {/* Photo lightbox */}
       <PhotoLightbox
-        images={galleryImages}
+        images={lightboxImages}
         index={lightboxIndex}
-        onClose={() => setLightboxIndex(null)}
-        onPrev={() =>
-          setLightboxIndex((i) =>
-            i == null
-              ? null
-              : (i - 1 + galleryImages.length) % galleryImages.length
-          )
-        }
-        onNext={() =>
-          setLightboxIndex((i) =>
-            i == null ? null : (i + 1) % galleryImages.length
-          )
-        }
+        onClose={closeLightbox}
+        onPrev={prevLightbox}
+        onNext={nextLightbox}
       />
 
       {/* Admin toast */}
@@ -2058,6 +1999,29 @@ function LifecycleStage({
  * license caption. Rendered only while `index` is non-null, so callers can
  * mount/unmount it via a single state variable.
  */
+// Zoom bounds for the lightbox (1× → 3× in 0.5 steps), shared by the +/- buttons.
+const LIGHTBOX_ZOOM_MIN = 1;
+const LIGHTBOX_ZOOM_MAX = 3;
+const LIGHTBOX_ZOOM_STEP = 0.5;
+
+// Translucent-light circular control used for every lightbox overlay button
+// (close, prev/next, zoom) so they stay legible over a dark photo.
+const lightboxControlSx = {
+  color: 'white',
+  bgcolor: 'rgba(255,255,255,0.15)',
+  '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' },
+  '&.Mui-disabled': { color: 'rgba(255,255,255,0.35)' },
+} as const;
+
+/**
+ * Full-screen photo viewer matching the Plant Detail v2 design: a dark overlay
+ * with the photo centred (contain), a localized type badge top-left, a close
+ * button top-right, circular prev/next arrows on the edges, the composed
+ * attribution bottom-left, and the counter + zoom controls bottom-right. Zoom is
+ * stepped (1×–3×) and resets whenever the shown image changes or the viewer
+ * (re)opens. Keyboard: ← previous, → next (Escape close + focus-trap come from
+ * the MUI Dialog). Descriptive per-photo captions are deferred (SMA-177).
+ */
 function PhotoLightbox({
   images,
   index,
@@ -2072,23 +2036,125 @@ function PhotoLightbox({
   onNext: () => void;
 }) {
   const { t } = useTranslation();
+  const [zoom, setZoom] = useState(LIGHTBOX_ZOOM_MIN);
+
+  // Reset zoom when the shown image changes (prev/next) or the viewer reopens.
+  // Adjust-during-render (the React-recommended "reset on prop change" pattern)
+  // rather than an effect, so it never trips `react-hooks/set-state-in-effect`.
+  const [zoomedIndex, setZoomedIndex] = useState(index);
+  if (index !== zoomedIndex) {
+    setZoomedIndex(index);
+    setZoom(LIGHTBOX_ZOOM_MIN);
+  }
+
+  // Arrow keys navigate; the MUI Dialog already wires Escape → onClose. Only
+  // listen while the viewer is open so a closed lightbox never intercepts keys.
+  useEffect(() => {
+    if (index == null) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') onPrev();
+      else if (e.key === 'ArrowRight') onNext();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [index, onPrev, onNext]);
+
   if (index == null) return null;
   const img = images[index];
   if (!img) return null;
+
+  const attribution = composeImageAttribution(img);
+  // Localized type label — reused for the image alt text, the badge, and the
+  // dialog so screen readers never hear the raw enum (e.g. "Habit").
+  const imageTypeLabel = t(
+    `plantDetail.gallery.types.${img.imageType}`,
+    img.imageType
+  );
+  const zoomIn = () =>
+    setZoom((z) => Math.min(LIGHTBOX_ZOOM_MAX, z + LIGHTBOX_ZOOM_STEP));
+  const zoomOut = () =>
+    setZoom((z) => Math.max(LIGHTBOX_ZOOM_MIN, z - LIGHTBOX_ZOOM_STEP));
+
   return (
-    <Dialog open onClose={onClose} maxWidth="lg" fullWidth>
+    <Dialog
+      open
+      onClose={onClose}
+      aria-label={t('plantDetail.sections.gallery')}
+      maxWidth="lg"
+      fullWidth
+      slotProps={{
+        paper: { sx: { bgcolor: 'black', backgroundImage: 'none' } },
+      }}
+    >
       <Box sx={{ position: 'relative', bgcolor: 'black' }}>
+        {/* Image viewport — overflow hidden so a zoomed photo is clipped to the
+            frame rather than overflowing the dialog. */}
         <Box
-          component="img"
-          src={img.url}
-          alt={img.imageType}
           sx={{
+            position: 'relative',
             width: '100%',
-            maxHeight: '80vh',
-            objectFit: 'contain',
-            display: 'block',
+            height: '80vh',
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
-        />
+        >
+          <Box
+            component="img"
+            src={img.url}
+            alt={imageTypeLabel}
+            sx={{
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain',
+              display: 'block',
+              transform: `scale(${zoom})`,
+              transition: 'transform 0.2s ease',
+            }}
+          />
+          {/* Screen-reader-only zoom announcement (E4) — visual is unchanged. */}
+          <Box
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            sx={visuallyHidden}
+          >
+            {t('plantDetail.gallery.zoomLevel', {
+              percent: Math.round(zoom * 100),
+            })}
+          </Box>
+        </Box>
+
+        {/* Type badge — top-left, solid brand-green pill (same as the tiles). */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 12,
+            left: 12,
+            px: 1,
+            py: 0.5,
+            borderRadius: 1.5,
+            bgcolor: NAV_BG,
+            color: '#fff',
+            fontSize: 12,
+            fontWeight: 600,
+            pointerEvents: 'none',
+          }}
+        >
+          {imageTypeLabel}
+        </Box>
+
+        {/* Close — top-right. */}
+        <IconButton
+          onClick={onClose}
+          aria-label={t('plantDetail.gallery.lightboxClose')}
+          sx={{ position: 'absolute', top: 8, right: 8, ...lightboxControlSx }}
+        >
+          <CloseIcon />
+        </IconButton>
+
+        {/* Prev / next — circular edge arrows (only when there's more than one). */}
         {images.length > 1 && (
           <>
             <IconButton
@@ -2099,8 +2165,7 @@ function PhotoLightbox({
                 top: '50%',
                 left: 8,
                 transform: 'translateY(-50%)',
-                color: 'white',
-                bgcolor: 'rgba(0,0,0,0.4)',
+                ...lightboxControlSx,
               }}
             >
               <ChevronLeftIcon />
@@ -2113,50 +2178,74 @@ function PhotoLightbox({
                 top: '50%',
                 right: 8,
                 transform: 'translateY(-50%)',
-                color: 'white',
-                bgcolor: 'rgba(0,0,0,0.4)',
+                ...lightboxControlSx,
               }}
             >
               <ChevronRightIcon />
             </IconButton>
           </>
         )}
-        <IconButton
-          onClick={onClose}
-          aria-label={t('plantDetail.gallery.lightboxClose')}
+
+        {/* Attribution — bottom-left, monospace, legible over the dark photo. */}
+        {attribution && (
+          <Typography
+            variant="body2"
+            sx={{
+              position: 'absolute',
+              bottom: 12,
+              left: 12,
+              maxWidth: '55%',
+              color: 'rgba(255,255,255,0.92)',
+              fontFamily: 'monospace',
+              textShadow: '0 1px 3px rgba(0,0,0,0.9)',
+              pointerEvents: 'none',
+            }}
+          >
+            {attribution}
+          </Typography>
+        )}
+
+        {/* Counter + zoom controls — bottom-right. */}
+        <Stack
+          direction="row"
+          spacing={0.5}
+          alignItems="center"
           sx={{
             position: 'absolute',
-            top: 8,
-            right: 8,
-            color: 'white',
-            bgcolor: 'rgba(0,0,0,0.4)',
+            bottom: 12,
+            right: 12,
+            bgcolor: 'rgba(0,0,0,0.45)',
+            borderRadius: 2,
+            px: 1,
+            py: 0.25,
           }}
         >
-          <CloseIcon />
-        </IconButton>
+          <Typography
+            variant="body2"
+            sx={{ color: 'white', mr: 0.5, fontVariantNumeric: 'tabular-nums' }}
+          >
+            {`${index + 1} / ${images.length}`}
+          </Typography>
+          <IconButton
+            size="small"
+            onClick={zoomOut}
+            disabled={zoom <= LIGHTBOX_ZOOM_MIN}
+            aria-label={t('plantDetail.gallery.zoomOut')}
+            sx={lightboxControlSx}
+          >
+            <ZoomOutIcon fontSize="small" />
+          </IconButton>
+          <IconButton
+            size="small"
+            onClick={zoomIn}
+            disabled={zoom >= LIGHTBOX_ZOOM_MAX}
+            aria-label={t('plantDetail.gallery.zoomIn')}
+            sx={lightboxControlSx}
+          >
+            <ZoomInIcon fontSize="small" />
+          </IconButton>
+        </Stack>
       </Box>
-      {(img.credit || img.licenseName) && (
-        <Box sx={{ p: 2 }}>
-          {img.credit && (
-            <Typography
-              variant="caption"
-              display="block"
-              color="text.secondary"
-            >
-              {t('plantDetail.gallery.credit', { name: img.credit })}
-            </Typography>
-          )}
-          {img.licenseName && (
-            <Typography
-              variant="caption"
-              display="block"
-              color="text.secondary"
-            >
-              {t('plantDetail.gallery.license', { name: img.licenseName })}
-            </Typography>
-          )}
-        </Box>
-      )}
     </Dialog>
   );
 }
