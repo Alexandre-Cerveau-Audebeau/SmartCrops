@@ -102,4 +102,18 @@ describe('PlantGallerySection (SMA-154)', () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Open photo/ })).toBeNull();
   });
+
+  it('exposes the attribution as a keyboard-operable button with aria-expanded (M1)', async () => {
+    const user = userEvent.setup();
+    render(
+      <PlantGallerySection images={[makeImg(1, 'Fruit')]} onSelect={vi.fn()} />
+    );
+
+    const attribution = screen.getByRole('button', {
+      name: '© A. Photographer · Trefle · CC BY-SA',
+    });
+    expect(attribution).toHaveAttribute('aria-expanded', 'false');
+    await user.click(attribution);
+    expect(attribution).toHaveAttribute('aria-expanded', 'true');
+  });
 });

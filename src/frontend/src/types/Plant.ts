@@ -24,8 +24,11 @@ export interface PlantImage {
   displayOrder: number;
   isFlagged: boolean;
   /**
-   * Server-composed, always-non-null attribution line (credit / license / source)
-   * — the detail DTO ships it via `ImageAttribution.Compose`; rendered verbatim.
+   * Server-composed, always-non-null attribution line shipped by the detail DTO
+   * via `ImageAttribution.Compose` (format "© credit — license"). NOT rendered
+   * verbatim by the gallery: its format differs from the approved design
+   * ("© credit · source · license"), so `PlantGallerySection` composes its own
+   * line from credit/source/licenseName. Aligning the backend format is SMA-180.
    */
   attribution: string;
 }

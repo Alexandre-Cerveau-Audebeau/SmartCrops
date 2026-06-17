@@ -20,7 +20,12 @@ interface PlantGallerySectionProps {
 
 const ALL = 'all';
 
-/** Compose a one-line attribution from the raw image fields: © credit · source · license. */
+// Compose the gallery attribution line from the raw image fields, in the design
+// format "© credit · source · license" (3 parts, middle-dot). We deliberately do
+// NOT use the server-composed `PlantImage.attribution` here: it uses a different
+// shape ("© credit — license", 2 parts, no source) than the approved design.
+// Aligning the backend `ImageAttribution.Compose` to this format is tracked in
+// SMA-180; until then the gallery owns its own format.
 function composeAttribution(img: PlantImage): string {
   return [img.credit ? `© ${img.credit}` : null, img.source, img.licenseName]
     .filter(Boolean)
@@ -29,23 +34,36 @@ function composeAttribution(img: PlantImage): string {
 
 /**
  * One attribution line under a thumbnail: monospace, truncated with an ellipsis,
- * click to expand to the full text (and click again to collapse). Per-tile state
- * is local so toggling one line never re-renders the whole grid.
+ * click (or keyboard) to expand to the full text and back. Rendered as a native
+ * button so it is focusable and operable via Enter/Space (WCAG 2.1.1), with
+ * `aria-expanded` exposing the state; the full text stays in the DOM (screen
+ * readers read it all — the CSS only truncates visually). Per-tile state is local
+ * so toggling one line never re-renders the whole grid.
  */
 function GalleryAttribution({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
   if (!text) return null;
   return (
     <Typography
+      component="button"
+      type="button"
       variant="caption"
       color="text.secondary"
+      aria-expanded={expanded}
       title={text}
       onClick={() => setExpanded((v) => !v)}
       sx={{
-        fontFamily: 'monospace',
-        display: 'block',
+        background: 'none',
+        border: 0,
+        p: 0,
+        m: 0,
         mt: 0.5,
+        textAlign: 'left',
+        display: 'block',
+        width: '100%',
         cursor: 'pointer',
+        fontFamily: 'monospace',
+        color: 'text.secondary',
         ...(expanded
           ? { whiteSpace: 'normal' }
           : {
@@ -53,6 +71,12 @@ function GalleryAttribution({ text }: { text: string }) {
               overflow: 'hidden',
               textOverflow: 'ellipsis',
             }),
+        '&:focus-visible': {
+          outline: '2px solid',
+          outlineColor: 'primary.main',
+          outlineOffset: 2,
+          borderRadius: 0.5,
+        },
       }}
     >
       {text}
