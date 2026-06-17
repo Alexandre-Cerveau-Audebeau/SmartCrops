@@ -40,16 +40,13 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CloseIcon from '@mui/icons-material/Close';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ScienceIcon from '@mui/icons-material/Science';
 import SettingsIcon from '@mui/icons-material/Settings';
-import SpaIcon from '@mui/icons-material/Spa';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import WaterDropIcon from '@mui/icons-material/WaterDrop';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
-import YardIcon from '@mui/icons-material/Yard';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import { NAV_BG } from '../constants/colors';
@@ -71,6 +68,9 @@ import type { TocSection } from '../components/plantDetail/PlantDetailToc';
 import PlantHeroGauges from '../components/plantDetail/PlantHeroGauges';
 import PlantGallerySection from '../components/plantDetail/PlantGallerySection';
 import UnitSystemToggle from '../components/plantDetail/UnitSystemToggle';
+import AboutSection from '../components/plantDetail/AboutSection';
+import LifecycleSection from '../components/plantDetail/LifecycleSection';
+import ScientificDataSection from '../components/plantDetail/ScientificDataSection';
 import { isUserFacingUrl, toUserFacingUrl } from '../utils/externalSourceUrl';
 import { resolveTranslatedField } from '../utils/getTranslation';
 import { capitalizeFirst } from '../utils/capitalizeFirst';
@@ -79,18 +79,13 @@ import { formatPeriod } from '../utils/formatPeriod';
 import {
   formatHardinessZone,
   formatLength,
-  formatSpacing,
-  formatTemperature,
-  formatXDataRange,
   groupCommonNamesByLanguage,
   hasAnyXData,
   isHardinessSuspicious,
   parseStringArray,
-  parseStringArrayJson,
   pickHeroImage,
   pickLongDescription,
   sortGalleryImages,
-  toCamelKey,
 } from '../utils/plantDetail';
 
 const languageLabels: Record<string, string> = {
@@ -98,7 +93,6 @@ const languageLabels: Record<string, string> = {
   fr: 'Français',
 };
 
-const DESCRIPTION_TRUNCATE_CHARS = 360;
 const PESTS_PREVIEW_COUNT = 10;
 const COMMON_NAMES_PREVIEW_LANGUAGES = 6;
 
@@ -157,7 +151,6 @@ export default function PlantDetail() {
   const [addSuccess, setAddSuccess] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
 
-  const [descExpanded, setDescExpanded] = useState(false);
   const [pestsExpanded, setPestsExpanded] = useState(false);
   const [commonNamesExpanded, setCommonNamesExpanded] = useState(false);
 
@@ -495,6 +488,23 @@ export default function PlantDetail() {
     'description'
   );
 
+  // SMA-178: hero eyebrow "TYPE · LIFE CYCLE" above the title. The plant type
+  // moves here (removed from the taxonomy chips); the life-cycle part shows only
+  // when known, and the eyebrow is omitted entirely when neither is present.
+  const heroEyebrow = [
+    plant.plantType
+      ? t(`plantTypes.${plant.plantType.name}`, plant.plantType.name)
+      : null,
+    plant.lifeCycle
+      ? t(
+          `plantDetail.enumValues.lifeCycle.${plant.lifeCycle}`,
+          plant.lifeCycle
+        )
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   // Section D rows — characteristics column
   const characteristicRows: {
     label: string;
@@ -648,8 +658,18 @@ export default function PlantDetail() {
     // SMA-154: the gallery section always renders (grid or empty state), so it is
     // always listed in the TOC.
     { id: 'gallery', label: t('plantDetail.sections.gallery') },
-    ...(longDescription || shortDescription
-      ? [{ id: 'about', label: t('plantDetail.sections.about') }]
+    // SMA-178: order mirrors the JSX — lifecycle + scientific data are hoisted
+    // above characteristics; "about" is folded into the Overview card (no entry).
+    ...(showLifecycleSection
+      ? [{ id: 'lifecycle', label: t('plantDetail.sections.lifecycle') }]
+      : []),
+    ...(showScientificData
+      ? [
+          {
+            id: 'scientific-data',
+            label: t('plantDetail.scientificData.title'),
+          },
+        ]
       : []),
     ...(characteristicRows.length > 0 || conditions.length > 0
       ? [
@@ -659,22 +679,11 @@ export default function PlantDetail() {
           },
         ]
       : []),
-    ...(showLifecycleSection
-      ? [{ id: 'lifecycle', label: t('plantDetail.sections.lifecycle') }]
-      : []),
     ...(showEdibleAndPropagation
       ? [
           {
             id: 'edible',
             label: t('plantDetail.sections.edibleAndPropagation'),
-          },
-        ]
-      : []),
-    ...(showScientificData
-      ? [
-          {
-            id: 'scientific-data',
-            label: t('plantDetail.scientificData.title'),
           },
         ]
       : []),
@@ -806,6 +815,20 @@ export default function PlantDetail() {
                 gap={2}
               >
                 <Box sx={{ minWidth: 0, flex: 1 }}>
+                  {heroEyebrow && (
+                    <Typography
+                      sx={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        color: '#2E8B57',
+                        mb: 0.5,
+                      }}
+                    >
+                      {heroEyebrow}
+                    </Typography>
+                  )}
                   <Typography variant="h3" fontWeight={700} sx={{ mb: 0.5 }}>
                     {displayName}
                   </Typography>
@@ -832,17 +855,6 @@ export default function PlantDetail() {
                     useFlexGap
                     sx={{ mt: 1.5, alignItems: 'center' }}
                   >
-                    {plant.plantType && (
-                      <Chip
-                        label={t(
-                          `plantTypes.${plant.plantType.name}`,
-                          plant.plantType.name
-                        )}
-                        color="primary"
-                        variant="outlined"
-                        size="small"
-                      />
-                    )}
                     {plant.family && (
                       <Typography variant="body2" color="text.secondary">
                         {t('plantDetail.labels.family')}:{' '}
@@ -955,6 +967,9 @@ export default function PlantDetail() {
                 </Stack>
               </Stack>
               <PlantHeroGauges plant={plant} />
+              {(longDescription || shortDescription) && (
+                <AboutSection plant={plant} />
+              )}
             </CardContent>
           </Card>
 
@@ -976,61 +991,11 @@ export default function PlantDetail() {
             </CardContent>
           </Card>
 
-          {/* ── Section C: About / long description ────────────────────────── */}
-          {(longDescription || shortDescription) && (
-            <Card
-              id="about"
-              variant="outlined"
-              sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
-            >
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} sx={{ mb: 1.5 }}>
-                  {t('plantDetail.sections.about')}
-                </Typography>
-                {longDescription ? (
-                  <>
-                    <Typography
-                      variant="body1"
-                      sx={{ lineHeight: 1.8, whiteSpace: 'pre-wrap' }}
-                    >
-                      {descExpanded ||
-                      longDescription.longDescription.length <=
-                        DESCRIPTION_TRUNCATE_CHARS
-                        ? longDescription.longDescription
-                        : `${longDescription.longDescription.slice(0, DESCRIPTION_TRUNCATE_CHARS).trimEnd()}…`}
-                    </Typography>
-                    {longDescription.longDescription.length >
-                      DESCRIPTION_TRUNCATE_CHARS && (
-                      <Button
-                        size="small"
-                        onClick={() => setDescExpanded((v) => !v)}
-                        sx={{ mt: 1, textTransform: 'none' }}
-                      >
-                        {descExpanded
-                          ? t('plantDetail.description.readLess')
-                          : t('plantDetail.description.readMore')}
-                      </Button>
-                    )}
-                    {longDescription.sourceMethod && (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ mt: 1.5, display: 'block' }}
-                      >
-                        {t('plantDetail.description.sourceLabel', {
-                          source: longDescription.sourceMethod,
-                        })}
-                      </Typography>
-                    )}
-                  </>
-                ) : shortDescription ? (
-                  <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
-                    {shortDescription}
-                  </Typography>
-                ) : null}
-              </CardContent>
-            </Card>
-          )}
+          {/* ── SMA-178: lifecycle + scientific data hoisted to mockup order
+              (after the gallery, before characteristics). The "about" content is
+              folded into the Overview card above. ─────────────────────────── */}
+          {showLifecycleSection && <LifecycleSection plant={plant} />}
+          {showScientificData && <ScientificDataSection plant={plant} />}
 
           {/* ── Section D: Characteristics + growing conditions ────────────── */}
           {(characteristicRows.length > 0 || conditions.length > 0) && (
@@ -1141,69 +1106,6 @@ export default function PlantDetail() {
             </Grid>
           )}
 
-          {/* ── Section E: Lifecycle frieze ─────────────────────────────────── */}
-          {showLifecycleSection && (
-            <Card
-              id="lifecycle"
-              variant="outlined"
-              sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
-            >
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-                  {t('plantDetail.sections.lifecycle')}
-                </Typography>
-                <Grid container spacing={2}>
-                  <LifecycleStage
-                    icon={<SpaIcon />}
-                    label={t('plantDetail.lifecycle.stages.sowing')}
-                    value={formatPeriod(plant.sowingPeriod, t)}
-                  />
-                  <LifecycleStage
-                    icon={<YardIcon />}
-                    label={t('plantDetail.lifecycle.stages.growth')}
-                    value={null}
-                  />
-                  <LifecycleStage
-                    icon={<LocalFloristIcon />}
-                    label={t('plantDetail.lifecycle.stages.flowering')}
-                    value={formatPeriod(
-                      plant.perenualData?.floweringSeason ?? null,
-                      t
-                    )}
-                  />
-                  <LifecycleStage
-                    icon={<AgricultureIcon />}
-                    label={t('plantDetail.lifecycle.stages.harvest')}
-                    value={formatPeriod(
-                      plant.harvestPeriod ??
-                        plant.perenualData?.harvestSeason ??
-                        null,
-                      t
-                    )}
-                  />
-                </Grid>
-                {plant.lifeCycle === 'Perennial' ||
-                plant.lifeCycle === 'HerbaceousPerennial' ? (
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ mt: 2, display: 'block' }}
-                  >
-                    {t('plantDetail.lifecycle.perennialNote')}
-                  </Typography>
-                ) : plant.lifeCycle === 'Biennial' ? (
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ mt: 2, display: 'block' }}
-                  >
-                    {t('plantDetail.lifecycle.biennialNote')}
-                  </Typography>
-                ) : null}
-              </CardContent>
-            </Card>
-          )}
-
           {/* ── Section F: Edible parts & propagation ──────────────────────── */}
           {showEdibleAndPropagation && (
             <Card
@@ -1288,141 +1190,6 @@ export default function PlantDetail() {
               </CardContent>
             </Card>
           )}
-
-          {/* ── Section F.6: Perenual Supreme scientific data (Sprint 1.5 PR B) ── */}
-          {/* Rendered only when the plant carries Supreme-tier xData AND at least
-          one field is populated — an empty section is worse than no section.
-          IIFE keeps each formatted value computed once. */}
-          {(() => {
-            const pd = plant.perenualData;
-            if (!pd?.hasSupremeData || !hasAnyXData(pd)) return null;
-
-            const phRange = formatXDataRange(
-              pd.xWateringPhMin,
-              pd.xWateringPhMax
-            );
-            const wateringTemp = formatTemperature(
-              pd.xWateringBasedTempMinC,
-              pd.xWateringBasedTempMaxC,
-              system
-            );
-            const sunlight = formatXDataRange(
-              pd.xSunlightHoursMin,
-              pd.xSunlightHoursMax,
-              ' h'
-            );
-            const tempTol = formatTemperature(
-              pd.xTemperatureToleranceMinC,
-              pd.xTemperatureToleranceMaxC,
-              system
-            );
-            const spacing = formatSpacing(
-              pd.xPlantSpacingValue,
-              pd.xPlantSpacingUnit,
-              system
-            );
-            const waterQuality = parseStringArrayJson(pd.xWateringQualityJson);
-            const wateringPeriod = parseStringArrayJson(pd.xWateringPeriodJson);
-
-            const row = (label: string, value: string) => (
-              <Stack direction="row" justifyContent="space-between" spacing={2}>
-                <Typography variant="body2" color="text.secondary">
-                  {label}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ fontWeight: 500, textAlign: 'right' }}
-                >
-                  {value}
-                </Typography>
-              </Stack>
-            );
-
-            const chips = (label: string, values: string[], dict: string) => (
-              <Box>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 0.5 }}
-                >
-                  {label}
-                </Typography>
-                <Stack direction="row" flexWrap="wrap" gap={0.5}>
-                  {values.map((v) => (
-                    <Chip
-                      key={v}
-                      size="small"
-                      label={t(
-                        `plantDetail.scientificData.${dict}.${toCamelKey(v)}`,
-                        v
-                      )}
-                    />
-                  ))}
-                </Stack>
-              </Box>
-            );
-
-            return (
-              <Card
-                id="scientific-data"
-                variant="outlined"
-                sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
-              >
-                <CardContent>
-                  <Stack direction="row" spacing={2} alignItems="flex-start">
-                    <ScienceIcon sx={{ color: 'success.main', mt: 0.5 }} />
-                    <Box sx={{ flex: 1 }}>
-                      <Typography
-                        variant="h6"
-                        fontWeight={600}
-                        sx={{ mb: 1.5 }}
-                      >
-                        {t('plantDetail.scientificData.title')}
-                      </Typography>
-                      <Stack spacing={1.25}>
-                        {phRange &&
-                          row(
-                            t('plantDetail.scientificData.wateringPh'),
-                            phRange
-                          )}
-                        {wateringTemp &&
-                          row(
-                            t('plantDetail.scientificData.wateringIdealTemp'),
-                            wateringTemp
-                          )}
-                        {sunlight &&
-                          row(
-                            t('plantDetail.scientificData.sunlightHours'),
-                            sunlight
-                          )}
-                        {tempTol &&
-                          row(
-                            t(
-                              'plantDetail.scientificData.temperatureTolerance'
-                            ),
-                            tempTol
-                          )}
-                        {spacing &&
-                          row(t('plantDetail.scientificData.spacing'), spacing)}
-                        {waterQuality &&
-                          chips(
-                            t('plantDetail.scientificData.waterQuality'),
-                            waterQuality,
-                            'waterQualityValues'
-                          )}
-                        {wateringPeriod &&
-                          chips(
-                            t('plantDetail.scientificData.wateringPeriod'),
-                            wateringPeriod,
-                            'wateringPeriodValues'
-                          )}
-                      </Stack>
-                    </Box>
-                  </Stack>
-                </CardContent>
-              </Card>
-            );
-          })()}
 
           {/* ── Section F.5: Scientific data (coming soon) placeholder ─────── */}
           {/* Always rendered — this is a promise to the user about what's next,
@@ -1976,49 +1743,6 @@ function sourceTypeColors(source: string): { bg: string; fg: string } {
 }
 
 /** One column of the lifecycle frieze — icon + label + period text (or em-dash). */
-function LifecycleStage({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string | null | undefined;
-}) {
-  return (
-    <Grid size={{ xs: 6, md: 3 }}>
-      <Box sx={{ textAlign: 'center', py: 1 }}>
-        <Box
-          sx={{
-            mx: 'auto',
-            width: 48,
-            height: 48,
-            borderRadius: '50%',
-            bgcolor: value ? 'primary.main' : 'grey.300',
-            color: value ? 'primary.contrastText' : 'text.secondary',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            mb: 1,
-          }}
-        >
-          {icon}
-        </Box>
-        <Typography variant="body2" fontWeight={600}>
-          {label}
-        </Typography>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ display: 'block', mt: 0.25 }}
-        >
-          {value ?? '—'}
-        </Typography>
-      </Box>
-    </Grid>
-  );
-}
-
 /**
  * Full-screen photo viewer with prev/next/close controls and a credit /
  * license caption. Rendered only while `index` is non-null, so callers can
