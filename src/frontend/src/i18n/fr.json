@@ -378,9 +378,11 @@
       "ariaLabel": "Navigation des sections"
     },
     "units": {
-      "label": "Système d'unités",
+      "label": "Unités",
       "metric": "Europe",
-      "imperial": "US"
+      "imperial": "US",
+      "metricUnits": "°C · cm · L",
+      "imperialUnits": "°F · in · gal"
     },
     "gauges": {
       "title": "Conditions de culture",

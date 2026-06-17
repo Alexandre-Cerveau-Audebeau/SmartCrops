@@ -709,10 +709,11 @@ export default function PlantDetail() {
           alignItems: { md: 'flex-start' },
         }}
       >
-        {/* SMA-178 — left column: unit toggle above the TOC. The wrapper is the
-            single sticky element (desktop top 80 / mobile top 56) and the inner
-            TOC <nav> is forced static, so the toggle + TOC pin together without a
-            nested-sticky overlap. */}
+        {/* SMA-178 — left column: the unit toggle card above the TOC. The wrapper
+            is the single sticky element (desktop top 80 / mobile top 56) and the
+            inner TOC <nav> is forced static, so the toggle + TOC pin together
+            without a nested-sticky overlap. The wrapper is transparent so the
+            toggle's own white card sits cleanly on the page background. */}
         <Box
           sx={{
             width: { xs: '100%', md: 288 },
@@ -721,11 +722,12 @@ export default function PlantDetail() {
             position: 'sticky',
             top: { xs: 56, md: 80 },
             zIndex: 2,
-            bgcolor: '#FAFDF7',
             '& > nav': { position: 'static', top: 'auto' },
           }}
         >
-          <UnitSystemToggle />
+          <Box sx={{ mb: 2 }}>
+            <UnitSystemToggle />
+          </Box>
           <PlantDetailToc sections={tocSections} />
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
