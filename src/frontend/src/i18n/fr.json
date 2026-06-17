@@ -544,7 +544,19 @@
       "credit": "Crédit : {{name}}",
       "license": "Licence : {{name}}",
       "openHero": "Ouvrir la galerie photo",
-      "openTile": "Ouvrir la photo {{index}} dans la visionneuse"
+      "openTile": "Ouvrir la photo {{index}} dans la visionneuse",
+      "dialogTitle": "Toutes les photos",
+      "empty": "Pas encore de photos pour cette plante.",
+      "types": {
+        "all": "Tout",
+        "Habit": "Port",
+        "Flower": "Fleur",
+        "Leaf": "Feuille",
+        "Fruit": "Fruit",
+        "Bark": "Écorce",
+        "Other": "Autre",
+        "Main": "Principale"
+      }
     },
     "description": {
       "readMore": "Lire plus",

@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -443,6 +444,49 @@ describe('PlantDetail', () => {
       name: 'Open photo gallery',
     });
     expect(heroButton.tagName).toBe('BUTTON');
+  });
+
+  it('shows the gallery empty state when the plant has no stable images (SMA-154)', async () => {
+    // Base plant has images: [] → no stable gallery pool.
+    renderAtPlant(makePlant());
+    await screen.findByRole('heading', { name: 'Basil' });
+    expect(
+      screen.getByText('No photos yet for this plant.')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /View all photos/ })
+    ).toBeNull();
+  });
+
+  it('opens the full gallery dialog from the "View all photos" button (SMA-154)', async () => {
+    const user = userEvent.setup();
+    renderAtPlant(
+      makePlant({
+        images: [
+          {
+            id: 1,
+            imageType: 'Flower',
+            url: 'https://img.test/flower.jpg',
+            thumbnailUrl: 'https://img.test/flower-thumb.jpg',
+            width: 100,
+            height: 100,
+            licenseName: 'CC BY-SA',
+            licenseUrl: null,
+            credit: 'Photographer',
+            source: 'Trefle',
+            sourceExternalId: null,
+            displayOrder: 0,
+            isFlagged: false,
+          },
+        ],
+      })
+    );
+    await screen.findByRole('heading', { name: 'Basil' });
+
+    const viewAll = screen.getByRole('button', { name: /View all photos/ });
+    await user.click(viewAll);
+    // The gallery dialog opens with its title.
+    expect(await screen.findByText('All photos')).toBeInTheDocument();
   });
 
   it('shows the correct "+N more" count on the gallery overlay (31 images → +25, not +26)', async () => {

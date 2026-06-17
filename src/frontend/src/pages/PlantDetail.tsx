@@ -37,6 +37,7 @@ import AgricultureIcon from '@mui/icons-material/Agriculture';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CloseIcon from '@mui/icons-material/Close';
+import HideImageIcon from '@mui/icons-material/HideImage';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
@@ -64,6 +65,7 @@ import type { Plant, PlantImage } from '../types/Plant';
 import PlantDetailToc from '../components/plantDetail/PlantDetailToc';
 import type { TocSection } from '../components/plantDetail/PlantDetailToc';
 import PlantHeroGauges from '../components/plantDetail/PlantHeroGauges';
+import PlantGalleryDialog from '../components/plantDetail/PlantGalleryDialog';
 import { isUserFacingUrl, toUserFacingUrl } from '../utils/externalSourceUrl';
 import { resolveTranslatedField } from '../utils/getTranslation';
 import { capitalizeFirst } from '../utils/capitalizeFirst';
@@ -154,6 +156,15 @@ export default function PlantDetail() {
   const [commonNamesExpanded, setCommonNamesExpanded] = useState(false);
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // The lightbox can be driven by the full gallery (hero / preview strip) OR by
+  // the filtered subset shown in the "all photos" dialog (SMA-154), so its source
+  // list is held in state and set at open time, not hard-wired to galleryImages.
+  const [lightboxImages, setLightboxImages] = useState<PlantImage[]>([]);
+  const [galleryDialogOpen, setGalleryDialogOpen] = useState(false);
+  const openLightbox = (imgs: PlantImage[], index: number) => {
+    setLightboxImages(imgs);
+    setLightboxIndex(index);
+  };
   const [adminMenuAnchor, setAdminMenuAnchor] = useState<null | HTMLElement>(
     null
   );
@@ -699,7 +710,7 @@ export default function PlantDetail() {
                 <Box
                   component="button"
                   type="button"
-                  onClick={() => setLightboxIndex(0)}
+                  onClick={() => openLightbox(galleryImages, 0)}
                   aria-label={t('plantDetail.gallery.openHero')}
                   sx={{
                     p: 0,
@@ -899,7 +910,7 @@ export default function PlantDetail() {
           </Card>
 
           {/* ── Section B: Photo gallery ───────────────────────────────────── */}
-          {galleryImages.length > 0 && (
+          {galleryImages.length > 0 ? (
             <Card
               id="gallery"
               variant="outlined"
@@ -933,7 +944,7 @@ export default function PlantDetail() {
                             <Box
                               component="button"
                               type="button"
-                              onClick={() => setLightboxIndex(idx)}
+                              onClick={() => openLightbox(galleryImages, idx)}
                               aria-label={t('plantDetail.gallery.openTile', {
                                 index: idx + 1,
                               })}
@@ -997,6 +1008,29 @@ export default function PlantDetail() {
                       .join(' · ')}
                   </Typography>
                 )}
+                <Box sx={{ mt: 2 }}>
+                  <Button
+                    variant="outlined"
+                    onClick={() => setGalleryDialogOpen(true)}
+                  >
+                    {t('plantDetail.gallery.showAll', {
+                      count: galleryImages.length,
+                    })}
+                  </Button>
+                </Box>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card
+              id="gallery"
+              variant="outlined"
+              sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
+            >
+              <CardContent
+                sx={{ textAlign: 'center', py: 6, color: 'text.secondary' }}
+              >
+                <HideImageIcon sx={{ fontSize: 40, opacity: 0.5, mb: 1 }} />
+                <Typography>{t('plantDetail.gallery.empty')}</Typography>
               </CardContent>
             </Card>
           )}
@@ -1835,21 +1869,29 @@ export default function PlantDetail() {
         </DialogActions>
       </Dialog>
 
+      {/* Full gallery view (SMA-154) — grid + type filter over the stable pool. */}
+      <PlantGalleryDialog
+        open={galleryDialogOpen}
+        onClose={() => setGalleryDialogOpen(false)}
+        images={galleryImages}
+        onSelect={openLightbox}
+      />
+
       {/* Photo lightbox */}
       <PhotoLightbox
-        images={galleryImages}
+        images={lightboxImages}
         index={lightboxIndex}
         onClose={() => setLightboxIndex(null)}
         onPrev={() =>
           setLightboxIndex((i) =>
             i == null
               ? null
-              : (i - 1 + galleryImages.length) % galleryImages.length
+              : (i - 1 + lightboxImages.length) % lightboxImages.length
           )
         }
         onNext={() =>
           setLightboxIndex((i) =>
-            i == null ? null : (i + 1) % galleryImages.length
+            i == null ? null : (i + 1) % lightboxImages.length
           )
         }
       />
