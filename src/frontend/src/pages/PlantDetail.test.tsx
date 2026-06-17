@@ -494,7 +494,9 @@ describe('PlantDetail', () => {
     expect(
       screen.queryByRole('button', { name: /View all photos/ })
     ).toBeNull();
-    // Server-composed attribution shows under the tile.
-    expect(screen.getByText('© Photographer — CC BY-SA')).toBeInTheDocument();
+    // Attribution composed from credit · source · license shows under the tile.
+    expect(
+      screen.getByText('© Photographer · Trefle · CC BY-SA')
+    ).toBeInTheDocument();
   });
 });

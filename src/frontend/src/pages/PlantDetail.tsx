@@ -263,6 +263,10 @@ export default function PlantDetail() {
   // ── Plant fetch with abort + reload trigger after admin re-enrich ─────────
   useEffect(() => {
     mountedRef.current = true;
+    // SMA-154: clear any open lightbox so a previous plant's photos never linger
+    // while navigating to another /library/:id.
+    setLightboxIndex(null);
+    setLightboxImages([]);
     setPlant(null);
     setError(null);
     if (!id) {
@@ -916,6 +920,7 @@ export default function PlantDetail() {
                 {t('plantDetail.sections.gallery')}
               </Typography>
               <PlantGallerySection
+                key={plant.id}
                 images={galleryImages}
                 onSelect={openLightbox}
               />

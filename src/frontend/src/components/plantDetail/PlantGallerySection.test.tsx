@@ -12,11 +12,9 @@ beforeEach(async () => {
   await i18n.changeLanguage('en');
 });
 
-function makeImg(
-  id: number,
-  imageType: string,
-  attribution = `Attribution ${id}`
-): PlantImage {
+// Returns a fully-typed PlantImage (no cast) so the fixture stays contract-checked.
+// The component composes the displayed attribution from credit/source/licenseName.
+function makeImg(id: number, imageType: string): PlantImage {
   return {
     id,
     imageType,
@@ -31,8 +29,8 @@ function makeImg(
     sourceExternalId: null,
     displayOrder: id,
     isFlagged: false,
-    attribution,
-  } as unknown as PlantImage;
+    attribution: '© A. Photographer · Trefle · CC BY-SA',
+  };
 }
 
 const tiles = () => screen.getAllByRole('button', { name: /Open photo/ });
@@ -40,18 +38,16 @@ const tiles = () => screen.getAllByRole('button', { name: /Open photo/ });
 describe('PlantGallerySection (SMA-154)', () => {
   it('renders a tile per image with a localized type badge and an attribution line', () => {
     // Single type → no chip row, so the badge text is unambiguous.
-    const images = [
-      makeImg(1, 'Fruit', 'Credit One'),
-      makeImg(2, 'Fruit', 'Credit Two'),
-    ];
+    const images = [makeImg(1, 'Fruit'), makeImg(2, 'Fruit')];
     render(<PlantGallerySection images={images} onSelect={vi.fn()} />);
 
     expect(tiles()).toHaveLength(2);
     // One localized type badge per tile.
     expect(screen.getAllByText('Fruit')).toHaveLength(2);
-    // Attribution line per tile.
-    expect(screen.getByText('Credit One')).toBeInTheDocument();
-    expect(screen.getByText('Credit Two')).toBeInTheDocument();
+    // Composed attribution line per tile (© credit · source · license).
+    expect(
+      screen.getAllByText('© A. Photographer · Trefle · CC BY-SA')
+    ).toHaveLength(2);
     // A single type means no filter chips.
     expect(screen.queryByRole('button', { name: 'All' })).toBeNull();
   });

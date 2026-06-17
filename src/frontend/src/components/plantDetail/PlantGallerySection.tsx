@@ -5,6 +5,7 @@ import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import HideImageIcon from '@mui/icons-material/HideImage';
+import { NAV_BG } from '../../constants/colors';
 import type { PlantImage } from '../../types/Plant';
 
 interface PlantGallerySectionProps {
@@ -19,13 +20,55 @@ interface PlantGallerySectionProps {
 
 const ALL = 'all';
 
+/** Compose a one-line attribution from the raw image fields: © credit · source · license. */
+function composeAttribution(img: PlantImage): string {
+  return [img.credit ? `© ${img.credit}` : null, img.source, img.licenseName]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/**
+ * One attribution line under a thumbnail: monospace, truncated with an ellipsis,
+ * click to expand to the full text (and click again to collapse). Per-tile state
+ * is local so toggling one line never re-renders the whole grid.
+ */
+function GalleryAttribution({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!text) return null;
+  return (
+    <Typography
+      variant="caption"
+      color="text.secondary"
+      title={text}
+      onClick={() => setExpanded((v) => !v)}
+      sx={{
+        fontFamily: 'monospace',
+        display: 'block',
+        mt: 0.5,
+        cursor: 'pointer',
+        ...(expanded
+          ? { whiteSpace: 'normal' }
+          : {
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }),
+      }}
+    >
+      {text}
+    </Typography>
+  );
+}
+
 /**
  * Inline photo gallery for Plant Detail v2 (SMA-154). Renders the whole stable
- * pool (no capping) as a thumbnail grid with filter chips for the ImageTypes
- * actually present (Perenual images are filtered upstream, so "Main" never shows).
- * Each tile carries a localised type badge and a one-line attribution; clicking a
- * tile hands the FILTERED subset + index back to the page, which reuses the
- * existing PhotoLightbox. Descriptive per-photo captions are deferred (SMA-177).
+ * pool (no capping) as uniform landscape thumbnails laid out in a two-row
+ * horizontal filmstrip — only the height is bounded; every photo stays reachable
+ * by scrolling. Filter chips cover the ImageTypes actually present (Perenual is
+ * filtered upstream, so "Main" never shows). Each tile carries a brand type badge
+ * and a one-line attribution; clicking a tile hands the FILTERED subset + index
+ * back to the page, which reuses the existing PhotoLightbox. Descriptive per-photo
+ * captions are deferred (SMA-177).
  */
 export default function PlantGallerySection({
   images,
@@ -37,11 +80,9 @@ export default function PlantGallerySection({
   // Distinct ImageTypes present, in canonical gallery order — `images` is already
   // canonically sorted, so first-seen order is the canonical type order.
   const presentTypes = useMemo(() => {
-    const seen: string[] = [];
-    for (const img of images) {
-      if (!seen.includes(img.imageType)) seen.push(img.imageType);
-    }
-    return seen;
+    const seen = new Set<string>();
+    for (const img of images) seen.add(img.imageType);
+    return Array.from(seen);
   }, [images]);
 
   // Guard against a filter whose type is no longer present (e.g. plant changed).
@@ -96,15 +137,26 @@ export default function PlantGallerySection({
         </Stack>
       )}
 
+      {/* Two-row horizontal filmstrip: uniform tiles fill column-by-column over two
+          rows; beyond what fits, the row scrolls horizontally (height-bounded, no
+          cap on photo count). Scrollbar themed in brand green. */}
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: {
-            xs: 'repeat(2, 1fr)',
-            sm: 'repeat(3, 1fr)',
-            md: 'repeat(4, 1fr)',
-          },
+          gridAutoFlow: 'column',
+          gridTemplateRows: 'repeat(2, auto)',
+          gridAutoColumns: '196px',
           gap: 1.5,
+          overflowX: 'auto',
+          pb: 1,
+          scrollbarWidth: 'thin',
+          scrollbarColor: `${NAV_BG} transparent`,
+          '&::-webkit-scrollbar': { height: 8 },
+          '&::-webkit-scrollbar-track': { backgroundColor: 'transparent' },
+          '&::-webkit-scrollbar-thumb': {
+            backgroundColor: NAV_BG,
+            borderRadius: 4,
+          },
         }}
       >
         {filtered.map((img, idx) => (
@@ -116,14 +168,14 @@ export default function PlantGallerySection({
               aria-label={t('plantDetail.gallery.openTile', { index: idx + 1 })}
               sx={{
                 position: 'relative',
-                aspectRatio: '1 / 1',
+                width: '100%',
+                aspectRatio: '3 / 2',
                 borderRadius: 2,
                 overflow: 'hidden',
                 cursor: 'pointer',
                 bgcolor: 'grey.100',
                 p: 0,
                 border: 0,
-                width: '100%',
                 display: 'block',
                 '&:focus-visible': {
                   outline: '2px solid',
@@ -137,8 +189,6 @@ export default function PlantGallerySection({
                 src={img.thumbnailUrl ?? img.url}
                 alt={img.imageType}
                 loading="lazy"
-                width={img.width ?? undefined}
-                height={img.height ?? undefined}
                 sx={{
                   width: '100%',
                   height: '100%',
@@ -146,7 +196,7 @@ export default function PlantGallerySection({
                   display: 'block',
                 }}
               />
-              {/* Type badge — translucent dark chip stays legible over any photo. */}
+              {/* Type badge — solid brand-green pill, white text, normal case. */}
               <Box
                 sx={{
                   position: 'absolute',
@@ -154,28 +204,18 @@ export default function PlantGallerySection({
                   left: 6,
                   px: 0.75,
                   py: 0.25,
-                  borderRadius: 1,
-                  bgcolor: 'rgba(0,0,0,0.6)',
+                  borderRadius: 1.5,
+                  bgcolor: NAV_BG,
                   color: '#fff',
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: '0.02em',
-                  textTransform: 'uppercase',
+                  fontSize: 11,
+                  fontWeight: 600,
                   pointerEvents: 'none',
                 }}
               >
                 {t(`plantDetail.gallery.types.${img.imageType}`, img.imageType)}
               </Box>
             </Box>
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              noWrap
-              title={img.attribution}
-              sx={{ display: 'block', mt: 0.5 }}
-            >
-              {img.attribution}
-            </Typography>
+            <GalleryAttribution text={composeAttribution(img)} />
           </Box>
         ))}
       </Box>
