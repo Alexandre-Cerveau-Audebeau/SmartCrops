@@ -97,12 +97,15 @@ describe('PlantHeroGauges (SMA-169)', () => {
     localStorage.setItem('smartcrops.unitSystem', 'imperial');
     renderGauges(makePlant());
 
-    // Convertible: height 30–60 cm → 12–24 in, spacing 45 cm → 18 in.
+    // Convertible: height 30–60 cm → 12–24 in, spacing 45 cm → 18 in,
+    // temperature 18–24 °C → 64–75 °F.
     expect(screen.getByText('12–24 in')).toBeInTheDocument();
     expect(screen.getByText('18 in')).toBeInTheDocument();
+    expect(screen.getByText('64–75 °F')).toBeInTheDocument();
     // Non-convertible: hardiness zone and pH are unchanged.
     expect(screen.getByText('5-9')).toBeInTheDocument();
     expect(screen.getByText('6–7')).toBeInTheDocument();
     expect(screen.queryByText('30–60 cm')).toBeNull();
+    expect(screen.queryByText('18–24 °C')).toBeNull();
   });
 });
