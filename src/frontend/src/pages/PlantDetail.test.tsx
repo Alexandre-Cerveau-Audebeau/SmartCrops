@@ -382,7 +382,7 @@ describe('PlantDetail', () => {
     expect(within(charSection!).getByText('2')).toBeInTheDocument();
     // The warning icon (WarningAmber) renders with role="img" via testid-less material.
     // We test that the suspicious-flag path triggered by querying the warning tooltip title.
-    const warningEls = document.querySelectorAll(
+    const warningEls = charSection!.querySelectorAll(
       'svg[data-testid="WarningAmberIcon"]'
     );
     expect(warningEls.length).toBeGreaterThan(0);
@@ -400,7 +400,7 @@ describe('PlantDetail', () => {
     const charSection = document.getElementById('characteristics');
     expect(charSection).toBeTruthy();
     expect(within(charSection!).getByText('5-7')).toBeInTheDocument();
-    const warningEls = document.querySelectorAll(
+    const warningEls = charSection!.querySelectorAll(
       'svg[data-testid="WarningAmberIcon"]'
     );
     expect(warningEls.length).toBe(0);
