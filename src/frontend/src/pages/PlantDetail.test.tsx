@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { AuthProvider } from '../contexts/AuthContext';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import type { Plant, PlantPerenualData } from '../types/Plant';
 
 vi.mock('../services/plantApi', () => ({
@@ -170,13 +171,15 @@ function renderAtPlant(plant: Plant) {
   vi.mocked(fetchPlantById).mockResolvedValue(plant);
   return render(
     <LanguageProvider>
-      <AuthProvider>
-        <MemoryRouter initialEntries={[`/library/${plant.id}`]}>
-          <Routes>
-            <Route path="/library/:id" element={<PlantDetail />} />
-          </Routes>
-        </MemoryRouter>
-      </AuthProvider>
+      <UnitSystemProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={[`/library/${plant.id}`]}>
+            <Routes>
+              <Route path="/library/:id" element={<PlantDetail />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </UnitSystemProvider>
     </LanguageProvider>
   );
 }
@@ -305,7 +308,7 @@ describe('PlantDetail', () => {
     // row now (SMA-169, temporary hero/Characteristics duplication).
     const sciSection = document.getElementById('scientific-data');
     expect(sciSection).toBeTruthy();
-    expect(within(sciSection!).getByText('18–24°C')).toBeInTheDocument();
+    expect(within(sciSection!).getByText('18–24 °C')).toBeInTheDocument();
     // Water-quality chip is i18n-labelled via toCamelKey lookup.
     expect(screen.getByText('Rainwater')).toBeInTheDocument();
   });

@@ -377,6 +377,13 @@
       "title": "Summary",
       "ariaLabel": "Section navigation"
     },
+    "units": {
+      "label": "Units",
+      "metric": "Europe",
+      "imperial": "US",
+      "metricUnits": "°C · cm · L",
+      "imperialUnits": "°F · in · gal"
+    },
     "gauges": {
       "title": "Growing conditions",
       "sun": "Sun",

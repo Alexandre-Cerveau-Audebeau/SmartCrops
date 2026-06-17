@@ -11,10 +11,12 @@ import ThermostatIcon from '@mui/icons-material/Thermostat';
 import WaterDropIcon from '@mui/icons-material/WaterDrop';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import type { Plant } from '../../types/Plant';
+import { useUnitSystem } from '../../hooks/useUnitSystem';
 import {
   formatHardinessZone,
-  formatPlantSpacing,
-  formatRange,
+  formatLength,
+  formatSpacing,
+  formatTemperature,
   formatXDataRange,
 } from '../../utils/plantDetail';
 
@@ -38,11 +40,14 @@ interface Gauge {
  * field is null), so we show exactly the conditions the plant actually has. The
  * whole row renders nothing when no gauge has a value.
  *
- * Values are shown verbatim — no unit conversion here; the global EU/US switch
- * is a dedicated later slice. pH is the WATERING pH (Perenual xData), not soil pH.
+ * Convertible measures (height, temperature, spacing) honour the metric/imperial
+ * toggle via the shared unit-aware formatters (SMA-178); sun hours, pH, hardiness
+ * zone and the qualitative levels are shown verbatim. pH is the WATERING pH
+ * (Perenual xData), not soil pH.
  */
 export default function PlantHeroGauges({ plant }: { plant: Plant }) {
   const { t } = useTranslation();
+  const { system } = useUnitSystem();
   const pd = plant.perenualData;
 
   const candidates: {
@@ -83,7 +88,7 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
       key: 'height',
       icon: <HeightIcon sx={{ fontSize: 21 }} />,
       label: t('plantDetail.gauges.height'),
-      value: formatRange(plant.minHeightCm, plant.maxHeightCm, 'cm'),
+      value: formatLength(plant.minHeightCm, plant.maxHeightCm, system),
     },
     {
       key: 'ph',
@@ -96,10 +101,10 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
       icon: <ThermostatIcon sx={{ fontSize: 21 }} />,
       label: t('plantDetail.gauges.temperature'),
       value: pd
-        ? formatXDataRange(
+        ? formatTemperature(
             pd.xWateringBasedTempMinC,
             pd.xWateringBasedTempMaxC,
-            '°C'
+            system
           )
         : null,
     },
@@ -108,7 +113,7 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
       icon: <OpenInFullIcon sx={{ fontSize: 21 }} />,
       label: t('plantDetail.gauges.spacing'),
       value: pd
-        ? formatPlantSpacing(pd.xPlantSpacingValue, pd.xPlantSpacingUnit)
+        ? formatSpacing(pd.xPlantSpacingValue, pd.xPlantSpacingUnit, system)
         : null,
     },
     {

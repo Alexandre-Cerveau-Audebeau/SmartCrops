@@ -1,16 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
-  formatPlantSpacing,
+  celsiusToFahrenheit,
+  cmToInches,
+  formatLength,
+  formatSpacing,
+  formatTemperature,
   formatXDataRange,
   groupCommonNamesByLanguage,
   hasAnyXData,
+  hasSpacing,
+  inchesToCm,
   parseStringArrayJson,
   toCamelKey,
 } from './plantDetail';
 import type { PlantCommonName, PlantPerenualData } from '../types/Plant';
 
 /** Build a PlantPerenualData with all xData null, overridable per field. */
-function makeXData(overrides: Partial<PlantPerenualData> = {}): PlantPerenualData {
+function makeXData(
+  overrides: Partial<PlantPerenualData> = {}
+): PlantPerenualData {
   return {
     id: 'pd-1',
     perenualId: 1,
@@ -53,7 +61,7 @@ function name(
   id: number,
   languageCode: string,
   text: string,
-  isPrimary: boolean,
+  isPrimary: boolean
 ): PlantCommonName {
   return { id, languageCode, name: text, isPrimary };
 }
@@ -71,8 +79,14 @@ describe('groupCommonNamesByLanguage', () => {
 
     const grouped = groupCommonNamesByLanguage(input, 'en');
 
-    expect(grouped.get('en')?.map((c) => c.name)).toEqual(['Tomato', 'Love apple']);
-    expect(grouped.get('fr')?.map((c) => c.name)).toEqual(['Tomate', 'Pomme d’amour']);
+    expect(grouped.get('en')?.map((c) => c.name)).toEqual([
+      'Tomato',
+      'Love apple',
+    ]);
+    expect(grouped.get('fr')?.map((c) => c.name)).toEqual([
+      'Tomate',
+      'Pomme d’amour',
+    ]);
   });
 
   it('breaks ties alphabetically by name when several non-primary entries share a language', () => {
@@ -84,7 +98,11 @@ describe('groupCommonNamesByLanguage', () => {
 
     const grouped = groupCommonNamesByLanguage(input, 'en');
 
-    expect(grouped.get('en')?.map((c) => c.name)).toEqual(['Tomato', 'Brandywine', 'Cherokee Purple']);
+    expect(grouped.get('en')?.map((c) => c.name)).toEqual([
+      'Tomato',
+      'Brandywine',
+      'Cherokee Purple',
+    ]);
   });
 
   it('orders language groups with the UI language first, then alphabetical', () => {
@@ -137,11 +155,71 @@ describe('parseStringArrayJson', () => {
   });
 });
 
-describe('formatPlantSpacing', () => {
-  it('composes value + unit, and returns null when either part is missing', () => {
-    expect(formatPlantSpacing(18, 'inches')).toBe('18 inches');
-    expect(formatPlantSpacing(18, null)).toBeNull();
-    expect(formatPlantSpacing(null, 'inches')).toBeNull();
+describe('unit conversions (SMA-178)', () => {
+  it('converts cm↔in and °C→°F (raw, unrounded)', () => {
+    expect(cmToInches(2.54)).toBeCloseTo(1);
+    expect(inchesToCm(1)).toBeCloseTo(2.54);
+    expect(celsiusToFahrenheit(0)).toBe(32);
+    expect(celsiusToFahrenheit(100)).toBe(212);
+    expect(celsiusToFahrenheit(18)).toBeCloseTo(64.4);
+  });
+});
+
+describe('formatLength (SMA-178)', () => {
+  it('shows raw cm in metric and rounded inches in imperial', () => {
+    expect(formatLength(30, 120, 'metric')).toBe('30–120 cm');
+    expect(formatLength(30, 120, 'imperial')).toBe('12–47 in'); // 11.8→12, 47.2→47
+  });
+
+  it('collapses equal bounds and keeps half-open / null contracts', () => {
+    expect(formatLength(30, 30, 'metric')).toBe('30 cm');
+    expect(formatLength(30, null, 'metric')).toBe('≥30 cm');
+    expect(formatLength(null, 120, 'imperial')).toBe('≤47 in');
+    expect(formatLength(null, null, 'metric')).toBeNull();
+  });
+});
+
+describe('formatTemperature (SMA-178)', () => {
+  it('shows °C in metric and rounded °F in imperial', () => {
+    expect(formatTemperature(18, 24, 'metric')).toBe('18–24 °C');
+    expect(formatTemperature(18, 24, 'imperial')).toBe('64–75 °F'); // 64.4→64, 75.2→75
+  });
+
+  it('collapses equal bounds and returns null when both are absent', () => {
+    expect(formatTemperature(20, 20, 'metric')).toBe('20 °C');
+    expect(formatTemperature(null, null, 'imperial')).toBeNull();
+  });
+});
+
+describe('formatSpacing (SMA-178)', () => {
+  it('parses an "inches" source and shows the chosen system', () => {
+    // 18 in → 45.72 cm
+    expect(formatSpacing(18, 'inches', 'imperial')).toBe('18 in');
+    expect(formatSpacing(18, 'inches', 'metric')).toBe('46 cm');
+  });
+
+  it('parses a "cm" source and shows the chosen system', () => {
+    // 40 cm → 15.7 in
+    expect(formatSpacing(40, 'cm', 'metric')).toBe('40 cm');
+    expect(formatSpacing(40, 'cm', 'imperial')).toBe('16 in');
+  });
+
+  it('returns null when value or unit is missing', () => {
+    expect(formatSpacing(18, null, 'metric')).toBeNull();
+    expect(formatSpacing(null, 'inches', 'metric')).toBeNull();
+  });
+
+  it('falls back to the raw value + unit for an unrecognized source unit', () => {
+    expect(formatSpacing(2, 'feet', 'metric')).toBe('2 feet');
+  });
+});
+
+describe('hasSpacing (SMA-178)', () => {
+  it('is true only when both value and unit are present', () => {
+    expect(hasSpacing(18, 'inches')).toBe(true);
+    expect(hasSpacing(18, null)).toBe(false);
+    expect(hasSpacing(null, 'inches')).toBe(false);
+    expect(hasSpacing(18, '   ')).toBe(false);
   });
 });
 
@@ -165,7 +243,11 @@ describe('hasAnyXData', () => {
   });
 
   it('returns true when both spacing value and unit are set', () => {
-    expect(hasAnyXData(makeXData({ xPlantSpacingValue: 18, xPlantSpacingUnit: 'inches' }))).toBe(true);
+    expect(
+      hasAnyXData(
+        makeXData({ xPlantSpacingValue: 18, xPlantSpacingUnit: 'inches' })
+      )
+    ).toBe(true);
   });
 
   it('returns true when a scalar range field is set', () => {
