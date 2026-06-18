@@ -500,8 +500,16 @@
       ],
       "stages": {
         "sowing": "Seed · sowing",
-        "growth": "Growth",
+        "growth": "Plant · growth",
         "flowering": "Flowering",
+        "fruiting": "Fruits",
+        "harvest": "Harvest"
+      },
+      "legend": {
+        "seed": "Seed",
+        "plant": "Plant",
+        "flowering": "Flowering",
+        "fruits": "Fruits",
         "harvest": "Harvest"
       },
       "perennialNote": "Perennial growth resumes each year.",

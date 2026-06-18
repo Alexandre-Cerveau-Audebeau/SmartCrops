@@ -502,6 +502,14 @@
         "sowing": "Graine · semis",
         "growth": "Plant · croissance",
         "flowering": "Floraison",
+        "fruiting": "Fruits",
+        "harvest": "Récolte"
+      },
+      "legend": {
+        "seed": "Graine",
+        "plant": "Plant",
+        "flowering": "Floraison",
+        "fruits": "Fruits",
         "harvest": "Récolte"
       },
       "perennialNote": "La croissance vivace reprend chaque année.",

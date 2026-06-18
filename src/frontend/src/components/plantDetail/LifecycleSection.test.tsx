@@ -20,7 +20,7 @@ function makePlant(overrides: Partial<Plant> = {}): Plant {
 }
 
 describe('LifecycleSection (SMA-78 — 12-month Gantt timeline)', () => {
-  it('renders the 12-month header, the four stages and the legend, without MUI Grid', () => {
+  it('renders the 12-month header, five stage rows + a short-word legend, without MUI Grid', () => {
     const { container } = render(<LifecycleSection plant={makePlant()} />);
 
     expect(
@@ -29,24 +29,27 @@ describe('LifecycleSection (SMA-78 — 12-month Gantt timeline)', () => {
     // Month header (Jan … Dec).
     expect(screen.getByText('Jan')).toBeInTheDocument();
     expect(screen.getByText('Dec')).toBeInTheDocument();
-    // Each stage label appears in its timeline row AND in the legend.
-    expect(screen.getAllByText('Seed · sowing').length).toBeGreaterThanOrEqual(
-      2
-    );
-    expect(screen.getAllByText('Growth').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText('Flowering').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText('Harvest').length).toBeGreaterThanOrEqual(2);
+    // Full row labels (middot) are unique to their rows.
+    expect(screen.getByText('Seed · sowing')).toBeInTheDocument();
+    expect(screen.getByText('Plant · growth')).toBeInTheDocument();
+    // Flowering / Fruits / Harvest each appear in their row AND the legend.
+    expect(screen.getAllByText('Flowering')).toHaveLength(2);
+    expect(screen.getAllByText('Fruits')).toHaveLength(2);
+    expect(screen.getAllByText('Harvest')).toHaveLength(2);
+    // Legend short words distinct from the full row labels.
+    expect(screen.getByText('Seed')).toBeInTheDocument();
+    expect(screen.getByText('Plant')).toBeInTheDocument();
     // SMA-178/78: the banned MUI <Grid> stays absent (CSS-grid Box only).
     expect(container.querySelector('.MuiGrid-root')).toBeNull();
   });
 
-  it('shows the COMING SOON · DATA badge and a disabled Indoor mode teaser', () => {
+  it('shows the COMING SOON · DATA badge and a disabled Indoor mode teaser (no extra chip)', () => {
     render(<LifecycleSection plant={makePlant()} />);
 
     expect(screen.getByText('COMING SOON · DATA')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Outdoor' })).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /Indoor · greenhouse · IoT/ })
+      screen.getByRole('button', { name: 'Indoor · greenhouse · IoT' })
     ).toBeDisabled();
   });
 
@@ -76,7 +79,7 @@ describe('LifecycleSection (SMA-78 — 12-month Gantt timeline)', () => {
         })}
       />
     );
-    // The frozen rich layout keeps all four stage rows even with no periods.
-    expect(screen.getAllByText('Harvest').length).toBeGreaterThanOrEqual(2);
+    // The frozen rich layout keeps all five stage rows even with no periods.
+    expect(screen.getAllByText('Harvest')).toHaveLength(2);
   });
 });

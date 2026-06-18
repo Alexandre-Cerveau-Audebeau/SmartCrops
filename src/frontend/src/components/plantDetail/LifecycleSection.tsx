@@ -9,8 +9,9 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import AgricultureIcon from '@mui/icons-material/Agriculture';
+import GrassIcon from '@mui/icons-material/Grass';
 import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
-import SpaIcon from '@mui/icons-material/Spa';
+import EmojiNatureIcon from '@mui/icons-material/EmojiNature';
 import YardIcon from '@mui/icons-material/Yard';
 import type { Plant } from '../../types/Plant';
 import { periodToMonths } from '../../utils/formatPeriod';
@@ -18,24 +19,39 @@ import { periodToMonths } from '../../utils/formatPeriod';
 // Terracotta accent shared with the TOC "coming-data" state (PlantDetailToc.tsx).
 // SMA-184: dark-mode / AA-contrast audit pending for these literals.
 const COMING_DATA = '#C88968';
+const TITLE_GREEN = '#2E8B57';
 
-// Stage bar colours, aligned to the v2 mockup (p.2).
+// Stage bar / legend swatch colours, aligned to the v2 mockup (p.2).
 const STAGE_COLORS: Record<string, string> = {
-  sowing: '#8BC34A', // light green — seed / sowing
-  growth: '#2E8B57', // primary green — growth
-  flowering: '#D9A441', // amber / gold — flowering
-  harvest: '#B5651D', // terracotta / brown — harvest
+  sowing: '#A5D6A7', // light green — seed / sowing
+  growth: '#3C9A5F', // medium green — growth
+  flowering: '#E0A526', // amber / gold — flowering
+  fruiting: '#D1495B', // tomato red — fruiting
+  harvest: '#A8642A', // brown — harvest
 };
 
+// Plain outline glyphs (no coloured disc) — the colour lives in the bars + legend.
 const STAGE_ICONS: Record<string, ReactNode> = {
-  sowing: <SpaIcon sx={{ fontSize: 18 }} />,
-  growth: <YardIcon sx={{ fontSize: 18 }} />,
-  flowering: <LocalFloristIcon sx={{ fontSize: 18 }} />,
-  harvest: <AgricultureIcon sx={{ fontSize: 18 }} />,
+  sowing: <GrassIcon sx={{ fontSize: 19, color: 'text.secondary' }} />,
+  growth: <YardIcon sx={{ fontSize: 19, color: 'text.secondary' }} />,
+  flowering: (
+    <LocalFloristIcon sx={{ fontSize: 19, color: 'text.secondary' }} />
+  ),
+  fruiting: <EmojiNatureIcon sx={{ fontSize: 19, color: 'text.secondary' }} />,
+  harvest: <AgricultureIcon sx={{ fontSize: 19, color: 'text.secondary' }} />,
 };
 
-const LABEL_W = 150; // fixed left label column so every track aligns with the header
-const TIMELINE_MIN_W = 660; // min width before horizontal scroll kicks in (mobile)
+// Legend uses SHORT words (mockup) — distinct from the full row labels.
+const LEGEND: ReadonlyArray<{ stageKey: string; legendKey: string }> = [
+  { stageKey: 'sowing', legendKey: 'seed' },
+  { stageKey: 'growth', legendKey: 'plant' },
+  { stageKey: 'flowering', legendKey: 'flowering' },
+  { stageKey: 'fruiting', legendKey: 'fruits' },
+  { stageKey: 'harvest', legendKey: 'harvest' },
+];
+
+const LABEL_W = 170; // fixed left label column (fits "Plant · croissance" on one line)
+const TIMELINE_MIN_W = 680; // min width before horizontal scroll kicks in (mobile)
 
 /** Collapse a set of 1-based month indices into contiguous [start,end] runs (1=Jan). */
 function toRuns(months: number[]): Array<{ start: number; end: number }> {
@@ -74,20 +90,19 @@ function StageRow({
       >
         <Box
           sx={{
-            width: 26,
-            height: 26,
-            borderRadius: '50%',
             flexShrink: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            bgcolor: runs.length > 0 ? color : 'grey.300',
-            color: runs.length > 0 ? '#fff' : 'text.secondary',
           }}
         >
           {icon}
         </Box>
-        <Typography variant="body2" fontWeight={600} sx={{ lineHeight: 1.15 }}>
+        <Typography
+          variant="body2"
+          fontWeight={600}
+          sx={{ whiteSpace: 'nowrap' }}
+        >
           {label}
         </Typography>
       </Stack>
@@ -118,14 +133,14 @@ function StageRow({
 }
 
 /**
- * Seasonal calendar for Plant Detail v2 (SMA-78, PR C). Rebuilt from the former
- * icon-disc row into a 12-month Gantt timeline (mockup p.2): a month header plus
- * one bar per stage (sowing / growth / flowering / harvest) spanning its active
- * months, derived from `sowingPeriod` / `harvestPeriod` and the Perenual
- * flowering / harvest seasons via {@link periodToMonths}. A stage with no data
- * renders an empty track (the row is kept — rich display). The "Indoor ·
- * greenhouse · IoT" mode (per-phase durations in DAYS) has no data source yet
- * (tracked in SMA-197), so its toggle segment is disabled as a teaser and the
+ * Seasonal calendar for Plant Detail v2 (SMA-78, PR C). 12-month Gantt timeline
+ * (mockup p.2): a month header plus one bar per stage (sowing / growth /
+ * flowering / fruiting / harvest) spanning its active months, derived from
+ * `sowingPeriod` / `harvestPeriod` and the Perenual flowering / harvest seasons
+ * via {@link periodToMonths}. Stages without a data source (growth, fruiting)
+ * render an empty track — the labelled row is kept for parity with the mockup.
+ * The "Indoor · greenhouse · IoT" mode (per-phase durations in DAYS) has no data
+ * source yet (tracked in SMA-197), so its toggle segment is disabled and the
  * section carries a COMING SOON · DATA badge. Pure: the parent mounts it only
  * when `showLifecycleSection` is true (TOC state unchanged — Option B).
  */
@@ -137,13 +152,14 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
 
   const stages = [
     { key: 'sowing', months: periodToMonths(plant.sowingPeriod) },
-    // Growth has no period data source (no sowing/harvest-style field), so its
-    // track is intentionally empty; the labelled row is still shown.
+    // Growth has no period data source, so its track is intentionally empty.
     { key: 'growth', months: [] as number[] },
     {
       key: 'flowering',
       months: periodToMonths(plant.perenualData?.floweringSeason),
     },
+    // Fruiting has no dedicated data source yet — empty track, row kept (mockup).
+    { key: 'fruiting', months: [] as number[] },
     {
       key: 'harvest',
       months: periodToMonths(
@@ -169,7 +185,11 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
         >
           <Box sx={{ minWidth: 0 }}>
             <Stack direction="row" alignItems="center" flexWrap="wrap" gap={1}>
-              <Typography variant="h6" fontWeight={600}>
+              <Typography
+                variant="h6"
+                fontWeight={600}
+                sx={{ color: TITLE_GREEN }}
+              >
                 {t('plantDetail.lifecycle.sectionTitle')}
               </Typography>
               <Box
@@ -180,7 +200,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                   px: 1,
                   py: 0.25,
                   borderRadius: 999,
-                  bgcolor: 'rgba(200,137,104,0.14)',
+                  border: `1px solid ${COMING_DATA}`,
                   color: COMING_DATA,
                   fontSize: 10.5,
                   fontWeight: 700,
@@ -204,33 +224,34 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
             value="outdoor"
             onChange={() => {}}
             aria-label={t('plantDetail.lifecycle.sectionTitle')}
-            sx={{ flexShrink: 0 }}
+            sx={{
+              flexShrink: 0,
+              bgcolor: '#F1F3F4',
+              borderRadius: 2,
+              p: '3px',
+              gap: '3px',
+              '& .MuiToggleButtonGroup-grouped': {
+                border: 0,
+                borderRadius: '8px',
+                textTransform: 'none',
+                px: 1.5,
+                color: 'text.secondary',
+                '&.Mui-selected': {
+                  bgcolor: '#fff',
+                  color: 'text.primary',
+                  fontWeight: 600,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+                  '&:hover': { bgcolor: '#fff' },
+                },
+                '&.Mui-disabled': { border: 0, color: 'text.disabled' },
+              },
+            }}
           >
-            <ToggleButton value="outdoor" sx={{ textTransform: 'none' }}>
+            <ToggleButton value="outdoor">
               {t('plantDetail.lifecycle.modeOutdoor')}
             </ToggleButton>
-            <ToggleButton
-              value="indoor"
-              disabled
-              sx={{ textTransform: 'none', gap: 0.75 }}
-            >
+            <ToggleButton value="indoor" disabled>
               {t('plantDetail.lifecycle.modeIndoor')}
-              <Box
-                component="span"
-                sx={{
-                  px: 0.6,
-                  py: 0.1,
-                  borderRadius: 999,
-                  bgcolor: 'rgba(200,137,104,0.14)',
-                  color: COMING_DATA,
-                  fontSize: 9,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                }}
-              >
-                {t('plantDetail.sections.comingSoonTag')}
-              </Box>
             </ToggleButton>
           </ToggleButtonGroup>
         </Stack>
@@ -274,11 +295,11 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
           </Box>
         </Box>
 
-        {/* Legend: colour swatch + stage label for the four stages. */}
+        {/* Legend: colour swatch + short stage word for the five stages. */}
         <Stack direction="row" flexWrap="wrap" gap={2} sx={{ mt: 2.5 }}>
-          {stages.map((s) => (
+          {LEGEND.map((l) => (
             <Stack
-              key={s.key}
+              key={l.legendKey}
               direction="row"
               alignItems="center"
               spacing={0.75}
@@ -288,11 +309,11 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                   width: 12,
                   height: 12,
                   borderRadius: 0.5,
-                  bgcolor: STAGE_COLORS[s.key],
+                  bgcolor: STAGE_COLORS[l.stageKey],
                 }}
               />
               <Typography variant="caption" color="text.secondary">
-                {t(`plantDetail.lifecycle.stages.${s.key}`)}
+                {t(`plantDetail.lifecycle.legend.${l.legendKey}`)}
               </Typography>
             </Stack>
           ))}
