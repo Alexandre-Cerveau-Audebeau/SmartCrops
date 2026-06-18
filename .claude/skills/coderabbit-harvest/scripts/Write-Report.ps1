@@ -138,7 +138,7 @@ end {
     # Write raw JSON to OutputPath (ensure parent dir exists). Guard the write so
     # an I/O failure (permission / lock / disk full) hits the standardized
     # Write-Stderr stop path instead of a raw terminating error — matching the
-    # intermediate bridge writes. Encoding stays UTF-8 (no BOM) by design.
+    # intermediate bridge writes. Encoding is explicit utf8NoBOM by design.
     $outputDir = Split-Path $OutputPath -Parent
     if ($outputDir -and -not (Test-Path $outputDir)) {
         try {
@@ -148,7 +148,7 @@ end {
         }
     }
     try {
-        $joined | Set-Content -Path $OutputPath -Encoding UTF8
+        $joined | Set-Content -Path $OutputPath -Encoding utf8NoBOM
     } catch {
         Write-Stderr -Message "Failed to write harvest JSON to '$OutputPath': $($_.Exception.Message)" -ExitCode 1
     }

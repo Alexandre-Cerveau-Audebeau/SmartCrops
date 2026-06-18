@@ -129,7 +129,15 @@ $classifiedPath = Join-Path $OutputDir "cr-classified-$shortSha.json"
 # -OutputPath), so the multi-byte CR content never round-trips through this
 # parent's console codepage (which corrupts emoji under -NoProfile). We branch
 # only on the exit code + file presence. Direct `pwsh -File`, no -Command string.
-if (Test-Path $entryPath) { Remove-Item $entryPath }   # clear any stale bridge file
+# Clear any stale Stage-1 bridge file FIRST (mirrors Stage 2's pre-clear), so the
+# post-Locate file-presence check validates THIS run's output rather than a leftover.
+if (Test-Path $entryPath) {
+    try {
+        Remove-Item $entryPath -Force
+    } catch {
+        Write-Stderr -Message "Failed to clear stale entry bridge file '$entryPath': $($_.Exception.Message)" -ExitCode 2
+    }
+}
 pwsh -NoProfile -File (Join-Path $scriptDir 'Locate-Review.ps1') -CommitSha $Commit -OutputPath $entryPath
 $locateRc = $LASTEXITCODE
 if ($locateRc -eq 0 -and (Test-Path $entryPath)) {
