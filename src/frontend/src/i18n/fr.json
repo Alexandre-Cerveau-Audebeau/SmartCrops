@@ -404,6 +404,22 @@
     "scientificData": {
       "comingSoon": "Des mesures scientifiques détaillées (besoins en eau en litres, exposition lumineuse en lumens, exigences nutritives, durée de croissance) seront disponibles dans une prochaine mise à jour.",
       "title": "Données scientifiques",
+      "sectionTitle": "Données scientifiques · culture / serre",
+      "caption": "Les paramètres généraux sont déjà disponibles ; les mesures fines de pilotage arrivent avec l'intégration capteurs.",
+      "availableTitle": "Disponible",
+      "comingTitle": "À venir · mesures exactes",
+      "coming": {
+        "light": { "label": "Lumière reçue", "unit": "lumens·h" },
+        "water": {
+          "label": "Besoin en eau",
+          "unitMetric": "L/jour",
+          "unitImperial": "gal/jour"
+        },
+        "npk": { "label": "Fertilisation NPK", "unit": "g·semaine" },
+        "germination": { "label": "Germination", "unit": "jours" },
+        "humidity": { "label": "Plage d'humidité", "unit": "%RH" },
+        "temp": { "label": "Plage de température", "unit": "°C exact" }
+      },
       "wateringPh": "pH d'arrosage",
       "wateringIdealTemp": "Température d'arrosage idéale",
       "sunlightHours": "Ensoleillement quotidien",

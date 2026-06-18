@@ -1,11 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import ScienceIcon from '@mui/icons-material/Science';
 import { useUnitSystem } from '../../hooks/useUnitSystem';
 import type { Plant } from '../../types/Plant';
 import {
@@ -15,19 +12,35 @@ import {
   parseStringArrayJson,
   toCamelKey,
 } from '../../utils/plantDetail';
+import { Sym } from '../Sym';
+
+// Six sensor placeholders for the dashed "Coming" teaser card (design HTML).
+const COMING_ITEMS: ReadonlyArray<{ key: string; icon: string }> = [
+  { key: 'light', icon: 'wb_incandescent' },
+  { key: 'water', icon: 'water_drop' },
+  { key: 'npk', icon: 'compost' },
+  { key: 'germination', icon: 'timer' },
+  { key: 'humidity', icon: 'humidity_percentage' },
+  { key: 'temp', icon: 'thermostat' },
+];
 
 /**
- * Perenual Supreme scientific-data section for Plant Detail v2 (SMA-178 part A).
- * Extracted from the inline IIFE; convertible measures honour the unit toggle via
- * the shared formatters. Pure: the parent mounts it only when `showScientificData`
- * is true (Supreme data present + at least one xData field), so the TOC stays in
- * sync; the `pd` null-check below is type-narrowing only, not a visibility gate.
+ * Perenual Supreme scientific-data section for Plant Detail v2 (SMA-78, PR C) —
+ * available/coming hybrid, pixel-matched to the Claude Design HTML. The title +
+ * COMING SOON · DATA badge + caption live outside the cards; then a two-column
+ * grid: an "Available" card listing the real Perenual xData metrics (unit-aware,
+ * hide-if-null) plus the existing water-quality/period chips, and a dashed
+ * "Coming · exact measurements" teaser with six sensor placeholders. Gating
+ * unchanged (parent mounts only when `showScientificData`); the `pd` null-check
+ * is type-narrowing only.
  */
 export default function ScientificDataSection({ plant }: { plant: Plant }) {
   const { t } = useTranslation();
   const { system } = useUnitSystem();
   const pd = plant.perenualData;
   if (!pd) return null;
+
+  const sd = 'plantDetail.scientificData';
 
   const phRange = formatXDataRange(pd.xWateringPhMin, pd.xWateringPhMax);
   const wateringTemp = formatTemperature(
@@ -53,20 +66,26 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
   const waterQuality = parseStringArrayJson(pd.xWateringQualityJson);
   const wateringPeriod = parseStringArrayJson(pd.xWateringPeriodJson);
 
-  const row = (label: string, value: string) => (
-    <Stack direction="row" justifyContent="space-between" spacing={2}>
-      <Typography variant="body2" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography variant="body2" sx={{ fontWeight: 500, textAlign: 'right' }}>
-        {value}
-      </Typography>
-    </Stack>
+  // Real metrics — hide a row when its source field is null.
+  const availableRows = [
+    { icon: 'science', label: t(`${sd}.wateringPh`), value: phRange },
+    {
+      icon: 'device_thermostat',
+      label: t(`${sd}.wateringIdealTemp`),
+      value: wateringTemp,
+    },
+    { icon: 'light_mode', label: t(`${sd}.sunlightHours`), value: sunlight },
+    { icon: 'open_in_full', label: t(`${sd}.spacing`), value: spacing },
+    { icon: 'ac_unit', label: t(`${sd}.temperatureTolerance`), value: tempTol },
+  ].filter((r): r is { icon: string; label: string; value: string } =>
+    Boolean(r.value)
   );
 
   const chips = (label: string, values: string[], dict: string) => (
     <Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+      <Typography
+        sx={{ fontSize: 12, fontWeight: 700, color: '#5a665c', mb: 0.75 }}
+      >
         {label}
       </Typography>
       <Stack direction="row" flexWrap="wrap" gap={0.5}>
@@ -74,58 +93,223 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
           <Chip
             key={`${v}-${i}`}
             size="small"
-            label={t(`plantDetail.scientificData.${dict}.${toCamelKey(v)}`, v)}
+            label={t(`${sd}.${dict}.${toCamelKey(v)}`, v)}
           />
         ))}
       </Stack>
     </Box>
   );
 
+  const waterUnit = t(
+    system === 'imperial'
+      ? `${sd}.coming.water.unitImperial`
+      : `${sd}.coming.water.unitMetric`
+  );
+
   return (
-    <Card
-      id="scientific-data"
-      variant="outlined"
-      sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
-    >
-      <CardContent>
-        <Stack direction="row" spacing={2} alignItems="flex-start">
-          <ScienceIcon sx={{ color: 'success.main', mt: 0.5 }} />
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="h6" fontWeight={600} sx={{ mb: 1.5 }}>
-              {t('plantDetail.scientificData.title')}
-            </Typography>
-            <Stack spacing={1.25}>
-              {phRange &&
-                row(t('plantDetail.scientificData.wateringPh'), phRange)}
-              {wateringTemp &&
-                row(
-                  t('plantDetail.scientificData.wateringIdealTemp'),
-                  wateringTemp
-                )}
-              {sunlight &&
-                row(t('plantDetail.scientificData.sunlightHours'), sunlight)}
-              {tempTol &&
-                row(
-                  t('plantDetail.scientificData.temperatureTolerance'),
-                  tempTol
-                )}
-              {spacing && row(t('plantDetail.scientificData.spacing'), spacing)}
-              {waterQuality &&
-                chips(
-                  t('plantDetail.scientificData.waterQuality'),
-                  waterQuality,
-                  'waterQualityValues'
-                )}
-              {wateringPeriod &&
-                chips(
-                  t('plantDetail.scientificData.wateringPeriod'),
-                  wateringPeriod,
-                  'wateringPeriodValues'
-                )}
-            </Stack>
+    <Box id="scientific-data" sx={{ scrollMarginTop: '80px', mb: 3 }}>
+      {/* ── Title + COMING SOON · DATA badge (OUTSIDE the cards) ──────────── */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          mb: '4px',
+          flexWrap: 'wrap',
+        }}
+      >
+        <Typography
+          component="h2"
+          sx={{
+            m: 0,
+            fontSize: '23px',
+            fontWeight: 800,
+            color: '#1B5E3A',
+            letterSpacing: '-0.01em',
+          }}
+        >
+          {t(`${sd}.sectionTitle`)}
+        </Typography>
+        <Box
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            px: '9px',
+            py: '4px',
+            bgcolor: '#FBEEE6',
+            color: '#A0522D',
+            borderRadius: '6px',
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: '0.04em',
+          }}
+        >
+          <Sym name="schedule" size={13} color="#A0522D" />
+          {t('plantDetail.comingSoonDataBadge')}
+        </Box>
+      </Box>
+
+      <Typography sx={{ m: 0, mb: '14px', fontSize: 13, color: '#7a857f' }}>
+        {t(`${sd}.caption`)}
+      </Typography>
+
+      {/* ── Two-column grid: Available (real) | Coming (teaser) ───────────── */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+          gap: '16px',
+          alignItems: 'start',
+        }}
+      >
+        {/* Available */}
+        <Box
+          sx={{
+            bgcolor: '#fff',
+            border: '1px solid #ECF1EA',
+            borderRadius: '12px',
+            p: '18px 20px',
+            boxShadow: '0 1px 3px rgba(27,94,58,0.05)',
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: 13,
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              color: '#1B5E3A',
+              mb: '14px',
+            }}
+          >
+            <Sym name="check_circle" size={18} color="#2E8B57" />
+            {t(`${sd}.availableTitle`)}
           </Box>
-        </Stack>
-      </CardContent>
-    </Card>
+          <Stack spacing="10px">
+            {availableRows.map((r) => (
+              <Box
+                key={r.icon}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  p: '10px 12px',
+                  bgcolor: '#F7FBF5',
+                  borderRadius: '9px',
+                }}
+              >
+                <Sym name={r.icon} size={20} color="#2E8B57" />
+                <Box
+                  sx={{
+                    flex: 1,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: '#3a463f',
+                  }}
+                >
+                  {r.label}
+                </Box>
+                <Box sx={{ fontSize: 14, fontWeight: 700, color: '#1B5E3A' }}>
+                  {r.value}
+                </Box>
+              </Box>
+            ))}
+            {waterQuality &&
+              chips(
+                t(`${sd}.waterQuality`),
+                waterQuality,
+                'waterQualityValues'
+              )}
+            {wateringPeriod &&
+              chips(
+                t(`${sd}.wateringPeriod`),
+                wateringPeriod,
+                'wateringPeriodValues'
+              )}
+          </Stack>
+        </Box>
+
+        {/* Coming (teaser) */}
+        <Box
+          sx={{
+            bgcolor: '#FCFAF7',
+            border: '1px dashed #E2CDB8',
+            borderRadius: '12px',
+            p: '18px 20px',
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: 13,
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              color: '#A0522D',
+              mb: '14px',
+            }}
+          >
+            <Sym name="pending" size={18} color="#A0522D" />
+            {t(`${sd}.comingTitle`)}
+          </Box>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '10px',
+            }}
+          >
+            {COMING_ITEMS.map((c) => (
+              <Box
+                key={c.key}
+                sx={{
+                  bgcolor: '#fff',
+                  border: '1px dashed #E6D3C2',
+                  borderRadius: '9px',
+                  p: '11px 12px',
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                  <Sym name={c.icon} size={17} color="#B98A5E" />
+                  <Box sx={{ fontSize: 11, fontWeight: 700, color: '#8a7a6a' }}>
+                    {t(`${sd}.coming.${c.key}.label`)}
+                  </Box>
+                </Box>
+                <Box
+                  sx={{
+                    mt: '8px',
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: '5px',
+                  }}
+                >
+                  <Box
+                    sx={{
+                      fontSize: 20,
+                      fontWeight: 800,
+                      color: '#D9C3AE',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    —
+                  </Box>
+                  <Box sx={{ fontSize: 11, fontWeight: 600, color: '#B98A5E' }}>
+                    {c.key === 'water'
+                      ? waterUnit
+                      : t(`${sd}.coming.${c.key}.unit`)}
+                  </Box>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 }
