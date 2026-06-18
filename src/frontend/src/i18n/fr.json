@@ -532,6 +532,40 @@
       "biennialNote": "Croissance végétative en année 1, floraison et fructification en année 2."
     },
     "comingSoonDataBadge": "COMING SOON · DATA",
+    "faq": {
+      "sectionTitle": "Questions fréquentes",
+      "caption": "Généré automatiquement depuis les champs de la plante.",
+      "edible": {
+        "q": "Cette plante est-elle comestible ?",
+        "aYes": "Oui, cette plante est comestible.",
+        "aYesParts": "Oui, cette plante est comestible ({{parts}}).",
+        "aNo": "Non, cette plante n'est pas considérée comme comestible.",
+        "partFruit": "fruits",
+        "partLeaves": "feuilles"
+      },
+      "toxic": {
+        "q": "Cette plante est-elle toxique pour les animaux domestiques ?",
+        "aYes": "Oui, cette plante est toxique pour les animaux domestiques.",
+        "aNo": "Non, cette plante n'est pas signalée comme toxique pour les animaux."
+      },
+      "sun": {
+        "q": "De combien de soleil cette plante a-t-elle besoin ?",
+        "a": "Cette plante préfère environ {{hours}} de soleil par jour."
+      },
+      "hardiness": {
+        "q": "Dans quelles zones de rusticité pousse-t-elle ?",
+        "a": "Zones {{min}} à {{max}} (USDA).",
+        "annualNote": "Souvent cultivée en annuelle hors de ces zones."
+      },
+      "ph": {
+        "q": "Quel pH de sol préfère-t-elle ?",
+        "a": "Un pH du sol de {{ph}}."
+      },
+      "spacing": {
+        "q": "Quel espacement laisser entre les pieds ?",
+        "a": "{{spacing}} entre les pieds."
+      }
+    },
     "enumValues": {
       "lifeCycle": {
         "Annual": "Annuelle",

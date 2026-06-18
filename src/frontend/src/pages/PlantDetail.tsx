@@ -71,6 +71,8 @@ import UnitSystemToggle from '../components/plantDetail/UnitSystemToggle';
 import AboutSection from '../components/plantDetail/AboutSection';
 import LifecycleSection from '../components/plantDetail/LifecycleSection';
 import ScientificDataSection from '../components/plantDetail/ScientificDataSection';
+import FaqSection from '../components/plantDetail/FaqSection';
+import { buildFaqItems } from '../utils/plantDetailFaq';
 import { isUserFacingUrl, toUserFacingUrl } from '../utils/externalSourceUrl';
 import { resolveTranslatedField } from '../utils/getTranslation';
 import { capitalizeFirst } from '../utils/capitalizeFirst';
@@ -659,6 +661,10 @@ export default function PlantDetail() {
     plant.perenualData?.hasSupremeData && hasAnyXData(plant.perenualData)
   );
 
+  // SMA-78 — FAQ items auto-built from the plant's real fields; entry 14 of the
+  // TOC goes live only when at least one question can be answered.
+  const faqItems = buildFaqItems(plant, t, system);
+
   // SMA-178 part B — FROZEN 15-entry sommaire, numbered 01–15 per the v2 mockup.
   // The skeleton is fixed: a live-capable section with no data for this plant
   // renders as a greyed `empty` entry rather than being dropped. Teaser sections
@@ -759,7 +765,7 @@ export default function PlantDetail() {
       num: '14',
       id: 'faq',
       labelKey: 'plantDetail.sections.faq',
-      state: 'empty',
+      state: faqItems.length > 0 ? 'live' : 'empty',
     },
     {
       num: '15',
@@ -1584,6 +1590,7 @@ export default function PlantDetail() {
               </Stack>
             </CardContent>
           </Card>
+          {faqItems.length > 0 && <FaqSection plant={plant} />}
         </Box>
       </Box>
 
