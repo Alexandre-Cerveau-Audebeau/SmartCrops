@@ -765,7 +765,7 @@ export default function PlantDetail() {
   ];
 
   return (
-    <Container maxWidth="lg" sx={{ pt: 4, pb: 6 }}>
+    <Container maxWidth="xl" sx={{ pt: 4, pb: 6 }}>
       <Button
         startIcon={<ArrowBackIcon />}
         onClick={() => navigate(backTarget)}
@@ -774,13 +774,22 @@ export default function PlantDetail() {
         {backLabel}
       </Button>
 
-      {/* SMA-169 — two-column shell: sticky TOC (left) + content column (right). */}
+      {/* SMA-178 PR B layout fix — symmetric 3-track grid (gutter | content |
+          gutter). The content column is centred on the VIEWPORT regardless of the
+          TOC; the TOC rail lives in the LEFT gutter (justifySelf: start) and shrinks
+          with the screen via its gutter track; the right gutter mirrors the left so
+          the centre stays centred. Below md the grid collapses to a single column
+          (rail stacks above content; PlantDetailToc renders its horizontal pill bar). */}
       <Box
         sx={{
-          display: 'flex',
-          flexDirection: { xs: 'column', md: 'row' },
-          gap: { md: 4 },
-          alignItems: { md: 'flex-start' },
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: '1fr',
+            md: 'minmax(200px, 1fr) minmax(0, 880px) minmax(200px, 1fr)',
+          },
+          columnGap: { md: 4 },
+          alignItems: 'start',
+          width: '100%',
         }}
       >
         {/* SMA-178 — left column: the unit toggle card above the TOC. The wrapper
@@ -791,9 +800,10 @@ export default function PlantDetail() {
             transparent so the toggle's own white card sits cleanly on the page. */}
         <Box
           sx={{
-            width: { xs: '100%', md: 288 },
-            flexShrink: { md: 0 },
-            alignSelf: { md: 'flex-start' },
+            gridColumn: { md: '1' },
+            justifySelf: { md: 'start' },
+            width: '100%',
+            maxWidth: { md: 256 },
             position: 'sticky',
             top: { xs: 56, md: 80 },
             zIndex: 2,
@@ -804,7 +814,7 @@ export default function PlantDetail() {
           </Box>
           <PlantDetailToc sections={tocSections} disableSticky />
         </Box>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ gridColumn: { md: '2' }, minWidth: 0 }}>
           {/* ── Section A: Hero header ───────────────────────────────────── */}
           <Card
             id="overview"
