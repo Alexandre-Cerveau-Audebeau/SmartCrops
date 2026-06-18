@@ -620,8 +620,17 @@ export default function PlantDetail() {
     Boolean(c.value)
   );
 
+  // SMA-185 — the guard now also covers the Perenual flowering/harvest seasons
+  // that LifecycleSection already renders, so a plant with only those still shows
+  // the section (and its TOC entry 04 lights up). No current plant exhibits
+  // Perenual-only seasons, so this is correctness/future-proofing with zero
+  // visible effect on today's data.
   const showLifecycleSection =
-    !!plant.sowingPeriod || !!plant.harvestPeriod || !!plant.lifeCycle;
+    !!plant.sowingPeriod ||
+    !!plant.harvestPeriod ||
+    !!plant.lifeCycle ||
+    !!plant.perenualData?.floweringSeason ||
+    !!plant.perenualData?.harvestSeason;
 
   const showEdibleAndPropagation =
     ediblePartsList.length > 0 ||
@@ -650,53 +659,109 @@ export default function PlantDetail() {
     plant.perenualData?.hasSupremeData && hasAnyXData(plant.perenualData)
   );
 
-  // SMA-169 — table-of-contents entries, built from the sections ACTUALLY
-  // rendered for this plant (same conditions as the JSX below) so the sticky
-  // sommaire never links to an absent section. Anchors target each section's id.
+  // SMA-178 part B — FROZEN 15-entry sommaire, numbered 01–15 per the v2 mockup.
+  // The skeleton is fixed: a live-capable section with no data for this plant
+  // renders as a greyed `empty` entry rather than being dropped. Teaser sections
+  // not built yet are `coming-data` (pending data) or `coming-backend` (pending
+  // backend); they are non-clickable placeholders whose sections arrive in PR C/D.
+  // Per product decision, 04 (lifecycle) and 05 (scientific data) stay LIVE when
+  // they have content — the "coming soon" treatment lives on the section, not the
+  // nav. Only `live` entries are clickable + scroll-spied; ids match each
+  // section's anchor (the teaser ids are reserved for the future PR C/D sections).
   const tocSections: TocSection[] = [
-    { id: 'overview', label: t('plantDetail.sections.overview') },
-    // SMA-154: the gallery section always renders (grid or empty state), so it is
-    // always listed in the TOC.
-    { id: 'gallery', label: t('plantDetail.sections.gallery') },
-    // SMA-178: order mirrors the JSX — lifecycle + scientific data are hoisted
-    // above characteristics; "about" is folded into the Overview card (no entry).
-    ...(showLifecycleSection
-      ? [{ id: 'lifecycle', label: t('plantDetail.sections.lifecycle') }]
-      : []),
-    ...(showScientificData
-      ? [
-          {
-            id: 'scientific-data',
-            label: t('plantDetail.scientificData.title'),
-          },
-        ]
-      : []),
-    ...(characteristicRows.length > 0 || conditions.length > 0
-      ? [
-          {
-            id: 'characteristics',
-            label: t('plantDetail.sections.characteristics'),
-          },
-        ]
-      : []),
-    ...(showEdibleAndPropagation
-      ? [
-          {
-            id: 'edible',
-            label: t('plantDetail.sections.edibleAndPropagation'),
-          },
-        ]
-      : []),
-    ...(plant.pests.length > 0
-      ? [{ id: 'pests', label: t('plantDetail.sections.pestsAndDiseases') }]
-      : []),
-    ...(plant.commonNames.length > 1
-      ? [{ id: 'common-names', label: t('plantDetail.sections.commonNames') }]
-      : []),
-    ...(plant.synonyms.length > 0
-      ? [{ id: 'synonyms', label: t('plantDetail.sections.synonyms') }]
-      : []),
-    { id: 'sources', label: t('plantDetail.sections.sources') },
+    {
+      num: '01',
+      id: 'overview',
+      labelKey: 'plantDetail.sections.overview',
+      state: 'live',
+    },
+    {
+      num: '02',
+      id: 'gallery',
+      labelKey: 'plantDetail.sections.gallery',
+      state: 'live',
+    },
+    {
+      num: '03',
+      id: 'distribution',
+      labelKey: 'plantDetail.sections.distribution',
+      state: 'coming-data',
+    },
+    {
+      num: '04',
+      id: 'lifecycle',
+      labelKey: 'plantDetail.sections.lifecycle',
+      state: showLifecycleSection ? 'live' : 'empty',
+    },
+    {
+      num: '05',
+      id: 'scientific-data',
+      labelKey: 'plantDetail.scientificData.title',
+      state: showScientificData ? 'live' : 'empty',
+    },
+    {
+      num: '06',
+      id: 'characteristics',
+      labelKey: 'plantDetail.sections.characteristics',
+      state:
+        characteristicRows.length > 0 || conditions.length > 0
+          ? 'live'
+          : 'empty',
+    },
+    {
+      num: '07',
+      id: 'edible',
+      labelKey: 'plantDetail.sections.edibleAndPropagation',
+      state: showEdibleAndPropagation ? 'live' : 'empty',
+    },
+    {
+      num: '08',
+      id: 'pests',
+      labelKey: 'plantDetail.sections.pestsAndDiseases',
+      state: plant.pests.length > 0 ? 'live' : 'empty',
+    },
+    {
+      num: '09',
+      id: 'common-names',
+      labelKey: 'plantDetail.sections.commonNames',
+      state: plant.commonNames.length > 1 ? 'live' : 'empty',
+    },
+    {
+      num: '10',
+      id: 'synonyms',
+      labelKey: 'plantDetail.sections.synonyms',
+      state: plant.synonyms.length > 0 ? 'live' : 'empty',
+    },
+    {
+      num: '11',
+      id: 'plantnet',
+      labelKey: 'plantDetail.sections.plantnet',
+      state: 'coming-data',
+    },
+    {
+      num: '12',
+      id: 'sources',
+      labelKey: 'plantDetail.sections.sources',
+      state: 'live',
+    },
+    {
+      num: '13',
+      id: 'similar',
+      labelKey: 'plantDetail.sections.similar',
+      state: 'coming-backend',
+    },
+    {
+      num: '14',
+      id: 'faq',
+      labelKey: 'plantDetail.sections.faq',
+      state: 'empty',
+    },
+    {
+      num: '15',
+      id: 'community',
+      labelKey: 'plantDetail.sections.community',
+      state: 'coming-backend',
+    },
   ];
 
   return (
@@ -719,10 +784,11 @@ export default function PlantDetail() {
         }}
       >
         {/* SMA-178 — left column: the unit toggle card above the TOC. The wrapper
-            is the single sticky element (desktop top 80 / mobile top 56) and the
-            inner TOC <nav> is forced static, so the toggle + TOC pin together
-            without a nested-sticky overlap. The wrapper is transparent so the
-            toggle's own white card sits cleanly on the page background. */}
+            is the single sticky element (desktop top 80 / mobile top 56); the
+            inner TOC renders static via its own `disableSticky` prop (SMA-183,
+            replacing the former fragile `& > nav` override), so the toggle + TOC
+            pin together without a nested-sticky overlap. The wrapper is
+            transparent so the toggle's own white card sits cleanly on the page. */}
         <Box
           sx={{
             width: { xs: '100%', md: 288 },
@@ -731,13 +797,12 @@ export default function PlantDetail() {
             position: 'sticky',
             top: { xs: 56, md: 80 },
             zIndex: 2,
-            '& > nav': { position: 'static', top: 'auto' },
           }}
         >
           <Box sx={{ mb: 2 }}>
             <UnitSystemToggle />
           </Box>
-          <PlantDetailToc sections={tocSections} />
+          <PlantDetailToc sections={tocSections} disableSticky />
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           {/* ── Section A: Hero header ───────────────────────────────────── */}

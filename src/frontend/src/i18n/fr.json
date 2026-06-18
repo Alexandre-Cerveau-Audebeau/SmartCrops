@@ -362,16 +362,22 @@
     "sections": {
       "about": "À propos",
       "characteristics": "Caractéristiques",
-      "lifecycle": "Cycle de vie",
-      "edibleAndPropagation": "Parties comestibles & propagation",
+      "lifecycle": "Calendrier saisonnier",
+      "edibleAndPropagation": "Culture & propagation",
       "scientificData": "Données scientifiques (à venir)",
-      "pestsAndDiseases": "Parasites & maladies",
+      "pestsAndDiseases": "Maladies & ravageurs",
       "commonNames": "Noms vernaculaires",
       "synonyms": "Synonymes botaniques",
-      "sources": "Sources externes",
+      "sources": "Ressources externes",
       "adminActions": "Actions admin",
       "overview": "Aperçu",
-      "gallery": "Galerie"
+      "gallery": "Galerie photos",
+      "distribution": "Carte de répartition",
+      "plantnet": "Observations PlantNet",
+      "similar": "Plantes similaires",
+      "faq": "FAQ",
+      "community": "Communauté",
+      "comingSoonTag": "À VENIR"
     },
     "toc": {
       "title": "Sommaire",
@@ -397,7 +403,7 @@
     },
     "scientificData": {
       "comingSoon": "Des mesures scientifiques détaillées (besoins en eau en litres, exposition lumineuse en lumens, exigences nutritives, durée de croissance) seront disponibles dans une prochaine mise à jour.",
-      "title": "Données scientifiques (Perenual Supreme)",
+      "title": "Données scientifiques",
       "wateringPh": "pH d'arrosage",
       "wateringIdealTemp": "Température d'arrosage idéale",
       "sunlightHours": "Ensoleillement quotidien",
@@ -570,7 +576,7 @@
       "languageSwitch": "Lire en {{language}}"
     },
     "pests": {
-      "header": "Parasites & maladies ({{count}})",
+      "header": "Maladies & ravageurs ({{count}})",
       "showAll": "Tout afficher ({{count}})",
       "showLess": "Voir moins"
     },

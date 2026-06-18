@@ -5,9 +5,23 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import { useScrollSpy } from './useScrollSpy';
 
+/**
+ * State of a TOC entry (SMA-178 part B):
+ * - `live`           — the section renders real content for this plant (clickable, scroll-spy).
+ * - `empty`          — a live-capable section with no data for this plant (grey, non-clickable).
+ * - `coming-data`    — a teaser section not built yet, pending data (orange, non-clickable).
+ * - `coming-backend` — a teaser section not built yet, pending backend (blue, non-clickable).
+ */
+export type TocState = 'live' | 'empty' | 'coming-data' | 'coming-backend';
+
 export interface TocSection {
+  /** Fixed zero-padded entry number ('01'..'15') — NOT positional. */
+  num: string;
+  /** Anchor id of the on-page section. */
   id: string;
-  label: string;
+  /** i18n key; resolved by this component so the page only builds structure. */
+  labelKey: string;
+  state: TocState;
 }
 
 interface PlantDetailTocProps {
@@ -17,28 +31,62 @@ interface PlantDetailTocProps {
    * (the page does this); pass it explicitly to drive the highlight in tests.
    */
   activeId?: string;
+  /**
+   * SMA-183: when true, the <nav> renders `position: static` (top auto) so a
+   * sticky PARENT owns the positioning. Replaces the page's former fragile
+   * `'& > nav': { position: 'static' }` override on the wrapper.
+   */
+  disableSticky?: boolean;
 }
 
-const ACTIVE_GREEN = '#2E8B57';
-const ACTIVE_BG = '#EAF5EE';
+// SMA-184: dark-mode / AA-contrast audit pending — the palette is captured here
+// in one place so that pass can retune every state from a single spot.
+const LIVE_GREEN = '#2E8B57'; // = theme primary
+const ACTIVE_BG = '#EAF5EE'; // primary ~12% opacity
 const ACTIVE_TEXT = '#1B5E3A';
 const IDLE_TEXT = '#4a564d';
+const COMING_DATA = '#C88968';
+const COMING_BACKEND = '#6D7DA4';
+const EMPTY_DOT = '#C9D3CC';
+
+/** Bullet colour per state (the small leading disc). */
+function dotColor(state: TocState): string {
+  switch (state) {
+    case 'live':
+      return LIVE_GREEN;
+    case 'coming-data':
+      return COMING_DATA;
+    case 'coming-backend':
+      return COMING_BACKEND;
+    default:
+      return EMPTY_DOT; // 'empty'
+  }
+}
 
 /**
- * Sticky table of contents for Plant Detail v2 (SMA-169). The left column on
- * desktop (sticky under the fixed navbar, active section highlighted), a sticky
- * horizontal scrollable anchor bar on mobile. Anchors jump via native `#id`
- * links; the on-page sections carry a matching `scroll-margin-top` so the jump
- * clears the navbar. `activeId` is computed by the page's scroll-spy.
+ * Frozen 15-entry table of contents for Plant Detail v2 (SMA-178 part B). The
+ * skeleton is fixed and numbered 01–15: a section that has no content for the
+ * current plant renders as a greyed, non-clickable entry rather than being
+ * dropped. Four states drive the visuals (see {@link TocState}). Only `live`
+ * entries are clickable, scroll-spied and eligible for the active highlight.
+ *
+ * Desktop = sticky left sidebar card; mobile = horizontal scrollable pill bar.
+ * Anchors jump via native `#id` links; the on-page sections carry a matching
+ * `scroll-margin-top` so the jump clears the navbar. `activeId` is computed by
+ * the page's scroll-spy (here restricted to the live anchors).
  */
 export default function PlantDetailToc({
   sections,
   activeId: activeIdProp,
+  disableSticky = false,
 }: PlantDetailTocProps) {
   const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const spyActiveId = useScrollSpy(sections.map((s) => s.id));
+  // Scroll-spy only the live anchors — non-live entries have no section to
+  // observe and must never be highlighted (SMA-178 part B).
+  const liveIds = sections.filter((s) => s.state === 'live').map((s) => s.id);
+  const spyActiveId = useScrollSpy(liveIds);
   const activeId = activeIdProp ?? spyActiveId;
 
   if (sections.length === 0) return null;
@@ -49,8 +97,8 @@ export default function PlantDetailToc({
         component="nav"
         aria-label={t('plantDetail.toc.ariaLabel')}
         sx={{
-          position: 'sticky',
-          top: 56,
+          position: disableSticky ? 'static' : 'sticky',
+          top: disableSticky ? 'auto' : 56,
           zIndex: 2,
           display: 'flex',
           gap: 1,
@@ -63,12 +111,15 @@ export default function PlantDetailToc({
         }}
       >
         {sections.map((s) => {
-          const active = s.id === activeId;
+          const live = s.state === 'live';
+          const active = live && s.id === activeId;
+          const coming =
+            s.state === 'coming-data' || s.state === 'coming-backend';
           return (
             <Box
               key={s.id}
-              component="a"
-              href={`#${s.id}`}
+              component={live ? 'a' : 'div'}
+              href={live ? `#${s.id}` : undefined}
               aria-current={active ? 'location' : undefined}
               sx={{
                 flexShrink: 0,
@@ -76,20 +127,43 @@ export default function PlantDetailToc({
                 py: 0.9,
                 borderRadius: 999,
                 border: '1px solid',
-                borderColor: active ? ACTIVE_GREEN : '#d8e0d6',
-                bgcolor: active ? ACTIVE_GREEN : '#fff',
-                color: active ? '#fff' : IDLE_TEXT,
+                borderColor: active
+                  ? LIVE_GREEN
+                  : coming
+                    ? dotColor(s.state)
+                    : '#d8e0d6',
+                bgcolor: active ? LIVE_GREEN : '#fff',
+                color: active ? '#fff' : live ? IDLE_TEXT : 'text.secondary',
                 fontSize: 13.5,
                 fontWeight: 600,
                 whiteSpace: 'nowrap',
                 textDecoration: 'none',
-                '&:focus-visible': {
-                  outline: `2px solid ${ACTIVE_GREEN}`,
-                  outlineOffset: 2,
-                },
+                cursor: live ? 'pointer' : 'default',
+                opacity: live ? 1 : 0.75,
+                ...(live && {
+                  '&:focus-visible': {
+                    outline: `2px solid ${LIVE_GREEN}`,
+                    outlineOffset: 2,
+                  },
+                }),
               }}
             >
-              {s.label}
+              {t(s.labelKey)}
+              {coming && (
+                <Box
+                  component="span"
+                  sx={{
+                    ml: 0.75,
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    opacity: 0.9,
+                  }}
+                >
+                  {t('plantDetail.sections.comingSoonTag')}
+                </Box>
+              )}
             </Box>
           );
         })}
@@ -104,8 +178,8 @@ export default function PlantDetailToc({
       sx={{
         width: 288,
         flexShrink: 0,
-        position: 'sticky',
-        top: 80,
+        position: disableSticky ? 'static' : 'sticky',
+        top: disableSticky ? 'auto' : 80,
         alignSelf: 'flex-start',
         maxHeight: 'calc(100vh - 96px)',
         overflowY: 'auto',
@@ -131,33 +205,43 @@ export default function PlantDetailToc({
       >
         {t('plantDetail.toc.title')}
       </Typography>
-      {sections.map((s, i) => {
-        const active = s.id === activeId;
+      {sections.map((s) => {
+        const live = s.state === 'live';
+        const active = live && s.id === activeId;
+        const coming =
+          s.state === 'coming-data' || s.state === 'coming-backend';
         return (
           <Box
             key={s.id}
-            component="a"
-            href={`#${s.id}`}
+            component={live ? 'a' : 'div'}
+            href={live ? `#${s.id}` : undefined}
             aria-current={active ? 'location' : undefined}
             sx={{
               display: 'flex',
-              alignItems: 'center',
+              alignItems: 'flex-start',
               gap: 1,
               px: 1.25,
               py: 1.1,
               borderRadius: 2,
               borderLeft: '3px solid',
-              borderLeftColor: active ? ACTIVE_GREEN : 'transparent',
+              borderLeftColor: active ? LIVE_GREEN : 'transparent',
               bgcolor: active ? ACTIVE_BG : 'transparent',
-              color: active ? ACTIVE_TEXT : IDLE_TEXT,
-              fontWeight: active ? 700 : 500,
+              color: active
+                ? ACTIVE_TEXT
+                : live
+                  ? 'text.primary'
+                  : 'text.secondary',
+              fontWeight: active ? 500 : 400,
               fontSize: 14,
               textDecoration: 'none',
-              '&:hover': { bgcolor: active ? ACTIVE_BG : '#F2F6F0' },
-              '&:focus-visible': {
-                outline: `2px solid ${ACTIVE_GREEN}`,
-                outlineOffset: 2,
-              },
+              cursor: live ? 'pointer' : 'default',
+              ...(live && {
+                '&:hover': { bgcolor: active ? ACTIVE_BG : '#F2F6F0' },
+                '&:focus-visible': {
+                  outline: `2px solid ${LIVE_GREEN}`,
+                  outlineOffset: 2,
+                },
+              }),
             }}
           >
             <Box
@@ -168,7 +252,8 @@ export default function PlantDetailToc({
                 height: 7,
                 borderRadius: '50%',
                 flexShrink: 0,
-                bgcolor: active ? ACTIVE_GREEN : '#C9D3CC',
+                mt: '6px',
+                bgcolor: dotColor(s.state),
               }}
             />
             <Box
@@ -177,16 +262,34 @@ export default function PlantDetailToc({
               sx={{
                 fontSize: 11,
                 fontWeight: 700,
-                color: '#b3bdb6',
+                color: active ? LIVE_GREEN : 'text.secondary',
                 width: 18,
                 flexShrink: 0,
+                mt: '1px',
               }}
             >
-              {i + 1}
+              {s.num}
             </Box>
             <Box component="span" sx={{ flex: 1, lineHeight: 1.25 }}>
-              {s.label}
+              {t(s.labelKey)}
             </Box>
+            {coming && (
+              <Box
+                component="span"
+                sx={{
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  color: 'text.secondary',
+                  flexShrink: 0,
+                  mt: '2px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {t('plantDetail.sections.comingSoonTag')}
+              </Box>
+            )}
           </Box>
         );
       })}
