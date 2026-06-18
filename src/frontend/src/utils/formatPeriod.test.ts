@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import i18n from '../i18n/i18n';
-import { formatPeriod } from './formatPeriod';
+import { formatPeriod, periodToMonths } from './formatPeriod';
 
 // Use the real i18n resources (en.json / fr.json) via getFixedT so the test
 // exercises the actual translations, not a hand-rolled mock.
@@ -49,5 +49,43 @@ describe('formatPeriod', () => {
     expect(formatPeriod(null, tFr)).toBeNull();
     expect(formatPeriod(undefined, tFr)).toBeNull();
     expect(formatPeriod('   ', tFr)).toBeNull();
+  });
+});
+
+describe('periodToMonths (SMA-78 — 12-month timeline)', () => {
+  it('maps a month range to inclusive 1-based indices', () => {
+    expect(periodToMonths('march-may')).toEqual([3, 4, 5]);
+  });
+
+  it('wraps a year-end range past December', () => {
+    expect(periodToMonths('november-february')).toEqual([11, 12, 1, 2]);
+  });
+
+  it('maps a single month', () => {
+    expect(periodToMonths('june')).toEqual([6]);
+  });
+
+  it('maps season words (fall == autumn)', () => {
+    expect(periodToMonths('spring')).toEqual([3, 4, 5]);
+    expect(periodToMonths('summer')).toEqual([6, 7, 8]);
+    expect(periodToMonths('fall')).toEqual([9, 10, 11]);
+    expect(periodToMonths('autumn')).toEqual([9, 10, 11]);
+    expect(periodToMonths('winter')).toEqual([12, 1, 2]);
+  });
+
+  it('maps year-round to all twelve months', () => {
+    expect(periodToMonths('year-round')).toHaveLength(12);
+  });
+
+  it('is case/whitespace tolerant', () => {
+    expect(periodToMonths('  Spring ')).toEqual([3, 4, 5]);
+  });
+
+  it('returns [] for null/blank/unknown', () => {
+    expect(periodToMonths(null)).toEqual([]);
+    expect(periodToMonths(undefined)).toEqual([]);
+    expect(periodToMonths('   ')).toEqual([]);
+    expect(periodToMonths('early summer')).toEqual([]);
+    expect(periodToMonths('march-sometime')).toEqual([]);
   });
 });

@@ -480,15 +480,34 @@
       "attractsPollinators": "Attire les pollinisateurs"
     },
     "lifecycle": {
+      "sectionTitle": "Calendrier & frise saisonnière",
+      "caption": "Aperçu — étapes de la graine à la récolte, calées sur 12 mois.",
+      "modeOutdoor": "Extérieur",
+      "modeIndoor": "Intérieur · serre · IOT",
+      "monthsShort": [
+        "Jan",
+        "Fév",
+        "Mar",
+        "Avr",
+        "Mai",
+        "Juin",
+        "Juil",
+        "Août",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Déc"
+      ],
       "stages": {
-        "sowing": "Semis",
-        "growth": "Croissance",
+        "sowing": "Graine · semis",
+        "growth": "Plant · croissance",
         "flowering": "Floraison",
         "harvest": "Récolte"
       },
       "perennialNote": "La croissance vivace reprend chaque année.",
       "biennialNote": "Croissance végétative en année 1, floraison et fructification en année 2."
     },
+    "comingSoonDataBadge": "COMING SOON · DATA",
     "enumValues": {
       "lifeCycle": {
         "Annual": "Annuelle",

@@ -480,8 +480,26 @@
       "attractsPollinators": "Attracts pollinators"
     },
     "lifecycle": {
+      "sectionTitle": "Seasonal calendar & timeline",
+      "caption": "Overview — stages from seed to harvest, mapped across 12 months.",
+      "modeOutdoor": "Outdoor",
+      "modeIndoor": "Indoor · greenhouse · IoT",
+      "monthsShort": [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec"
+      ],
       "stages": {
-        "sowing": "Sowing",
+        "sowing": "Seed · sowing",
         "growth": "Growth",
         "flowering": "Flowering",
         "harvest": "Harvest"
@@ -489,6 +507,7 @@
       "perennialNote": "Perennial growth resumes each year.",
       "biennialNote": "Vegetative growth in year 1, flowering and fruiting in year 2."
     },
+    "comingSoonDataBadge": "COMING SOON · DATA",
     "enumValues": {
       "lifeCycle": {
         "Annual": "Annual",
