@@ -96,6 +96,11 @@ if ($Help) {
 
 # -- Resolve commit + PR -----------------------------------------------------
 if (-not $Commit) {
+    # Preflight: a missing git CLI must hit the stop/report path, not throw a raw
+    # command-not-found before $LASTEXITCODE can be inspected.
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        Write-Stderr -Message "The 'git' CLI is required to auto-resolve -Commit. Install git or pass -Commit explicitly - STOPPING." -ExitCode 2
+    }
     $Commit = (git rev-parse HEAD)
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($Commit)) {
         Write-Stderr -Message "Could not resolve HEAD via git (not a repo?) - STOPPING." -ExitCode 2
@@ -104,6 +109,10 @@ if (-not $Commit) {
 }
 
 if (-not $Pr) {
+    # Preflight: same stop/report contract for a missing gh CLI.
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+        Write-Stderr -Message "The 'gh' CLI is required to auto-resolve -Pr. Install gh or pass -Pr explicitly - STOPPING." -ExitCode 2
+    }
     $Pr = (gh pr view --json number --jq '.number') -as [int]
     if (-not $Pr) {
         Write-Stderr -Message "No open PR for the current branch (pass -Pr <n> to target one) - STOPPING." -ExitCode 2
@@ -149,6 +158,16 @@ if ($CompareWith) {
 }
 
 $classifyArgs += @('-OutputPath', $classifiedPath)
+# Clear any stale Stage-2 bridge file FIRST (mirrors Stage 1's pre-clear of the
+# entry file), so the post-Classify existence check below validates THIS run's
+# output rather than a leftover from a previous run.
+if (Test-Path $classifiedPath) {
+    try {
+        Remove-Item $classifiedPath -Force
+    } catch {
+        Write-Stderr -Message "Failed to clear stale classified bridge file '$classifiedPath': $($_.Exception.Message)" -ExitCode 2
+    }
+}
 pwsh -NoProfile -File (Join-Path $scriptDir 'Classify-Comments.ps1') @classifyArgs
 $classifyRc = $LASTEXITCODE
 if ($classifyRc -ne 0) {

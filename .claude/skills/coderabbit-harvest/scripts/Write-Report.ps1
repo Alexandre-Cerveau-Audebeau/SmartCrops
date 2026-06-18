@@ -135,12 +135,23 @@ end {
         Write-Stderr -Message "Schema validation failed: 'counts' missing from input JSON" -ExitCode 1
     }
 
-    # Write raw JSON to OutputPath (ensure parent dir exists)
+    # Write raw JSON to OutputPath (ensure parent dir exists). Guard the write so
+    # an I/O failure (permission / lock / disk full) hits the standardized
+    # Write-Stderr stop path instead of a raw terminating error — matching the
+    # intermediate bridge writes. Encoding stays UTF-8 (no BOM) by design.
     $outputDir = Split-Path $OutputPath -Parent
     if ($outputDir -and -not (Test-Path $outputDir)) {
-        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        try {
+            New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        } catch {
+            Write-Stderr -Message "Failed to create output directory '$outputDir': $($_.Exception.Message)" -ExitCode 1
+        }
     }
-    $joined | Set-Content -Path $OutputPath -Encoding UTF8
+    try {
+        $joined | Set-Content -Path $OutputPath -Encoding UTF8
+    } catch {
+        Write-Stderr -Message "Failed to write harvest JSON to '$OutputPath': $($_.Exception.Message)" -ExitCode 1
+    }
 
     # Build markdown summary
     $sb = [System.Text.StringBuilder]::new()
