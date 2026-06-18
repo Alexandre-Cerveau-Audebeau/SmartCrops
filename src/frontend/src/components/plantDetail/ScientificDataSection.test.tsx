@@ -66,6 +66,18 @@ describe('ScientificDataSection (SMA-178)', () => {
     expect(screen.getByText('Preferred water quality')).toBeInTheDocument();
     expect(screen.getByText('Rainwater')).toBeInTheDocument();
     expect(screen.getByText('Watering time of day')).toBeInTheDocument();
+    expect(screen.getByText('Morning')).toBeInTheDocument();
+  });
+
+  it('renders duplicate chip values without React key warnings', () => {
+    renderSci(
+      makePlant({
+        xWateringQualityJson: '["Rainwater", "Rainwater", "Tap water"]',
+      })
+    );
+
+    expect(screen.getAllByText('Rainwater')).toHaveLength(2);
+    expect(screen.getByText('Tap water')).toBeInTheDocument();
   });
 
   it('converts temperature and spacing for the imperial system (SMA-178)', () => {
