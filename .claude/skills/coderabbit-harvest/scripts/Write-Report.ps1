@@ -14,7 +14,14 @@
     Where to write the persistent JSON file. Typically /tmp/harvest-<sha-prefix>.json.
 
 .PARAMETER InputJson
-    Optional: classified JSON as a string. If not provided, reads from stdin.
+    Optional: classified JSON as a string. Lowest input precedence (see -InputPath).
+
+.PARAMETER InputPath
+    Optional: path to a file holding the classified JSON (UTF-8). Input precedence
+    is -InputPath > -InputJson > stdin: when -InputPath is given it is used and the
+    other two sources are ignored. The orchestrator bridges stages through this file
+    because a cross-process `pwsh -File` does not bind stdin to a ValueFromPipeline
+    parameter.
 
 .NOTES
     PowerShell 7+ required.
@@ -30,7 +37,10 @@ param(
     [string]$OutputPath,
 
     [Parameter(Mandatory = $false, ValueFromPipeline = $true)]
-    [string]$InputJson
+    [string]$InputJson,
+
+    [Parameter(Mandatory = $false)]
+    [string]$InputPath
 )
 
 begin {
@@ -59,9 +69,24 @@ process {
 }
 
 end {
-    $joined = $inputLines -join "`n"
+    if ($InputPath) {
+        if (-not (Test-Path $InputPath)) {
+            Write-Stderr -Message "Input JSON file not found: $InputPath" -ExitCode 1
+        }
+        # Read the classified bridge file with explicit UTF-8 so multi-byte CR
+        # content (emoji) decodes correctly, independent of the console codepage.
+        # Wrap the read so a permission / lock / disk error surfaces a clear stop
+        # instead of a raw .NET exception collapsing the documented exit codes.
+        try {
+            $joined = [System.IO.File]::ReadAllText($InputPath, [System.Text.UTF8Encoding]::new($false))
+        } catch {
+            Write-Stderr -Message "Failed to read input JSON from '$InputPath': $($_.Exception.Message)" -ExitCode 1
+        }
+    } else {
+        $joined = $inputLines -join "`n"
+    }
     if (-not $joined) {
-        Write-Stderr -Message "No JSON input received (expected from stdin or -InputJson)" -ExitCode 1
+        Write-Stderr -Message "No JSON input received (expected from stdin, -InputJson, or -InputPath)" -ExitCode 1
     }
 
     try {

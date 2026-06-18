@@ -61,7 +61,8 @@
 param(
     [Parameter(Mandatory = $true)] [ValidateNotNullOrEmpty()] [string]$CommitSha,
     [Parameter(Mandatory = $false)] [string]$WorkspaceStorageRoot = (Join-Path $env:APPDATA 'Code\User\workspaceStorage'),
-    [Parameter(Mandatory = $false)] [string]$ExpectedRepoPath
+    [Parameter(Mandatory = $false)] [string]$ExpectedRepoPath,
+    [Parameter(Mandatory = $false)] [string]$OutputPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -196,6 +197,27 @@ $best = $candidates | Sort-Object SortKey -Descending | Select-Object -First 1
 # Emit the located entry as JSON, annotated with its source file.
 $entryOut = $best.Entry
 Add-Member -InputObject $entryOut -NotePropertyName '_sourceFile' -NotePropertyValue $best.SourceFile -Force
-$entryOut | ConvertTo-Json -Depth 100
+$entryJson = $entryOut | ConvertTo-Json -Depth 100
+if ($OutputPath) {
+    # Write with explicit UTF-8 (no BOM) so the orchestrator never round-trips
+    # our stdout through the console codepage (corrupts emoji under -NoProfile).
+    # Ensure the parent dir exists and surface a clear stop on I/O failure rather
+    # than letting a raw .NET exception collapse the documented exit codes.
+    $outDir = Split-Path -Parent $OutputPath
+    if ($outDir -and -not (Test-Path $outDir)) {
+        try {
+            New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+        } catch {
+            Write-Stderr -Message "Failed to create output directory '$outDir': $($_.Exception.Message)" -ExitCode 1
+        }
+    }
+    try {
+        [System.IO.File]::WriteAllText($OutputPath, $entryJson, [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        Write-Stderr -Message "Failed to write entry JSON to '$OutputPath': $($_.Exception.Message)" -ExitCode 1
+    }
+} else {
+    $entryJson
+}
 
 exit 0
