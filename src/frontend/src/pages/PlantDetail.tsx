@@ -668,6 +668,12 @@ export default function PlantDetail() {
   // they have content — the "coming soon" treatment lives on the section, not the
   // nav. Only `live` entries are clickable + scroll-spied; ids match each
   // section's anchor (the teaser ids are reserved for the future PR C/D sections).
+  // NOTE: intentionally a plain array, not useMemo — this is built AFTER the
+  // loading / not-found early returns (and depends on plant-derived state defined
+  // there), so wrapping it in a hook would violate the rules-of-hooks. The CR
+  // "memoize for stable identity" nitpick is filed as trivial/low-value and has no
+  // effect today: PlantDetailToc is not wrapped in React.memo. Revisit only if the
+  // component's guard/hook ordering is refactored.
   const tocSections: TocSection[] = [
     {
       num: '01',
@@ -765,7 +771,11 @@ export default function PlantDetail() {
   ];
 
   return (
-    <Container maxWidth="xl" sx={{ pt: 4, pb: 6 }}>
+    <Container
+      maxWidth={false}
+      disableGutters
+      sx={{ pt: 4, pb: 6, px: { xs: 2, md: 3 } }}
+    >
       <Button
         startIcon={<ArrowBackIcon />}
         onClick={() => navigate(backTarget)}
@@ -794,10 +804,12 @@ export default function PlantDetail() {
       >
         {/* SMA-178 — left column: the unit toggle card above the TOC. The wrapper
             is the single sticky element (desktop top 80 / mobile top 56); the
-            inner TOC renders static via its own `disableSticky` prop (SMA-183,
-            replacing the former fragile `& > nav` override), so the toggle + TOC
-            pin together without a nested-sticky overlap. The wrapper is
-            transparent so the toggle's own white card sits cleanly on the page. */}
+            inner TOC renders static via its own `disableSticky` prop (SMA-183).
+            At md+ the wrapper is a height-capped flex column (calc(100vh - 96px)):
+            the toggle stays pinned (flexShrink 0) and the TOC list flex-grows with
+            its own internal scroll, so a rail taller than a short viewport never
+            pushes its lower entries below the fold. The wrapper is transparent so
+            the toggle's own white card sits cleanly on the page. */}
         <Box
           sx={{
             gridColumn: { md: '1' },
@@ -807,9 +819,13 @@ export default function PlantDetail() {
             position: 'sticky',
             top: { xs: 56, md: 80 },
             zIndex: 2,
+            maxHeight: { md: 'calc(100vh - 96px)' },
+            display: { md: 'flex' },
+            flexDirection: { md: 'column' },
+            minHeight: { md: 0 },
           }}
         >
-          <Box sx={{ mb: 2 }}>
+          <Box sx={{ mb: 2, flexShrink: 0 }}>
             <UnitSystemToggle />
           </Box>
           <PlantDetailToc sections={tocSections} disableSticky />

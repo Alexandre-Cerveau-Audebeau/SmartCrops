@@ -176,12 +176,15 @@ export default function PlantDetailToc({
       component="nav"
       aria-label={t('plantDetail.toc.ariaLabel')}
       sx={{
-        width: 288,
-        flexShrink: 0,
+        width: '100%',
         position: disableSticky ? 'static' : 'sticky',
         top: disableSticky ? 'auto' : 80,
-        alignSelf: 'flex-start',
-        maxHeight: 'calc(100vh - 96px)',
+        // SMA-178 layout v2: the parent rail wrapper owns the viewport height cap
+        // (it includes the unit toggle above this nav, which the old per-nav
+        // maxHeight ignored). Here we just flex-grow into the remaining height and
+        // scroll the list internally so every 01–15 entry stays reachable.
+        flexGrow: 1,
+        minHeight: 0,
         overflowY: 'auto',
         bgcolor: '#fff',
         border: '1px solid #ECF1EA',
