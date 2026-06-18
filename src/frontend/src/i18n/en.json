@@ -362,16 +362,22 @@
     "sections": {
       "about": "About",
       "characteristics": "Characteristics",
-      "lifecycle": "Life cycle",
-      "edibleAndPropagation": "Edible parts & propagation",
+      "lifecycle": "Seasonal calendar",
+      "edibleAndPropagation": "Cultivation & propagation",
       "scientificData": "Scientific data (coming soon)",
-      "pestsAndDiseases": "Pests & diseases",
+      "pestsAndDiseases": "Diseases & pests",
       "commonNames": "Common names",
       "synonyms": "Botanical synonyms",
-      "sources": "External sources",
+      "sources": "External resources",
       "adminActions": "Admin actions",
       "overview": "Overview",
-      "gallery": "Gallery"
+      "gallery": "Photo gallery",
+      "distribution": "Distribution map",
+      "plantnet": "PlantNet observations",
+      "similar": "Similar plants",
+      "faq": "FAQ",
+      "community": "Community",
+      "comingSoonTag": "COMING SOON"
     },
     "toc": {
       "title": "Summary",
@@ -397,7 +403,7 @@
     },
     "scientificData": {
       "comingSoon": "Detailed scientific measurements (water needs in litres, light exposure in lumens, nutrient requirements, growth duration) will be available in an upcoming update.",
-      "title": "Scientific data (Perenual Supreme)",
+      "title": "Scientific data",
       "wateringPh": "Watering pH range",
       "wateringIdealTemp": "Ideal watering temperature",
       "sunlightHours": "Daily sunlight",
@@ -570,7 +576,7 @@
       "languageSwitch": "Read in {{language}}"
     },
     "pests": {
-      "header": "Pests & diseases ({{count}})",
+      "header": "Diseases & pests ({{count}})",
       "showAll": "Show all ({{count}})",
       "showLess": "Show less"
     },

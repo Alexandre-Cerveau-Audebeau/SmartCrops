@@ -195,7 +195,7 @@ describe('PlantDetail', () => {
       screen.getByText('Sweet basil short description.')
     ).toBeInTheDocument();
     // Empty collections → conditional sections must be absent.
-    expect(screen.queryByText(/Pests & diseases \(/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Diseases & pests \(/)).not.toBeInTheDocument();
     expect(
       screen.queryByRole('heading', { name: 'Common names' })
     ).not.toBeInTheDocument();
@@ -273,7 +273,7 @@ describe('PlantDetail', () => {
     expect(
       screen.getByText('Tomato is a warm-season crop.')
     ).toBeInTheDocument();
-    expect(screen.getByText(/Pests & diseases \(2\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Diseases & pests \(2\)/)).toBeInTheDocument();
     expect(screen.getByText('Aphids')).toBeInTheDocument();
     expect(screen.getByText('Powdery Mildew')).toBeInTheDocument();
   });
@@ -301,7 +301,7 @@ describe('PlantDetail', () => {
     );
     expect(
       await screen.findByRole('heading', {
-        name: /Scientific data \(Perenual Supreme\)/,
+        name: 'Scientific data',
       })
     ).toBeInTheDocument();
     // Scoped to the F.6 section — the same value also appears in the hero gauge
@@ -327,7 +327,7 @@ describe('PlantDetail', () => {
       })
     );
     await screen.findByRole('heading', {
-      name: /Scientific data \(Perenual Supreme\)/,
+      name: 'Scientific data',
     });
     expect(screen.queryByText('Watering pH range')).not.toBeInTheDocument();
     expect(screen.getByText('Ideal watering temperature')).toBeInTheDocument();
@@ -340,7 +340,7 @@ describe('PlantDetail', () => {
     await screen.findByRole('heading', { name: 'Basil' });
     expect(
       screen.queryByRole('heading', {
-        name: /Scientific data \(Perenual Supreme\)/,
+        name: 'Scientific data',
       })
     ).not.toBeInTheDocument();
   });
@@ -361,7 +361,7 @@ describe('PlantDetail', () => {
   it('hides the Pests section when pests are empty', async () => {
     renderAtPlant(makePlant());
     await screen.findByRole('heading', { name: 'Basil' });
-    expect(screen.queryByText(/Pests & diseases \(/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Diseases & pests \(/)).not.toBeInTheDocument();
   });
 
   it('hides the Common names section when only one common name exists', async () => {
@@ -465,7 +465,7 @@ describe('PlantDetail', () => {
       screen.getByText('No photos yet for this plant.')
     ).toBeInTheDocument();
     // The gallery section always renders now, so the TOC always links to it.
-    expect(screen.getByRole('link', { name: 'Gallery' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Photo gallery' })).toHaveAttribute(
       'href',
       '#gallery'
     );
