@@ -771,11 +771,7 @@ export default function PlantDetail() {
   ];
 
   return (
-    <Container
-      maxWidth={false}
-      disableGutters
-      sx={{ pt: 4, pb: 6, px: { xs: 2, md: 3 } }}
-    >
+    <Container maxWidth="lg" sx={{ pt: 4, pb: 6 }}>
       <Button
         startIcon={<ArrowBackIcon />}
         onClick={() => navigate(backTarget)}
@@ -784,21 +780,17 @@ export default function PlantDetail() {
         {backLabel}
       </Button>
 
-      {/* SMA-178 PR B layout fix — symmetric 3-track grid (gutter | content |
-          gutter). The content column is centred on the VIEWPORT regardless of the
-          TOC; the TOC rail lives in the LEFT gutter (justifySelf: start) and shrinks
-          with the screen via its gutter track; the right gutter mirrors the left so
-          the centre stays centred. Below md the grid collapses to a single column
-          (rail stacks above content; PlantDetailToc renders its horizontal pill bar). */}
+      {/* SMA-178 — mockup two-column shell: a narrow sticky TOC rail on the left
+          and the content filling all remaining width on the right, the whole block
+          centred inside the maxWidth=lg container (equal side margins, ~24% / ~73%
+          split per the mockup). No empty gutter column. Below md it stacks into a
+          single column (rail above content; PlantDetailToc renders its pill bar). */}
       <Box
         sx={{
-          display: 'grid',
-          gridTemplateColumns: {
-            xs: '1fr',
-            md: 'minmax(200px, 1fr) minmax(0, 880px) minmax(200px, 1fr)',
-          },
-          columnGap: { md: 4 },
-          alignItems: 'start',
+          display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' },
+          gap: { md: 4 },
+          alignItems: { md: 'flex-start' },
           width: '100%',
         }}
       >
@@ -812,10 +804,8 @@ export default function PlantDetail() {
             the toggle's own white card sits cleanly on the page. */}
         <Box
           sx={{
-            gridColumn: { md: '1' },
-            justifySelf: { md: 'start' },
-            width: '100%',
-            maxWidth: { md: 256 },
+            width: { xs: '100%', md: 272 },
+            flexShrink: { md: 0 },
             position: 'sticky',
             top: { xs: 56, md: 80 },
             zIndex: 2,
@@ -830,7 +820,7 @@ export default function PlantDetail() {
           </Box>
           <PlantDetailToc sections={tocSections} disableSticky />
         </Box>
-        <Box sx={{ gridColumn: { md: '2' }, minWidth: 0 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           {/* ── Section A: Hero header ───────────────────────────────────── */}
           <Card
             id="overview"
