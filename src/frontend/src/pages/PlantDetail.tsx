@@ -997,6 +997,57 @@ export default function PlantDetail() {
           {showLifecycleSection && <LifecycleSection plant={plant} />}
           {showScientificData && <ScientificDataSection plant={plant} />}
 
+          {/* ── Scientific data (coming soon) placeholder ──────────────────── */}
+          {/* Always rendered — a promise about what's next, not a graceful-
+          degradation fallback. Kept adjacent to the live scientific section
+          (slot 05) after the SMA-178 reorder. */}
+          <Card
+            variant="outlined"
+            sx={{ mb: 3, borderRadius: 3, bgcolor: 'grey.50' }}
+          >
+            <CardContent>
+              <Stack direction="row" spacing={2} alignItems="flex-start">
+                <ScienceIcon sx={{ color: 'text.secondary', mt: 0.5 }} />
+                <Box sx={{ flex: 1 }}>
+                  <Typography
+                    variant="h6"
+                    fontWeight={600}
+                    color="text.secondary"
+                    sx={{ mb: 1.5 }}
+                  >
+                    {t('plantDetail.sections.scientificData')}
+                  </Typography>
+                  <Box
+                    component="ul"
+                    sx={{
+                      m: 0,
+                      pl: 2.5,
+                      color: 'text.secondary',
+                      fontStyle: 'italic',
+                      '& li': { mb: 0.5, fontSize: '0.9rem' },
+                    }}
+                  >
+                    <li>{t('plantDetail.scientificData.items.waterLiters')}</li>
+                    <li>{t('plantDetail.scientificData.items.lightLumens')}</li>
+                    <li>
+                      {t('plantDetail.scientificData.items.nutrientsNPK')}
+                    </li>
+                    <li>
+                      {t('plantDetail.scientificData.items.daysToGermination')}
+                    </li>
+                  </Box>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: 'block', mt: 1.5 }}
+                  >
+                    {t('plantDetail.scientificData.comingSoon')}
+                  </Typography>
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+
           {/* ── Section D: Characteristics + growing conditions ────────────── */}
           {(characteristicRows.length > 0 || conditions.length > 0) && (
             <Grid
@@ -1190,57 +1241,6 @@ export default function PlantDetail() {
               </CardContent>
             </Card>
           )}
-
-          {/* ── Section F.5: Scientific data (coming soon) placeholder ─────── */}
-          {/* Always rendered — this is a promise to the user about what's next,
-          not a graceful-degradation fallback. Surfaces between edible parts
-          and pests so it sits in the "deep data" middle of the page. */}
-          <Card
-            variant="outlined"
-            sx={{ mb: 3, borderRadius: 3, bgcolor: 'grey.50' }}
-          >
-            <CardContent>
-              <Stack direction="row" spacing={2} alignItems="flex-start">
-                <ScienceIcon sx={{ color: 'text.secondary', mt: 0.5 }} />
-                <Box sx={{ flex: 1 }}>
-                  <Typography
-                    variant="h6"
-                    fontWeight={600}
-                    color="text.secondary"
-                    sx={{ mb: 1.5 }}
-                  >
-                    {t('plantDetail.sections.scientificData')}
-                  </Typography>
-                  <Box
-                    component="ul"
-                    sx={{
-                      m: 0,
-                      pl: 2.5,
-                      color: 'text.secondary',
-                      fontStyle: 'italic',
-                      '& li': { mb: 0.5, fontSize: '0.9rem' },
-                    }}
-                  >
-                    <li>{t('plantDetail.scientificData.items.waterLiters')}</li>
-                    <li>{t('plantDetail.scientificData.items.lightLumens')}</li>
-                    <li>
-                      {t('plantDetail.scientificData.items.nutrientsNPK')}
-                    </li>
-                    <li>
-                      {t('plantDetail.scientificData.items.daysToGermination')}
-                    </li>
-                  </Box>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ display: 'block', mt: 1.5 }}
-                  >
-                    {t('plantDetail.scientificData.comingSoon')}
-                  </Typography>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
 
           {/* ── Section G: Pests & diseases ─────────────────────────────────── */}
           {plant.pests.length > 0 && (
