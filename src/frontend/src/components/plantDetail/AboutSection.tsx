@@ -26,7 +26,7 @@ export default function AboutSection({ plant }: { plant: Plant }) {
 
   const longDescription = useMemo(
     () => pickLongDescription(plant.longDescriptions, language),
-    [plant, language]
+    [plant.longDescriptions, language]
   );
   const shortDescription = resolveTranslatedField(
     plant,
@@ -42,6 +42,7 @@ export default function AboutSection({ plant }: { plant: Plant }) {
       {longDescription ? (
         <>
           <Typography
+            id="about-description"
             variant="body1"
             sx={{ lineHeight: 1.8, whiteSpace: 'pre-wrap' }}
           >
@@ -55,6 +56,8 @@ export default function AboutSection({ plant }: { plant: Plant }) {
             <Button
               size="small"
               onClick={() => setDescExpanded((v) => !v)}
+              aria-expanded={descExpanded}
+              aria-controls="about-description"
               sx={{ mt: 1, textTransform: 'none' }}
             >
               {descExpanded

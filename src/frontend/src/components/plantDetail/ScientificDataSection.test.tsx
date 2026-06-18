@@ -49,4 +49,39 @@ describe('ScientificDataSection (SMA-178)', () => {
     expect(screen.getByText('Watering pH range')).toBeInTheDocument();
     expect(screen.getByText('6–7')).toBeInTheDocument();
   });
+
+  it('renders nothing when perenualData is absent', () => {
+    const { container } = renderSci({ perenualData: null } as unknown as Plant);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('renders water-quality / watering-period chips from JSON arrays', () => {
+    renderSci(
+      makePlant({
+        xWateringQualityJson: '["Rainwater"]',
+        xWateringPeriodJson: '["Morning"]',
+      })
+    );
+
+    expect(screen.getByText('Preferred water quality')).toBeInTheDocument();
+    expect(screen.getByText('Rainwater')).toBeInTheDocument();
+    expect(screen.getByText('Watering time of day')).toBeInTheDocument();
+  });
+
+  it('converts temperature and spacing for the imperial system (SMA-178)', () => {
+    localStorage.setItem('smartcrops.unitSystem', 'imperial');
+    renderSci(
+      makePlant({
+        xWateringBasedTempMinC: 18,
+        xWateringBasedTempMaxC: 24,
+        xPlantSpacingValue: 45,
+        xPlantSpacingUnit: 'cm',
+      })
+    );
+
+    // 18–24 °C → 64–75 °F ; 45 cm → 18 in.
+    expect(screen.getByText('64–75 °F')).toBeInTheDocument();
+    expect(screen.getByText('18 in')).toBeInTheDocument();
+    expect(screen.queryByText('18–24 °C')).toBeNull();
+  });
 });

@@ -70,9 +70,9 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
         {label}
       </Typography>
       <Stack direction="row" flexWrap="wrap" gap={0.5}>
-        {values.map((v) => (
+        {values.map((v, i) => (
           <Chip
-            key={v}
+            key={`${v}-${i}`}
             size="small"
             label={t(`plantDetail.scientificData.${dict}.${toCamelKey(v)}`, v)}
           />

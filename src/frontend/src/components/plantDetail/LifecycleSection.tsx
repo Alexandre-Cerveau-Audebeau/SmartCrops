@@ -85,6 +85,8 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
             label={t('plantDetail.lifecycle.stages.sowing')}
             value={formatPeriod(plant.sowingPeriod, t)}
           />
+          {/* Growth has no period data source yet (no sowing/harvest-style field),
+              so it is intentionally always null and renders as "—". */}
           <LifecycleStage
             icon={<YardIcon />}
             label={t('plantDetail.lifecycle.stages.growth')}

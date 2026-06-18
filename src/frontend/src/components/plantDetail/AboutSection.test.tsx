@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import i18n from '../../i18n/i18n';
 import type { Plant } from '../../types/Plant';
@@ -58,5 +59,61 @@ describe('AboutSection (SMA-178)', () => {
     );
 
     expect(screen.getByText('A short basil note.')).toBeInTheDocument();
+  });
+
+  it('truncates a long description and toggles it via the read-more button, exposing aria-expanded', async () => {
+    const user = userEvent.setup();
+    // >360 chars, with a unique marker placed past the truncation boundary.
+    const longText = `Basil intro. ${'word '.repeat(80)}ENDMARKER`;
+    render(
+      <AboutSection
+        plant={makePlant({
+          longDescriptions: [
+            {
+              id: 1,
+              language: 'en',
+              longDescription: longText,
+              sourceMethod: null,
+            },
+          ],
+        })}
+      />
+    );
+
+    // Collapsed: the tail beyond 360 chars is hidden; toggle reads "Read more".
+    expect(screen.queryByText(/ENDMARKER/)).toBeNull();
+    const toggle = screen.getByRole('button', { name: 'Read more' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveAttribute('aria-controls', 'about-description');
+
+    await user.click(toggle);
+    // Expanded: full text shown, button flips to "Read less", aria-expanded true.
+    expect(screen.getByText(/ENDMARKER/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Read less' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Read less' }));
+    expect(screen.queryByText(/ENDMARKER/)).toBeNull();
+  });
+
+  it('renders the source attribution when sourceMethod is present', () => {
+    render(
+      <AboutSection
+        plant={makePlant({
+          longDescriptions: [
+            {
+              id: 1,
+              language: 'en',
+              longDescription: 'Short rich text.',
+              sourceMethod: 'perenual',
+            },
+          ],
+        })}
+      />
+    );
+
+    expect(screen.getByText('Source: perenual')).toBeInTheDocument();
   });
 });

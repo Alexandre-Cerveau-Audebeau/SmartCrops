@@ -968,7 +968,7 @@ export default function PlantDetail() {
               </Stack>
               <PlantHeroGauges plant={plant} />
               {(longDescription || shortDescription) && (
-                <AboutSection plant={plant} />
+                <AboutSection key={plant.id} plant={plant} />
               )}
             </CardContent>
           </Card>

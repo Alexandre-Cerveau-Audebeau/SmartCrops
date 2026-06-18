@@ -32,4 +32,39 @@ describe('LifecycleSection (SMA-178)', () => {
     // SMA-178: the banned MUI <Grid> is replaced by a CSS-grid Box.
     expect(container.querySelector('.MuiGrid-root')).toBeNull();
   });
+
+  it('shows the perennial note for a perennial life cycle', () => {
+    render(<LifecycleSection plant={makePlant({ lifeCycle: 'Perennial' })} />);
+    expect(
+      screen.getByText('Perennial growth resumes each year.')
+    ).toBeInTheDocument();
+  });
+
+  it('shows the biennial note for a biennial life cycle', () => {
+    render(<LifecycleSection plant={makePlant({ lifeCycle: 'Biennial' })} />);
+    expect(
+      screen.getByText(
+        'Vegetative growth in year 1, flowering and fruiting in year 2.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('falls back to Perenual flowering/harvest seasons when legacy fields are absent', () => {
+    render(
+      <LifecycleSection
+        plant={makePlant({
+          harvestPeriod: null,
+          perenualData: {
+            floweringSeason: 'june-august',
+            harvestSeason: 'september-october',
+          } as unknown as Plant['perenualData'],
+        })}
+      />
+    );
+
+    // Flowering comes from perenualData.floweringSeason; harvest from
+    // perenualData.harvestSeason since harvestPeriod is null.
+    expect(screen.getByText(/June/)).toBeInTheDocument();
+    expect(screen.getByText(/September/)).toBeInTheDocument();
+  });
 });
