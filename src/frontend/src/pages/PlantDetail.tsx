@@ -770,8 +770,15 @@ export default function PlantDetail() {
     },
   ];
 
+  // Full-bleed page: fixed, symmetric horizontal padding (PAGE_PAD = 32px at md)
+  // that does NOT grow on zoom-out, so the left-edge→TOC distance stays constant
+  // and equals the content→right-edge distance.
   return (
-    <Container maxWidth="lg" sx={{ pt: 4, pb: 6 }}>
+    <Container
+      maxWidth={false}
+      disableGutters
+      sx={{ pt: 4, pb: 6, px: { xs: 2, md: 4 } }}
+    >
       <Button
         startIcon={<ArrowBackIcon />}
         onClick={() => navigate(backTarget)}
@@ -780,16 +787,16 @@ export default function PlantDetail() {
         {backLabel}
       </Button>
 
-      {/* SMA-178 — mockup two-column shell: a narrow sticky TOC rail on the left
-          and the content filling all remaining width on the right, the whole block
-          centred inside the maxWidth=lg container (equal side margins, ~24% / ~73%
-          split per the mockup). No empty gutter column. Below md it stacks into a
-          single column (rail above content; PlantDetailToc renders its pill bar). */}
+      {/* SMA-178 — full-bleed two-column shell: a narrow sticky TOC rail pinned to
+          the page's left padding and the content filling all remaining width to the
+          right padding (no empty gutter, no centring drift on zoom-out). GAP = 64px
+          (md) between rail and content (~2x the previous spacing). Below md it
+          stacks into a single column (rail above content; PlantDetailToc pill bar). */}
       <Box
         sx={{
           display: 'flex',
           flexDirection: { xs: 'column', md: 'row' },
-          gap: { md: 4 },
+          gap: { xs: 2, md: 8 },
           alignItems: { md: 'flex-start' },
           width: '100%',
         }}
