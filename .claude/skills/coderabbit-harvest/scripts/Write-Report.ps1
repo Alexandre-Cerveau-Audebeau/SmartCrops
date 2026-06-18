@@ -14,7 +14,14 @@
     Where to write the persistent JSON file. Typically /tmp/harvest-<sha-prefix>.json.
 
 .PARAMETER InputJson
-    Optional: classified JSON as a string. If not provided, reads from stdin.
+    Optional: classified JSON as a string. Lowest input precedence (see -InputPath).
+
+.PARAMETER InputPath
+    Optional: path to a file holding the classified JSON (UTF-8). Input precedence
+    is -InputPath > -InputJson > stdin: when -InputPath is given it is used and the
+    other two sources are ignored. The orchestrator bridges stages through this file
+    because a cross-process `pwsh -File` does not bind stdin to a ValueFromPipeline
+    parameter.
 
 .NOTES
     PowerShell 7+ required.
@@ -30,7 +37,10 @@ param(
     [string]$OutputPath,
 
     [Parameter(Mandatory = $false, ValueFromPipeline = $true)]
-    [string]$InputJson
+    [string]$InputJson,
+
+    [Parameter(Mandatory = $false)]
+    [string]$InputPath
 )
 
 begin {
@@ -59,9 +69,24 @@ process {
 }
 
 end {
-    $joined = $inputLines -join "`n"
+    if ($InputPath) {
+        if (-not (Test-Path $InputPath)) {
+            Write-Stderr -Message "Input JSON file not found: $InputPath" -ExitCode 1
+        }
+        # Read the classified bridge file with explicit UTF-8 so multi-byte CR
+        # content (emoji) decodes correctly, independent of the console codepage.
+        # Wrap the read so a permission / lock / disk error surfaces a clear stop
+        # instead of a raw .NET exception collapsing the documented exit codes.
+        try {
+            $joined = [System.IO.File]::ReadAllText($InputPath, [System.Text.UTF8Encoding]::new($false))
+        } catch {
+            Write-Stderr -Message "Failed to read input JSON from '$InputPath': $($_.Exception.Message)" -ExitCode 1
+        }
+    } else {
+        $joined = $inputLines -join "`n"
+    }
     if (-not $joined) {
-        Write-Stderr -Message "No JSON input received (expected from stdin or -InputJson)" -ExitCode 1
+        Write-Stderr -Message "No JSON input received (expected from stdin, -InputJson, or -InputPath)" -ExitCode 1
     }
 
     try {
@@ -110,12 +135,23 @@ end {
         Write-Stderr -Message "Schema validation failed: 'counts' missing from input JSON" -ExitCode 1
     }
 
-    # Write raw JSON to OutputPath (ensure parent dir exists)
+    # Write raw JSON to OutputPath (ensure parent dir exists). Guard the write so
+    # an I/O failure (permission / lock / disk full) hits the standardized
+    # Write-Stderr stop path instead of a raw terminating error — matching the
+    # intermediate bridge writes. Encoding is explicit utf8NoBOM by design.
     $outputDir = Split-Path $OutputPath -Parent
     if ($outputDir -and -not (Test-Path $outputDir)) {
-        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        try {
+            New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        } catch {
+            Write-Stderr -Message "Failed to create output directory '$outputDir': $($_.Exception.Message)" -ExitCode 1
+        }
     }
-    $joined | Set-Content -Path $OutputPath -Encoding UTF8
+    try {
+        $joined | Set-Content -Path $OutputPath -Encoding utf8NoBOM
+    } catch {
+        Write-Stderr -Message "Failed to write harvest JSON to '$OutputPath': $($_.Exception.Message)" -ExitCode 1
+    }
 
     # Build markdown summary
     $sb = [System.Text.StringBuilder]::new()

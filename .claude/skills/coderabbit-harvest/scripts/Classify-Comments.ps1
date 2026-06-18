@@ -71,6 +71,8 @@ param(
     [Parameter(Mandatory = $false, ParameterSetName = 'Run')]
     [string]$PreviousJsonPath,
 
+    [Parameter(Mandatory = $false)] [string]$OutputPath,
+
     [Parameter(Mandatory = $false, ParameterSetName = 'Run')]
     [switch]$NoOutput,
 
@@ -702,7 +704,26 @@ if (-not $NoOutput) {
         comparisonMode = [bool]$PreviousJsonPath
     }
 
-    $output | ConvertTo-Json -Depth 20
+    $jsonOut = $output | ConvertTo-Json -Depth 20
+    if ($OutputPath) {
+        # Ensure the parent dir exists; surface a clear stop on I/O failure rather
+        # than letting a raw .NET exception collapse the documented exit codes.
+        $outDir = Split-Path -Parent $OutputPath
+        if ($outDir -and -not (Test-Path $outDir)) {
+            try {
+                New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+            } catch {
+                Write-Stderr -Message "Failed to create output directory '$outDir': $($_.Exception.Message)" -ExitCode 1
+            }
+        }
+        try {
+            [System.IO.File]::WriteAllText($OutputPath, $jsonOut, [System.Text.UTF8Encoding]::new($false))
+        } catch {
+            Write-Stderr -Message "Failed to write classified JSON to '$OutputPath': $($_.Exception.Message)" -ExitCode 1
+        }
+    } else {
+        $jsonOut
+    }
 }
 
 exit 0
