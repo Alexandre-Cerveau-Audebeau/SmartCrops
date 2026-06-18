@@ -668,12 +668,11 @@ export default function PlantDetail() {
   // they have content — the "coming soon" treatment lives on the section, not the
   // nav. Only `live` entries are clickable + scroll-spied; ids match each
   // section's anchor (the teaser ids are reserved for the future PR C/D sections).
-  // NOTE: intentionally a plain array, not useMemo — this is built AFTER the
-  // loading / not-found early returns (and depends on plant-derived state defined
-  // there), so wrapping it in a hook would violate the rules-of-hooks. The CR
-  // "memoize for stable identity" nitpick is filed as trivial/low-value and has no
-  // effect today: PlantDetailToc is not wrapped in React.memo. Revisit only if the
-  // component's guard/hook ordering is refactored.
+  // NOTE: Plain array, not useMemo — built after the loading / not-found early
+  // returns using plant-derived state, so wrapping it in a hook would violate the
+  // rules-of-hooks. No performance impact today: PlantDetailToc is not memoized.
+  // Revisit only if the component is restructured to allow hooks after the guards.
+  // Tracked in SMA-189.
   const tocSections: TocSection[] = [
     {
       num: '01',
@@ -827,7 +826,7 @@ export default function PlantDetail() {
           </Box>
           <PlantDetailToc sections={tocSections} disableSticky />
         </Box>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ flex: 1, minWidth: 0, maxWidth: { lg: 1600 } }}>
           {/* ── Section A: Hero header ───────────────────────────────────── */}
           <Card
             id="overview"
