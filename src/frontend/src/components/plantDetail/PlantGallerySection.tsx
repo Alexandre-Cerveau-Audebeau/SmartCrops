@@ -158,6 +158,10 @@ export default function PlantGallerySection({
       >
         {filtered.map((img, idx) => {
           const src = img.thumbnailUrl ?? img.url;
+          const imageTypeLabel = t(
+            `plantDetail.gallery.types.${img.imageType}`,
+            img.imageType
+          );
           return (
             <Box
               key={img.id}
@@ -192,7 +196,7 @@ export default function PlantGallerySection({
                   <Box
                     component="img"
                     src={src}
-                    alt={img.imageType}
+                    alt={imageTypeLabel}
                     loading="lazy"
                     sx={{
                       width: '100%',
@@ -231,10 +235,7 @@ export default function PlantGallerySection({
                     pointerEvents: 'none',
                   }}
                 >
-                  {t(
-                    `plantDetail.gallery.types.${img.imageType}`,
-                    img.imageType
-                  )}
+                  {imageTypeLabel}
                 </Box>
               </Box>
               {/* Credit / license line (monospace, design). */}
