@@ -991,7 +991,11 @@ export default function PlantDetail() {
                         {heroEyebrow}
                       </Typography>
                     )}
-                    <Typography variant="h3" fontWeight={700} sx={{ mb: 0.5 }}>
+                    <Typography
+                      variant="h3"
+                      fontWeight={700}
+                      sx={{ mb: 0.5, color: '#1B5E3A' }}
+                    >
                       {displayName}
                     </Typography>
                     <Typography
