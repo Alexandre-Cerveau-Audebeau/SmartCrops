@@ -1258,7 +1258,7 @@ export default function PlantDetail() {
           (slot 05) after the SMA-178 reorder. */}
           <Card
             variant="outlined"
-            sx={{ mb: 3, borderRadius: 3, bgcolor: 'grey.50' }}
+            sx={{ mb: 3, borderRadius: 3, bgcolor: 'surfaceSubtle' }}
           >
             <CardContent>
               <Stack direction="row" spacing={2} alignItems="flex-start">
