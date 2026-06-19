@@ -11,7 +11,8 @@
     "homeAriaLabel": "SmartCrops home",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
-    "switchLanguage": "Switch language (current: {{lang}})"
+    "switchLanguage": "Switch language (current: {{lang}})",
+    "changeLanguage": "Change language"
   },
   "errorBoundary": {
     "title": "Something went wrong",

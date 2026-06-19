@@ -33,6 +33,7 @@ import { NAV_BG } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
 import ComingSoonChip from '../ComingSoonChip';
+import LanguageMenu from '../LanguageMenu';
 import LogoButton from '../LogoButton';
 import ProfileMenuHeader from './ProfileMenuHeader';
 
@@ -361,44 +362,7 @@ export default function Navbar() {
 
               {/* Right: language + auth */}
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={toggleLanguage}
-                  aria-label={t('nav.switchLanguage', {
-                    lang: language.toUpperCase(),
-                  })}
-                  sx={{
-                    color: '#fff',
-                    borderColor: 'rgba(255,255,255,0.5)',
-                    '&:hover': {
-                      borderColor: '#fff',
-                      bgcolor: 'rgba(255,255,255,0.1)',
-                    },
-                  }}
-                >
-                  <Box
-                    component="span"
-                    sx={{
-                      fontWeight: language === 'fr' ? 700 : 400,
-                      opacity: language === 'fr' ? 1 : 0.6,
-                    }}
-                  >
-                    FR
-                  </Box>
-                  <Box component="span" sx={{ mx: 0.5 }}>
-                    /
-                  </Box>
-                  <Box
-                    component="span"
-                    sx={{
-                      fontWeight: language === 'en' ? 700 : 400,
-                      opacity: language === 'en' ? 1 : 0.6,
-                    }}
-                  >
-                    EN
-                  </Box>
-                </Button>
+                <LanguageMenu />
                 {isAuthenticated ? (
                   <>
                     <Button
