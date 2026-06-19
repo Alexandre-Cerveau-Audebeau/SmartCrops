@@ -18,6 +18,10 @@ interface PlantGallerySectionProps {
 
 const ALL = 'all';
 
+// Filmstrip column width — smaller than the original 196 so more than four tiles
+// are visible at once before the row scrolls. Adjustable.
+const TILE_W = 150;
+
 // Hatched placeholder background (design HTML) for a tile whose image has no
 // resolvable URL — keeps the 4/3 cell filled instead of collapsing.
 const EMPTY_HATCH =
@@ -36,12 +40,14 @@ function creditLine(img: PlantImage): string {
 }
 
 /**
- * Inline photo gallery for Plant Detail v2 (SMA-154; visual restyled to the Claude
+ * Inline photo gallery for Plant Detail v2 (SMA-154; tiles restyled to the Claude
  * Design HTML in SMA-39). ImageType filter chips (a "All" pill + one per type
  * actually present — Perenual is filtered upstream, so "Main" never shows) drive a
- * responsive 4-column grid of 4/3 thumbnails: radius 11, object-fit cover, a
- * dark-green type badge top-left, and a monospace credit/license line below. A
- * tile with no URL falls back to a hatched placeholder. Clicking a tile hands the
+ * two-row horizontal filmstrip: uniform 4/3 thumbnails fill column-by-column over
+ * two rows, and beyond what fits the row scrolls horizontally (height-bounded, no
+ * cap on photo count) with an always-visible discreet scrollbar. Each tile carries
+ * a dark-green type badge top-left and a monospace credit/license line; a tile
+ * with no URL falls back to a hatched placeholder. Clicking a tile hands the
  * FILTERED subset + index back to the page, which reuses the existing
  * PhotoLightbox. Data/lightbox/empty-state wiring is unchanged from SMA-154.
  */
@@ -123,12 +129,31 @@ export default function PlantGallerySection({
         </Box>
       )}
 
-      {/* Responsive grid: 2 columns on mobile, 4 from md up. */}
+      {/* Two-row horizontal filmstrip: uniform tiles fill column-by-column over two
+          rows; beyond what fits, the row scrolls horizontally (height-bounded, no
+          cap on photo count). The scrollbar is rendered permanently (overflowX:
+          'scroll' + a discreet styled track) so the affordance is always visible. */}
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
+          gridAutoFlow: 'column',
+          gridTemplateRows: 'repeat(2, auto)',
+          gridAutoColumns: `${TILE_W}px`,
           gap: '14px',
+          overflowX: 'scroll',
+          overflowY: 'hidden',
+          pb: '8px',
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#cdded0 #EEF4EC',
+          '&::-webkit-scrollbar': { height: '8px' },
+          '&::-webkit-scrollbar-track': {
+            background: '#EEF4EC',
+            borderRadius: '8px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: '#cdded0',
+            borderRadius: '8px',
+          },
         }}
       >
         {filtered.map((img, idx) => {
