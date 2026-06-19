@@ -41,7 +41,12 @@ export default function ProfileMenuHeader({
       </Box>
       <Box sx={{ minWidth: 0, flexGrow: 1 }}>
         <Typography
-          sx={{ fontWeight: 700, fontSize: 15, lineHeight: 1.3 }}
+          sx={{
+            fontWeight: 700,
+            fontSize: 15,
+            lineHeight: 1.3,
+            color: 'text.primary',
+          }}
           noWrap
         >
           {name}
