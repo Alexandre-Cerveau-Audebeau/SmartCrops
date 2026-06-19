@@ -44,10 +44,8 @@ describe('PlantGallerySection (SMA-154)', () => {
     expect(tiles()).toHaveLength(2);
     // One localized type badge per tile.
     expect(screen.getAllByText('Fruit')).toHaveLength(2);
-    // Composed attribution line per tile (© credit · source · license).
-    expect(
-      screen.getAllByText('© A. Photographer · Trefle · CC BY-SA')
-    ).toHaveLength(2);
+    // Credit / license line per tile, in the design "{credit} · {license}" format.
+    expect(screen.getAllByText('A. Photographer · CC BY-SA')).toHaveLength(2);
     // A single type means no filter chips.
     expect(screen.queryByRole('button', { name: 'All' })).toBeNull();
   });
@@ -103,22 +101,10 @@ describe('PlantGallerySection (SMA-154)', () => {
     expect(screen.queryByRole('button', { name: /Open photo/ })).toBeNull();
   });
 
-  it('exposes the attribution as a keyboard-operable button with aria-expanded (M1)', async () => {
-    const user = userEvent.setup();
-    render(
-      <PlantGallerySection images={[makeImg(1, 'Fruit')]} onSelect={vi.fn()} />
-    );
+  it('falls back to the stable-pool credit when a tile has no credit/license', () => {
+    const img = { ...makeImg(1, 'Fruit'), credit: null, licenseName: null };
+    render(<PlantGallerySection images={[img]} onSelect={vi.fn()} />);
 
-    const attribution = screen.getByRole('button', {
-      name: '© A. Photographer · Trefle · CC BY-SA',
-    });
-    expect(attribution).toHaveAttribute('aria-expanded', 'false');
-
-    // Drive it from the keyboard (focus + Enter), not a pointer click, so the
-    // test actually proves the control is keyboard-operable (WCAG 2.1.1).
-    attribution.focus();
-    expect(attribution).toHaveFocus();
-    await user.keyboard('{Enter}');
-    expect(attribution).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Trefle · CC-BY-SA')).toBeInTheDocument();
   });
 });

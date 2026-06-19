@@ -1066,23 +1066,29 @@ export default function PlantDetail() {
             </CardContent>
           </Card>
 
-          {/* ── Section B: Photo gallery (SMA-154, inline) ─────────────────── */}
-          <Card
-            id="gallery"
-            variant="outlined"
-            sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
-          >
-            <CardContent>
-              <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-                {t('plantDetail.sections.gallery')}
-              </Typography>
-              <PlantGallerySection
-                key={plant.id}
-                images={galleryImages}
-                onSelect={openLightbox}
-              />
-            </CardContent>
-          </Card>
+          {/* ── Section B: Photo gallery (SMA-154, inline). No card wrapper —
+              the design has header + chips + filmstrip directly on the page
+              background (global section-header pattern). ───────────────────── */}
+          <Box id="gallery" sx={{ mb: 3, scrollMarginTop: '80px' }}>
+            <Typography
+              component="h2"
+              sx={{
+                m: 0,
+                mb: '16px',
+                fontSize: 23,
+                fontWeight: 800,
+                color: '#1B5E3A',
+                letterSpacing: '-0.01em',
+              }}
+            >
+              {t('plantDetail.sections.gallery')}
+            </Typography>
+            <PlantGallerySection
+              key={plant.id}
+              images={galleryImages}
+              onSelect={openLightbox}
+            />
+          </Box>
 
           {/* ── SMA-178: lifecycle + scientific data hoisted to mockup order
               (after the gallery, before characteristics). The "about" content is

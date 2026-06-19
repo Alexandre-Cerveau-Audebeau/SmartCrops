@@ -1,13 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
-import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import HideImageIcon from '@mui/icons-material/HideImage';
-import { NAV_BG } from '../../constants/colors';
 import type { PlantImage } from '../../types/Plant';
-import { composeImageAttribution } from '../../utils/imageAttribution';
+import { Sym } from '../Sym';
 
 interface PlantGallerySectionProps {
   /** The stable (non-Perenual), canonically-sorted gallery images. */
@@ -21,67 +18,38 @@ interface PlantGallerySectionProps {
 
 const ALL = 'all';
 
+// Filmstrip column width — smaller than the original 196 so more than four tiles
+// are visible at once before the row scrolls. Adjustable.
+const TILE_W = 150;
+
+// Hatched placeholder background (design HTML) for a tile whose image has no
+// resolvable URL — keeps the 4/3 cell filled instead of collapsing.
+const EMPTY_HATCH =
+  'repeating-linear-gradient(45deg,#eef4ec,#eef4ec 9px,#e4ede2 9px,#e4ede2 18px)';
+
 /**
- * One attribution line under a thumbnail: monospace, truncated with an ellipsis,
- * click (or keyboard) to expand to the full text and back. Rendered as a native
- * button so it is focusable and operable via Enter/Space (WCAG 2.1.1), with
- * `aria-expanded` exposing the state; the full text stays in the DOM (screen
- * readers read it all — the CSS only truncates visually). Per-tile state is local
- * so toggling one line never re-renders the whole grid.
+ * One credit line under a thumbnail, in the design format "{credit} · {license}".
+ * Both values come from the real DTO fields; when a tile carries neither (rare on
+ * the stable Trefle pool), it falls back to the pool's "Trefle · CC-BY-SA" rather
+ * than inventing an English string. Per-photo descriptive captions are deferred
+ * (SMA-177), so this line is the only text under a tile.
  */
-function GalleryAttribution({ text }: { text: string }) {
-  const [expanded, setExpanded] = useState(false);
-  if (!text) return null;
-  return (
-    <Typography
-      component="button"
-      type="button"
-      variant="caption"
-      color="text.secondary"
-      aria-expanded={expanded}
-      title={text}
-      onClick={() => setExpanded((v) => !v)}
-      sx={{
-        background: 'none',
-        border: 0,
-        p: 0,
-        m: 0,
-        mt: 0.5,
-        textAlign: 'left',
-        display: 'block',
-        width: '100%',
-        cursor: 'pointer',
-        fontFamily: 'monospace',
-        color: 'text.secondary',
-        ...(expanded
-          ? { whiteSpace: 'normal' }
-          : {
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }),
-        '&:focus-visible': {
-          outline: '2px solid',
-          outlineColor: 'primary.main',
-          outlineOffset: 2,
-          borderRadius: 0.5,
-        },
-      }}
-    >
-      {text}
-    </Typography>
-  );
+function creditLine(img: PlantImage): string {
+  const parts = [img.credit, img.licenseName].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : 'Trefle · CC-BY-SA';
 }
 
 /**
- * Inline photo gallery for Plant Detail v2 (SMA-154). Renders the whole stable
- * pool (no capping) as uniform landscape thumbnails laid out in a two-row
- * horizontal filmstrip — only the height is bounded; every photo stays reachable
- * by scrolling. Filter chips cover the ImageTypes actually present (Perenual is
- * filtered upstream, so "Main" never shows). Each tile carries a brand type badge
- * and a one-line attribution; clicking a tile hands the FILTERED subset + index
- * back to the page, which reuses the existing PhotoLightbox. Descriptive per-photo
- * captions are deferred (SMA-177).
+ * Inline photo gallery for Plant Detail v2 (SMA-154; tiles restyled to the Claude
+ * Design HTML in SMA-39). ImageType filter chips (a "All" pill + one per type
+ * actually present — Perenual is filtered upstream, so "Main" never shows) drive a
+ * two-row horizontal filmstrip: uniform 4/3 thumbnails fill column-by-column over
+ * two rows, and beyond what fits the row scrolls horizontally (height-bounded, no
+ * cap on photo count) with an always-visible discreet scrollbar. Each tile carries
+ * a dark-green type badge top-left and a monospace credit/license line; a tile
+ * with no URL falls back to a hatched placeholder. Clicking a tile hands the
+ * FILTERED subset + index back to the page, which reuses the existing
+ * PhotoLightbox. Data/lightbox/empty-state wiring is unchanged from SMA-154.
  */
 export default function PlantGallerySection({
   images,
@@ -123,114 +91,166 @@ export default function PlantGallerySection({
     <Box>
       {/* Filter chips only when there's more than one type to choose between. */}
       {presentTypes.length > 1 && (
-        <Stack
-          direction="row"
-          spacing={1}
-          flexWrap="wrap"
-          useFlexGap
-          sx={{ mb: 2 }}
-        >
-          <Chip
-            label={t('plantDetail.gallery.types.all')}
-            color={activeFilter === ALL ? 'primary' : 'default'}
-            variant={activeFilter === ALL ? 'filled' : 'outlined'}
-            onClick={() => setFilter(ALL)}
-            size="small"
-          />
-          {presentTypes.map((type) => (
-            <Chip
-              key={type}
-              label={t(`plantDetail.gallery.types.${type}`, type)}
-              color={activeFilter === type ? 'primary' : 'default'}
-              variant={activeFilter === type ? 'filled' : 'outlined'}
-              onClick={() => setFilter(type)}
-              size="small"
-            />
-          ))}
-        </Stack>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px', mb: '16px' }}>
+          {[ALL, ...presentTypes].map((type) => {
+            const active = activeFilter === type;
+            const label =
+              type === ALL
+                ? t('plantDetail.gallery.types.all')
+                : t(`plantDetail.gallery.types.${type}`, type);
+            return (
+              <Box
+                component="button"
+                type="button"
+                key={type}
+                onClick={() => setFilter(type)}
+                aria-pressed={active}
+                sx={{
+                  borderRadius: '999px',
+                  px: '14px',
+                  py: '6px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  bgcolor: active ? '#2E8B57' : '#F2F6F0',
+                  color: active ? '#fff' : '#3a463f',
+                  border: active ? '1px solid #2E8B57' : '1px solid #E2EADF',
+                  '&:focus-visible': {
+                    outline: '2px solid',
+                    outlineColor: 'primary.main',
+                    outlineOffset: 2,
+                  },
+                }}
+              >
+                {label}
+              </Box>
+            );
+          })}
+        </Box>
       )}
 
       {/* Two-row horizontal filmstrip: uniform tiles fill column-by-column over two
           rows; beyond what fits, the row scrolls horizontally (height-bounded, no
-          cap on photo count). Scrollbar themed in brand green. */}
+          cap on photo count). The scrollbar is rendered permanently (overflowX:
+          'scroll' + a discreet styled track) so the affordance is always visible. */}
       <Box
         sx={{
           display: 'grid',
           gridAutoFlow: 'column',
           gridTemplateRows: 'repeat(2, auto)',
-          gridAutoColumns: '196px',
-          gap: 1.5,
-          overflowX: 'auto',
-          pb: 1,
+          gridAutoColumns: `${TILE_W}px`,
+          gap: '14px',
+          overflowX: 'scroll',
+          overflowY: 'hidden',
+          pb: '8px',
           scrollbarWidth: 'thin',
-          scrollbarColor: `${NAV_BG} transparent`,
-          '&::-webkit-scrollbar': { height: 8 },
-          '&::-webkit-scrollbar-track': { backgroundColor: 'transparent' },
+          scrollbarColor: '#cdded0 #EEF4EC',
+          '&::-webkit-scrollbar': { height: '8px' },
+          '&::-webkit-scrollbar-track': {
+            background: '#EEF4EC',
+            borderRadius: '8px',
+          },
           '&::-webkit-scrollbar-thumb': {
-            backgroundColor: NAV_BG,
-            borderRadius: 4,
+            background: '#cdded0',
+            borderRadius: '8px',
           },
         }}
       >
-        {filtered.map((img, idx) => (
-          <Box key={img.id}>
+        {filtered.map((img, idx) => {
+          const src = img.thumbnailUrl ?? img.url;
+          const imageTypeLabel = t(
+            `plantDetail.gallery.types.${img.imageType}`,
+            img.imageType
+          );
+          return (
             <Box
-              component="button"
-              type="button"
-              onClick={() => onSelect(filtered, idx)}
-              aria-label={t('plantDetail.gallery.openTile', { index: idx + 1 })}
-              sx={{
-                position: 'relative',
-                width: '100%',
-                aspectRatio: '3 / 2',
-                borderRadius: 2,
-                overflow: 'hidden',
-                cursor: 'pointer',
-                bgcolor: 'grey.100',
-                p: 0,
-                border: 0,
-                display: 'block',
-                '&:focus-visible': {
-                  outline: '2px solid',
-                  outlineColor: 'primary.main',
-                  outlineOffset: 2,
-                },
-              }}
+              key={img.id}
+              sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}
             >
               <Box
-                component="img"
-                src={img.thumbnailUrl ?? img.url}
-                alt={img.imageType}
-                loading="lazy"
+                component="button"
+                type="button"
+                onClick={() => onSelect(filtered, idx)}
+                aria-label={t('plantDetail.gallery.openTile', {
+                  index: idx + 1,
+                })}
                 sx={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
+                  position: 'relative',
+                  border: 'none',
+                  p: 0,
+                  cursor: 'pointer',
+                  aspectRatio: '4 / 3',
+                  borderRadius: '11px',
+                  overflow: 'hidden',
+                  bgcolor: 'grey.100',
                   display: 'block',
-                }}
-              />
-              {/* Type badge — solid brand-green pill, white text, normal case. */}
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: 6,
-                  left: 6,
-                  px: 0.75,
-                  py: 0.25,
-                  borderRadius: 1.5,
-                  bgcolor: NAV_BG,
-                  color: '#fff',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  pointerEvents: 'none',
+                  width: '100%',
+                  '&:focus-visible': {
+                    outline: '2px solid',
+                    outlineColor: 'primary.main',
+                    outlineOffset: 2,
+                  },
                 }}
               >
-                {t(`plantDetail.gallery.types.${img.imageType}`, img.imageType)}
+                {src ? (
+                  <Box
+                    component="img"
+                    src={src}
+                    alt={imageTypeLabel}
+                    loading="lazy"
+                    sx={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      display: 'block',
+                    }}
+                  />
+                ) : (
+                  <Box
+                    sx={{
+                      width: '100%',
+                      height: '100%',
+                      background: EMPTY_HATCH,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Sym name="image" size={28} color="#9aa5a0" />
+                  </Box>
+                )}
+                {/* Type badge — dark-green pill, white text, top-left. */}
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    left: '8px',
+                    top: '8px',
+                    bgcolor: 'rgba(27,94,58,0.9)',
+                    color: '#fff',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    px: '8px',
+                    py: '3px',
+                    borderRadius: '6px',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {imageTypeLabel}
+                </Box>
+              </Box>
+              {/* Credit / license line (monospace, design). */}
+              <Box
+                sx={{
+                  fontSize: 10,
+                  fontFamily: 'ui-monospace, monospace',
+                  color: '#b0bbb2',
+                }}
+              >
+                {creditLine(img)}
               </Box>
             </Box>
-            <GalleryAttribution text={composeImageAttribution(img)} />
-          </Box>
-        ))}
+          );
+        })}
       </Box>
     </Box>
   );
