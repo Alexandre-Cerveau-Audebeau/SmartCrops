@@ -32,6 +32,7 @@ import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
 import { visuallyHidden } from '@mui/utils';
 import AddIcon from '@mui/icons-material/Add';
 import AgricultureIcon from '@mui/icons-material/Agriculture';
@@ -78,6 +79,7 @@ import { isUserFacingUrl, toUserFacingUrl } from '../utils/externalSourceUrl';
 import { resolveTranslatedField } from '../utils/getTranslation';
 import { capitalizeFirst } from '../utils/capitalizeFirst';
 import { composeImageAttribution } from '../utils/imageAttribution';
+import { adaptBadge } from '../utils/badgeColors';
 import { formatPeriod } from '../utils/formatPeriod';
 import {
   formatHardinessZone,
@@ -130,6 +132,7 @@ export default function PlantDetail() {
     : t('library.backToLibrary');
   const { language } = useLanguage();
   const { system } = useUnitSystem();
+  const mode = useTheme().palette.mode;
   const { isAuthenticated, user } = useAuth();
   // SMA-33: admin UI gated on the backend role surfaced via /me (was the
   // VITE_ADMIN_EMAILS front whitelist). UX only — the real barrier is the
@@ -1118,29 +1121,36 @@ export default function PlantDetail() {
                         useFlexGap
                         sx={{ mt: 1.5 }}
                       >
-                        {heroChips.map((c) => (
-                          <Box
-                            key={c.key}
-                            sx={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              bgcolor: c.bgcolor,
-                              color: c.color,
-                              border: c.border,
-                              borderRadius: '8px',
-                              padding: '7px 12px',
-                              fontSize: 13,
-                              fontWeight: 700,
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {c.icon && (
-                              <Sym name={c.icon} size={18} color={c.color} />
-                            )}
-                            {c.label}
-                          </Box>
-                        ))}
+                        {heroChips.map((c) => {
+                          const b = adaptBadge(
+                            { bg: c.bgcolor, fg: c.color, border: c.border },
+                            mode
+                          );
+                          return (
+                            <Box
+                              key={c.key}
+                              sx={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                bgcolor: b.bg,
+                                color: b.fg,
+                                border: '1px solid',
+                                borderColor: b.border,
+                                borderRadius: '8px',
+                                padding: '7px 12px',
+                                fontSize: 13,
+                                fontWeight: 700,
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {c.icon && (
+                                <Sym name={c.icon} size={18} color={b.fg} />
+                              )}
+                              {c.label}
+                            </Box>
+                          );
+                        })}
                       </Stack>
                     )}
                   </Box>
@@ -1429,21 +1439,29 @@ export default function PlantDetail() {
                       flexWrap="wrap"
                       useFlexGap
                     >
-                      {ediblePartsList.map((part) => (
-                        <Chip
-                          key={part}
-                          label={t(
-                            `plantDetail.enumValues.ediblePart.${part.toLowerCase()}`,
-                            part
-                          )}
-                          size="small"
-                          sx={{
-                            bgcolor: '#E8F5E9',
-                            color: '#1B5E20',
-                            fontWeight: 500,
-                          }}
-                        />
-                      ))}
+                      {ediblePartsList.map((part) => {
+                        const b = adaptBadge(
+                          { bg: '#E8F5E9', fg: '#1B5E20' },
+                          mode
+                        );
+                        return (
+                          <Chip
+                            key={part}
+                            label={t(
+                              `plantDetail.enumValues.ediblePart.${part.toLowerCase()}`,
+                              part
+                            )}
+                            size="small"
+                            sx={{
+                              bgcolor: b.bg,
+                              color: b.fg,
+                              border: '1px solid',
+                              borderColor: b.border,
+                              fontWeight: 500,
+                            }}
+                          />
+                        );
+                      })}
                     </Stack>
                   </Box>
                 )}
@@ -1500,7 +1518,10 @@ export default function PlantDetail() {
                 </Typography>
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                   {pestsToShow.map((pest) => {
-                    const pestColors = pestTypeColors(pest.type);
+                    const pestColors = adaptBadge(
+                      pestTypeColors(pest.type),
+                      mode
+                    );
                     return (
                       <Tooltip
                         key={pest.id}
@@ -1513,6 +1534,8 @@ export default function PlantDetail() {
                           sx={{
                             bgcolor: pestColors.bg,
                             color: pestColors.fg,
+                            border: '1px solid',
+                            borderColor: pestColors.border,
                             fontWeight: 500,
                           }}
                         />
@@ -1650,21 +1673,26 @@ export default function PlantDetail() {
                     flexWrap="wrap"
                     useFlexGap
                   >
-                    {plant.enrichmentSources.map((src) => (
-                      <Chip
-                        key={src}
-                        label={t(
-                          `plantDetail.enumValues.sourceType.${src}`,
-                          src
-                        )}
-                        size="small"
-                        sx={{
-                          bgcolor: sourceTypeColors(src).bg,
-                          color: sourceTypeColors(src).fg,
-                          fontWeight: 500,
-                        }}
-                      />
-                    ))}
+                    {plant.enrichmentSources.map((src) => {
+                      const b = adaptBadge(sourceTypeColors(src), mode);
+                      return (
+                        <Chip
+                          key={src}
+                          label={t(
+                            `plantDetail.enumValues.sourceType.${src}`,
+                            src
+                          )}
+                          size="small"
+                          sx={{
+                            bgcolor: b.bg,
+                            color: b.fg,
+                            border: '1px solid',
+                            borderColor: b.border,
+                            fontWeight: 500,
+                          }}
+                        />
+                      );
+                    })}
                     {!fullyEnriched && (
                       <Chip
                         label={t('plantDetail.fallback.notEnriched')}
@@ -1897,7 +1925,7 @@ function buildFeatureChips(
         : t('plantDetail.flags.edible'),
       bgcolor: '#E6F4EC',
       color: '#1B5E3A',
-      border: '1px solid #BCE2CC',
+      border: '#BCE2CC',
       icon: 'restaurant',
     });
   if (plant.isMedicinal)
@@ -1913,7 +1941,7 @@ function buildFeatureChips(
       label: t('plantDetail.flags.toxic'),
       bgcolor: '#FCE9E7',
       color: '#B23A2E',
-      border: '1px solid #F3C9C3',
+      border: '#F3C9C3',
       icon: 'warning',
     });
   if (plant.isToxicToPets)
@@ -1922,7 +1950,7 @@ function buildFeatureChips(
       label: t('plantDetail.flags.toxicToPets'),
       bgcolor: '#FCE9E7',
       color: '#B23A2E',
-      border: '1px solid #F3C9C3',
+      border: '#F3C9C3',
       icon: 'pets',
     });
   if (plant.isIndoor)

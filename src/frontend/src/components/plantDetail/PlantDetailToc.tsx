@@ -41,18 +41,19 @@ interface PlantDetailTocProps {
 
 // SMA-184: the live/active neutrals + brand greens now resolve from theme tokens
 // ('primary.main', 'brandTintBg', 'heading', 'text.*') so the TOC follows
-// light/dark. The colored teaser-state indicators (orange/blue/grey) stay
-// literal — they're a colored semantic family retuned with the pastel pass.
+// light/dark. The colored teaser-state indicators (orange/blue) stay literal —
+// they're mid-tones legible on both light and navy. The empty-state grey dot is
+// mode-aware (light grey → 'mutedText' navy-grey in dark).
 const COMING_DATA = '#C88968';
 const COMING_BACKEND = '#6D7DA4';
 const EMPTY_DOT = '#C9D3CC';
 
 /**
  * Bullet colour per state (the small leading disc). The `live` case returns the
- * 'primary.main' theme token (resolved by the consuming `sx`); the others are
- * literal teaser-state colors.
+ * 'primary.main' theme token (resolved by the consuming `sx`); `empty` returns
+ * a mode-aware token; the teaser states are literal mid-tone colors.
  */
-function dotColor(state: TocState): string {
+function dotColor(state: TocState, mode: 'light' | 'dark'): string {
   switch (state) {
     case 'live':
       return 'primary.main';
@@ -61,7 +62,7 @@ function dotColor(state: TocState): string {
     case 'coming-backend':
       return COMING_BACKEND;
     default:
-      return EMPTY_DOT; // 'empty'
+      return mode === 'dark' ? 'mutedText' : EMPTY_DOT; // 'empty'
   }
 }
 
@@ -84,6 +85,7 @@ export default function PlantDetailToc({
 }: PlantDetailTocProps) {
   const { t } = useTranslation();
   const theme = useTheme();
+  const mode = theme.palette.mode;
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   // Scroll-spy only the live anchors — non-live entries have no section to
   // observe and must never be highlighted (SMA-178 part B).
@@ -132,7 +134,7 @@ export default function PlantDetailToc({
                 borderColor: active
                   ? 'primary.main'
                   : coming
-                    ? dotColor(s.state)
+                    ? dotColor(s.state, mode)
                     : 'borderSubtle',
                 bgcolor: active ? 'primary.main' : 'background.paper',
                 color: active
@@ -265,7 +267,7 @@ export default function PlantDetailToc({
                 borderRadius: '50%',
                 flexShrink: 0,
                 mt: '6px',
-                bgcolor: dotColor(s.state),
+                bgcolor: dotColor(s.state, mode),
               }}
             />
             <Box

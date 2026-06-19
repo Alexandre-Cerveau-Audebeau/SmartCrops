@@ -2,8 +2,10 @@ import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
 import type { Plant } from '../../types/Plant';
 import { periodToMonths } from '../../utils/formatPeriod';
+import { adaptBadge } from '../../utils/badgeColors';
 import { Sym } from '../Sym';
 
 // Stage bar / legend swatch colours + Material Symbols glyph names, exact to the
@@ -66,6 +68,8 @@ function toRuns(months: number[]): Array<{ start: number; end: number }> {
  */
 export default function LifecycleSection({ plant }: { plant: Plant }) {
   const { t } = useTranslation();
+  const mode = useTheme().palette.mode;
+  const comingBadge = adaptBadge({ bg: '#FBEEE6', fg: '#A0522D' }, mode);
   const monthsRaw = t('plantDetail.lifecycle.monthsShort', {
     returnObjects: true,
   });
@@ -132,15 +136,17 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
             gap: '5px',
             px: '9px',
             py: '4px',
-            bgcolor: '#FBEEE6',
-            color: '#A0522D',
+            bgcolor: comingBadge.bg,
+            color: comingBadge.fg,
+            border: '1px solid',
+            borderColor: comingBadge.border,
             borderRadius: '6px',
             fontSize: 10,
             fontWeight: 800,
             letterSpacing: '0.04em',
           }}
         >
-          <Sym name="schedule" size={13} color="#A0522D" />
+          <Sym name="schedule" size={13} color={comingBadge.fg} />
           {t('plantDetail.comingSoonDataBadge')}
         </Box>
       </Box>
