@@ -504,10 +504,8 @@ describe('PlantDetail', () => {
     expect(
       screen.queryByRole('button', { name: /View all photos/ })
     ).toBeNull();
-    // Attribution composed from credit · source · license shows under the tile.
-    expect(
-      screen.getByText('© Photographer · Trefle · CC BY-SA')
-    ).toBeInTheDocument();
+    // Credit / license line ("{credit} · {license}", design format) under the tile.
+    expect(screen.getByText('Photographer · CC BY-SA')).toBeInTheDocument();
   });
 
   it('opens the lightbox with a type badge, counter, composed attribution, and bounded zoom (SMA-154)', async () => {
