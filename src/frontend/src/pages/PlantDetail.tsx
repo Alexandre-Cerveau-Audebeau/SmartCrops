@@ -63,6 +63,7 @@ import {
 } from '../services/adminApi';
 import type { Garden } from '../types/Garden';
 import type { Plant, PlantImage } from '../types/Plant';
+import { Sym } from '../components/Sym';
 import PlantDetailToc from '../components/plantDetail/PlantDetailToc';
 import type { TocSection } from '../components/plantDetail/PlantDetailToc';
 import PlantHeroGauges from '../components/plantDetail/PlantHeroGauges';
@@ -386,6 +387,21 @@ export default function PlantDetail() {
     () => (plant ? pickHeroImage(plant) : ''),
     [plant]
   );
+  // SMA-39: the PlantImage object behind the hero URL (for the attribution
+  // overlay). Null when the hero falls back to the legacy scalar or the brand
+  // placeholder — those carry no licence metadata, so no overlay renders.
+  const heroImage = useMemo<PlantImage | null>(
+    () =>
+      plant ? (plant.images.find((i) => i.url === heroImageUrl) ?? null) : null,
+    [plant, heroImageUrl]
+  );
+  // SMA-39: compact attribution for the hero overlay, composed from REAL fields
+  // only ("{source} · {license}", matching the design chip) — never fabricate a
+  // credit or licence. Empty string when no metadata exists → no overlay. The
+  // full "© credit · source · license" line stays in the lightbox.
+  const heroAttribution = heroImage
+    ? [heroImage.source, heroImage.licenseName].filter(Boolean).join(' · ')
+    : '';
   // SMA-118: the gallery (thumbnails, category-filter row, "+N" count, lightbox)
   // all derive from this — filter to STABLE-source images only (Trefle/PlantNet)
   // so no dead Perenual URL ever renders a broken tile, consistent with
@@ -844,221 +860,348 @@ export default function PlantDetail() {
               scrollMarginTop: '80px',
             }}
           >
-            <Box
-              sx={{
-                position: 'relative',
-                width: '100%',
-                height: { xs: 220, sm: 320, md: 400 },
-                bgcolor: 'grey.100',
-              }}
-            >
-              {/* The hero is a focusable button so keyboard users can open the
+            <CardContent>
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: { xs: 'column', md: 'row' },
+                  gap: '28px',
+                  alignItems: 'flex-start',
+                }}
+              >
+                {/* ── Left column: hero photo ─────────────────────────────── */}
+                <Box
+                  sx={{
+                    position: 'relative',
+                    width: { xs: '100%', md: '46%' },
+                    flexShrink: 0,
+                    aspectRatio: '4 / 3',
+                    maxHeight: { md: 360 },
+                    borderRadius: '14px',
+                    overflow: 'hidden',
+                    bgcolor: 'grey.100',
+                  }}
+                >
+                  {/* The hero is a focusable button so keyboard users can open the
               lightbox; when no STABLE gallery exists we render a plain img instead
               (a disabled button would be a confusing focus target). Gated on the
               filtered gallery (SMA-118) so a Perenual-only plant — whose hero is
               the placeholder — never opens an empty lightbox. */}
-              {galleryImages.length > 0 ? (
-                <Box
-                  component="button"
-                  type="button"
-                  onClick={() => openLightbox(galleryImages, 0)}
-                  aria-label={t('plantDetail.gallery.openHero')}
-                  sx={{
-                    p: 0,
-                    m: 0,
-                    border: 0,
-                    background: 'transparent',
-                    width: '100%',
-                    height: '100%',
-                    display: 'block',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <Box
-                    component="img"
-                    src={heroImageUrl}
-                    alt={displayName}
-                    sx={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      display: 'block',
-                    }}
-                  />
-                </Box>
-              ) : (
-                <Box
-                  component="img"
-                  src={heroImageUrl}
-                  alt={displayName}
-                  sx={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    display: 'block',
-                  }}
-                />
-              )}
-            </Box>
-            <CardContent>
-              <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                justifyContent="space-between"
-                alignItems={{ sm: 'flex-start' }}
-                gap={2}
-              >
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                  {heroEyebrow && (
-                    <Typography
+                  {galleryImages.length > 0 ? (
+                    <Box
+                      component="button"
+                      type="button"
+                      onClick={() => openLightbox(galleryImages, 0)}
+                      aria-label={t('plantDetail.gallery.openHero')}
                       sx={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        letterSpacing: '0.08em',
-                        textTransform: 'uppercase',
-                        color: '#2E8B57',
-                        mb: 0.5,
+                        p: 0,
+                        m: 0,
+                        border: 0,
+                        background: 'transparent',
+                        width: '100%',
+                        height: '100%',
+                        display: 'block',
+                        cursor: 'pointer',
                       }}
                     >
-                      {heroEyebrow}
-                    </Typography>
-                  )}
-                  <Typography variant="h3" fontWeight={700} sx={{ mb: 0.5 }}>
-                    {displayName}
-                  </Typography>
-                  <Typography
-                    variant="h6"
-                    color="text.secondary"
-                    sx={{ fontStyle: 'italic' }}
-                  >
-                    {plant.scientificName}
-                    {plant.author ? (
-                      <Typography
-                        component="span"
-                        color="text.secondary"
-                        sx={{ fontStyle: 'normal', ml: 1 }}
-                      >
-                        {plant.author}
-                      </Typography>
-                    ) : null}
-                  </Typography>
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    flexWrap="wrap"
-                    useFlexGap
-                    sx={{ mt: 1.5, alignItems: 'center' }}
-                  >
-                    {plant.family && (
-                      <Typography variant="body2" color="text.secondary">
-                        {t('plantDetail.labels.family')}:{' '}
-                        <Box component="span" sx={{ fontWeight: 500 }}>
-                          {plant.family}
-                        </Box>
-                      </Typography>
-                    )}
-                    {plant.genus && (
-                      <Typography variant="body2" color="text.secondary">
-                        {t('plantDetail.labels.genus')}:{' '}
-                        <Box component="span" sx={{ fontStyle: 'italic' }}>
-                          {plant.genus}
-                        </Box>
-                      </Typography>
-                    )}
-                    {plant.gbifTaxonKey != null && (
-                      <Chip
-                        component="a"
-                        href={`https://www.gbif.org/species/${plant.gbifTaxonKey}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        label={t('plantDetail.gbifBadge', {
-                          key: plant.gbifTaxonKey,
-                        })}
-                        size="small"
-                        clickable
-                        icon={<OpenInNewIcon fontSize="small" />}
-                        sx={{ bgcolor: 'grey.200' }}
+                      <Box
+                        component="img"
+                        src={heroImageUrl}
+                        alt={displayName}
+                        sx={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          display: 'block',
+                        }}
                       />
+                    </Box>
+                  ) : (
+                    <Box
+                      component="img"
+                      src={heroImageUrl}
+                      alt={displayName}
+                      sx={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
+                      }}
+                    />
+                  )}
+                  {/* SMA-39: hero overlays — gallery cue (bottom-left, when the
+              gallery has photos) and licence attribution (bottom-right, when the
+              hero is a real catalogued image). Decorative: pointer-events off so
+              the whole image stays a single click target for the lightbox. */}
+                  {galleryImages.length > 0 && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        left: '12px',
+                        bottom: '12px',
+                        bgcolor: 'rgba(27,94,58,0.92)',
+                        color: '#fff',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        padding: '7px 12px',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      <Sym name="collections" size={16} color="#fff" />
+                      {t('plantDetail.gallery.seeGallery')}
+                    </Box>
+                  )}
+                  {heroAttribution && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        right: '12px',
+                        bottom: '12px',
+                        bgcolor: 'rgba(255,255,255,0.92)',
+                        color: '#5a665c',
+                        fontSize: 10,
+                        fontFamily: 'ui-monospace, monospace',
+                        padding: '5px 9px',
+                        borderRadius: '6px',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      {heroAttribution}
+                    </Box>
+                  )}
+                </Box>
+                {/* ── Right column: title, taxonomy, badges, CTA ──────────── */}
+                <Box
+                  sx={{
+                    flex: 1,
+                    minWidth: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  <Box sx={{ minWidth: 0 }}>
+                    {heroEyebrow && (
+                      <Typography
+                        sx={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          letterSpacing: '0.08em',
+                          textTransform: 'uppercase',
+                          color: '#A0522D',
+                          mb: 0.5,
+                        }}
+                      >
+                        {heroEyebrow}
+                      </Typography>
                     )}
-                  </Stack>
-                  {heroChips.length > 0 && (
+                    <Typography
+                      variant="h3"
+                      fontWeight={700}
+                      sx={{ mb: 0.5, color: '#1B5E3A' }}
+                    >
+                      {displayName}
+                    </Typography>
+                    <Typography
+                      variant="h6"
+                      color="text.secondary"
+                      sx={{ fontStyle: 'italic' }}
+                    >
+                      {plant.scientificName}
+                      {plant.author ? (
+                        <Typography
+                          component="span"
+                          color="text.secondary"
+                          sx={{ fontStyle: 'normal', ml: 1 }}
+                        >
+                          {plant.author}
+                        </Typography>
+                      ) : null}
+                    </Typography>
                     <Stack
                       direction="row"
                       spacing={1}
                       flexWrap="wrap"
                       useFlexGap
-                      sx={{ mt: 1.5 }}
+                      sx={{ mt: 1.5, alignItems: 'center' }}
                     >
-                      {heroChips.map((c) => (
-                        <Chip
-                          key={c.key}
-                          label={c.label}
-                          size="small"
+                      {plant.family && (
+                        <Box
                           sx={{
-                            bgcolor: c.bgcolor,
-                            color: c.color,
-                            fontWeight: 500,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            bgcolor: '#F2F6F0',
+                            color: '#3a463f',
+                            border: '1px solid #E2EADF',
+                            borderRadius: '999px',
+                            padding: '6px 12px',
+                            fontSize: 13,
+                            fontWeight: 600,
+                          }}
+                        >
+                          <Box
+                            component="span"
+                            sx={{ color: '#9aa5a0', fontWeight: 500 }}
+                          >
+                            {t('plantDetail.labels.family')}
+                          </Box>
+                          {plant.family}
+                        </Box>
+                      )}
+                      {plant.genus && (
+                        <Box
+                          sx={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            bgcolor: '#F2F6F0',
+                            color: '#3a463f',
+                            border: '1px solid #E2EADF',
+                            borderRadius: '999px',
+                            padding: '6px 12px',
+                            fontSize: 13,
+                            fontWeight: 600,
+                          }}
+                        >
+                          <Box
+                            component="span"
+                            sx={{ color: '#9aa5a0', fontWeight: 500 }}
+                          >
+                            {t('plantDetail.labels.genus')}
+                          </Box>
+                          {plant.genus}
+                        </Box>
+                      )}
+                      {plant.gbifTaxonKey != null && (
+                        <Chip
+                          component="a"
+                          href={`https://www.gbif.org/species/${plant.gbifTaxonKey}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          label={t('plantDetail.gbifBadge', {
+                            key: plant.gbifTaxonKey,
+                          })}
+                          clickable
+                          icon={<OpenInNewIcon sx={{ fontSize: 15 }} />}
+                          sx={{
+                            height: 'auto',
+                            bgcolor: '#fff',
+                            color: '#2C3E6B',
+                            border: '1px solid #cdd6e8',
+                            borderRadius: '999px',
+                            fontSize: 13,
+                            fontWeight: 700,
+                            py: '6px',
+                            '& .MuiChip-label': { px: '12px' },
+                            '& .MuiChip-icon': {
+                              color: '#2C3E6B',
+                              fontSize: 15,
+                              ml: '8px',
+                              mr: '-4px',
+                            },
                           }}
                         />
-                      ))}
+                      )}
                     </Stack>
-                  )}
-                </Box>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  alignItems="center"
-                  sx={{ flexShrink: 0 }}
-                >
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    startIcon={<AddIcon />}
-                    onClick={openAddDialog}
-                  >
-                    {t('library.addToGarden')}
-                  </Button>
-                  {isAdmin && (
-                    <>
-                      <Tooltip title={t('plantDetail.actions.adminMenu')}>
-                        <span>
-                          <IconButton
-                            color="default"
-                            onClick={(e) => setAdminMenuAnchor(e.currentTarget)}
-                            disabled={adminRunning !== null}
-                            aria-label={t('plantDetail.actions.adminMenu')}
-                          >
-                            {adminRunning ? (
-                              <CircularProgress size={20} />
-                            ) : (
-                              <SettingsIcon />
-                            )}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                      <Menu
-                        anchorEl={adminMenuAnchor}
-                        open={Boolean(adminMenuAnchor)}
-                        onClose={() => setAdminMenuAnchor(null)}
+                    {heroChips.length > 0 && (
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        flexWrap="wrap"
+                        useFlexGap
+                        sx={{ mt: 1.5 }}
                       >
-                        <MenuItem
-                          onClick={() => handleReEnrich('trefle')}
-                          disabled={adminRunning !== null}
-                        >
-                          <RefreshIcon fontSize="small" sx={{ mr: 1 }} />
-                          {t('plantDetail.actions.reEnrichTrefle')}
-                        </MenuItem>
-                        <MenuItem
-                          onClick={() => handleReEnrich('perenual')}
-                          disabled={adminRunning !== null}
-                        >
-                          <RefreshIcon fontSize="small" sx={{ mr: 1 }} />
-                          {t('plantDetail.actions.reEnrichPerenual')}
-                        </MenuItem>
-                      </Menu>
-                    </>
-                  )}
-                </Stack>
-              </Stack>
+                        {heroChips.map((c) => (
+                          <Box
+                            key={c.key}
+                            sx={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              bgcolor: c.bgcolor,
+                              color: c.color,
+                              border: c.border,
+                              borderRadius: '8px',
+                              padding: '7px 12px',
+                              fontSize: 13,
+                              fontWeight: 700,
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {c.icon && (
+                              <Sym name={c.icon} size={18} color={c.color} />
+                            )}
+                            {c.label}
+                          </Box>
+                        ))}
+                      </Stack>
+                    )}
+                  </Box>
+                  <Box sx={{ mt: 'auto' }}>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      alignItems="center"
+                      sx={{ mt: 2.5 }}
+                    >
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<AddIcon />}
+                        onClick={openAddDialog}
+                      >
+                        {t('library.addToGarden')}
+                      </Button>
+                      {isAdmin && (
+                        <>
+                          <Tooltip title={t('plantDetail.actions.adminMenu')}>
+                            <span>
+                              <IconButton
+                                color="default"
+                                onClick={(e) =>
+                                  setAdminMenuAnchor(e.currentTarget)
+                                }
+                                disabled={adminRunning !== null}
+                                aria-label={t('plantDetail.actions.adminMenu')}
+                              >
+                                {adminRunning ? (
+                                  <CircularProgress size={20} />
+                                ) : (
+                                  <SettingsIcon />
+                                )}
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                          <Menu
+                            anchorEl={adminMenuAnchor}
+                            open={Boolean(adminMenuAnchor)}
+                            onClose={() => setAdminMenuAnchor(null)}
+                          >
+                            <MenuItem
+                              onClick={() => handleReEnrich('trefle')}
+                              disabled={adminRunning !== null}
+                            >
+                              <RefreshIcon fontSize="small" sx={{ mr: 1 }} />
+                              {t('plantDetail.actions.reEnrichTrefle')}
+                            </MenuItem>
+                            <MenuItem
+                              onClick={() => handleReEnrich('perenual')}
+                              disabled={adminRunning !== null}
+                            >
+                              <RefreshIcon fontSize="small" sx={{ mr: 1 }} />
+                              {t('plantDetail.actions.reEnrichPerenual')}
+                            </MenuItem>
+                          </Menu>
+                        </>
+                      )}
+                    </Stack>
+                  </Box>
+                </Box>
+              </Box>
               <PlantHeroGauges plant={plant} />
               {(longDescription || shortDescription) && (
                 <AboutSection key={plant.id} plant={plant} />
@@ -1723,19 +1866,36 @@ export default function PlantDetail() {
 function buildFeatureChips(
   plant: Plant,
   t: ReturnType<typeof useTranslation>['t']
-): { key: string; label: string; bgcolor: string; color: string }[] {
+): {
+  key: string;
+  label: string;
+  bgcolor: string;
+  color: string;
+  border?: string;
+  icon?: string;
+}[] {
   const chips: {
     key: string;
     label: string;
     bgcolor: string;
     color: string;
+    border?: string;
+    icon?: string;
   }[] = [];
-  if (plant.isEdible)
+  // SMA-39: edibility and the two toxicity flags are independent semantic
+  // badges (no mutual exclusion) with Material-Symbols icons. The edible badge
+  // names the fruit explicitly when `edibleParts` lists one.
+  const edibleParts = parseStringArray(plant.edibleParts);
+  if (plant.isEdible || edibleParts.length > 0)
     chips.push({
       key: 'edible',
-      label: t('plantDetail.flags.edible'),
-      bgcolor: '#E8F5E9',
-      color: '#1B5E20',
+      label: edibleParts.some((p) => p.toLowerCase().includes('fruit'))
+        ? t('plantDetail.flags.edibleFruit')
+        : t('plantDetail.flags.edible'),
+      bgcolor: '#E6F4EC',
+      color: '#1B5E3A',
+      border: '1px solid #BCE2CC',
+      icon: 'restaurant',
     });
   if (plant.isMedicinal)
     chips.push({
@@ -1744,16 +1904,24 @@ function buildFeatureChips(
       bgcolor: '#E0F7FA',
       color: '#006064',
     });
-  if (plant.isToxicToHumans || plant.isToxicToPets) {
+  if (plant.isToxicToHumans)
     chips.push({
-      key: 'toxic',
-      label: plant.isToxicToHumans
-        ? t('plantDetail.flags.toxic')
-        : t('plantDetail.flags.toxicToPets'),
-      bgcolor: '#FFEBEE',
-      color: '#B71C1C',
+      key: 'toxic-humans',
+      label: t('plantDetail.flags.toxic'),
+      bgcolor: '#FCE9E7',
+      color: '#B23A2E',
+      border: '1px solid #F3C9C3',
+      icon: 'warning',
     });
-  }
+  if (plant.isToxicToPets)
+    chips.push({
+      key: 'toxic-pets',
+      label: t('plantDetail.flags.toxicToPets'),
+      bgcolor: '#FCE9E7',
+      color: '#B23A2E',
+      border: '1px solid #F3C9C3',
+      icon: 'pets',
+    });
   if (plant.isIndoor)
     chips.push({
       key: 'indoor',

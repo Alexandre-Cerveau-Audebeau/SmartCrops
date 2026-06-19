@@ -504,8 +504,14 @@ describe('PlantDetail', () => {
     expect(
       screen.queryByRole('button', { name: /View all photos/ })
     ).toBeNull();
-    // Credit / license line ("{credit} · {license}", design format) under the tile.
-    expect(screen.getByText('Photographer · CC BY-SA')).toBeInTheDocument();
+    // Credit / license line ("{credit} · {license}", design format) under the
+    // tile. Scoped to the gallery section because the same attribution now also
+    // renders as the hero image overlay (SMA-39).
+    const gallerySection = document.getElementById('gallery');
+    expect(gallerySection).not.toBeNull();
+    expect(
+      within(gallerySection!).getByText('Photographer · CC BY-SA')
+    ).toBeInTheDocument();
   });
 
   it('opens the lightbox with a type badge, counter, composed attribution, and bounded zoom (SMA-154)', async () => {

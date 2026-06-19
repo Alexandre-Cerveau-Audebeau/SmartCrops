@@ -484,6 +484,7 @@
     },
     "flags": {
       "edible": "Edible",
+      "edibleFruit": "Edible fruit",
       "medicinal": "Medicinal",
       "toxic": "Toxic",
       "toxicToPets": "Toxic to pets",
@@ -634,6 +635,7 @@
       "zoomLevel": "Zoom {{percent}}%",
       "openHero": "Open photo gallery",
       "openTile": "Open photo {{index}} in lightbox",
+      "seeGallery": "See gallery",
       "empty": "No photos yet for this plant.",
       "types": {
         "all": "All",
