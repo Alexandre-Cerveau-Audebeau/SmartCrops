@@ -90,6 +90,10 @@ export default function UnitSystemToggle() {
                 color: mode === 'dark' ? 'background.default' : NAV_BG,
                 fontWeight: 700,
               },
+              '& .unit-triplet': {
+                color:
+                  mode === 'dark' ? 'background.default' : 'text.secondary',
+              },
             },
           },
         }}
