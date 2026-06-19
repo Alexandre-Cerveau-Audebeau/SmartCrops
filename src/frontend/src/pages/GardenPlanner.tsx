@@ -9,6 +9,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
+import { alpha, type Theme } from '@mui/material/styles';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -49,7 +50,7 @@ const addBtnSx = {
   color: 'success.main',
   fontSize: 16,
   fontWeight: 500,
-  bgcolor: 'rgba(46,125,50,0.04)',
+  bgcolor: (theme: Theme) => alpha(theme.palette.success.main, 0.06),
   '&:hover': { bgcolor: 'success.light', color: '#fff' },
 };
 
@@ -64,7 +65,7 @@ const removeBtnSx = {
   color: 'error.main',
   fontSize: 16,
   fontWeight: 500,
-  bgcolor: 'rgba(211,47,47,0.04)',
+  bgcolor: (theme: Theme) => alpha(theme.palette.error.main, 0.06),
   '&:hover': { bgcolor: 'error.light', color: '#fff' },
 };
 
@@ -88,11 +89,16 @@ export default function GardenPlanner() {
   const [showSetup, setShowSetup] = useState(false);
   const [showResize, setShowResize] = useState(false);
   const [showHelp, setShowHelp] = useState(true);
-  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: 'success' | 'error' | 'info';
+    text: string;
+  } | null>(null);
   const [allPlants, setAllPlants] = useState<Plant[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPlantId, setSelectedPlantId] = useState<string | null>(null);
-  const [selectedPlacementIndex, setSelectedPlacementIndex] = useState<number | null>(null);
+  const [selectedPlacementIndex, setSelectedPlacementIndex] = useState<
+    number | null
+  >(null);
 
   // Drag-to-paint state
   const [isPainting, setIsPainting] = useState(false);
@@ -109,8 +115,14 @@ export default function GardenPlanner() {
 
   // Visual zoom (purely view-state — does not affect saved data)
   const [zoom, setZoom] = useState(1);
-  const handleZoomIn = useCallback(() => setZoom(z => Math.min(2, z + 0.2)), []);
-  const handleZoomOut = useCallback(() => setZoom(z => Math.max(0.5, z - 0.2)), []);
+  const handleZoomIn = useCallback(
+    () => setZoom((z) => Math.min(2, z + 0.2)),
+    []
+  );
+  const handleZoomOut = useCallback(
+    () => setZoom((z) => Math.max(0.5, z - 0.2)),
+    []
+  );
   const cellSizePx = Math.round(44 * zoom);
 
   // Horizontal scroll state for grid container
@@ -133,16 +145,26 @@ export default function GardenPlanner() {
     mountedRef.current = true;
     if (!id) return;
     fetch('/api/plants', { credentials: 'include' })
-      .then(res => res.json())
-      .then((plants: Plant[]) => { if (mountedRef.current) setAllPlants(plants); })
-      .catch(() => { /* plant fetch failure is non-blocking */ });
+      .then((res) => res.json())
+      .then((plants: Plant[]) => {
+        if (mountedRef.current) setAllPlants(plants);
+      })
+      .catch(() => {
+        /* plant fetch failure is non-blocking */
+      });
     Promise.all([fetchLayout(id), fetchGarden(id)])
       .then(([layoutData, gardenData]) => {
         if (!mountedRef.current) return;
         setGarden(gardenData);
         if (layoutData.width && layoutData.height && layoutData.cellSize) {
-          const loadedGrid = parseCellsJson(layoutData.cellsJson, layoutData.width, layoutData.height);
-          const loadedPlacements: SavePlacementData[] = (layoutData.placements ?? []).map(p => ({
+          const loadedGrid = parseCellsJson(
+            layoutData.cellsJson,
+            layoutData.width,
+            layoutData.height
+          );
+          const loadedPlacements: SavePlacementData[] = (
+            layoutData.placements ?? []
+          ).map((p) => ({
             plantId: p.plantId,
             startRow: p.startRow,
             startCol: p.startCol,
@@ -156,94 +178,118 @@ export default function GardenPlanner() {
           setGrid(loadedGrid);
           setPlacements(loadedPlacements);
           lastSavedRef.current = {
-            grid: loadedGrid ? loadedGrid.map(row => row.map(cell => ({ ...cell }))) : null,
+            grid: loadedGrid
+              ? loadedGrid.map((row) => row.map((cell) => ({ ...cell })))
+              : null,
             layoutWidth: layoutData.width,
             layoutHeight: layoutData.height,
             cellSize: layoutData.cellSize,
-            placements: loadedPlacements.map(p => ({ ...p })),
+            placements: loadedPlacements.map((p) => ({ ...p })),
           };
         } else {
           setShowSetup(true);
         }
       })
       .catch(() => {
-        if (mountedRef.current) setMessage({ type: 'error', text: t('planner.toolbar.saveError') });
+        if (mountedRef.current)
+          setMessage({ type: 'error', text: t('planner.toolbar.saveError') });
       })
       .finally(() => {
         if (mountedRef.current) setLoading(false);
       });
-    return () => { mountedRef.current = false; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      mountedRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const notifyRemovedPlacements = useCallback((removedCount: number) => {
-    if (removedCount > 0) {
-      setMessage({ type: 'info', text: t('planner.placementsRemoved', { count: removedCount }) });
-      setSelectedPlacementIndex(null);
-    }
-  }, [t]);
+  const notifyRemovedPlacements = useCallback(
+    (removedCount: number) => {
+      if (removedCount > 0) {
+        setMessage({
+          type: 'info',
+          text: t('planner.placementsRemoved', { count: removedCount }),
+        });
+        setSelectedPlacementIndex(null);
+      }
+    },
+    [t]
+  );
 
-  const handleSetupConfirm = useCallback((cols: number, rows: number, cs: string) => {
-    setLayoutWidth(cols);
-    setLayoutHeight(rows);
-    setCellSize(cs);
-    setGrid(parseCellsJson(null, cols, rows));
-    setShowSetup(false);
-    setIsDirty(true);
-  }, []);
+  const handleSetupConfirm = useCallback(
+    (cols: number, rows: number, cs: string) => {
+      setLayoutWidth(cols);
+      setLayoutHeight(rows);
+      setCellSize(cs);
+      setGrid(parseCellsJson(null, cols, rows));
+      setShowSetup(false);
+      setIsDirty(true);
+    },
+    []
+  );
 
-  const handleResize = useCallback((newWidth: number, newHeight: number, newCellSize: string) => {
-    setShowResize(false);
-    const newGrid: CellData[][] = [];
-    for (let r = 0; r < newHeight; r++) {
-      newGrid[r] = [];
-      for (let c = 0; c < newWidth; c++) {
-        if (grid && r < grid.length && c < grid[r].length) {
-          newGrid[r][c] = grid[r][c];
-        } else {
-          newGrid[r][c] = { active: true };
+  const handleResize = useCallback(
+    (newWidth: number, newHeight: number, newCellSize: string) => {
+      setShowResize(false);
+      const newGrid: CellData[][] = [];
+      for (let r = 0; r < newHeight; r++) {
+        newGrid[r] = [];
+        for (let c = 0; c < newWidth; c++) {
+          if (grid && r < grid.length && c < grid[r].length) {
+            newGrid[r][c] = grid[r][c];
+          } else {
+            newGrid[r][c] = { active: true };
+          }
         }
       }
-    }
-    setGrid(newGrid);
-    setLayoutWidth(newWidth);
-    setLayoutHeight(newHeight);
-    setCellSize(newCellSize);
-    const filtered = placements.filter(p =>
-      p.startRow + p.spanRows <= newHeight &&
-      p.startCol + p.spanCols <= newWidth
-    );
-    notifyRemovedPlacements(placements.length - filtered.length);
-    setPlacements(filtered);
-    setIsDirty(true);
-  }, [grid, placements, notifyRemovedPlacements]);
+      setGrid(newGrid);
+      setLayoutWidth(newWidth);
+      setLayoutHeight(newHeight);
+      setCellSize(newCellSize);
+      const filtered = placements.filter(
+        (p) =>
+          p.startRow + p.spanRows <= newHeight &&
+          p.startCol + p.spanCols <= newWidth
+      );
+      notifyRemovedPlacements(placements.length - filtered.length);
+      setPlacements(filtered);
+      setIsDirty(true);
+    },
+    [grid, placements, notifyRemovedPlacements]
+  );
 
   // Drag-to-paint handlers
-  const handleCellDragStart = useCallback((row: number, col: number) => {
-    if (!shapeEditMode) return;
-    setIsPainting(true);
-    setGrid(prev => {
-      if (!prev) return prev;
-      const currentActive = prev[row][col].active;
-      paintActionRef.current = !currentActive;
-      const copy = prev.map(r => r.map(c => ({ ...c })));
-      copy[row][col] = { ...copy[row][col], active: !currentActive };
-      return copy;
-    });
-    setIsDirty(true);
-  }, [shapeEditMode]);
+  const handleCellDragStart = useCallback(
+    (row: number, col: number) => {
+      if (!shapeEditMode) return;
+      setIsPainting(true);
+      setGrid((prev) => {
+        if (!prev) return prev;
+        const currentActive = prev[row][col].active;
+        paintActionRef.current = !currentActive;
+        const copy = prev.map((r) => r.map((c) => ({ ...c })));
+        copy[row][col] = { ...copy[row][col], active: !currentActive };
+        return copy;
+      });
+      setIsDirty(true);
+    },
+    [shapeEditMode]
+  );
 
-  const handleCellDragEnter = useCallback((row: number, col: number) => {
-    if (!isPainting || paintActionRef.current === null) return;
-    const action = paintActionRef.current;
-    setGrid(prev => {
-      if (!prev) return prev;
-      const copy = prev.map(r => r.map(c => ({ ...c })));
-      copy[row][col] = { ...copy[row][col], active: action };
-      return copy;
-    });
-    setIsDirty(true);
-  }, [isPainting]);
+  const handleCellDragEnter = useCallback(
+    (row: number, col: number) => {
+      if (!isPainting || paintActionRef.current === null) return;
+      const action = paintActionRef.current;
+      setGrid((prev) => {
+        if (!prev) return prev;
+        const copy = prev.map((r) => r.map((c) => ({ ...c })));
+        copy[row][col] = { ...copy[row][col], active: action };
+        return copy;
+      });
+      setIsDirty(true);
+    },
+    [isPainting]
+  );
 
   const handleCellDragEnd = useCallback(() => {
     setIsPainting(false);
@@ -253,43 +299,51 @@ export default function GardenPlanner() {
   // Add row/column handlers
   const addRowTop = useCallback(() => {
     if (!grid) return;
-    const newRow: CellData[] = Array.from({ length: layoutWidth }, () => ({ active: true }));
+    const newRow: CellData[] = Array.from({ length: layoutWidth }, () => ({
+      active: true,
+    }));
     setGrid([newRow, ...grid]);
-    setLayoutHeight(h => h + 1);
-    setPlacements(prev => prev.map(p => ({ ...p, startRow: p.startRow + 1 })));
+    setLayoutHeight((h) => h + 1);
+    setPlacements((prev) =>
+      prev.map((p) => ({ ...p, startRow: p.startRow + 1 }))
+    );
     setIsDirty(true);
   }, [grid, layoutWidth]);
 
   const addRowBottom = useCallback(() => {
     if (!grid) return;
-    const newRow: CellData[] = Array.from({ length: layoutWidth }, () => ({ active: true }));
+    const newRow: CellData[] = Array.from({ length: layoutWidth }, () => ({
+      active: true,
+    }));
     setGrid([...grid, newRow]);
-    setLayoutHeight(h => h + 1);
+    setLayoutHeight((h) => h + 1);
     setIsDirty(true);
   }, [grid, layoutWidth]);
 
   const addColLeft = useCallback(() => {
     if (!grid) return;
-    setGrid(grid.map(row => [{ active: true }, ...row]));
-    setLayoutWidth(w => w + 1);
-    setPlacements(prev => prev.map(p => ({ ...p, startCol: p.startCol + 1 })));
+    setGrid(grid.map((row) => [{ active: true }, ...row]));
+    setLayoutWidth((w) => w + 1);
+    setPlacements((prev) =>
+      prev.map((p) => ({ ...p, startCol: p.startCol + 1 }))
+    );
     setIsDirty(true);
   }, [grid]);
 
   const addColRight = useCallback(() => {
     if (!grid) return;
-    setGrid(grid.map(row => [...row, { active: true }]));
-    setLayoutWidth(w => w + 1);
+    setGrid(grid.map((row) => [...row, { active: true }]));
+    setLayoutWidth((w) => w + 1);
     setIsDirty(true);
   }, [grid]);
 
   const removeRowTop = useCallback(() => {
     if (!grid || grid.length <= 2) return;
     setGrid(grid.slice(1));
-    setLayoutHeight(h => h - 1);
+    setLayoutHeight((h) => h - 1);
     const filtered = placements
-      .filter(p => p.startRow >= 1)
-      .map(p => ({ ...p, startRow: p.startRow - 1 }));
+      .filter((p) => p.startRow >= 1)
+      .map((p) => ({ ...p, startRow: p.startRow - 1 }));
     notifyRemovedPlacements(placements.length - filtered.length);
     setPlacements(filtered);
     setIsDirty(true);
@@ -299,8 +353,10 @@ export default function GardenPlanner() {
     if (!grid || grid.length <= 2) return;
     setGrid(grid.slice(0, -1));
     const newHeight = grid.length - 1;
-    setLayoutHeight(h => h - 1);
-    const filtered = placements.filter(p => p.startRow + p.spanRows <= newHeight);
+    setLayoutHeight((h) => h - 1);
+    const filtered = placements.filter(
+      (p) => p.startRow + p.spanRows <= newHeight
+    );
     notifyRemovedPlacements(placements.length - filtered.length);
     setPlacements(filtered);
     setIsDirty(true);
@@ -308,11 +364,11 @@ export default function GardenPlanner() {
 
   const removeColLeft = useCallback(() => {
     if (!grid || !grid[0] || grid[0].length <= 2) return;
-    setGrid(grid.map(row => row.slice(1)));
-    setLayoutWidth(w => w - 1);
+    setGrid(grid.map((row) => row.slice(1)));
+    setLayoutWidth((w) => w - 1);
     const filtered = placements
-      .filter(p => p.startCol >= 1)
-      .map(p => ({ ...p, startCol: p.startCol - 1 }));
+      .filter((p) => p.startCol >= 1)
+      .map((p) => ({ ...p, startCol: p.startCol - 1 }));
     notifyRemovedPlacements(placements.length - filtered.length);
     setPlacements(filtered);
     setIsDirty(true);
@@ -320,51 +376,64 @@ export default function GardenPlanner() {
 
   const removeColRight = useCallback(() => {
     if (!grid || !grid[0] || grid[0].length <= 2) return;
-    setGrid(grid.map(row => row.slice(0, -1)));
+    setGrid(grid.map((row) => row.slice(0, -1)));
     const newWidth = grid[0].length - 1;
-    setLayoutWidth(w => w - 1);
-    const filtered = placements.filter(p => p.startCol + p.spanCols <= newWidth);
+    setLayoutWidth((w) => w - 1);
+    const filtered = placements.filter(
+      (p) => p.startCol + p.spanCols <= newWidth
+    );
     notifyRemovedPlacements(placements.length - filtered.length);
     setPlacements(filtered);
     setIsDirty(true);
   }, [grid, placements, notifyRemovedPlacements]);
 
-  const handleCellClick = useCallback((row: number, col: number) => {
-    if (shapeEditMode || !grid) return;
+  const handleCellClick = useCallback(
+    (row: number, col: number) => {
+      if (shapeEditMode || !grid) return;
 
-    const existingIndex = placements.findIndex(p =>
-      row >= p.startRow && row < p.startRow + p.spanRows &&
-      col >= p.startCol && col < p.startCol + p.spanCols
-    );
+      const existingIndex = placements.findIndex(
+        (p) =>
+          row >= p.startRow &&
+          row < p.startRow + p.spanRows &&
+          col >= p.startCol &&
+          col < p.startCol + p.spanCols
+      );
 
-    // Block clicks on inactive cells only when there's no placement to interact with
-    if (!grid[row][col].active && existingIndex < 0) return;
+      // Block clicks on inactive cells only when there's no placement to interact with
+      if (!grid[row][col].active && existingIndex < 0) return;
 
-    if (selectedPlantId) {
-      if (existingIndex >= 0) {
-        setPlacements(prev => prev.map((p, i) =>
-          i === existingIndex ? { ...p, plantId: selectedPlantId } : p
-        ));
-      } else {
-        setPlacements(prev => [...prev, {
-          plantId: selectedPlantId,
-          startRow: row,
-          startCol: col,
-          spanRows: 1,
-          spanCols: 1,
-          notes: null,
-        }]);
+      if (selectedPlantId) {
+        if (existingIndex >= 0) {
+          setPlacements((prev) =>
+            prev.map((p, i) =>
+              i === existingIndex ? { ...p, plantId: selectedPlantId } : p
+            )
+          );
+        } else {
+          setPlacements((prev) => [
+            ...prev,
+            {
+              plantId: selectedPlantId,
+              startRow: row,
+              startCol: col,
+              spanRows: 1,
+              spanCols: 1,
+              notes: null,
+            },
+          ]);
+        }
+        setIsDirty(true);
+        return;
       }
-      setIsDirty(true);
-      return;
-    }
 
-    if (existingIndex >= 0) {
-      setSelectedPlacementIndex(existingIndex);
-    } else {
-      setSelectedPlacementIndex(null);
-    }
-  }, [shapeEditMode, selectedPlantId, grid, placements]);
+      if (existingIndex >= 0) {
+        setSelectedPlacementIndex(existingIndex);
+      } else {
+        setSelectedPlacementIndex(null);
+      }
+    },
+    [shapeEditMode, selectedPlantId, grid, placements]
+  );
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -422,40 +491,47 @@ export default function GardenPlanner() {
   }, [selectedPlacementIndex]);
 
   const enrichedPlacements = useMemo(() => {
-    const plantMap = new Map(allPlants.map(p => [p.id, p]));
-    return placements.map(p => {
+    const plantMap = new Map(allPlants.map((p) => [p.id, p]));
+    return placements.map((p) => {
       const plant = plantMap.get(p.plantId);
       return {
         ...p,
         plantName: plant
-          ? (getTranslation(plant, language)?.commonName || plant.scientificName)
+          ? getTranslation(plant, language)?.commonName || plant.scientificName
           : 'Unknown',
       };
     });
   }, [placements, allPlants, language]);
 
   const plantsToShow = useMemo(() => {
-    const plantMap = new Map(allPlants.map(p => [p.id, p]));
+    const plantMap = new Map(allPlants.map((p) => [p.id, p]));
     const seen = new Set<string>();
-    const list: Array<{ plantId: string; plantName: string; scientificName: string }> = [];
-    garden?.gardenPlants?.forEach(gp => {
+    const list: Array<{
+      plantId: string;
+      plantName: string;
+      scientificName: string;
+    }> = [];
+    garden?.gardenPlants?.forEach((gp) => {
       if (gp.plant && !seen.has(gp.plant.id)) {
         seen.add(gp.plant.id);
         list.push({
           plantId: gp.plant.id,
-          plantName: getTranslation(gp.plant, language)?.commonName || gp.plant.scientificName,
+          plantName:
+            getTranslation(gp.plant, language)?.commonName ||
+            gp.plant.scientificName,
           scientificName: gp.plant.scientificName,
         });
       }
     });
-    placements.forEach(p => {
+    placements.forEach((p) => {
       if (seen.has(p.plantId)) return;
       const plant = plantMap.get(p.plantId);
       if (!plant) return;
       seen.add(p.plantId);
       list.push({
         plantId: plant.id,
-        plantName: getTranslation(plant, language)?.commonName || plant.scientificName,
+        plantName:
+          getTranslation(plant, language)?.commonName || plant.scientificName,
         scientificName: plant.scientificName,
       });
     });
@@ -476,11 +552,11 @@ export default function GardenPlanner() {
       });
       setIsDirty(false);
       lastSavedRef.current = {
-        grid: grid.map(row => row.map(cell => ({ ...cell }))),
+        grid: grid.map((row) => row.map((cell) => ({ ...cell }))),
         layoutWidth,
         layoutHeight,
         cellSize,
-        placements: placements.map(p => ({ ...p })),
+        placements: placements.map((p) => ({ ...p })),
       };
       setMessage({ type: 'success', text: t('planner.toolbar.saveSuccess') });
     } catch {
@@ -505,11 +581,15 @@ export default function GardenPlanner() {
       return;
     }
     const snap = lastSavedRef.current;
-    setGrid(snap.grid ? snap.grid.map(row => row.map(cell => ({ ...cell }))) : null);
+    setGrid(
+      snap.grid
+        ? snap.grid.map((row) => row.map((cell) => ({ ...cell })))
+        : null
+    );
     setLayoutWidth(snap.layoutWidth);
     setLayoutHeight(snap.layoutHeight);
     setCellSize(snap.cellSize);
-    setPlacements(snap.placements.map(p => ({ ...p })));
+    setPlacements(snap.placements.map((p) => ({ ...p })));
     setIsDirty(false);
     setSelectedPlacementIndex(null);
     setSelectedPlantId(null);
@@ -517,7 +597,7 @@ export default function GardenPlanner() {
   }, [t]);
 
   const m = cellSizeToMeters(cellSize);
-  const activeCells = grid ? grid.flat().filter(c => c.active).length : 0;
+  const activeCells = grid ? grid.flat().filter((c) => c.active).length : 0;
   const totalCells = grid ? grid.flat().length : 0;
   const surfaceM2 = (activeCells * m * m).toFixed(1);
   const dimensionsText = grid
@@ -530,17 +610,20 @@ export default function GardenPlanner() {
       })
     : '';
 
-  const selectedPlacement = selectedPlacementIndex !== null ? placements[selectedPlacementIndex] : null;
+  const selectedPlacement =
+    selectedPlacementIndex !== null ? placements[selectedPlacementIndex] : null;
   const selectedPlant = selectedPlacement
-    ? allPlants.find(p => p.id === selectedPlacement.plantId) ?? null
+    ? (allPlants.find((p) => p.id === selectedPlacement.plantId) ?? null)
     : null;
-  const selectedCellSoil = selectedPlacement && grid &&
+  const selectedCellSoil =
+    selectedPlacement &&
+    grid &&
     selectedPlacement.startRow >= 0 &&
     selectedPlacement.startRow < grid.length &&
     selectedPlacement.startCol >= 0 &&
     selectedPlacement.startCol < (grid[selectedPlacement.startRow]?.length ?? 0)
-    ? grid[selectedPlacement.startRow][selectedPlacement.startCol]?.soil
-    : undefined;
+      ? grid[selectedPlacement.startRow][selectedPlacement.startCol]?.soil
+      : undefined;
 
   if (loading) {
     return (
@@ -573,27 +656,61 @@ export default function GardenPlanner() {
       />
 
       {/* Toolbar */}
-      <Button component={RouterLink} to="/gardens" startIcon={<ArrowBackIcon />} sx={{ mb: 2 }}>
+      <Button
+        component={RouterLink}
+        to="/gardens"
+        startIcon={<ArrowBackIcon />}
+        sx={{ mb: 2 }}
+      >
         {t('planner.toolbar.backToGardens')}
       </Button>
 
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2, mb: 2 }}>
-        <Typography variant="h5" fontWeight={700} color="primary" sx={{ mr: 'auto' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 2,
+          mb: 2,
+        }}
+      >
+        <Typography
+          variant="h5"
+          fontWeight={700}
+          color="primary"
+          sx={{ mr: 'auto' }}
+        >
           {garden?.name || t('planner.title')}
         </Typography>
 
         {shapeEditMode && grid && (
           <>
-            <Button variant="outlined" size="small" onClick={() => {
-              setGrid(grid.map(row => row.map(cell => ({ ...cell, active: true }))));
-              setIsDirty(true);
-            }}>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => {
+                setGrid(
+                  grid.map((row) =>
+                    row.map((cell) => ({ ...cell, active: true }))
+                  )
+                );
+                setIsDirty(true);
+              }}
+            >
               {t('planner.shape.selectAll')}
             </Button>
-            <Button variant="outlined" size="small" onClick={() => {
-              setGrid(grid.map(row => row.map(cell => ({ ...cell, active: false }))));
-              setIsDirty(true);
-            }}>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => {
+                setGrid(
+                  grid.map((row) =>
+                    row.map((cell) => ({ ...cell, active: false }))
+                  )
+                );
+                setIsDirty(true);
+              }}
+            >
               {t('planner.shape.deselectAll')}
             </Button>
           </>
@@ -609,7 +726,10 @@ export default function GardenPlanner() {
             >
               <ZoomOutIcon fontSize="small" />
             </IconButton>
-            <Typography variant="caption" sx={{ minWidth: 40, textAlign: 'center' }}>
+            <Typography
+              variant="caption"
+              sx={{ minWidth: 40, textAlign: 'center' }}
+            >
               {Math.round(zoom * 100)}%
             </Typography>
             <IconButton
@@ -647,7 +767,13 @@ export default function GardenPlanner() {
 
         <Button
           variant="contained"
-          startIcon={saving ? <CircularProgress size={18} color="inherit" /> : <SaveIcon />}
+          startIcon={
+            saving ? (
+              <CircularProgress size={18} color="inherit" />
+            ) : (
+              <SaveIcon />
+            )
+          }
           disabled={!isDirty || saving}
           onClick={handleSave}
         >
@@ -659,7 +785,11 @@ export default function GardenPlanner() {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           {dimensionsText}
           {' — '}
-          {t('planner.toolbar.activeCells', { active: activeCells, total: totalCells, surface: surfaceM2 })}
+          {t('planner.toolbar.activeCells', {
+            active: activeCells,
+            total: totalCells,
+            surface: surfaceM2,
+          })}
         </Typography>
       )}
 
@@ -670,11 +800,24 @@ export default function GardenPlanner() {
           sx={{ mb: 2 }}
           action={
             <>
-              <Button color="inherit" size="small" onClick={handleCancel} sx={{ mr: 1 }}>
+              <Button
+                color="inherit"
+                size="small"
+                onClick={handleCancel}
+                sx={{ mr: 1 }}
+              >
                 {t('planner.toolbar.cancel')}
               </Button>
-              <Button color="inherit" size="small" variant="outlined" onClick={handleSave} disabled={saving}>
-                {saving ? t('planner.toolbar.saving') : t('planner.toolbar.save')}
+              <Button
+                color="inherit"
+                size="small"
+                variant="outlined"
+                onClick={handleSave}
+                disabled={saving}
+              >
+                {saving
+                  ? t('planner.toolbar.saving')
+                  : t('planner.toolbar.save')}
               </Button>
             </>
           }
@@ -684,22 +827,38 @@ export default function GardenPlanner() {
       )}
 
       {message && (
-        <Alert severity={message.type} sx={{ mb: 2 }} onClose={() => setMessage(null)}>
+        <Alert
+          severity={message.type}
+          sx={{ mb: 2 }}
+          onClose={() => setMessage(null)}
+        >
           {message.text}
         </Alert>
       )}
 
       {grid && showHelp && (
-        <Alert severity="info" variant="outlined" sx={{ mb: 2 }} icon={false} onClose={() => setShowHelp(false)}>
-          <Typography variant="body2">
-            {t('planner.help.unified')}
-          </Typography>
+        <Alert
+          severity="info"
+          variant="outlined"
+          sx={{ mb: 2 }}
+          icon={false}
+          onClose={() => setShowHelp(false)}
+        >
+          <Typography variant="body2">{t('planner.help.unified')}</Typography>
         </Alert>
       )}
 
       {/* Two-column layout: sidebar | grid (detail panel is a floating overlay below) */}
       {grid && (
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', pb: 2, minHeight: 0 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 2,
+            alignItems: 'flex-start',
+            pb: 2,
+            minHeight: 0,
+          }}
+        >
           <PlantSidebar
             plants={allPlants}
             searchQuery={searchQuery}
@@ -723,19 +882,32 @@ export default function GardenPlanner() {
             }}
           >
             {/* Scroll arrows — sticky to top of viewport (page scroll) so they stay visible */}
-            <Box sx={{ position: 'sticky', top: STICKY_OFFSET, zIndex: 5, height: 0, alignSelf: 'stretch' }}>
+            <Box
+              sx={{
+                position: 'sticky',
+                top: STICKY_OFFSET,
+                zIndex: 5,
+                height: 0,
+                alignSelf: 'stretch',
+              }}
+            >
               {showLeftArrow && (
                 <IconButton
                   size="small"
                   aria-label={t('planner.toolbar.scrollLeft')}
-                  onClick={() => { if (!leftHold.consumeWasHeld()) handleScrollLeftStep(); }}
+                  onClick={() => {
+                    if (!leftHold.consumeWasHeld()) handleScrollLeftStep();
+                  }}
                   onPointerDown={leftHold.start}
                   onPointerUp={leftHold.stop}
                   onPointerLeave={leftHold.stop}
                   onPointerCancel={leftHold.stop}
                   sx={{
-                    position: 'absolute', left: 4, top: 4,
-                    bgcolor: 'background.paper', boxShadow: 2,
+                    position: 'absolute',
+                    left: 4,
+                    top: 4,
+                    bgcolor: 'background.paper',
+                    boxShadow: 2,
                     '&:hover': { bgcolor: 'background.paper' },
                   }}
                 >
@@ -746,14 +918,19 @@ export default function GardenPlanner() {
                 <IconButton
                   size="small"
                   aria-label={t('planner.toolbar.scrollRight')}
-                  onClick={() => { if (!rightHold.consumeWasHeld()) handleScrollRightStep(); }}
+                  onClick={() => {
+                    if (!rightHold.consumeWasHeld()) handleScrollRightStep();
+                  }}
                   onPointerDown={rightHold.start}
                   onPointerUp={rightHold.stop}
                   onPointerLeave={rightHold.stop}
                   onPointerCancel={rightHold.stop}
                   sx={{
-                    position: 'absolute', right: 4, top: 4,
-                    bgcolor: 'background.paper', boxShadow: 2,
+                    position: 'absolute',
+                    right: 4,
+                    top: 4,
+                    bgcolor: 'background.paper',
+                    boxShadow: 2,
                     '&:hover': { bgcolor: 'background.paper' },
                   }}
                 >
@@ -764,7 +941,9 @@ export default function GardenPlanner() {
 
             {/* TOP +/- row — OUTSIDE scroll, centered in wrapper width (= visible viewport) */}
             {shapeEditMode && (
-              <Box sx={{ display: 'flex', gap: 0.5, alignSelf: 'center', mb: 0.5 }}>
+              <Box
+                sx={{ display: 'flex', gap: 0.5, alignSelf: 'center', mb: 0.5 }}
+              >
                 <Box
                   component="button"
                   type="button"
@@ -782,7 +961,9 @@ export default function GardenPlanner() {
                       outlineOffset: 2,
                     },
                   }}
-                >+</Box>
+                >
+                  +
+                </Box>
                 <Box
                   component="button"
                   type="button"
@@ -800,7 +981,9 @@ export default function GardenPlanner() {
                       outlineOffset: 2,
                     },
                   }}
-                >{'−'}</Box>
+                >
+                  {'−'}
+                </Box>
               </Box>
             )}
 
@@ -816,9 +999,13 @@ export default function GardenPlanner() {
                 alignSelf: 'center',
               }}
             >
-              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+              <Box
+                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+              >
                 {shapeEditMode && (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                  <Box
+                    sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
+                  >
                     <Box
                       component="button"
                       type="button"
@@ -836,7 +1023,9 @@ export default function GardenPlanner() {
                           outlineOffset: 2,
                         },
                       }}
-                    >+</Box>
+                    >
+                      +
+                    </Box>
                     <Box
                       component="button"
                       type="button"
@@ -854,7 +1043,9 @@ export default function GardenPlanner() {
                           outlineOffset: 2,
                         },
                       }}
-                    >{'−'}</Box>
+                    >
+                      {'−'}
+                    </Box>
                   </Box>
                 )}
                 <GardenGrid
@@ -868,7 +1059,9 @@ export default function GardenPlanner() {
                   cellSizePx={cellSizePx}
                 />
                 {shapeEditMode && (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                  <Box
+                    sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
+                  >
                     <Box
                       component="button"
                       type="button"
@@ -886,7 +1079,9 @@ export default function GardenPlanner() {
                           outlineOffset: 2,
                         },
                       }}
-                    >+</Box>
+                    >
+                      +
+                    </Box>
                     <Box
                       component="button"
                       type="button"
@@ -904,7 +1099,9 @@ export default function GardenPlanner() {
                           outlineOffset: 2,
                         },
                       }}
-                    >{'−'}</Box>
+                    >
+                      {'−'}
+                    </Box>
                   </Box>
                 )}
               </Box>
@@ -912,7 +1109,9 @@ export default function GardenPlanner() {
 
             {/* BOTTOM +/- row — OUTSIDE scroll, centered in wrapper width */}
             {shapeEditMode && (
-              <Box sx={{ display: 'flex', gap: 0.5, alignSelf: 'center', mt: 0.5 }}>
+              <Box
+                sx={{ display: 'flex', gap: 0.5, alignSelf: 'center', mt: 0.5 }}
+              >
                 <Box
                   component="button"
                   type="button"
@@ -930,7 +1129,9 @@ export default function GardenPlanner() {
                       outlineOffset: 2,
                     },
                   }}
-                >+</Box>
+                >
+                  +
+                </Box>
                 <Box
                   component="button"
                   type="button"
@@ -948,7 +1149,9 @@ export default function GardenPlanner() {
                       outlineOffset: 2,
                     },
                   }}
-                >{'−'}</Box>
+                >
+                  {'−'}
+                </Box>
               </Box>
             )}
           </Box>
@@ -957,45 +1160,60 @@ export default function GardenPlanner() {
 
       {/* Floating detail panel — anchored at the top of the map area, sticks while scrolling */}
       {selectedPlacement && (
-        <Box sx={{
-          position: 'fixed',
-          top: panelTop,
-          right: 20,
-          width: 280,
-          zIndex: 10,
-          p: 2,
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 1,
-          bgcolor: 'background.paper',
-          boxShadow: 3,
-        }}>
+        <Box
+          sx={{
+            position: 'fixed',
+            top: panelTop,
+            right: 20,
+            width: 280,
+            zIndex: 10,
+            p: 2,
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 1,
+            bgcolor: 'background.paper',
+            boxShadow: 3,
+          }}
+        >
           <Typography variant="subtitle1" fontWeight={600}>
             {selectedPlant
-              ? (getTranslation(selectedPlant, language)?.commonName || selectedPlant.scientificName)
+              ? getTranslation(selectedPlant, language)?.commonName ||
+                selectedPlant.scientificName
               : 'Unknown'}
           </Typography>
           {selectedPlant && (
-            <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'text.secondary', mb: 1 }}>
+            <Typography
+              variant="body2"
+              sx={{ fontStyle: 'italic', color: 'text.secondary', mb: 1 }}
+            >
               {selectedPlant.scientificName}
             </Typography>
           )}
           <Typography variant="body2" color="text.secondary">
-            {t('planner.placement.position', { row: selectedPlacement.startRow, col: selectedPlacement.startCol })}
+            {t('planner.placement.position', {
+              row: selectedPlacement.startRow,
+              col: selectedPlacement.startCol,
+            })}
           </Typography>
           {selectedCellSoil && (
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               {t('planner.placement.soil', { soil: selectedCellSoil })}
             </Typography>
           )}
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5, fontStyle: 'italic' }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', mt: 1.5, fontStyle: 'italic' }}
+          >
             {t('planner.placement.replaceHint')}
           </Typography>
           <Button
             color="error"
             size="small"
             onClick={() => {
-              setPlacements(prev => prev.filter((_, i) => i !== selectedPlacementIndex));
+              setPlacements((prev) =>
+                prev.filter((_, i) => i !== selectedPlacementIndex)
+              );
               setSelectedPlacementIndex(null);
               setIsDirty(true);
             }}
@@ -1020,7 +1238,11 @@ export default function GardenPlanner() {
                   key={p.plantId}
                   component={RouterLink}
                   to={`/library/${p.plantId}`}
-                  state={{ from: 'planner', gardenId: id, gardenName: garden?.name }}
+                  state={{
+                    from: 'planner',
+                    gardenId: id,
+                    gardenName: garden?.name,
+                  }}
                   sx={{
                     display: 'flex',
                     alignItems: 'center',
@@ -1033,7 +1255,8 @@ export default function GardenPlanner() {
                     borderColor: 'divider',
                     borderRadius: 1,
                     bgcolor: 'background.paper',
-                    transition: 'border-color 0.2s, transform 0.2s, box-shadow 0.2s',
+                    transition:
+                      'border-color 0.2s, transform 0.2s, box-shadow 0.2s',
                     '&:hover': {
                       borderColor: 'primary.main',
                       transform: 'translateY(-1px)',
@@ -1041,14 +1264,21 @@ export default function GardenPlanner() {
                     },
                   }}
                 >
-                  <Avatar sx={{ width: 32, height: 32, fontSize: 14, bgcolor: color }}>
+                  <Avatar
+                    sx={{ width: 32, height: 32, fontSize: 14, bgcolor: color }}
+                  >
                     {p.plantName.charAt(0).toUpperCase()}
                   </Avatar>
                   <Box sx={{ minWidth: 0, flex: 1 }}>
                     <Typography variant="body2" noWrap>
                       {p.plantName}
                     </Typography>
-                    <Typography variant="caption" sx={{ fontStyle: 'italic', color: 'text.secondary' }} noWrap component="div">
+                    <Typography
+                      variant="caption"
+                      sx={{ fontStyle: 'italic', color: 'text.secondary' }}
+                      noWrap
+                      component="div"
+                    >
                       {p.scientificName}
                     </Typography>
                   </Box>
@@ -1060,8 +1290,14 @@ export default function GardenPlanner() {
       )}
 
       {/* Status bar */}
-      <Typography variant="caption" color={isDirty ? 'warning.main' : 'text.secondary'} sx={{ mt: 1 }}>
-        {isDirty ? t('planner.toolbar.unsavedChanges') : t('planner.toolbar.saved')}
+      <Typography
+        variant="caption"
+        color={isDirty ? 'warning.main' : 'text.secondary'}
+        sx={{ mt: 1 }}
+      >
+        {isDirty
+          ? t('planner.toolbar.unsavedChanges')
+          : t('planner.toolbar.saved')}
       </Typography>
     </Container>
   );

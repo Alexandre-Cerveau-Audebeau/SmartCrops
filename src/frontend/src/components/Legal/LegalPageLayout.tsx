@@ -7,7 +7,9 @@ import Divider from '@mui/material/Divider';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
 import TranslateIcon from '@mui/icons-material/Translate';
+import { adaptBadge } from '../../utils/badgeColors';
 import PlaceholderChip from './PlaceholderChip';
 
 interface LegalPageLayoutProps {
@@ -29,6 +31,10 @@ export default function LegalPageLayout({
 }: LegalPageLayoutProps) {
   const { t, i18n } = useTranslation();
   const isEnglish = i18n.resolvedLanguage === 'en';
+  const courtesy = adaptBadge(
+    { bg: '#EAF1F7', fg: '#3D5A75', border: '#D4E0EC' },
+    useTheme().palette.mode
+  );
 
   return (
     <Box sx={{ py: { xs: 4, md: 6 }, px: { xs: 2, sm: 3 } }}>
@@ -62,8 +68,9 @@ export default function LegalPageLayout({
               display: 'flex',
               alignItems: 'center',
               gap: 1.5,
-              bgcolor: '#EAF1F7',
-              border: '1px solid #D4E0EC',
+              bgcolor: courtesy.bg,
+              border: '1px solid',
+              borderColor: courtesy.border,
               px: 2,
               py: 1.5,
               mb: 3,
@@ -71,9 +78,9 @@ export default function LegalPageLayout({
           >
             <TranslateIcon
               aria-hidden="true"
-              sx={{ color: '#4A6B8A', fontSize: 20, flexShrink: 0 }}
+              sx={{ color: courtesy.fg, fontSize: 20, flexShrink: 0 }}
             />
-            <Typography variant="body2" sx={{ color: '#3D5A75' }}>
+            <Typography variant="body2" sx={{ color: courtesy.fg }}>
               {t('legal.layout.courtesy')}
             </Typography>
           </Paper>
@@ -82,7 +89,7 @@ export default function LegalPageLayout({
         <Card sx={{ boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
           <CardContent sx={{ p: { xs: 2.5, sm: 4 } }}>
             <Stack
-              divider={<Divider sx={{ borderColor: 'rgba(0,0,0,0.08)' }} />}
+              divider={<Divider sx={{ borderColor: 'divider' }} />}
               spacing={3.5}
             >
               {children}

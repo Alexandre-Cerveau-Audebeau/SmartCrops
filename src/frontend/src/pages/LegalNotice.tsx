@@ -18,9 +18,10 @@ function OptionBox({
   return (
     <Box
       sx={{
-        border: '1px solid rgba(46,139,87,0.35)',
+        border: '1px solid',
+        borderColor: 'borderSubtle',
         borderRadius: 2,
-        bgcolor: 'rgba(46,139,87,0.04)',
+        bgcolor: 'brandTintBg',
         p: 2,
         display: 'flex',
         flexDirection: 'column',

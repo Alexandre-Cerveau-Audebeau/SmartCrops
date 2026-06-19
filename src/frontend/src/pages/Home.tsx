@@ -301,7 +301,7 @@ export default function Home() {
       <HeroCarousel />
 
       {/* ==================== SECTION 2 — STATS BAR ==================== */}
-      <Box sx={{ bgcolor: '#1B5E3A', py: 3, color: '#fff' }}>
+      <Box sx={{ bgcolor: 'primary.dark', py: 3, color: '#fff' }}>
         <Container maxWidth="lg">
           <Box
             sx={{
@@ -445,7 +445,7 @@ export default function Home() {
       </Container>
 
       {/* ==================== SECTION 4 — LIBRARY PREVIEW ==================== */}
-      <Box sx={{ bgcolor: 'rgba(46, 125, 50, 0.04)', py: 8 }}>
+      <Box sx={{ bgcolor: 'brandTintBg', py: 8 }}>
         <Container maxWidth="lg">
           <Typography variant="h4" textAlign="center" gutterBottom>
             {t('home.libraryPreview.title')}
@@ -672,7 +672,7 @@ export default function Home() {
       </Box>
 
       {/* ==================== SECTION 7 — BUILT WITH ==================== */}
-      <Box sx={{ bgcolor: '#F5F5F5', py: 8 }}>
+      <Box sx={{ bgcolor: 'surfaceSubtle', py: 8 }}>
         <Container maxWidth="lg">
           <Typography variant="h4" textAlign="center" gutterBottom>
             {t('home.builtWith.title')}
@@ -791,7 +791,7 @@ export default function Home() {
       </Box>
 
       {/* ==================== SECTION 9 — NEWSLETTER ==================== */}
-      <Box sx={{ bgcolor: 'rgba(46, 125, 50, 0.04)', py: 6 }}>
+      <Box sx={{ bgcolor: 'brandTintBg', py: 6 }}>
         <Container maxWidth="sm" sx={{ textAlign: 'center' }}>
           <Typography variant="h5" gutterBottom>
             {t('home.newsletter.title')}

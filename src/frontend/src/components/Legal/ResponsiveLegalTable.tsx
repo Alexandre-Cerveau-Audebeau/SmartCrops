@@ -86,7 +86,8 @@ export default function ResponsiveLegalTable({
           key={i}
           role="listitem"
           sx={{
-            border: '1px solid rgba(0,0,0,0.12)',
+            border: '1px solid',
+            borderColor: 'divider',
             borderRadius: 2,
             p: 2,
             display: 'flex',

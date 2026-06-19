@@ -43,7 +43,12 @@ export default function Login() {
     <Container maxWidth="xs" sx={{ pt: 8 }}>
       <Card variant="outlined" sx={{ borderRadius: 3 }}>
         <CardContent sx={{ p: 4 }}>
-          <Typography variant="h5" fontWeight={700} color="primary" sx={{ mb: 3, textAlign: 'center' }}>
+          <Typography
+            variant="h5"
+            fontWeight={700}
+            color="primary"
+            sx={{ mb: 3, textAlign: 'center' }}
+          >
             {t('auth.login')}
           </Typography>
 
@@ -53,7 +58,12 @@ export default function Login() {
             </Alert>
           )}
 
-          <Box component="form" onSubmit={handleSubmit} aria-label={t('auth.login')} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box
+            component="form"
+            onSubmit={handleSubmit}
+            aria-label={t('auth.login')}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+          >
             <TextField
               label={t('auth.email')}
               type="email"
@@ -76,7 +86,15 @@ export default function Login() {
               fullWidth
               disabled={loading}
               aria-busy={loading}
-              startIcon={loading ? <CircularProgress size={18} color="inherit" aria-hidden="true" /> : undefined}
+              startIcon={
+                loading ? (
+                  <CircularProgress
+                    size={18}
+                    color="inherit"
+                    aria-hidden="true"
+                  />
+                ) : undefined
+              }
               sx={{ mt: 1 }}
             >
               {t('auth.loginButton')}
@@ -93,14 +111,19 @@ export default function Login() {
             variant="outlined"
             fullWidth
             aria-label={t('auth.googleLogin')}
-            onClick={() => { window.location.href = `${API_BASE}/api/auth/google-login`; }}
+            onClick={() => {
+              window.location.href = `${API_BASE}/api/auth/google-login`;
+            }}
             sx={{
-              bgcolor: '#fff',
-              color: '#444',
-              borderColor: '#ddd',
+              bgcolor: 'background.paper',
+              color: 'text.primary',
+              borderColor: 'borderSubtle',
               textTransform: 'none',
               fontWeight: 500,
-              '&:hover': { bgcolor: '#f5f5f5', borderColor: '#ccc' },
+              '&:hover': {
+                bgcolor: 'surfaceSubtle',
+                borderColor: 'borderSubtle',
+              },
             }}
           >
             {t('auth.googleLogin')}
