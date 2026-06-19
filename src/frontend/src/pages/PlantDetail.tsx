@@ -859,7 +859,7 @@ export default function PlantDetail() {
                   display: 'flex',
                   flexDirection: { xs: 'column', md: 'row' },
                   gap: '28px',
-                  alignItems: 'stretch',
+                  alignItems: 'flex-start',
                 }}
               >
                 {/* ── Left column: hero photo ─────────────────────────────── */}
@@ -868,7 +868,8 @@ export default function PlantDetail() {
                     position: 'relative',
                     width: { xs: '100%', md: '46%' },
                     flexShrink: 0,
-                    minHeight: { xs: 240, md: 340 },
+                    aspectRatio: '4 / 3',
+                    maxHeight: { md: 360 },
                     borderRadius: '14px',
                     overflow: 'hidden',
                     bgcolor: 'grey.100',
