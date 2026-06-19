@@ -1,7 +1,5 @@
 import './i18n/i18n';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
-import { ThemeProvider } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
 import CookieBanner from './components/CookieBanner';
 import Layout from './components/Layout/Layout';
 import ScrollToTop from './components/ScrollToTop';
@@ -28,12 +26,11 @@ import Profile from './pages/Profile';
 import Register from './pages/Register';
 import Shop from './pages/Shop';
 import Terms from './pages/Terms';
-import theme from './theme';
+import { ColorModeProvider } from './contexts/ColorModeContext';
 
 export default function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <ColorModeProvider>
       <LanguageProvider>
         <ErrorBoundary>
           <AuthProvider>
@@ -74,6 +71,6 @@ export default function App() {
           </AuthProvider>
         </ErrorBoundary>
       </LanguageProvider>
-    </ThemeProvider>
+    </ColorModeProvider>
   );
 }

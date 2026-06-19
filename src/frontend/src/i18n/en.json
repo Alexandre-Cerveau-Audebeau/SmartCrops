@@ -41,7 +41,8 @@
     "privacy": "Privacy",
     "copyright": "© {{year}} SmartCrops. All rights reserved.",
     "legalNotice": "Legal Notice",
-    "termsOfUse": "Terms of Use"
+    "termsOfUse": "Terms of Use",
+    "toggleTheme": "Toggle dark mode"
   },
   "home": {
     "hero": {

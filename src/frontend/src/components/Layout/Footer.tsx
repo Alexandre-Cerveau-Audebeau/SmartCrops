@@ -5,6 +5,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
+import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
 import FacebookIcon from '@mui/icons-material/Facebook';
@@ -13,8 +14,10 @@ import XIcon from '@mui/icons-material/X';
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import { NAV_BG } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
+import { useColorMode } from '../../hooks/useColorMode';
 import ComingSoonChip from '../ComingSoonChip';
 import LogoButton from '../LogoButton';
+import { Sym } from '../Sym';
 
 /**
  * SMA-151: single footer link helper for both the column lists (block) and the
@@ -88,6 +91,7 @@ const socialPlatforms = [
 export default function Footer() {
   const { t } = useTranslation();
   const { isAuthenticated, logout } = useAuth();
+  const { mode, toggle } = useColorMode();
 
   const columnSx = { flex: '1 1 180px', minWidth: 150 } as const;
 
@@ -274,6 +278,19 @@ export default function Footer() {
               <FooterLink label={legal.label} to={legal.to} inline />
             </Box>
           ))}
+          {/* SMA-184: discreet light/dark toggle at the end of the copyright row. */}
+          <IconButton
+            onClick={toggle}
+            aria-label={t('footer.toggleTheme', 'Toggle dark mode')}
+            size="small"
+            sx={{ color: 'inherit', ml: 0.5 }}
+          >
+            <Sym
+              name={mode === 'dark' ? 'light_mode' : 'dark_mode'}
+              size={20}
+              color="inherit"
+            />
+          </IconButton>
         </Box>
       </Container>
     </Box>
