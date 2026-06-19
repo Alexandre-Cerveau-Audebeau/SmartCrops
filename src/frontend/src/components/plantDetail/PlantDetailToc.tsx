@@ -194,6 +194,17 @@ export default function PlantDetailToc({
         flexGrow: 1,
         minHeight: 0,
         overflowY: 'auto',
+        // SMA-184: thin theme-aware scrollbar (borderSubtle thumb on a
+        // transparent track) so the default white track never shows in dark.
+        scrollbarWidth: 'thin',
+        scrollbarColor: (theme) => `${theme.palette.borderSubtle} transparent`,
+        '&::-webkit-scrollbar': { width: 8 },
+        '&::-webkit-scrollbar-track': { backgroundColor: 'transparent' },
+        '&::-webkit-scrollbar-thumb': {
+          backgroundColor: 'borderSubtle',
+          borderRadius: 8,
+        },
+        '&::-webkit-scrollbar-thumb:hover': { backgroundColor: 'divider' },
         bgcolor: 'background.paper',
         border: '1px solid',
         borderColor: 'borderSubtle',
