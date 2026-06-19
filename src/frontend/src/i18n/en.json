@@ -404,6 +404,22 @@
     "scientificData": {
       "comingSoon": "Detailed scientific measurements (water needs in litres, light exposure in lumens, nutrient requirements, growth duration) will be available in an upcoming update.",
       "title": "Scientific data",
+      "sectionTitle": "Scientific data · cultivation / greenhouse",
+      "caption": "General parameters are already available; fine-grained control metrics arrive with sensor integration.",
+      "availableTitle": "Available",
+      "comingTitle": "Coming · exact measurements",
+      "coming": {
+        "light": { "label": "Light received", "unit": "lumens·h" },
+        "water": {
+          "label": "Water need",
+          "unitMetric": "L/day",
+          "unitImperial": "gal/day"
+        },
+        "npk": { "label": "NPK fertilisation", "unit": "g·week" },
+        "germination": { "label": "Germination", "unit": "days" },
+        "humidity": { "label": "Humidity range", "unit": "%RH" },
+        "temp": { "label": "Temperature range", "unit": "°C exact" }
+      },
       "wateringPh": "Watering pH range",
       "wateringIdealTemp": "Ideal watering temperature",
       "sunlightHours": "Daily sunlight",
@@ -480,14 +496,75 @@
       "attractsPollinators": "Attracts pollinators"
     },
     "lifecycle": {
+      "sectionTitle": "Seasonal calendar & timeline",
+      "caption": "Overview — stages from seed to harvest, mapped across 12 months.",
+      "modeOutdoor": "Outdoor",
+      "modeIndoor": "Indoor · greenhouse · IoT",
+      "monthsShort": [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec"
+      ],
       "stages": {
-        "sowing": "Sowing",
-        "growth": "Growth",
+        "sowing": "Seed · sowing",
+        "growth": "Plant · growth",
         "flowering": "Flowering",
+        "fruiting": "Fruits",
+        "harvest": "Harvest"
+      },
+      "legend": {
+        "seed": "Seed",
+        "plant": "Plant",
+        "flowering": "Flowering",
+        "fruits": "Fruits",
         "harvest": "Harvest"
       },
       "perennialNote": "Perennial growth resumes each year.",
       "biennialNote": "Vegetative growth in year 1, flowering and fruiting in year 2."
+    },
+    "comingSoonDataBadge": "COMING SOON · DATA",
+    "faq": {
+      "sectionTitle": "Frequently asked questions",
+      "caption": "Auto-generated from the plant's data fields.",
+      "edible": {
+        "q": "Is this plant edible?",
+        "aYes": "Yes, this plant is edible.",
+        "aYesParts": "Yes, this plant is edible ({{parts}}).",
+        "aNo": "No, this plant is not considered edible.",
+        "partFruit": "fruit",
+        "partLeaves": "leaves"
+      },
+      "toxic": {
+        "q": "Is this plant toxic to pets?",
+        "aYes": "Yes, this plant is toxic to pets.",
+        "aNo": "No, this plant is not reported as toxic to pets."
+      },
+      "sun": {
+        "q": "How much sun does this plant need?",
+        "a": "This plant prefers about {{hours}} of sun per day."
+      },
+      "hardiness": {
+        "q": "Which hardiness zones does it grow in?",
+        "a": "USDA zones {{min}} to {{max}}.",
+        "annualNote": "Often grown as an annual outside these zones."
+      },
+      "ph": {
+        "q": "What soil pH does it prefer?",
+        "a": "A soil pH of {{ph}}."
+      },
+      "spacing": {
+        "q": "How far apart should it be spaced?",
+        "a": "{{spacing}} between plants."
+      }
     },
     "enumValues": {
       "lifeCycle": {

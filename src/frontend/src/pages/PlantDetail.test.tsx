@@ -301,7 +301,7 @@ describe('PlantDetail', () => {
     );
     expect(
       await screen.findByRole('heading', {
-        name: 'Scientific data',
+        name: 'Scientific data · cultivation / greenhouse',
       })
     ).toBeInTheDocument();
     // Scoped to the F.6 section — the same value also appears in the hero gauge
@@ -327,7 +327,7 @@ describe('PlantDetail', () => {
       })
     );
     await screen.findByRole('heading', {
-      name: 'Scientific data',
+      name: 'Scientific data · cultivation / greenhouse',
     });
     expect(screen.queryByText('Watering pH range')).not.toBeInTheDocument();
     expect(screen.getByText('Ideal watering temperature')).toBeInTheDocument();
@@ -340,7 +340,7 @@ describe('PlantDetail', () => {
     await screen.findByRole('heading', { name: 'Basil' });
     expect(
       screen.queryByRole('heading', {
-        name: 'Scientific data',
+        name: 'Scientific data · cultivation / greenhouse',
       })
     ).not.toBeInTheDocument();
   });

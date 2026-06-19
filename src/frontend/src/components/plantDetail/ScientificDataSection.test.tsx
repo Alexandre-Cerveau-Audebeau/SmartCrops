@@ -40,12 +40,19 @@ function renderSci(plant: Plant) {
 }
 
 describe('ScientificDataSection (SMA-178)', () => {
-  it('renders the title and a formatted xData field', () => {
+  it('renders the section title, the Available card with a real metric, and the Coming teaser', () => {
     renderSci(makePlant());
 
-    expect(screen.getByText('Scientific data')).toBeInTheDocument();
+    expect(
+      screen.getByText('Scientific data · cultivation / greenhouse')
+    ).toBeInTheDocument();
+    // Available card with the real pH metric.
+    expect(screen.getByText('Available')).toBeInTheDocument();
     expect(screen.getByText('Watering pH range')).toBeInTheDocument();
     expect(screen.getByText('6–7')).toBeInTheDocument();
+    // Coming teaser card with a sensor placeholder.
+    expect(screen.getByText('Coming · exact measurements')).toBeInTheDocument();
+    expect(screen.getByText('Water need')).toBeInTheDocument();
   });
 
   it('renders nothing when perenualData is absent', () => {
