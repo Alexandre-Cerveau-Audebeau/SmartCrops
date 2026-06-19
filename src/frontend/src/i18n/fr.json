@@ -42,7 +42,9 @@
     "copyright": "© {{year}} SmartCrops. Tous droits réservés.",
     "legalNotice": "Mentions légales",
     "termsOfUse": "CGU",
-    "toggleTheme": "Basculer le mode sombre"
+    "theme": "Thème",
+    "lightMode": "Mode clair",
+    "darkMode": "Mode sombre"
   },
   "home": {
     "hero": {
