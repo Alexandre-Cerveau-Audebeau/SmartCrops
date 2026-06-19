@@ -19,7 +19,7 @@ export default function FaqSection({ plant }: { plant: Plant }) {
   const { t } = useTranslation();
   const { system } = useUnitSystem();
   const items = buildFaqItems(plant, t, system);
-  const [open, setOpen] = useState(0);
+  const [open, setOpen] = useState<number | null>(0);
 
   if (items.length === 0) return null;
 
@@ -70,7 +70,7 @@ export default function FaqSection({ plant }: { plant: Plant }) {
               <Box
                 component="button"
                 type="button"
-                onClick={() => setOpen(isOpen ? -1 : i)}
+                onClick={() => setOpen(isOpen ? null : i)}
                 aria-expanded={isOpen}
                 sx={{
                   display: 'flex',

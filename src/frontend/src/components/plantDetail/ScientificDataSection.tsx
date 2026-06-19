@@ -14,8 +14,16 @@ import {
 } from '../../utils/plantDetail';
 import { Sym } from '../Sym';
 
+type ComingItemKey =
+  | 'light'
+  | 'water'
+  | 'npk'
+  | 'germination'
+  | 'humidity'
+  | 'temp';
+
 // Six sensor placeholders for the dashed "Coming" teaser card (design HTML).
-const COMING_ITEMS: ReadonlyArray<{ key: string; icon: string }> = [
+const COMING_ITEMS: ReadonlyArray<{ key: ComingItemKey; icon: string }> = [
   { key: 'light', icon: 'wb_incandescent' },
   { key: 'water', icon: 'water_drop' },
   { key: 'npk', icon: 'compost' },

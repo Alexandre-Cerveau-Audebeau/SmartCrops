@@ -63,10 +63,10 @@ export function buildFaqItems(
   }
 
   // 4. Hardiness zones (+ annual note when the plant is an annual).
-  if (plant.hardinessZoneMin != null) {
-    const min = plant.hardinessZoneMin;
-    const max = plant.hardinessZoneMax ?? plant.hardinessZoneMin;
-    let a = t(`${F}.hardiness.a`, { min, max });
+  const hardinessMin = plant.hardinessZoneMin ?? plant.hardinessZoneMax;
+  const hardinessMax = plant.hardinessZoneMax ?? plant.hardinessZoneMin;
+  if (hardinessMin != null && hardinessMax != null) {
+    let a = t(`${F}.hardiness.a`, { min: hardinessMin, max: hardinessMax });
     if (plant.lifeCycle === 'Annual') a += ` ${t(`${F}.hardiness.annualNote`)}`;
     items.push({ q: t(`${F}.hardiness.q`), a });
   }

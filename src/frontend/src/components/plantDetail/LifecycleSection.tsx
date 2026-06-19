@@ -34,7 +34,11 @@ const STAGES: ReadonlyArray<{
 const GRID_COLS = '150px repeat(12, 1fr)';
 const TIMELINE_MIN_W = 760; // min width before horizontal scroll kicks in (mobile)
 
-/** Collapse a set of 1-based month indices into contiguous [start,end] runs (1=Jan). */
+/**
+ * Collapse a set of 1-based month indices into contiguous [start,end] runs (1=Jan).
+ * Note: does NOT treat December->January as contiguous (e.g. [11,12,1,2] yields two
+ * runs 11-12 and 1-2), which is intended for the linear Jan->Dec timeline.
+ */
 function toRuns(months: number[]): Array<{ start: number; end: number }> {
   const uniq = Array.from(new Set(months))
     .filter((m) => m >= 1 && m <= 12)
@@ -62,9 +66,28 @@ function toRuns(months: number[]): Array<{ start: number; end: number }> {
  */
 export default function LifecycleSection({ plant }: { plant: Plant }) {
   const { t } = useTranslation();
-  const months = t('plantDetail.lifecycle.monthsShort', {
+  const monthsRaw = t('plantDetail.lifecycle.monthsShort', {
     returnObjects: true,
-  }) as unknown as string[];
+  });
+  const months =
+    Array.isArray(monthsRaw) &&
+    monthsRaw.length === 12 &&
+    monthsRaw.every((m): m is string => typeof m === 'string')
+      ? monthsRaw
+      : [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
+        ];
 
   const monthsByStage: Record<string, number[]> = {
     sowing: periodToMonths(plant.sowingPeriod),
@@ -72,7 +95,9 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
     flowering: periodToMonths(plant.perenualData?.floweringSeason),
     fruiting: [],
     harvest: periodToMonths(
-      plant.harvestPeriod ?? plant.perenualData?.harvestSeason
+      plant.harvestPeriod?.trim()
+        ? plant.harvestPeriod
+        : plant.perenualData?.harvestSeason
     ),
   };
 
