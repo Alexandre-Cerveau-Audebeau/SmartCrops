@@ -395,6 +395,13 @@ export default function PlantDetail() {
       plant ? (plant.images.find((i) => i.url === heroImageUrl) ?? null) : null,
     [plant, heroImageUrl]
   );
+  // SMA-39: compact attribution for the hero overlay, composed from REAL fields
+  // only ("{source} · {license}", matching the design chip) — never fabricate a
+  // credit or licence. Empty string when no metadata exists → no overlay. The
+  // full "© credit · source · license" line stays in the lightbox.
+  const heroAttribution = heroImage
+    ? [heroImage.source, heroImage.licenseName].filter(Boolean).join(' · ')
+    : '';
   // SMA-118: the gallery (thumbnails, category-filter row, "+N" count, lightbox)
   // all derive from this — filter to STABLE-source images only (Trefle/PlantNet)
   // so no dead Perenual URL ever renders a broken tile, consistent with
@@ -948,7 +955,7 @@ export default function PlantDetail() {
                       {t('plantDetail.gallery.seeGallery')}
                     </Box>
                   )}
-                  {heroImage && (heroImage.credit || heroImage.licenseName) && (
+                  {heroAttribution && (
                     <Box
                       sx={{
                         position: 'absolute',
@@ -963,7 +970,7 @@ export default function PlantDetail() {
                         pointerEvents: 'none',
                       }}
                     >
-                      {`${heroImage.credit ?? 'Trefle'} · ${heroImage.licenseName ?? 'CC-BY-SA'}`}
+                      {heroAttribution}
                     </Box>
                   )}
                 </Box>
