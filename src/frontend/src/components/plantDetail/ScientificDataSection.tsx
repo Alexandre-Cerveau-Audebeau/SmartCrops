@@ -92,7 +92,12 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
   const chips = (label: string, values: string[], dict: string) => (
     <Box>
       <Typography
-        sx={{ fontSize: 12, fontWeight: 700, color: '#5a665c', mb: 0.75 }}
+        sx={{
+          fontSize: 12,
+          fontWeight: 700,
+          color: 'text.secondary',
+          mb: 0.75,
+        }}
       >
         {label}
       </Typography>
@@ -132,7 +137,7 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
             m: 0,
             fontSize: '23px',
             fontWeight: 800,
-            color: '#1B5E3A',
+            color: 'heading',
             letterSpacing: '-0.01em',
           }}
         >
@@ -158,7 +163,9 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
         </Box>
       </Box>
 
-      <Typography sx={{ m: 0, mb: '14px', fontSize: 13, color: '#7a857f' }}>
+      <Typography
+        sx={{ m: 0, mb: '14px', fontSize: 13, color: 'text.secondary' }}
+      >
         {t(`${sd}.caption`)}
       </Typography>
 
@@ -174,8 +181,9 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
         {/* Available */}
         <Box
           sx={{
-            bgcolor: '#fff',
-            border: '1px solid #ECF1EA',
+            bgcolor: 'background.paper',
+            border: '1px solid',
+            borderColor: 'borderSubtle',
             borderRadius: '12px',
             p: '18px 20px',
             boxShadow: '0 1px 3px rgba(27,94,58,0.05)',
@@ -190,11 +198,11 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
               fontWeight: 800,
               textTransform: 'uppercase',
               letterSpacing: '0.04em',
-              color: '#1B5E3A',
+              color: 'heading',
               mb: '14px',
             }}
           >
-            <Sym name="check_circle" size={18} color="#2E8B57" />
+            <Sym name="check_circle" size={18} color="inherit" />
             {t(`${sd}.availableTitle`)}
           </Box>
           <Stack spacing="10px">
@@ -206,22 +214,23 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
                   alignItems: 'center',
                   gap: '12px',
                   p: '10px 12px',
-                  bgcolor: '#F7FBF5',
+                  bgcolor: 'surfaceSubtle',
+                  color: 'primary.main',
                   borderRadius: '9px',
                 }}
               >
-                <Sym name={r.icon} size={20} color="#2E8B57" />
+                <Sym name={r.icon} size={20} color="inherit" />
                 <Box
                   sx={{
                     flex: 1,
                     fontSize: 13,
                     fontWeight: 600,
-                    color: '#3a463f',
+                    color: 'text.primary',
                   }}
                 >
                   {r.label}
                 </Box>
-                <Box sx={{ fontSize: 14, fontWeight: 700, color: '#1B5E3A' }}>
+                <Box sx={{ fontSize: 14, fontWeight: 700, color: 'heading' }}>
                   {r.value}
                 </Box>
               </Box>

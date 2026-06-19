@@ -119,7 +119,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
             m: 0,
             fontSize: '23px',
             fontWeight: 800,
-            color: '#1B5E3A',
+            color: 'heading',
             letterSpacing: '-0.01em',
           }}
         >
@@ -156,13 +156,13 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
           mb: '14px',
         }}
       >
-        <Typography sx={{ m: 0, fontSize: 13, color: '#7a857f' }}>
+        <Typography sx={{ m: 0, fontSize: 13, color: 'text.secondary' }}>
           {t('plantDetail.lifecycle.caption')}
         </Typography>
         <Box
           sx={{
             display: 'flex',
-            bgcolor: '#F2F6F0',
+            bgcolor: 'surfaceSubtle',
             borderRadius: '9px',
             p: '3px',
             gap: '3px',
@@ -191,7 +191,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
             disableRipple
             sx={{
               bgcolor: 'transparent',
-              color: '#7a857f',
+              color: 'text.secondary',
               fontWeight: 700,
               borderRadius: '7px',
               px: '14px',
@@ -199,7 +199,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
               fontSize: 13,
               textTransform: 'none',
               minWidth: 0,
-              '&.Mui-disabled': { color: '#7a857f' },
+              '&.Mui-disabled': { color: 'text.secondary' },
             }}
           >
             {t('plantDetail.lifecycle.modeIndoor')}
@@ -210,8 +210,9 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
       {/* ── Card: timeline + legend only ─────────────────────────────────── */}
       <Box
         sx={{
-          bgcolor: '#fff',
-          border: '1px solid #ECF1EA',
+          bgcolor: 'background.paper',
+          border: '1px solid',
+          borderColor: 'borderSubtle',
           borderRadius: '12px',
           p: '20px 22px',
           boxShadow: '0 1px 3px rgba(27,94,58,0.05)',
@@ -236,8 +237,9 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                     textAlign: 'center',
                     fontSize: 11,
                     fontWeight: 700,
-                    color: '#9aa5a0',
-                    borderLeft: '1px solid #F1F5F0',
+                    color: 'text.secondary',
+                    borderLeft: '1px solid',
+                    borderLeftColor: 'divider',
                     py: '2px',
                   }}
                 >
@@ -266,12 +268,12 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                         gap: '8px',
                         fontSize: 13,
                         fontWeight: 700,
-                        color: '#3a463f',
+                        color: 'text.primary',
                         whiteSpace: 'nowrap',
                         pr: 1,
                       }}
                     >
-                      <Sym name={s.icon} size={17} color="#7a857f" />
+                      <Sym name={s.icon} size={17} color="inherit" />
                       {t(`plantDetail.lifecycle.stages.${s.key}`)}
                     </Box>
                     {runs.map((run) => (
@@ -299,7 +301,8 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
             display: 'flex',
             flexWrap: 'wrap',
             gap: '16px',
-            borderTop: '1px solid #F1F5F0',
+            borderTop: '1px solid',
+            borderTopColor: 'divider',
             mt: '16px',
             pt: '14px',
           }}
@@ -313,7 +316,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                 gap: '6px',
                 fontSize: 12,
                 fontWeight: 600,
-                color: '#5a665c',
+                color: 'text.secondary',
               }}
             >
               <Box

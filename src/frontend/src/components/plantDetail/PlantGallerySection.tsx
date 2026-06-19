@@ -112,9 +112,10 @@ export default function PlantGallerySection({
                   fontSize: 13,
                   fontWeight: 600,
                   cursor: 'pointer',
-                  bgcolor: active ? '#2E8B57' : '#F2F6F0',
-                  color: active ? '#fff' : '#3a463f',
-                  border: active ? '1px solid #2E8B57' : '1px solid #E2EADF',
+                  bgcolor: active ? 'primary.main' : 'surfaceSubtle',
+                  color: active ? '#fff' : 'text.primary',
+                  border: '1px solid',
+                  borderColor: active ? 'primary.main' : 'borderSubtle',
                   '&:focus-visible': {
                     outline: '2px solid',
                     outlineColor: 'primary.main',
@@ -243,7 +244,7 @@ export default function PlantGallerySection({
                 sx={{
                   fontSize: 10,
                   fontFamily: 'ui-monospace, monospace',
-                  color: '#b0bbb2',
+                  color: 'mutedText',
                 }}
               >
                 {creditLine(img)}

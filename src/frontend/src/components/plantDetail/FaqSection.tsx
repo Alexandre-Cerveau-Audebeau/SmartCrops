@@ -33,7 +33,7 @@ export default function FaqSection({ plant }: { plant: Plant }) {
           mb: '4px',
           fontSize: '23px',
           fontWeight: 800,
-          color: '#1B5E3A',
+          color: 'heading',
           letterSpacing: '-0.01em',
         }}
       >
@@ -46,10 +46,10 @@ export default function FaqSection({ plant }: { plant: Plant }) {
           gap: '6px',
           mb: '14px',
           fontSize: 13,
-          color: '#7a857f',
+          color: 'text.secondary',
         }}
       >
-        <Sym name="bolt" size={15} color="#7a857f" />
+        <Sym name="bolt" size={15} color="inherit" />
         {t(`${F}.caption`)}
       </Box>
 
@@ -60,8 +60,9 @@ export default function FaqSection({ plant }: { plant: Plant }) {
             <Box
               key={item.q}
               sx={{
-                bgcolor: '#fff',
-                border: '1px solid #ECF1EA',
+                bgcolor: 'background.paper',
+                border: '1px solid',
+                borderColor: 'borderSubtle',
                 borderRadius: '12px',
                 boxShadow: '0 1px 3px rgba(27,94,58,0.05)',
                 overflow: 'hidden',
@@ -90,7 +91,7 @@ export default function FaqSection({ plant }: { plant: Plant }) {
                     flex: 1,
                     fontSize: 15,
                     fontWeight: 700,
-                    color: '#1B5E3A',
+                    color: 'heading',
                   }}
                 >
                   {item.q}
@@ -98,11 +99,12 @@ export default function FaqSection({ plant }: { plant: Plant }) {
                 <Box
                   sx={{
                     display: 'flex',
+                    color: 'text.secondary',
                     transition: 'transform 0.2s',
                     transform: isOpen ? 'rotate(180deg)' : 'none',
                   }}
                 >
-                  <Sym name="expand_more" size={22} color="#9aa5a0" />
+                  <Sym name="expand_more" size={22} color="inherit" />
                 </Box>
               </Box>
               {isOpen && (
@@ -111,7 +113,7 @@ export default function FaqSection({ plant }: { plant: Plant }) {
                     p: '0 18px 18px',
                     fontSize: 14,
                     lineHeight: 1.6,
-                    color: '#4a564d',
+                    color: 'text.primary',
                   }}
                 >
                   {item.a}

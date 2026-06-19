@@ -9,12 +9,16 @@ declare module '@mui/material/styles' {
     borderSubtle: string;
     mutedText: string;
     brandTintBg: string;
+    heading: string;
+    eyebrow: string;
   }
   interface PaletteOptions {
     surfaceSubtle?: string;
     borderSubtle?: string;
     mutedText?: string;
     brandTintBg?: string;
+    heading?: string;
+    eyebrow?: string;
   }
 }
 
@@ -43,17 +47,19 @@ export function createAppTheme(mode: 'light' | 'dark'): Theme {
           },
           background: {
             default: '#0D1E34',
-            paper: '#17281E',
+            paper: '#16294A',
           },
           text: {
             primary: '#E8EEF4',
             secondary: '#9FAAB6',
           },
-          divider: '#2C3B31',
-          surfaceSubtle: '#20342A',
-          borderSubtle: '#2C3B31',
+          divider: '#27374F',
+          surfaceSubtle: '#1E3358',
+          borderSubtle: 'rgba(79,179,124,0.45)',
           mutedText: '#6E7A84',
           brandTintBg: 'rgba(79,179,124,0.16)',
+          heading: '#4FB37C',
+          eyebrow: '#CF8A63',
         }
       : {
           mode: 'light',
@@ -75,6 +81,8 @@ export function createAppTheme(mode: 'light' | 'dark'): Theme {
           borderSubtle: '#E2EADF',
           mutedText: '#b0bbb2',
           brandTintBg: '#EAF5EE',
+          heading: '#1B5E3A',
+          eyebrow: '#A0522D',
         },
     typography: {
       fontFamily: [
@@ -102,6 +110,12 @@ export function createAppTheme(mode: 'light' | 'dark'): Theme {
         styleOverrides: {
           root: {
             borderRadius: 12,
+            // Dark only: a soft-green border so navy cards lift off the navy
+            // canvas. Light adds no border (visually unchanged).
+            ...(isDark && {
+              border: '1px solid',
+              borderColor: 'rgba(79,179,124,0.45)',
+            }),
           },
         },
       },

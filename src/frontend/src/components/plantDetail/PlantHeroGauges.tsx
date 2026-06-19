@@ -136,7 +136,7 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
           fontSize: 11,
           textTransform: 'uppercase',
           letterSpacing: '0.07em',
-          color: '#7a857f',
+          color: 'text.secondary',
           fontWeight: 700,
           mb: '10px',
         }}
@@ -154,8 +154,9 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
           <Box
             key={g.key}
             sx={{
-              bgcolor: '#fff',
-              border: '1px solid #ECF1EA',
+              bgcolor: 'background.paper',
+              border: '1px solid',
+              borderColor: 'borderSubtle',
               borderRadius: '12px',
               padding: '14px',
               display: 'flex',
@@ -172,11 +173,12 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
                 width: 36,
                 height: 36,
                 flexShrink: 0,
-                bgcolor: '#EAF5EE',
+                bgcolor: 'brandTintBg',
+                color: 'primary.main',
                 borderRadius: '9px',
               }}
             >
-              <Sym name={g.icon} size={21} color="#2E8B57" />
+              <Sym name={g.icon} size={21} color="inherit" />
             </Box>
             <Box sx={{ minWidth: 0 }}>
               <Typography
@@ -184,7 +186,7 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
                   fontSize: 10,
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
-                  color: '#9aa5a0',
+                  color: 'text.secondary',
                   fontWeight: 700,
                 }}
               >
@@ -194,7 +196,7 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
                 sx={{
                   fontSize: 15,
                   fontWeight: 700,
-                  color: '#1B5E3A',
+                  color: 'heading',
                   lineHeight: 1.2,
                   mt: '1px',
                 }}

@@ -39,21 +39,23 @@ interface PlantDetailTocProps {
   disableSticky?: boolean;
 }
 
-// SMA-184: dark-mode / AA-contrast audit pending — the palette is captured here
-// in one place so that pass can retune every state from a single spot.
-const LIVE_GREEN = '#2E8B57'; // = theme primary
-const ACTIVE_BG = '#EAF5EE'; // primary ~12% opacity
-const ACTIVE_TEXT = '#1B5E3A';
-const IDLE_TEXT = '#4a564d';
+// SMA-184: the live/active neutrals + brand greens now resolve from theme tokens
+// ('primary.main', 'brandTintBg', 'heading', 'text.*') so the TOC follows
+// light/dark. The colored teaser-state indicators (orange/blue/grey) stay
+// literal — they're a colored semantic family retuned with the pastel pass.
 const COMING_DATA = '#C88968';
 const COMING_BACKEND = '#6D7DA4';
 const EMPTY_DOT = '#C9D3CC';
 
-/** Bullet colour per state (the small leading disc). */
+/**
+ * Bullet colour per state (the small leading disc). The `live` case returns the
+ * 'primary.main' theme token (resolved by the consuming `sx`); the others are
+ * literal teaser-state colors.
+ */
 function dotColor(state: TocState): string {
   switch (state) {
     case 'live':
-      return LIVE_GREEN;
+      return 'primary.main';
     case 'coming-data':
       return COMING_DATA;
     case 'coming-backend':
@@ -104,7 +106,7 @@ export default function PlantDetailToc({
           gap: 1,
           overflowX: 'auto',
           py: 1,
-          bgcolor: '#FAFDF7',
+          bgcolor: 'background.default',
           // Hide the scrollbar — the row scrolls horizontally by drag/swipe.
           scrollbarWidth: 'none',
           '&::-webkit-scrollbar': { display: 'none' },
@@ -128,12 +130,16 @@ export default function PlantDetailToc({
                 borderRadius: 999,
                 border: '1px solid',
                 borderColor: active
-                  ? LIVE_GREEN
+                  ? 'primary.main'
                   : coming
                     ? dotColor(s.state)
-                    : '#d8e0d6',
-                bgcolor: active ? LIVE_GREEN : '#fff',
-                color: active ? '#fff' : live ? IDLE_TEXT : 'text.secondary',
+                    : 'borderSubtle',
+                bgcolor: active ? 'primary.main' : 'background.paper',
+                color: active
+                  ? '#fff'
+                  : live
+                    ? 'text.primary'
+                    : 'text.secondary',
                 fontSize: 13.5,
                 fontWeight: 600,
                 whiteSpace: 'nowrap',
@@ -142,7 +148,7 @@ export default function PlantDetailToc({
                 opacity: live ? 1 : 0.75,
                 ...(live && {
                   '&:focus-visible': {
-                    outline: `2px solid ${LIVE_GREEN}`,
+                    outline: `2px solid ${theme.palette.primary.main}`,
                     outlineOffset: 2,
                   },
                 }),
@@ -186,8 +192,9 @@ export default function PlantDetailToc({
         flexGrow: 1,
         minHeight: 0,
         overflowY: 'auto',
-        bgcolor: '#fff',
-        border: '1px solid #ECF1EA',
+        bgcolor: 'background.paper',
+        border: '1px solid',
+        borderColor: 'borderSubtle',
         borderRadius: 3,
         p: 1,
         boxShadow: '0 1px 3px rgba(27,94,58,0.06)',
@@ -199,7 +206,7 @@ export default function PlantDetailToc({
           fontSize: 12,
           textTransform: 'uppercase',
           letterSpacing: '0.07em',
-          color: '#7a857f',
+          color: 'text.secondary',
           fontWeight: 700,
           px: 1.25,
           pt: 1,
@@ -227,10 +234,10 @@ export default function PlantDetailToc({
               py: 1.1,
               borderRadius: 2,
               borderLeft: '3px solid',
-              borderLeftColor: active ? LIVE_GREEN : 'transparent',
-              bgcolor: active ? ACTIVE_BG : 'transparent',
+              borderLeftColor: active ? 'primary.main' : 'transparent',
+              bgcolor: active ? 'brandTintBg' : 'transparent',
               color: active
-                ? ACTIVE_TEXT
+                ? 'heading'
                 : live
                   ? 'text.primary'
                   : 'text.secondary',
@@ -239,9 +246,11 @@ export default function PlantDetailToc({
               textDecoration: 'none',
               cursor: live ? 'pointer' : 'default',
               ...(live && {
-                '&:hover': { bgcolor: active ? ACTIVE_BG : '#F2F6F0' },
+                '&:hover': {
+                  bgcolor: active ? 'brandTintBg' : 'surfaceSubtle',
+                },
                 '&:focus-visible': {
-                  outline: `2px solid ${LIVE_GREEN}`,
+                  outline: `2px solid ${theme.palette.primary.main}`,
                   outlineOffset: 2,
                 },
               }),
@@ -265,7 +274,7 @@ export default function PlantDetailToc({
               sx={{
                 fontSize: 11,
                 fontWeight: 700,
-                color: active ? LIVE_GREEN : 'text.secondary',
+                color: active ? 'primary.main' : 'text.secondary',
                 width: 18,
                 flexShrink: 0,
                 mt: '1px',

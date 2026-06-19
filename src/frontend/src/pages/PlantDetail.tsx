@@ -991,7 +991,7 @@ export default function PlantDetail() {
                           fontWeight: 700,
                           letterSpacing: '0.08em',
                           textTransform: 'uppercase',
-                          color: '#A0522D',
+                          color: 'eyebrow',
                           mb: 0.5,
                         }}
                       >
@@ -1001,7 +1001,7 @@ export default function PlantDetail() {
                     <Typography
                       variant="h3"
                       fontWeight={700}
-                      sx={{ mb: 0.5, color: '#1B5E3A' }}
+                      sx={{ mb: 0.5, color: 'heading' }}
                     >
                       {displayName}
                     </Typography>
@@ -1034,9 +1034,10 @@ export default function PlantDetail() {
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '5px',
-                            bgcolor: '#F2F6F0',
-                            color: '#3a463f',
-                            border: '1px solid #E2EADF',
+                            bgcolor: 'surfaceSubtle',
+                            color: 'text.primary',
+                            border: '1px solid',
+                            borderColor: 'borderSubtle',
                             borderRadius: '999px',
                             padding: '6px 12px',
                             fontSize: 13,
@@ -1045,7 +1046,7 @@ export default function PlantDetail() {
                         >
                           <Box
                             component="span"
-                            sx={{ color: '#9aa5a0', fontWeight: 500 }}
+                            sx={{ color: 'text.secondary', fontWeight: 500 }}
                           >
                             {t('plantDetail.labels.family')}
                           </Box>
@@ -1058,9 +1059,10 @@ export default function PlantDetail() {
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '5px',
-                            bgcolor: '#F2F6F0',
-                            color: '#3a463f',
-                            border: '1px solid #E2EADF',
+                            bgcolor: 'surfaceSubtle',
+                            color: 'text.primary',
+                            border: '1px solid',
+                            borderColor: 'borderSubtle',
                             borderRadius: '999px',
                             padding: '6px 12px',
                             fontSize: 13,
@@ -1069,7 +1071,7 @@ export default function PlantDetail() {
                         >
                           <Box
                             component="span"
-                            sx={{ color: '#9aa5a0', fontWeight: 500 }}
+                            sx={{ color: 'text.secondary', fontWeight: 500 }}
                           >
                             {t('plantDetail.labels.genus')}
                           </Box>
@@ -1089,16 +1091,17 @@ export default function PlantDetail() {
                           icon={<OpenInNewIcon sx={{ fontSize: 15 }} />}
                           sx={{
                             height: 'auto',
-                            bgcolor: '#fff',
-                            color: '#2C3E6B',
-                            border: '1px solid #cdd6e8',
+                            bgcolor: 'background.paper',
+                            color: 'secondary.main',
+                            border: '1px solid',
+                            borderColor: 'borderSubtle',
                             borderRadius: '999px',
                             fontSize: 13,
                             fontWeight: 700,
                             py: '6px',
                             '& .MuiChip-label': { px: '12px' },
                             '& .MuiChip-icon': {
-                              color: '#2C3E6B',
+                              color: 'secondary.main',
                               fontSize: 15,
                               ml: '8px',
                               mr: '-4px',
@@ -1220,7 +1223,7 @@ export default function PlantDetail() {
                 mb: '16px',
                 fontSize: 23,
                 fontWeight: 800,
-                color: '#1B5E3A',
+                color: 'heading',
                 letterSpacing: '-0.01em',
               }}
             >
