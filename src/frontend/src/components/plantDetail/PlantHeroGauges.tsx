@@ -1,15 +1,7 @@
-import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import AcUnitIcon from '@mui/icons-material/AcUnit';
-import HandymanIcon from '@mui/icons-material/Handyman';
-import HeightIcon from '@mui/icons-material/Height';
-import OpenInFullIcon from '@mui/icons-material/OpenInFull';
-import ScienceIcon from '@mui/icons-material/Science';
-import ThermostatIcon from '@mui/icons-material/Thermostat';
-import WaterDropIcon from '@mui/icons-material/WaterDrop';
-import WbSunnyIcon from '@mui/icons-material/WbSunny';
+import { Sym } from '../Sym';
 import type { Plant } from '../../types/Plant';
 import { useUnitSystem } from '../../hooks/useUnitSystem';
 import {
@@ -22,7 +14,7 @@ import {
 
 interface Gauge {
   key: string;
-  icon: ReactNode;
+  icon: string;
   label: string;
   value: string;
 }
@@ -44,6 +36,9 @@ interface Gauge {
  * toggle via the shared unit-aware formatters (SMA-178); sun hours, pH, hardiness
  * zone and the qualitative levels are shown verbatim. pH is the WATERING pH
  * (Perenual xData), not soil pH.
+ *
+ * SMA-39: pixel-match the Claude Design reference — each card is a tinted
+ * Material-Symbols icon tile beside an uppercase label and a bold value.
  */
 export default function PlantHeroGauges({ plant }: { plant: Plant }) {
   const { t } = useTranslation();
@@ -52,13 +47,13 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
 
   const candidates: {
     key: string;
-    icon: ReactNode;
+    icon: string;
     label: string;
     value: string | null;
   }[] = [
     {
       key: 'sun',
-      icon: <WbSunnyIcon sx={{ fontSize: 21 }} />,
+      icon: 'wb_sunny',
       label: t('plantDetail.gauges.sun'),
       value: pd
         ? formatXDataRange(pd.xSunlightHoursMin, pd.xSunlightHoursMax, ' h')
@@ -66,7 +61,7 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
     },
     {
       key: 'water',
-      icon: <WaterDropIcon sx={{ fontSize: 21 }} />,
+      icon: 'water_drop',
       label: t('plantDetail.gauges.water'),
       value: plant.wateringNeedLevel
         ? t(
@@ -77,7 +72,7 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
     },
     {
       key: 'hardiness',
-      icon: <AcUnitIcon sx={{ fontSize: 21 }} />,
+      icon: 'severe_cold',
       label: t('plantDetail.gauges.hardiness'),
       value: formatHardinessZone(
         plant.hardinessZoneMin,
@@ -86,19 +81,19 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
     },
     {
       key: 'height',
-      icon: <HeightIcon sx={{ fontSize: 21 }} />,
+      icon: 'height',
       label: t('plantDetail.gauges.height'),
       value: formatLength(plant.minHeightCm, plant.maxHeightCm, system),
     },
     {
       key: 'ph',
-      icon: <ScienceIcon sx={{ fontSize: 21 }} />,
+      icon: 'science',
       label: t('plantDetail.gauges.ph'),
       value: pd ? formatXDataRange(pd.xWateringPhMin, pd.xWateringPhMax) : null,
     },
     {
       key: 'temperature',
-      icon: <ThermostatIcon sx={{ fontSize: 21 }} />,
+      icon: 'device_thermostat',
       label: t('plantDetail.gauges.temperature'),
       value: pd
         ? formatTemperature(
@@ -110,7 +105,7 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
     },
     {
       key: 'spacing',
-      icon: <OpenInFullIcon sx={{ fontSize: 21 }} />,
+      icon: 'open_in_full',
       label: t('plantDetail.gauges.spacing'),
       value: pd
         ? formatSpacing(pd.xPlantSpacingValue, pd.xPlantSpacingUnit, system)
@@ -118,7 +113,7 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
     },
     {
       key: 'care',
-      icon: <HandymanIcon sx={{ fontSize: 21 }} />,
+      icon: 'build',
       label: t('plantDetail.gauges.care'),
       value: plant.careLevel
         ? t(
@@ -143,7 +138,7 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
           letterSpacing: '0.07em',
           color: '#7a857f',
           fontWeight: 700,
-          mb: 1.25,
+          mb: '10px',
         }}
       >
         {t('plantDetail.gauges.title')}
@@ -152,7 +147,7 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
         sx={{
           display: 'grid',
           gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
-          gap: 1.5,
+          gap: '12px',
         }}
       >
         {gauges.map((g) => (
@@ -161,10 +156,10 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
             sx={{
               bgcolor: '#fff',
               border: '1px solid #ECF1EA',
-              borderRadius: 3,
-              p: 1.75,
+              borderRadius: '12px',
+              padding: '14px',
               display: 'flex',
-              gap: 1.25,
+              gap: '11px',
               alignItems: 'flex-start',
               boxShadow: '0 1px 3px rgba(27,94,58,0.05)',
             }}
@@ -178,11 +173,10 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
                 height: 36,
                 flexShrink: 0,
                 bgcolor: '#EAF5EE',
-                borderRadius: 2,
-                color: 'primary.main',
+                borderRadius: '9px',
               }}
             >
-              {g.icon}
+              <Sym name={g.icon} size={21} color="#2E8B57" />
             </Box>
             <Box sx={{ minWidth: 0 }}>
               <Typography

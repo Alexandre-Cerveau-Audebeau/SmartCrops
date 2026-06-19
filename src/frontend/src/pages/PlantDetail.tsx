@@ -63,6 +63,7 @@ import {
 } from '../services/adminApi';
 import type { Garden } from '../types/Garden';
 import type { Plant, PlantImage } from '../types/Plant';
+import { Sym } from '../components/Sym';
 import PlantDetailToc from '../components/plantDetail/PlantDetailToc';
 import type { TocSection } from '../components/plantDetail/PlantDetailToc';
 import PlantHeroGauges from '../components/plantDetail/PlantHeroGauges';
@@ -385,6 +386,14 @@ export default function PlantDetail() {
   const heroImageUrl = useMemo(
     () => (plant ? pickHeroImage(plant) : ''),
     [plant]
+  );
+  // SMA-39: the PlantImage object behind the hero URL (for the attribution
+  // overlay). Null when the hero falls back to the legacy scalar or the brand
+  // placeholder — those carry no licence metadata, so no overlay renders.
+  const heroImage = useMemo<PlantImage | null>(
+    () =>
+      plant ? (plant.images.find((i) => i.url === heroImageUrl) ?? null) : null,
+    [plant, heroImageUrl]
   );
   // SMA-118: the gallery (thumbnails, category-filter row, "+N" count, lightbox)
   // all derive from this — filter to STABLE-source images only (Trefle/PlantNet)
@@ -899,6 +908,50 @@ export default function PlantDetail() {
                   }}
                 />
               )}
+              {/* SMA-39: hero overlays — gallery cue (bottom-left, when the
+              gallery has photos) and licence attribution (bottom-right, when the
+              hero is a real catalogued image). Decorative: pointer-events off so
+              the whole image stays a single click target for the lightbox. */}
+              {galleryImages.length > 0 && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    left: '12px',
+                    bottom: '12px',
+                    bgcolor: 'rgba(27,94,58,0.92)',
+                    color: '#fff',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    padding: '7px 12px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <Sym name="collections" size={16} color="#fff" />
+                  {t('plantDetail.gallery.seeGallery')}
+                </Box>
+              )}
+              {heroImage && (heroImage.credit || heroImage.licenseName) && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    right: '12px',
+                    bottom: '12px',
+                    bgcolor: 'rgba(255,255,255,0.92)',
+                    color: '#5a665c',
+                    fontSize: 10,
+                    fontFamily: 'ui-monospace, monospace',
+                    padding: '5px 9px',
+                    borderRadius: '6px',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {`${heroImage.credit ?? 'Trefle'} · ${heroImage.licenseName ?? 'CC-BY-SA'}`}
+                </Box>
+              )}
             </Box>
             <CardContent>
               <Stack
@@ -915,7 +968,7 @@ export default function PlantDetail() {
                         fontWeight: 700,
                         letterSpacing: '0.08em',
                         textTransform: 'uppercase',
-                        color: '#2E8B57',
+                        color: '#A0522D',
                         mb: 0.5,
                       }}
                     >
@@ -949,20 +1002,52 @@ export default function PlantDetail() {
                     sx={{ mt: 1.5, alignItems: 'center' }}
                   >
                     {plant.family && (
-                      <Typography variant="body2" color="text.secondary">
-                        {t('plantDetail.labels.family')}:{' '}
-                        <Box component="span" sx={{ fontWeight: 500 }}>
-                          {plant.family}
+                      <Box
+                        sx={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          bgcolor: '#F2F6F0',
+                          color: '#3a463f',
+                          border: '1px solid #E2EADF',
+                          borderRadius: '999px',
+                          padding: '6px 12px',
+                          fontSize: 13,
+                          fontWeight: 600,
+                        }}
+                      >
+                        <Box
+                          component="span"
+                          sx={{ color: '#9aa5a0', fontWeight: 500 }}
+                        >
+                          {t('plantDetail.labels.family')}
                         </Box>
-                      </Typography>
+                        {plant.family}
+                      </Box>
                     )}
                     {plant.genus && (
-                      <Typography variant="body2" color="text.secondary">
-                        {t('plantDetail.labels.genus')}:{' '}
-                        <Box component="span" sx={{ fontStyle: 'italic' }}>
-                          {plant.genus}
+                      <Box
+                        sx={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          bgcolor: '#F2F6F0',
+                          color: '#3a463f',
+                          border: '1px solid #E2EADF',
+                          borderRadius: '999px',
+                          padding: '6px 12px',
+                          fontSize: 13,
+                          fontWeight: 600,
+                        }}
+                      >
+                        <Box
+                          component="span"
+                          sx={{ color: '#9aa5a0', fontWeight: 500 }}
+                        >
+                          {t('plantDetail.labels.genus')}
                         </Box>
-                      </Typography>
+                        {plant.genus}
+                      </Box>
                     )}
                     {plant.gbifTaxonKey != null && (
                       <Chip
@@ -973,10 +1058,25 @@ export default function PlantDetail() {
                         label={t('plantDetail.gbifBadge', {
                           key: plant.gbifTaxonKey,
                         })}
-                        size="small"
                         clickable
-                        icon={<OpenInNewIcon fontSize="small" />}
-                        sx={{ bgcolor: 'grey.200' }}
+                        icon={<OpenInNewIcon sx={{ fontSize: 15 }} />}
+                        sx={{
+                          height: 'auto',
+                          bgcolor: '#fff',
+                          color: '#2C3E6B',
+                          border: '1px solid #cdd6e8',
+                          borderRadius: '999px',
+                          fontSize: 13,
+                          fontWeight: 700,
+                          py: '6px',
+                          '& .MuiChip-label': { px: '12px' },
+                          '& .MuiChip-icon': {
+                            color: '#2C3E6B',
+                            fontSize: 15,
+                            ml: '8px',
+                            mr: '-4px',
+                          },
+                        }}
                       />
                     )}
                   </Stack>
@@ -989,16 +1089,27 @@ export default function PlantDetail() {
                       sx={{ mt: 1.5 }}
                     >
                       {heroChips.map((c) => (
-                        <Chip
+                        <Box
                           key={c.key}
-                          label={c.label}
-                          size="small"
                           sx={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
                             bgcolor: c.bgcolor,
                             color: c.color,
-                            fontWeight: 500,
+                            border: c.border,
+                            borderRadius: '8px',
+                            padding: '7px 12px',
+                            fontSize: 13,
+                            fontWeight: 700,
+                            whiteSpace: 'nowrap',
                           }}
-                        />
+                        >
+                          {c.icon && (
+                            <Sym name={c.icon} size={18} color={c.color} />
+                          )}
+                          {c.label}
+                        </Box>
                       ))}
                     </Stack>
                   )}
@@ -1723,19 +1834,36 @@ export default function PlantDetail() {
 function buildFeatureChips(
   plant: Plant,
   t: ReturnType<typeof useTranslation>['t']
-): { key: string; label: string; bgcolor: string; color: string }[] {
+): {
+  key: string;
+  label: string;
+  bgcolor: string;
+  color: string;
+  border?: string;
+  icon?: string;
+}[] {
   const chips: {
     key: string;
     label: string;
     bgcolor: string;
     color: string;
+    border?: string;
+    icon?: string;
   }[] = [];
-  if (plant.isEdible)
+  // SMA-39: edibility and the two toxicity flags are independent semantic
+  // badges (no mutual exclusion) with Material-Symbols icons. The edible badge
+  // names the fruit explicitly when `edibleParts` lists one.
+  const edibleParts = parseStringArray(plant.edibleParts);
+  if (plant.isEdible || edibleParts.length > 0)
     chips.push({
       key: 'edible',
-      label: t('plantDetail.flags.edible'),
-      bgcolor: '#E8F5E9',
-      color: '#1B5E20',
+      label: edibleParts.some((p) => p.toLowerCase().includes('fruit'))
+        ? t('plantDetail.flags.edibleFruit')
+        : t('plantDetail.flags.edible'),
+      bgcolor: '#E6F4EC',
+      color: '#1B5E3A',
+      border: '1px solid #BCE2CC',
+      icon: 'restaurant',
     });
   if (plant.isMedicinal)
     chips.push({
@@ -1744,16 +1872,24 @@ function buildFeatureChips(
       bgcolor: '#E0F7FA',
       color: '#006064',
     });
-  if (plant.isToxicToHumans || plant.isToxicToPets) {
+  if (plant.isToxicToHumans)
     chips.push({
-      key: 'toxic',
-      label: plant.isToxicToHumans
-        ? t('plantDetail.flags.toxic')
-        : t('plantDetail.flags.toxicToPets'),
-      bgcolor: '#FFEBEE',
-      color: '#B71C1C',
+      key: 'toxic-humans',
+      label: t('plantDetail.flags.toxic'),
+      bgcolor: '#FCE9E7',
+      color: '#B23A2E',
+      border: '1px solid #F3C9C3',
+      icon: 'warning',
     });
-  }
+  if (plant.isToxicToPets)
+    chips.push({
+      key: 'toxic-pets',
+      label: t('plantDetail.flags.toxicToPets'),
+      bgcolor: '#FCE9E7',
+      color: '#B23A2E',
+      border: '1px solid #F3C9C3',
+      icon: 'pets',
+    });
   if (plant.isIndoor)
     chips.push({
       key: 'indoor',

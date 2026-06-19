@@ -484,6 +484,7 @@
     },
     "flags": {
       "edible": "Comestible",
+      "edibleFruit": "Fruit comestible",
       "medicinal": "Médicinal",
       "toxic": "Toxique",
       "toxicToPets": "Toxique pour animaux",
@@ -634,6 +635,7 @@
       "zoomLevel": "Zoom {{percent}} %",
       "openHero": "Ouvrir la galerie photo",
       "openTile": "Ouvrir la photo {{index}} dans la visionneuse",
+      "seeGallery": "Voir la galerie",
       "empty": "Pas encore de photos pour cette plante.",
       "types": {
         "all": "Tout",
