@@ -189,23 +189,19 @@ export default function PlantDetailToc({
         top: disableSticky ? 'auto' : 80,
         // SMA-178 layout v2: the parent rail wrapper owns the viewport height cap
         // (it includes the unit toggle above this nav, which the old per-nav
-        // maxHeight ignored). Here we just flex-grow into the remaining height and
-        // scroll the list internally so every 01–15 entry stays reachable.
+        // maxHeight ignored). Here we just flex-grow into the remaining height; an
+        // inner wrapper scrolls the list so every 01–15 entry stays reachable.
+        display: 'flex',
+        flexDirection: 'column',
         flexGrow: 1,
         minHeight: 0,
-        overflowY: 'auto',
         bgcolor: 'background.paper',
         border: '1px solid',
         borderColor: 'borderSubtle',
         borderRadius: 3,
-        p: 1,
-        // SMA-216: inset the (global) scrollbar track away from the rounded
-        // corners so the thumb stays on the flat part of the frame and never
-        // pokes past the radius. Colour/width come from the global style.
-        '&::-webkit-scrollbar-track': {
-          marginTop: '10px',
-          marginBottom: '10px',
-        },
+        px: 1,
+        pt: 1,
+        pb: 2,
         boxShadow: '0 1px 3px rgba(27,94,58,0.06)',
       }}
     >
@@ -224,96 +220,109 @@ export default function PlantDetailToc({
       >
         {t('plantDetail.toc.title')}
       </Typography>
-      {sections.map((s) => {
-        const live = s.state === 'live';
-        const active = live && s.id === activeId;
-        const coming =
-          s.state === 'coming-data' || s.state === 'coming-backend';
-        return (
-          <Box
-            key={s.id}
-            component={live ? 'a' : 'div'}
-            href={live ? `#${s.id}` : undefined}
-            aria-current={active ? 'location' : undefined}
-            sx={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 1,
-              px: 1.25,
-              py: 1.1,
-              borderRadius: 2,
-              borderLeft: '3px solid',
-              borderLeftColor: active ? 'primary.main' : 'transparent',
-              bgcolor: active ? 'brandTintBg' : 'transparent',
-              color: active
-                ? 'heading'
-                : live
-                  ? 'text.primary'
-                  : 'text.secondary',
-              fontWeight: active ? 500 : 400,
-              fontSize: 14,
-              textDecoration: 'none',
-              cursor: live ? 'pointer' : 'default',
-              ...(live && {
-                '&:hover': {
-                  bgcolor: active ? 'brandTintBg' : 'surfaceSubtle',
-                },
-                '&:focus-visible': {
-                  outline: `2px solid ${theme.palette.primary.main}`,
-                  outlineOffset: 2,
-                },
-              }),
-            }}
-          >
+      <Box
+        sx={{
+          flexGrow: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          // SMA-216: scroll scoped to the list only — the title stays fixed
+          // above, so the scrollbar is physically shorter; the frame's pb
+          // insets it from the rounded corners. Slim 4px; colour/thumb come
+          // from the global style.
+          '&::-webkit-scrollbar': { width: '4px' },
+        }}
+      >
+        {sections.map((s) => {
+          const live = s.state === 'live';
+          const active = live && s.id === activeId;
+          const coming =
+            s.state === 'coming-data' || s.state === 'coming-backend';
+          return (
             <Box
-              component="span"
-              aria-hidden="true"
+              key={s.id}
+              component={live ? 'a' : 'div'}
+              href={live ? `#${s.id}` : undefined}
+              aria-current={active ? 'location' : undefined}
               sx={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                flexShrink: 0,
-                mt: '6px',
-                bgcolor: dotColor(s.state, mode),
-              }}
-            />
-            <Box
-              component="span"
-              aria-hidden="true"
-              sx={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: active ? 'primary.main' : 'text.secondary',
-                width: 18,
-                flexShrink: 0,
-                mt: '1px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 1,
+                px: 1.25,
+                py: 1.1,
+                borderRadius: 2,
+                borderLeft: '3px solid',
+                borderLeftColor: active ? 'primary.main' : 'transparent',
+                bgcolor: active ? 'brandTintBg' : 'transparent',
+                color: active
+                  ? 'heading'
+                  : live
+                    ? 'text.primary'
+                    : 'text.secondary',
+                fontWeight: active ? 500 : 400,
+                fontSize: 14,
+                textDecoration: 'none',
+                cursor: live ? 'pointer' : 'default',
+                ...(live && {
+                  '&:hover': {
+                    bgcolor: active ? 'brandTintBg' : 'surfaceSubtle',
+                  },
+                  '&:focus-visible': {
+                    outline: `2px solid ${theme.palette.primary.main}`,
+                    outlineOffset: 2,
+                  },
+                }),
               }}
             >
-              {s.num}
-            </Box>
-            <Box component="span" sx={{ flex: 1, lineHeight: 1.25 }}>
-              {t(s.labelKey)}
-            </Box>
-            {coming && (
               <Box
                 component="span"
+                aria-hidden="true"
                 sx={{
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  color: 'text.secondary',
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
                   flexShrink: 0,
-                  mt: '2px',
-                  whiteSpace: 'nowrap',
+                  mt: '6px',
+                  bgcolor: dotColor(s.state, mode),
+                }}
+              />
+              <Box
+                component="span"
+                aria-hidden="true"
+                sx={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: active ? 'primary.main' : 'text.secondary',
+                  width: 18,
+                  flexShrink: 0,
+                  mt: '1px',
                 }}
               >
-                {t('plantDetail.sections.comingSoonTag')}
+                {s.num}
               </Box>
-            )}
-          </Box>
-        );
-      })}
+              <Box component="span" sx={{ flex: 1, lineHeight: 1.25 }}>
+                {t(s.labelKey)}
+              </Box>
+              {coming && (
+                <Box
+                  component="span"
+                  sx={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    color: 'text.secondary',
+                    flexShrink: 0,
+                    mt: '2px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {t('plantDetail.sections.comingSoonTag')}
+                </Box>
+              )}
+            </Box>
+          );
+        })}
+      </Box>
     </Box>
   );
 }
