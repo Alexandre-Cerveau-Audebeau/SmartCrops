@@ -8,7 +8,6 @@ export function FlagFr({ h = 13 }: FlagProps) {
       width={h * 1.5}
       height={h}
       viewBox="0 0 3 2"
-      role="img"
       aria-hidden="true"
       style={{ borderRadius: 2, display: 'block', flexShrink: 0 }}
     >
@@ -25,7 +24,6 @@ export function FlagUs({ h = 13 }: FlagProps) {
       width={h * 1.9}
       height={h}
       viewBox="0 0 19 10"
-      role="img"
       aria-hidden="true"
       style={{ borderRadius: 2, display: 'block', flexShrink: 0 }}
     >

@@ -8,8 +8,6 @@ export interface ColorModeContextValue {
   setMode: (m: ColorMode) => void;
 }
 
-export const ColorModeContext = createContext<ColorModeContextValue>({
-  mode: 'light',
-  toggle: () => {},
-  setMode: () => {},
-});
+export const ColorModeContext = createContext<
+  ColorModeContextValue | undefined
+>(undefined);

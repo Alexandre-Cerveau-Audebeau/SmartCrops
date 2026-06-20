@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../../i18n/i18n';
 import { AuthContext } from '../../contexts/authContextValue';
 import type { AuthContextValue } from '../../contexts/authContextValue';
+import { ColorModeProvider } from '../../contexts/ColorModeContext';
 import Footer from './Footer';
 
 function makeAuth(overrides: Partial<AuthContextValue> = {}): AuthContextValue {
@@ -24,11 +25,13 @@ function makeAuth(overrides: Partial<AuthContextValue> = {}): AuthContextValue {
 
 function renderFooter(auth: AuthContextValue = makeAuth()) {
   return render(
-    <AuthContext.Provider value={auth}>
-      <MemoryRouter>
-        <Footer />
-      </MemoryRouter>
-    </AuthContext.Provider>
+    <ColorModeProvider>
+      <AuthContext.Provider value={auth}>
+        <MemoryRouter>
+          <Footer />
+        </MemoryRouter>
+      </AuthContext.Provider>
+    </ColorModeProvider>
   );
 }
 
