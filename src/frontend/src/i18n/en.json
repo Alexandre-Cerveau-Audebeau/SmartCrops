@@ -537,6 +537,8 @@
       "biennialNote": "Vegetative growth in year 1, flowering and fruiting in year 2."
     },
     "comingSoonDataBadge": "COMING SOON · DATA",
+    "buildNowBadge": "BUILD NOW",
+    "comingSoonBackendBadge": "COMING SOON · BACKEND",
     "faq": {
       "sectionTitle": "Frequently asked questions",
       "caption": "Auto-generated from the plant's data fields.",
