@@ -2,8 +2,10 @@ import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
 import type { Plant } from '../../types/Plant';
 import { periodToMonths } from '../../utils/formatPeriod';
+import { NAV_BG } from '../../constants/colors';
 import SectionHeader from './SectionHeader';
 import StatusBadge from './StatusBadge';
 import { Sym } from '../Sym';
@@ -68,6 +70,7 @@ function toRuns(months: number[]): Array<{ start: number; end: number }> {
  */
 export default function LifecycleSection({ plant }: { plant: Plant }) {
   const { t } = useTranslation();
+  const mode = useTheme().palette.mode;
   const monthsRaw = t('plantDetail.lifecycle.monthsShort', {
     returnObjects: true,
   });
@@ -138,17 +141,20 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
           <Button
             disableRipple
             sx={{
-              bgcolor: '#fff',
-              color: '#1B5E3A',
-              fontWeight: 800,
-              borderRadius: '7px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+              // Active segment, mode-aware like UnitSystemToggle's selected
+              // option (SMA-217): light = raised white pill with NAV_BG text
+              // (unchanged); dark = the same brand-green fill with navy text.
+              bgcolor: mode === 'dark' ? 'primary.main' : '#fff',
+              color: mode === 'dark' ? 'background.default' : NAV_BG,
+              fontWeight: 700,
+              borderRadius: '8px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
               px: '14px',
               py: '8px',
               fontSize: 13,
               textTransform: 'none',
               minWidth: 0,
-              '&:hover': { bgcolor: '#fff' },
+              '&:hover': { bgcolor: mode === 'dark' ? 'primary.main' : '#fff' },
             }}
           >
             {t('plantDetail.lifecycle.modeOutdoor')}
