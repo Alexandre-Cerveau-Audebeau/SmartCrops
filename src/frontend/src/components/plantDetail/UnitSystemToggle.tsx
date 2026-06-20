@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import { useTheme } from '@mui/material/styles';
 import StraightenIcon from '@mui/icons-material/Straighten';
 import { useUnitSystem } from '../../hooks/useUnitSystem';
 import type { UnitSystem } from '../../contexts/unitSystemContextValue';
@@ -20,12 +21,14 @@ import { NAV_BG } from '../../constants/colors';
 export default function UnitSystemToggle() {
   const { t } = useTranslation();
   const { system, setSystem } = useUnitSystem();
+  const mode = useTheme().palette.mode;
 
   return (
     <Box
       sx={{
         bgcolor: 'background.paper',
-        border: '1px solid #ECF1EA',
+        border: '1px solid',
+        borderColor: 'borderSubtle',
         borderRadius: 3,
         p: 1.5,
         boxShadow: '0 1px 3px rgba(27,94,58,0.06)',
@@ -58,7 +61,7 @@ export default function UnitSystemToggle() {
         aria-label={t('plantDetail.units.label')}
         sx={{
           width: '100%',
-          bgcolor: '#EFF1EC',
+          bgcolor: 'surfaceSubtle',
           borderRadius: 1.5,
           p: '4px',
           gap: '4px',
@@ -80,10 +83,17 @@ export default function UnitSystemToggle() {
             '& .unit-triplet': { fontSize: 11, color: 'text.secondary' },
             '&:hover': { bgcolor: 'transparent' },
             '&.Mui-selected': {
-              bgcolor: '#fff',
+              bgcolor: mode === 'dark' ? 'primary.main' : '#fff',
               boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
-              '&:hover': { bgcolor: '#fff' },
-              '& .unit-name': { color: NAV_BG, fontWeight: 700 },
+              '&:hover': { bgcolor: mode === 'dark' ? 'primary.main' : '#fff' },
+              '& .unit-name': {
+                color: mode === 'dark' ? 'background.default' : NAV_BG,
+                fontWeight: 700,
+              },
+              '& .unit-triplet': {
+                color:
+                  mode === 'dark' ? 'background.default' : 'text.secondary',
+              },
             },
           },
         }}

@@ -1,4 +1,6 @@
 import Box from '@mui/material/Box';
+import { useTheme } from '@mui/material/styles';
+import { adaptBadge } from '../../utils/badgeColors';
 
 interface PlaceholderChipProps {
   text: string;
@@ -12,6 +14,10 @@ interface PlaceholderChipProps {
  * the EN pages — they are internal annotations, not user-facing content.
  */
 export default function PlaceholderChip({ text }: PlaceholderChipProps) {
+  const b = adaptBadge(
+    { bg: '#FDF0E7', fg: '#A14E2A', border: '#F0CDB0' },
+    useTheme().palette.mode
+  );
   return (
     <Box
       component="span"
@@ -21,9 +27,10 @@ export default function PlaceholderChip({ text }: PlaceholderChipProps) {
         py: 0.25,
         mx: 0.25,
         borderRadius: 1,
-        bgcolor: '#FDF0E7',
-        border: '1px solid #F0CDB0',
-        color: '#A14E2A',
+        bgcolor: b.bg,
+        border: '1px solid',
+        borderColor: b.border,
+        color: b.fg,
         fontFamily: '"Roboto Mono", Consolas, monospace',
         fontSize: '0.8em',
         fontWeight: 500,

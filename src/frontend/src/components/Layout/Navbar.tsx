@@ -33,6 +33,7 @@ import { NAV_BG } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
 import ComingSoonChip from '../ComingSoonChip';
+import LanguageMenu from '../LanguageMenu';
 import LogoButton from '../LogoButton';
 import ProfileMenuHeader from './ProfileMenuHeader';
 
@@ -78,6 +79,7 @@ export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [profileAnchor, setProfileAnchor] = useState<null | HTMLElement>(null);
   const theme = useTheme();
+  const mode = theme.palette.mode;
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { language, setLanguage } = useLanguage();
   const location = useLocation();
@@ -197,7 +199,10 @@ export default function Navbar() {
                 to="/profile"
                 onClick={toggleDrawer(false)}
                 aria-label={t('nav.editProfile')}
-                sx={{ bgcolor: '#F2F7EE', py: 1.5 }}
+                sx={{
+                  bgcolor: mode === 'dark' ? 'surfaceSubtle' : '#F2F7EE',
+                  py: 1.5,
+                }}
               >
                 <ProfileMenuHeader
                   name={profileLabel}
@@ -361,44 +366,7 @@ export default function Navbar() {
 
               {/* Right: language + auth */}
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={toggleLanguage}
-                  aria-label={t('nav.switchLanguage', {
-                    lang: language.toUpperCase(),
-                  })}
-                  sx={{
-                    color: '#fff',
-                    borderColor: 'rgba(255,255,255,0.5)',
-                    '&:hover': {
-                      borderColor: '#fff',
-                      bgcolor: 'rgba(255,255,255,0.1)',
-                    },
-                  }}
-                >
-                  <Box
-                    component="span"
-                    sx={{
-                      fontWeight: language === 'fr' ? 700 : 400,
-                      opacity: language === 'fr' ? 1 : 0.6,
-                    }}
-                  >
-                    FR
-                  </Box>
-                  <Box component="span" sx={{ mx: 0.5 }}>
-                    /
-                  </Box>
-                  <Box
-                    component="span"
-                    sx={{
-                      fontWeight: language === 'en' ? 700 : 400,
-                      opacity: language === 'en' ? 1 : 0.6,
-                    }}
-                  >
-                    EN
-                  </Box>
-                </Button>
+                <LanguageMenu />
                 {isAuthenticated ? (
                   <>
                     <Button
@@ -443,9 +411,13 @@ export default function Navbar() {
                         onClick={closeProfileMenu}
                         aria-label={t('nav.editProfile')}
                         sx={{
-                          bgcolor: '#F2F7EE',
+                          bgcolor:
+                            mode === 'dark' ? 'surfaceSubtle' : '#F2F7EE',
                           py: 1.5,
-                          '&:hover': { bgcolor: '#E0EDD4' },
+                          '&:hover': {
+                            bgcolor:
+                              mode === 'dark' ? 'brandTintBg' : '#E0EDD4',
+                          },
                         }}
                       >
                         <ProfileMenuHeader

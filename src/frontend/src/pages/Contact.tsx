@@ -503,7 +503,7 @@ export default function Contact() {
               flex: '1 1 260px',
               p: { xs: 2.5, md: 3 },
               alignSelf: 'flex-start',
-              bgcolor: 'rgba(46,125,50,0.04)',
+              bgcolor: 'brandTintBg',
             }}
           >
             <Typography

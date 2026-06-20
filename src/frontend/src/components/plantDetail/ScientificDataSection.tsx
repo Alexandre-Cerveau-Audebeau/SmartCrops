@@ -3,8 +3,10 @@ import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
 import { useUnitSystem } from '../../hooks/useUnitSystem';
 import type { Plant } from '../../types/Plant';
+import { adaptBadge } from '../../utils/badgeColors';
 import {
   formatSpacing,
   formatTemperature,
@@ -45,6 +47,8 @@ const COMING_ITEMS: ReadonlyArray<{ key: ComingItemKey; icon: string }> = [
 export default function ScientificDataSection({ plant }: { plant: Plant }) {
   const { t } = useTranslation();
   const { system } = useUnitSystem();
+  const mode = useTheme().palette.mode;
+  const comingBadge = adaptBadge({ bg: '#FBEEE6', fg: '#A0522D' }, mode);
   const pd = plant.perenualData;
   if (!pd) return null;
 
@@ -92,7 +96,12 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
   const chips = (label: string, values: string[], dict: string) => (
     <Box>
       <Typography
-        sx={{ fontSize: 12, fontWeight: 700, color: '#5a665c', mb: 0.75 }}
+        sx={{
+          fontSize: 12,
+          fontWeight: 700,
+          color: 'text.secondary',
+          mb: 0.75,
+        }}
       >
         {label}
       </Typography>
@@ -132,7 +141,7 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
             m: 0,
             fontSize: '23px',
             fontWeight: 800,
-            color: '#1B5E3A',
+            color: 'heading',
             letterSpacing: '-0.01em',
           }}
         >
@@ -145,20 +154,24 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
             gap: '5px',
             px: '9px',
             py: '4px',
-            bgcolor: '#FBEEE6',
-            color: '#A0522D',
+            bgcolor: comingBadge.bg,
+            color: comingBadge.fg,
+            border: '1px solid',
+            borderColor: comingBadge.border,
             borderRadius: '6px',
             fontSize: 10,
             fontWeight: 800,
             letterSpacing: '0.04em',
           }}
         >
-          <Sym name="schedule" size={13} color="#A0522D" />
+          <Sym name="schedule" size={13} color={comingBadge.fg} />
           {t('plantDetail.comingSoonDataBadge')}
         </Box>
       </Box>
 
-      <Typography sx={{ m: 0, mb: '14px', fontSize: 13, color: '#7a857f' }}>
+      <Typography
+        sx={{ m: 0, mb: '14px', fontSize: 13, color: 'text.secondary' }}
+      >
         {t(`${sd}.caption`)}
       </Typography>
 
@@ -174,8 +187,9 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
         {/* Available */}
         <Box
           sx={{
-            bgcolor: '#fff',
-            border: '1px solid #ECF1EA',
+            bgcolor: 'background.paper',
+            border: '1px solid',
+            borderColor: 'borderSubtle',
             borderRadius: '12px',
             p: '18px 20px',
             boxShadow: '0 1px 3px rgba(27,94,58,0.05)',
@@ -190,11 +204,11 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
               fontWeight: 800,
               textTransform: 'uppercase',
               letterSpacing: '0.04em',
-              color: '#1B5E3A',
+              color: 'heading',
               mb: '14px',
             }}
           >
-            <Sym name="check_circle" size={18} color="#2E8B57" />
+            <Sym name="check_circle" size={18} color="inherit" />
             {t(`${sd}.availableTitle`)}
           </Box>
           <Stack spacing="10px">
@@ -206,22 +220,23 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
                   alignItems: 'center',
                   gap: '12px',
                   p: '10px 12px',
-                  bgcolor: '#F7FBF5',
+                  bgcolor: 'surfaceSubtle',
+                  color: 'primary.main',
                   borderRadius: '9px',
                 }}
               >
-                <Sym name={r.icon} size={20} color="#2E8B57" />
+                <Sym name={r.icon} size={20} color="inherit" />
                 <Box
                   sx={{
                     flex: 1,
                     fontSize: 13,
                     fontWeight: 600,
-                    color: '#3a463f',
+                    color: 'text.primary',
                   }}
                 >
                   {r.label}
                 </Box>
-                <Box sx={{ fontSize: 14, fontWeight: 700, color: '#1B5E3A' }}>
+                <Box sx={{ fontSize: 14, fontWeight: 700, color: 'heading' }}>
                   {r.value}
                 </Box>
               </Box>
@@ -244,8 +259,9 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
         {/* Coming (teaser) */}
         <Box
           sx={{
-            bgcolor: '#FCFAF7',
-            border: '1px dashed #E2CDB8',
+            bgcolor: 'background.paper',
+            border: '1px solid',
+            borderColor: 'borderSubtle',
             borderRadius: '12px',
             p: '18px 20px',
           }}
@@ -259,11 +275,11 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
               fontWeight: 800,
               textTransform: 'uppercase',
               letterSpacing: '0.04em',
-              color: '#A0522D',
+              color: 'eyebrow',
               mb: '14px',
             }}
           >
-            <Sym name="pending" size={18} color="#A0522D" />
+            <Sym name="pending" size={18} color="inherit" />
             {t(`${sd}.comingTitle`)}
           </Box>
           <Box
@@ -277,15 +293,29 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
               <Box
                 key={c.key}
                 sx={{
-                  bgcolor: '#fff',
-                  border: '1px dashed #E6D3C2',
+                  bgcolor: 'background.paper',
+                  border: '1px dashed',
+                  borderColor: 'borderSubtle',
                   borderRadius: '9px',
                   p: '11px 12px',
                 }}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                  <Sym name={c.icon} size={17} color="#B98A5E" />
-                  <Box sx={{ fontSize: 11, fontWeight: 700, color: '#8a7a6a' }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '7px',
+                    color: 'eyebrow',
+                  }}
+                >
+                  <Sym name={c.icon} size={17} color="inherit" />
+                  <Box
+                    sx={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: 'text.secondary',
+                    }}
+                  >
                     {t(`${sd}.coming.${c.key}.label`)}
                   </Box>
                 </Box>
@@ -301,13 +331,13 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
                     sx={{
                       fontSize: 20,
                       fontWeight: 800,
-                      color: '#D9C3AE',
+                      color: 'mutedText',
                       letterSpacing: '0.06em',
                     }}
                   >
                     —
                   </Box>
-                  <Box sx={{ fontSize: 11, fontWeight: 600, color: '#B98A5E' }}>
+                  <Box sx={{ fontSize: 11, fontWeight: 600, color: 'eyebrow' }}>
                     {c.key === 'water'
                       ? waterUnit
                       : t(`${sd}.coming.${c.key}.unit`)}

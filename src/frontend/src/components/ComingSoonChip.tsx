@@ -1,8 +1,9 @@
 import Chip from '@mui/material/Chip';
-import { alpha } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import type { SxProps, Theme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
 import { TERRACOTTA } from '../constants/colors';
+import { adaptBadge } from '../utils/badgeColors';
 
 interface ComingSoonChipProps {
   /** i18n key for the label; defaults to the shared "coming soon" string. */
@@ -22,15 +23,23 @@ export default function ComingSoonChip({
   sx,
 }: ComingSoonChipProps) {
   const { t } = useTranslation();
+  const b = adaptBadge(
+    {
+      bg: alpha(TERRACOTTA, 0.12),
+      fg: TERRACOTTA,
+      border: alpha(TERRACOTTA, 0.35),
+    },
+    useTheme().palette.mode
+  );
   return (
     <Chip
       label={t(labelKey)}
       size={size}
       sx={{
-        bgcolor: alpha(TERRACOTTA, 0.12),
-        color: TERRACOTTA,
+        bgcolor: b.bg,
+        color: b.fg,
         fontWeight: 600,
-        border: `1px solid ${alpha(TERRACOTTA, 0.35)}`,
+        border: `1px solid ${b.border}`,
         ...sx,
       }}
     />

@@ -30,7 +30,7 @@ export default function ProfileMenuHeader({
           width: avatarSize,
           height: avatarSize,
           borderRadius: '50%',
-          bgcolor: 'rgba(46,139,87,0.15)',
+          bgcolor: 'brandTintBg',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -41,7 +41,12 @@ export default function ProfileMenuHeader({
       </Box>
       <Box sx={{ minWidth: 0, flexGrow: 1 }}>
         <Typography
-          sx={{ fontWeight: 700, fontSize: 15, lineHeight: 1.3 }}
+          sx={{
+            fontWeight: 700,
+            fontSize: 15,
+            lineHeight: 1.3,
+            color: 'text.primary',
+          }}
           noWrap
         >
           {name}
@@ -58,8 +63,9 @@ export default function ProfileMenuHeader({
           width: 32,
           height: 32,
           borderRadius: 2,
-          border: '1.5px solid rgba(27,94,58,0.25)',
-          bgcolor: '#fff',
+          border: '1.5px solid',
+          borderColor: 'borderSubtle',
+          bgcolor: 'background.paper',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

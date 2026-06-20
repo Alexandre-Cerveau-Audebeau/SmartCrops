@@ -15,6 +15,7 @@ import { NAV_BG } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
 import ComingSoonChip from '../ComingSoonChip';
 import LogoButton from '../LogoButton';
+import ThemeModeSwitch from '../ThemeModeSwitch';
 
 /**
  * SMA-151: single footer link helper for both the column lists (block) and the
@@ -274,6 +275,10 @@ export default function Footer() {
               <FooterLink label={legal.label} to={legal.to} inline />
             </Box>
           ))}
+          {/* SMA-184: day/night segmented switch at the end of the copyright row. */}
+          <Box sx={{ ml: 0.5 }}>
+            <ThemeModeSwitch />
+          </Box>
         </Box>
       </Container>
     </Box>

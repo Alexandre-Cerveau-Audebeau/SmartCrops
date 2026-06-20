@@ -11,7 +11,8 @@
     "homeAriaLabel": "Accueil SmartCrops",
     "openMenu": "Ouvrir le menu",
     "closeMenu": "Fermer le menu",
-    "switchLanguage": "Changer de langue (actuelle : {{lang}})"
+    "switchLanguage": "Changer de langue (actuelle : {{lang}})",
+    "changeLanguage": "Changer de langue"
   },
   "errorBoundary": {
     "title": "Une erreur est survenue",
@@ -40,7 +41,10 @@
     "privacy": "Confidentialité",
     "copyright": "© {{year}} SmartCrops. Tous droits réservés.",
     "legalNotice": "Mentions légales",
-    "termsOfUse": "CGU"
+    "termsOfUse": "CGU",
+    "theme": "Thème",
+    "lightMode": "Mode clair",
+    "darkMode": "Mode sombre"
   },
   "home": {
     "hero": {

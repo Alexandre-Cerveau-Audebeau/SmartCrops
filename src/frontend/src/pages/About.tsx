@@ -153,7 +153,7 @@ export default function About() {
       </Container>
 
       {/* ===== THE PROJECT ===== */}
-      <Box sx={{ bgcolor: 'rgba(46,125,50,0.04)', py: { xs: 6, md: 8 } }}>
+      <Box sx={{ bgcolor: 'brandTintBg', py: { xs: 6, md: 8 } }}>
         <Container maxWidth="md">
           <SectionHeading>{t('about.project.title')}</SectionHeading>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -225,7 +225,7 @@ export default function About() {
       </Container>
 
       {/* ===== BUILT WITH ===== */}
-      <Box sx={{ bgcolor: '#F5F5F5', py: { xs: 6, md: 8 } }}>
+      <Box sx={{ bgcolor: 'surfaceSubtle', py: { xs: 6, md: 8 } }}>
         <Container maxWidth="md">
           <SectionHeading>{t('about.builtWith.title')}</SectionHeading>
           <Box
@@ -241,7 +241,7 @@ export default function About() {
                 key={name}
                 label={name}
                 sx={{
-                  bgcolor: '#fff',
+                  bgcolor: 'background.paper',
                   border: '1px solid',
                   borderColor: 'divider',
                   fontWeight: 600,
@@ -253,7 +253,9 @@ export default function About() {
       </Box>
 
       {/* ===== CTA ===== */}
-      <Box sx={{ bgcolor: '#1B5E3A', color: '#fff', py: { xs: 6, md: 8 } }}>
+      <Box
+        sx={{ bgcolor: 'primary.dark', color: '#fff', py: { xs: 6, md: 8 } }}
+      >
         <Container maxWidth="sm" sx={{ textAlign: 'center' }}>
           <Typography
             variant="h4"
