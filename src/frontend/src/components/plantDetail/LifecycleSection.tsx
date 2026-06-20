@@ -4,6 +4,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import type { Plant } from '../../types/Plant';
 import { periodToMonths } from '../../utils/formatPeriod';
+import SectionHeader from './SectionHeader';
 import StatusBadge from './StatusBadge';
 import { Sym } from '../Sym';
 
@@ -105,29 +106,11 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
   return (
     <Box id="lifecycle" sx={{ scrollMarginTop: '80px', mb: 3 }}>
       {/* ── Title + COMING SOON · DATA badge (OUTSIDE the card) ───────────── */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          mb: '4px',
-          flexWrap: 'wrap',
-        }}
-      >
-        <Typography
-          component="h2"
-          sx={{
-            m: 0,
-            fontSize: '23px',
-            fontWeight: 800,
-            color: 'heading',
-            letterSpacing: '-0.01em',
-          }}
-        >
-          {t('plantDetail.lifecycle.sectionTitle')}
-        </Typography>
-        <StatusBadge variant="data" />
-      </Box>
+      <SectionHeader
+        title={t('plantDetail.lifecycle.sectionTitle')}
+        badge={<StatusBadge variant="data" />}
+        mb="4px"
+      />
 
       {/* ── Caption + mode toggle (OUTSIDE the card) ─────────────────────── */}
       <Box

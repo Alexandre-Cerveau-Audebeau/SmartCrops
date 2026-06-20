@@ -69,6 +69,7 @@ import PlantDetailToc from '../components/plantDetail/PlantDetailToc';
 import type { TocSection } from '../components/plantDetail/PlantDetailToc';
 import PlantHeroGauges from '../components/plantDetail/PlantHeroGauges';
 import PlantGallerySection from '../components/plantDetail/PlantGallerySection';
+import SectionHeader from '../components/plantDetail/SectionHeader';
 import UnitSystemToggle from '../components/plantDetail/UnitSystemToggle';
 import AboutSection from '../components/plantDetail/AboutSection';
 import LifecycleSection from '../components/plantDetail/LifecycleSection';
@@ -1226,19 +1227,7 @@ export default function PlantDetail() {
               the design has header + chips + filmstrip directly on the page
               background (global section-header pattern). ───────────────────── */}
           <Box id="gallery" sx={{ mb: 3, scrollMarginTop: '80px' }}>
-            <Typography
-              component="h2"
-              sx={{
-                m: 0,
-                mb: '16px',
-                fontSize: 23,
-                fontWeight: 800,
-                color: 'heading',
-                letterSpacing: '-0.01em',
-              }}
-            >
-              {t('plantDetail.sections.gallery')}
-            </Typography>
+            <SectionHeader title={t('plantDetail.sections.gallery')} />
             <PlantGallerySection
               key={plant.id}
               images={galleryImages}

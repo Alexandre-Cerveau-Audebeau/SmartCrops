@@ -5,6 +5,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useUnitSystem } from '../../hooks/useUnitSystem';
 import type { Plant } from '../../types/Plant';
+import SectionHeader from './SectionHeader';
 import StatusBadge from './StatusBadge';
 import {
   formatSpacing,
@@ -123,29 +124,11 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
   return (
     <Box id="scientific-data" sx={{ scrollMarginTop: '80px', mb: 3 }}>
       {/* ── Title + COMING SOON · DATA badge (OUTSIDE the cards) ──────────── */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          mb: '4px',
-          flexWrap: 'wrap',
-        }}
-      >
-        <Typography
-          component="h2"
-          sx={{
-            m: 0,
-            fontSize: '23px',
-            fontWeight: 800,
-            color: 'heading',
-            letterSpacing: '-0.01em',
-          }}
-        >
-          {t(`${sd}.sectionTitle`)}
-        </Typography>
-        <StatusBadge variant="data" />
-      </Box>
+      <SectionHeader
+        title={t(`${sd}.sectionTitle`)}
+        badge={<StatusBadge variant="data" />}
+        mb="4px"
+      />
 
       <Typography
         sx={{ m: 0, mb: '14px', fontSize: 13, color: 'text.secondary' }}
