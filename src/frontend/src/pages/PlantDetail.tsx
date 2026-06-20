@@ -1194,6 +1194,7 @@ export default function PlantDetail() {
                             anchorEl={adminMenuAnchor}
                             open={Boolean(adminMenuAnchor)}
                             onClose={() => setAdminMenuAnchor(null)}
+                            disableScrollLock
                           >
                             <MenuItem
                               onClick={() => handleReEnrich('trefle')}
@@ -2116,6 +2117,7 @@ function PhotoLightbox({
     <Dialog
       open
       onClose={onClose}
+      disableScrollLock
       aria-label={t('plantDetail.sections.gallery')}
       maxWidth="lg"
       fullWidth
