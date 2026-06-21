@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
@@ -9,7 +10,16 @@ import { Sym } from '../Sym';
 const D = 'plantDetail.distribution';
 
 // Decorative continent blobs — purely visual teaser (no real geo data).
-const BLOBS = [
+// Coordinates: left/top = % of the map container (0–100); w/h = intrinsic
+// blob size in px.
+type DecorativeBlobPosition = {
+  left: string; // % of container width
+  top: string; // % of container height
+  w: number; // width in px
+  h: number; // height in px
+};
+
+const BLOBS: DecorativeBlobPosition[] = [
   { left: '6%', top: '26%', w: 200, h: 130 },
   { left: '29%', top: '55%', w: 130, h: 165 },
   { left: '49%', top: '16%', w: 95, h: 70 },
@@ -17,7 +27,7 @@ const BLOBS = [
   { left: '62%', top: '14%', w: 240, h: 135 },
   { left: '82%', top: '60%', w: 95, h: 55 },
 ];
-const CORES = [
+const CORES: DecorativeBlobPosition[] = [
   { left: '14%', top: '50%', w: 62, h: 38 },
   { left: '33%', top: '60%', w: 56, h: 34 },
   { left: '58%', top: '49%', w: 60, h: 38 },
@@ -33,7 +43,7 @@ const CORES = [
  * entry stays `coming-data` (non-clickable). Colours are mode-aware estimates,
  * refined against the mockup at rasterize-compare.
  */
-export function DistributionSection() {
+export const DistributionSection = memo(function DistributionSection() {
   const { t } = useTranslation();
   const { palette } = useTheme();
   const dark = palette.mode === 'dark';
@@ -120,6 +130,7 @@ export function DistributionSection() {
           }}
         >
           <Box
+            role="presentation"
             sx={{
               width: 34,
               height: 32,
@@ -134,6 +145,7 @@ export function DistributionSection() {
             <Sym name="add" size={18} />
           </Box>
           <Box
+            role="presentation"
             sx={{
               width: 34,
               height: 32,
@@ -203,4 +215,4 @@ export function DistributionSection() {
       </Box>
     </Box>
   );
-}
+});
