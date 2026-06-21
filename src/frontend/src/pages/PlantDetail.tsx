@@ -72,6 +72,7 @@ import PlantGallerySection from '../components/plantDetail/PlantGallerySection';
 import SectionHeader from '../components/plantDetail/SectionHeader';
 import UnitSystemToggle from '../components/plantDetail/UnitSystemToggle';
 import AboutSection from '../components/plantDetail/AboutSection';
+import { DistributionSection } from '../components/plantDetail/DistributionSection';
 import LifecycleSection from '../components/plantDetail/LifecycleSection';
 import ScientificDataSection from '../components/plantDetail/ScientificDataSection';
 import FaqSection from '../components/plantDetail/FaqSection';
@@ -1235,6 +1236,10 @@ export default function PlantDetail() {
               onSelect={openLightbox}
             />
           </Box>
+
+          {/* ── Section 03: Distribution map teaser (SMA-78). Decorative blob
+              map, always mounted; TOC entry stays coming-data (non-clickable). */}
+          <DistributionSection />
 
           {/* ── SMA-178: lifecycle + scientific data hoisted to mockup order
               (after the gallery, before characteristics). The "about" content is
