@@ -503,6 +503,9 @@
     "lifecycle": {
       "sectionTitle": "Seasonal calendar & timeline",
       "caption": "Overview — stages from seed to harvest, mapped across 12 months.",
+      "timelineLabel": "Seasonal timeline (sowing, flowering, harvest by month)",
+      "stageHeader": "Stage",
+      "noDataShort": "No data",
       "modeOutdoor": "Outdoor",
       "modeIndoor": "Indoor · greenhouse · IoT",
       "monthsShort": [

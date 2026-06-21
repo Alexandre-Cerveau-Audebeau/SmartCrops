@@ -9,16 +9,20 @@ export function Sym({
   name,
   size = 20,
   color,
+  ariaLabel,
 }: {
   name: string;
   size?: number;
   color?: string;
+  ariaLabel?: string;
 }) {
   return (
     <span
       className="material-symbols-outlined"
       style={{ fontSize: size, color, lineHeight: 1 }}
-      aria-hidden
+      role={ariaLabel ? 'img' : undefined}
+      aria-label={ariaLabel || undefined}
+      aria-hidden={ariaLabel ? undefined : true}
     >
       {name}
     </span>

@@ -503,6 +503,9 @@
     "lifecycle": {
       "sectionTitle": "Calendrier & frise saisonnière",
       "caption": "Aperçu — étapes de la graine à la récolte, calées sur 12 mois.",
+      "timelineLabel": "Calendrier saisonnier (semis, floraison, récolte par mois)",
+      "stageHeader": "Stade",
+      "noDataShort": "Aucune donnée",
       "modeOutdoor": "Extérieur",
       "modeIndoor": "Intérieur · serre · IOT",
       "monthsShort": [

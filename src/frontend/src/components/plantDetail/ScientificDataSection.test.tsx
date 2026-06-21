@@ -44,14 +44,24 @@ describe('ScientificDataSection (SMA-178)', () => {
     renderSci(makePlant());
 
     expect(
-      screen.getByText('Scientific data · cultivation / greenhouse')
+      screen.getByRole('heading', {
+        level: 2,
+        name: 'Scientific data · cultivation / greenhouse',
+      })
     ).toBeInTheDocument();
     // Available card with the real pH metric.
-    expect(screen.getByText('Available')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 3, name: /Available/ })
+    ).toBeInTheDocument();
     expect(screen.getByText('Watering pH range')).toBeInTheDocument();
     expect(screen.getByText('6–7')).toBeInTheDocument();
     // Coming teaser card with a sensor placeholder.
-    expect(screen.getByText('Coming · exact measurements')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', {
+        level: 3,
+        name: /Coming · exact measurements/,
+      })
+    ).toBeInTheDocument();
     expect(screen.getByText('Water need')).toBeInTheDocument();
   });
 

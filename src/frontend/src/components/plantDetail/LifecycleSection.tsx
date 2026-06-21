@@ -192,9 +192,14 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
         }}
       >
         <Box sx={{ overflowX: 'auto' }}>
-          <Box sx={{ minWidth: TIMELINE_MIN_W }}>
+          <Box
+            role="table"
+            aria-label={t('plantDetail.lifecycle.timelineLabel')}
+            sx={{ minWidth: TIMELINE_MIN_W }}
+          >
             {/* Month header — vertical gridlines between months. */}
             <Box
+              role="row"
               sx={{
                 display: 'grid',
                 gridTemplateColumns: GRID_COLS,
@@ -202,10 +207,14 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                 mb: '10px',
               }}
             >
-              <Box />
+              <Box
+                role="columnheader"
+                aria-label={t('plantDetail.lifecycle.stageHeader')}
+              />
               {months.map((m, i) => (
                 <Typography
                   key={i}
+                  role="columnheader"
                   sx={{
                     textAlign: 'center',
                     fontSize: 11,
@@ -225,9 +234,21 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {STAGES.map((s) => {
                 const runs = toRuns(monthsByStage[s.key]);
+                // sr-only summary of the months this stage spans (runs are
+                // 1-based; `months` is 0-based → index by start-1/end-1).
+                const activeLabel = runs.length
+                  ? runs
+                      .map((r) =>
+                        r.start === r.end
+                          ? months[r.start - 1]
+                          : `${months[r.start - 1]} – ${months[r.end - 1]}`
+                      )
+                      .join(', ')
+                  : t('plantDetail.lifecycle.noDataShort');
                 return (
                   <Box
                     key={s.key}
+                    role="row"
                     sx={{
                       display: 'grid',
                       gridTemplateColumns: GRID_COLS,
@@ -235,6 +256,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                     }}
                   >
                     <Box
+                      role="rowheader"
                       sx={{
                         display: 'flex',
                         alignItems: 'center',
@@ -249,9 +271,26 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                       <Sym name={s.icon} size={17} color="inherit" />
                       {t(`plantDetail.lifecycle.stages.${s.key}`)}
                     </Box>
+                    <Box
+                      role="cell"
+                      sx={{
+                        position: 'absolute',
+                        width: 1,
+                        height: 1,
+                        p: 0,
+                        m: -1,
+                        overflow: 'hidden',
+                        clip: 'rect(0 0 0 0)',
+                        whiteSpace: 'nowrap',
+                        border: 0,
+                      }}
+                    >
+                      {activeLabel}
+                    </Box>
                     {runs.map((run) => (
                       <Box
                         key={`${run.start}-${run.end}`}
+                        aria-hidden
                         sx={{
                           gridColumn: `${run.start + 1} / ${run.end + 2}`,
                           height: '22px',

@@ -61,6 +61,8 @@ export default function FaqSection({ plant }: { plant: Plant }) {
                 type="button"
                 onClick={() => setOpen(isOpen ? null : i)}
                 aria-expanded={isOpen}
+                id={`faq-q-${i}`}
+                aria-controls={`faq-panel-${i}`}
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
@@ -97,6 +99,9 @@ export default function FaqSection({ plant }: { plant: Plant }) {
               </Box>
               {isOpen && (
                 <Box
+                  id={`faq-panel-${i}`}
+                  role="region"
+                  aria-labelledby={`faq-q-${i}`}
                   sx={{
                     p: '0 18px 18px',
                     fontSize: 14,
