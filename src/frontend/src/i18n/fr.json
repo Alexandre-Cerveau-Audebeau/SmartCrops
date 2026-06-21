@@ -545,6 +545,19 @@
       "legendFavorable": "Climat favorable",
       "legendLandmass": "Terres émergées"
     },
+    "observations": {
+      "sectionTitle": "Observations & phénologie",
+      "caption": "Aperçu — données d'observation citoyenne PlantNet, bientôt synchronisées en direct.",
+      "perYearTitle": "Observations par an",
+      "topContributors": "Top contributeurs",
+      "obsMapLabel": "Carte d'observations",
+      "phenologyTitle": "Phénologie sur l'année",
+      "phaseGrowth": "Croissance",
+      "phaseFlowering": "Floraison",
+      "phaseFruiting": "Fructification",
+      "emptyChart": "Pas encore de données d'observation",
+      "emptyContributors": "Aucun contributeur pour le moment"
+    },
     "comingSoonDataBadge": "COMING SOON · DATA",
     "buildNowBadge": "BUILD NOW",
     "comingSoonBackendBadge": "COMING SOON · BACKEND",

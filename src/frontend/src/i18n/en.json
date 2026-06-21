@@ -545,6 +545,19 @@
       "legendFavorable": "Favorable climate",
       "legendLandmass": "Landmass"
     },
+    "observations": {
+      "sectionTitle": "Observations & phenology",
+      "caption": "Preview — citizen-science observation data from PlantNet, soon synced live.",
+      "perYearTitle": "Observations per year",
+      "topContributors": "Top contributors",
+      "obsMapLabel": "Observation map",
+      "phenologyTitle": "Phenology over the year",
+      "phaseGrowth": "Growth",
+      "phaseFlowering": "Flowering",
+      "phaseFruiting": "Fruiting",
+      "emptyChart": "No observation data yet",
+      "emptyContributors": "No contributors yet"
+    },
     "comingSoonDataBadge": "COMING SOON · DATA",
     "buildNowBadge": "BUILD NOW",
     "comingSoonBackendBadge": "COMING SOON · BACKEND",
