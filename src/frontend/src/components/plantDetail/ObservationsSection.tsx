@@ -15,18 +15,18 @@ const MAP_BLOBS = [
   { left: '52%', top: '28%', w: 150, h: 70 },
 ];
 const MONTH_KEYS = [
-  'jan',
-  'feb',
-  'mar',
-  'apr',
-  'may',
-  'jun',
-  'jul',
-  'aug',
-  'sep',
-  'oct',
-  'nov',
-  'dec',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ] as const;
 
 /**
@@ -58,9 +58,10 @@ export const ObservationsSection = memo(function ObservationsSection() {
   });
   const months =
     Array.isArray(monthsRaw) &&
+    monthsRaw.length === 12 &&
     monthsRaw.every((m): m is string => typeof m === 'string')
       ? monthsRaw
-      : null;
+      : MONTH_KEYS;
 
   const cardSx = {
     bgcolor: cardBg,
@@ -256,7 +257,7 @@ export const ObservationsSection = memo(function ObservationsSection() {
                 }}
               />
               <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>
-                {months?.[i] ?? mk}
+                {months[i]}
               </Typography>
             </Box>
           ))}
