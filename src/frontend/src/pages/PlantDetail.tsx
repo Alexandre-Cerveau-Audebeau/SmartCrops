@@ -73,6 +73,7 @@ import SectionHeader from '../components/plantDetail/SectionHeader';
 import UnitSystemToggle from '../components/plantDetail/UnitSystemToggle';
 import AboutSection from '../components/plantDetail/AboutSection';
 import { DistributionSection } from '../components/plantDetail/DistributionSection';
+import { ObservationsSection } from '../components/plantDetail/ObservationsSection';
 import LifecycleSection from '../components/plantDetail/LifecycleSection';
 import ScientificDataSection from '../components/plantDetail/ScientificDataSection';
 import FaqSection from '../components/plantDetail/FaqSection';
@@ -1639,6 +1640,10 @@ export default function PlantDetail() {
               </CardContent>
             </Card>
           )}
+
+          {/* ── Section 11: Observations & phenology teaser (SMA-78). Decorative
+              sample data; always mounted; TOC entry (plantnet) stays coming-data. */}
+          <ObservationsSection />
 
           {/* ── Section J: Enrichment footer + external sources ─────────────── */}
           <Card
