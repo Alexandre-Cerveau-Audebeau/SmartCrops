@@ -12,7 +12,7 @@ interface SectionHeaderProps {
    * Bottom margin of the header row: '16px' when the section body follows
    * directly (e.g. the gallery filmstrip), '4px' when a caption follows.
    */
-  mb?: string;
+  mb?: number | string;
   sx?: SxProps<Theme>;
 }
 

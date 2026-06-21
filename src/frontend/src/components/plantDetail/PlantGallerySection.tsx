@@ -153,7 +153,7 @@ export default function PlantGallerySection({
             borderRadius: '8px',
           },
           '&::-webkit-scrollbar-thumb': {
-            backgroundColor: 'borderSubtle',
+            backgroundColor: (theme) => theme.palette.borderSubtle,
             borderRadius: '8px',
           },
         }}

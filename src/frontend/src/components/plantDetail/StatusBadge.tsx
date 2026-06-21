@@ -10,14 +10,17 @@ export type StatusVariant = 'build' | 'data' | 'backend';
 interface VariantDef {
   bg: string;
   fg: string;
-  labelKey: string;
+  labelKey:
+    | 'plantDetail.buildNowBadge'
+    | 'plantDetail.comingSoonDataBadge'
+    | 'plantDetail.comingSoonBackendBadge';
 }
 
 // Light-tuned palettes per status, matching the Claude Design HTML. Dark is
 // derived from `fg` by adaptBadge (SMA-184), so no dark hex is hand-picked.
 // 'build' shows a brand-green dot (primary.main, mode-aware); 'data' and
 // 'backend' show a Material `schedule` glyph in the badge's own foreground.
-const VARIANTS: Record<StatusVariant, VariantDef> = {
+const VARIANTS = {
   build: {
     bg: '#E6F4EC',
     fg: '#1B5E3A',
@@ -33,7 +36,7 @@ const VARIANTS: Record<StatusVariant, VariantDef> = {
     fg: '#2C3E6B',
     labelKey: 'plantDetail.comingSoonBackendBadge',
   },
-};
+} satisfies Record<StatusVariant, VariantDef>;
 
 interface StatusBadgeProps {
   variant: StatusVariant;
