@@ -852,7 +852,7 @@ export default function PlantDetail() {
           </Box>
           <PlantDetailToc sections={tocSections} disableSticky />
         </Box>
-        <Box sx={{ flex: 1, minWidth: 0, maxWidth: { lg: 1600 } }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           {/* ── Section A: Hero header ───────────────────────────────────── */}
           <Card
             id="overview"
