@@ -539,6 +539,12 @@
       "perennialNote": "Perennial growth resumes each year.",
       "biennialNote": "Vegetative growth in year 1, flowering and fruiting in year 2."
     },
+    "distribution": {
+      "sectionTitle": "Worldwide distribution map",
+      "caption": "Preview — distribution by favorable climate, soon connected to GBIF occurrences.",
+      "legendFavorable": "Favorable climate",
+      "legendLandmass": "Landmass"
+    },
     "comingSoonDataBadge": "COMING SOON · DATA",
     "buildNowBadge": "BUILD NOW",
     "comingSoonBackendBadge": "COMING SOON · BACKEND",

@@ -539,6 +539,12 @@
       "perennialNote": "La croissance vivace reprend chaque année.",
       "biennialNote": "Croissance végétative en année 1, floraison et fructification en année 2."
     },
+    "distribution": {
+      "sectionTitle": "Carte de répartition mondiale",
+      "caption": "Aperçu — répartition par climat favorable, bientôt connectée aux occurrences GBIF.",
+      "legendFavorable": "Climat favorable",
+      "legendLandmass": "Terres émergées"
+    },
     "comingSoonDataBadge": "COMING SOON · DATA",
     "buildNowBadge": "BUILD NOW",
     "comingSoonBackendBadge": "COMING SOON · BACKEND",
