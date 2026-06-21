@@ -537,6 +537,8 @@
       "biennialNote": "Croissance végétative en année 1, floraison et fructification en année 2."
     },
     "comingSoonDataBadge": "COMING SOON · DATA",
+    "buildNowBadge": "BUILD NOW",
+    "comingSoonBackendBadge": "COMING SOON · BACKEND",
     "faq": {
       "sectionTitle": "Questions fréquentes",
       "caption": "Généré automatiquement depuis les champs de la plante.",

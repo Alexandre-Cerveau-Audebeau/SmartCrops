@@ -5,7 +5,9 @@ import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import type { Plant } from '../../types/Plant';
 import { periodToMonths } from '../../utils/formatPeriod';
-import { adaptBadge } from '../../utils/badgeColors';
+import { NAV_BG } from '../../constants/colors';
+import SectionHeader from './SectionHeader';
+import StatusBadge from './StatusBadge';
 import { Sym } from '../Sym';
 
 // Stage bar / legend swatch colours + Material Symbols glyph names, exact to the
@@ -69,7 +71,6 @@ function toRuns(months: number[]): Array<{ start: number; end: number }> {
 export default function LifecycleSection({ plant }: { plant: Plant }) {
   const { t } = useTranslation();
   const mode = useTheme().palette.mode;
-  const comingBadge = adaptBadge({ bg: '#FBEEE6', fg: '#A0522D' }, mode);
   const monthsRaw = t('plantDetail.lifecycle.monthsShort', {
     returnObjects: true,
   });
@@ -108,48 +109,11 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
   return (
     <Box id="lifecycle" sx={{ scrollMarginTop: '80px', mb: 3 }}>
       {/* ── Title + COMING SOON · DATA badge (OUTSIDE the card) ───────────── */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          mb: '4px',
-          flexWrap: 'wrap',
-        }}
-      >
-        <Typography
-          component="h2"
-          sx={{
-            m: 0,
-            fontSize: '23px',
-            fontWeight: 800,
-            color: 'heading',
-            letterSpacing: '-0.01em',
-          }}
-        >
-          {t('plantDetail.lifecycle.sectionTitle')}
-        </Typography>
-        <Box
-          sx={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '5px',
-            px: '9px',
-            py: '4px',
-            bgcolor: comingBadge.bg,
-            color: comingBadge.fg,
-            border: '1px solid',
-            borderColor: comingBadge.border,
-            borderRadius: '6px',
-            fontSize: 10,
-            fontWeight: 800,
-            letterSpacing: '0.04em',
-          }}
-        >
-          <Sym name="schedule" size={13} color={comingBadge.fg} />
-          {t('plantDetail.comingSoonDataBadge')}
-        </Box>
-      </Box>
+      <SectionHeader
+        title={t('plantDetail.lifecycle.sectionTitle')}
+        badge={<StatusBadge variant="data" />}
+        mb="4px"
+      />
 
       {/* ── Caption + mode toggle (OUTSIDE the card) ─────────────────────── */}
       <Box
@@ -177,17 +141,20 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
           <Button
             disableRipple
             sx={{
-              bgcolor: '#fff',
-              color: '#1B5E3A',
-              fontWeight: 800,
-              borderRadius: '7px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+              // Active segment, mode-aware like UnitSystemToggle's selected
+              // option (SMA-217): light = raised white pill with NAV_BG text
+              // (unchanged); dark = the same brand-green fill with navy text.
+              bgcolor: mode === 'dark' ? 'primary.main' : '#fff',
+              color: mode === 'dark' ? 'background.default' : NAV_BG,
+              fontWeight: 700,
+              borderRadius: '8px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
               px: '14px',
               py: '8px',
               fontSize: 13,
               textTransform: 'none',
               minWidth: 0,
-              '&:hover': { bgcolor: '#fff' },
+              '&:hover': { bgcolor: mode === 'dark' ? 'primary.main' : '#fff' },
             }}
           >
             {t('plantDetail.lifecycle.modeOutdoor')}

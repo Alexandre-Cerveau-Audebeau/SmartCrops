@@ -145,14 +145,15 @@ export default function PlantGallerySection({
           overflowY: 'hidden',
           pb: '8px',
           scrollbarWidth: 'thin',
-          scrollbarColor: '#cdded0 #EEF4EC',
+          scrollbarColor: (theme) =>
+            `${theme.palette.borderSubtle} transparent`,
           '&::-webkit-scrollbar': { height: '8px' },
           '&::-webkit-scrollbar-track': {
-            background: '#EEF4EC',
+            background: 'transparent',
             borderRadius: '8px',
           },
           '&::-webkit-scrollbar-thumb': {
-            background: '#cdded0',
+            backgroundColor: (theme) => theme.palette.borderSubtle,
             borderRadius: '8px',
           },
         }}

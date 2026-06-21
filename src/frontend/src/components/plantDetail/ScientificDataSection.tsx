@@ -3,10 +3,10 @@ import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
 import { useUnitSystem } from '../../hooks/useUnitSystem';
 import type { Plant } from '../../types/Plant';
-import { adaptBadge } from '../../utils/badgeColors';
+import SectionHeader from './SectionHeader';
+import StatusBadge from './StatusBadge';
 import {
   formatSpacing,
   formatTemperature,
@@ -47,8 +47,6 @@ const COMING_ITEMS: ReadonlyArray<{ key: ComingItemKey; icon: string }> = [
 export default function ScientificDataSection({ plant }: { plant: Plant }) {
   const { t } = useTranslation();
   const { system } = useUnitSystem();
-  const mode = useTheme().palette.mode;
-  const comingBadge = adaptBadge({ bg: '#FBEEE6', fg: '#A0522D' }, mode);
   const pd = plant.perenualData;
   if (!pd) return null;
 
@@ -126,48 +124,11 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
   return (
     <Box id="scientific-data" sx={{ scrollMarginTop: '80px', mb: 3 }}>
       {/* ── Title + COMING SOON · DATA badge (OUTSIDE the cards) ──────────── */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          mb: '4px',
-          flexWrap: 'wrap',
-        }}
-      >
-        <Typography
-          component="h2"
-          sx={{
-            m: 0,
-            fontSize: '23px',
-            fontWeight: 800,
-            color: 'heading',
-            letterSpacing: '-0.01em',
-          }}
-        >
-          {t(`${sd}.sectionTitle`)}
-        </Typography>
-        <Box
-          sx={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '5px',
-            px: '9px',
-            py: '4px',
-            bgcolor: comingBadge.bg,
-            color: comingBadge.fg,
-            border: '1px solid',
-            borderColor: comingBadge.border,
-            borderRadius: '6px',
-            fontSize: 10,
-            fontWeight: 800,
-            letterSpacing: '0.04em',
-          }}
-        >
-          <Sym name="schedule" size={13} color={comingBadge.fg} />
-          {t('plantDetail.comingSoonDataBadge')}
-        </Box>
-      </Box>
+      <SectionHeader
+        title={t(`${sd}.sectionTitle`)}
+        badge={<StatusBadge variant="data" />}
+        mb="4px"
+      />
 
       <Typography
         sx={{ m: 0, mb: '14px', fontSize: 13, color: 'text.secondary' }}

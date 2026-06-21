@@ -99,12 +99,31 @@ export function createAppTheme(mode: 'light' | 'dark'): Theme {
     },
     components: {
       MuiCssBaseline: {
-        styleOverrides: {
-          html: {
-            overflowY: 'scroll',
-            scrollbarGutter: 'stable',
+        styleOverrides: (theme) => ({
+          // A permanent scrollbar + reserved gutter keep the viewport width
+          // constant. The no-overlay-shift fix lives per-overlay now
+          // (disableScrollLock on the menus/dialog, mirroring the profile menu),
+          // so there is no body padding-right reset here (SMA-216).
+          html: { overflowY: 'scroll', scrollbarGutter: 'stable' },
+          // Global thin theme-aware scrollbar (borderSubtle thumb on a
+          // transparent track), generalised from the TOC (SMA-184 → SMA-216).
+          '*': {
+            scrollbarWidth: 'thin',
+            scrollbarColor: `${theme.palette.borderSubtle} transparent`,
           },
-        },
+          '*::-webkit-scrollbar': { width: '8px', height: '8px' },
+          '*::-webkit-scrollbar-track': { backgroundColor: 'transparent' },
+          '*::-webkit-scrollbar-thumb': {
+            backgroundColor: theme.palette.borderSubtle,
+            borderRadius: '8px',
+          },
+          '*::-webkit-scrollbar-thumb:hover': {
+            backgroundColor: theme.palette.divider,
+          },
+          // Hide the webkit up/down (and left/right) stepper buttons so the
+          // thumb track stays clean inside rounded frames (SMA-216).
+          '*::-webkit-scrollbar-button': { display: 'none' },
+        }),
       },
       MuiCard: {
         styleOverrides: {

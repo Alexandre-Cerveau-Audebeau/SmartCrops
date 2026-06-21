@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
 import { useUnitSystem } from '../../hooks/useUnitSystem';
 import type { Plant } from '../../types/Plant';
 import { buildFaqItems } from '../../utils/plantDetailFaq';
+import SectionHeader from './SectionHeader';
 import { Sym } from '../Sym';
 
 const F = 'plantDetail.faq';
@@ -26,19 +26,7 @@ export default function FaqSection({ plant }: { plant: Plant }) {
   return (
     <Box id="faq" sx={{ scrollMarginTop: '80px', mb: 3 }}>
       {/* Header (outside the cards). */}
-      <Typography
-        component="h2"
-        sx={{
-          m: 0,
-          mb: '4px',
-          fontSize: '23px',
-          fontWeight: 800,
-          color: 'heading',
-          letterSpacing: '-0.01em',
-        }}
-      >
-        {t(`${F}.sectionTitle`)}
-      </Typography>
+      <SectionHeader title={t(`${F}.sectionTitle`)} mb="4px" />
       <Box
         sx={{
           display: 'flex',
