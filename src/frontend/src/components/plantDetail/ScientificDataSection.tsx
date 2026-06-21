@@ -157,7 +157,9 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
           }}
         >
           <Box
+            component="h3"
             sx={{
+              m: 0,
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
@@ -228,7 +230,9 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
           }}
         >
           <Box
+            component="h3"
             sx={{
+              m: 0,
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
