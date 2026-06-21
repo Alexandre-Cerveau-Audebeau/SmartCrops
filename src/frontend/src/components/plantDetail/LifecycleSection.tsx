@@ -273,7 +273,6 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                     </Box>
                     <Box
                       role="cell"
-                      aria-label={activeLabel}
                       sx={{
                         position: 'absolute',
                         width: 1,
@@ -285,7 +284,9 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                         whiteSpace: 'nowrap',
                         border: 0,
                       }}
-                    />
+                    >
+                      {activeLabel}
+                    </Box>
                     {runs.map((run) => (
                       <Box
                         key={`${run.start}-${run.end}`}

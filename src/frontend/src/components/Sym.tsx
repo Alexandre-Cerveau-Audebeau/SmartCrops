@@ -21,7 +21,7 @@ export function Sym({
       className="material-symbols-outlined"
       style={{ fontSize: size, color, lineHeight: 1 }}
       role={ariaLabel ? 'img' : undefined}
-      aria-label={ariaLabel}
+      aria-label={ariaLabel || undefined}
       aria-hidden={ariaLabel ? undefined : true}
     >
       {name}
