@@ -75,6 +75,7 @@ import AboutSection from '../components/plantDetail/AboutSection';
 import { DistributionSection } from '../components/plantDetail/DistributionSection';
 import { ObservationsSection } from '../components/plantDetail/ObservationsSection';
 import { SimilarPlantsSection } from '../components/plantDetail/SimilarPlantsSection';
+import { CommunitySection } from '../components/plantDetail/CommunitySection';
 import { CommonNamesSection } from '../components/plantDetail/CommonNamesSection';
 import { BotanicalSynonymsSection } from '../components/plantDetail/BotanicalSynonymsSection';
 import LifecycleSection from '../components/plantDetail/LifecycleSection';
@@ -1695,6 +1696,63 @@ export default function PlantDetail() {
           <SimilarPlantsSection />
 
           {faqItems.length > 0 && <FaqSection plant={plant} />}
+
+          {/* ── Section 15: Community teaser (SMA-78). Empty-state corrections
+              & comments; always mounted; TOC entry (community) stays
+              coming-backend. */}
+          <CommunitySection />
+
+          {/* ── Bottom CTA: reuse the hero add-to-garden action ─────────────── */}
+          <Box
+            sx={{
+              bgcolor: '#1B5E3A',
+              borderRadius: '16px',
+              p: { xs: 3, sm: '32px 36px' },
+              display: 'flex',
+              alignItems: 'center',
+              gap: 3,
+              flexWrap: 'wrap',
+            }}
+          >
+            <Box sx={{ flex: 1, minWidth: 240 }}>
+              <Typography
+                component="h3"
+                sx={{ mb: '6px', fontSize: 22, fontWeight: 800, color: '#fff' }}
+              >
+                {t('plantDetail.cta.title', { name: displayName })}
+              </Typography>
+              <Typography
+                sx={{
+                  fontSize: 14,
+                  color: 'rgba(255,255,255,0.78)',
+                  lineHeight: 1.5,
+                }}
+              >
+                {t('plantDetail.cta.subtitle')}
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={openAddDialog}
+              sx={{
+                bgcolor: '#fff',
+                color: '#1B5E3A',
+                borderRadius: '8px',
+                px: '26px',
+                py: '14px',
+                fontSize: 15,
+                fontWeight: 800,
+                boxShadow: 'none',
+                '&:hover': {
+                  bgcolor: 'rgba(255,255,255,0.9)',
+                  boxShadow: 'none',
+                },
+              }}
+            >
+              {t('library.addToGarden')}
+            </Button>
+          </Box>
         </Box>
       </Box>
 

@@ -563,6 +563,20 @@
       "caption": "Preview — plants with a close growing profile, recommended by the similarity engine.",
       "emptyMessage": "Recommendation engine coming soon"
     },
+    "community": {
+      "sectionTitle": "Community · corrections & comments",
+      "caption": "Preview — suggest corrections and exchange with other gardeners (read-only for now).",
+      "correctionTitle": "Spotted something to correct?",
+      "correctionSubtitle": "Edits are reviewed before publication.",
+      "proposeButton": "Suggest a correction",
+      "emptyComments": "Community comments will appear here.",
+      "lockedMessage": "Sign in to take part — comments coming soon.",
+      "soonPill": "Soon"
+    },
+    "cta": {
+      "title": "Ready to grow your {{name}}?",
+      "subtitle": "Add this plant to your virtual garden and plan its placement, sowing and care."
+    },
     "comingSoonDataBadge": "COMING SOON · DATA",
     "buildNowBadge": "BUILD NOW",
     "comingSoonBackendBadge": "COMING SOON · BACKEND",

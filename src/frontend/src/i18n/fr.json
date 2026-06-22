@@ -563,6 +563,20 @@
       "caption": "Aperçu — plantes au profil de culture proche, recommandées par le moteur de similarité.",
       "emptyMessage": "Le moteur de recommandation arrive bientôt"
     },
+    "community": {
+      "sectionTitle": "Communauté · corrections & commentaires",
+      "caption": "Aperçu — proposez des corrections et échangez avec les autres jardiniers (en lecture seule pour l'instant).",
+      "correctionTitle": "Une information à corriger ?",
+      "correctionSubtitle": "Les modifications sont relues avant publication.",
+      "proposeButton": "Proposer une correction",
+      "emptyComments": "Les commentaires de la communauté apparaîtront ici.",
+      "lockedMessage": "Connectez-vous pour participer — espace commentaires bientôt disponible.",
+      "soonPill": "Bientôt"
+    },
+    "cta": {
+      "title": "Prêt à cultiver votre {{name}} ?",
+      "subtitle": "Ajoutez cette plante à votre jardin virtuel et planifiez son emplacement, ses semis et son entretien."
+    },
     "comingSoonDataBadge": "COMING SOON · DATA",
     "buildNowBadge": "BUILD NOW",
     "comingSoonBackendBadge": "COMING SOON · BACKEND",
