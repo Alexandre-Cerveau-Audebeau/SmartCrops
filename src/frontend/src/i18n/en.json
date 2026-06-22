@@ -558,6 +558,11 @@
       "emptyChart": "No observation data yet",
       "emptyContributors": "No contributors yet"
     },
+    "similar": {
+      "sectionTitle": "Similar plants",
+      "caption": "Preview — plants with a close growing profile, recommended by the similarity engine.",
+      "emptyMessage": "Recommendations engine coming soon"
+    },
     "comingSoonDataBadge": "COMING SOON · DATA",
     "buildNowBadge": "BUILD NOW",
     "comingSoonBackendBadge": "COMING SOON · BACKEND",

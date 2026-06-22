@@ -558,6 +558,11 @@
       "emptyChart": "Pas encore de données d'observation",
       "emptyContributors": "Aucun contributeur pour le moment"
     },
+    "similar": {
+      "sectionTitle": "Plantes similaires",
+      "caption": "Aperçu — plantes au profil de culture proche, recommandées par le moteur de similarité.",
+      "emptyMessage": "Le moteur de recommandation arrive bientôt"
+    },
     "comingSoonDataBadge": "COMING SOON · DATA",
     "buildNowBadge": "BUILD NOW",
     "comingSoonBackendBadge": "COMING SOON · BACKEND",
