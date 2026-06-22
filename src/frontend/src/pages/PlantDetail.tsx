@@ -74,6 +74,7 @@ import UnitSystemToggle from '../components/plantDetail/UnitSystemToggle';
 import AboutSection from '../components/plantDetail/AboutSection';
 import { DistributionSection } from '../components/plantDetail/DistributionSection';
 import { ObservationsSection } from '../components/plantDetail/ObservationsSection';
+import { SimilarPlantsSection } from '../components/plantDetail/SimilarPlantsSection';
 import LifecycleSection from '../components/plantDetail/LifecycleSection';
 import ScientificDataSection from '../components/plantDetail/ScientificDataSection';
 import FaqSection from '../components/plantDetail/FaqSection';
@@ -1770,6 +1771,12 @@ export default function PlantDetail() {
               </Stack>
             </CardContent>
           </Card>
+
+          {/* ── Section 13: Similar plants teaser (SMA-78). Decorative sample
+              recommendations; always mounted; TOC entry (similar) stays
+              coming-backend. */}
+          <SimilarPlantsSection />
+
           {faqItems.length > 0 && <FaqSection plant={plant} />}
         </Box>
       </Box>
