@@ -186,7 +186,7 @@ export const PestsSection = memo(function PestsSection({
               <Sym name="pest_control" size={40} color={pestIconColor} />
               <IconButton
                 onClick={() => setActivePest(null)}
-                aria-label={t('common.close', 'Fermer')}
+                aria-label={t('common.close', 'Close')}
                 sx={{
                   position: 'absolute',
                   top: 14,
