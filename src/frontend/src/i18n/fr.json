@@ -699,6 +699,12 @@
       "pinnedLabel": "Langue de la page",
       "noResults": "Aucune langue ne correspond"
     },
+    "synonyms": {
+      "caption_one": "{{count}} synonyme botanique",
+      "caption_other": "{{count}} synonymes botaniques",
+      "showMore": "+ {{count}} autres",
+      "showFewer": "Afficher moins"
+    },
     "sources": {
       "viewExternal": "Voir sur {{source}}",
       "fetched": "Récupéré le {{date}}"

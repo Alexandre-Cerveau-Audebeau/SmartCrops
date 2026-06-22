@@ -76,6 +76,7 @@ import { DistributionSection } from '../components/plantDetail/DistributionSecti
 import { ObservationsSection } from '../components/plantDetail/ObservationsSection';
 import { SimilarPlantsSection } from '../components/plantDetail/SimilarPlantsSection';
 import { CommonNamesSection } from '../components/plantDetail/CommonNamesSection';
+import { BotanicalSynonymsSection } from '../components/plantDetail/BotanicalSynonymsSection';
 import LifecycleSection from '../components/plantDetail/LifecycleSection';
 import ScientificDataSection from '../components/plantDetail/ScientificDataSection';
 import FaqSection from '../components/plantDetail/FaqSection';
@@ -1545,25 +1546,11 @@ export default function PlantDetail() {
             <CommonNamesSection commonNames={plant.commonNames} />
           )}
 
-          {/* ── Section I: Synonyms ─────────────────────────────────────────── */}
+          {/* ── Section 10: Botanical synonyms (SMA-223). Italic synonym chips
+              with authority tooltip + "+N more" toggle; mounted only when >0
+              synonyms (gating preserved). */}
           {plant.synonyms.length > 0 && (
-            <Card
-              id="synonyms"
-              variant="outlined"
-              sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
-            >
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                  {t('plantDetail.sections.synonyms')}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ fontStyle: 'italic', color: 'text.secondary' }}
-                >
-                  {plant.synonyms.map((s) => s.synonym).join(', ')}
-                </Typography>
-              </CardContent>
-            </Card>
+            <BotanicalSynonymsSection synonyms={plant.synonyms} />
           )}
 
           {/* ── Section 11: Observations & phenology teaser (SMA-78). Decorative
