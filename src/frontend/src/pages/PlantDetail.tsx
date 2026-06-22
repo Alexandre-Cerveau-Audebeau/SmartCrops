@@ -1543,14 +1543,20 @@ export default function PlantDetail() {
           {/* ── Section 09: Common names (SMA-223). Language-card carousel with
               search + pin; mounted only when >1 name (gating preserved). */}
           {plant.commonNames.length > 1 && (
-            <CommonNamesSection commonNames={plant.commonNames} />
+            <CommonNamesSection
+              key={plant.id}
+              commonNames={plant.commonNames}
+            />
           )}
 
           {/* ── Section 10: Botanical synonyms (SMA-223). Italic synonym chips
               with authority tooltip + "+N more" toggle; mounted only when >0
               synonyms (gating preserved). */}
           {plant.synonyms.length > 0 && (
-            <BotanicalSynonymsSection synonyms={plant.synonyms} />
+            <BotanicalSynonymsSection
+              key={plant.id}
+              synonyms={plant.synonyms}
+            />
           )}
 
           {/* ── Section 11: Observations & phenology teaser (SMA-78). Decorative

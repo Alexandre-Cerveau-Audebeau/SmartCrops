@@ -131,17 +131,29 @@ export const CommonNamesSection = memo(function CommonNamesSection({
         </Typography>
       ) : (
         <Box
+          role="region"
+          aria-label={t('plantDetail.sections.commonNames')}
+          tabIndex={0}
           sx={{
             display: 'flex',
             gap: 1.5,
             overflowX: 'auto',
             pb: 1.5,
+            scrollbarWidth: 'thin',
+            scrollbarColor: dark
+              ? 'rgba(255,255,255,0.2) transparent'
+              : '#cdded0 transparent',
             '&::-webkit-scrollbar': { height: 8 },
             '&::-webkit-scrollbar-thumb': {
               backgroundColor: 'borderSubtle',
               borderRadius: 4,
             },
             '&::-webkit-scrollbar-track': { backgroundColor: 'transparent' },
+            '&:focus-visible': {
+              outline: '2px solid',
+              outlineColor: palette.primary.main,
+              outlineOffset: 2,
+            },
           }}
         >
           {visible.map((lang) => {

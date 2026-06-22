@@ -55,11 +55,13 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
       </Typography>
 
       <Box
+        id="synonyms-list"
         sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}
       >
         {visible.map((s) => {
           const chip = (
             <Box
+              key={s.id}
               sx={{
                 px: '14px',
                 py: '7px',
@@ -74,6 +76,10 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
                 color: chipText,
                 cursor: s.authority ? 'help' : 'default',
               }}
+              tabIndex={s.authority ? 0 : undefined}
+              aria-label={
+                s.authority ? `${s.synonym} (${s.authority})` : undefined
+              }
             >
               {s.synonym}
             </Box>
@@ -83,7 +89,7 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
               {chip}
             </Tooltip>
           ) : (
-            <Box key={s.id}>{chip}</Box>
+            chip
           );
         })}
 
@@ -92,6 +98,8 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
             component="button"
             type="button"
             onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            aria-controls="synonyms-list"
             sx={{
               px: '14px',
               py: '7px',
