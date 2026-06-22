@@ -561,7 +561,7 @@
     "similar": {
       "sectionTitle": "Similar plants",
       "caption": "Preview — plants with a close growing profile, recommended by the similarity engine.",
-      "emptyMessage": "Recommendations engine coming soon"
+      "emptyMessage": "Recommendation engine coming soon"
     },
     "comingSoonDataBadge": "COMING SOON · DATA",
     "buildNowBadge": "BUILD NOW",
