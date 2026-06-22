@@ -1544,7 +1544,7 @@ export default function PlantDetail() {
               search + pin; mounted only when >1 name (gating preserved). */}
           {plant.commonNames.length > 1 && (
             <CommonNamesSection
-              key={plant.id}
+              key={`common-names-${plant.id}`}
               commonNames={plant.commonNames}
             />
           )}
@@ -1554,7 +1554,7 @@ export default function PlantDetail() {
               synonyms (gating preserved). */}
           {plant.synonyms.length > 0 && (
             <BotanicalSynonymsSection
-              key={plant.id}
+              key={`botanical-synonyms-${plant.id}`}
               synonyms={plant.synonyms}
             />
           )}

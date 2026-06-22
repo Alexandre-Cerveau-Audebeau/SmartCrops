@@ -2,7 +2,7 @@ import { memo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
-import { useTheme } from '@mui/material/styles';
+import { useTheme, type SxProps, type Theme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
 import SectionHeader from './SectionHeader';
 import StatusBadge from './StatusBadge';
@@ -59,37 +59,34 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
         sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}
       >
         {visible.map((s) => {
-          const chip = (
-            <Box
-              key={s.id}
-              sx={{
-                px: '14px',
-                py: '7px',
-                borderRadius: '999px',
-                border: '1px solid',
-                borderColor: chipBorder,
-                bgcolor: chipBg,
-                fontSize: 13,
-                fontStyle: 'italic',
-                fontWeight: 500,
-                lineHeight: 1.2,
-                color: chipText,
-                cursor: s.authority ? 'help' : 'default',
-              }}
-              tabIndex={s.authority ? 0 : undefined}
-              aria-label={
-                s.authority ? `${s.synonym} (${s.authority})` : undefined
-              }
-            >
-              {s.synonym}
-            </Box>
-          );
+          const chipSx: SxProps<Theme> = {
+            px: '14px',
+            py: '7px',
+            borderRadius: '999px',
+            border: '1px solid',
+            borderColor: chipBorder,
+            bgcolor: chipBg,
+            fontSize: 13,
+            fontStyle: 'italic',
+            fontWeight: 500,
+            lineHeight: 1.2,
+            color: chipText,
+            cursor: s.authority ? 'help' : 'default',
+          };
           return s.authority ? (
             <Tooltip key={s.id} title={s.authority} arrow placement="top">
-              {chip}
+              <Box
+                sx={chipSx}
+                tabIndex={0}
+                aria-label={`${s.synonym} (${s.authority})`}
+              >
+                {s.synonym}
+              </Box>
             </Tooltip>
           ) : (
-            chip
+            <Box key={s.id} sx={chipSx}>
+              {s.synonym}
+            </Box>
           );
         })}
 
