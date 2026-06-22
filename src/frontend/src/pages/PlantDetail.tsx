@@ -76,6 +76,7 @@ import { DistributionSection } from '../components/plantDetail/DistributionSecti
 import { ObservationsSection } from '../components/plantDetail/ObservationsSection';
 import { SimilarPlantsSection } from '../components/plantDetail/SimilarPlantsSection';
 import { CommunitySection } from '../components/plantDetail/CommunitySection';
+import { PestsSection } from '../components/plantDetail/PestsSection';
 import { CommonNamesSection } from '../components/plantDetail/CommonNamesSection';
 import { BotanicalSynonymsSection } from '../components/plantDetail/BotanicalSynonymsSection';
 import LifecycleSection from '../components/plantDetail/LifecycleSection';
@@ -98,8 +99,6 @@ import {
   pickLongDescription,
   sortGalleryImages,
 } from '../utils/plantDetail';
-
-const PESTS_PREVIEW_COUNT = 10;
 
 type PlantDetailNavState = {
   from?: string;
@@ -156,8 +155,6 @@ export default function PlantDetail() {
   const [addError, setAddError] = useState<string | null>(null);
   const [addSuccess, setAddSuccess] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
-
-  const [pestsExpanded, setPestsExpanded] = useState(false);
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   // The lightbox can be driven by the full gallery (hero) OR by the filtered
@@ -649,10 +646,6 @@ export default function PlantDetail() {
     ediblePartsList.length > 0 ||
     !!plant.propagationInstructions ||
     !!plant.sowingInstructions;
-
-  const pestsToShow = pestsExpanded
-    ? plant.pests
-    : plant.pests.slice(0, PESTS_PREVIEW_COUNT);
 
   const heroChips = buildFeatureChips(plant, t);
 
@@ -1486,60 +1479,9 @@ export default function PlantDetail() {
             </Card>
           )}
 
-          {/* ── Section G: Pests & diseases ─────────────────────────────────── */}
-          {plant.pests.length > 0 && (
-            <Card
-              id="pests"
-              variant="outlined"
-              sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
-            >
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-                  {t('plantDetail.pests.header', { count: plant.pests.length })}
-                </Typography>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  {pestsToShow.map((pest) => {
-                    const pestColors = adaptBadge(
-                      pestTypeColors(pest.type),
-                      mode
-                    );
-                    return (
-                      <Tooltip
-                        key={pest.id}
-                        title={pest.description ?? ''}
-                        arrow
-                      >
-                        <Chip
-                          label={pest.name}
-                          size="small"
-                          sx={{
-                            bgcolor: pestColors.bg,
-                            color: pestColors.fg,
-                            border: '1px solid',
-                            borderColor: pestColors.border,
-                            fontWeight: 500,
-                          }}
-                        />
-                      </Tooltip>
-                    );
-                  })}
-                </Stack>
-                {plant.pests.length > PESTS_PREVIEW_COUNT && (
-                  <Button
-                    size="small"
-                    onClick={() => setPestsExpanded((v) => !v)}
-                    sx={{ mt: 1.5, textTransform: 'none' }}
-                  >
-                    {pestsExpanded
-                      ? t('plantDetail.pests.showLess')
-                      : t('plantDetail.pests.showAll', {
-                          count: plant.pests.length,
-                        })}
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          )}
+          {/* ── Section 08: Pests & diseases (SMA-227). Card grid + teaser detail
+              modal; mounted only when >0 pests (gating preserved). */}
+          {plant.pests.length > 0 && <PestsSection pests={plant.pests} />}
 
           {/* ── Section 09: Common names (SMA-223). Language-card carousel with
               search + pin; mounted only when >1 name (gating preserved). */}
@@ -1760,6 +1702,7 @@ export default function PlantDetail() {
       <Dialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
+        disableScrollLock
         maxWidth="sm"
         fullWidth
       >
@@ -1985,26 +1928,6 @@ function buildFeatureChips(
       color: '#4A148C',
     });
   return chips;
-}
-
-/** Map a `PlantPestType` string to its chip background/foreground palette. */
-function pestTypeColors(type: string): { bg: string; fg: string } {
-  switch (type) {
-    case 'Insect':
-      return { bg: '#FFF3E0', fg: '#E65100' };
-    case 'Fungus':
-    case 'Disease':
-      return { bg: '#FFEBEE', fg: '#C62828' };
-    case 'Bacteria':
-      return { bg: '#FCE4EC', fg: '#AD1457' };
-    case 'Virus':
-      return { bg: '#F3E5F5', fg: '#6A1B9A' };
-    case 'Mite':
-    case 'Nematode':
-      return { bg: '#FBE9E7', fg: '#BF360C' };
-    default:
-      return { bg: '#ECEFF1', fg: '#37474F' };
-  }
 }
 
 /** Map an enrichment source label to its footer-badge palette. */

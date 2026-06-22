@@ -273,7 +273,9 @@ describe('PlantDetail', () => {
     expect(
       screen.getByText('Tomato is a warm-season crop.')
     ).toBeInTheDocument();
-    expect(screen.getByText(/Diseases & pests \(2\)/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Diseases & pests' })
+    ).toBeInTheDocument();
     expect(screen.getByText('Aphids')).toBeInTheDocument();
     expect(screen.getByText('Powdery Mildew')).toBeInTheDocument();
   });
