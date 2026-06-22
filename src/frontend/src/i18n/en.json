@@ -693,8 +693,11 @@
       "showLess": "Show less"
     },
     "commonNames": {
-      "showAllLanguages": "Show {{count}} more languages",
-      "showFewerLanguages": "Show fewer languages"
+      "caption_one": "{{count}} language — page language pinned first",
+      "caption_other": "{{count}} languages — page language pinned first",
+      "searchPlaceholder": "Search a language…",
+      "pinnedLabel": "Page language",
+      "noResults": "No matching language"
     },
     "sources": {
       "viewExternal": "View on {{source}}",
