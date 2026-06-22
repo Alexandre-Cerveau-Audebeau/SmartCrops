@@ -75,6 +75,8 @@ import AboutSection from '../components/plantDetail/AboutSection';
 import { DistributionSection } from '../components/plantDetail/DistributionSection';
 import { ObservationsSection } from '../components/plantDetail/ObservationsSection';
 import { SimilarPlantsSection } from '../components/plantDetail/SimilarPlantsSection';
+import { CommonNamesSection } from '../components/plantDetail/CommonNamesSection';
+import { BotanicalSynonymsSection } from '../components/plantDetail/BotanicalSynonymsSection';
 import LifecycleSection from '../components/plantDetail/LifecycleSection';
 import ScientificDataSection from '../components/plantDetail/ScientificDataSection';
 import FaqSection from '../components/plantDetail/FaqSection';
@@ -88,7 +90,6 @@ import { formatPeriod } from '../utils/formatPeriod';
 import {
   formatHardinessZone,
   formatLength,
-  groupCommonNamesByLanguage,
   hasAnyXData,
   isHardinessSuspicious,
   parseStringArray,
@@ -97,13 +98,7 @@ import {
   sortGalleryImages,
 } from '../utils/plantDetail';
 
-const languageLabels: Record<string, string> = {
-  en: 'English',
-  fr: 'Français',
-};
-
 const PESTS_PREVIEW_COUNT = 10;
-const COMMON_NAMES_PREVIEW_LANGUAGES = 6;
 
 type PlantDetailNavState = {
   from?: string;
@@ -162,7 +157,6 @@ export default function PlantDetail() {
   const [isAdding, setIsAdding] = useState(false);
 
   const [pestsExpanded, setPestsExpanded] = useState(false);
-  const [commonNamesExpanded, setCommonNamesExpanded] = useState(false);
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   // The lightbox can be driven by the full gallery (hero) OR by the filtered
@@ -429,13 +423,6 @@ export default function PlantDetail() {
       plant ? pickLongDescription(plant.longDescriptions, language) : null,
     [plant, language]
   );
-  const groupedCommonNames = useMemo<Map<string, Plant['commonNames']>>(
-    () =>
-      plant
-        ? groupCommonNamesByLanguage(plant.commonNames, language)
-        : new Map<string, Plant['commonNames']>(),
-    [plant, language]
-  );
   const ediblePartsList = useMemo(
     () => (plant ? parseStringArray(plant.edibleParts) : []),
     [plant]
@@ -665,10 +652,6 @@ export default function PlantDetail() {
   const pestsToShow = pestsExpanded
     ? plant.pests
     : plant.pests.slice(0, PESTS_PREVIEW_COUNT);
-  const commonNameLanguages = [...groupedCommonNames.keys()];
-  const visibleCommonNameLanguages = commonNamesExpanded
-    ? commonNameLanguages
-    : commonNameLanguages.slice(0, COMMON_NAMES_PREVIEW_LANGUAGES);
 
   const heroChips = buildFeatureChips(plant, t);
 
@@ -1557,89 +1540,23 @@ export default function PlantDetail() {
             </Card>
           )}
 
-          {/* ── Section H: Common names ─────────────────────────────────────── */}
+          {/* ── Section 09: Common names (SMA-223). Language-card carousel with
+              search + pin; mounted only when >1 name (gating preserved). */}
           {plant.commonNames.length > 1 && (
-            <Card
-              id="common-names"
-              variant="outlined"
-              sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
-            >
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-                  {t('plantDetail.sections.commonNames')}
-                </Typography>
-                <Stack spacing={1.5}>
-                  {visibleCommonNameLanguages.map((lang) => {
-                    const names = groupedCommonNames.get(lang) ?? [];
-                    return (
-                      <Box key={lang}>
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          display="block"
-                          sx={{ mb: 0.5 }}
-                        >
-                          {languageLabels[lang] ?? lang.toUpperCase()}
-                        </Typography>
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          flexWrap="wrap"
-                          useFlexGap
-                        >
-                          {names.map((cn) => (
-                            <Chip
-                              key={cn.id}
-                              label={cn.name}
-                              size="small"
-                              variant={cn.isPrimary ? 'filled' : 'outlined'}
-                              color={cn.isPrimary ? 'primary' : 'default'}
-                            />
-                          ))}
-                        </Stack>
-                      </Box>
-                    );
-                  })}
-                </Stack>
-                {commonNameLanguages.length >
-                  COMMON_NAMES_PREVIEW_LANGUAGES && (
-                  <Button
-                    size="small"
-                    onClick={() => setCommonNamesExpanded((v) => !v)}
-                    sx={{ mt: 1.5, textTransform: 'none' }}
-                  >
-                    {commonNamesExpanded
-                      ? t('plantDetail.commonNames.showFewerLanguages')
-                      : t('plantDetail.commonNames.showAllLanguages', {
-                          count:
-                            commonNameLanguages.length -
-                            COMMON_NAMES_PREVIEW_LANGUAGES,
-                        })}
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
+            <CommonNamesSection
+              key={`common-names-${plant.id}`}
+              commonNames={plant.commonNames}
+            />
           )}
 
-          {/* ── Section I: Synonyms ─────────────────────────────────────────── */}
+          {/* ── Section 10: Botanical synonyms (SMA-223). Italic synonym chips
+              with authority tooltip + "+N more" toggle; mounted only when >0
+              synonyms (gating preserved). */}
           {plant.synonyms.length > 0 && (
-            <Card
-              id="synonyms"
-              variant="outlined"
-              sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
-            >
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-                  {t('plantDetail.sections.synonyms')}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ fontStyle: 'italic', color: 'text.secondary' }}
-                >
-                  {plant.synonyms.map((s) => s.synonym).join(', ')}
-                </Typography>
-              </CardContent>
-            </Card>
+            <BotanicalSynonymsSection
+              key={`botanical-synonyms-${plant.id}`}
+              synonyms={plant.synonyms}
+            />
           )}
 
           {/* ── Section 11: Observations & phenology teaser (SMA-78). Decorative

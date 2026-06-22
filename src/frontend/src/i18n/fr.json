@@ -693,8 +693,17 @@
       "showLess": "Voir moins"
     },
     "commonNames": {
-      "showAllLanguages": "Afficher {{count}} langues de plus",
-      "showFewerLanguages": "Afficher moins de langues"
+      "caption_one": "{{count}} langue — langue de la page épinglée en tête",
+      "caption_other": "{{count}} langues — langue de la page épinglée en tête",
+      "searchPlaceholder": "Rechercher une langue…",
+      "pinnedLabel": "Langue de la page",
+      "noResults": "Aucune langue ne correspond"
+    },
+    "synonyms": {
+      "caption_one": "{{count}} synonyme botanique",
+      "caption_other": "{{count}} synonymes botaniques",
+      "showMore": "+ {{count}} autres",
+      "showFewer": "Afficher moins"
     },
     "sources": {
       "viewExternal": "Voir sur {{source}}",
