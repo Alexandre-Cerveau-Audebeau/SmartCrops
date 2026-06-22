@@ -704,7 +704,21 @@
     "pests": {
       "header": "Diseases & pests ({{count}})",
       "showAll": "Show all ({{count}})",
-      "showLess": "Show less"
+      "showLess": "Show less",
+      "viewDetail": "View details",
+      "viewDetailFor": "View details for {{name}}",
+      "modalTeaser": "Detailed info (symptoms, solutions, photo) is coming soon.",
+      "modalTeaserBadge": "Soon · data",
+      "types": {
+        "Disease": "Disease",
+        "Fungus": "Disease · fungus",
+        "Bacteria": "Disease · bacteria",
+        "Virus": "Disease · virus",
+        "Insect": "Pest · insect",
+        "Mite": "Pest · mite",
+        "Nematode": "Pest · nematode",
+        "Other": "Other"
+      }
     },
     "commonNames": {
       "caption_one": "{{count}} language — page language pinned first",

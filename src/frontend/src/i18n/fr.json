@@ -704,7 +704,21 @@
     "pests": {
       "header": "Maladies & ravageurs ({{count}})",
       "showAll": "Tout afficher ({{count}})",
-      "showLess": "Voir moins"
+      "showLess": "Voir moins",
+      "viewDetail": "Voir le détail",
+      "viewDetailFor": "Voir le détail de {{name}}",
+      "modalTeaser": "La fiche détaillée (symptômes, solutions, photo) arrive bientôt.",
+      "modalTeaserBadge": "Bientôt · données",
+      "types": {
+        "Disease": "Maladie",
+        "Fungus": "Maladie · champignon",
+        "Bacteria": "Maladie · bactérie",
+        "Virus": "Maladie · virus",
+        "Insect": "Ravageur · insecte",
+        "Mite": "Ravageur · acarien",
+        "Nematode": "Ravageur · nématode",
+        "Other": "Autre"
+      }
     },
     "commonNames": {
       "caption_one": "{{count}} langue — langue de la page épinglée en tête",
