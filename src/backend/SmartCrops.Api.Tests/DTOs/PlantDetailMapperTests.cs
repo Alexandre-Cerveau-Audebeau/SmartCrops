@@ -115,6 +115,9 @@ public class PlantDetailMapperTests
             HarvestSeason = "summer",
             PropagationMethods = "Division",
             OriginCountries = "China",
+            // Factual fields that must always survive (never gated):
+            WateringBenchmark = "2-3",
+            WateringBenchmarkUnit = "days",
             // Factual xData that must always survive:
             XSunlightHoursMin = 6,
             LastSyncAt = DateTime.UtcNow,
@@ -133,17 +136,20 @@ public class PlantDetailMapperTests
         Assert.Empty(dto.LongDescriptions);
         Assert.NotNull(dto.PerenualData);
         Assert.Null(dto.PerenualData!.SunlightPreferences);
-        Assert.Null(dto.PerenualData.PruningMonths);
         Assert.Null(dto.PerenualData.Maintenance);
         Assert.Null(dto.PerenualData.FloweringSeason);
         Assert.Null(dto.PerenualData.HarvestSeason);
-        Assert.Null(dto.PerenualData.PropagationMethods);
         Assert.Null(dto.PerenualData.OriginCountries);
 
-        // Factual data preserved.
+        // Factual data preserved (incl. PropagationMethods + PruningMonths,
+        // dé-gated in SMA-231 — short factual values, exposed even when false).
         Assert.Equal(6, dto.HardinessZoneMin);
         Assert.Equal(9, dto.HardinessZoneMax);
         Assert.Equal(6, dto.PerenualData.XSunlightHoursMin);
+        Assert.Equal("March,April", dto.PerenualData.PruningMonths);
+        Assert.Equal("Division", dto.PerenualData.PropagationMethods);
+        Assert.Equal("2-3", dto.PerenualData.WateringBenchmark);
+        Assert.Equal("days", dto.PerenualData.WateringBenchmarkUnit);
     }
 
     [Fact]
@@ -168,6 +174,8 @@ public class PlantDetailMapperTests
         Assert.Equal("China", dto.PerenualData.OriginCountries);
         // Factual data survives on both paths.
         Assert.Equal(6, dto.PerenualData.XSunlightHoursMin);
+        Assert.Equal("2-3", dto.PerenualData.WateringBenchmark);
+        Assert.Equal("days", dto.PerenualData.WateringBenchmarkUnit);
     }
 
     [Fact]

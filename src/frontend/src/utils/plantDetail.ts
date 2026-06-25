@@ -362,6 +362,47 @@ export function hasAnyXData(pd: PlantPerenualData): boolean {
 }
 
 /**
+ * Single source of truth for section-07 culture facts: splits/trims/filters
+ * the raw Perenual fields into ready-to-render lists (raw values, NOT
+ * translated). Both {@link hasCultureContent} (section gating) and
+ * CultureSection (rendering) derive from this, so the "what rows exist" rule
+ * lives in exactly one place (SMA-231).
+ */
+export interface CultureFacts {
+  propagationMethods: string[];
+  pruningMonths: string[];
+  wateringBenchmark: string | null;
+}
+
+export function getCultureFacts(pd: PlantPerenualData | null): CultureFacts {
+  const split = (s: string | null | undefined) =>
+    s
+      ?.split(',')
+      .map((v) => v.trim())
+      .filter(Boolean) ?? [];
+  return {
+    propagationMethods: split(pd?.propagationMethods),
+    pruningMonths: split(pd?.pruningMonths),
+    wateringBenchmark: pd?.wateringBenchmark?.trim() || null,
+  };
+}
+
+/**
+ * True when the plant has at least one displayable culture fact (propagation
+ * method, pruning month, or watering benchmark). Derives from
+ * {@link getCultureFacts} so section 07 is never mounted — nor marked "live" in
+ * the TOC — with zero visible rows (SMA-231).
+ */
+export function hasCultureContent(pd: PlantPerenualData | null): boolean {
+  const f = getCultureFacts(pd);
+  return (
+    f.propagationMethods.length > 0 ||
+    f.pruningMonths.length > 0 ||
+    !!f.wateringBenchmark
+  );
+}
+
+/**
  * Map a raw Perenual label (e.g. `"Reverse Osmosis Water"`, `"Pond/Lake Water"`)
  * to its camelCase i18n key (`reverseOsmosisWater`, `pondLakeWater`). Whitespace
  * and slashes are stripped; the first character is lower-cased. Callers pass the

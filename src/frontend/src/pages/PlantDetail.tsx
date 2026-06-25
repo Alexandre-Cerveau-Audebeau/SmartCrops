@@ -77,6 +77,7 @@ import { ObservationsSection } from '../components/plantDetail/ObservationsSecti
 import { SimilarPlantsSection } from '../components/plantDetail/SimilarPlantsSection';
 import { CommunitySection } from '../components/plantDetail/CommunitySection';
 import { PestsSection } from '../components/plantDetail/PestsSection';
+import { CultureSection } from '../components/plantDetail/CultureSection';
 import { CommonNamesSection } from '../components/plantDetail/CommonNamesSection';
 import { BotanicalSynonymsSection } from '../components/plantDetail/BotanicalSynonymsSection';
 import LifecycleSection from '../components/plantDetail/LifecycleSection';
@@ -93,6 +94,7 @@ import {
   formatHardinessZone,
   formatLength,
   hasAnyXData,
+  hasCultureContent,
   isHardinessSuspicious,
   parseStringArray,
   pickHeroImage,
@@ -112,9 +114,9 @@ type Toast = { message: string; severity: ToastSeverity };
 /**
  * `GET /library/:id` detail page. Renders the full `PlantDetailResponse`
  * payload across 12 conditional sections (hero + gallery + about +
- * characteristics + lifecycle + edible/propagation + scientific-data
- * placeholder + pests + common names + synonyms + sources + admin), with
- * graceful degradation when enrichments are absent (cf. Basil seed).
+ * characteristics + lifecycle + cultivation/propagation (factual culture card)
+ * + scientific-data placeholder + pests + common names + synonyms + sources +
+ * admin), with graceful degradation when enrichments are absent (cf. Basil seed).
  */
 export default function PlantDetail() {
   const { t } = useTranslation();
@@ -421,10 +423,6 @@ export default function PlantDetail() {
       plant ? pickLongDescription(plant.longDescriptions, language) : null,
     [plant, language]
   );
-  const ediblePartsList = useMemo(
-    () => (plant ? parseStringArray(plant.edibleParts) : []),
-    [plant]
-  );
 
   // ── Early-return guards (unchanged behaviour, just maxWidth=lg) ──────────
   if (!id) {
@@ -642,10 +640,7 @@ export default function PlantDetail() {
     !!plant.perenualData?.floweringSeason ||
     !!plant.perenualData?.harvestSeason;
 
-  const showEdibleAndPropagation =
-    ediblePartsList.length > 0 ||
-    !!plant.propagationInstructions ||
-    !!plant.sowingInstructions;
+  const showCulture = hasCultureContent(plant.perenualData);
 
   const heroChips = buildFeatureChips(plant, t);
 
@@ -723,7 +718,7 @@ export default function PlantDetail() {
       num: '07',
       id: 'edible',
       labelKey: 'plantDetail.sections.edibleAndPropagation',
-      state: showEdibleAndPropagation ? 'live' : 'empty',
+      state: showCulture ? 'live' : 'empty',
     },
     {
       num: '08',
@@ -1386,98 +1381,10 @@ export default function PlantDetail() {
             </Grid>
           )}
 
-          {/* ── Section F: Edible parts & propagation ──────────────────────── */}
-          {showEdibleAndPropagation && (
-            <Card
-              id="edible"
-              variant="outlined"
-              sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
-            >
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-                  {t('plantDetail.sections.edibleAndPropagation')}
-                </Typography>
-                {ediblePartsList.length > 0 && (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      display="block"
-                      sx={{ mb: 0.75 }}
-                    >
-                      {t('plantDetail.labels.edibleParts')}
-                    </Typography>
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      flexWrap="wrap"
-                      useFlexGap
-                    >
-                      {ediblePartsList.map((part) => {
-                        const b = adaptBadge(
-                          { bg: '#E8F5E9', fg: '#1B5E20' },
-                          mode
-                        );
-                        return (
-                          <Chip
-                            key={part}
-                            label={t(
-                              `plantDetail.enumValues.ediblePart.${part.toLowerCase()}`,
-                              part
-                            )}
-                            size="small"
-                            sx={{
-                              bgcolor: b.bg,
-                              color: b.fg,
-                              border: '1px solid',
-                              borderColor: b.border,
-                              fontWeight: 500,
-                            }}
-                          />
-                        );
-                      })}
-                    </Stack>
-                  </Box>
-                )}
-                {plant.propagationInstructions && (
-                  <Box sx={{ mb: plant.sowingInstructions ? 2 : 0 }}>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      display="block"
-                      sx={{ mb: 0.5 }}
-                    >
-                      {t('plantDetail.labels.propagationInstructions')}
-                    </Typography>
-                    <Typography variant="body2" sx={{ lineHeight: 1.7 }}>
-                      {plant.propagationInstructions
-                        .split(/;\s*|\n/)
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </Typography>
-                  </Box>
-                )}
-                {plant.sowingInstructions && (
-                  <Box>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      display="block"
-                      sx={{ mb: 0.5 }}
-                    >
-                      {t('plantDetail.labels.sowingInstructions')}
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{ lineHeight: 1.7, whiteSpace: 'pre-wrap' }}
-                    >
-                      {plant.sowingInstructions}
-                    </Typography>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-          )}
+          {/* ── Section 07: Growing & propagation (SMA-231). Factual rows
+              (propagation methods, pruning months, watering) on the section-05
+              card format; mounted only when ≥1 value (gating preserved). */}
+          {showCulture && <CultureSection perenualData={plant.perenualData} />}
 
           {/* ── Section 08: Pests & diseases (SMA-227). Card grid + teaser detail
               modal; mounted only when >0 pests (gating preserved). */}
