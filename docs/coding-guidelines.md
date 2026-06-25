@@ -54,6 +54,33 @@ Conventions may evolve; significant changes should be made via PR and discussed.
 - **State management**: React's built-in hooks (`useState`, `useReducer`, `useContext`). No external state library unless cross-page state becomes complex.
 - **API calls**: typed at the boundary. The shape of the response is declared with an explicit interface; runtime validation uses Zod for untrusted inputs.
 
+### Styling & theming
+
+- **No literal colors in components.** Use MUI theme tokens or shared named constants — never inline `#hex`/`rgba()` literals. Intentional exceptions stay as named constants, never anonymous inline values: brand constants (e.g. `NAV_BG`) and semantic visualization palettes (e.g. the Garden Planner grid).
+- **Mode-aware colors.** Components derive colors from `palette.mode`; never hardcode a color that breaks the dark theme.
+
+### Overlays
+
+- **Always pass `disableScrollLock`** to every MUI overlay (`Menu`, `Dialog`, `Drawer`, `Popover`, `Select`). The scrollbar gutter is stabilized globally in `theme.ts` (`html { overflow-y: scroll; scrollbar-gutter: stable }`); `disableScrollLock` per overlay prevents the page from shifting on open.
+
+### State & rendering
+
+- **Single source of truth for derived content.** A section's visibility gate and its render must derive from the same parse. Don't duplicate split/trim/filter between the gate and the component — extract one function (e.g. `getCultureFacts`) that both consume, so "what content exists" lives in exactly one place.
+
+### Internationalization
+
+- **Plural/singular by value.** Any displayed unit or count selects its key from the value (pattern: `days` / `days_one`). Never hardcode a plural form.
+- **User-facing strings live in the i18n files**, not as literals in components (rare, deliberately-documented design exceptions aside).
+
+### Constants
+
+- **Extract shared magic numbers.** Shared literals (e.g. the navbar scroll offset `80px`) live in one named constant reused everywhere, not duplicated across call sites.
+
+### Accessibility
+
+- **Label→value pairs as a description list.** Render term/value rows with `component="dl"` + `dt`/`dd` (visual `sx` unchanged) so assistive tech gets the programmatic association — not generic flex `Box`es.
+- **`aria-label`s are neutral and localized** (no hardcoded text); the close affordance uses `'Close'`.
+
 ## 5. Testing
 
 - **Backend**: xUnit. Test classes named `<Subject>Tests`. Methods named `<MethodUnderTest>_<Condition>_<Outcome>` (e.g. `Bcp47LanguageCodeLowercase_Matches_ValidLowercaseTags`).
@@ -67,6 +94,7 @@ Conventions may evolve; significant changes should be made via PR and discussed.
 
 - **XML doc expectation**: document public C# methods, properties, and classes with non-trivial behavior — this is the team standard. The CI Docstring Coverage check enforces an 80% floor (warnings tolerated, but missing docs are still a violation of the standard, to be improved incrementally).
 - **`/// <summary>`** for the top-level description, `<param>` for each parameter, `<returns>` for non-void return, `<exception>` for thrown exceptions when relevant.
+- **JSDoc on exported frontend utilities.** The 80% docstring floor applies to the frontend too: exported helpers/mappers in `utils/*.ts` carry a JSDoc. (Target, not a merge gate.)
 - **README.md** at the repo root summarizes the project. Subdirectory docs follow the local convention: Claude Code skills use `.claude/skills/<name>/SKILL.md` as the canonical entry point (with `README.md` as optional human-readable supplement); other subdirectories may use `README.md` or directory-local conventions as appropriate.
 - **ADRs** in `docs/adr/` for architectural decisions. Follow the format established by ADR-0001 (`docs/adr/0001-...md`): Status / Date / Deciders / Context / Decision / Rationale / Consequences / When to revisit / Related.
 - **Markdown fenced code blocks** must declare a language tag (markdownlint MD040). Use `regex`, `text`, `csharp`, `powershell`, etc. — pick the closest fit.
