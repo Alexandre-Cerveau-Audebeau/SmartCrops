@@ -705,7 +705,7 @@
       "propagationLabel": "Propagation methods",
       "pruningLabel": "Pruning months",
       "wateringLabel": "Watering rhythm",
-      "units": { "days": "days" },
+      "units": { "days": "days", "days_one": "day" },
       "propagationMethods": {
         "airLayeringPropagation": "Air layering",
         "asexualReproduction": "Asexual reproduction",

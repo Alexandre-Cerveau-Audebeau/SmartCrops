@@ -705,7 +705,7 @@
       "propagationLabel": "Méthodes de propagation",
       "pruningLabel": "Mois de taille",
       "wateringLabel": "Rythme d'arrosage",
-      "units": { "days": "jours" },
+      "units": { "days": "jours", "days_one": "jour" },
       "propagationMethods": {
         "airLayeringPropagation": "Marcottage aérien",
         "asexualReproduction": "Reproduction asexuée",

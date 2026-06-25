@@ -94,6 +94,7 @@ import {
   formatHardinessZone,
   formatLength,
   hasAnyXData,
+  hasCultureContent,
   isHardinessSuspicious,
   parseStringArray,
   pickHeroImage,
@@ -639,10 +640,7 @@ export default function PlantDetail() {
     !!plant.perenualData?.floweringSeason ||
     !!plant.perenualData?.harvestSeason;
 
-  const showCulture =
-    !!plant.perenualData?.propagationMethods ||
-    !!plant.perenualData?.pruningMonths ||
-    !!plant.perenualData?.wateringBenchmark;
+  const showCulture = hasCultureContent(plant.perenualData);
 
   const heroChips = buildFeatureChips(plant, t);
 

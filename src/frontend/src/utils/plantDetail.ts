@@ -362,6 +362,28 @@ export function hasAnyXData(pd: PlantPerenualData): boolean {
 }
 
 /**
+ * True when the plant has at least one displayable culture fact (propagation
+ * method, pruning month, or watering benchmark) after trimming/splitting.
+ * Mirrors the row-building in CultureSection so section 07 is never mounted —
+ * nor marked "live" in the TOC — with zero visible rows (SMA-231).
+ */
+export function hasCultureContent(pd: PlantPerenualData | null): boolean {
+  if (!pd) return false;
+  const splitNonEmpty = (s: string | null | undefined) =>
+    (
+      s
+        ?.split(',')
+        .map((v) => v.trim())
+        .filter(Boolean) ?? []
+    ).length > 0;
+  return (
+    splitNonEmpty(pd.propagationMethods) ||
+    splitNonEmpty(pd.pruningMonths) ||
+    !!pd.wateringBenchmark?.trim()
+  );
+}
+
+/**
  * Map a raw Perenual label (e.g. `"Reverse Osmosis Water"`, `"Pond/Lake Water"`)
  * to its camelCase i18n key (`reverseOsmosisWater`, `pondLakeWater`). Whitespace
  * and slashes are stripped; the first character is lower-cased. Callers pass the

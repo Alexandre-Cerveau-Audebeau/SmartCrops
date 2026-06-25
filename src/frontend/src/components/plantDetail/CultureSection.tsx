@@ -62,11 +62,14 @@ export const CultureSection = memo(function CultureSection({
         .join(', ')
     : '';
 
-  const watering = pd?.wateringBenchmark
-    ? `${pd.wateringBenchmark} ${
-        pd.wateringBenchmarkUnit
+  const wb = pd?.wateringBenchmark?.trim();
+  const watering = wb
+    ? `${wb} ${
+        pd?.wateringBenchmarkUnit
           ? t(
-              `plantDetail.culture.units.${pd.wateringBenchmarkUnit}`,
+              `plantDetail.culture.units.${pd.wateringBenchmarkUnit}${
+                wb === '1' ? '_one' : ''
+              }`,
               pd.wateringBenchmarkUnit
             )
           : ''
@@ -92,6 +95,10 @@ export const CultureSection = memo(function CultureSection({
   ].filter((r): r is { icon: string; label: string; value: string } =>
     Boolean(r.value)
   );
+
+  // Belt-and-braces: never render an empty card even if showCulture and the
+  // row set ever diverged (SMA-231).
+  if (rows.length === 0) return null;
 
   return (
     <Box id="edible" sx={{ mb: 3, scrollMarginTop: '80px' }}>
