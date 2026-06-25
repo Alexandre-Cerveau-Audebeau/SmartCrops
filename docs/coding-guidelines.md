@@ -61,7 +61,7 @@ Conventions may evolve; significant changes should be made via PR and discussed.
 
 ### Overlays
 
-- **Always pass `disableScrollLock`** to every MUI overlay (`Menu`, `Dialog`, `Drawer`, `Popover`, `Select`). The scrollbar gutter is stabilized globally in `theme.ts` (`html { overflow-y: scroll; scrollbar-gutter: stable }`); `disableScrollLock` per overlay prevents the page from shifting on open.
+- **Disable the scroll lock on overlays.** The scrollbar gutter is stabilized globally in `theme.ts` (`html { overflow-y: scroll; scrollbar-gutter: stable }`); each overlay must also opt out of MUI's scroll lock so the page doesn't shift on open. The prop's location depends on the component: `disableScrollLock` directly on `Dialog`/`Menu`/`Popover`; via `MenuProps={{ disableScrollLock: true }}` on `Select`; via `ModalProps={{ disableScrollLock: true }}` on a temporary `Drawer`.
 
 ### State & rendering
 
@@ -79,7 +79,7 @@ Conventions may evolve; significant changes should be made via PR and discussed.
 ### Accessibility
 
 - **Label→value pairs as a description list.** Render term/value rows with `component="dl"` + `dt`/`dd` (visual `sx` unchanged) so assistive tech gets the programmatic association — not generic flex `Box`es.
-- **`aria-label`s are neutral and localized** (no hardcoded text); the close affordance uses `'Close'`.
+- **`aria-label`s come from i18n**, not hardcoded strings — pass a translated value (the literal in `t('common.close', 'Close')` is the neutral default behind the key, not a hardcoded label).
 
 ## 5. Testing
 
@@ -94,7 +94,7 @@ Conventions may evolve; significant changes should be made via PR and discussed.
 
 - **XML doc expectation**: document public C# methods, properties, and classes with non-trivial behavior — this is the team standard. The CI Docstring Coverage check enforces an 80% floor (warnings tolerated, but missing docs are still a violation of the standard, to be improved incrementally).
 - **`/// <summary>`** for the top-level description, `<param>` for each parameter, `<returns>` for non-void return, `<exception>` for thrown exceptions when relevant.
-- **JSDoc on exported frontend utilities.** The 80% docstring floor applies to the frontend too: exported helpers/mappers in `utils/*.ts` carry a JSDoc. (Target, not a merge gate.)
+- **JSDoc on exported `utils/*.ts` members.** The 80% docstring floor applies to the frontend too: exported helpers/mappers in `utils/*.ts` carry a JSDoc. (Target, not a merge gate.)
 - **README.md** at the repo root summarizes the project. Subdirectory docs follow the local convention: Claude Code skills use `.claude/skills/<name>/SKILL.md` as the canonical entry point (with `README.md` as optional human-readable supplement); other subdirectories may use `README.md` or directory-local conventions as appropriate.
 - **ADRs** in `docs/adr/` for architectural decisions. Follow the format established by ADR-0001 (`docs/adr/0001-...md`): Status / Date / Deciders / Context / Decision / Rationale / Consequences / When to revisit / Related.
 - **Markdown fenced code blocks** must declare a language tag (markdownlint MD040). Use `regex`, `text`, `csharp`, `powershell`, etc. — pick the closest fit.
