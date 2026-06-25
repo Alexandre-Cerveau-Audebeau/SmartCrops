@@ -114,9 +114,9 @@ type Toast = { message: string; severity: ToastSeverity };
 /**
  * `GET /library/:id` detail page. Renders the full `PlantDetailResponse`
  * payload across 12 conditional sections (hero + gallery + about +
- * characteristics + lifecycle + edible/propagation + scientific-data
- * placeholder + pests + common names + synonyms + sources + admin), with
- * graceful degradation when enrichments are absent (cf. Basil seed).
+ * characteristics + lifecycle + cultivation/propagation (factual culture card)
+ * + scientific-data placeholder + pests + common names + synonyms + sources +
+ * admin), with graceful degradation when enrichments are absent (cf. Basil seed).
  */
 export default function PlantDetail() {
   const { t } = useTranslation();

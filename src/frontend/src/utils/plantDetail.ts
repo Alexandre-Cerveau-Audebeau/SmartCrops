@@ -362,24 +362,43 @@ export function hasAnyXData(pd: PlantPerenualData): boolean {
 }
 
 /**
+ * Single source of truth for section-07 culture facts: splits/trims/filters
+ * the raw Perenual fields into ready-to-render lists (raw values, NOT
+ * translated). Both {@link hasCultureContent} (section gating) and
+ * CultureSection (rendering) derive from this, so the "what rows exist" rule
+ * lives in exactly one place (SMA-231).
+ */
+export interface CultureFacts {
+  propagationMethods: string[];
+  pruningMonths: string[];
+  wateringBenchmark: string | null;
+}
+
+export function getCultureFacts(pd: PlantPerenualData | null): CultureFacts {
+  const split = (s: string | null | undefined) =>
+    s
+      ?.split(',')
+      .map((v) => v.trim())
+      .filter(Boolean) ?? [];
+  return {
+    propagationMethods: split(pd?.propagationMethods),
+    pruningMonths: split(pd?.pruningMonths),
+    wateringBenchmark: pd?.wateringBenchmark?.trim() || null,
+  };
+}
+
+/**
  * True when the plant has at least one displayable culture fact (propagation
- * method, pruning month, or watering benchmark) after trimming/splitting.
- * Mirrors the row-building in CultureSection so section 07 is never mounted —
- * nor marked "live" in the TOC — with zero visible rows (SMA-231).
+ * method, pruning month, or watering benchmark). Derives from
+ * {@link getCultureFacts} so section 07 is never mounted — nor marked "live" in
+ * the TOC — with zero visible rows (SMA-231).
  */
 export function hasCultureContent(pd: PlantPerenualData | null): boolean {
-  if (!pd) return false;
-  const splitNonEmpty = (s: string | null | undefined) =>
-    (
-      s
-        ?.split(',')
-        .map((v) => v.trim())
-        .filter(Boolean) ?? []
-    ).length > 0;
+  const f = getCultureFacts(pd);
   return (
-    splitNonEmpty(pd.propagationMethods) ||
-    splitNonEmpty(pd.pruningMonths) ||
-    !!pd.wateringBenchmark?.trim()
+    f.propagationMethods.length > 0 ||
+    f.pruningMonths.length > 0 ||
+    !!f.wateringBenchmark
   );
 }
 

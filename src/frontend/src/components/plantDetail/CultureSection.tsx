@@ -3,7 +3,7 @@ import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import { useTranslation } from 'react-i18next';
 import type { PlantPerenualData } from '../../types/Plant';
-import { toCamelKey } from '../../utils/plantDetail';
+import { getCultureFacts, toCamelKey } from '../../utils/plantDetail';
 import SectionHeader from './SectionHeader';
 import StatusBadge from './StatusBadge';
 import { Sym } from '../Sym';
@@ -41,28 +41,21 @@ export const CultureSection = memo(function CultureSection({
   const { t } = useTranslation();
   const pd = perenualData;
 
-  const methods = pd?.propagationMethods
-    ? pd.propagationMethods
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((m) =>
-          t(`plantDetail.culture.propagationMethods.${toCamelKey(m)}`, m)
-        )
-        .join(', ')
-    : '';
+  // Single parse of provenance (gating + rendering share getCultureFacts);
+  // translation/order/format stay here so the rendered output is unchanged.
+  const facts = getCultureFacts(pd);
 
-  const months = pd?.pruningMonths
-    ? pd.pruningMonths
-        .split(',')
-        .map((s) => s.trim().toLowerCase())
-        .filter(Boolean)
-        .sort((a, b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b))
-        .map((m) => t(`periods.months.${m}`, m))
-        .join(', ')
-    : '';
+  const methods = facts.propagationMethods
+    .map((m) => t(`plantDetail.culture.propagationMethods.${toCamelKey(m)}`, m))
+    .join(', ');
 
-  const wb = pd?.wateringBenchmark?.trim();
+  const months = facts.pruningMonths
+    .map((m) => m.toLowerCase())
+    .sort((a, b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b))
+    .map((m) => t(`periods.months.${m}`, m))
+    .join(', ');
+
+  const wb = facts.wateringBenchmark;
   const watering = wb
     ? `${wb} ${
         pd?.wateringBenchmarkUnit
