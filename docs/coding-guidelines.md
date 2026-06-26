@@ -56,12 +56,12 @@ Conventions may evolve; significant changes should be made via PR and discussed.
 
 ### Styling & theming
 
-- **No literal colors in components.** Use MUI theme tokens or shared named constants — never inline `#hex`/`rgba()` literals. Intentional exceptions stay as named constants, never anonymous inline values: brand constants (e.g. `NAV_BG`) and semantic visualization palettes (e.g. the Garden Planner grid).
+- **No new literal colors in components.** Use MUI theme tokens or shared named constants for new code; don't add inline `#hex`/`rgba()` literals. Intentional exceptions stay as named constants (e.g. `NAV_BG`, semantic visualization palettes like the Garden Planner grid). Pre-existing inline colors (e.g. `Navbar`) are migration backlog (SMA-226), not a precedent for new literals.
 - **Mode-aware colors.** Components derive colors from `palette.mode`; never hardcode a color that breaks the dark theme.
 
 ### Overlays
 
-- **Disable the scroll lock on overlays.** The scrollbar gutter is stabilized globally in `theme.ts` (`html { overflow-y: scroll; scrollbar-gutter: stable }`); each overlay must also opt out of MUI's scroll lock so the page doesn't shift on open. The prop's location depends on the component: `disableScrollLock` directly on `Dialog`/`Menu`/`Popover`; via `MenuProps={{ disableScrollLock: true }}` on `Select`; via `ModalProps={{ disableScrollLock: true }}` on a temporary `Drawer`.
+- **Disable MUI's scroll lock on modal overlays.** The scrollbar gutter is stabilized globally in `theme.ts` (`html { overflow-y: scroll; scrollbar-gutter: stable }`); the scroll-locking overlays must each opt out so the page doesn't shift on open. These are `Dialog`/`Menu`/`Popover` (`disableScrollLock` directly), `Select` (via `MenuProps={{ disableScrollLock: true }}`), and a temporary `Drawer` (via `ModalProps={{ disableScrollLock: true }}`).
 
 ### State & rendering
 
