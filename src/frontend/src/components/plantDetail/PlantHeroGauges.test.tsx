@@ -108,4 +108,20 @@ describe('PlantHeroGauges (SMA-169)', () => {
     expect(screen.queryByText('30–60 cm')).toBeNull();
     expect(screen.queryByText('18–24 °C')).toBeNull();
   });
+
+  it('flags a suspicious hardiness zone with a warning icon (SMA-241)', () => {
+    // min === max === 2 is the ETL artefact isHardinessSuspicious() catches.
+    renderGauges(makePlant({ hardinessZoneMin: 2, hardinessZoneMax: 2 }));
+
+    expect(screen.getByText('Hardiness')).toBeInTheDocument();
+    // Sym renders the ligature name as the span's text; no other gauge uses it.
+    expect(screen.getByText('warning')).toBeInTheDocument();
+  });
+
+  it('shows no warning icon for a normal hardiness zone (SMA-241)', () => {
+    renderGauges(makePlant({ hardinessZoneMin: 5, hardinessZoneMax: 9 }));
+
+    expect(screen.getByText('5-9')).toBeInTheDocument();
+    expect(screen.queryByText('warning')).toBeNull();
+  });
 });

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { Sym } from '../Sym';
 import type { Plant } from '../../types/Plant';
@@ -10,6 +11,7 @@ import {
   formatSpacing,
   formatTemperature,
   formatXDataRange,
+  isHardinessSuspicious,
 } from '../../utils/plantDetail';
 
 interface Gauge {
@@ -17,6 +19,7 @@ interface Gauge {
   icon: string;
   label: string;
   value: string;
+  warning?: boolean;
 }
 
 /**
@@ -50,6 +53,7 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
     icon: string;
     label: string;
     value: string | null;
+    warning?: boolean;
   }[] = [
     {
       key: 'sun',
@@ -75,6 +79,10 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
       icon: 'severe_cold',
       label: t('plantDetail.gauges.hardiness'),
       value: formatHardinessZone(
+        plant.hardinessZoneMin,
+        plant.hardinessZoneMax
+      ),
+      warning: isHardinessSuspicious(
         plant.hardinessZoneMin,
         plant.hardinessZoneMax
       ),
@@ -192,17 +200,35 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
               >
                 {g.label}
               </Typography>
-              <Typography
-                sx={{
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: 'heading',
-                  lineHeight: 1.2,
-                  mt: '1px',
-                }}
-              >
-                {g.value}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Typography
+                  sx={{
+                    fontSize: 15,
+                    fontWeight: 700,
+                    color: 'heading',
+                    lineHeight: 1.2,
+                    mt: '1px',
+                  }}
+                >
+                  {g.value}
+                </Typography>
+                {g.warning && (
+                  <Tooltip
+                    title={t('plantDetail.warnings.suspiciousHardiness')}
+                  >
+                    <Box
+                      component="span"
+                      sx={{
+                        display: 'inline-flex',
+                        color: 'warning.main',
+                        cursor: 'help',
+                      }}
+                    >
+                      <Sym name="warning" size={15} color="inherit" />
+                    </Box>
+                  </Tooltip>
+                )}
+              </Box>
             </Box>
           </Box>
         ))}
