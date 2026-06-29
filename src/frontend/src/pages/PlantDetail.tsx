@@ -39,7 +39,6 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import ScienceIcon from '@mui/icons-material/Science';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
@@ -1096,57 +1095,6 @@ export default function PlantDetail() {
               folded into the Overview card above. ─────────────────────────── */}
           {showLifecycleSection && <LifecycleSection plant={plant} />}
           {showScientificData && <ScientificDataSection plant={plant} />}
-
-          {/* ── Scientific data (coming soon) placeholder ──────────────────── */}
-          {/* Always rendered — a promise about what's next, not a graceful-
-          degradation fallback. Kept adjacent to the live scientific section
-          (slot 05) after the SMA-178 reorder. */}
-          <Card
-            variant="outlined"
-            sx={{ mb: 3, borderRadius: 3, bgcolor: 'surfaceSubtle' }}
-          >
-            <CardContent>
-              <Stack direction="row" spacing={2} alignItems="flex-start">
-                <ScienceIcon sx={{ color: 'text.secondary', mt: 0.5 }} />
-                <Box sx={{ flex: 1 }}>
-                  <Typography
-                    variant="h6"
-                    fontWeight={600}
-                    color="text.secondary"
-                    sx={{ mb: 1.5 }}
-                  >
-                    {t('plantDetail.sections.scientificData')}
-                  </Typography>
-                  <Box
-                    component="ul"
-                    sx={{
-                      m: 0,
-                      pl: 2.5,
-                      color: 'text.secondary',
-                      fontStyle: 'italic',
-                      '& li': { mb: 0.5, fontSize: '0.9rem' },
-                    }}
-                  >
-                    <li>{t('plantDetail.scientificData.items.waterLiters')}</li>
-                    <li>{t('plantDetail.scientificData.items.lightLumens')}</li>
-                    <li>
-                      {t('plantDetail.scientificData.items.nutrientsNPK')}
-                    </li>
-                    <li>
-                      {t('plantDetail.scientificData.items.daysToGermination')}
-                    </li>
-                  </Box>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ display: 'block', mt: 1.5 }}
-                  >
-                    {t('plantDetail.scientificData.comingSoon')}
-                  </Typography>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
 
           {/* ── Section 06: Characteristics — bar-gauge panel (SMA-39). ── */}
           <CharacteristicsSection plant={plant} />

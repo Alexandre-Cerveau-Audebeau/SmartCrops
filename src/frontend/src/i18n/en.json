@@ -368,7 +368,6 @@
       "characteristics": "Characteristics",
       "lifecycle": "Seasonal calendar",
       "edibleAndPropagation": "Cultivation & propagation",
-      "scientificData": "Scientific data (coming soon)",
       "pestsAndDiseases": "Diseases & pests",
       "commonNames": "Common names",
       "synonyms": "Botanical synonyms",
@@ -454,7 +453,6 @@
       }
     },
     "scientificData": {
-      "comingSoon": "Detailed scientific measurements (water needs in litres, light exposure in lumens, nutrient requirements, growth duration) will be available in an upcoming update.",
       "title": "Scientific data",
       "sectionTitle": "Scientific data · cultivation / greenhouse",
       "caption": "General parameters are already available; fine-grained control metrics arrive with sensor integration.",
@@ -496,12 +494,6 @@
         "evening": "Evening",
         "afternoon": "Afternoon",
         "night": "Night"
-      },
-      "items": {
-        "waterLiters": "Water needs (L/week)",
-        "lightLumens": "Light exposure (lumens/day)",
-        "nutrientsNPK": "Required nutrients (NPK)",
-        "daysToGermination": "Days to germination and harvest"
       }
     },
     "labels": {

@@ -280,15 +280,6 @@ describe('PlantDetail', () => {
     expect(screen.getByText('Powdery Mildew')).toBeInTheDocument();
   });
 
-  it('always renders the "Scientific data (coming soon)" section regardless of enrichment state', async () => {
-    renderAtPlant(makePlant());
-    expect(
-      await screen.findByRole('heading', {
-        name: /Scientific data \(coming soon\)/,
-      })
-    ).toBeInTheDocument();
-  });
-
   it('renders Section F.6 when hasSupremeData and at least one xData field is present', async () => {
     renderAtPlant(
       makePlant({
@@ -345,19 +336,6 @@ describe('PlantDetail', () => {
         name: 'Scientific data · cultivation / greenhouse',
       })
     ).not.toBeInTheDocument();
-  });
-
-  it('drops the temperatureRange and geoDistribution items from the F.5 placeholder', async () => {
-    renderAtPlant(makePlant());
-    await screen.findByRole('heading', { name: 'Basil' });
-    expect(
-      screen.queryByText('Optimal temperature range (°C)')
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText('Geographic distribution')
-    ).not.toBeInTheDocument();
-    // Kept items still present.
-    expect(screen.getByText('Required nutrients (NPK)')).toBeInTheDocument();
   });
 
   it('hides the Pests section when pests are empty', async () => {

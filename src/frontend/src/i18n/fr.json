@@ -368,7 +368,6 @@
       "characteristics": "Caractéristiques",
       "lifecycle": "Calendrier saisonnier",
       "edibleAndPropagation": "Culture & propagation",
-      "scientificData": "Données scientifiques (à venir)",
       "pestsAndDiseases": "Maladies & ravageurs",
       "commonNames": "Noms vernaculaires",
       "synonyms": "Synonymes botaniques",
@@ -454,7 +453,6 @@
       }
     },
     "scientificData": {
-      "comingSoon": "Des mesures scientifiques détaillées (besoins en eau en litres, exposition lumineuse en lumens, exigences nutritives, durée de croissance) seront disponibles dans une prochaine mise à jour.",
       "title": "Données scientifiques",
       "sectionTitle": "Données scientifiques · culture / serre",
       "caption": "Les paramètres généraux sont déjà disponibles ; les mesures fines de pilotage arrivent avec l'intégration des capteurs.",
@@ -496,12 +494,6 @@
         "evening": "Soir",
         "afternoon": "Après-midi",
         "night": "Nuit"
-      },
-      "items": {
-        "waterLiters": "Besoin en eau (L/semaine)",
-        "lightLumens": "Exposition lumineuse (lumens/jour)",
-        "nutrientsNPK": "Nutriments requis (NPK)",
-        "daysToGermination": "Jours jusqu'à germination et récolte"
       }
     },
     "labels": {
