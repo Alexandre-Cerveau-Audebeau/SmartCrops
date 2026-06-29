@@ -380,43 +380,16 @@ describe('PlantDetail', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('shows a hardiness warning chip when zone min === max === 2', async () => {
-    renderAtPlant(
-      makePlant({
-        hardinessZoneMin: 2,
-        hardinessZoneMax: 2,
-      })
-    );
+  it('renders the Characteristics bar-gauge section (SMA-39, mock-fed étape 1)', async () => {
+    renderAtPlant(makePlant());
     await screen.findByRole('heading', { name: 'Basil' });
-    // The warning icon's aria-label is the warning string; the chip itself reads "2".
-    // Scoped to Characteristics — the hardiness gauge also shows "2" now (SMA-169).
     const charSection = document.getElementById('characteristics');
     expect(charSection).toBeTruthy();
-    expect(within(charSection!).getByText('2')).toBeInTheDocument();
-    // The warning icon (WarningAmber) renders with role="img" via testid-less material.
-    // We test that the suspicious-flag path triggered by querying the warning tooltip title.
-    const warningEls = charSection!.querySelectorAll(
-      'svg[data-testid="WarningAmberIcon"]'
-    );
-    expect(warningEls.length).toBe(1);
-  });
-
-  it('does not show the hardiness warning for a normal zone range', async () => {
-    renderAtPlant(
-      makePlant({
-        hardinessZoneMin: 5,
-        hardinessZoneMax: 7,
-      })
-    );
-    await screen.findByRole('heading', { name: 'Basil' });
-    // Scoped to Characteristics — the hardiness gauge also shows "5-7" now (SMA-169).
-    const charSection = document.getElementById('characteristics');
-    expect(charSection).toBeTruthy();
-    expect(within(charSection!).getByText('5-7')).toBeInTheDocument();
-    const warningEls = charSection!.querySelectorAll(
-      'svg[data-testid="WarningAmberIcon"]'
-    );
-    expect(warningEls.length).toBe(0);
+    // Bar labels come from i18n; assert the first and last gauges render.
+    expect(within(charSection!).getByText('Light')).toBeInTheDocument();
+    expect(
+      within(charSection!).getByText('Frost tolerance')
+    ).toBeInTheDocument();
   });
 
   it('uses the inline SVG placeholder when the plant has no images and no legacy imageUrl', async () => {

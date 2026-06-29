@@ -405,6 +405,54 @@
       "spacing": "Espacement",
       "care": "Entretien"
     },
+    "characteristics": {
+      "bars": {
+        "light": "Lumière",
+        "soilMoisture": "Humidité du sol",
+        "atmoHumidity": "Humidité atmosphérique",
+        "soilTexture": "Texture du sol",
+        "soilPh": "pH du sol",
+        "frostTolerance": "Tolérance au gel"
+      },
+      "levels": {
+        "light": {
+          "shade": "Ombre",
+          "partialShade": "Mi-ombre",
+          "partialSun": "Soleil partiel",
+          "fullSun": "Plein soleil"
+        },
+        "frost": {
+          "veryHigh": "Très élevée",
+          "high": "Élevée",
+          "medium": "Moyenne",
+          "low": "Faible",
+          "lowFrostTender": "Faible (gélive)"
+        },
+        "ph": {
+          "acidic": "Acide",
+          "slightlyAcidic": "Légèrement acide",
+          "neutral": "Neutre",
+          "slightlyAlkaline": "Légèrement alcalin",
+          "alkaline": "Alcalin"
+        }
+      },
+      "notProvided": "Non renseigné",
+      "frostZone": "Zone {{range}}",
+      "nativeRange": "Aire d'origine",
+      "distribution": "Distribution",
+      "nativePrefix": "Native",
+      "introducedPrefix": "Introduite",
+      "allContinents": "Tous les continents",
+      "continents": {
+        "africa": "Afrique",
+        "northAmerica": "Amérique du Nord",
+        "centralAmericaCaribbean": "Amérique centrale & Caraïbes",
+        "southAmerica": "Amérique du Sud",
+        "asia": "Asie",
+        "europe": "Europe",
+        "oceania": "Océanie"
+      }
+    },
     "scientificData": {
       "comingSoon": "Des mesures scientifiques détaillées (besoins en eau en litres, exposition lumineuse en lumens, exigences nutritives, durée de croissance) seront disponibles dans une prochaine mise à jour.",
       "title": "Données scientifiques",

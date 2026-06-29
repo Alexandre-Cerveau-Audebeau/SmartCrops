@@ -405,6 +405,54 @@
       "spacing": "Spacing",
       "care": "Maintenance"
     },
+    "characteristics": {
+      "bars": {
+        "light": "Light",
+        "soilMoisture": "Soil moisture",
+        "atmoHumidity": "Atmospheric humidity",
+        "soilTexture": "Soil texture",
+        "soilPh": "Soil pH",
+        "frostTolerance": "Frost tolerance"
+      },
+      "levels": {
+        "light": {
+          "shade": "Shade",
+          "partialShade": "Partial shade",
+          "partialSun": "Partial sun",
+          "fullSun": "Full sun"
+        },
+        "frost": {
+          "veryHigh": "Very high",
+          "high": "High",
+          "medium": "Medium",
+          "low": "Low",
+          "lowFrostTender": "Low (frost-tender)"
+        },
+        "ph": {
+          "acidic": "Acidic",
+          "slightlyAcidic": "Slightly acidic",
+          "neutral": "Neutral",
+          "slightlyAlkaline": "Slightly alkaline",
+          "alkaline": "Alkaline"
+        }
+      },
+      "notProvided": "Not provided",
+      "frostZone": "Zone {{range}}",
+      "nativeRange": "Native range",
+      "distribution": "Distribution",
+      "nativePrefix": "Native",
+      "introducedPrefix": "Introduced",
+      "allContinents": "All continents",
+      "continents": {
+        "africa": "Africa",
+        "northAmerica": "North America",
+        "centralAmericaCaribbean": "Central America & Caribbean",
+        "southAmerica": "South America",
+        "asia": "Asia",
+        "europe": "Europe",
+        "oceania": "Oceania"
+      }
+    },
     "scientificData": {
       "comingSoon": "Detailed scientific measurements (water needs in litres, light exposure in lumens, nutrient requirements, growth duration) will be available in an upcoming update.",
       "title": "Scientific data",
