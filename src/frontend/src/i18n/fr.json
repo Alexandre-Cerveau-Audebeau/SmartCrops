@@ -365,6 +365,41 @@
       "library": "Bibliothèque",
       "ariaLabel": "Fil d'Ariane"
     },
+    "externalResources": {
+      "title": "Ressources externes",
+      "badgeNew": "NOUVEAU",
+      "items": {
+        "gbif": {
+          "name": "GBIF",
+          "desc": "Global Biodiversity Information Facility"
+        },
+        "wfo": { "name": "WFO", "desc": "World Flora Online" },
+        "perenual": {
+          "name": "Perenual",
+          "desc": "Soins, arrosage & culture"
+        },
+        "powo": {
+          "name": "POWO",
+          "desc": "Plants of the World Online — Kew"
+        },
+        "ipni": {
+          "name": "IPNI",
+          "desc": "International Plant Names Index"
+        },
+        "eppo": {
+          "name": "EPPO",
+          "desc": "European and Mediterranean Plant Protection Organization"
+        },
+        "plantuse": {
+          "name": "PlantUse",
+          "desc": "Usages ethnobotaniques"
+        },
+        "wikipedia": {
+          "name": "Wikipédia",
+          "desc": "Encyclopédie libre"
+        }
+      }
+    },
     "backToGarden": "Retour à {{name}}",
     "gbifBadge": "GBIF {{key}}",
     "sections": {
@@ -815,7 +850,6 @@
       "showFewer": "Afficher moins"
     },
     "sources": {
-      "viewExternal": "Voir sur {{source}}",
       "fetched": "Récupéré le {{date}}"
     },
     "fallback": {
