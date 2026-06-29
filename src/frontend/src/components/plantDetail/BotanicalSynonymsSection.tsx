@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useLayoutEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
@@ -9,18 +9,24 @@ import StatusBadge from './StatusBadge';
 import type { PlantSynonym } from '../../types/Plant';
 
 const S = 'plantDetail.synonyms';
-const PREVIEW_COUNT = 12;
 
 interface BotanicalSynonymsSectionProps {
   synonyms: readonly PlantSynonym[];
 }
 
 /**
- * Botanical synonyms for Plant Detail v2 (SMA-223, section 10). A wrap of
- * italic synonym chips; when there are more than PREVIEW_COUNT, the surplus
- * is hidden behind a "+N more" toggle chip. Each chip carries its botanical
- * authority (e.g. "Mill.") in a tooltip when present. Real data only. BUILD
- * NOW badge. Mounted only when >0 synonyms (gating preserved). Mode-aware.
+ * Botanical synonyms for Plant Detail v2 (SMA-223 / SMA-246, section 10). A wrap
+ * of italic synonym chips clamped to TWO rows when collapsed: the surplus is
+ * hidden behind a "+N more" toggle that reveals the rest. The clamp is measured
+ * at runtime (chip `offsetTop` rows + a `ResizeObserver` so the count re-derives
+ * when the width — and therefore the wrap — changes), not a fixed count, so it
+ * stays exactly two lines at any viewport. Each chip carries its botanical
+ * authority (e.g. "Mill.") in a tooltip when present. Real data only. BUILD NOW
+ * badge. Mounted only when >0 synonyms (gating preserved). Mode-aware.
+ *
+ * Note: jsdom reports `offsetTop === 0` for every node and ships no layout, so
+ * the clamp never engages under test — all chips render and no toggle appears.
+ * The two-line behaviour is validated visually on the running app.
  */
 export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
   synonyms,
@@ -29,10 +35,70 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
   const { palette } = useTheme();
   const dark = palette.mode === 'dark';
   const [expanded, setExpanded] = useState(false);
+  // null until measured → render everything (also the jsdom / no-layout path).
+  const [visibleCount, setVisibleCount] = useState<number | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  const hasOverflow = synonyms.length > PREVIEW_COUNT;
-  const visible = expanded ? synonyms : synonyms.slice(0, PREVIEW_COUNT);
-  const hiddenCount = synonyms.length - PREVIEW_COUNT;
+  useLayoutEffect(() => {
+    const container = listRef.current;
+    if (!container) return;
+
+    const measure = () => {
+      const chips = Array.from(
+        container.querySelectorAll<HTMLElement>('[data-syn-chip]')
+      );
+      if (chips.length === 0) return;
+
+      // Force every chip visible and drop the toggle out of flow so the
+      // measurement reflects the chips' NATURAL wrap. Inline styles override the
+      // emotion class for the duration of the (pre-paint) layout pass only.
+      const toggle = container.querySelector<HTMLElement>('[data-syn-toggle]');
+      chips.forEach((c) => {
+        c.style.display = 'inline-flex';
+      });
+      if (toggle) toggle.style.display = 'none';
+
+      // Distinct row tops, in DOM (increasing) order.
+      const rowTops: number[] = [];
+      for (const c of chips) {
+        const top = c.offsetTop;
+        if (!rowTops.includes(top)) rowTops.push(top);
+      }
+
+      let next: number;
+      if (rowTops.length <= 2) {
+        next = chips.length; // fits in two rows → no overflow.
+      } else {
+        const thirdRowTop = rowTops[2];
+        const fitTwoRows = chips.filter(
+          (c) => c.offsetTop < thirdRowTop
+        ).length;
+        // Reserve one slot on row 2 for the toggle chip.
+        next = Math.max(1, fitTwoRows - 1);
+      }
+
+      // Hand control back to the React-driven sx classes.
+      chips.forEach((c) => {
+        c.style.display = '';
+      });
+      if (toggle) toggle.style.display = '';
+
+      setVisibleCount((prev) => (prev === next ? prev : next));
+    };
+
+    measure();
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(measure);
+      observer.observe(container);
+    }
+    return () => observer?.disconnect();
+  }, [synonyms]);
+
+  const total = synonyms.length;
+  const hasOverflow = visibleCount != null && visibleCount < total;
+  const hiddenCount = total - (visibleCount ?? total);
 
   const chipBg = dark ? 'rgba(255,255,255,0.05)' : '#F2F6F0';
   const chipBorder = dark ? 'rgba(255,255,255,0.10)' : '#E2EADF';
@@ -51,15 +117,19 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
       <Typography
         sx={{ m: 0, mb: '12px', fontSize: 13, color: 'text.secondary' }}
       >
-        {t(`${S}.caption`, { count: synonyms.length })}
+        {t(`${S}.caption`, { count: total })}
       </Typography>
 
       <Box
         id="synonyms-list"
+        ref={listRef}
         sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}
       >
-        {visible.map((s) => {
+        {synonyms.map((s, i) => {
+          // When collapsed, only the first `visibleCount` chips stay in flow.
+          const shown = expanded || visibleCount == null || i < visibleCount;
           const chipSx: SxProps<Theme> = {
+            display: shown ? 'inline-flex' : 'none',
             px: '14px',
             py: '7px',
             borderRadius: '999px',
@@ -76,6 +146,7 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
           return s.authority ? (
             <Tooltip key={s.id} title={s.authority} arrow placement="top">
               <Box
+                data-syn-chip
                 sx={chipSx}
                 tabIndex={0}
                 aria-label={`${s.synonym} (${s.authority})`}
@@ -84,7 +155,7 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
               </Box>
             </Tooltip>
           ) : (
-            <Box key={s.id} sx={chipSx}>
+            <Box key={s.id} data-syn-chip sx={chipSx}>
               {s.synonym}
             </Box>
           );
@@ -92,6 +163,7 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
 
         {hasOverflow && (
           <Box
+            data-syn-toggle
             component="button"
             type="button"
             onClick={() => setExpanded((v) => !v)}
