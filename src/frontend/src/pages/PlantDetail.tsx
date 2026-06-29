@@ -19,8 +19,6 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Divider from '@mui/material/Divider';
-import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
 import List from '@mui/material/List';
@@ -35,9 +33,7 @@ import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { visuallyHidden } from '@mui/utils';
 import AddIcon from '@mui/icons-material/Add';
-import AgricultureIcon from '@mui/icons-material/Agriculture';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CloseIcon from '@mui/icons-material/Close';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -45,9 +41,6 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ScienceIcon from '@mui/icons-material/Science';
 import SettingsIcon from '@mui/icons-material/Settings';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import WaterDropIcon from '@mui/icons-material/WaterDrop';
-import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import { NAV_BG } from '../constants/colors';
@@ -78,6 +71,7 @@ import { SimilarPlantsSection } from '../components/plantDetail/SimilarPlantsSec
 import { CommunitySection } from '../components/plantDetail/CommunitySection';
 import { PestsSection } from '../components/plantDetail/PestsSection';
 import { CultureSection } from '../components/plantDetail/CultureSection';
+import { CharacteristicsSection } from '../components/plantDetail/CharacteristicsSection';
 import { CommonNamesSection } from '../components/plantDetail/CommonNamesSection';
 import { BotanicalSynonymsSection } from '../components/plantDetail/BotanicalSynonymsSection';
 import LifecycleSection from '../components/plantDetail/LifecycleSection';
@@ -89,13 +83,9 @@ import { resolveTranslatedField } from '../utils/getTranslation';
 import { capitalizeFirst } from '../utils/capitalizeFirst';
 import { composeImageAttribution } from '../utils/imageAttribution';
 import { adaptBadge } from '../utils/badgeColors';
-import { formatPeriod } from '../utils/formatPeriod';
 import {
-  formatHardinessZone,
-  formatLength,
   hasAnyXData,
   hasCultureContent,
-  isHardinessSuspicious,
   parseStringArray,
   pickHeroImage,
   pickLongDescription,
@@ -513,120 +503,8 @@ export default function PlantDetail() {
     .filter(Boolean)
     .join(' · ');
 
-  // Section D rows — characteristics column
-  const characteristicRows: {
-    label: string;
-    value: string;
-    warning?: boolean;
-    tooltip?: string;
-  }[] = [];
-  if (plant.lifeCycle) {
-    characteristicRows.push({
-      label: t('plantDetail.labels.lifeCycle'),
-      value: t(
-        `plantDetail.enumValues.lifeCycle.${plant.lifeCycle}`,
-        plant.lifeCycle
-      ),
-    });
-  }
-  if (plant.growthRate) {
-    characteristicRows.push({
-      label: t('plantDetail.labels.growthRate'),
-      value: t(
-        `plantDetail.enumValues.growthRate.${plant.growthRate}`,
-        plant.growthRate
-      ),
-    });
-  }
-  if (plant.careLevel) {
-    characteristicRows.push({
-      label: t('plantDetail.labels.careLevel'),
-      value: t(
-        `plantDetail.enumValues.careLevel.${plant.careLevel}`,
-        plant.careLevel
-      ),
-    });
-  }
-  if (plant.wateringNeedLevel) {
-    characteristicRows.push({
-      label: t('plantDetail.labels.wateringNeed'),
-      value: t(
-        `plantDetail.enumValues.wateringNeed.${plant.wateringNeedLevel}`,
-        plant.wateringNeedLevel
-      ),
-    });
-  }
-  const zone = formatHardinessZone(
-    plant.hardinessZoneMin,
-    plant.hardinessZoneMax
-  );
-  if (zone) {
-    const suspicious = isHardinessSuspicious(
-      plant.hardinessZoneMin,
-      plant.hardinessZoneMax
-    );
-    characteristicRows.push({
-      label: t('plantDetail.labels.hardinessZone'),
-      value: zone,
-      warning: suspicious,
-      tooltip: suspicious
-        ? t('plantDetail.warnings.suspiciousHardiness')
-        : undefined,
-    });
-  }
-  const height = formatLength(plant.minHeightCm, plant.maxHeightCm, system);
-  if (height)
-    characteristicRows.push({
-      label: t('plantDetail.labels.height'),
-      value: height,
-    });
-  const spread = formatLength(plant.minSpreadCm, plant.maxSpreadCm, system);
-  if (spread)
-    characteristicRows.push({
-      label: t('plantDetail.labels.spread'),
-      value: spread,
-    });
-  const phRange =
-    plant.soilPhMin != null && plant.soilPhMax != null
-      ? `${plant.soilPhMin} – ${plant.soilPhMax}`
-      : null;
-  if (phRange)
-    characteristicRows.push({
-      label: t('plantDetail.labels.soilPh'),
-      value: phRange,
-    });
-
-  // Section D rows — growing conditions column (existing legacy fields)
-  const conditions = (
-    [
-      {
-        icon: <WbSunnyIcon />,
-        label: t('library.sunExposure'),
-        value: plant.sunExposure
-          ? t(`plantValues.${plant.sunExposure}`, plant.sunExposure)
-          : null,
-      },
-      {
-        icon: <WaterDropIcon />,
-        label: t('library.waterNeeds'),
-        value: plant.waterNeeds
-          ? t(`plantValues.${plant.waterNeeds}`, plant.waterNeeds)
-          : null,
-      },
-      {
-        icon: <CalendarMonthIcon />,
-        label: t('library.sowingPeriod'),
-        value: formatPeriod(plant.sowingPeriod, t),
-      },
-      {
-        icon: <AgricultureIcon />,
-        label: t('library.harvestPeriod'),
-        value: formatPeriod(plant.harvestPeriod, t),
-      },
-    ] as { icon: React.ReactNode; label: string; value: string | null }[]
-  ).filter((c): c is { icon: React.ReactNode; label: string; value: string } =>
-    Boolean(c.value)
-  );
+  // Section 06 (Characteristics) is rendered by CharacteristicsSection from
+  // plant data.
 
   // SMA-185 — the guard now also covers the Perenual flowering/harvest seasons
   // that LifecycleSection already renders, so a plant with only those still shows
@@ -709,10 +587,8 @@ export default function PlantDetail() {
       num: '06',
       id: 'characteristics',
       labelKey: 'plantDetail.sections.characteristics',
-      state:
-        characteristicRows.length > 0 || conditions.length > 0
-          ? 'live'
-          : 'empty',
+      // SMA-39: CharacteristicsSection always renders its six gauge slots.
+      state: 'live',
     },
     {
       num: '07',
@@ -1272,114 +1148,8 @@ export default function PlantDetail() {
             </CardContent>
           </Card>
 
-          {/* ── Section D: Characteristics + growing conditions ────────────── */}
-          {(characteristicRows.length > 0 || conditions.length > 0) && (
-            <Grid
-              id="characteristics"
-              container
-              spacing={3}
-              sx={{ mb: 3, scrollMarginTop: '80px' }}
-            >
-              {characteristicRows.length > 0 && (
-                <Grid size={{ xs: 12, md: 6 }}>
-                  <Card
-                    variant="outlined"
-                    sx={{ borderRadius: 3, height: '100%' }}
-                  >
-                    <CardContent>
-                      <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-                        {t('plantDetail.sections.characteristics')}
-                      </Typography>
-                      <Stack spacing={1.25} divider={<Divider flexItem />}>
-                        {characteristicRows.map((row) => (
-                          <Box
-                            key={row.label}
-                            sx={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              gap: 2,
-                            }}
-                          >
-                            <Typography variant="body2" color="text.secondary">
-                              {row.label}
-                            </Typography>
-                            <Stack
-                              direction="row"
-                              spacing={0.5}
-                              alignItems="center"
-                            >
-                              <Typography
-                                variant="body2"
-                                fontWeight={500}
-                                color={
-                                  row.warning ? 'warning.main' : 'text.primary'
-                                }
-                              >
-                                {row.value}
-                              </Typography>
-                              {row.warning && (
-                                <Tooltip title={row.tooltip ?? ''} arrow>
-                                  <WarningAmberIcon
-                                    fontSize="small"
-                                    color="warning"
-                                  />
-                                </Tooltip>
-                              )}
-                            </Stack>
-                          </Box>
-                        ))}
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              )}
-              {conditions.length > 0 && (
-                <Grid size={{ xs: 12, md: 6 }}>
-                  <Card
-                    variant="outlined"
-                    sx={{ borderRadius: 3, height: '100%' }}
-                  >
-                    <CardContent>
-                      <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-                        {t('library.growingConditions')}
-                      </Typography>
-                      <Stack spacing={1.5}>
-                        {conditions.map((c) => (
-                          <Box
-                            key={c.label}
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 1.5,
-                            }}
-                          >
-                            <Box
-                              sx={{ color: 'primary.main', display: 'flex' }}
-                            >
-                              {c.icon}
-                            </Box>
-                            <Box>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                display="block"
-                              >
-                                {c.label}
-                              </Typography>
-                              <Typography variant="body2" fontWeight={500}>
-                                {c.value}
-                              </Typography>
-                            </Box>
-                          </Box>
-                        ))}
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              )}
-            </Grid>
-          )}
+          {/* ── Section 06: Characteristics — bar-gauge panel (SMA-39). ── */}
+          <CharacteristicsSection plant={plant} />
 
           {/* ── Section 07: Growing & propagation (SMA-231). Factual rows
               (propagation methods, pruning months, watering) on the section-05
