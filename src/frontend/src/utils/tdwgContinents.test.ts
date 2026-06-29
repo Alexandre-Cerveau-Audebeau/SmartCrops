@@ -14,7 +14,7 @@ describe('TDWG_TO_CONTINENT table', () => {
   it('maps every token to a known continent', () => {
     const allowed = new Set<Continent>(CONTINENT_ORDER);
     for (const c of Object.values(TDWG_TO_CONTINENT)) {
-      expect(allowed.has(c)).toBe(true);
+      expect(c !== undefined && allowed.has(c)).toBe(true);
     }
   });
 });

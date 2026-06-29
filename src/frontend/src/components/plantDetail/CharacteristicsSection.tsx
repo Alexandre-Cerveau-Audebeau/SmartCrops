@@ -204,7 +204,7 @@ function BarRow({ bar, t }: { bar: Bar; t: TFn }) {
           >
             {bar.label}
           </Typography>
-          {bar.rawValue && (
+          {filled && bar.rawValue && (
             <Typography
               component="span"
               sx={{ fontSize: 11, fontWeight: 500, color: 'text.secondary' }}
@@ -287,10 +287,13 @@ function RegionPill({
           color: fg,
           fontSize: 13,
           fontWeight: 600,
+          maxWidth: '100%',
         }}
       >
         <Sym name={icon} size={17} color="inherit" />
-        {text}
+        <Box component="span" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+          {text}
+        </Box>
       </Box>
     </Box>
   );

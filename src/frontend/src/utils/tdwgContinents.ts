@@ -7,7 +7,7 @@ export type Continent =
   | 'europe'
   | 'oceania';
 
-export const CONTINENT_ORDER: Continent[] = [
+export const CONTINENT_ORDER: readonly Continent[] = [
   'africa',
   'northAmerica',
   'centralAmericaCaribbean',
@@ -22,7 +22,7 @@ export const CONTINENT_ORDER: Continent[] = [
  * strings stored in Plants.NativeRegions / IntroducedRegions, including the
  * source data's 20-char truncations (e.g. "North European Russi"). 360 entries.
  */
-export const TDWG_TO_CONTINENT: Record<string, Continent> = {
+export const TDWG_TO_CONTINENT: Readonly<Partial<Record<string, Continent>>> = {
   // africa
   Algeria: 'africa',
   Angola: 'africa',

@@ -503,8 +503,8 @@ export default function PlantDetail() {
     .filter(Boolean)
     .join(' · ');
 
-  // Section 06 (Characteristics) is now its own component fed by mock data
-  // (SMA-39, étape 1/2) — see CharacteristicsSection.
+  // Section 06 (Characteristics) is rendered by CharacteristicsSection from
+  // plant data.
 
   // SMA-185 — the guard now also covers the Perenual flowering/harvest seasons
   // that LifecycleSection already renders, so a plant with only those still shows
@@ -587,7 +587,7 @@ export default function PlantDetail() {
       num: '06',
       id: 'characteristics',
       labelKey: 'plantDetail.sections.characteristics',
-      // Étape 1/2 (SMA-39): the mock-fed CharacteristicsSection always renders.
+      // SMA-39: CharacteristicsSection always renders its six gauge slots.
       state: 'live',
     },
     {
@@ -1148,8 +1148,7 @@ export default function PlantDetail() {
             </CardContent>
           </Card>
 
-          {/* ── Section 06: Characteristics — bar-gauge panel (SMA-39).
-              ⚠️ Étape 1/2: fed by a TEMP MOCK inside the component. ── */}
+          {/* ── Section 06: Characteristics — bar-gauge panel (SMA-39). ── */}
           <CharacteristicsSection plant={plant} />
 
           {/* ── Section 07: Growing & propagation (SMA-231). Factual rows

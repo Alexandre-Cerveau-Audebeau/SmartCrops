@@ -380,7 +380,7 @@ describe('PlantDetail', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('renders the Characteristics bar-gauge section (SMA-39, mock-fed étape 1)', async () => {
+  it('renders the Characteristics bar-gauge section (SMA-39)', async () => {
     renderAtPlant(makePlant());
     await screen.findByRole('heading', { name: 'Basil' });
     const charSection = document.getElementById('characteristics');
@@ -390,6 +390,8 @@ describe('PlantDetail', () => {
     expect(
       within(charSection!).getByText('Frost tolerance')
     ).toBeInTheDocument();
+    // TOC contract: section 06 is now always "live" → a clickable anchor to it.
+    expect(document.querySelector('a[href="#characteristics"]')).toBeTruthy();
   });
 
   it('uses the inline SVG placeholder when the plant has no images and no legacy imageUrl', async () => {
