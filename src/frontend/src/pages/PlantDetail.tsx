@@ -71,6 +71,7 @@ import { CommunitySection } from '../components/plantDetail/CommunitySection';
 import { PestsSection } from '../components/plantDetail/PestsSection';
 import { CultureSection } from '../components/plantDetail/CultureSection';
 import { CharacteristicsSection } from '../components/plantDetail/CharacteristicsSection';
+import { PlantBreadcrumb } from '../components/plantDetail/PlantBreadcrumb';
 import { CommonNamesSection } from '../components/plantDetail/CommonNamesSection';
 import { BotanicalSynonymsSection } from '../components/plantDetail/BotanicalSynonymsSection';
 import LifecycleSection from '../components/plantDetail/LifecycleSection';
@@ -654,13 +655,30 @@ export default function PlantDetail() {
       disableGutters
       sx={{ pt: 4, pb: 6, px: { xs: 2, md: 4 } }}
     >
-      <Button
-        startIcon={<ArrowBackIcon />}
-        onClick={() => navigate(backTarget)}
-        sx={{ mb: 3 }}
-      >
-        {backLabel}
-      </Button>
+      {/* SMA-246 — hierarchical breadcrumb (Library › Type › Plant) at the top of
+          the loaded page. It replaces the redundant "back to library" button; the
+          garden-provenance back button is kept below it so the planner return path
+          survives (the breadcrumb's Library link can't lead back to a garden). */}
+      <PlantBreadcrumb
+        libraryLabel={t('plantDetail.breadcrumb.library')}
+        libraryHref="/library"
+        typeLabel={
+          plant.plantType
+            ? t(`plantTypes.${plant.plantType.name}`, plant.plantType.name)
+            : null
+        }
+        currentLabel={displayName}
+      />
+
+      {fromPlanner && (
+        <Button
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate(backTarget)}
+          sx={{ mb: 3 }}
+        >
+          {backLabel}
+        </Button>
+      )}
 
       {/* SMA-178 — full-bleed two-column shell: a narrow sticky TOC rail pinned to
           the page's left padding and the content filling all remaining width to the

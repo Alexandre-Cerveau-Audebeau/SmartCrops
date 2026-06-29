@@ -361,6 +361,10 @@
     }
   },
   "plantDetail": {
+    "breadcrumb": {
+      "library": "Bibliothèque",
+      "ariaLabel": "Fil d'Ariane"
+    },
     "backToGarden": "Retour à {{name}}",
     "gbifBadge": "GBIF {{key}}",
     "sections": {
