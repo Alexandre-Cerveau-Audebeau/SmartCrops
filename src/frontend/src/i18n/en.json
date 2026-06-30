@@ -361,6 +361,45 @@
     }
   },
   "plantDetail": {
+    "breadcrumb": {
+      "library": "Library",
+      "ariaLabel": "Breadcrumb"
+    },
+    "externalResources": {
+      "title": "External resources",
+      "badgeNew": "NEW",
+      "items": {
+        "gbif": {
+          "name": "GBIF",
+          "desc": "Global Biodiversity Information Facility"
+        },
+        "wfo": { "name": "WFO", "desc": "World Flora Online" },
+        "perenual": {
+          "name": "Perenual",
+          "desc": "Care, watering & cultivation"
+        },
+        "powo": {
+          "name": "POWO",
+          "desc": "Plants of the World Online — Kew"
+        },
+        "ipni": {
+          "name": "IPNI",
+          "desc": "International Plant Names Index"
+        },
+        "eppo": {
+          "name": "EPPO",
+          "desc": "European and Mediterranean Plant Protection Organization"
+        },
+        "plantuse": {
+          "name": "PlantUse",
+          "desc": "Ethnobotanical uses"
+        },
+        "wikipedia": {
+          "name": "Wikipedia",
+          "desc": "The free encyclopedia"
+        }
+      }
+    },
     "backToGarden": "Back to {{name}}",
     "gbifBadge": "GBIF {{key}}",
     "sections": {
@@ -368,7 +407,6 @@
       "characteristics": "Characteristics",
       "lifecycle": "Seasonal calendar",
       "edibleAndPropagation": "Cultivation & propagation",
-      "scientificData": "Scientific data (coming soon)",
       "pestsAndDiseases": "Diseases & pests",
       "commonNames": "Common names",
       "synonyms": "Botanical synonyms",
@@ -454,7 +492,6 @@
       }
     },
     "scientificData": {
-      "comingSoon": "Detailed scientific measurements (water needs in litres, light exposure in lumens, nutrient requirements, growth duration) will be available in an upcoming update.",
       "title": "Scientific data",
       "sectionTitle": "Scientific data · cultivation / greenhouse",
       "caption": "General parameters are already available; fine-grained control metrics arrive with sensor integration.",
@@ -496,12 +533,6 @@
         "evening": "Evening",
         "afternoon": "Afternoon",
         "night": "Night"
-      },
-      "items": {
-        "waterLiters": "Water needs (L/week)",
-        "lightLumens": "Light exposure (lumens/day)",
-        "nutrientsNPK": "Required nutrients (NPK)",
-        "daysToGermination": "Days to germination and harvest"
       }
     },
     "labels": {
@@ -819,7 +850,6 @@
       "showFewer": "Show fewer"
     },
     "sources": {
-      "viewExternal": "View on {{source}}",
       "fetched": "Fetched {{date}}"
     },
     "fallback": {

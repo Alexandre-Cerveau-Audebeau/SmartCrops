@@ -20,7 +20,6 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
-import Link from '@mui/material/Link';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
@@ -39,7 +38,6 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import ScienceIcon from '@mui/icons-material/Science';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
@@ -72,13 +70,14 @@ import { CommunitySection } from '../components/plantDetail/CommunitySection';
 import { PestsSection } from '../components/plantDetail/PestsSection';
 import { CultureSection } from '../components/plantDetail/CultureSection';
 import { CharacteristicsSection } from '../components/plantDetail/CharacteristicsSection';
+import { PlantBreadcrumb } from '../components/plantDetail/PlantBreadcrumb';
+import { ExternalResourcesSection } from '../components/plantDetail/ExternalResourcesSection';
 import { CommonNamesSection } from '../components/plantDetail/CommonNamesSection';
 import { BotanicalSynonymsSection } from '../components/plantDetail/BotanicalSynonymsSection';
 import LifecycleSection from '../components/plantDetail/LifecycleSection';
 import ScientificDataSection from '../components/plantDetail/ScientificDataSection';
 import FaqSection from '../components/plantDetail/FaqSection';
 import { buildFaqItems } from '../utils/plantDetailFaq';
-import { isUserFacingUrl, toUserFacingUrl } from '../utils/externalSourceUrl';
 import { resolveTranslatedField } from '../utils/getTranslation';
 import { capitalizeFirst } from '../utils/capitalizeFirst';
 import { composeImageAttribution } from '../utils/imageAttribution';
@@ -522,12 +521,6 @@ export default function PlantDetail() {
 
   const heroChips = buildFeatureChips(plant, t);
 
-  const fullyEnriched =
-    plant.enrichmentSources.includes('Manual') &&
-    plant.enrichmentSources.includes('GBIF') &&
-    plant.enrichmentSources.includes('Trefle') &&
-    plant.enrichmentSources.includes('Perenual');
-
   // SMA-169 — the scientific (Perenual xData) section renders only when Supreme
   // data is present AND at least one xData field is populated (mirrors Section F.6).
   const showScientificData = !!(
@@ -655,13 +648,30 @@ export default function PlantDetail() {
       disableGutters
       sx={{ pt: 4, pb: 6, px: { xs: 2, md: 4 } }}
     >
-      <Button
-        startIcon={<ArrowBackIcon />}
-        onClick={() => navigate(backTarget)}
-        sx={{ mb: 3 }}
-      >
-        {backLabel}
-      </Button>
+      {/* SMA-246 — hierarchical breadcrumb (Library › Type › Plant) at the top of
+          the loaded page. It replaces the redundant "back to library" button; the
+          garden-provenance back button is kept below it so the planner return path
+          survives (the breadcrumb's Library link can't lead back to a garden). */}
+      <PlantBreadcrumb
+        libraryLabel={t('plantDetail.breadcrumb.library')}
+        libraryHref="/library"
+        typeLabel={
+          plant.plantType
+            ? t(`plantTypes.${plant.plantType.name}`, plant.plantType.name)
+            : null
+        }
+        currentLabel={displayName}
+      />
+
+      {fromPlanner && (
+        <Button
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate(backTarget)}
+          sx={{ mb: 3 }}
+        >
+          {backLabel}
+        </Button>
+      )}
 
       {/* SMA-178 — full-bleed two-column shell: a narrow sticky TOC rail pinned to
           the page's left padding and the content filling all remaining width to the
@@ -1097,57 +1107,6 @@ export default function PlantDetail() {
           {showLifecycleSection && <LifecycleSection plant={plant} />}
           {showScientificData && <ScientificDataSection plant={plant} />}
 
-          {/* ── Scientific data (coming soon) placeholder ──────────────────── */}
-          {/* Always rendered — a promise about what's next, not a graceful-
-          degradation fallback. Kept adjacent to the live scientific section
-          (slot 05) after the SMA-178 reorder. */}
-          <Card
-            variant="outlined"
-            sx={{ mb: 3, borderRadius: 3, bgcolor: 'surfaceSubtle' }}
-          >
-            <CardContent>
-              <Stack direction="row" spacing={2} alignItems="flex-start">
-                <ScienceIcon sx={{ color: 'text.secondary', mt: 0.5 }} />
-                <Box sx={{ flex: 1 }}>
-                  <Typography
-                    variant="h6"
-                    fontWeight={600}
-                    color="text.secondary"
-                    sx={{ mb: 1.5 }}
-                  >
-                    {t('plantDetail.sections.scientificData')}
-                  </Typography>
-                  <Box
-                    component="ul"
-                    sx={{
-                      m: 0,
-                      pl: 2.5,
-                      color: 'text.secondary',
-                      fontStyle: 'italic',
-                      '& li': { mb: 0.5, fontSize: '0.9rem' },
-                    }}
-                  >
-                    <li>{t('plantDetail.scientificData.items.waterLiters')}</li>
-                    <li>{t('plantDetail.scientificData.items.lightLumens')}</li>
-                    <li>
-                      {t('plantDetail.scientificData.items.nutrientsNPK')}
-                    </li>
-                    <li>
-                      {t('plantDetail.scientificData.items.daysToGermination')}
-                    </li>
-                  </Box>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ display: 'block', mt: 1.5 }}
-                  >
-                    {t('plantDetail.scientificData.comingSoon')}
-                  </Typography>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
-
           {/* ── Section 06: Characteristics — bar-gauge panel (SMA-39). ── */}
           <CharacteristicsSection plant={plant} />
 
@@ -1183,131 +1142,8 @@ export default function PlantDetail() {
               sample data; always mounted; TOC entry (plantnet) stays coming-data. */}
           <ObservationsSection />
 
-          {/* ── Section J: Enrichment footer + external sources ─────────────── */}
-          <Card
-            id="sources"
-            variant="outlined"
-            sx={{ mb: 3, borderRadius: 3, scrollMarginTop: '80px' }}
-          >
-            <CardContent>
-              <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                spacing={2}
-                alignItems={{ sm: 'center' }}
-                justifyContent="space-between"
-              >
-                <Box>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    display="block"
-                    sx={{ mb: 0.5 }}
-                  >
-                    {t('plantDetail.sections.sources')}
-                  </Typography>
-                  <Stack
-                    direction="row"
-                    spacing={0.75}
-                    flexWrap="wrap"
-                    useFlexGap
-                  >
-                    {plant.enrichmentSources.map((src) => {
-                      const b = adaptBadge(sourceTypeColors(src), mode);
-                      return (
-                        <Chip
-                          key={src}
-                          label={t(
-                            `plantDetail.enumValues.sourceType.${src}`,
-                            src
-                          )}
-                          size="small"
-                          sx={{
-                            bgcolor: b.bg,
-                            color: b.fg,
-                            border: '1px solid',
-                            borderColor: b.border,
-                            fontWeight: 500,
-                          }}
-                        />
-                      );
-                    })}
-                    {!fullyEnriched && (
-                      <Chip
-                        label={t('plantDetail.fallback.notEnriched')}
-                        size="small"
-                        variant="outlined"
-                        color="default"
-                      />
-                    )}
-                  </Stack>
-                </Box>
-                <Box>
-                  {plant.lastEnrichmentAt && (
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      display="block"
-                    >
-                      {t('plantDetail.labels.lastEnriched')}:{' '}
-                      {new Date(plant.lastEnrichmentAt).toLocaleDateString(
-                        language
-                      )}
-                    </Typography>
-                  )}
-                  {plant.sources.length > 0 && (
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      sx={{ mt: 0.5 }}
-                      flexWrap="wrap"
-                      useFlexGap
-                    >
-                      {plant.sources.flatMap((s) => {
-                        // PlantSource.Url persists the API endpoint we called during enrichment.
-                        // Rewrite to the upstream's public species page before rendering, and
-                        // drop the link entirely if the rewrite couldn't take it out of /api/ —
-                        // sending the user to a JSON endpoint (or one that demands an API key)
-                        // is worse than no link at all.
-                        //
-                        // For Perenual: prefer the requested id over the canonical one stored in
-                        // the API URL (issue #67 — Perenual canonicalises server-side). The
-                        // helper ignores the explicit id for non-Perenual sources, so passing
-                        // it unconditionally is safe and removes a per-source branch here.
-                        const userUrl = toUserFacingUrl(
-                          s.url,
-                          plant.perenualData?.requestedPerenualId
-                        );
-                        if (!isUserFacingUrl(userUrl)) return [];
-                        return [
-                          <Link
-                            key={s.id}
-                            href={userUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            underline="hover"
-                            variant="caption"
-                            sx={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 0.25,
-                            }}
-                          >
-                            {t('plantDetail.sources.viewExternal', {
-                              source: t(
-                                `plantDetail.enumValues.sourceType.${s.sourceType}`,
-                                s.sourceType
-                              ),
-                            })}
-                            <OpenInNewIcon sx={{ fontSize: 12 }} />
-                          </Link>,
-                        ];
-                      })}
-                    </Stack>
-                  )}
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
+          {/* ── Section 12: External resources + enrichment provenance (SMA-246) ── */}
+          <ExternalResourcesSection plant={plant} />
 
           {/* ── Section 13: Similar plants teaser (SMA-78). Decorative sample
               recommendations; always mounted; TOC entry (similar) stays
@@ -1605,22 +1441,6 @@ function buildFeatureChips(
       color: '#4A148C',
     });
   return chips;
-}
-
-/** Map an enrichment source label to its footer-badge palette. */
-function sourceTypeColors(source: string): { bg: string; fg: string } {
-  switch (source) {
-    case 'Manual':
-      return { bg: '#E0E0E0', fg: '#212121' };
-    case 'GBIF':
-      return { bg: '#E1F5FE', fg: '#01579B' };
-    case 'Trefle':
-      return { bg: '#E8F5E9', fg: '#1B5E20' };
-    case 'Perenual':
-      return { bg: '#FFF3E0', fg: '#E65100' };
-    default:
-      return { bg: '#F5F5F5', fg: '#424242' };
-  }
 }
 
 /** One column of the lifecycle frieze — icon + label + period text (or em-dash). */

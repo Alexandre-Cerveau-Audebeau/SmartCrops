@@ -361,6 +361,45 @@
     }
   },
   "plantDetail": {
+    "breadcrumb": {
+      "library": "Bibliothèque",
+      "ariaLabel": "Fil d'Ariane"
+    },
+    "externalResources": {
+      "title": "Ressources externes",
+      "badgeNew": "NOUVEAU",
+      "items": {
+        "gbif": {
+          "name": "GBIF",
+          "desc": "Global Biodiversity Information Facility"
+        },
+        "wfo": { "name": "WFO", "desc": "World Flora Online" },
+        "perenual": {
+          "name": "Perenual",
+          "desc": "Soins, arrosage & culture"
+        },
+        "powo": {
+          "name": "POWO",
+          "desc": "Plants of the World Online — Kew"
+        },
+        "ipni": {
+          "name": "IPNI",
+          "desc": "International Plant Names Index"
+        },
+        "eppo": {
+          "name": "EPPO",
+          "desc": "European and Mediterranean Plant Protection Organization"
+        },
+        "plantuse": {
+          "name": "PlantUse",
+          "desc": "Usages ethnobotaniques"
+        },
+        "wikipedia": {
+          "name": "Wikipédia",
+          "desc": "Encyclopédie libre"
+        }
+      }
+    },
     "backToGarden": "Retour à {{name}}",
     "gbifBadge": "GBIF {{key}}",
     "sections": {
@@ -368,7 +407,6 @@
       "characteristics": "Caractéristiques",
       "lifecycle": "Calendrier saisonnier",
       "edibleAndPropagation": "Culture & propagation",
-      "scientificData": "Données scientifiques (à venir)",
       "pestsAndDiseases": "Maladies & ravageurs",
       "commonNames": "Noms vernaculaires",
       "synonyms": "Synonymes botaniques",
@@ -454,7 +492,6 @@
       }
     },
     "scientificData": {
-      "comingSoon": "Des mesures scientifiques détaillées (besoins en eau en litres, exposition lumineuse en lumens, exigences nutritives, durée de croissance) seront disponibles dans une prochaine mise à jour.",
       "title": "Données scientifiques",
       "sectionTitle": "Données scientifiques · culture / serre",
       "caption": "Les paramètres généraux sont déjà disponibles ; les mesures fines de pilotage arrivent avec l'intégration des capteurs.",
@@ -496,12 +533,6 @@
         "evening": "Soir",
         "afternoon": "Après-midi",
         "night": "Nuit"
-      },
-      "items": {
-        "waterLiters": "Besoin en eau (L/semaine)",
-        "lightLumens": "Exposition lumineuse (lumens/jour)",
-        "nutrientsNPK": "Nutriments requis (NPK)",
-        "daysToGermination": "Jours jusqu'à germination et récolte"
       }
     },
     "labels": {
@@ -819,7 +850,6 @@
       "showFewer": "Afficher moins"
     },
     "sources": {
-      "viewExternal": "Voir sur {{source}}",
       "fetched": "Récupéré le {{date}}"
     },
     "fallback": {
