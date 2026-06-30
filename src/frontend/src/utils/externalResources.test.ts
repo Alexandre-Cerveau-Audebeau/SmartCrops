@@ -85,6 +85,16 @@ describe('buildExternalResourceLinks', () => {
     );
   });
 
+  it('folds a region-tagged locale to the primary Wikipedia subtag', () => {
+    const href = byKey(build({ lang: 'fr-CA' }), 'wikipedia')!.href;
+    expect(href).toContain('https://fr.wikipedia.org/');
+    expect(href).not.toContain('fr-CA.wikipedia.org');
+    // Underscore form + casing are normalized too.
+    expect(byKey(build({ lang: 'EN_US' }), 'wikipedia')!.href).toContain(
+      'https://en.wikipedia.org/'
+    );
+  });
+
   it('returns entries in the mockup order, omitting absent direct ones', () => {
     expect(build().map((l) => l.key)).toEqual([
       'gbif',

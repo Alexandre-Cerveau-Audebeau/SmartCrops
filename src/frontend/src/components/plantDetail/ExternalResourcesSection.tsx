@@ -16,14 +16,16 @@ import {
 } from '../../utils/externalSourceUrl';
 import {
   buildExternalResourceLinks,
+  type ExternalResourceKey,
   type ExternalResourceLink,
 } from '../../utils/externalResources';
 import type { Plant } from '../../types/Plant';
 
 const ER = 'plantDetail.externalResources';
 
-// Two-letter pill abbreviations, keyed by resource (matches the mockup).
-const ABBREV: Readonly<Record<string, string>> = {
+// Two-letter pill abbreviations, keyed by resource (matches the mockup). Typed on
+// the closed key union so a new resource forces an abbreviation here (compile-time).
+const ABBREV: Readonly<Record<ExternalResourceKey, string>> = {
   gbif: 'GB',
   wfo: 'WF',
   perenual: 'PE',

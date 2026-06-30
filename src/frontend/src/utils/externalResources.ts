@@ -18,8 +18,25 @@
  */
 export type ResourceLinkKind = 'direct' | 'search';
 
+// The closed set of resource keys, in mockup order. Exported as a literal union
+// so every consumer (the ABBREV map, the i18n `items.*` entries) is checked for
+// exhaustiveness at compile time — adding a key here without its abbreviation /
+// locale entry becomes a type error rather than a blank badge at runtime.
+export const EXTERNAL_RESOURCE_KEYS = [
+  'gbif',
+  'wfo',
+  'perenual',
+  'powo',
+  'ipni',
+  'eppo',
+  'plantuse',
+  'wikipedia',
+] as const;
+
+export type ExternalResourceKey = (typeof EXTERNAL_RESOURCE_KEYS)[number];
+
 export interface ExternalResourceLink {
-  key: string;
+  key: ExternalResourceKey;
   labelKey: string;
   descriptionKey: string;
   href: string;
@@ -30,7 +47,7 @@ export interface ExternalResourceLink {
 const ITEMS = 'plantDetail.externalResources.items';
 
 function mk(
-  key: string,
+  key: ExternalResourceKey,
   href: string,
   kind: ResourceLinkKind,
   isNew: boolean
@@ -55,7 +72,9 @@ export function buildExternalResourceLinks(args: {
   lang?: string | null;
 }): ExternalResourceLink[] {
   const enc = encodeURIComponent(args.scientificName);
-  const lang = args.lang || 'en';
+  // Wikipedia hosts use the bare primary subtag (`fr`, not `fr-CA`), so fold any
+  // region/script tag away — matching CommonNamesSection's locale handling.
+  const lang = (args.lang || 'en').split(/[-_]/)[0].toLowerCase() || 'en';
   const links: ExternalResourceLink[] = [];
 
   // ── Direct (id-addressable, omitted when the id is absent) ──────────────

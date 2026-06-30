@@ -116,6 +116,10 @@ describe('PlantHeroGauges (SMA-169)', () => {
     expect(screen.getByText('Hardiness')).toBeInTheDocument();
     // Sym renders the ligature name as the span's text; no other gauge uses it.
     expect(screen.getByText('warning')).toBeInTheDocument();
+    // SMA-246 a11y: the warning trigger is focusable and carries an accessible
+    // name (role="img" + aria-label) so screen readers announce it.
+    const warning = screen.getByRole('img', { name: /suspicious/i });
+    expect(warning).toHaveAttribute('tabindex', '0');
   });
 
   it('shows no warning icon for a normal hardiness zone (SMA-241)', () => {

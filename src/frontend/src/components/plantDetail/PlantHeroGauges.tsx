@@ -216,8 +216,14 @@ export default function PlantHeroGauges({ plant }: { plant: Plant }) {
                   <Tooltip
                     title={t('plantDetail.warnings.suspiciousHardiness')}
                   >
+                    {/* Focusable + named so the warning is reachable by keyboard
+                        and announced by screen readers; Sym stays decorative to
+                        avoid doubling the accessible name. */}
                     <Box
                       component="span"
+                      role="img"
+                      tabIndex={0}
+                      aria-label={t('plantDetail.warnings.suspiciousHardiness')}
                       sx={{
                         display: 'inline-flex',
                         color: 'warning.main',
