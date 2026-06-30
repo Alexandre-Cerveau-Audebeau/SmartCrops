@@ -175,4 +175,71 @@ describe('PlantDetailToc (SMA-178 part B — 01-15 four-state)', () => {
     const { container } = render(<PlantDetailToc sections={[]} />);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it('centers the active pill in the mobile bar via container.scrollTo (SMA-247)', () => {
+    // Query-aware stub: the breakpoint matches (mobile) but reduced-motion does
+    // not → smooth scroll.
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: !query.includes('prefers-reduced-motion'),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }))
+    );
+
+    const rect = (left: number, width: number): DOMRect =>
+      ({
+        left,
+        width,
+        right: left + width,
+        top: 0,
+        bottom: 0,
+        height: 0,
+        x: left,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const { rerender } = render(
+      <PlantDetailToc sections={SECTIONS} activeId="overview" />
+    );
+
+    // jsdom has no layout — mock the specific container + target-pill geometry so
+    // the rect math runs: bar 300px wide (scrollable 900), the 'sources' pill is
+    // an 80px box at x=400 → target = 0 + 400 - (300-80)/2 = 290, clamped to
+    // [0, 600].
+    const nav = screen.getByRole('navigation');
+    const scrollTo = vi.fn();
+    nav.scrollTo = scrollTo as unknown as HTMLElement['scrollTo'];
+    Object.defineProperty(nav, 'clientWidth', {
+      value: 300,
+      configurable: true,
+    });
+    Object.defineProperty(nav, 'scrollWidth', {
+      value: 900,
+      configurable: true,
+    });
+    Object.defineProperty(nav, 'scrollLeft', {
+      value: 0,
+      configurable: true,
+      writable: true,
+    });
+    nav.getBoundingClientRect = () => rect(0, 300);
+
+    const sourcesPill = screen.getByRole('link', {
+      name: label('plantDetail.sections.sources'),
+    });
+    sourcesPill.getBoundingClientRect = () => rect(400, 80);
+
+    // Activate 'sources' → the effect re-runs and centers its pill.
+    rerender(<PlantDetailToc sections={SECTIONS} activeId="sources" />);
+
+    expect(scrollTo).toHaveBeenCalledWith({ left: 290, behavior: 'smooth' });
+  });
 });
