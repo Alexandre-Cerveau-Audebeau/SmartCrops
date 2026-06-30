@@ -72,6 +72,7 @@ import { CultureSection } from '../components/plantDetail/CultureSection';
 import { CharacteristicsSection } from '../components/plantDetail/CharacteristicsSection';
 import { PlantBreadcrumb } from '../components/plantDetail/PlantBreadcrumb';
 import { ExternalResourcesSection } from '../components/plantDetail/ExternalResourcesSection';
+import { AiAssistantFab } from '../components/plantDetail/AiAssistantFab';
 import { CommonNamesSection } from '../components/plantDetail/CommonNamesSection';
 import { BotanicalSynonymsSection } from '../components/plantDetail/BotanicalSynonymsSection';
 import LifecycleSection from '../components/plantDetail/LifecycleSection';
@@ -99,6 +100,13 @@ type PlantDetailNavState = {
 
 type ToastSeverity = 'success' | 'info' | 'warning' | 'error';
 type Toast = { message: string; severity: ToastSeverity };
+
+// Anchor offset for in-page section navigation. Mobile clears the fixed AppBar
+// (56px) + the sticky TOC pill bar (~48px); desktop clears the AppBar only, as
+// before (SMA-247).
+const SECTION_SCROLL_MARGIN = {
+  scrollMarginTop: { xs: '104px', md: '80px' },
+} as const;
 
 /**
  * `GET /library/:id` detail page. Renders the full `PlantDetailResponse`
@@ -646,6 +654,8 @@ export default function PlantDetail() {
     <Container
       maxWidth={false}
       disableGutters
+      // SMA-247 — the horizontal-scroll guard now lives once on the Layout shell
+      // Box (covers every page); no per-page overflow override needed here.
       sx={{ pt: 4, pb: 6, px: { xs: 2, md: 4 } }}
     >
       {/* SMA-246 — hierarchical breadcrumb (Library › Type › Plant) at the top of
@@ -672,6 +682,21 @@ export default function PlantDetail() {
           {backLabel}
         </Button>
       )}
+
+      {/* SMA-247 — mobile-only unit toggle in normal flow (scrolls with the page).
+          On mobile the sticky rail keeps only the thin TOC pill bar; the toggle is
+          pulled out here so no thick block stays pinned. Desktop keeps its copy in
+          the rail (below). The flex item shrinks to the toggle's content width and
+          is right-aligned. */}
+      <Box
+        sx={{
+          display: { xs: 'flex', md: 'none' },
+          justifyContent: 'flex-end',
+          mb: 2,
+        }}
+      >
+        <UnitSystemToggle />
+      </Box>
 
       {/* SMA-178 — full-bleed two-column shell: a narrow sticky TOC rail pinned to
           the page's left padding and the content filling all remaining width to the
@@ -708,12 +733,25 @@ export default function PlantDetail() {
             minHeight: { md: 0 },
           }}
         >
-          <Box sx={{ mb: 2, flexShrink: 0 }}>
+          {/* SMA-247 — desktop only: the mobile copy lives above, in normal flow. */}
+          <Box
+            sx={{ mb: 2, flexShrink: 0, display: { xs: 'none', md: 'block' } }}
+          >
             <UnitSystemToggle />
           </Box>
           <PlantDetailToc sections={tocSections} disableSticky />
         </Box>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            // SMA-247 — single source for the anchor offset. On mobile the sticky
+            // pill bar (top 56 + ~48px) hides more than the desktop rail, so bump
+            // the per-section scroll-margin via a descendant selector (its higher
+            // specificity overrides each section's inline default; desktop stays 80).
+            '& [id]': SECTION_SCROLL_MARGIN,
+          }}
+        >
           {/* ── Section A: Hero header ───────────────────────────────────── */}
           <Card
             id="overview"
@@ -1164,15 +1202,26 @@ export default function PlantDetail() {
               borderRadius: '16px',
               p: { xs: 3, sm: '32px 36px' },
               display: 'flex',
-              alignItems: 'center',
+              // SMA-247 — stack on narrow screens (text above the button) so the
+              // title gets the full width and never overflows; row from sm up.
+              flexDirection: { xs: 'column', sm: 'row' },
+              alignItems: { xs: 'flex-start', sm: 'center' },
               gap: 3,
               flexWrap: 'wrap',
             }}
           >
-            <Box sx={{ flex: 1, minWidth: 240 }}>
+            <Box sx={{ flex: 1, minWidth: { xs: 0, sm: 240 } }}>
               <Typography
                 component="h3"
-                sx={{ mb: '6px', fontSize: 22, fontWeight: 800, color: '#fff' }}
+                sx={{
+                  mb: '6px',
+                  fontSize: 22,
+                  fontWeight: 800,
+                  color: '#fff',
+                  // Let a long title/plant-name break instead of overflowing the
+                  // squeezed flex item (SMA-247).
+                  overflowWrap: 'anywhere',
+                }}
               >
                 {t('plantDetail.cta.title', { name: displayName })}
               </Typography>
@@ -1317,6 +1366,9 @@ export default function PlantDetail() {
           </Alert>
         ) : undefined}
       </Snackbar>
+
+      {/* SMA-247 — floating AI-assistant teaser (mobile only, non-interactive). */}
+      <AiAssistantFab />
     </Container>
   );
 }

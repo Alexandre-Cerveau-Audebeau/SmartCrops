@@ -365,6 +365,11 @@
       "library": "Bibliothèque",
       "ariaLabel": "Fil d'Ariane"
     },
+    "aiAssistant": {
+      "label": "IA",
+      "comingSoon": "Bientôt",
+      "ariaLabel": "Assistant IA — bientôt"
+    },
     "externalResources": {
       "title": "Ressources externes",
       "badgeNew": "NOUVEAU",

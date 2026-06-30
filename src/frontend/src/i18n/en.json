@@ -365,6 +365,11 @@
       "library": "Library",
       "ariaLabel": "Breadcrumb"
     },
+    "aiAssistant": {
+      "label": "AI",
+      "comingSoon": "Soon",
+      "ariaLabel": "AI assistant — coming soon"
+    },
     "externalResources": {
       "title": "External resources",
       "badgeNew": "NEW",
