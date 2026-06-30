@@ -683,21 +683,6 @@ export default function PlantDetail() {
         </Button>
       )}
 
-      {/* SMA-247 — mobile-only unit toggle in normal flow (scrolls with the page).
-          On mobile the sticky rail keeps only the thin TOC pill bar; the toggle is
-          pulled out here so no thick block stays pinned. Desktop keeps its copy in
-          the rail (below). The flex item shrinks to the toggle's content width and
-          is right-aligned. */}
-      <Box
-        sx={{
-          display: { xs: 'flex', md: 'none' },
-          justifyContent: 'flex-end',
-          mb: 2,
-        }}
-      >
-        <UnitSystemToggle />
-      </Box>
-
       {/* SMA-178 — full-bleed two-column shell: a narrow sticky TOC rail pinned to
           the page's left padding and the content filling all remaining width to the
           right padding (no empty gutter, no centring drift on zoom-out). GAP = 64px
@@ -712,14 +697,14 @@ export default function PlantDetail() {
           width: '100%',
         }}
       >
-        {/* SMA-178 — left column: the unit toggle card above the TOC. The wrapper
-            is the single sticky element (desktop top 80 / mobile top 56); the
-            inner TOC renders static via its own `disableSticky` prop (SMA-183).
-            At md+ the wrapper is a height-capped flex column (calc(100vh - 96px)):
-            the toggle stays pinned (flexShrink 0) and the TOC list flex-grows with
-            its own internal scroll, so a rail taller than a short viewport never
-            pushes its lower entries below the fold. The wrapper is transparent so
-            the toggle's own white card sits cleanly on the page. */}
+        {/* SMA-178 — left column: the unit toggle card above the TOC (DESKTOP only;
+            on mobile the toggle lives in the global top bar — SMA-247). The wrapper
+            is the single sticky element (desktop top 80 / mobile top 56); the inner
+            TOC renders static via its own `disableSticky` prop (SMA-183). At md+ the
+            wrapper is a height-capped flex column (calc(100vh - 96px)): the toggle
+            stays pinned (flexShrink 0) and the TOC list flex-grows with its own
+            internal scroll, so a rail taller than a short viewport never pushes its
+            lower entries below the fold. */}
         <Box
           sx={{
             width: { xs: '100%', md: 272 },
@@ -733,7 +718,7 @@ export default function PlantDetail() {
             minHeight: { md: 0 },
           }}
         >
-          {/* SMA-247 — desktop only: the mobile copy lives above, in normal flow. */}
+          {/* SMA-247 — desktop only: mobile uses the top-bar switch instead. */}
           <Box
             sx={{ mb: 2, flexShrink: 0, display: { xs: 'none', md: 'block' } }}
           >

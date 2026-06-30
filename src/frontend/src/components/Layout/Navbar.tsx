@@ -34,6 +34,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
 import ComingSoonChip from '../ComingSoonChip';
 import LanguageMenu from '../LanguageMenu';
+import UnitSystemSwitch from './UnitSystemSwitch';
 import LogoButton from '../LogoButton';
 import ProfileMenuHeader from './ProfileMenuHeader';
 
@@ -309,13 +310,17 @@ export default function Navbar() {
           </Box>
 
           {isMobile ? (
-            <IconButton
-              onClick={toggleDrawer(true)}
-              sx={{ color: '#fff' }}
-              aria-label={t('nav.openMenu')}
-            >
-              <MenuIcon />
-            </IconButton>
+            // SMA-247 — units switch sits to the left of the hamburger on mobile.
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <UnitSystemSwitch />
+              <IconButton
+                onClick={toggleDrawer(true)}
+                sx={{ color: '#fff' }}
+                aria-label={t('nav.openMenu')}
+              >
+                <MenuIcon />
+              </IconButton>
+            </Box>
           ) : (
             <>
               {/* Center: nav links */}
