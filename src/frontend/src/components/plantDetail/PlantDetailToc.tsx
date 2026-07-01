@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -93,12 +94,52 @@ export default function PlantDetailToc({
   const spyActiveId = useScrollSpy(liveIds);
   const activeId = activeIdProp ?? spyActiveId;
 
+  // SMA-247 — mobile only: keep the active pill centered as the user scrolls the
+  // page. We scroll the PILL CONTAINER horizontally (never the page), so the
+  // section view never jumps vertically — the trap with element.scrollIntoView.
+  // useLayoutEffect (not useEffect): on the prefers-reduced-motion path the scroll
+  // is instant, so running before paint avoids a visible off-center snap (this is
+  // a client-only Vite SPA, so there is no SSR useLayoutEffect warning to guard).
+  const mobileNavRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (!isMobile || !activeId) return;
+    const container = mobileNavRef.current;
+    if (!container) return;
+    const pill = container.querySelector<HTMLElement>(
+      '[aria-current="location"]'
+    );
+    if (!pill) return;
+
+    // Rect-based (robust, no offsetParent dependency): bring the active pill to
+    // the horizontal center of the bar, clamped to the scrollable range.
+    const cRect = container.getBoundingClientRect();
+    const pRect = pill.getBoundingClientRect();
+    let target =
+      container.scrollLeft +
+      (pRect.left - cRect.left) -
+      (container.clientWidth - pRect.width) / 2;
+    target = Math.max(
+      0,
+      Math.min(target, container.scrollWidth - container.clientWidth)
+    );
+
+    if (typeof container.scrollTo !== 'function') return; // jsdom / older engines
+    const reducedMotion =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    container.scrollTo({
+      left: target,
+      behavior: reducedMotion ? 'auto' : 'smooth',
+    });
+  }, [activeId, isMobile]);
+
   if (sections.length === 0) return null;
 
   if (isMobile) {
     return (
       <Box
         component="nav"
+        ref={mobileNavRef}
         aria-label={t('plantDetail.toc.ariaLabel')}
         sx={{
           position: disableSticky ? 'static' : 'sticky',

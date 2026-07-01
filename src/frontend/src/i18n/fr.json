@@ -365,6 +365,11 @@
       "library": "Bibliothèque",
       "ariaLabel": "Fil d'Ariane"
     },
+    "aiAssistant": {
+      "label": "IA",
+      "comingSoon": "Bientôt",
+      "ariaLabel": "Assistant IA — bientôt"
+    },
     "externalResources": {
       "title": "Ressources externes",
       "badgeNew": "NOUVEAU",
@@ -430,7 +435,9 @@
       "metric": "Europe",
       "imperial": "US",
       "metricUnits": "°C · cm · L",
-      "imperialUnits": "°F · in · gal"
+      "imperialUnits": "°F · in · gal",
+      "celsius": "°C",
+      "fahrenheit": "°F"
     },
     "gauges": {
       "title": "Conditions de culture",

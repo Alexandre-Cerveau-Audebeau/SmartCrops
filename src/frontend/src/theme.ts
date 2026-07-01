@@ -104,12 +104,13 @@ export function createAppTheme(mode: 'light' | 'dark'): Theme {
           // constant. The no-overlay-shift fix lives per-overlay now
           // (disableScrollLock on the menus/dialog, mirroring the profile menu),
           // so there is no body padding-right reset here (SMA-216).
-          // `overflowX: clip` is a global guard against any page-level
-          // horizontal scrollbar (SMA-39); inner overflowX:auto/scroll wrappers
-          // (timeline, gallery) keep their own scroll — clip on <html> only
-          // bounds the page box, it does not create a scroll container.
+          // SMA-247: the page-level horizontal-scroll guard (`overflowX: clip`)
+          // is NOT set on <html> — on the document element it clips fixed-position
+          // descendants (their containing block is the ICB), which made the fixed
+          // AppBar scroll away on mobile. The guard now lives on the Layout shell
+          // Box, a normal element that bounds page overflow without trapping the
+          // fixed topbar. <html> keeps only the stable-scrollbar setup.
           html: {
-            overflowX: 'clip',
             overflowY: 'scroll',
             scrollbarGutter: 'stable',
           },
