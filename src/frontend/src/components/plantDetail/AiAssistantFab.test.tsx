@@ -30,20 +30,23 @@ afterEach(() => {
 });
 
 describe('AiAssistantFab (SMA-247)', () => {
-  it('renders a non-interactive pill on mobile', () => {
+  it('renders a non-interactive note on mobile (not a focusable button)', () => {
     setMatchMedia(true);
     render(<AiAssistantFab />);
 
-    const fab = screen.getByRole('button', { name: /ai assistant/i });
-    expect(fab).toHaveAttribute('aria-disabled', 'true');
+    expect(
+      screen.getByRole('note', { name: /ai assistant/i })
+    ).toBeInTheDocument();
     expect(screen.getByText('Soon')).toBeInTheDocument();
+    // Purely informative — never a focusable/activatable control.
+    expect(screen.queryByRole('button')).toBeNull();
   });
 
   it('renders nothing on desktop (>= md)', () => {
     setMatchMedia(false);
     render(<AiAssistantFab />);
 
-    expect(screen.queryByRole('button', { name: /ai assistant/i })).toBeNull();
+    expect(screen.queryByRole('note', { name: /ai assistant/i })).toBeNull();
   });
 
   it('localizes its accessible name', async () => {
@@ -52,7 +55,7 @@ describe('AiAssistantFab (SMA-247)', () => {
     render(<AiAssistantFab />);
 
     expect(
-      screen.getByRole('button', { name: /assistant ia/i })
+      screen.getByRole('note', { name: /assistant ia/i })
     ).toBeInTheDocument();
   });
 });

@@ -745,7 +745,6 @@ export default function PlantDetail() {
               mb: 3,
               overflow: 'hidden',
               borderRadius: 3,
-              scrollMarginTop: '80px',
             }}
           >
             <CardContent>
@@ -1111,7 +1110,7 @@ export default function PlantDetail() {
           {/* ── Section B: Photo gallery (SMA-154, inline). No card wrapper —
               the design has header + chips + filmstrip directly on the page
               background (global section-header pattern). ───────────────────── */}
-          <Box id="gallery" sx={{ mb: 3, scrollMarginTop: '80px' }}>
+          <Box id="gallery" sx={{ mb: 3 }}>
             <SectionHeader title={t('plantDetail.sections.gallery')} />
             <PlantGallerySection
               key={plant.id}

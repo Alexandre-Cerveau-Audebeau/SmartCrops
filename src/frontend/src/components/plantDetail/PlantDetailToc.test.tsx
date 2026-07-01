@@ -242,4 +242,126 @@ describe('PlantDetailToc (SMA-178 part B — 01-15 four-state)', () => {
 
     expect(scrollTo).toHaveBeenCalledWith({ left: 290, behavior: 'smooth' });
   });
+
+  it('clamps the scroll target to 0 for a pill near the start (SMA-247)', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: !query.includes('prefers-reduced-motion'),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }))
+    );
+
+    const rect = (left: number, width: number): DOMRect =>
+      ({
+        left,
+        width,
+        right: left + width,
+        top: 0,
+        bottom: 0,
+        height: 0,
+        x: left,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const { rerender } = render(
+      <PlantDetailToc sections={SECTIONS} activeId="sources" />
+    );
+
+    const nav = screen.getByRole('navigation');
+    const scrollTo = vi.fn();
+    nav.scrollTo = scrollTo as unknown as HTMLElement['scrollTo'];
+    Object.defineProperty(nav, 'clientWidth', {
+      value: 300,
+      configurable: true,
+    });
+    Object.defineProperty(nav, 'scrollWidth', {
+      value: 900,
+      configurable: true,
+    });
+    Object.defineProperty(nav, 'scrollLeft', {
+      value: 0,
+      configurable: true,
+      writable: true,
+    });
+    nav.getBoundingClientRect = () => rect(0, 300);
+
+    // 'overview' pill near the left edge → target = 10 - (300-80)/2 = -100 → clamp 0.
+    const overviewPill = screen.getByRole('link', {
+      name: label('plantDetail.sections.overview'),
+    });
+    overviewPill.getBoundingClientRect = () => rect(10, 80);
+
+    rerender(<PlantDetailToc sections={SECTIONS} activeId="overview" />);
+
+    expect(scrollTo).toHaveBeenCalledWith({ left: 0, behavior: 'smooth' });
+  });
+
+  it('honours prefers-reduced-motion with an instant scroll (SMA-247)', () => {
+    // Every query matches → mobile AND reduced-motion → behavior 'auto'.
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }))
+    );
+
+    const rect = (left: number, width: number): DOMRect =>
+      ({
+        left,
+        width,
+        right: left + width,
+        top: 0,
+        bottom: 0,
+        height: 0,
+        x: left,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const { rerender } = render(
+      <PlantDetailToc sections={SECTIONS} activeId="overview" />
+    );
+
+    const nav = screen.getByRole('navigation');
+    const scrollTo = vi.fn();
+    nav.scrollTo = scrollTo as unknown as HTMLElement['scrollTo'];
+    Object.defineProperty(nav, 'clientWidth', {
+      value: 300,
+      configurable: true,
+    });
+    Object.defineProperty(nav, 'scrollWidth', {
+      value: 900,
+      configurable: true,
+    });
+    Object.defineProperty(nav, 'scrollLeft', {
+      value: 0,
+      configurable: true,
+      writable: true,
+    });
+    nav.getBoundingClientRect = () => rect(0, 300);
+
+    const sourcesPill = screen.getByRole('link', {
+      name: label('plantDetail.sections.sources'),
+    });
+    sourcesPill.getBoundingClientRect = () => rect(400, 80);
+
+    rerender(<PlantDetailToc sections={SECTIONS} activeId="sources" />);
+
+    expect(scrollTo).toHaveBeenCalledWith({ left: 290, behavior: 'auto' });
+  });
 });

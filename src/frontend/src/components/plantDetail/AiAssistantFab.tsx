@@ -9,12 +9,14 @@ import { Sym } from '../Sym';
 const A = 'plantDetail.aiAssistant';
 
 /**
- * Floating AI-assistant button for Plant Detail (SMA-247) — mobile only. A pinned
- * pill that previews an upcoming AI feature: non-interactive (aria-disabled, click
- * prevented) and tagged with a "soon" badge. Rendered only below `md`; returns
- * null on desktop. All colours come from theme tokens — `secondary` is the page's
- * "coming-backend" blue, `warning` the amber badge — so dark mode is automatic. It
- * sits at `zIndex.fab`, below the navbar / drawer / lightbox overlays.
+ * Floating AI-assistant teaser for Plant Detail (SMA-247) — mobile only. A pinned
+ * pill that previews an upcoming AI feature: a purely informative `role="note"`
+ * (NOT a button — a native button with `aria-disabled` stays focusable/activatable,
+ * a dead control for keyboard users) tagged with a "soon" badge. Rendered only
+ * below `md`; returns null on desktop. All colours come from theme tokens —
+ * `secondary` is the page's "coming-backend" blue, `warning` the amber badge — so
+ * dark mode is automatic. It sits at `zIndex.fab`, below the navbar / drawer /
+ * lightbox overlays.
  */
 export const AiAssistantFab = memo(function AiAssistantFab() {
   const { t } = useTranslation();
@@ -27,11 +29,8 @@ export const AiAssistantFab = memo(function AiAssistantFab() {
   // not live inside the clipped page content.
   return createPortal(
     <Box
-      component="button"
-      type="button"
-      aria-disabled={true}
+      role="note"
       aria-label={t(`${A}.ariaLabel`)}
-      onClick={(e) => e.preventDefault()}
       sx={{
         position: 'fixed',
         // SMA-248 — bottom slot of the FAB column; the global back-to-top arrow

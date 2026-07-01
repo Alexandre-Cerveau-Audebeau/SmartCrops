@@ -97,7 +97,7 @@ export default function PlantDetailToc({
   // SMA-247 — mobile only: keep the active pill centered as the user scrolls the
   // page. We scroll the PILL CONTAINER horizontally (never the page), so the
   // section view never jumps vertically — the trap with element.scrollIntoView.
-  const mobileNavRef = useRef<HTMLDivElement>(null);
+  const mobileNavRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!isMobile || !activeId) return;
     const container = mobileNavRef.current;
