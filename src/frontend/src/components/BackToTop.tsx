@@ -29,12 +29,20 @@ export default function BackToTop() {
       <Box
         sx={{
           position: 'fixed',
-          bottom: { xs: 16, sm: 24 },
+          // SMA-248 — below md the AI assistant FAB occupies the bottom slot, so
+          // the arrow is raised above it across the whole mobile range (xs+sm);
+          // md+ keeps the original 24px (no AI FAB there → desktop unchanged).
+          bottom: { xs: 76, md: 24 },
           right: { xs: 16, sm: 24 },
           zIndex: (theme) => theme.zIndex.fab,
         }}
       >
-        <Fab size="small" color="primary" aria-label={t('common.backToTop')} onClick={handleClick}>
+        <Fab
+          size="small"
+          color="primary"
+          aria-label={t('common.backToTop')}
+          onClick={handleClick}
+        >
           <KeyboardArrowUpIcon />
         </Fab>
       </Box>

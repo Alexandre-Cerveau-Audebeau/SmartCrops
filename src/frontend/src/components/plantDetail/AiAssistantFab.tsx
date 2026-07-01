@@ -34,11 +34,12 @@ export const AiAssistantFab = memo(function AiAssistantFab() {
       onClick={(e) => e.preventDefault()}
       sx={{
         position: 'fixed',
-        // Stacked in the same column as the global back-to-top FAB (BackToTop:
-        // right/bottom {xs:16, sm:24}, 40px tall) but 12px above it, so the two
-        // never overlap and both stay tappable.
+        // SMA-248 — bottom slot of the FAB column; the global back-to-top arrow
+        // sits above it (BackToTop bottom {xs:76}). Same right edge, so the two
+        // stack cleanly without overlapping. zIndex.fab (< drawer 1200) keeps it
+        // under the open navigation drawer.
         right: { xs: 16, sm: 24 },
-        bottom: { xs: 68, sm: 76 },
+        bottom: { xs: 16, sm: 24 },
         zIndex: theme.zIndex.fab,
         display: 'inline-flex',
         alignItems: 'center',

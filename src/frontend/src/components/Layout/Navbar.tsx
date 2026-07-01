@@ -34,6 +34,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
 import ComingSoonChip from '../ComingSoonChip';
 import LanguageMenu from '../LanguageMenu';
+import ThemeModeSwitch from '../ThemeModeSwitch';
 import UnitSystemSwitch from './UnitSystemSwitch';
 import LogoButton from '../LogoButton';
 import ProfileMenuHeader from './ProfileMenuHeader';
@@ -212,33 +213,79 @@ export default function Navbar() {
                 />
               </ListItemButton>
             </ListItem>
-            <ListItem
-              disablePadding
-              secondaryAction={<ComingSoonChip />}
+            {/* SMA-248 — bulletproof flex row (plain <li>, no MUI ListItem): a
+                pure flex layout (icon | shrinkable label | chip) cannot overlap,
+                unlike the previous ListItem which still let the chip cover the
+                label. icon | label(flex:1 minWidth:0 noWrap) | chip(flexShrink:0). */}
+            <Box
+              component="li"
               aria-label={`${t('nav.notifications')} — ${t('common.comingSoon')}`}
-              sx={{ px: 2, py: 1 }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                px: 2,
+                py: 1,
+                listStyle: 'none',
+              }}
             >
-              <ListItemIcon sx={{ minWidth: 36 }}>
+              <Box
+                sx={{ display: 'flex', minWidth: 36, color: 'text.secondary' }}
+              >
                 <NotificationsIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText primary={t('nav.notifications')} />
-            </ListItem>
-            <ListItem
-              disablePadding
-              secondaryAction={<ComingSoonChip />}
+              </Box>
+              <Typography noWrap sx={{ flex: 1, minWidth: 0 }}>
+                {t('nav.notifications')}
+              </Typography>
+              <ComingSoonChip sx={{ flexShrink: 0 }} />
+            </Box>
+            <Box
+              component="li"
               aria-label={`${t('nav.settings')} — ${t('common.comingSoon')}`}
-              sx={{ px: 2, py: 1 }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                px: 2,
+                py: 1,
+                listStyle: 'none',
+              }}
             >
-              <ListItemIcon sx={{ minWidth: 36 }}>
+              <Box
+                sx={{ display: 'flex', minWidth: 36, color: 'text.secondary' }}
+              >
                 <TuneIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText primary={t('nav.settings')} />
-            </ListItem>
+              </Box>
+              <Typography noWrap sx={{ flex: 1, minWidth: 0 }}>
+                {t('nav.settings')}
+              </Typography>
+              <ComingSoonChip sx={{ flexShrink: 0 }} />
+            </Box>
           </List>
           <Divider />
         </>
       )}
       <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {/* SMA-247 — day/night switch in the mobile menu, next to the language
+            toggle. ThemeModeSwitch is styled white-on-green, so it sits on a
+            brand-green pill to stay legible on the drawer's paper background. */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1,
+          }}
+        >
+          <Typography sx={{ fontSize: 14, fontWeight: 500 }}>
+            {t('footer.theme', 'Theme')}
+          </Typography>
+          <Box
+            sx={{ bgcolor: NAV_BG, borderRadius: 999, display: 'inline-flex' }}
+          >
+            <ThemeModeSwitch />
+          </Box>
+        </Box>
         <Button
           variant="outlined"
           fullWidth
@@ -471,7 +518,7 @@ export default function Navbar() {
         </Toolbar>
       </AppBar>
 
-      <Drawer anchor="left" open={drawerOpen} onClose={toggleDrawer(false)}>
+      <Drawer anchor="right" open={drawerOpen} onClose={toggleDrawer(false)}>
         {drawer}
       </Drawer>
     </>

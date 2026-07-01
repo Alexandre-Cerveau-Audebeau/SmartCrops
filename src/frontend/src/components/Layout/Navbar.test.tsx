@@ -14,6 +14,7 @@ import {
 import i18next from '../../i18n/i18n';
 import { AuthContext } from '../../contexts/authContextValue';
 import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
+import { ColorModeProvider } from '../../contexts/ColorModeContext';
 import type { AuthContextValue } from '../../contexts/authContextValue';
 import type { AuthUser } from '../../types/Auth';
 import Navbar from './Navbar';
@@ -63,11 +64,13 @@ function renderNavbar(
   setMatchMedia(mobile); // mobile=true => useMediaQuery(down('md')) matches => drawer mode
   return render(
     <AuthContext.Provider value={auth}>
-      <UnitSystemProvider>
-        <MemoryRouter>
-          <Navbar />
-        </MemoryRouter>
-      </UnitSystemProvider>
+      <ColorModeProvider>
+        <UnitSystemProvider>
+          <MemoryRouter>
+            <Navbar />
+          </MemoryRouter>
+        </UnitSystemProvider>
+      </ColorModeProvider>
     </AuthContext.Provider>
   );
 }
