@@ -1,8 +1,9 @@
-import { memo } from 'react';
+import { memo, useId } from 'react';
 import { createPortal } from 'react-dom';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
+import { visuallyHidden } from '@mui/utils';
 import { useTranslation } from 'react-i18next';
 import { Sym } from '../Sym';
 
@@ -22,6 +23,7 @@ export const AiAssistantFab = memo(function AiAssistantFab() {
   const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const labelId = useId();
   if (!isMobile) return null;
 
   // Portalled to <body> so it escapes the `overflow: clip` on <main> (SMA-247):
@@ -30,7 +32,9 @@ export const AiAssistantFab = memo(function AiAssistantFab() {
   return createPortal(
     <Box
       role="note"
-      aria-label={t(`${A}.ariaLabel`)}
+      // aria-labelledby (referencing real DOM text) is announced more reliably on
+      // role="note" than aria-label across JAWS/NVDA (SMA-247 CR round 2).
+      aria-labelledby={labelId}
       sx={{
         position: 'fixed',
         // SMA-248 — bottom slot of the FAB column; the global back-to-top arrow
@@ -58,6 +62,11 @@ export const AiAssistantFab = memo(function AiAssistantFab() {
         lineHeight: 1,
       }}
     >
+      {/* Accessible name for the note, kept in the DOM (visually hidden) so
+          aria-labelledby resolves to real text rather than an attribute. */}
+      <Box component="span" id={labelId} sx={visuallyHidden}>
+        {t(`${A}.ariaLabel`)}
+      </Box>
       <Sym name="auto_awesome" size={20} color="inherit" />
       {t(`${A}.label`)}
       <Box

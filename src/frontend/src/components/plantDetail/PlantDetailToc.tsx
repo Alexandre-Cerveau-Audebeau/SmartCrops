@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -97,8 +97,11 @@ export default function PlantDetailToc({
   // SMA-247 — mobile only: keep the active pill centered as the user scrolls the
   // page. We scroll the PILL CONTAINER horizontally (never the page), so the
   // section view never jumps vertically — the trap with element.scrollIntoView.
+  // useLayoutEffect (not useEffect): on the prefers-reduced-motion path the scroll
+  // is instant, so running before paint avoids a visible off-center snap (this is
+  // a client-only Vite SPA, so there is no SSR useLayoutEffect warning to guard).
   const mobileNavRef = useRef<HTMLElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isMobile || !activeId) return;
     const container = mobileNavRef.current;
     if (!container) return;
