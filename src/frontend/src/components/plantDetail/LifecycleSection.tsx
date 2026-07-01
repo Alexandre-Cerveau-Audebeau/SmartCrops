@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import { visuallyHidden } from '@mui/utils';
 import type { Plant } from '../../types/Plant';
 import { periodToMonths } from '../../utils/formatPeriod';
 import { NAV_BG } from '../../constants/colors';
@@ -250,6 +251,9 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                     key={s.key}
                     role="row"
                     sx={{
+                      // SMA-249 — be the containing block for the sr-only absolute
+                      // cell so it can never resolve its box against <body> again.
+                      position: 'relative',
                       display: 'grid',
                       gridTemplateColumns: GRID_COLS,
                       alignItems: 'center',
@@ -271,20 +275,13 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                       <Sym name={s.icon} size={17} color="inherit" />
                       {t(`plantDetail.lifecycle.stages.${s.key}`)}
                     </Box>
-                    <Box
-                      role="cell"
-                      sx={{
-                        position: 'absolute',
-                        width: 1,
-                        height: 1,
-                        p: 0,
-                        m: -1,
-                        overflow: 'hidden',
-                        clip: 'rect(0 0 0 0)',
-                        whiteSpace: 'nowrap',
-                        border: 0,
-                      }}
-                    >
+                    {/* SMA-249 — sr-only month summary. Uses the canonical
+                        `visuallyHidden` (width/height '1px' STRINGS): the previous
+                        hand-rolled `width: 1` was read by MUI's sizing system as
+                        100%, and on this absolute box with no positioned ancestor
+                        it resolved against <body> (~1525px), pushing the page ~382px
+                        wide in Chromium. */}
+                    <Box role="cell" sx={visuallyHidden}>
                       {activeLabel}
                     </Box>
                     {runs.map((run) => (
