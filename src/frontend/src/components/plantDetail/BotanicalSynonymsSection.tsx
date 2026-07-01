@@ -2,6 +2,7 @@ import { memo, useLayoutEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme, type SxProps, type Theme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
 import SectionHeader from './SectionHeader';
@@ -16,13 +17,14 @@ interface BotanicalSynonymsSectionProps {
 
 /**
  * Botanical synonyms for Plant Detail v2 (SMA-223 / SMA-246, section 10). A wrap
- * of italic synonym chips clamped to TWO rows when collapsed: the surplus is
- * hidden behind a "+N more" toggle that reveals the rest. The clamp is measured
- * at runtime — chip `offsetTop` rows, with the toggle measured IN FLOW so it
- * never wraps onto a third line, plus a `ResizeObserver` (deferred to rAF to
- * avoid the "ResizeObserver loop" warning) so the count re-derives when the width
- * — and therefore the wrap — changes. Not a fixed count, so it stays exactly two
- * lines at any viewport. The toggle is always mounted (hidden via display when
+ * of italic synonym chips clamped to `maxRows` rows when collapsed (SMA-247: 4 on
+ * mobile, 2 on desktop): the surplus is hidden behind a "+N more" toggle that
+ * reveals the rest. The clamp is measured at runtime — chip `offsetTop` rows, with
+ * the toggle measured IN FLOW so it never wraps past the clamp, plus a
+ * `ResizeObserver` (deferred to rAF to avoid the "ResizeObserver loop" warning) so
+ * the count re-derives when the width — and therefore the wrap — changes. Not a
+ * fixed count, so it clamps to exactly `maxRows` at any viewport. The toggle is
+ * always mounted (hidden via display when
  * there is no overflow) so it is measurable. Each chip carries its botanical
  * authority (e.g. "Mill.") in a tooltip when present. Real data only. BUILD NOW
  * badge. Mounted only when >0 synonyms (gating preserved). Mode-aware.
@@ -36,8 +38,12 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
   synonyms,
 }: BotanicalSynonymsSectionProps) {
   const { t } = useTranslation();
-  const { palette } = useTheme();
+  const theme = useTheme();
+  const { palette } = theme;
   const dark = palette.mode === 'dark';
+  // SMA-247 — clamp to 4 rows on mobile, 2 on desktop (unchanged desktop).
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const maxRows = isMobile ? 4 : 2;
   const [expanded, setExpanded] = useState(false);
   // null until measured → render everything (also the jsdom / no-layout path).
   const [visibleCount, setVisibleCount] = useState<number | null>(null);
@@ -69,17 +75,15 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
       }
 
       let next: number;
-      if (rowTops.length <= 2) {
-        next = chips.length; // fits in two rows → no overflow, no toggle.
+      if (rowTops.length <= maxRows) {
+        next = chips.length; // fits in maxRows rows → no overflow, no toggle.
       } else {
         // Phase 2 — measure the toggle IN FLOW: show it, then shrink the visible
-        // count until { chips[0..n), toggle } occupy at most two rows, so the
-        // toggle never wraps onto a third line (the old `fitTwoRows - 1` was a
-        // guess; this measures the real fit).
-        const thirdRowTop = rowTops[2];
-        const fitTwoRows = chips.filter(
-          (c) => c.offsetTop < thirdRowTop
-        ).length;
+        // count until { chips[0..n), toggle } occupy at most `maxRows` rows, so the
+        // toggle never wraps past the clamp (this measures the real fit rather than
+        // guessing).
+        const cutoffRowTop = rowTops[maxRows];
+        const fitRows = chips.filter((c) => c.offsetTop < cutoffRowTop).length;
         if (toggle) toggle.style.display = 'inline-flex';
 
         const rowsWith = (n: number) => {
@@ -92,8 +96,8 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
           return tops.size;
         };
 
-        let candidate = Math.max(1, fitTwoRows);
-        while (candidate > 1 && rowsWith(candidate) > 2) candidate--;
+        let candidate = Math.max(1, fitRows);
+        while (candidate > 1 && rowsWith(candidate) > maxRows) candidate--;
         next = candidate;
       }
 
@@ -131,7 +135,7 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
       cancelAnimationFrame(frame);
       observer?.disconnect();
     };
-  }, [synonyms, visibleCount]);
+  }, [synonyms, visibleCount, maxRows]);
 
   const total = synonyms.length;
   const hasOverflow = visibleCount != null && visibleCount < total;

@@ -10,6 +10,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 function syn(id: number, synonym: string, authority?: string): PlantSynonym {
@@ -65,7 +66,23 @@ describe('BotanicalSynonymsSection (SMA-246 — two-row clamp)', () => {
     expect(screen.queryByRole('button', { name: /more|fewer/i })).toBeNull();
   });
 
-  it('clamps to two rows and reveals a "+N more" toggle when the layout wraps', async () => {
+  it('clamps to two rows (desktop) and reveals a "+N more" toggle when the layout wraps', async () => {
+    // Desktop → maxRows = 2 (SMA-247). matchMedia stub: nothing matches so
+    // useMediaQuery(down('md')) is false.
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }))
+    );
+
     // Simulate a 2-chips-per-row layout: chips report row = floor(domIndex/2)*24;
     // the toggle measures onto row 2 (24). With 6 chips this is three rows, so the
     // clamp engages and — measuring the toggle in flow — keeps the first four.
@@ -91,6 +108,49 @@ describe('BotanicalSynonymsSection (SMA-246 — two-row clamp)', () => {
     // 6 chips → rows 0,0,24,24,48,48; four fit two rows with the toggle → "+ 2 more".
     const toggle = await screen.findByRole('button', {
       name: /\+\s*2\s*more/i,
+    });
+    expect(toggle).toBeInTheDocument();
+  });
+
+  it('clamps to four rows on mobile (SMA-247)', async () => {
+    // Mobile → maxRows = 4. matchMedia matches so useMediaQuery(down('md')) is true.
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }))
+    );
+
+    // Same 2-chips-per-row simulation; toggle on row 2. With 12 chips this is six
+    // rows, so the clamp keeps the first eight (four rows) → "+ 4 more".
+    vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(
+      function (this: HTMLElement) {
+        if (this.hasAttribute('data-syn-toggle')) return 24;
+        if (this.hasAttribute('data-syn-chip')) {
+          const parent = this.parentElement;
+          const chips = parent
+            ? Array.from(parent.querySelectorAll('[data-syn-chip]'))
+            : [];
+          return Math.floor(chips.indexOf(this) / 2) * 24;
+        }
+        return 0;
+      }
+    );
+
+    const synonyms = Array.from({ length: 12 }, (_, i) =>
+      syn(i + 1, `Synonym ${i + 1}`)
+    );
+    render(<BotanicalSynonymsSection synonyms={synonyms} />);
+
+    const toggle = await screen.findByRole('button', {
+      name: /\+\s*4\s*more/i,
     });
     expect(toggle).toBeInTheDocument();
   });
