@@ -26,6 +26,7 @@ public class GardensTestFactory : WebApplicationFactory<Program>
             .WithFrontendUrl()
             .WithTrefle()
             .WithPerenual()
+            .WithTypesense()
             .WithInMemoryDatabase("GardensTests")
             .ApplyTo(builder);
     }

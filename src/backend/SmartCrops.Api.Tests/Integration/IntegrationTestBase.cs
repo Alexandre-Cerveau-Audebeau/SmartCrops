@@ -36,6 +36,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         Fixture.PerenualStub.Reset();
         Fixture.PerenualCatalogStub.Reset();
         Fixture.PerenualPestCatalogStub.Reset();
+        Fixture.SearchIndexingStub.Reset();
         Fixture.PerenualHttpStub.Reset();
         Fixture.GbifHttpStub.Reset();
 

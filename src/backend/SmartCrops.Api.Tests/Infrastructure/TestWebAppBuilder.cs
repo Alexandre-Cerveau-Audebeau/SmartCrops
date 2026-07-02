@@ -126,6 +126,20 @@ public sealed class TestWebAppBuilder
     }
 
     /// <summary>
+    /// Registers <c>Typesense:ApiKey</c>. <c>TypesenseOptions.ApiKey</c> is
+    /// <c>[Required]</c> with an empty default and validated at host boot via
+    /// <c>ValidateOnStart</c>; any non-empty placeholder keeps the host alive.
+    /// No test dials Typesense (the client is HTTP-lazy and only the admin
+    /// reindex endpoint uses it), but every booting factory needs this method
+    /// called so the host starts.
+    /// </summary>
+    public TestWebAppBuilder WithTypesense(string apiKey = "test-typesense-key")
+    {
+        _config["Typesense:ApiKey"] = apiKey;
+        return this;
+    }
+
+    /// <summary>
     /// Registers <c>ConnectionStrings:DefaultConnection</c>. Use this for
     /// fixtures backed by a real database (e.g. Postgres Testcontainers).
     /// Mutually exclusive with <see cref="WithInMemoryDatabase"/>: calling

@@ -84,6 +84,13 @@ public sealed class PostgresFixture : IAsyncLifetime
         Factory.Services.GetRequiredService<StubPerenualPestCatalogService>();
 
     /// <summary>
+    /// Shared stub for <see cref="ISearchIndexingService"/> (SMA-255 admin
+    /// reindex). Same lifecycle as the other stubs — reset per test.
+    /// </summary>
+    public StubSearchIndexingService SearchIndexingStub =>
+        Factory.Services.GetRequiredService<StubSearchIndexingService>();
+
+    /// <summary>
     /// Shared programmable HTTP handler backing the <c>PerenualClient</c> typed
     /// client (SMA-93). The <c>PerenualRawCacheController</c> injects the concrete
     /// client, so its only seam is the transport — tests configure canned
@@ -116,6 +123,7 @@ public sealed class PostgresFixture : IAsyncLifetime
             .WithFrontendUrl()
             .WithTrefle()
             .WithPerenual()
+            .WithTypesense()
             .WithConnectionString(ConnectionString)
             .WithServices(services =>
             {
@@ -159,6 +167,15 @@ public sealed class PostgresFixture : IAsyncLifetime
                 services.AddSingleton<StubPerenualPestCatalogService>();
                 services.AddSingleton<IPerenualPestCatalogService>(sp =>
                     sp.GetRequiredService<StubPerenualPestCatalogService>());
+
+                // SMA-255: no Typesense server exists in the integration
+                // environment, so the reindex endpoint is exercised against a
+                // deterministic stub (the Postgres→Typesense round-trip is
+                // validated against the live docker stack instead).
+                services.RemoveAll<ISearchIndexingService>();
+                services.AddSingleton<StubSearchIndexingService>();
+                services.AddSingleton<ISearchIndexingService>(sp =>
+                    sp.GetRequiredService<StubSearchIndexingService>());
 
                 // SMA-93: the raw-cache controller injects the concrete PerenualClient
                 // (no service interface to swap), so we stub the transport instead —

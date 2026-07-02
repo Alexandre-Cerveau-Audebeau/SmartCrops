@@ -13,6 +13,8 @@ using SmartCrops.Infrastructure.ExternalApis.Gbif;
 using SmartCrops.Infrastructure.ExternalApis.Logging;
 using SmartCrops.Infrastructure.ExternalApis.Perenual;
 using SmartCrops.Infrastructure.ExternalApis.Trefle;
+using SmartCrops.Infrastructure.ExternalApis.SearchIndex;
+using Typesense.Setup;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -210,6 +212,32 @@ builder.Services.AddSingleton<PerenualResolver>();
 builder.Services.AddScoped<IPlantPerenualEnrichmentService, PlantPerenualEnrichmentService>();
 builder.Services.AddScoped<IPerenualCatalogService, PerenualCatalogService>();
 builder.Services.AddScoped<IPerenualPestCatalogService, PerenualPestCatalogService>();
+
+// ── Search engine: Typesense (SMA-255) ───────────────────────────────────
+// Options validated at startup (missing API key fails the host boot), same
+// contract as Trefle/Perenual above. AddTypesenseClient consumes its Config at
+// registration time and has no IServiceProvider overload, so the section is
+// also bound manually here to feed the client; ValidateOnStart still guards
+// the final configuration. The client is HTTP-lazy — nothing dials Typesense
+// until an admin reindex call — so the API boots fine when the search
+// container is down.
+builder.Services.AddOptions<TypesenseOptions>()
+    .Bind(builder.Configuration.GetSection(TypesenseOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+var typesenseOptions = new TypesenseOptions();
+builder.Configuration.GetSection(TypesenseOptions.SectionName).Bind(typesenseOptions);
+builder.Services.AddTypesenseClient(config =>
+{
+    config.ApiKey = typesenseOptions.ApiKey;
+    config.Nodes = new List<Node>
+    {
+        new(typesenseOptions.Host, typesenseOptions.Port.ToString(System.Globalization.CultureInfo.InvariantCulture), typesenseOptions.Protocol),
+    };
+});
+
+builder.Services.AddScoped<ISearchIndexingService, TypesenseSearchIndexingService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
