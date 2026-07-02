@@ -89,9 +89,22 @@ public class PlantFinderControllerTests : IntegrationTestBase
     [InlineData("lang=de")]
     [InlineData("careLevels=SuperEasy")]
     [InlineData("hardinessZoneMin=9&hardinessZoneMax=4")]
+    [InlineData("plantTypeIds=0")]
     public async Task Find_InvalidQuery_Returns400_WithoutCallingTheEngine(string queryString)
     {
         var response = await Client.GetAsync($"{FinderUrl}?{queryString}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(Fixture.PlantSearchStub.Received);
+    }
+
+    [Fact]
+    public async Task Find_OversizedTextQuery_Returns400_WithoutCallingTheEngine()
+    {
+        // Amplification guard: the 200-char cap 400s before any engine call.
+        var oversized = new string('a', 250);
+
+        var response = await Client.GetAsync($"{FinderUrl}?q={oversized}");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Empty(Fixture.PlantSearchStub.Received);

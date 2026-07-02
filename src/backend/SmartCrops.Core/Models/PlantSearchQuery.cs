@@ -70,14 +70,27 @@ public record PlantSearchQuery
 
 /// <summary>
 /// Request-surface validation for <see cref="PlantSearchQuery"/> — bounds,
-/// language, range sanity, and the enum-vocabulary guard (filter values are
-/// validated against the C# enum member names so raw user strings can never
-/// reach the engine's <c>filter_by</c>; unknown values are a 400, not a
-/// pass-through). The Infrastructure filter builder re-checks the same rules
-/// as defense in depth.
+/// language, input-size caps, range sanity, and the enum-vocabulary guard
+/// (filter values are validated against the C# enum member names so raw user
+/// strings can never reach the engine's <c>filter_by</c>; unknown values are
+/// a 400, not a pass-through). The Infrastructure filter builder re-checks
+/// the vocabulary/range rules as defense in depth.
+/// <para>
+/// <c>PlantTypeIds</c> are only sanity-checked (positive, capped) —
+/// deliberately NO lookup against the real PlantTypes rows: this validator is
+/// pure Core (no DB dependency), and a nonexistent id simply yields zero hits,
+/// which is harmless.
+/// </para>
 /// </summary>
 public static class PlantSearchQueryValidator
 {
+    // Public-endpoint amplification guard (SMA-255 T3 CR): unbounded free text
+    // or repeated multi-select keys would flow straight into the engine's
+    // query_by/filter_by cost on every anonymous request — cap them here so
+    // validation, not Typesense, is the first line of defense.
+    private const int MaxTextQueryLength = 200;
+    private const int MaxMultiSelectValues = 20;
+
     public static List<string> Validate(PlantSearchQuery query)
     {
         var errors = new List<string>();
@@ -88,6 +101,17 @@ public static class PlantSearchQueryValidator
             errors.Add("page must be >= 1.");
         if (query.PerPage is < 1 or > 100)
             errors.Add("perPage must be between 1 and 100.");
+        if (query.Q is { Length: > MaxTextQueryLength })
+            errors.Add($"q must be at most {MaxTextQueryLength} characters.");
+
+        CheckMultiSelectCap(errors, "plantTypeIds", query.PlantTypeIds?.Length);
+        CheckMultiSelectCap(errors, "careLevels", query.CareLevels?.Length);
+        CheckMultiSelectCap(errors, "wateringNeedLevels", query.WateringNeedLevels?.Length);
+        CheckMultiSelectCap(errors, "growthRates", query.GrowthRates?.Length);
+        CheckMultiSelectCap(errors, "lifeCycles", query.LifeCycles?.Length);
+
+        if (query.PlantTypeIds is { Length: > 0 } && Array.Exists(query.PlantTypeIds, id => id <= 0))
+            errors.Add("plantTypeIds must be positive.");
 
         CheckVocabulary<PlantCareLevel>(errors, "careLevels", query.CareLevels);
         CheckVocabulary<PlantWateringNeed>(errors, "wateringNeedLevels", query.WateringNeedLevels);
@@ -103,6 +127,12 @@ public static class PlantSearchQueryValidator
         CheckRange(errors, "xTemperatureToleranceC", query.XTemperatureToleranceCMin, query.XTemperatureToleranceCMax);
 
         return errors;
+    }
+
+    private static void CheckMultiSelectCap(List<string> errors, string paramName, int? count)
+    {
+        if (count > MaxMultiSelectValues)
+            errors.Add($"{paramName} accepts at most {MaxMultiSelectValues} values.");
     }
 
     private static void CheckVocabulary<TEnum>(List<string> errors, string paramName, string[]? values)

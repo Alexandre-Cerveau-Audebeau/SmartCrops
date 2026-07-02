@@ -69,7 +69,65 @@ public class PlantSearchQueryValidatorTests
             CareLevels = ["easy"],
         });
 
-        Assert.Single(errors);
+        var error = Assert.Single(errors);
+        Assert.Contains("easy", error);
+    }
+
+    [Fact]
+    public void Validate_QAtTheCap_NoError_OneOverErrors()
+    {
+        Assert.Empty(PlantSearchQueryValidator.Validate(new PlantSearchQuery { Q = new string('a', 200) }));
+
+        var errors = PlantSearchQueryValidator.Validate(new PlantSearchQuery { Q = new string('a', 201) });
+
+        var error = Assert.Single(errors);
+        Assert.Contains("200", error);
+    }
+
+    [Fact]
+    public void Validate_MultiSelectAtTheCap_NoError_OneOverErrors()
+    {
+        var atCap = Enumerable.Repeat("Easy", 20).ToArray();
+        Assert.Empty(PlantSearchQueryValidator.Validate(new PlantSearchQuery { CareLevels = atCap }));
+
+        var overCap = Enumerable.Repeat("Easy", 21).ToArray();
+        var errors = PlantSearchQueryValidator.Validate(new PlantSearchQuery { CareLevels = overCap });
+
+        var error = Assert.Single(errors);
+        Assert.Contains("careLevels", error);
+        Assert.Contains("20", error);
+    }
+
+    [Fact]
+    public void Validate_PlantTypeIdsOverCap_Errors()
+    {
+        var errors = PlantSearchQueryValidator.Validate(new PlantSearchQuery
+        {
+            PlantTypeIds = Enumerable.Range(1, 21).ToArray(),
+        });
+
+        var error = Assert.Single(errors);
+        Assert.Contains("plantTypeIds", error);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Validate_NonPositivePlantTypeIds_Errors(int badId)
+    {
+        var errors = PlantSearchQueryValidator.Validate(new PlantSearchQuery
+        {
+            PlantTypeIds = [1, badId],
+        });
+
+        var error = Assert.Single(errors);
+        Assert.Contains("positive", error);
+    }
+
+    [Fact]
+    public void Validate_PositivePlantTypeIds_NoErrors()
+    {
+        Assert.Empty(PlantSearchQueryValidator.Validate(new PlantSearchQuery { PlantTypeIds = [1, 2, 8] }));
     }
 
     [Fact]
