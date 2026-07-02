@@ -238,6 +238,7 @@ builder.Services.AddTypesenseClient(config =>
 });
 
 builder.Services.AddScoped<ISearchIndexingService, TypesenseSearchIndexingService>();
+builder.Services.AddScoped<IPlantSearchService, TypesensePlantSearchService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

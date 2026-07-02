@@ -58,6 +58,28 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
             .AsNoTracking();
 
     /// <summary>
+    /// Finder hydration (SMA-255): fetch the given ids with the lean-list
+    /// includes, then reorder in memory to match the input order — the search
+    /// engine's relevance ranking — since SQL <c>IN</c> gives no ordering
+    /// guarantee. Missing ids (index drift) are simply absent.
+    /// </summary>
+    public async Task<IReadOnlyList<Plant>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, string language = "en")
+    {
+        if (ids.Count == 0)
+            return [];
+
+        var plants = await ApplyListIncludes(context.Plants, language)
+            .Where(p => ids.Contains(p.Id))
+            .ToListAsync();
+
+        var rank = ids
+            .Select((id, index) => (id, index))
+            .ToDictionary(x => x.id, x => x.index);
+
+        return plants.OrderBy(p => rank[p.Id]).ToList();
+    }
+
+    /// <summary>
     /// Detail-view fetch for the Plant Detail page: eagerly loads every
     /// navigation collection (images, long descriptions, common names, pests,
     /// synonyms, sources, Trefle/Perenual data) via <c>AsSplitQuery</c>, with

@@ -25,4 +25,13 @@ public interface IPlantRepository
     /// falling back to <see cref="Plant.ScientificName"/>.
     /// </summary>
     Task<IEnumerable<Plant>> SearchAsync(string query, string language);
+
+    /// <summary>
+    /// Batch lean-list fetch for the finder hydration path (SMA-255): loads
+    /// the given plants with the same includes as <see cref="GetAllAsync"/>
+    /// and returns them in the ORDER OF <paramref name="ids"/> (the search
+    /// engine's relevance order — SQL <c>IN</c> does not preserve it). Ids
+    /// with no matching row are silently absent from the result.
+    /// </summary>
+    Task<IReadOnlyList<Plant>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, string language = "en");
 }
