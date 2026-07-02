@@ -49,5 +49,18 @@ services:
     depends_on:
       - api
 
+  typesense:
+    image: typesense/typesense:30.2
+    container_name: smartcrops-typesense
+    ports:
+      - "8108:8108"
+    environment:
+      # TYPESENSE_API_KEY is required and supplied via the gitignored
+      # docker-compose.override.yml — never commit it here.
+      - TYPESENSE_DATA_DIR=/data
+    volumes:
+      - smartcrops-typesense-data:/data
+
 volumes:
   smartcrops-db-data:
+  smartcrops-typesense-data:
