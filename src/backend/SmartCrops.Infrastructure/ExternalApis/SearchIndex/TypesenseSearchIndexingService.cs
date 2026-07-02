@@ -1,11 +1,11 @@
 using System.Diagnostics;
-using global::Typesense;
+using Typesense;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure.Data;
 
-namespace SmartCrops.Infrastructure.ExternalApis.Typesense;
+namespace SmartCrops.Infrastructure.ExternalApis.SearchIndex;
 
 /// <summary>
 /// Full Postgres → Typesense reindex (SMA-255 T2). Bootstraps the
@@ -41,7 +41,7 @@ public class TypesenseSearchIndexingService : ISearchIndexingService
     {
         var stopwatch = Stopwatch.StartNew();
 
-        var collectionExisted = await EnsureCollectionAsync();
+        var collectionExisted = await EnsureCollectionAsync(ct);
 
         // Same include style as PlantRepository.ApplyListIncludes, but loading
         // BOTH languages (the index stores en and fr side by side) and the
@@ -59,6 +59,10 @@ public class TypesenseSearchIndexingService : ISearchIndexingService
         var failures = new List<string>();
         if (documents.Count > 0)
         {
+            // typesense-dotnet 8.5.0 exposes no CancellationToken overloads, so
+            // explicit checkpoints before each engine call are the cancellation
+            // contract on this path (the EF query above honors ct natively).
+            ct.ThrowIfCancellationRequested();
             var responses = await _typesense.ImportDocuments(
                 PlantsSearchCollection.Name, documents, ImportBatchSize, ImportType.Upsert);
 
@@ -85,9 +89,13 @@ public class TypesenseSearchIndexingService : ISearchIndexingService
 
     /// <summary>
     /// Returns whether the collection already existed; creates it when absent.
+    /// A concurrent reindex can win the create race between our 404 and our
+    /// CreateCollection — that conflict is benign (the collection now exists),
+    /// so it reports "existed" instead of surfacing a 409.
     /// </summary>
-    private async Task<bool> EnsureCollectionAsync()
+    private async Task<bool> EnsureCollectionAsync(CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         try
         {
             await _typesense.RetrieveCollection(PlantsSearchCollection.Name);
@@ -98,8 +106,21 @@ public class TypesenseSearchIndexingService : ISearchIndexingService
             _logger.LogInformation(
                 "Typesense collection '{Collection}' absent — bootstrapping schema v{SchemaVersion}",
                 PlantsSearchCollection.Name, PlantsSearchCollection.SchemaVersion);
-            await _typesense.CreateCollection(PlantsSearchCollection.Build());
-            return false;
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                await _typesense.CreateCollection(PlantsSearchCollection.Build());
+                return false;
+            }
+            catch (TypesenseApiConflictException)
+            {
+                // Lost the bootstrap race with a concurrent reindex — the
+                // collection exists now, which is all this method guarantees.
+                _logger.LogInformation(
+                    "Typesense collection '{Collection}' was created concurrently — continuing",
+                    PlantsSearchCollection.Name);
+                return true;
+            }
         }
     }
 }

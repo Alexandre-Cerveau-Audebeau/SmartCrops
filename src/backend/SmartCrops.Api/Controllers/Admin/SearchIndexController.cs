@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Interfaces;
+using Typesense;
 
 namespace SmartCrops.Api.Controllers.Admin;
 
@@ -35,17 +36,33 @@ public class SearchIndexController : ControllerBase
     [HttpPost("reindex")]
     public async Task<IActionResult> Reindex(CancellationToken ct = default)
     {
-        var result = await _indexer.ReindexAllAsync(ct);
+        try
+        {
+            var result = await _indexer.ReindexAllAsync(ct);
 
-        _logger.LogInformation(
-            "Search reindex requested by admin: collectionExisted={CollectionExisted} indexed={Indexed} failures={Failures} durationMs={DurationMs}",
-            result.CollectionExisted, result.DocumentsIndexed, result.Failures.Count, result.DurationMs);
+            _logger.LogInformation(
+                "Search reindex requested by admin: collectionExisted={CollectionExisted} indexed={Indexed} failures={Failures} durationMs={DurationMs}",
+                result.CollectionExisted, result.DocumentsIndexed, result.Failures.Count, result.DurationMs);
 
-        return Ok(new ReindexResponse(
-            result.CollectionExisted,
-            result.DocumentsIndexed,
-            result.DurationMs,
-            result.Failures));
+            return Ok(new ReindexResponse(
+                result.CollectionExisted,
+                result.DocumentsIndexed,
+                result.DurationMs,
+                result.Failures));
+        }
+        catch (Exception ex) when (ex is TypesenseApiException or HttpRequestException)
+        {
+            // TypesenseApiException covers every engine rejection (auth, bad
+            // request, service-unavailable); HttpRequestException covers the
+            // container being unreachable. Both are foreseeable operator
+            // situations — surface a 503 instead of an opaque 500. Cancellation
+            // (OperationCanceledException) deliberately falls through to the
+            // framework's request-abort handling.
+            _logger.LogError(ex, "Search reindex failed — Typesense unreachable or rejected the request");
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                "Search engine unavailable or rejected the reindex; see server logs for detail.");
+        }
     }
 
     /// <summary>

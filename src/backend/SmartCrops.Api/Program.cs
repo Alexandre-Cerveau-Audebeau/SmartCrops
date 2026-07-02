@@ -13,7 +13,7 @@ using SmartCrops.Infrastructure.ExternalApis.Gbif;
 using SmartCrops.Infrastructure.ExternalApis.Logging;
 using SmartCrops.Infrastructure.ExternalApis.Perenual;
 using SmartCrops.Infrastructure.ExternalApis.Trefle;
-using SmartCrops.Infrastructure.ExternalApis.Typesense;
+using SmartCrops.Infrastructure.ExternalApis.SearchIndex;
 using Typesense.Setup;
 
 var builder = WebApplication.CreateBuilder(args);

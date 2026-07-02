@@ -15,9 +15,18 @@ public class StubSearchIndexingService : ISearchIndexingService
 
     public SearchReindexResult Next { get; set; } = new(false, 0, 0, []);
 
+    /// <summary>
+    /// When set, <see cref="ReindexAllAsync"/> throws this instead of
+    /// returning <see cref="Next"/> — lets tests drive the controller's
+    /// engine-failure mapping (Typesense down → 503).
+    /// </summary>
+    public Exception? NextException { get; set; }
+
     public Task<SearchReindexResult> ReindexAllAsync(CancellationToken ct = default)
     {
         Calls++;
+        if (NextException is not null)
+            throw NextException;
         return Task.FromResult(Next);
     }
 
@@ -25,5 +34,6 @@ public class StubSearchIndexingService : ISearchIndexingService
     {
         Calls = 0;
         Next = new(false, 0, 0, []);
+        NextException = null;
     }
 }

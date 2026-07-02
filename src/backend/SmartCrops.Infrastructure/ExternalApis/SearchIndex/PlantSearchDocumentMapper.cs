@@ -1,6 +1,6 @@
 using SmartCrops.Core.Entities;
 
-namespace SmartCrops.Infrastructure.ExternalApis.Typesense;
+namespace SmartCrops.Infrastructure.ExternalApis.SearchIndex;
 
 /// <summary>
 /// Pure Plant → <see cref="PlantSearchDocument"/> mapping (no I/O, no DB, no

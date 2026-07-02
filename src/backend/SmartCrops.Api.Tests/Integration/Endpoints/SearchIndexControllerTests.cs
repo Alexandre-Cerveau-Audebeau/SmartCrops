@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Interfaces;
+using Typesense;
 
 namespace SmartCrops.Api.Tests.Integration.Endpoints;
 
@@ -64,6 +65,25 @@ public class SearchIndexControllerTests : IntegrationTestBase
         Assert.Equal(536, body.DocumentsIndexed);
         Assert.Equal(42, body.DurationMs);
         Assert.Equal(["someId (Some plant): bad document"], body.Failures);
+    }
+
+    [Fact]
+    public async Task Reindex_EngineUnavailable_Returns503NotOpaque500()
+    {
+        // Design (a) of the SMA-255 failure contract: TypesenseApiException /
+        // HttpRequestException from the indexing service map to 503 in the
+        // controller — an unreachable search engine is a foreseeable operator
+        // situation, not an internal server error.
+        Fixture.SearchIndexingStub.NextException =
+            new TypesenseApiServiceUnavailableException("engine down");
+        var userId = $"u-{Guid.NewGuid():N}";
+        Client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId, Roles.Admin));
+
+        var response = await Client.PostAsync(ReindexUrl, null);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal(1, Fixture.SearchIndexingStub.Calls);
     }
 
     private sealed record ReindexResp(

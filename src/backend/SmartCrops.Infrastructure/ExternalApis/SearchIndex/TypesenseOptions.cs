@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace SmartCrops.Infrastructure.ExternalApis.Typesense;
+namespace SmartCrops.Infrastructure.ExternalApis.SearchIndex;
 
 /// <summary>
 /// Connection settings for the Typesense search engine (SMA-255). Non-secret

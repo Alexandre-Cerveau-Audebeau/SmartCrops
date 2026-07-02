@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace SmartCrops.Infrastructure.ExternalApis.Typesense;
+namespace SmartCrops.Infrastructure.ExternalApis.SearchIndex;
 
 /// <summary>
 /// The Typesense document shape for the <c>plants</c> collection (SMA-255 T2).

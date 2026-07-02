@@ -1,6 +1,6 @@
-using global::Typesense;
+using Typesense;
 
-namespace SmartCrops.Infrastructure.ExternalApis.Typesense;
+namespace SmartCrops.Infrastructure.ExternalApis.SearchIndex;
 
 /// <summary>
 /// Schema of the <c>plants</c> Typesense collection (SMA-255 T2), kept in code

@@ -1,8 +1,8 @@
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
-using SmartCrops.Infrastructure.ExternalApis.Typesense;
+using SmartCrops.Infrastructure.ExternalApis.SearchIndex;
 
-namespace SmartCrops.Api.Tests.ExternalApis.Typesense;
+namespace SmartCrops.Api.Tests.ExternalApis.SearchIndex;
 
 /// <summary>
 /// Unit tests for the Plant → Typesense document mapping (SMA-255 T2) — pure
