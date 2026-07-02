@@ -31,7 +31,9 @@ public interface IPlantRepository
     /// the given plants with the same includes as <see cref="GetAllAsync"/>
     /// and returns them in the ORDER OF <paramref name="ids"/> (the search
     /// engine's relevance order — SQL <c>IN</c> does not preserve it). Ids
-    /// with no matching row are silently absent from the result.
+    /// with no matching row are silently absent from the result; duplicate
+    /// ids hydrate once (first occurrence keeps its rank).
     /// </summary>
-    Task<IReadOnlyList<Plant>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, string language = "en");
+    Task<IReadOnlyList<Plant>> GetByIdsAsync(
+        IReadOnlyCollection<Guid> ids, string language = "en", CancellationToken ct = default);
 }

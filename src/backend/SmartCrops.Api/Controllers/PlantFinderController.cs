@@ -14,11 +14,13 @@ namespace SmartCrops.Api.Controllers;
 /// read path the v2 Library (T4) will consume.
 ///
 /// Query-string contract (ASP.NET default binding): scalars as
-/// <c>?q=...&amp;language=fr&amp;page=2&amp;perPage=24</c>, multi-selects as
+/// <c>?q=...&amp;lang=fr&amp;page=2&amp;perPage=24</c>, multi-selects as
 /// repeated keys (<c>?careLevels=Easy&amp;careLevels=Medium</c>), tri-state
 /// booleans as <c>?isEdible=true</c>, ranges as
 /// <c>?hardinessZoneMin=4&amp;hardinessZoneMax=9</c>. See
-/// <see cref="PlantSearchQuery"/> for the full parameter roster.
+/// <see cref="PlantSearchQuery"/> for the full parameter roster. The display
+/// language binds as <c>lang</c> — the same key as the legacy list endpoints
+/// (CodeRabbit alignment) — NOT <c>language</c>, which is ignored.
 /// </summary>
 [ApiController]
 [Route("api/plants/finder")]
@@ -45,8 +47,19 @@ public class PlantFinderController : ControllerBase
     /// reflect the filtered result set and include the "unknown" bucket.
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> Find([FromQuery] PlantSearchQuery query, CancellationToken ct = default)
+    public async Task<IActionResult> Find(
+        [FromQuery] PlantSearchQuery query,
+        [FromQuery(Name = "lang")] string? lang = null,
+        CancellationToken ct = default)
     {
+        // The legacy list endpoints bind the display language as `lang`; this
+        // endpoint follows suit. PlantSearchQuery is a Core domain type with
+        // no ASP.NET reference, so the rename can't be an attribute on the
+        // property — it lives here as an explicit alias: `lang` wins, a stray
+        // `language=` key is deliberately overwritten (ignored), and absence
+        // falls back to "en".
+        query.Language = lang ?? "en";
+
         var errors = PlantSearchQueryValidator.Validate(query);
         if (errors.Count > 0)
             return BadRequest(string.Join(" ", errors));
@@ -55,7 +68,7 @@ public class PlantFinderController : ControllerBase
         {
             var result = await _search.SearchAsync(query, ct);
 
-            var plants = await _plants.GetByIdsAsync(result.Ids, query.Language);
+            var plants = await _plants.GetByIdsAsync(result.Ids, query.Language, ct);
             if (plants.Count != result.Ids.Count)
             {
                 // Index drift (a plant deleted since the last reindex): serve
@@ -90,16 +103,4 @@ public class PlantFinderController : ControllerBase
                 "Search engine unavailable; see server logs for detail.");
         }
     }
-
-    /// <summary>
-    /// Finder page: hydrated list items (Typesense relevance order), the total
-    /// match count, echoed pagination, and the facet distributions of the
-    /// filtered result set.
-    /// </summary>
-    public record PlantFinderResponse(
-        List<PlantListItemResponse> Items,
-        int Found,
-        int Page,
-        int PerPage,
-        List<FacetFieldCounts> FacetCounts);
 }

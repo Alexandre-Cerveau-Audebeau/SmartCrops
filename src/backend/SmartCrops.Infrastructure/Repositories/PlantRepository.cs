@@ -63,16 +63,20 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
     /// engine's relevance ranking — since SQL <c>IN</c> gives no ordering
     /// guarantee. Missing ids (index drift) are simply absent.
     /// </summary>
-    public async Task<IReadOnlyList<Plant>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, string language = "en")
+    public async Task<IReadOnlyList<Plant>> GetByIdsAsync(
+        IReadOnlyCollection<Guid> ids, string language = "en", CancellationToken ct = default)
     {
         if (ids.Count == 0)
             return [];
 
         var plants = await ApplyListIncludes(context.Plants, language)
             .Where(p => ids.Contains(p.Id))
-            .ToListAsync();
+            .ToListAsync(ct);
 
+        // Distinct: a duplicated input id must hydrate once (first occurrence
+        // keeps its rank), not crash the dictionary build.
         var rank = ids
+            .Distinct()
             .Select((id, index) => (id, index))
             .ToDictionary(x => x.id, x => x.index);
 

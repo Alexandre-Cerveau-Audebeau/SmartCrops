@@ -86,7 +86,7 @@ public class PlantFinderControllerTests : IntegrationTestBase
     [InlineData("page=0")]
     [InlineData("perPage=0")]
     [InlineData("perPage=101")]
-    [InlineData("language=de")]
+    [InlineData("lang=de")]
     [InlineData("careLevels=SuperEasy")]
     [InlineData("hardinessZoneMin=9&hardinessZoneMax=4")]
     public async Task Find_InvalidQuery_Returns400_WithoutCallingTheEngine(string queryString)
@@ -109,12 +109,44 @@ public class PlantFinderControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Find_LegacyLanguageKey_IsIgnored_FallsBackToEnglish()
+    {
+        // The finder binds the display language as `lang` (legacy list-endpoint
+        // convention). A stray `language=` key must be ignored — default en —
+        // not honored and not a 400.
+        Fixture.PlantSearchStub.Next = new PlantSearchResult([], 0, 1, 24, []);
+
+        var response = await Client.GetAsync($"{FinderUrl}?language=fr");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var received = Assert.Single(Fixture.PlantSearchStub.Received);
+        Assert.Equal("en", received.Language);
+    }
+
+    [Fact]
+    public async Task Find_DuplicateEngineIds_HydrateOnce_NoCrash()
+    {
+        var seeded = await SeedPlantsAsync("Aster alpinus");
+        // A duplicated hit id (defensive: the engine shouldn't do this, but the
+        // repository contract must not crash on it) hydrates a single item.
+        Fixture.PlantSearchStub.Next = new PlantSearchResult(
+            [seeded[0].Id, seeded[0].Id], 2, 1, 24, []);
+
+        var response = await Client.GetAsync(FinderUrl);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<FinderResp>();
+        var item = Assert.Single(body!.Items);
+        Assert.Equal("Aster alpinus", item.ScientificName);
+    }
+
+    [Fact]
     public async Task Find_BindsFullQueryContract_ToTheServiceCall()
     {
         Fixture.PlantSearchStub.Next = new PlantSearchResult([], 0, 2, 10, []);
 
         var response = await Client.GetAsync(
-            $"{FinderUrl}?q=lavender&language=fr&page=2&perPage=10"
+            $"{FinderUrl}?q=lavender&lang=fr&page=2&perPage=10"
             + "&careLevels=Easy&careLevels=Medium&plantTypeIds=1&plantTypeIds=3"
             + "&isEdible=true&hardinessZoneMin=4&hardinessZoneMax=9&xWateringPhMin=5.5");
 

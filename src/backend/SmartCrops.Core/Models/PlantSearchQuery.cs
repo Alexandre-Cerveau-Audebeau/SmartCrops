@@ -16,7 +16,12 @@ public record PlantSearchQuery
     /// <summary>Free text; null/empty means match-all.</summary>
     public string? Q { get; set; }
 
-    /// <summary>"en" or "fr" — drives query_by fields and hydration language.</summary>
+    /// <summary>
+    /// "en" or "fr" — drives query_by fields and hydration language. The API
+    /// binds this from the <c>lang</c> query key (legacy list-endpoint
+    /// convention) via an explicit alias in PlantFinderController — this Core
+    /// type carries no ASP.NET binding attributes.
+    /// </summary>
     public string Language { get; set; } = "en";
 
     public int Page { get; set; } = 1;
@@ -106,12 +111,13 @@ public static class PlantSearchQueryValidator
         if (values is not { Length: > 0 })
             return;
 
-        var invalid = values.Except(Enum.GetNames<TEnum>()).ToList();
+        var vocabulary = Enum.GetNames<TEnum>();
+        var invalid = values.Except(vocabulary).ToList();
         if (invalid.Count > 0)
         {
             errors.Add(
                 $"Unknown {paramName} value(s): {string.Join(", ", invalid)}. " +
-                $"Valid values: {string.Join(", ", Enum.GetNames<TEnum>())}.");
+                $"Valid values: {string.Join(", ", vocabulary)}.");
         }
     }
 
