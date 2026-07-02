@@ -18,6 +18,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             .WithFrontendUrl()
             .WithTrefle()
             .WithPerenual()
+            .WithTypesense()
             .ApplyTo(builder);
     }
 }

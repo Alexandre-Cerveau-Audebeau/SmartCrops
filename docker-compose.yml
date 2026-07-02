@@ -27,6 +27,11 @@ services:
       # already exist AND be email-confirmed to be granted. Set the real value in
       # docker-compose.override.yml (gitignored); empty default = no admin seeded.
       AdminSeed__Emails: ${ADMIN_SEED_EMAILS:-}
+      # SMA-255 — Typesense admin API key for indexing/search. Set the real
+      # value in docker-compose.override.yml (gitignored); an empty value fails
+      # the API boot via ValidateOnStart (same contract as the Perenual/Trefle
+      # keys).
+      Typesense__ApiKey: ${TYPESENSE_API_KEY:-}
     ports:
       - "5000:8080"
     depends_on:
