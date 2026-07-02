@@ -59,8 +59,8 @@ services:
       # docker-compose.override.yml — never commit it here.
       - TYPESENSE_DATA_DIR=/data
     volumes:
-      - typesense-data:/data
+      - smartcrops-typesense-data:/data
 
 volumes:
   smartcrops-db-data:
-  typesense-data:
+  smartcrops-typesense-data:
