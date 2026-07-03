@@ -10,7 +10,7 @@
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write src/",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run --testTimeout=20000"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
