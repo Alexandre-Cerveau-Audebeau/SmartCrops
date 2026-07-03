@@ -156,6 +156,43 @@ describe('usePlantFinder', () => {
     expect(vi.mocked(findPlants)).toHaveBeenCalledTimes(2);
   });
 
+  it('a failed append rolls the page back so the next loadMore retries it', async () => {
+    // Without the rollback, a failed page-2 fetch left `page` bumped with
+    // prevRef uncommitted; the advance cap then made every retry a same-value
+    // setPage → React bail-out → the effect never re-ran and Load more was
+    // permanently wedged (only a context change escaped).
+    const catalog = makeMany(50);
+    let page2Failed = false;
+    vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) => {
+      if (params.page === 2 && !page2Failed) {
+        page2Failed = true;
+        return Promise.reject(new Error('Failed to find plants: 503'));
+      }
+      return Promise.resolve(pageOf(catalog, params.page ?? 1));
+    });
+    const { result } = renderFinder();
+    await waitFor(() => expect(result.current.initialLoading).toBe(false));
+
+    // First append fails: error surfaces, the list keeps page 1 only.
+    act(() => result.current.loadMore());
+    await waitFor(() =>
+      expect(result.current.error).toBe('Failed to find plants: 503')
+    );
+    expect(result.current.items).toHaveLength(24);
+    const callsAfterFailure = vi.mocked(findPlants).mock.calls.length;
+
+    // Second loadMore re-advances to the SAME page (exactly one new call),
+    // appends it, and the success clears the error.
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.items).toHaveLength(48));
+    expect(vi.mocked(findPlants)).toHaveBeenCalledTimes(callsAfterFailure + 1);
+    expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 2 }),
+      expect.anything()
+    );
+    expect(result.current.error).toBeNull();
+  });
+
   it('a query change replaces from page 1 after the debounce; resetToFirstPage alone refetches nothing', async () => {
     const { result, rerender } = await loadedFinder();
     act(() => result.current.loadMore());

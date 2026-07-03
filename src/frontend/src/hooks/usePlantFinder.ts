@@ -170,6 +170,11 @@ export function usePlantFinder({
       } catch (err) {
         if (!signal.aborted && (err as Error).name !== 'AbortError') {
           onFetchError(err);
+          // A failed APPEND left page bumped but prevRef uncommitted; roll
+          // back so the next loadMore() re-advances and retries this page
+          // (the T1 advance cap would otherwise wedge: same-value setPage
+          // bails out and the effect never re-runs).
+          if (pageAdvanced && prev !== null) setPage(prev.page);
         }
       } finally {
         fetchingRef.current = false;
