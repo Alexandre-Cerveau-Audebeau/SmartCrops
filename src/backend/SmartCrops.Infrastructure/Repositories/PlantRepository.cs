@@ -73,12 +73,17 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
             .Where(p => ids.Contains(p.Id))
             .ToListAsync(ct);
 
-        // Distinct: a duplicated input id must hydrate once (first occurrence
-        // keeps its rank), not crash the dictionary build.
-        var rank = ids
-            .Distinct()
-            .Select((id, index) => (id, index))
-            .ToDictionary(x => x.id, x => x.index);
+        // First-seen loop rather than Distinct().Select().ToDictionary():
+        // a duplicated input id must hydrate once with its FIRST occurrence's
+        // rank, and Distinct()'s ordering is undocumented — the relevance rank
+        // must be contractual, not an implementation accident.
+        var rank = new Dictionary<Guid, int>(ids.Count);
+        var next = 0;
+        foreach (var id in ids)
+        {
+            if (rank.TryAdd(id, next))
+                next++;
+        }
 
         return plants.OrderBy(p => rank[p.Id]).ToList();
     }

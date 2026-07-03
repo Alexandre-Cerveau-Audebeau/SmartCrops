@@ -111,6 +111,20 @@ public class PlantFinderControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Find_TextQueryAtTheCap_Passes_EngineIsReached()
+    {
+        // Boundary of the amplification guard at the HTTP layer: exactly 200
+        // chars is allowed and the query reaches the engine.
+        var atCap = new string('a', 200);
+
+        var response = await Client.GetAsync($"{FinderUrl}?q={atCap}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var received = Assert.Single(Fixture.PlantSearchStub.Received);
+        Assert.Equal(atCap, received.Q);
+    }
+
+    [Fact]
     public async Task Find_EngineUnavailable_Returns503()
     {
         Fixture.PlantSearchStub.NextException =
