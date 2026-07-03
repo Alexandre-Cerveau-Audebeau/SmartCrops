@@ -33,3 +33,55 @@ export async function searchPlants(query: string, language: string, signal?: Abo
   if (!res.ok) throw new Error(`Failed to search plants: ${res.status}`);
   return res.json();
 }
+
+// ── SMA-255 T4 — faceted finder ────────────────────────────────────────────
+// The Library's single data path since T4: text search + structured filters +
+// facet counts + REAL server pagination over the Typesense index, hydrated
+// server-side into the same PlantListItemResponse items as /api/plants.
+// fetchPlants/searchPlants above stay in place for now (cleanup ticket).
+
+export interface FindPlantsParams {
+  q?: string;
+  lang?: string;
+  page?: number;
+  perPage?: number;
+  plantTypeIds?: number[];
+}
+
+export interface FacetValueCount {
+  value: string;
+  count: number;
+}
+
+export interface FacetFieldCounts {
+  field: string;
+  counts: FacetValueCount[];
+}
+
+export interface PlantFinderResult {
+  items: Plant[];
+  found: number;
+  page: number;
+  perPage: number;
+  facetCounts: FacetFieldCounts[];
+}
+
+export async function findPlants(
+  params: FindPlantsParams,
+  signal?: AbortSignal
+): Promise<PlantFinderResult> {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set('q', params.q);
+  // Query key is `lang` — same unified locale key as the list endpoints.
+  if (params.lang) qs.set('lang', params.lang);
+  if (params.page !== undefined) qs.set('page', String(params.page));
+  if (params.perPage !== undefined) qs.set('perPage', String(params.perPage));
+  // Multi-selects go as repeated keys (?plantTypeIds=1&plantTypeIds=3) —
+  // ASP.NET's default array binding.
+  for (const id of params.plantTypeIds ?? []) {
+    qs.append('plantTypeIds', String(id));
+  }
+  const res = await fetch(`${API_BASE}/plants/finder?${qs}`, { signal });
+  if (!res.ok) throw new Error(`Failed to find plants: ${res.status}`);
+  return res.json();
+}

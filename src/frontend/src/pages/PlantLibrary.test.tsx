@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -6,22 +6,25 @@ import i18next from '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { useLanguage } from '../hooks/useLanguage';
 import type { Plant } from '../types/Plant';
+import type { FindPlantsParams, PlantFinderResult } from '../services/plantApi';
 
 vi.mock('../services/plantApi', () => ({
-  fetchPlants: vi.fn(),
+  findPlants: vi.fn(),
   fetchPlantTypes: vi.fn(),
-  searchPlants: vi.fn(),
 }));
 
 import PlantLibrary from './PlantLibrary';
-import {
-  fetchPlants,
-  fetchPlantTypes,
-  searchPlants,
-} from '../services/plantApi';
+import { fetchPlantTypes, findPlants } from '../services/plantApi';
+
+// SMA-255 T4 — the Library runs on the faceted finder with real server
+// pagination, so this suite mocks findPlants (the single data path) and
+// asserts the page/filter/language orchestration. The old suite's flake
+// (SMA-174) came from real-timer debounce races; every debounce test below
+// uses fake timers, everything else resolves synchronously-awaitable mocks.
 
 afterEach(async () => {
   vi.clearAllMocks();
+  vi.useRealTimers();
   localStorage.clear();
   // A test below flips the language; reset the shared i18next singleton so the
   // English-label assertions in the other tests stay deterministic.
@@ -43,10 +46,10 @@ function LangSwitch() {
   );
 }
 
-// Shape returned by GET /api/plants since PR #100 (PlantListItemResponse):
-// identity + type + factual scalars, and crucially NO `translations` array.
-// Typed as Plant (the frontend contract) but missing `translations` at runtime —
-// exactly the payload that crashed the Library before the getTranslation guard.
+// Items keep the PlantListItemResponse shape (identity + type + factual
+// scalars, NO translations array) — the neutral list DTO the finder hydrates
+// server-side, and exactly the payload that crashed the Library before the
+// SMA-73 getTranslation guard.
 function makeListItem(overrides: Partial<Plant> = {}): Plant {
   return {
     id: '00a098b2-b0d2-4ff8-a100-cee56088391e',
@@ -57,6 +60,31 @@ function makeListItem(overrides: Partial<Plant> = {}): Plant {
     waterNeeds: null,
     ...overrides,
   } as unknown as Plant;
+}
+
+const makeMany = (n: number) =>
+  Array.from({ length: n }, (_, i) =>
+    makeListItem({
+      id: `id-${i}`,
+      scientificName: `Plant ${String(i).padStart(2, '0')}`,
+    })
+  );
+
+// Serves 24-item pages out of `catalog`, mirroring the finder contract.
+function pageOf(catalog: Plant[], page: number): PlantFinderResult {
+  return {
+    items: catalog.slice((page - 1) * 24, page * 24),
+    found: catalog.length,
+    page,
+    perPage: 24,
+    facetCounts: [],
+  };
+}
+
+function mockFinderCatalog(catalog: Plant[]) {
+  vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
+    Promise.resolve(pageOf(catalog, params.page ?? 1))
+  );
 }
 
 function renderLibrary() {
@@ -71,114 +99,157 @@ function renderLibrary() {
 
 describe('PlantLibrary', () => {
   it('renders cards from the neutral list DTO (no translations) without crashing (SMA-73)', async () => {
-    vi.mocked(fetchPlants).mockResolvedValue([makeListItem()]);
+    mockFinderCatalog([makeListItem()]);
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
-    vi.mocked(searchPlants).mockResolvedValue([]);
 
     renderLibrary();
 
     // The card title falls back to the scientific name (no common name in the
-    // list DTO — restoring common names is a separate decision; SMA-73 is
-    // resilience only). Before the fix, the render threw a TypeError here.
+    // list DTO). Before the SMA-73 fix, the render threw a TypeError here.
     expect(
       await screen.findByRole('heading', { name: 'Achillea ptarmica' })
     ).toBeInTheDocument();
   });
 
-  // SMA-58 — front-pure infinite scroll. Each PlantCard renders the name as an
-  // <h6> (level-6 heading), so the count of level-6 headings == visible cards.
-  // IntersectionObserver isn't implemented in jsdom; the guard + Load more button
-  // cover the reveal logic deterministically here.
-  const makeMany = (n: number) =>
-    Array.from({ length: n }, (_, i) =>
-      makeListItem({
-        id: `id-${i}`,
-        scientificName: `Plant ${String(i).padStart(2, '0')}`,
-      })
-    );
-
-  it('renders only the initial slice (24) plus a Load more button when the list is larger', async () => {
-    vi.mocked(fetchPlants).mockResolvedValue(makeMany(50));
+  it('requests page 1 with perPage 24 and the current lang on mount', async () => {
+    mockFinderCatalog(makeMany(50));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
-    vi.mocked(searchPlants).mockResolvedValue([]);
 
     renderLibrary();
-
     await screen.findByRole('heading', { name: 'Plant 00' });
+
+    // No exact call count: StrictMode double-invokes the mount effect (the
+    // first run is aborted and never commits). The contract is the params.
+    expect(vi.mocked(findPlants)).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, perPage: 24, lang: 'en', q: undefined }),
+      expect.anything()
+    );
+    // Server pagination: only page 1 (24 cards) is in the DOM.
     expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24);
     expect(
       screen.getByRole('button', { name: 'Load more' })
     ).toBeInTheDocument();
-    // The 25th card (index 24) is not in the DOM yet.
-    expect(
-      screen.queryByRole('heading', { name: 'Plant 24' })
-    ).not.toBeInTheDocument();
   });
 
-  it('reveals the next slice (+24) when Load more is clicked', async () => {
-    vi.mocked(fetchPlants).mockResolvedValue(makeMany(50));
+  it('debounces typing — keystrokes coalesce into one fetch 300ms after the last', async () => {
+    mockFinderCatalog(makeMany(50));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
-    vi.mocked(searchPlants).mockResolvedValue([]);
+
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    // fireEvent (not userEvent) under fake timers: one synchronous change per
+    // keystroke, no userEvent-internal timer coupling — deterministic by
+    // construction (the SMA-174 flake came from real-timer debounce races).
+    vi.useFakeTimers();
+    const callsAfterMount = vi.mocked(findPlants).mock.calls.length;
+    const textbox = screen.getByRole('textbox');
+
+    fireEvent.change(textbox, { target: { value: 'la' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(150);
+    });
+    fireEvent.change(textbox, { target: { value: 'lav' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(299);
+    });
+    // The 'la' timer was cancelled by the 'lav' keystroke; 'lav' fires at
+    // +300ms — one tick early, nothing has fired yet.
+    expect(vi.mocked(findPlants).mock.calls).toHaveLength(callsAfterMount);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(vi.mocked(findPlants).mock.calls).toHaveLength(callsAfterMount + 1);
+    expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ q: 'lav', page: 1 }),
+      expect.anything()
+    );
+  });
+
+  it('a single character stays match-all — no fetch until a 2nd character', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    vi.useFakeTimers();
+    const callsAfterMount = vi.mocked(findPlants).mock.calls.length;
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'l' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(vi.mocked(findPlants).mock.calls).toHaveLength(callsAfterMount);
+    // The current list stays visible.
+    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24);
+  });
+
+  it('a type chip becomes a plantTypeIds server filter and replaces from page 1', async () => {
+    const ornamentals = makeMany(3);
+    vi.mocked(fetchPlantTypes).mockResolvedValue([
+      { id: 4, name: 'Ornamental', description: null },
+    ]);
+    vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
+      Promise.resolve(
+        params.plantTypeIds?.length
+          ? pageOf(ornamentals, params.page ?? 1)
+          : pageOf(makeMany(50), params.page ?? 1)
+      )
+    );
 
     const user = userEvent.setup();
     renderLibrary();
     await screen.findByRole('heading', { name: 'Plant 00' });
-
     expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24);
+
+    await user.click(screen.getByRole('button', { name: 'Ornamental' }));
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(3)
+    );
+    expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ plantTypeIds: [4], page: 1 }),
+      expect.anything()
+    );
+  });
+
+  it('Load more fetches the next page and APPENDS it (server pagination)', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24);
+
     await user.click(screen.getByRole('button', { name: 'Load more' }));
-    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(48);
-    // 50 total → after a second click the button disappears (all shown).
+    await waitFor(() =>
+      expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(48)
+    );
+    expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 2 }),
+      expect.anything()
+    );
+    // Page 1 cards are still present — appended, not replaced.
+    expect(
+      screen.getByRole('heading', { name: 'Plant 00' })
+    ).toBeInTheDocument();
+
+    // 50 total → the last page (2 items) exhausts the results; button gone.
     await user.click(screen.getByRole('button', { name: 'Load more' }));
-    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(50);
+    await waitFor(() =>
+      expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(50)
+    );
     expect(
       screen.queryByRole('button', { name: 'Load more' })
     ).not.toBeInTheDocument();
   });
 
-  it('resets the visible slice to 24 when the search query changes', async () => {
-    vi.mocked(fetchPlants).mockResolvedValue(makeMany(50));
+  it('keeps the loaded slice on a language change by refetching the loaded pages (SMA-153)', async () => {
+    mockFinderCatalog(makeMany(50));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
-    vi.mocked(searchPlants).mockResolvedValue([]);
-
-    const user = userEvent.setup();
-    renderLibrary();
-    await screen.findByRole('heading', { name: 'Plant 00' });
-
-    await user.click(screen.getByRole('button', { name: 'Load more' }));
-    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(48);
-
-    // Typing resets the count immediately via the change handler (independent of
-    // the debounced fetch, which doesn't fire under the test's real timers).
-    await user.type(screen.getByRole('textbox'), 'ro');
-    await waitFor(() =>
-      expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24)
-    );
-  });
-
-  it('resets the visible slice to 24 when the type filter changes', async () => {
-    // 50 ornamentals (type 4) + a chip for type 4 so a click re-filters.
-    vi.mocked(fetchPlants).mockResolvedValue(makeMany(50));
-    vi.mocked(fetchPlantTypes).mockResolvedValue([
-      { id: 4, name: 'Ornamental', description: null },
-    ]);
-    vi.mocked(searchPlants).mockResolvedValue([]);
-
-    const user = userEvent.setup();
-    renderLibrary();
-    await screen.findByRole('heading', { name: 'Plant 00' });
-
-    await user.click(screen.getByRole('button', { name: 'Load more' }));
-    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(48);
-
-    // Click the Ornamental chip → activeType set → slice resets (all 50 still match).
-    await user.click(screen.getByRole('button', { name: 'Ornamental' }));
-    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24);
-  });
-
-  it('keeps the visible slice on a language change, but still resets it on a new search (SMA-153)', async () => {
-    vi.mocked(fetchPlants).mockResolvedValue(makeMany(50));
-    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
-    vi.mocked(searchPlants).mockResolvedValue([]);
 
     const user = userEvent.setup();
     render(
@@ -189,35 +260,102 @@ describe('PlantLibrary', () => {
         </MemoryRouter>
       </LanguageProvider>
     );
-
     await screen.findByRole('heading', { name: 'Plant 00' });
 
-    // Grow the slice past the initial page (24 → 48).
+    // Grow to two loaded pages (24 → 48).
     await user.click(screen.getByRole('button', { name: 'Load more' }));
-    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(48);
+    await waitFor(() =>
+      expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(48)
+    );
+    vi.mocked(findPlants).mockClear();
 
-    // Switching language re-fetches the (re-localised) catalogue with the new lang…
+    // Switching language refetches BOTH loaded pages in the new lang (no
+    // exact call count — an aborted first pass from the i18next `t` identity
+    // change can add framework-noise calls; the contract is that both pages
+    // were requested in fr).
     await user.click(screen.getByRole('button', { name: 'switch language' }));
     await waitFor(() =>
-      expect(vi.mocked(fetchPlants)).toHaveBeenCalledWith(
-        expect.anything(),
-        'fr'
+      expect(vi.mocked(findPlants)).toHaveBeenCalledWith(
+        expect.objectContaining({ lang: 'fr', page: 1 }),
+        expect.anything()
       )
     );
-    // …but the visible slice is preserved — no collapse back to 24 (SMA-153).
-    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(48);
-
-    // Lock: a genuine new search still resets the slice (reset intent intact).
-    await user.type(screen.getByRole('textbox'), 'ro');
     await waitFor(() =>
-      expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24)
+      expect(vi.mocked(findPlants)).toHaveBeenCalledWith(
+        expect.objectContaining({ lang: 'fr', page: 2 }),
+        expect.anything()
+      )
+    );
+    // …and the visible slice is preserved — no collapse back to 24 (SMA-153).
+    await waitFor(() =>
+      expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(48)
     );
   });
 
-  it('exposes a polite status region that tracks the visible/total count (a11y)', async () => {
-    vi.mocked(fetchPlants).mockResolvedValue(makeMany(50));
+  it('shows noResults (not noPlants) when a search matches nothing', async () => {
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
-    vi.mocked(searchPlants).mockResolvedValue([]);
+    vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
+      Promise.resolve(
+        params.q
+          ? { items: [], found: 0, page: 1, perPage: 24, facetCounts: [] }
+          : pageOf(makeMany(5), 1)
+      )
+    );
+
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    vi.useFakeTimers();
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'zz' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    vi.useRealTimers();
+
+    expect(
+      await screen.findByText('No plants match your search.')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('No plants found yet — check back soon!')
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows noPlants when the catalogue itself is empty (no filter active)', async () => {
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+    vi.mocked(findPlants).mockResolvedValue({
+      items: [],
+      found: 0,
+      page: 1,
+      perPage: 24,
+      facetCounts: [],
+    });
+
+    renderLibrary();
+
+    expect(
+      await screen.findByText('No plants found yet — check back soon!')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('No plants match your search.')
+    ).not.toBeInTheDocument();
+  });
+
+  it('surfaces a finder failure through the error alert', async () => {
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+    vi.mocked(findPlants).mockRejectedValue(
+      new Error('Failed to find plants: 503')
+    );
+
+    renderLibrary();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Failed to find plants: 503'
+    );
+  });
+
+  it('exposes a polite status region that tracks the loaded/total count (a11y)', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     const user = userEvent.setup();
     renderLibrary();
@@ -226,6 +364,8 @@ describe('PlantLibrary', () => {
     const status = screen.getByRole('status');
     expect(status).toHaveTextContent('Showing 24 of 50 plants');
     await user.click(screen.getByRole('button', { name: 'Load more' }));
-    expect(status).toHaveTextContent('Showing 48 of 50 plants');
+    await waitFor(() =>
+      expect(status).toHaveTextContent('Showing 48 of 50 plants')
+    );
   });
 });
