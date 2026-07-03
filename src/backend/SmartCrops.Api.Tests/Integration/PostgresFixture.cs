@@ -91,6 +91,13 @@ public sealed class PostgresFixture : IAsyncLifetime
         Factory.Services.GetRequiredService<StubSearchIndexingService>();
 
     /// <summary>
+    /// Shared stub for <see cref="IPlantSearchService"/> (SMA-255 T3 public
+    /// finder). Same lifecycle as the other stubs — reset per test.
+    /// </summary>
+    public StubPlantSearchService PlantSearchStub =>
+        Factory.Services.GetRequiredService<StubPlantSearchService>();
+
+    /// <summary>
     /// Shared programmable HTTP handler backing the <c>PerenualClient</c> typed
     /// client (SMA-93). The <c>PerenualRawCacheController</c> injects the concrete
     /// client, so its only seam is the transport — tests configure canned
@@ -176,6 +183,14 @@ public sealed class PostgresFixture : IAsyncLifetime
                 services.AddSingleton<StubSearchIndexingService>();
                 services.AddSingleton<ISearchIndexingService>(sp =>
                     sp.GetRequiredService<StubSearchIndexingService>());
+
+                // SMA-255 T3: same policy for the public finder read path —
+                // the engine is stubbed, hydration runs against the real
+                // Postgres container.
+                services.RemoveAll<IPlantSearchService>();
+                services.AddSingleton<StubPlantSearchService>();
+                services.AddSingleton<IPlantSearchService>(sp =>
+                    sp.GetRequiredService<StubPlantSearchService>());
 
                 // SMA-93: the raw-cache controller injects the concrete PerenualClient
                 // (no service interface to swap), so we stub the transport instead —

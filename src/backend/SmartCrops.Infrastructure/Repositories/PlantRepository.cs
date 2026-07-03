@@ -58,6 +58,37 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
             .AsNoTracking();
 
     /// <summary>
+    /// Finder hydration (SMA-255): fetch the given ids with the lean-list
+    /// includes, then reorder in memory to match the input order — the search
+    /// engine's relevance ranking — since SQL <c>IN</c> gives no ordering
+    /// guarantee. Missing ids (index drift) are simply absent.
+    /// </summary>
+    public async Task<IReadOnlyList<Plant>> GetByIdsAsync(
+        IReadOnlyCollection<Guid> ids, string language = "en", CancellationToken ct = default)
+    {
+        if (ids.Count == 0)
+            return [];
+
+        var plants = await ApplyListIncludes(context.Plants, language)
+            .Where(p => ids.Contains(p.Id))
+            .ToListAsync(ct);
+
+        // First-seen loop rather than Distinct().Select().ToDictionary():
+        // a duplicated input id must hydrate once with its FIRST occurrence's
+        // rank, and Distinct()'s ordering is undocumented — the relevance rank
+        // must be contractual, not an implementation accident.
+        var rank = new Dictionary<Guid, int>(ids.Count);
+        var next = 0;
+        foreach (var id in ids)
+        {
+            if (rank.TryAdd(id, next))
+                next++;
+        }
+
+        return plants.OrderBy(p => rank[p.Id]).ToList();
+    }
+
+    /// <summary>
     /// Detail-view fetch for the Plant Detail page: eagerly loads every
     /// navigation collection (images, long descriptions, common names, pests,
     /// synonyms, sources, Trefle/Perenual data) via <c>AsSplitQuery</c>, with
