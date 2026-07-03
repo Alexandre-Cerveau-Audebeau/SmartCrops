@@ -77,7 +77,7 @@ function renderFinder(inputs = initialInputs) {
 async function loadedFinder(catalog: Plant[] = makeMany(50)) {
   mockCatalog(catalog);
   const view = renderFinder();
-  await waitFor(() => expect(view.result.current.loading).toBe(false));
+  await waitFor(() => expect(view.result.current.initialLoading).toBe(false));
   return view;
 }
 
@@ -106,7 +106,7 @@ describe('usePlantFinder', () => {
     );
     const { result } = renderFinder();
 
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current.initialLoading).toBe(false));
     expect(result.current.facetCounts).toEqual(facetCounts);
   });
 
@@ -143,7 +143,7 @@ describe('usePlantFinder', () => {
       return Promise.resolve(pageOf(catalog, params.page ?? 1));
     });
     const { result } = renderFinder();
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current.initialLoading).toBe(false));
 
     // First call starts the page-2 fetch (act flushes the effect)…
     act(() => result.current.loadMore());
@@ -227,15 +227,45 @@ describe('usePlantFinder', () => {
   it('a 0–1 character query stays match-all — no refetch at all', async () => {
     const { result, rerender } = await loadedFinder();
 
+    // Fake timers (like the debounce test): deterministic by construction —
+    // no real-clock sleep that could flake under load.
+    vi.useFakeTimers();
     rerender({ ...initialInputs, query: 'l' });
     // effectiveQuery is unchanged (''), so the effect does not even re-run —
     // give any stray debounce a chance to fire before asserting.
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 350));
+      await vi.advanceTimersByTimeAsync(350);
     });
 
     expect(vi.mocked(findPlants)).toHaveBeenCalledTimes(1);
     expect(result.current.items).toHaveLength(24);
+  });
+
+  it('a sub-threshold edit keeps the fetched page context: one loadMore appends the NEXT page (guarded reset)', async () => {
+    // Pins the hook contract behind the component's guarded reset: a 0↔1-char
+    // edit does NOT reset the page (the displayed set is identical), so the
+    // page state stays in sync with the fetched context and Load more keeps
+    // working. Had the caller reset to page 1 here (pre-fix T4 behavior), the
+    // next loadMore would advance 1→2 — a page already fetched — and append
+    // NOTHING: a silent no-op wedge.
+    const { result, rerender } = await loadedFinder(makeMany(100));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.items).toHaveLength(48));
+    const callsBefore = vi.mocked(findPlants).mock.calls.length;
+
+    // The guarded handler forwards the raw query WITHOUT resetToFirstPage().
+    rerender({ ...initialInputs, query: 'l' });
+    expect(vi.mocked(findPlants)).toHaveBeenCalledTimes(callsBefore);
+    expect(result.current.items).toHaveLength(48);
+
+    // ONE loadMore → ONE fetch, straight to page 3 and appended.
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.items).toHaveLength(72));
+    expect(vi.mocked(findPlants)).toHaveBeenCalledTimes(callsBefore + 1);
+    expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 3, q: undefined }),
+      expect.anything()
+    );
   });
 
   it('surfaces a fetch failure through error and clears it on the next success', async () => {
@@ -252,7 +282,7 @@ describe('usePlantFinder', () => {
     await waitFor(() =>
       expect(result.current.error).toBe('Failed to find plants: 503')
     );
-    expect(result.current.loading).toBe(false);
+    expect(result.current.initialLoading).toBe(false);
 
     // A context change retries (prevRef was never committed for the failed
     // fetch) and a success clears the error.
@@ -266,8 +296,8 @@ describe('usePlantFinder', () => {
     // aborted by the cleanup before its promise settles; run 2 must still see
     // prevRef === null (uncommitted) and fetch again. With the old
     // commit-at-entry bug, run 2 saw "nothing changed" and the hook hung on
-    // loading forever. A probe component under render(<StrictMode>) is used
-    // instead of renderHook's wrapper option: with the wrapper, this React +
+    // initialLoading forever. A probe component under render(<StrictMode>) is
+    // used instead of renderHook's wrapper option: with the wrapper, this React +
     // RTL combination does NOT double-invoke effects (probed empirically),
     // which would silently void this guard.
     mockCatalog(makeMany(50));
@@ -290,7 +320,7 @@ describe('usePlantFinder', () => {
       </StrictMode>
     );
 
-    await waitFor(() => expect(latestRef.current?.loading).toBe(false));
+    await waitFor(() => expect(latestRef.current?.initialLoading).toBe(false));
     expect(latestRef.current?.items).toHaveLength(PER_PAGE);
     expect(latestRef.current?.found).toBe(50);
     // Both effect runs fetched — the aborted one committed nothing.

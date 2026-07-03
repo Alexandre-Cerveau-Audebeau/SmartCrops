@@ -39,8 +39,15 @@ export default function PlantLibrary() {
 
   // The hook also returns facetCounts (T2 facet-rail seam) — no consumer here
   // yet, so it stays undestructured.
-  const { items, found, loading, error, hasMore, loadMore, resetToFirstPage } =
-    usePlantFinder({ query: searchQuery, activeType, language });
+  const {
+    items,
+    found,
+    initialLoading,
+    error,
+    hasMore,
+    loadMore,
+    resetToFirstPage,
+  } = usePlantFinder({ query: searchQuery, activeType, language });
 
   // Plant types load once (mount). They're translated client-side via
   // `plantTypes.*`, so there's no need to refetch them on a language change.
@@ -87,8 +94,17 @@ export default function PlantLibrary() {
   // Resetting in handlers (not an effect) keeps clear of
   // react-hooks/set-state-in-effect.
   const handleSearchChange = (value: string) => {
+    // Reset only when the EFFECTIVE query changes (either side of the edit is
+    // a real query). A 0↔1-char edit keeps the displayed set identical
+    // (match-all on both sides), and resetting page 1 there desyncs the page
+    // state from the hook's fetched context — the next Load more became a
+    // silent no-op (advance 1→2 = a page already fetched). Pre-existing T4
+    // bug surfaced in review; not a refactor drift.
+    const effectiveQueryChanged =
+      searchQuery.length >= MIN_QUERY_LENGTH ||
+      value.length >= MIN_QUERY_LENGTH;
     setSearchQuery(value);
-    resetToFirstPage();
+    if (effectiveQueryChanged) resetToFirstPage();
   };
   const handleTypeChange = (typeId: number | null) => {
     setActiveType(typeId);
@@ -106,7 +122,7 @@ export default function PlantLibrary() {
         {t('library.title')}
       </Typography>
 
-      {!loading && !error && (
+      {!initialLoading && !error && (
         <>
           <TextField
             placeholder={t('library.searchPlaceholder')}
@@ -148,7 +164,7 @@ export default function PlantLibrary() {
         </>
       )}
 
-      {loading && (
+      {initialLoading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />
         </Box>
@@ -164,20 +180,20 @@ export default function PlantLibrary() {
           query or chip active it's a no-match state. Same components as before
           T4 — only the gating source changed (server `found` instead of the
           in-memory array lengths). */}
-      {!loading && !error && found === 0 && !isFiltered && (
+      {!initialLoading && !error && found === 0 && !isFiltered && (
         <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
           <SpaIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
           <Typography>{t('library.noPlants')}</Typography>
         </Box>
       )}
 
-      {!loading && !error && found === 0 && isFiltered && (
+      {!initialLoading && !error && found === 0 && isFiltered && (
         <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
           <Typography>{t('library.noResults')}</Typography>
         </Box>
       )}
 
-      {!loading && items.length > 0 && (
+      {!initialLoading && items.length > 0 && (
         <>
           <Grid container spacing={3}>
             {items.map((plant) => {
@@ -193,7 +209,7 @@ export default function PlantLibrary() {
           </Grid>
 
           {/* Polite, visually-hidden live region rendered once the list has loaded
-              (gated by !loading && items.length > 0). It announces the
+              (gated by !initialLoading && items.length > 0). It announces the
               loaded/total count as pages append (Load more / scroll); some
               screen readers may also announce the initial count when it appears. */}
           <Box

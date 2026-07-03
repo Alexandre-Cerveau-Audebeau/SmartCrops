@@ -38,7 +38,14 @@ export interface UsePlantFinderResult {
   items: Plant[];
   found: number;
   facetCounts: FacetFieldCounts[];
-  loading: boolean;
+  /**
+   * True during the initial catalogue load ONLY — later fetches (debounced
+   * search, type/language change, page append) update the list in place, so
+   * consumers gating their whole UI on this flag don't flash it on every
+   * keystroke. T2 may add discreet per-control pending states if the design
+   * calls for it.
+   */
+  initialLoading: boolean;
   error: string | null;
   hasMore: boolean;
   loadMore: () => void;
@@ -58,7 +65,9 @@ export function usePlantFinder({
   // current filter context, not the page, so every page of one context
   // carries the same values.
   const [facetCounts, setFacetCounts] = useState<FacetFieldCounts[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Single transition true→false by design (see UsePlantFinderResult doc):
+  // re-arming it per fetch would flash consumers' gates on every keystroke.
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   // Snapshot of the last fetch context so the effect can tell WHAT changed:
@@ -164,7 +173,7 @@ export function usePlantFinder({
         }
       } finally {
         fetchingRef.current = false;
-        if (!signal.aborted) setLoading(false);
+        if (!signal.aborted) setInitialLoading(false);
       }
     };
 
@@ -209,7 +218,7 @@ export function usePlantFinder({
     items,
     found,
     facetCounts,
-    loading,
+    initialLoading,
     error,
     hasMore,
     loadMore,
