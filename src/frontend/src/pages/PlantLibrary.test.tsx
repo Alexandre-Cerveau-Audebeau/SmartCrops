@@ -13,7 +13,7 @@ vi.mock('../services/plantApi', () => ({
   fetchPlantTypes: vi.fn(),
 }));
 
-import PlantLibrary from './PlantLibrary';
+import PlantLibrary, { PER_PAGE } from './PlantLibrary';
 import { fetchPlantTypes, findPlants } from '../services/plantApi';
 
 // SMA-255 T4 — the Library runs on the faceted finder with real server
@@ -70,13 +70,16 @@ const makeMany = (n: number) =>
     })
   );
 
-// Serves 24-item pages out of `catalog`, mirroring the finder contract.
+// Serves PER_PAGE-item pages out of `catalog`, mirroring the finder contract.
+// Slice math derives from the component's own constant so a page-size change
+// can't silently drift this mock; the 24/48 card-count ASSERTIONS below stay
+// literal on purpose — they're the visible contract and must break loudly.
 function pageOf(catalog: Plant[], page: number): PlantFinderResult {
   return {
-    items: catalog.slice((page - 1) * 24, page * 24),
+    items: catalog.slice((page - 1) * PER_PAGE, page * PER_PAGE),
     found: catalog.length,
     page,
-    perPage: 24,
+    perPage: PER_PAGE,
     facetCounts: [],
   };
 }
@@ -121,7 +124,7 @@ describe('PlantLibrary', () => {
     // No exact call count: StrictMode double-invokes the mount effect (the
     // first run is aborted and never commits). The contract is the params.
     expect(vi.mocked(findPlants)).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 1, perPage: 24, lang: 'en', q: undefined }),
+      expect.objectContaining({ page: 1, perPage: PER_PAGE, lang: 'en', q: undefined }),
       expect.anything()
     );
     // Server pagination: only page 1 (24 cards) is in the DOM.

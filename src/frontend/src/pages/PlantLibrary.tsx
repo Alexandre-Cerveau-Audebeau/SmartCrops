@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -25,7 +25,9 @@ import PlantCard from '../components/PlantCard';
 // the type chips are server filters on the same single data path — no more
 // full-catalogue load, client-side type filtering, or client-side slicing
 // (which SMA-58 needed when the list endpoint returned everything at once).
-const PER_PAGE = 24;
+// Exported so the test suite's finder mock derives its page math from the
+// same constant — a page-size change can't silently drift the tests.
+export const PER_PAGE = 24;
 
 // The finder waits for a 2nd character before searching (single letters are
 // too broad to be a useful query); 0–1 chars behave as match-all.
@@ -59,6 +61,14 @@ export default function PlantLibrary() {
   // 0–1 chars = match-all; the debounce below only applies to real queries.
   const effectiveQuery =
     searchQuery.length >= MIN_QUERY_LENGTH ? searchQuery : '';
+
+  // Effect event so the fetch effect can read the CURRENT translator without
+  // depending on it: `t` swaps identity on every locale change, and a
+  // locale-only identity swap must never retrigger fetching (`language` is
+  // the real refetch trigger).
+  const onFetchError = useEffectEvent((err: unknown) => {
+    setError(err instanceof Error ? err.message : t('library.error'));
+  });
 
   // Plant types load once (mount). They're translated client-side via
   // `plantTypes.*`, so there's no need to refetch them on a language change.
@@ -143,7 +153,7 @@ export default function PlantLibrary() {
         setError(null);
       } catch (err) {
         if (!signal.aborted && (err as Error).name !== 'AbortError') {
-          setError(err instanceof Error ? err.message : t('library.error'));
+          onFetchError(err);
         }
       } finally {
         fetchingRef.current = false;
@@ -163,8 +173,10 @@ export default function PlantLibrary() {
     run(controller.signal);
     return () => controller.abort();
     // Raw searchQuery is deliberately NOT a dep: a 0↔1-char keystroke leaves
-    // effectiveQuery unchanged and requires no work at all.
-  }, [effectiveQuery, activeType, language, page, t]);
+    // effectiveQuery unchanged and requires no work at all. `t` is deliberately
+    // NOT a dep either — it's only read inside onFetchError (an effect event),
+    // so a locale-only translator identity swap can't retrigger fetching.
+  }, [effectiveQuery, activeType, language, page]);
 
   const hasMore = items.length > 0 && items.length < found;
 
