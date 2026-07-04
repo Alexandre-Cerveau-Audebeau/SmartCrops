@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -14,61 +14,40 @@ import { visuallyHidden } from '@mui/utils';
 import SearchIcon from '@mui/icons-material/Search';
 import SpaIcon from '@mui/icons-material/Spa';
 import { useLanguage } from '../hooks/useLanguage';
-import { fetchPlantTypes, findPlants } from '../services/plantApi';
-import type { Plant } from '../types/Plant';
+import { MIN_QUERY_LENGTH, usePlantFinder } from '../hooks/usePlantFinder';
+import { fetchPlantTypes } from '../services/plantApi';
 import type { PlantType } from '../types/PlantType';
 import PlantCard from '../components/PlantCard';
 
-// SMA-255 T4 — the Library now runs on the faceted finder endpoint with REAL
-// server pagination: 24 items per page, the scroll sentinel (or Load more)
-// fetches the next page and APPENDS it. Search (typo-tolerant, localized) and
-// the type chips are server filters on the same single data path — no more
-// full-catalogue load, client-side type filtering, or client-side slicing
-// (which SMA-58 needed when the list endpoint returned everything at once).
-// Exported so the test suite's finder mock derives its page math from the
-// same constant — a page-size change can't silently drift the tests.
-export const PER_PAGE = 24;
+// SMA-255 T4 put the Library on the faceted finder endpoint (real server
+// pagination); SMA-9 T1 moved that fetch orchestration wholesale into
+// usePlantFinder. This component is presentation + handlers: it owns the raw
+// inputs (search text, active type chip), hands them to the hook, and renders
+// what comes back.
 
-// The finder waits for a 2nd character before searching (single letters are
-// too broad to be a useful query); 0–1 chars behave as match-all.
-const MIN_QUERY_LENGTH = 2;
+// Re-exported from its original home so the page size keeps a stable import
+// path (the test suite's finder mock derives its page math from it).
+export { PER_PAGE } from '../hooks/usePlantFinder';
 
 export default function PlantLibrary() {
   const { t } = useTranslation();
-  const [items, setItems] = useState<Plant[]>([]);
-  const [found, setFound] = useState(0);
   const [plantTypes, setPlantTypes] = useState<PlantType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeType, setActiveType] = useState<number | null>(null);
-  const [page, setPage] = useState(1);
   const { language } = useLanguage();
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-  // Snapshot of the last fetch context so the effect can tell WHAT changed:
-  // a filter (q/type → replace from page 1), the language (refetch the
-  // currently loaded pages), or the page number (append the next page).
-  const prevRef = useRef<{
-    q: string;
-    type: number | null;
-    lang: string;
-    page: number;
-  } | null>(null);
-  // In-flight guard: the sentinel can fire repeatedly while a page is still
-  // loading; page bumps are ignored until the current fetch settles.
-  const fetchingRef = useRef(false);
 
-  // 0–1 chars = match-all; the debounce below only applies to real queries.
-  const effectiveQuery =
-    searchQuery.length >= MIN_QUERY_LENGTH ? searchQuery : '';
-
-  // Effect event so the fetch effect can read the CURRENT translator without
-  // depending on it: `t` swaps identity on every locale change, and a
-  // locale-only identity swap must never retrigger fetching (`language` is
-  // the real refetch trigger).
-  const onFetchError = useEffectEvent((err: unknown) => {
-    setError(err instanceof Error ? err.message : t('library.error'));
-  });
+  // The hook also returns facetCounts (T2 facet-rail seam) — no consumer here
+  // yet, so it stays undestructured.
+  const {
+    items,
+    found,
+    initialLoading,
+    error,
+    hasMore,
+    loadMore,
+    resetToFirstPage,
+  } = usePlantFinder({ query: searchQuery, activeType, language });
 
   // Plant types load once (mount). They're translated client-side via
   // `plantTypes.*`, so there's no need to refetch them on a language change.
@@ -81,115 +60,6 @@ export default function PlantLibrary() {
       });
     return () => controller.abort();
   }, []);
-
-  // Single consolidated finder fetch — every state (initial, search, type
-  // chip, language, next page) goes through findPlants. Every state write
-  // lives inside the async `run` (never synchronously at the top of the
-  // effect) to satisfy react-hooks/set-state-in-effect.
-  useEffect(() => {
-    const controller = new AbortController();
-    const prev = prevRef.current;
-    const contextChanged =
-      prev === null ||
-      prev.q !== effectiveQuery ||
-      prev.type !== activeType;
-    const queryChanged = prev !== null && prev.q !== effectiveQuery;
-    const langChanged = prev !== null && prev.lang !== language;
-    const pageAdvanced =
-      prev !== null && !contextChanged && !langChanged && page > prev.page;
-
-    // Nothing effective changed (e.g. a re-render with an identical context):
-    // keep the current list.
-    if (!contextChanged && !langChanged && !pageAdvanced) return;
-
-    const baseParams = {
-      q: effectiveQuery || undefined,
-      lang: language,
-      perPage: PER_PAGE,
-      plantTypeIds: activeType === null ? undefined : [activeType],
-    };
-
-    const run = async (signal: AbortSignal) => {
-      fetchingRef.current = true;
-      try {
-        if (langChanged && !contextChanged) {
-          // SMA-153 evolution, server-paginated: refetch the CURRENTLY loaded
-          // pages (1..page) in the new language and replace positionally. For
-          // match-all the natural order is identical, so the visible slice is
-          // preserved — no collapse, no scroll jump (SMA-153 intact). For a
-          // text search the query legitimately RE-EXECUTES in the new
-          // language (localized query_by), so the result set may change —
-          // that is the intended product behavior.
-          const pages = await Promise.all(
-            Array.from({ length: page }, (_, i) =>
-              findPlants({ ...baseParams, page: i + 1 }, signal)
-            )
-          );
-          if (signal.aborted) return;
-          setItems(pages.flatMap((p) => p.items));
-          setFound(pages[pages.length - 1]?.found ?? 0);
-        } else if (pageAdvanced) {
-          const data = await findPlants({ ...baseParams, page }, signal);
-          if (signal.aborted) return;
-          setItems((current) => [...current, ...data.items]);
-          setFound(data.found);
-        } else {
-          // Context change (or initial load): fetch page 1 and REPLACE.
-          const data = await findPlants({ ...baseParams, page: 1 }, signal);
-          if (signal.aborted) return;
-          setItems(data.items);
-          setFound(data.found);
-        }
-        // Commit the fetched context only AFTER a successful, non-aborted
-        // fetch: an aborted run (StrictMode double-invoke, rapid typing,
-        // unmount) must leave the snapshot untouched so the next effect run
-        // still sees the change and refetches.
-        prevRef.current = {
-          q: effectiveQuery,
-          type: activeType,
-          lang: language,
-          page,
-        };
-        setError(null);
-      } catch (err) {
-        if (!signal.aborted && (err as Error).name !== 'AbortError') {
-          onFetchError(err);
-        }
-      } finally {
-        fetchingRef.current = false;
-        if (!signal.aborted) setLoading(false);
-      }
-    };
-
-    // Debounce only the typed query — chip clicks, language switches and
-    // page appends fire immediately.
-    if (contextChanged && queryChanged && effectiveQuery !== '') {
-      const timeout = setTimeout(() => run(controller.signal), 300);
-      return () => {
-        clearTimeout(timeout);
-        controller.abort();
-      };
-    }
-    run(controller.signal);
-    return () => controller.abort();
-    // Raw searchQuery is deliberately NOT a dep: a 0↔1-char keystroke leaves
-    // effectiveQuery unchanged and requires no work at all. `t` is deliberately
-    // NOT a dep either — it's only read inside onFetchError (an effect event),
-    // so a locale-only translator identity swap can't retrigger fetching.
-  }, [effectiveQuery, activeType, language, page]);
-
-  const hasMore = items.length > 0 && items.length < found;
-
-  // Shared by the scroll sentinel and the Load more button. Advances at most
-  // ONE page beyond the last fetched context — a double fire (sentinel +
-  // button, or two rapid clicks) before the effect runs must not skip a page —
-  // and no-ops while a page is in flight.
-  const handleLoadMore = useCallback(() => {
-    if (fetchingRef.current || !hasMore) return;
-    setPage((p) =>
-      prevRef.current !== null && p > prevRef.current.page ? p : p + 1
-    );
-  }, [hasMore]);
 
   // Auto-load the next PAGE when the sentinel scrolls into view (server
   // pagination since SMA-255 T4 — this is a network fetch, guarded against
@@ -207,7 +77,7 @@ export default function PlantLibrary() {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          handleLoadMore();
+          loadMore();
         }
       },
       // Preload the next page ~100px before the sentinel reaches the viewport
@@ -216,23 +86,35 @@ export default function PlantLibrary() {
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasMore, items.length, handleLoadMore]);
+  }, [hasMore, items.length, loadMore]);
 
   // Reset to page 1 on the inputs that change the displayed SET — the search
-  // text and the type chip. NOT language: the language effect branch refetches
+  // text and the type chip. NOT language: the hook's language branch refetches
   // the loaded pages in place, so the visible slice is preserved (SMA-153).
   // Resetting in handlers (not an effect) keeps clear of
   // react-hooks/set-state-in-effect.
   const handleSearchChange = (value: string) => {
+    // Reset only when the EFFECTIVE query changes (either side of the edit is
+    // a real query). A 0↔1-char edit keeps the displayed set identical
+    // (match-all on both sides), and resetting page 1 there desyncs the page
+    // state from the hook's fetched context — the next Load more became a
+    // silent no-op (advance 1→2 = a page already fetched). Pre-existing T4
+    // bug surfaced in review; not a refactor drift.
+    const effectiveQueryChanged =
+      searchQuery.length >= MIN_QUERY_LENGTH ||
+      value.length >= MIN_QUERY_LENGTH;
     setSearchQuery(value);
-    setPage(1);
+    if (effectiveQueryChanged) resetToFirstPage();
   };
   const handleTypeChange = (typeId: number | null) => {
     setActiveType(typeId);
-    setPage(1);
+    resetToFirstPage();
   };
 
-  const isFiltered = effectiveQuery !== '' || activeType !== null;
+  // Same derivation as the hook's effective query: 0–1 chars = match-all,
+  // i.e. not filtering.
+  const isFiltered =
+    searchQuery.length >= MIN_QUERY_LENGTH || activeType !== null;
 
   return (
     <Container maxWidth="lg" sx={{ pt: 4, pb: 6 }}>
@@ -240,7 +122,7 @@ export default function PlantLibrary() {
         {t('library.title')}
       </Typography>
 
-      {!loading && !error && (
+      {!initialLoading && !error && (
         <>
           <TextField
             placeholder={t('library.searchPlaceholder')}
@@ -282,7 +164,7 @@ export default function PlantLibrary() {
         </>
       )}
 
-      {loading && (
+      {initialLoading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />
         </Box>
@@ -298,20 +180,20 @@ export default function PlantLibrary() {
           query or chip active it's a no-match state. Same components as before
           T4 — only the gating source changed (server `found` instead of the
           in-memory array lengths). */}
-      {!loading && !error && found === 0 && !isFiltered && (
+      {!initialLoading && !error && found === 0 && !isFiltered && (
         <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
           <SpaIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
           <Typography>{t('library.noPlants')}</Typography>
         </Box>
       )}
 
-      {!loading && !error && found === 0 && isFiltered && (
+      {!initialLoading && !error && found === 0 && isFiltered && (
         <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
           <Typography>{t('library.noResults')}</Typography>
         </Box>
       )}
 
-      {!loading && items.length > 0 && (
+      {!initialLoading && items.length > 0 && (
         <>
           <Grid container spacing={3}>
             {items.map((plant) => {
@@ -327,7 +209,7 @@ export default function PlantLibrary() {
           </Grid>
 
           {/* Polite, visually-hidden live region rendered once the list has loaded
-              (gated by !loading && items.length > 0). It announces the
+              (gated by !initialLoading && items.length > 0). It announces the
               loaded/total count as pages append (Load more / scroll); some
               screen readers may also announce the initial count when it appears. */}
           <Box
@@ -351,7 +233,7 @@ export default function PlantLibrary() {
                   fallback. */}
               <Box ref={sentinelRef} aria-hidden="true" sx={{ height: 10 }} />
               <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                <Button variant="outlined" onClick={handleLoadMore}>
+                <Button variant="outlined" onClick={loadMore}>
                   {t('library.loadMore')}
                 </Button>
               </Box>
