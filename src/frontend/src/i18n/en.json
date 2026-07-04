@@ -143,7 +143,49 @@
     "add": "Add",
     "missingPlantId": "Missing plant id",
     "sun": "Sun",
-    "water": "Water"
+    "water": "Water",
+    "filters": {
+      "button": "Filters · {{count}}",
+      "title": "Filters",
+      "resultCount_one": "{{count}} plant",
+      "resultCount_other": "{{count}} plants",
+      "forMe": "For me",
+      "myGardens": "My gardens",
+      "location": "Location",
+      "soon": "Soon",
+      "plantType": "Plant type",
+      "careLevel": "Care level",
+      "watering": "Watering",
+      "lifeCycle": "Life cycle",
+      "growthRate": "Growth rate",
+      "reset": "Reset",
+      "seeResults_one": "See the plant",
+      "seeResults_other": "See the {{count}} plants",
+      "values": {
+        "careLevel": {
+          "Easy": "Easy",
+          "Medium": "Medium",
+          "Difficult": "Difficult"
+        },
+        "wateringNeedLevel": {
+          "Low": "Low",
+          "Average": "Average",
+          "High": "High",
+          "Frequent": "Frequent"
+        },
+        "lifeCycle": {
+          "Annual": "Annual",
+          "Biennial": "Biennial",
+          "Perennial": "Perennial",
+          "HerbaceousPerennial": "Herbaceous perennial"
+        },
+        "growthRate": {
+          "Low": "Low",
+          "Moderate": "Moderate",
+          "High": "High"
+        }
+      }
+    }
   },
   "gardens": {
     "title": "My Gardens",

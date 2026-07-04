@@ -143,7 +143,49 @@
     "add": "Ajouter",
     "missingPlantId": "Identifiant de plante manquant",
     "sun": "Soleil",
-    "water": "Eau"
+    "water": "Eau",
+    "filters": {
+      "button": "Filtres · {{count}}",
+      "title": "Filtres",
+      "resultCount_one": "{{count}} plante",
+      "resultCount_other": "{{count}} plantes",
+      "forMe": "Pour moi",
+      "myGardens": "Mes jardins",
+      "location": "Localisation",
+      "soon": "Bientôt",
+      "plantType": "Type de plante",
+      "careLevel": "Difficulté d'entretien",
+      "watering": "Arrosage",
+      "lifeCycle": "Cycle de vie",
+      "growthRate": "Croissance",
+      "reset": "Réinitialiser",
+      "seeResults_one": "Voir la plante",
+      "seeResults_other": "Voir les {{count}} plantes",
+      "values": {
+        "careLevel": {
+          "Easy": "Facile",
+          "Medium": "Moyenne",
+          "Difficult": "Difficile"
+        },
+        "wateringNeedLevel": {
+          "Low": "Faible",
+          "Average": "Modéré",
+          "High": "Élevé",
+          "Frequent": "Fréquent"
+        },
+        "lifeCycle": {
+          "Annual": "Annuelle",
+          "Biennial": "Bisannuelle",
+          "Perennial": "Vivace",
+          "HerbaceousPerennial": "Vivace herbacée"
+        },
+        "growthRate": {
+          "Low": "Lente",
+          "Moderate": "Modérée",
+          "High": "Rapide"
+        }
+      }
+    }
   },
   "gardens": {
     "title": "Mes Jardins",

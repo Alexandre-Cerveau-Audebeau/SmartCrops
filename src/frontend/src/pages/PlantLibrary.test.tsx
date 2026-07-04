@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { useLanguage } from '../hooks/useLanguage';
@@ -21,11 +21,35 @@ import { fetchPlantTypes, findPlants } from '../services/plantApi';
 // asserts the page/filter/language orchestration. The old suite's flake
 // (SMA-174) came from real-timer debounce races; every debounce test below
 // uses fake timers, everything else resolves synchronously-awaitable mocks.
+// SMA-9 T2 — DELIBERATE updates: the single-select type-chip row is retired
+// in favor of the filter panel (control row + rail/drawer, multi-select
+// facets); the chip tests were replaced by panel tests accordingly.
+
+// jsdom has no matchMedia; MUI's useMediaQuery drives the rail (md+) vs
+// drawer (below md) split. Desktop is this suite's default; the mobile test
+// remocks with false.
+function mockMatchMedia(matches: boolean) {
+  window.matchMedia = ((query: string) => ({
+    matches,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+}
+
+beforeEach(() => {
+  mockMatchMedia(true);
+});
 
 afterEach(async () => {
   vi.clearAllMocks();
   vi.useRealTimers();
   localStorage.clear();
+  delete (window as { matchMedia?: unknown }).matchMedia;
   // A test below flips the language; reset the shared i18next singleton so the
   // English-label assertions in the other tests stay deterministic.
   await i18next.changeLanguage('en');
@@ -74,19 +98,27 @@ const makeMany = (n: number) =>
 // Slice math derives from the component's own constant so a page-size change
 // can't silently drift this mock; the 24/48 card-count ASSERTIONS below stay
 // literal on purpose — they're the visible contract and must break loudly.
-function pageOf(catalog: Plant[], page: number): PlantFinderResult {
+function pageOf(
+  catalog: Plant[],
+  page: number,
+  overrides: Partial<PlantFinderResult> = {}
+): PlantFinderResult {
   return {
     items: catalog.slice((page - 1) * PER_PAGE, page * PER_PAGE),
     found: catalog.length,
     page,
     perPage: PER_PAGE,
     facetCounts: [],
+    ...overrides,
   };
 }
 
-function mockFinderCatalog(catalog: Plant[]) {
+function mockFinderCatalog(
+  catalog: Plant[],
+  overrides: Partial<PlantFinderResult> = {}
+) {
   vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
-    Promise.resolve(pageOf(catalog, params.page ?? 1))
+    Promise.resolve(pageOf(catalog, params.page ?? 1, overrides))
   );
 }
 
@@ -99,6 +131,10 @@ function renderLibrary() {
     </LanguageProvider>
   );
 }
+
+// The panel-toggle pill; its accessible name carries the live selection count.
+const filtersButton = (count: number) =>
+  screen.getByRole('button', { name: `Filters · ${count}` });
 
 describe('PlantLibrary', () => {
   it('renders cards from the neutral list DTO (no translations) without crashing (SMA-73)', async () => {
@@ -132,6 +168,27 @@ describe('PlantLibrary', () => {
     expect(
       screen.getByRole('button', { name: 'Load more' })
     ).toBeInTheDocument();
+  });
+
+  it('shows the control row: closed panel, zero-count filter button, live result counter', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    const button = filtersButton(0);
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    // Permanent counter from the live `found`.
+    expect(screen.getByText('50 plants')).toBeInTheDocument();
+    // Panel closed by default — no rail in the tree.
+    expect(
+      screen.queryByRole('complementary', { name: 'Filters' })
+    ).not.toBeInTheDocument();
+    // The retired single-select type row is gone.
+    expect(
+      screen.queryByRole('button', { name: 'All' })
+    ).not.toBeInTheDocument();
   });
 
   it('debounces typing — keystrokes coalesce into one fetch 300ms after the last', async () => {
@@ -189,33 +246,191 @@ describe('PlantLibrary', () => {
     expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24);
   });
 
-  it('a type chip becomes a plantTypeIds server filter and replaces from page 1', async () => {
-    const ornamentals = makeMany(3);
-    vi.mocked(fetchPlantTypes).mockResolvedValue([
-      { id: 4, name: 'Ornamental', description: null },
-    ]);
-    vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
-      Promise.resolve(
-        params.plantTypeIds?.length
-          ? pageOf(ornamentals, params.page ?? 1)
-          : pageOf(makeMany(50), params.page ?? 1)
-      )
-    );
+  it('toggling two values in one facet sends both (OR) and updates the button count', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
     const user = userEvent.setup();
     renderLibrary();
     await screen.findByRole('heading', { name: 'Plant 00' });
+
+    await user.click(filtersButton(0));
+    // Desktop: the panel is a left rail (complementary landmark), the grid
+    // stays rendered beside it.
+    expect(
+      screen.getByRole('complementary', { name: 'Filters' })
+    ).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24);
 
+    await user.click(screen.getByRole('button', { name: 'Easy' }));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ careLevels: ['Easy'], page: 1 }),
+        expect.anything()
+      )
+    );
+    expect(filtersButton(1)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Medium' }));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ careLevels: ['Easy', 'Medium'], page: 1 }),
+        expect.anything()
+      )
+    );
+    expect(filtersButton(2)).toBeInTheDocument();
+  });
+
+  it('selections across two facets combine (AND) — both param arrays sent', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([
+      { id: 4, name: 'Ornamental', description: null },
+    ]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    await user.click(filtersButton(0));
     await user.click(screen.getByRole('button', { name: 'Ornamental' }));
+    await user.click(screen.getByRole('button', { name: 'Annual' }));
 
     await waitFor(() =>
-      expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(3)
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          plantTypeIds: [4],
+          lifeCycles: ['Annual'],
+          page: 1,
+        }),
+        expect.anything()
+      )
     );
-    expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
-      expect.objectContaining({ plantTypeIds: [4], page: 1 }),
-      expect.anything()
+    expect(filtersButton(2)).toBeInTheDocument();
+  });
+
+  it('Reset clears every facet selection but keeps the search text', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    // Type a real query (debounced, fake timers for determinism)…
+    vi.useFakeTimers();
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'lavender' },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    vi.useRealTimers();
+
+    // …then select a facet and reset it away.
+    fireEvent.click(filtersButton(0));
+    fireEvent.click(screen.getByRole('button', { name: 'Easy' }));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ q: 'lavender', careLevels: ['Easy'] }),
+        expect.anything()
+      )
     );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ q: 'lavender', careLevels: undefined }),
+        expect.anything()
+      )
+    );
+    // The search text survives a facet reset (design brief).
+    expect(screen.getByRole('textbox')).toHaveValue('lavender');
+    expect(filtersButton(0)).toBeInTheDocument();
+  });
+
+  it('facet chips carry live counts from facetCounts; absent values render count-less but stay clickable', async () => {
+    mockFinderCatalog(makeMany(50), {
+      facetCounts: [
+        {
+          field: 'careLevel',
+          counts: [
+            { value: 'Easy', count: 280 },
+            { value: 'Medium', count: 210 },
+            // 'Difficult' deliberately absent from the distribution.
+          ],
+        },
+      ],
+    });
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    await user.click(filtersButton(0));
+    expect(
+      screen.getByRole('button', { name: 'Easy (280)' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Medium (210)' })
+    ).toBeInTheDocument();
+
+    // Everything-shown rule: no count, no parentheses — but still toggleable.
+    const difficult = screen.getByRole('button', { name: 'Difficult' });
+    await user.click(difficult);
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ careLevels: ['Difficult'] }),
+        expect.anything()
+      )
+    );
+  });
+
+  it('renders the For-me placeholders greyed out with Soon pills', async () => {
+    mockFinderCatalog(makeMany(5));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    await user.click(filtersButton(0));
+    expect(screen.getByText('My gardens')).toBeInTheDocument();
+    expect(screen.getByText('Location')).toBeInTheDocument();
+    expect(screen.getAllByText('Soon')).toHaveLength(2);
+    // Not clickable: plain rows, not buttons.
+    expect(
+      screen.queryByRole('button', { name: /My gardens/ })
+    ).not.toBeInTheDocument();
+  });
+
+  it('below md the panel opens as a full-screen drawer whose footer button closes it', async () => {
+    mockMatchMedia(false); // mobile
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    await user.click(filtersButton(0));
+    expect(
+      await screen.findByRole('heading', { name: 'Filters' })
+    ).toBeInTheDocument();
+
+    // Live filtering while open: toggle Easy, the footer count is the live
+    // `found` (the mock keeps serving the same 50-item catalogue).
+    await user.click(screen.getByRole('button', { name: 'Easy' }));
+    const footer = await screen.findByRole('button', {
+      name: 'See the 50 plants',
+    });
+    await user.click(footer);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'See the 50 plants' })
+      ).not.toBeInTheDocument()
+    );
+    // The selection survives the close.
+    expect(filtersButton(1)).toBeInTheDocument();
   });
 
   it('Load more fetches the next page and APPENDS it (server pagination)', async () => {

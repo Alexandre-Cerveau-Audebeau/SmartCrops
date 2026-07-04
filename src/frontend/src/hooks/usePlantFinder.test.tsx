@@ -12,7 +12,7 @@ vi.mock('../services/plantApi', () => ({
   findPlants: vi.fn(),
 }));
 
-import { PER_PAGE, usePlantFinder } from './usePlantFinder';
+import { EMPTY_FILTERS, PER_PAGE, usePlantFinder } from './usePlantFinder';
 import type { UsePlantFinderResult } from './usePlantFinder';
 import { findPlants } from '../services/plantApi';
 
@@ -64,9 +64,12 @@ function mockCatalog(catalog: Plant[]) {
   );
 }
 
+// SMA-9 T2 — deliberate input-shape change: the single activeType became the
+// multi-facet `filters` object; this suite was adapted accordingly (not an
+// iso-behavior pass).
 const initialInputs = {
   query: '',
-  activeType: null as number | null,
+  filters: EMPTY_FILTERS,
   language: 'en',
 };
 
@@ -88,7 +91,17 @@ describe('usePlantFinder', () => {
     // Bare hook, no StrictMode: the count can be exact — ONE fetch.
     expect(vi.mocked(findPlants)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(findPlants)).toHaveBeenCalledWith(
-      { q: undefined, lang: 'en', perPage: PER_PAGE, plantTypeIds: undefined, page: 1 },
+      {
+        q: undefined,
+        lang: 'en',
+        perPage: PER_PAGE,
+        plantTypeIds: undefined,
+        careLevels: undefined,
+        wateringNeedLevels: undefined,
+        lifeCycles: undefined,
+        growthRates: undefined,
+        page: 1,
+      },
       expect.anything()
     );
     expect(result.current.items).toHaveLength(PER_PAGE);
@@ -223,10 +236,13 @@ describe('usePlantFinder', () => {
     expect(result.current.items).toHaveLength(24);
   });
 
-  it('a type change replaces from page 1 immediately (no debounce)', async () => {
+  it('a facet change replaces from page 1 immediately (no debounce)', async () => {
     const { result, rerender } = await loadedFinder();
 
-    rerender({ ...initialInputs, activeType: 4 });
+    rerender({
+      ...initialInputs,
+      filters: { ...EMPTY_FILTERS, plantTypeIds: [4] },
+    });
     await waitFor(() =>
       expect(vi.mocked(findPlants)).toHaveBeenCalledTimes(2)
     );
@@ -235,6 +251,64 @@ describe('usePlantFinder', () => {
       expect.anything()
     );
     await waitFor(() => expect(result.current.items).toHaveLength(24));
+  });
+
+  it('multi-value and cross-facet selections are passed through as arrays (OR within, AND across)', async () => {
+    const { result, rerender } = await loadedFinder();
+
+    rerender({
+      ...initialInputs,
+      filters: { ...EMPTY_FILTERS, careLevels: ['Easy', 'Medium'] },
+    });
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ careLevels: ['Easy', 'Medium'], page: 1 }),
+        expect.anything()
+      )
+    );
+    expect(result.current.activeFilterCount).toBe(2);
+
+    rerender({
+      ...initialInputs,
+      filters: {
+        ...EMPTY_FILTERS,
+        careLevels: ['Easy', 'Medium'],
+        lifeCycles: ['Annual'],
+      },
+    });
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          careLevels: ['Easy', 'Medium'],
+          lifeCycles: ['Annual'],
+        }),
+        expect.anything()
+      )
+    );
+    expect(result.current.activeFilterCount).toBe(3);
+    expect(result.current.isFiltered).toBe(true);
+  });
+
+  it('a facet change resets nothing the handlers do not reset — the hook never self-resets the page', async () => {
+    // Callers own the page reset (handlers call resetToFirstPage alongside
+    // the input change). Pin that the hook itself does not sneak one in: a
+    // filters change WITHOUT a reset still replaces from page 1 (context
+    // change semantics) in exactly one call.
+    const { result, rerender } = await loadedFinder();
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.items).toHaveLength(48));
+    const callsBefore = vi.mocked(findPlants).mock.calls.length;
+
+    rerender({
+      ...initialInputs,
+      filters: { ...EMPTY_FILTERS, careLevels: ['Easy'] },
+    });
+    await waitFor(() => expect(result.current.items).toHaveLength(24));
+    expect(vi.mocked(findPlants)).toHaveBeenCalledTimes(callsBefore + 1);
+    expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ careLevels: ['Easy'], page: 1 }),
+      expect.anything()
+    );
   });
 
   it('a language change refetches exactly the loaded pages (1..N) and preserves the slice (SMA-153)', async () => {
@@ -323,7 +397,10 @@ describe('usePlantFinder', () => {
 
     // A context change retries (prevRef was never committed for the failed
     // fetch) and a success clears the error.
-    rerender({ ...initialInputs, activeType: 4 });
+    rerender({
+      ...initialInputs,
+      filters: { ...EMPTY_FILTERS, plantTypeIds: [4] },
+    });
     await waitFor(() => expect(result.current.error).toBeNull());
     expect(result.current.items).toHaveLength(5);
   });
