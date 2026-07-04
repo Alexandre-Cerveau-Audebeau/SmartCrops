@@ -1,12 +1,26 @@
 import type { PlantFinderFilters } from '../hooks/usePlantFinder';
 
 /**
- * One enum facet of the Library filter panel (SMA-9 T2).
- * Values mirror the backend C# enum member names EXACTLY — they are the wire
- * values sent as repeated query keys AND the strings facetCounts returns.
- * The 'unknown' sentinel is never listed: it is an engine-side detail the
- * backend ORs into every selection ("absence never excludes", SMA-9) and must
- * never render as a chip.
+ * One chip of an enum facet (SMA-9 T2). A chip may GROUP several wire values
+ * (mockup decision: a gardener filtering "Vivace" must match herbaceous
+ * perennials too): its displayed count is the SUM of its wireValues'
+ * facetCounts, toggling sends/removes ALL wireValues together, and it renders
+ * selected when all of them are in the filter array.
+ */
+export interface FacetChipConfig {
+  /** i18n suffix: library.filters.values.<facetField>.<labelKeySuffix>. */
+  labelKeySuffix: string;
+  /** Backend C# enum member names — the exact wire/facetCounts strings. */
+  wireValues: string[];
+}
+
+/**
+ * One enum facet section of the Library filter panel.
+ * Wire values mirror the backend enums EXACTLY; the 'unknown' sentinel is
+ * never listed (engine-side detail the backend ORs into every selection —
+ * "absence never excludes", SMA-9). Values with zero real-data hits are
+ * deliberately absent per the validated mockups (checked against the live
+ * DB): PlantLifeCycle.Biennial (0 rows) and PlantWateringNeed.High (0 rows).
  */
 export interface EnumFacetConfig {
   /** Key into PlantFinderFilters (the query param name). */
@@ -15,34 +29,52 @@ export interface EnumFacetConfig {
   facetField: 'careLevel' | 'wateringNeedLevel' | 'lifeCycle' | 'growthRate';
   /** i18n key of the section title. */
   titleKey: string;
-  /** Wire values, in display order. Labels: library.filters.values.<facetField>.<value>. */
-  values: string[];
+  /** Optional explanatory microcopy under the title (mockup captions). */
+  captionKey?: string;
+  /** Mockup group the section renders under. */
+  group: 'plant' | 'care';
+  /** Chips in display order. */
+  chips: FacetChipConfig[];
 }
 
-/** Panel display order (after the Plant type section). */
+const single = (value: string): FacetChipConfig => ({
+  labelKeySuffix: value,
+  wireValues: [value],
+});
+
+/** Panel display order within each group (Plant type renders first in 'plant'). */
 export const ENUM_FACETS: EnumFacetConfig[] = [
-  {
-    filterKey: 'careLevels',
-    facetField: 'careLevel',
-    titleKey: 'library.filters.careLevel',
-    values: ['Easy', 'Medium', 'Difficult'], // PlantCareLevel
-  },
-  {
-    filterKey: 'wateringNeedLevels',
-    facetField: 'wateringNeedLevel',
-    titleKey: 'library.filters.watering',
-    values: ['Low', 'Average', 'High', 'Frequent'], // PlantWateringNeed
-  },
   {
     filterKey: 'lifeCycles',
     facetField: 'lifeCycle',
     titleKey: 'library.filters.lifeCycle',
-    values: ['Annual', 'Biennial', 'Perennial', 'HerbaceousPerennial'], // PlantLifeCycle
+    captionKey: 'library.filters.lifeCycleHint',
+    group: 'plant',
+    chips: [
+      // "Vivace" groups both perennial wire values (see FacetChipConfig doc).
+      { labelKeySuffix: 'Perennial', wireValues: ['Perennial', 'HerbaceousPerennial'] },
+      single('Annual'),
+    ],
   },
   {
     filterKey: 'growthRates',
     facetField: 'growthRate',
     titleKey: 'library.filters.growthRate',
-    values: ['Low', 'Moderate', 'High'], // PlantGrowthRate
+    group: 'plant',
+    chips: [single('Low'), single('Moderate'), single('High')], // PlantGrowthRate
+  },
+  {
+    filterKey: 'careLevels',
+    facetField: 'careLevel',
+    titleKey: 'library.filters.careLevel',
+    group: 'care',
+    chips: [single('Easy'), single('Medium'), single('Difficult')], // PlantCareLevel
+  },
+  {
+    filterKey: 'wateringNeedLevels',
+    facetField: 'wateringNeedLevel',
+    titleKey: 'library.filters.watering',
+    group: 'care',
+    chips: [single('Low'), single('Average'), single('Frequent')], // PlantWateringNeed sans High (0 rows)
   },
 ];

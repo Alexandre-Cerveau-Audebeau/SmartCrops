@@ -6,8 +6,12 @@ import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
+import MenuItem from '@mui/material/MenuItem';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { alpha } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import ComingSoonChip from '../ComingSoonChip';
 import type { EnumFacetConfig } from '../../constants/facetVocabularies';
 import type { PlantFinderFilters } from '../../hooks/usePlantFinder';
@@ -25,25 +29,33 @@ const RAIL_WIDTH = 300;
 
 export interface FilterPanelProps {
   open: boolean;
-  /** Closes the mobile drawer (header X and footer button; no-op for the rail). */
+  /** Closes the panel (header X in both variants; also the drawer footer). */
   onClose: () => void;
   plantTypes: PlantType[];
   /** Enum facet configs in display order (ENUM_FACETS; injected for testability). */
   vocabularies: EnumFacetConfig[];
   facetCounts: FacetFieldCounts[];
   filters: PlantFinderFilters;
-  onToggleValue: (field: keyof PlantFinderFilters, value: string | number) => void;
+  /**
+   * Toggles a chip's wire values ATOMICALLY: all added, or all removed when
+   * every one is already selected (grouped chips like "Vivace" carry several).
+   */
+  onToggleValues: (
+    field: keyof PlantFinderFilters,
+    wireValues: Array<string | number>
+  ) => void;
   onReset: () => void;
-  /** Live result total — drives the drawer's "See the N plants" button. */
+  /** Live result total — header pill and the drawer's "See the N plants". */
   found: number;
   variant: 'rail' | 'drawer';
 }
 
 /**
- * A facet value pill. Count comes from facetCounts when the value is present
- * in the current distribution; a value with no count keeps its label and
- * STAYS clickable — the brief's "everything shown" rule (never hide, never
- * disable). Selected = filled primary, unselected = outlined.
+ * A facet value pill. Count comes from facetCounts when at least one of the
+ * chip's wire values is present in the current distribution (grouped chips
+ * sum theirs); a value with no count keeps its label and STAYS clickable —
+ * the brief's "everything shown" rule (never hide, never disable). Selected =
+ * filled primary, unselected = outlined.
  */
 function FacetChip({
   label,
@@ -67,35 +79,197 @@ function FacetChip({
   );
 }
 
-function FacetSection({ title, children }: { title: string; children: ReactNode }) {
+function FacetSection({
+  title,
+  caption,
+  children,
+}: {
+  title: string;
+  caption?: string;
+  children: ReactNode;
+}) {
   return (
     <Box sx={{ mb: 2.5 }}>
       {/* component="p": MUI maps subtitle2 to <h6> by default, which would
           both skip the page's heading hierarchy and collide with the card
           titles (the suites count h6 as "cards"). */}
-      <Typography variant="subtitle2" component="p" sx={{ fontWeight: 600, mb: 1 }}>
+      <Typography
+        variant="subtitle2"
+        component="p"
+        sx={{ fontWeight: 600, mb: caption ? 0.25 : 1 }}
+      >
         {title}
       </Typography>
+      {caption && (
+        <Typography
+          variant="caption"
+          component="p"
+          color="text.secondary"
+          sx={{ mb: 1 }}
+        >
+          {caption}
+        </Typography>
+      )}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{children}</Box>
     </Box>
   );
 }
 
-/** A greyed-out, non-interactive "For me" row with the terracotta Soon pill. */
-function SoonRow({ label }: { label: string }) {
+/** Overline group header ("LA PLANTE" / "CULTURE & ENTRETIEN"). */
+function GroupHeader({ label }: { label: string }) {
+  return (
+    <Typography
+      variant="overline"
+      component="p"
+      color="text.secondary"
+      sx={{ mb: 1 }}
+    >
+      {label}
+    </Typography>
+  );
+}
+
+/**
+ * Shared rail/drawer header (mockup): title + live count pill + Reset link +
+ * close X. The bottom Reset of the first T2 cut is gone — Reset lives here.
+ */
+function PanelHeader({
+  found,
+  onReset,
+  onClose,
+  titleComponent,
+}: {
+  found: number;
+  onReset: () => void;
+  onClose: () => void;
+  /** 'h2' in the drawer (its modal needs a heading); 'p' in the labeled aside. */
+  titleComponent: 'h2' | 'p';
+}) {
+  const { t } = useTranslation();
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Typography
+        variant="subtitle1"
+        component={titleComponent}
+        sx={{ fontWeight: 600 }}
+      >
+        {t('library.filters.title')}
+      </Typography>
+      <Chip
+        size="small"
+        color="primary"
+        label={t('library.filters.resultCount', { count: found })}
+      />
+      <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Button
+          variant="text"
+          size="small"
+          onClick={onReset}
+          sx={{
+            textTransform: 'none',
+            textDecoration: 'underline',
+            '&:hover': { textDecoration: 'underline' },
+          }}
+        >
+          {t('library.filters.reset')}
+        </Button>
+        <IconButton
+          size="small"
+          onClick={onClose}
+          aria-label={t('common.close')}
+        >
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * "Pour moi" block (mockup): tinted container with the future personal
+ * filters, disabled until their features land (gardens SMA-256, location /
+ * climate SMA-257) — visible as a promise, never interactive.
+ */
+function ForMeBlock() {
+  const { t } = useTranslation();
   return (
     <Box
-      aria-disabled="true"
       sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        py: 0.75,
-        color: 'text.disabled',
+        bgcolor: (theme) =>
+          alpha(
+            theme.palette.primary.main,
+            theme.palette.mode === 'dark' ? 0.15 : 0.06
+          ),
+        borderRadius: 2,
+        p: 1.5,
+        mb: 2.5,
       }}
     >
-      <Typography variant="body2">{label}</Typography>
-      <ComingSoonChip labelKey="library.filters.soon" size="small" />
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1 }}>
+        <PersonOutlineIcon fontSize="small" />
+        <Typography variant="subtitle2" component="p" sx={{ fontWeight: 600 }}>
+          {t('library.filters.forMe')}
+        </Typography>
+      </Box>
+
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          mb: 0.5,
+        }}
+      >
+        <Typography variant="body2" color="text.secondary">
+          {t('library.filters.myGardens')}
+        </Typography>
+        <ComingSoonChip labelKey="library.filters.soon" size="small" />
+      </Box>
+      <TextField
+        select
+        fullWidth
+        size="small"
+        disabled
+        value="all"
+        slotProps={{
+          select: { MenuProps: { disableScrollLock: true } },
+          htmlInput: { 'aria-label': t('library.filters.myGardens') },
+        }}
+        sx={{ mb: 1.5 }}
+      >
+        <MenuItem value="all">{t('library.filters.allMyGardens')}</MenuItem>
+      </TextField>
+
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          mb: 0.5,
+        }}
+      >
+        <Typography variant="body2" color="text.secondary">
+          {t('library.filters.location')}
+        </Typography>
+        <ComingSoonChip labelKey="library.filters.soon" size="small" />
+      </Box>
+      <TextField
+        fullWidth
+        size="small"
+        disabled
+        placeholder={t('library.filters.locationPlaceholder')}
+        slotProps={{
+          htmlInput: { 'aria-label': t('library.filters.location') },
+        }}
+      />
+      <Typography
+        variant="caption"
+        component="p"
+        color="text.secondary"
+        sx={{ mt: 0.75 }}
+      >
+        {t('library.filters.locationHint')}
+      </Typography>
     </Box>
   );
 }
@@ -107,7 +281,7 @@ export default function FilterPanel({
   vocabularies,
   facetCounts,
   filters,
-  onToggleValue,
+  onToggleValues,
   onReset,
   found,
   variant,
@@ -119,22 +293,47 @@ export default function FilterPanel({
       .find((f) => f.field === field)
       ?.counts.find((c) => c.value === value)?.count;
 
+  // Grouped chips SUM their wire values' counts; all-absent stays count-less.
+  const sumCounts = (
+    field: string,
+    wireValues: string[]
+  ): number | undefined => {
+    const present = wireValues
+      .map((v) => countFor(field, v))
+      .filter((c): c is number => c !== undefined);
+    if (present.length === 0) return undefined;
+    return present.reduce((a, b) => a + b, 0);
+  };
+
+  const renderFacet = (facet: EnumFacetConfig) => (
+    <FacetSection
+      key={facet.facetField}
+      title={t(facet.titleKey)}
+      caption={facet.captionKey ? t(facet.captionKey) : undefined}
+    >
+      {facet.chips.map((chip) => (
+        <FacetChip
+          key={chip.labelKeySuffix}
+          label={t(
+            `library.filters.values.${facet.facetField}.${chip.labelKeySuffix}`
+          )}
+          count={sumCounts(facet.facetField, chip.wireValues)}
+          selected={chip.wireValues.every((v) =>
+            filters[facet.filterKey].includes(v)
+          )}
+          onClick={() => onToggleValues(facet.filterKey, chip.wireValues)}
+        />
+      ))}
+    </FacetSection>
+  );
+
   const content = (
     <>
-      <Box sx={{ mb: 2 }}>
-        <Typography
-          variant="subtitle2"
-          component="p"
-          sx={{ fontWeight: 600, mb: 0.5 }}
-        >
-          {t('library.filters.forMe')}
-        </Typography>
-        <SoonRow label={t('library.filters.myGardens')} />
-        <SoonRow label={t('library.filters.location')} />
-      </Box>
+      <ForMeBlock />
 
-      <Divider sx={{ mb: 2.5 }} />
+      <Divider sx={{ mb: 2 }} />
 
+      <GroupHeader label={t('library.filters.groupPlant')} />
       <FacetSection title={t('library.filters.plantType')}>
         {plantTypes.map((pt) => (
           <FacetChip
@@ -143,24 +342,14 @@ export default function FilterPanel({
             // Typesense facet values arrive as strings, ids included.
             count={countFor('plantTypeId', String(pt.id))}
             selected={filters.plantTypeIds.includes(pt.id)}
-            onClick={() => onToggleValue('plantTypeIds', pt.id)}
+            onClick={() => onToggleValues('plantTypeIds', [pt.id])}
           />
         ))}
       </FacetSection>
+      {vocabularies.filter((f) => f.group === 'plant').map(renderFacet)}
 
-      {vocabularies.map((facet) => (
-        <FacetSection key={facet.facetField} title={t(facet.titleKey)}>
-          {facet.values.map((value) => (
-            <FacetChip
-              key={value}
-              label={t(`library.filters.values.${facet.facetField}.${value}`)}
-              count={countFor(facet.facetField, value)}
-              selected={filters[facet.filterKey].includes(value)}
-              onClick={() => onToggleValue(facet.filterKey, value)}
-            />
-          ))}
-        </FacetSection>
-      ))}
+      <GroupHeader label={t('library.filters.groupCare')} />
+      {vocabularies.filter((f) => f.group === 'care').map(renderFacet)}
     </>
   );
 
@@ -182,10 +371,15 @@ export default function FilterPanel({
           p: 2.5,
         }}
       >
+        <Box sx={{ mb: 2 }}>
+          <PanelHeader
+            found={found}
+            onReset={onReset}
+            onClose={onClose}
+            titleComponent="p"
+          />
+        </Box>
         {content}
-        <Button variant="text" onClick={onReset} sx={{ mt: 1 }}>
-          {t('library.filters.reset')}
-        </Button>
       </Box>
     );
   }
@@ -201,41 +395,33 @@ export default function FilterPanel({
     >
       <Box
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
           px: 2.5,
           py: 1.5,
           borderBottom: '1px solid',
           borderColor: 'divider',
         }}
       >
-        <Typography variant="h6" component="h2">
-          {t('library.filters.title')}
-        </Typography>
-        <IconButton onClick={onClose} aria-label={t('common.close')}>
-          <CloseIcon />
-        </IconButton>
+        <PanelHeader
+          found={found}
+          onReset={onReset}
+          onClose={onClose}
+          titleComponent="h2"
+        />
       </Box>
       <Box sx={{ flex: 1, overflowY: 'auto', p: 2.5 }}>{content}</Box>
       {/* Sticky apply-less footer: filters are already live while the drawer
-          is open — the primary button only closes. */}
+          is open — the primary button only closes (Reset lives in the header,
+          matching the mockup). */}
       <Box
         sx={{
           p: 2,
           borderTop: '1px solid',
           borderColor: 'divider',
           bgcolor: 'background.paper',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1,
         }}
       >
         <Button fullWidth variant="contained" onClick={onClose}>
           {t('library.filters.seeResults', { count: found })}
-        </Button>
-        <Button fullWidth variant="text" onClick={onReset}>
-          {t('library.filters.reset')}
         </Button>
       </Box>
     </Drawer>

@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -170,25 +177,203 @@ describe('PlantLibrary', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows the control row: closed panel, zero-count filter button, live result counter', async () => {
+  it('shows the rest state: zero-count button, quick type chips, unfiltered counter, no rail', async () => {
     mockFinderCatalog(makeMany(50));
-    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+    vi.mocked(fetchPlantTypes).mockResolvedValue([
+      { id: 4, name: 'Ornamental', description: null },
+    ]);
 
     renderLibrary();
     await screen.findByRole('heading', { name: 'Plant 00' });
 
     const button = filtersButton(0);
     expect(button).toHaveAttribute('aria-expanded', 'false');
-    // Permanent counter from the live `found`.
+    // Quick type row: "All" filled at rest, one count-less chip per type.
+    expect(screen.getByRole('button', { name: 'All' })).toHaveClass(
+      'MuiChip-filled'
+    );
+    expect(screen.getByRole('button', { name: 'Ornamental' })).toHaveClass(
+      'MuiChip-outlined'
+    );
+    // Rich counter line — unfiltered variant, total from catalogTotal.
     expect(screen.getByText('50 plants')).toBeInTheDocument();
+    expect(
+      screen.getByText(/no active filter — the whole catalogue is visible/)
+    ).toBeInTheDocument();
     // Panel closed by default — no rail in the tree.
     expect(
       screen.queryByRole('complementary', { name: 'Filters' })
     ).not.toBeInTheDocument();
-    // The retired single-select type row is gone.
+  });
+
+  it('quick type chips mirror the rail Type facet — one plantTypeIds state, "All" clears', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([
+      { id: 1, name: 'Vegetable', description: null },
+    ]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    // Quick chip → state (rail still closed, name unique).
+    await user.click(screen.getByRole('button', { name: 'Vegetable' }));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ plantTypeIds: [1], page: 1 }),
+        expect.anything()
+      )
+    );
+    expect(filtersButton(1)).toBeInTheDocument();
+
+    // The rail's Type chip mirrors the quick selection…
+    await user.click(filtersButton(1));
+    const rail = screen.getByRole('complementary', { name: 'Filters' });
     expect(
-      screen.queryByRole('button', { name: 'All' })
+      within(rail).getByRole('button', { name: 'Vegetable' })
+    ).toHaveClass('MuiChip-filled');
+
+    // …and un-toggling in the rail mirrors back to the quick row.
+    await user.click(within(rail).getByRole('button', { name: 'Vegetable' }));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ plantTypeIds: undefined }),
+        expect.anything()
+      )
+    );
+    const quickVegetable = screen
+      .getAllByRole('button', { name: 'Vegetable' })
+      .find((el) => !rail.contains(el))!;
+    expect(quickVegetable).toHaveClass('MuiChip-outlined');
+    expect(screen.getByRole('button', { name: 'All' })).toHaveClass(
+      'MuiChip-filled'
+    );
+
+    // Select again via the quick row, then "All" clears the type selection.
+    await user.click(quickVegetable);
+    await waitFor(() => expect(filtersButton(1)).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'All' }));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ plantTypeIds: undefined }),
+        expect.anything()
+      )
+    );
+    expect(filtersButton(0)).toBeInTheDocument();
+  });
+
+  it('the counter line switches to the filtered "N of M — updating live" variant', async () => {
+    const catalogue = makeMany(50);
+    const filtered = makeMany(3);
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+    vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
+      Promise.resolve(
+        pageOf(params.careLevels ? filtered : catalogue, params.page ?? 1)
+      )
+    );
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+    expect(screen.getByText(/no active filter/)).toBeInTheDocument();
+
+    await user.click(filtersButton(0));
+    await user.click(screen.getByRole('button', { name: 'Easy' }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/of 50 — updating live/)).toBeInTheDocument()
+    );
+    // Strong "found" segment (also echoed by the rail header pill).
+    expect(screen.getAllByText('3 plants').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/no active filter/)).not.toBeInTheDocument();
+  });
+
+  it('the grouped Vivace chip sums both counts and toggles both wire values atomically', async () => {
+    mockFinderCatalog(makeMany(50), {
+      facetCounts: [
+        {
+          field: 'lifeCycle',
+          counts: [
+            { value: 'Perennial', count: 263 },
+            { value: 'HerbaceousPerennial', count: 209 },
+          ],
+        },
+      ],
+    });
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    await user.click(filtersButton(0));
+    // 263 + 209 — the grouped chip shows the SUM.
+    await user.click(screen.getByRole('button', { name: 'Perennial (472)' }));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          lifeCycles: ['Perennial', 'HerbaceousPerennial'],
+          page: 1,
+        }),
+        expect.anything()
+      )
+    );
+    // The button counts wire values — a grouped chip selects two.
+    expect(filtersButton(2)).toBeInTheDocument();
+
+    // Un-toggling removes BOTH wire values.
+    await user.click(screen.getByRole('button', { name: 'Perennial (472)' }));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ lifeCycles: undefined }),
+        expect.anything()
+      )
+    );
+    expect(filtersButton(0)).toBeInTheDocument();
+  });
+
+  it('the rail header X closes the rail and keeps the selection', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    await user.click(filtersButton(0));
+    const rail = screen.getByRole('complementary', { name: 'Filters' });
+    await user.click(within(rail).getByRole('button', { name: 'Easy' }));
+    await waitFor(() => expect(filtersButton(1)).toBeInTheDocument());
+
+    await user.click(within(rail).getByRole('button', { name: 'Close' }));
+    expect(
+      screen.queryByRole('complementary', { name: 'Filters' })
     ).not.toBeInTheDocument();
+    // The selection survives the close.
+    expect(filtersButton(1)).toBeInTheDocument();
+  });
+
+  it('omits the zero-hit vocabulary values: no Biennial chip, no High watering chip', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    await user.click(filtersButton(0));
+    expect(
+      screen.queryByRole('button', { name: /Biennial/ })
+    ).not.toBeInTheDocument();
+    // 'High' remains ONLY as a growth-rate chip — the watering one is omitted.
+    expect(screen.getAllByRole('button', { name: 'High' })).toHaveLength(1);
+    // Watering renders exactly its three real-data chips.
+    expect(
+      screen.getByRole('button', { name: 'Average' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Frequent' })
+    ).toBeInTheDocument();
   });
 
   it('debounces typing — keystrokes coalesce into one fetch 300ms after the last', async () => {
@@ -292,8 +477,10 @@ describe('PlantLibrary', () => {
     await screen.findByRole('heading', { name: 'Plant 00' });
 
     await user.click(filtersButton(0));
-    await user.click(screen.getByRole('button', { name: 'Ornamental' }));
-    await user.click(screen.getByRole('button', { name: 'Annual' }));
+    // within(rail): the quick row renders a chip with the same name.
+    const rail = screen.getByRole('complementary', { name: 'Filters' });
+    await user.click(within(rail).getByRole('button', { name: 'Ornamental' }));
+    await user.click(within(rail).getByRole('button', { name: 'Annual' }));
 
     await waitFor(() =>
       expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
@@ -342,8 +529,11 @@ describe('PlantLibrary', () => {
         expect.anything()
       )
     );
-    // The search text survives a facet reset (design brief).
-    expect(screen.getByRole('textbox')).toHaveValue('lavender');
+    // The search text survives a facet reset (design brief). Named query:
+    // with the rail open, the For-me location input is a textbox too.
+    expect(
+      screen.getByRole('textbox', { name: 'Search plants by name...' })
+    ).toHaveValue('lavender');
     expect(filtersButton(0)).toBeInTheDocument();
   });
 
@@ -385,7 +575,7 @@ describe('PlantLibrary', () => {
     );
   });
 
-  it('renders the For-me placeholders greyed out with Soon pills', async () => {
+  it('renders the For-me block: Soon pills, disabled garden select and location input, microcopy', async () => {
     mockFinderCatalog(makeMany(5));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
 
@@ -395,9 +585,14 @@ describe('PlantLibrary', () => {
 
     await user.click(filtersButton(0));
     expect(screen.getByText('My gardens')).toBeInTheDocument();
-    expect(screen.getByText('Location')).toBeInTheDocument();
+    expect(screen.getByText('Location / climate')).toBeInTheDocument();
     expect(screen.getAllByText('Soon')).toHaveLength(2);
-    // Not clickable: plain rows, not buttons.
+    // Future controls are visible as a promise but disabled until their
+    // features land (SMA-256 / SMA-257).
+    expect(screen.getByText('All my gardens')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('City or region…')).toBeDisabled();
+    expect(screen.getByText(/Soon: enter your city/)).toBeInTheDocument();
+    // Not clickable rows: no button carries the row labels.
     expect(
       screen.queryByRole('button', { name: /My gardens/ })
     ).not.toBeInTheDocument();
@@ -416,6 +611,9 @@ describe('PlantLibrary', () => {
     expect(
       await screen.findByRole('heading', { name: 'Filters' })
     ).toBeInTheDocument();
+    // Enriched header parity: Reset lives in the header now — exactly one
+    // Reset in the drawer, none in the footer.
+    expect(screen.getAllByRole('button', { name: 'Reset' })).toHaveLength(1);
 
     // Live filtering while open: toggle Easy, the footer count is the live
     // `found` (the mock keeps serving the same 50-item catalogue).

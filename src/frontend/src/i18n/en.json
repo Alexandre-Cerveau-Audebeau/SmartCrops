@@ -149,14 +149,22 @@
       "title": "Filters",
       "resultCount_one": "{{count}} plant",
       "resultCount_other": "{{count}} plants",
+      "counterRestTail": " · no active filter — the whole catalogue is visible",
+      "counterFilteredTail": " of {{total}} — updating live",
       "forMe": "For me",
       "myGardens": "My gardens",
-      "location": "Location",
+      "allMyGardens": "All my gardens",
+      "location": "Location / climate",
+      "locationPlaceholder": "City or region…",
+      "locationHint": "Soon: enter your city to see the plants suited to your climate (outdoor growing).",
       "soon": "Soon",
+      "groupPlant": "The plant",
+      "groupCare": "Care & growing",
       "plantType": "Plant type",
       "careLevel": "Care level",
       "watering": "Watering",
       "lifeCycle": "Life cycle",
+      "lifeCycleHint": "the expert detail (herbaceous perennial, bulbous…) stays visible on the plant page",
       "growthRate": "Growth rate",
       "reset": "Reset",
       "seeResults_one": "See the plant",
@@ -170,14 +178,11 @@
         "wateringNeedLevel": {
           "Low": "Low",
           "Average": "Average",
-          "High": "High",
           "Frequent": "Frequent"
         },
         "lifeCycle": {
-          "Annual": "Annual",
-          "Biennial": "Biennial",
           "Perennial": "Perennial",
-          "HerbaceousPerennial": "Herbaceous perennial"
+          "Annual": "Annual"
         },
         "growthRate": {
           "Low": "Low",

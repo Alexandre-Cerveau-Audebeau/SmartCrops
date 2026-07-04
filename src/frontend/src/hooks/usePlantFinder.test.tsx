@@ -289,6 +289,30 @@ describe('usePlantFinder', () => {
     expect(result.current.isFiltered).toBe(true);
   });
 
+  it('catalogTotal records the unfiltered catalogue size and survives filtered fetches', async () => {
+    const catalogue = makeMany(50);
+    const filtered = makeMany(3);
+    vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
+      Promise.resolve(pageOf(params.careLevels ? filtered : catalogue, params.page ?? 1))
+    );
+    const { result, rerender } = renderFinder();
+    await waitFor(() => expect(result.current.initialLoading).toBe(false));
+    // The mount fetch is always unfiltered — the total is known from page one.
+    expect(result.current.catalogTotal).toBe(50);
+
+    rerender({
+      ...initialInputs,
+      filters: { ...EMPTY_FILTERS, careLevels: ['Easy'] },
+    });
+    await waitFor(() => expect(result.current.found).toBe(3));
+    // Filtered fetches narrow `found` but never touch the catalogue total.
+    expect(result.current.catalogTotal).toBe(50);
+
+    rerender(initialInputs);
+    await waitFor(() => expect(result.current.found).toBe(50));
+    expect(result.current.catalogTotal).toBe(50);
+  });
+
   it('a facet change resets nothing the handlers do not reset — the hook never self-resets the page', async () => {
     // Callers own the page reset (handlers call resetToFirstPage alongside
     // the input change). Pin that the hook itself does not sneak one in: a

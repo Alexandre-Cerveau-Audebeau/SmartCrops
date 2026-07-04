@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import Grid from '@mui/material/Grid';
@@ -57,6 +58,7 @@ export default function PlantLibrary() {
   const {
     items,
     found,
+    catalogTotal,
     facetCounts,
     initialLoading,
     error,
@@ -125,19 +127,31 @@ export default function PlantLibrary() {
     if (effectiveQueryChanged) resetToFirstPage();
   };
 
-  const handleToggleValue = (
+  // Atomic multi-value toggle: grouped chips (e.g. "Vivace" =
+  // Perennial + HerbaceousPerennial) add or remove ALL their wire values
+  // together — all-selected means remove all, anything missing means add the
+  // missing ones.
+  const handleToggleValues = (
     field: keyof PlantFinderFilters,
-    value: string | number
+    wireValues: Array<string | number>
   ) => {
     setFilters((prev) => {
       const current = prev[field] as Array<string | number>;
-      const next = current.includes(value)
-        ? current.filter((v) => v !== value)
-        : [...current, value];
+      const allSelected = wireValues.every((v) => current.includes(v));
+      const next = allSelected
+        ? current.filter((v) => !wireValues.includes(v))
+        : [...current, ...wireValues.filter((v) => !current.includes(v))];
       // Computed-key spread widens the array type — safe: `next` holds the
       // same element type it was read with.
       return { ...prev, [field]: next } as PlantFinderFilters;
     });
+    resetToFirstPage();
+  };
+
+  // "All" quick chip — clears the type selection only (the other facets and
+  // the search text are untouched).
+  const handleClearTypes = () => {
+    setFilters((prev) => ({ ...prev, plantTypeIds: [] }));
     resetToFirstPage();
   };
 
@@ -158,7 +172,7 @@ export default function PlantLibrary() {
       vocabularies={ENUM_FACETS}
       facetCounts={facetCounts}
       filters={filters}
-      onToggleValue={handleToggleValue}
+      onToggleValues={handleToggleValues}
       onReset={handleReset}
       found={found}
       variant={isDesktop ? 'rail' : 'drawer'}
@@ -173,38 +187,35 @@ export default function PlantLibrary() {
 
       {!initialLoading && !error && (
         <>
-          <TextField
-            placeholder={t('library.searchPlaceholder')}
-            fullWidth
-            variant="outlined"
-            size="small"
-            value={searchQuery}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            inputProps={{ 'aria-label': t('library.searchPlaceholder') }}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
-              },
-            }}
-            sx={{ mb: 2, maxWidth: 500 }}
-          />
-
-          {/* Control row (SMA-9 T2): panel toggle left, permanent live result
-              counter right — replaces the retired type-chip row. */}
+          {/* Search + panel toggle on ONE line (mockup). */}
           <Box
             sx={{
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
               gap: 2,
               flexWrap: 'wrap',
-              mb: 3,
+              mb: 2,
             }}
           >
+            <TextField
+              placeholder={t('library.searchPlaceholder')}
+              fullWidth
+              variant="outlined"
+              size="small"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              inputProps={{ 'aria-label': t('library.searchPlaceholder') }}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon />
+                    </InputAdornment>
+                  ),
+                },
+              }}
+              sx={{ maxWidth: 500 }}
+            />
             <Button
               startIcon={<TuneIcon />}
               variant={
@@ -212,14 +223,57 @@ export default function PlantLibrary() {
               }
               onClick={() => setPanelOpen((open) => !open)}
               aria-expanded={panelOpen}
-              sx={{ borderRadius: 999, textTransform: 'none' }}
+              sx={{ borderRadius: 999, textTransform: 'none', flexShrink: 0 }}
             >
               {t('library.filters.button', { count: activeFilterCount })}
             </Button>
-            <Typography color="text.secondary">
-              {t('library.filters.resultCount', { count: found })}
-            </Typography>
           </Box>
+
+          {/* Quick type chips — a SHORTCUT over the SAME multi-select state
+              as the rail's Type facet (filters.plantTypeIds is the single
+              source of truth; the two surfaces always mirror each other).
+              No counts on this row (mockup). */}
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+            <Chip
+              label={t('library.allTypes')}
+              color={filters.plantTypeIds.length === 0 ? 'primary' : 'default'}
+              variant={
+                filters.plantTypeIds.length === 0 ? 'filled' : 'outlined'
+              }
+              onClick={handleClearTypes}
+            />
+            {plantTypes.map((pt) => (
+              <Chip
+                key={pt.id}
+                label={t(`plantTypes.${pt.name}`, pt.name)}
+                color={
+                  filters.plantTypeIds.includes(pt.id) ? 'primary' : 'default'
+                }
+                variant={
+                  filters.plantTypeIds.includes(pt.id) ? 'filled' : 'outlined'
+                }
+                onClick={() => handleToggleValues('plantTypeIds', [pt.id])}
+              />
+            ))}
+          </Box>
+
+          {/* Rich left-aligned counter line (mockup): the found count in
+              bold/primary, the context tail in secondary. */}
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            <Box
+              component="span"
+              sx={{ fontWeight: 700, color: 'primary.main' }}
+            >
+              {t('library.filters.resultCount', {
+                count: isFiltered ? found : catalogTotal,
+              })}
+            </Box>
+            {isFiltered
+              ? t('library.filters.counterFilteredTail', {
+                  total: catalogTotal,
+                })
+              : t('library.filters.counterRestTail')}
+          </Typography>
         </>
       )}
 

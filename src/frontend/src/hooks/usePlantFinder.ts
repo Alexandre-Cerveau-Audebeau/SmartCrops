@@ -66,6 +66,8 @@ function serializeFilters(filters: PlantFinderFilters): string {
   ].join('|');
 }
 
+const EMPTY_FILTERS_KEY = serializeFilters(EMPTY_FILTERS);
+
 export interface UsePlantFinderInputs {
   /** Raw search text — the hook derives the effective (match-all) query. */
   query: string;
@@ -76,6 +78,12 @@ export interface UsePlantFinderInputs {
 export interface UsePlantFinderResult {
   items: Plant[];
   found: number;
+  /**
+   * `found` of the last UNFILTERED context — the whole-catalogue size behind
+   * "N of M" counters. The mount fetch is always unfiltered by design, so it
+   * is set from page one and only refreshed by later unfiltered fetches.
+   */
+  catalogTotal: number;
   facetCounts: FacetFieldCounts[];
   /**
    * True during the initial catalogue load ONLY — later fetches (debounced
@@ -107,6 +115,7 @@ export function usePlantFinder({
   const { t } = useTranslation();
   const [items, setItems] = useState<Plant[]>([]);
   const [found, setFound] = useState(0);
+  const [catalogTotal, setCatalogTotal] = useState(0);
   // Facet value counts from the last response (T2 renders them as chip
   // counts). Counts are scoped to the current filter context, not the page,
   // so every page of one context carries the same values.
@@ -172,6 +181,11 @@ export function usePlantFinder({
     // keep the current list.
     if (!contextChanged && !langChanged && !pageAdvanced) return;
 
+    // An unfiltered context's `found` IS the catalogue size — recorded so
+    // filtered contexts can show "N of M" (see catalogTotal doc).
+    const contextIsUnfiltered =
+      effectiveQuery === '' && filtersKey === EMPTY_FILTERS_KEY;
+
     const baseParams = {
       q: effectiveQuery || undefined,
       lang: language,
@@ -208,13 +222,16 @@ export function usePlantFinder({
           );
           if (signal.aborted) return;
           setItems(pages.flatMap((p) => p.items));
-          setFound(pages[pages.length - 1]?.found ?? 0);
+          const lastFound = pages[pages.length - 1]?.found ?? 0;
+          setFound(lastFound);
+          if (contextIsUnfiltered) setCatalogTotal(lastFound);
           setFacetCounts(pages[pages.length - 1]?.facetCounts ?? []);
         } else if (pageAdvanced) {
           const data = await findPlants({ ...baseParams, page }, signal);
           if (signal.aborted) return;
           setItems((current) => [...current, ...data.items]);
           setFound(data.found);
+          if (contextIsUnfiltered) setCatalogTotal(data.found);
           setFacetCounts(data.facetCounts);
         } else {
           // Context change (or initial load): fetch page 1 and REPLACE.
@@ -222,6 +239,7 @@ export function usePlantFinder({
           if (signal.aborted) return;
           setItems(data.items);
           setFound(data.found);
+          if (contextIsUnfiltered) setCatalogTotal(data.found);
           setFacetCounts(data.facetCounts);
         }
         // Commit the fetched context only AFTER a successful, non-aborted
@@ -293,6 +311,7 @@ export function usePlantFinder({
   return {
     items,
     found,
+    catalogTotal,
     facetCounts,
     initialLoading,
     error,
