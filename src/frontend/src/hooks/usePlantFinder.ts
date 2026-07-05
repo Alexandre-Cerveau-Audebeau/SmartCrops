@@ -12,12 +12,13 @@ import type { Plant } from '../types/Plant';
 
 // SMA-255 T4 — the Library runs on the faceted finder endpoint with REAL
 // server pagination: 24 items per page, loadMore() fetches the next page and
-// APPENDS it. Search (typo-tolerant, localized) and the type filter are
-// server filters on the same single data path — no more full-catalogue load,
-// client-side type filtering, or client-side slicing (which SMA-58 needed
-// when the list endpoint returned everything at once). SMA-9 T1 moved this
-// orchestration wholesale out of PlantLibrary so the facet rail (T2+)
-// composes onto a hook, not a page.
+// APPENDS it. Search (typo-tolerant, localized) and the structured filters
+// are server filters on the same single data path — no more full-catalogue
+// load, client-side type filtering, or client-side slicing (which SMA-58
+// needed when the list endpoint returned everything at once). SMA-9 T1 moved
+// this orchestration wholesale out of PlantLibrary so the facet rail (T2+)
+// composes onto a hook, not a page; SMA-9 T2 generalized the single type
+// filter into the multi-facet `filters` object.
 
 // Exported so the test suites' finder mocks derive their page math from the
 // same constant — a page-size change can't silently drift the tests.
@@ -27,20 +28,73 @@ export const PER_PAGE = 24;
 // too broad to be a useful query); 0–1 chars behave as match-all.
 export const MIN_QUERY_LENGTH = 2;
 
+/**
+ * Multi-select facet state (SMA-9 T2). String values are the exact backend
+ * enum member names (PascalCase) — the same strings facetCounts returns.
+ * Within one facet the backend ORs the values; facets combine with AND.
+ */
+export interface PlantFinderFilters {
+  plantTypeIds: number[];
+  careLevels: string[];
+  wateringNeedLevels: string[];
+  lifeCycles: string[];
+  growthRates: string[];
+}
+
+/** All-empty filters — the caller's initial state and the Reset target. */
+export const EMPTY_FILTERS: PlantFinderFilters = {
+  plantTypeIds: [],
+  careLevels: [],
+  wateringNeedLevels: [],
+  lifeCycles: [],
+  growthRates: [],
+};
+
+// Context-change detection compares this STABLE serialization (fixed field
+// order, joined values) rather than object identity: callers may recreate an
+// equal filters object on any render without triggering a refetch. Value
+// order WITHIN a facet is part of the key — toggle handlers only append or
+// remove, so an equal-but-reordered array (which would refetch spuriously
+// but harmlessly) does not occur in practice.
+function serializeFilters(filters: PlantFinderFilters): string {
+  return [
+    filters.plantTypeIds.join(','),
+    filters.careLevels.join(','),
+    filters.wateringNeedLevels.join(','),
+    filters.lifeCycles.join(','),
+    filters.growthRates.join(','),
+  ].join('|');
+}
+
+const EMPTY_FILTERS_KEY = serializeFilters(EMPTY_FILTERS);
+
 export interface UsePlantFinderInputs {
   /** Raw search text — the hook derives the effective (match-all) query. */
   query: string;
-  activeType: number | null;
+  filters: PlantFinderFilters;
   language: string;
 }
 
 export interface UsePlantFinderResult {
   items: Plant[];
   found: number;
+  /**
+   * `found` of the last UNFILTERED context — the whole-catalogue size behind
+   * "N of M" counters. The mount fetch is always unfiltered by design, so it
+   * is set from page one and only refreshed by later unfiltered fetches.
+   */
+  catalogTotal: number;
   facetCounts: FacetFieldCounts[];
   /**
+   * Baseline distribution of the whole catalogue — facetCounts of the last
+   * UNFILTERED fetch (twin of catalogTotal, populated from the mount fetch).
+   * Chip ghost widths derive from it; counts only ever shrink under filters,
+   * so this is each value's natural maximum.
+   */
+  catalogFacetCounts: FacetFieldCounts[];
+  /**
    * True during the initial catalogue load ONLY — later fetches (debounced
-   * search, type/language change, page append) update the list in place, so
+   * search, facet/language change, page append) update the list in place, so
    * consumers gating their whole UI on this flag don't flash it on every
    * keystroke. T2 may add discreet per-control pending states if the design
    * calls for it.
@@ -48,34 +102,45 @@ export interface UsePlantFinderResult {
   initialLoading: boolean;
   error: string | null;
   hasMore: boolean;
+  /**
+   * True when the displayed set is narrowed at all: an effective text query
+   * or any facet selection. Single-sourced here so the empty-state gating
+   * can't drift from the fetch's own match-all rule.
+   */
+  isFiltered: boolean;
+  /** Total selected facet values across all facets — drives "Filters · N". */
+  activeFilterCount: number;
   loadMore: () => void;
   resetToFirstPage: () => void;
 }
 
 export function usePlantFinder({
   query,
-  activeType,
+  filters,
   language,
 }: UsePlantFinderInputs): UsePlantFinderResult {
   const { t } = useTranslation();
   const [items, setItems] = useState<Plant[]>([]);
   const [found, setFound] = useState(0);
-  // Facet value counts from the last response (additive in SMA-9 T1 — no
-  // consumer yet; the T2 facet rail reads these). Counts are scoped to the
-  // current filter context, not the page, so every page of one context
-  // carries the same values.
+  const [catalogTotal, setCatalogTotal] = useState(0);
+  // Facet value counts from the last response (T2 renders them as chip
+  // counts). Counts are scoped to the current filter context, not the page,
+  // so every page of one context carries the same values.
   const [facetCounts, setFacetCounts] = useState<FacetFieldCounts[]>([]);
+  const [catalogFacetCounts, setCatalogFacetCounts] = useState<
+    FacetFieldCounts[]
+  >([]);
   // Single transition true→false by design (see UsePlantFinderResult doc):
   // re-arming it per fetch would flash consumers' gates on every keystroke.
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   // Snapshot of the last fetch context so the effect can tell WHAT changed:
-  // a filter (q/type → replace from page 1), the language (refetch the
+  // a filter (q/facets → replace from page 1), the language (refetch the
   // currently loaded pages), or the page number (append the next page).
   const prevRef = useRef<{
     q: string;
-    type: number | null;
+    filtersKey: string;
     lang: string;
     page: number;
   } | null>(null);
@@ -87,6 +152,17 @@ export function usePlantFinder({
   // 0–1 chars = match-all; the debounce below only applies to real queries.
   const effectiveQuery = query.length >= MIN_QUERY_LENGTH ? query : '';
 
+  const filtersKey = serializeFilters(filters);
+
+  const activeFilterCount =
+    filters.plantTypeIds.length +
+    filters.careLevels.length +
+    filters.wateringNeedLevels.length +
+    filters.lifeCycles.length +
+    filters.growthRates.length;
+
+  const isFiltered = effectiveQuery !== '' || activeFilterCount > 0;
+
   // Effect event so the fetch effect can read the CURRENT translator without
   // depending on it: `t` swaps identity on every locale change, and a
   // locale-only identity swap must never retrigger fetching (`language` is
@@ -95,8 +171,8 @@ export function usePlantFinder({
     setError(err instanceof Error ? err.message : t('library.error'));
   });
 
-  // Single consolidated finder fetch — every state (initial, search, type
-  // filter, language, next page) goes through findPlants. Every state write
+  // Single consolidated finder fetch — every state (initial, search, facet
+  // toggle, language, next page) goes through findPlants. Every state write
   // lives inside the async `run` (never synchronously at the top of the
   // effect) to satisfy react-hooks/set-state-in-effect.
   useEffect(() => {
@@ -105,7 +181,7 @@ export function usePlantFinder({
     const contextChanged =
       prev === null ||
       prev.q !== effectiveQuery ||
-      prev.type !== activeType;
+      prev.filtersKey !== filtersKey;
     const queryChanged = prev !== null && prev.q !== effectiveQuery;
     const langChanged = prev !== null && prev.lang !== language;
     const pageAdvanced =
@@ -115,11 +191,39 @@ export function usePlantFinder({
     // keep the current list.
     if (!contextChanged && !langChanged && !pageAdvanced) return;
 
+    // An unfiltered context's `found` IS the catalogue size — recorded so
+    // filtered contexts can show "N of M" (see catalogTotal doc).
+    const contextIsUnfiltered =
+      effectiveQuery === '' && filtersKey === EMPTY_FILTERS_KEY;
+
+    // Single commit point for the catalogue baseline (catalogTotal +
+    // catalogFacetCounts) — every fetch branch calls this so a future change
+    // to the baseline rule can't silently miss one of them.
+    const commitUnfilteredBaseline = (
+      foundCount: number,
+      counts: FacetFieldCounts[]
+    ) => {
+      if (!contextIsUnfiltered) return;
+      setCatalogTotal(foundCount);
+      setCatalogFacetCounts(counts);
+    };
+
     const baseParams = {
       q: effectiveQuery || undefined,
       lang: language,
       perPage: PER_PAGE,
-      plantTypeIds: activeType === null ? undefined : [activeType],
+      plantTypeIds:
+        filters.plantTypeIds.length > 0 ? filters.plantTypeIds : undefined,
+      careLevels:
+        filters.careLevels.length > 0 ? filters.careLevels : undefined,
+      wateringNeedLevels:
+        filters.wateringNeedLevels.length > 0
+          ? filters.wateringNeedLevels
+          : undefined,
+      lifeCycles:
+        filters.lifeCycles.length > 0 ? filters.lifeCycles : undefined,
+      growthRates:
+        filters.growthRates.length > 0 ? filters.growthRates : undefined,
     };
 
     const run = async (signal: AbortSignal) => {
@@ -140,14 +244,18 @@ export function usePlantFinder({
           );
           if (signal.aborted) return;
           setItems(pages.flatMap((p) => p.items));
-          setFound(pages[pages.length - 1]?.found ?? 0);
-          setFacetCounts(pages[pages.length - 1]?.facetCounts ?? []);
+          const lastFound = pages[pages.length - 1]?.found ?? 0;
+          const lastCounts = pages[pages.length - 1]?.facetCounts ?? [];
+          setFound(lastFound);
+          setFacetCounts(lastCounts);
+          commitUnfilteredBaseline(lastFound, lastCounts);
         } else if (pageAdvanced) {
           const data = await findPlants({ ...baseParams, page }, signal);
           if (signal.aborted) return;
           setItems((current) => [...current, ...data.items]);
           setFound(data.found);
           setFacetCounts(data.facetCounts);
+          commitUnfilteredBaseline(data.found, data.facetCounts);
         } else {
           // Context change (or initial load): fetch page 1 and REPLACE.
           const data = await findPlants({ ...baseParams, page: 1 }, signal);
@@ -155,16 +263,26 @@ export function usePlantFinder({
           setItems(data.items);
           setFound(data.found);
           setFacetCounts(data.facetCounts);
+          commitUnfilteredBaseline(data.found, data.facetCounts);
+          // Only page 1 was fetched — a caller that changed context without
+          // resetting the page would otherwise desync loadMore/prevRef
+          // bookkeeping and skip pages. (Handlers still OWN the reset; this
+          // only realigns the hook's internal state with what it fetched.)
+          if (page !== 1) setPage(1);
         }
         // Commit the fetched context only AFTER a successful, non-aborted
         // fetch: an aborted run (StrictMode double-invoke, rapid typing,
         // unmount) must leave the snapshot untouched so the next effect run
-        // still sees the change and refetches.
+        // still sees the change and refetches. The committed page is the page
+        // actually FETCHED: a replace serves page 1 whatever the page state
+        // said (see the realignment above).
+        const committedPage =
+          pageAdvanced || (langChanged && !contextChanged) ? page : 1;
         prevRef.current = {
           q: effectiveQuery,
-          type: activeType,
+          filtersKey,
           lang: language,
-          page,
+          page: committedPage,
         };
         setError(null);
       } catch (err) {
@@ -182,8 +300,8 @@ export function usePlantFinder({
       }
     };
 
-    // Debounce only the typed query — type-filter changes, language switches
-    // and page appends fire immediately.
+    // Debounce only the typed query — facet toggles, language switches and
+    // page appends fire immediately.
     if (contextChanged && queryChanged && effectiveQuery !== '') {
       const timeout = setTimeout(() => run(controller.signal), 300);
       return () => {
@@ -197,7 +315,10 @@ export function usePlantFinder({
     // effectiveQuery unchanged and requires no work at all. `t` is deliberately
     // NOT a dep either — it's only read inside onFetchError (an effect event),
     // so a locale-only translator identity swap can't retrigger fetching.
-  }, [effectiveQuery, activeType, language, page]);
+    // `filters` and `filtersKey` are both deps (the effect reads both); an
+    // identity-only filters churn re-runs the effect but the filtersKey
+    // comparison early-returns it.
+  }, [effectiveQuery, filters, filtersKey, language, page]);
 
   const hasMore = items.length > 0 && items.length < found;
 
@@ -212,8 +333,8 @@ export function usePlantFinder({
     );
   }, [hasMore]);
 
-  // Page reset stays OWNED BY THE CALLER'S HANDLERS (search text, type
-  // filter — the inputs that change the displayed set), never by an effect:
+  // Page reset stays OWNED BY THE CALLER'S HANDLERS (search text, facet
+  // toggles — the inputs that change the displayed set), never by an effect:
   // the handlers decide WHEN, the hook just executes. NOT called on language
   // change — the language branch above refetches the loaded pages in place,
   // so the visible slice is preserved (SMA-153).
@@ -222,10 +343,14 @@ export function usePlantFinder({
   return {
     items,
     found,
+    catalogTotal,
     facetCounts,
+    catalogFacetCounts,
     initialLoading,
     error,
     hasMore,
+    isFiltered,
+    activeFilterCount,
     loadMore,
     resetToFirstPage,
   };

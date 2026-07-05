@@ -46,6 +46,13 @@ export interface FindPlantsParams {
   page?: number;
   perPage?: number;
   plantTypeIds?: number[];
+  // Enum multi-selects (SMA-9 T2). Values are the exact backend enum member
+  // names (PascalCase) — the same strings facetCounts returns; validated
+  // server-side against the enum vocabulary.
+  careLevels?: string[];
+  wateringNeedLevels?: string[];
+  lifeCycles?: string[];
+  growthRates?: string[];
 }
 
 export interface FacetValueCount {
@@ -78,8 +85,17 @@ export async function findPlants(
   if (params.perPage !== undefined) qs.set('perPage', String(params.perPage));
   // Multi-selects go as repeated keys (?plantTypeIds=1&plantTypeIds=3) —
   // ASP.NET's default array binding.
-  for (const id of params.plantTypeIds ?? []) {
-    qs.append('plantTypeIds', String(id));
+  const multiSelects: Array<[string, Array<string | number> | undefined]> = [
+    ['plantTypeIds', params.plantTypeIds],
+    ['careLevels', params.careLevels],
+    ['wateringNeedLevels', params.wateringNeedLevels],
+    ['lifeCycles', params.lifeCycles],
+    ['growthRates', params.growthRates],
+  ];
+  for (const [key, values] of multiSelects) {
+    for (const value of values ?? []) {
+      qs.append(key, String(value));
+    }
   }
   const res = await fetch(`${API_BASE}/plants/finder?${qs}`, { signal });
   if (!res.ok) throw new Error(`Failed to find plants: ${res.status}`);

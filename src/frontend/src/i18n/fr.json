@@ -143,7 +143,54 @@
     "add": "Ajouter",
     "missingPlantId": "Identifiant de plante manquant",
     "sun": "Soleil",
-    "water": "Eau"
+    "water": "Eau",
+    "filters": {
+      "button": "Filtres · {{count}}",
+      "title": "Filtres",
+      "resultCount_one": "{{count}} plante",
+      "resultCount_other": "{{count}} plantes",
+      "counterRestTail": " · aucun filtre actif — tout le catalogue est visible",
+      "counterFilteredTail": " sur {{total}} — mise à jour en direct",
+      "forMe": "Pour moi",
+      "myGardens": "Mes jardins",
+      "allMyGardens": "Tous mes jardins",
+      "location": "Localisation / climat",
+      "locationPlaceholder": "Ville ou région…",
+      "locationHint": "Bientôt : saisissez votre ville pour voir les plantes conseillées pour votre climat (culture en extérieur).",
+      "soon": "Bientôt",
+      "groupPlant": "La plante",
+      "groupCare": "Culture & entretien",
+      "plantType": "Type de plante",
+      "careLevel": "Difficulté",
+      "watering": "Besoin en eau",
+      "lifeCycle": "Cycle de vie",
+      "lifeCycleHint": "le détail expert (vivace herbacée, bulbeuse…) reste visible sur la fiche",
+      "growthRate": "Vitesse de croissance",
+      "reset": "Réinitialiser",
+      "seeResults_one": "Voir la plante",
+      "seeResults_other": "Voir les {{count}} plantes",
+      "values": {
+        "careLevel": {
+          "Easy": "Facile",
+          "Medium": "Moyenne",
+          "Difficult": "Difficile"
+        },
+        "wateringNeedLevel": {
+          "Low": "Faible",
+          "Average": "Moyen",
+          "Frequent": "Fréquent"
+        },
+        "lifeCycle": {
+          "Perennial": "Vivace",
+          "Annual": "Annuelle"
+        },
+        "growthRate": {
+          "Low": "Lente",
+          "Moderate": "Modérée",
+          "High": "Rapide"
+        }
+      }
+    }
   },
   "gardens": {
     "title": "Mes Jardins",
