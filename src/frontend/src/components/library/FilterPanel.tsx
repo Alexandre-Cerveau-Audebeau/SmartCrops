@@ -126,6 +126,7 @@ function FacetChip({
       color={selected ? 'primary' : 'default'}
       variant={selected ? 'filled' : 'outlined'}
       onClick={onClick}
+      aria-pressed={selected}
       sx={{ borderRadius: 999 }}
     />
   );
@@ -436,6 +437,7 @@ export default function FilterPanel({
     return (
       <Box
         component="aside"
+        id="library-filter-panel"
         aria-label={t('library.filters.title')}
         sx={{
           width: RAIL_WIDTH,
@@ -470,7 +472,9 @@ export default function FilterPanel({
       onClose={onClose}
       // Scroll lock opt-out per the project overlay rule (stable gutter).
       ModalProps={{ disableScrollLock: true }}
-      PaperProps={{ sx: { width: '100%' } }}
+      // The id the Filters toggle button's aria-controls points at (the rail
+      // aside carries the same id — only one variant renders at a time).
+      PaperProps={{ id: 'library-filter-panel', sx: { width: '100%' } }}
     >
       <Box
         sx={{

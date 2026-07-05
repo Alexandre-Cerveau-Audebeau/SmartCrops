@@ -379,6 +379,19 @@ describe('usePlantFinder', () => {
       expect.objectContaining({ careLevels: ['Easy'], page: 1 }),
       expect.anything()
     );
+
+    // CR fix: the replace realigned the internal page/prevRef bookkeeping to
+    // the actually-fetched page 1, so the next loadMore appends page 2 of the
+    // NEW context in exactly one call. (Pre-fix, the stale page-2 state made
+    // the advance jump to page 3 — a silent page skip.)
+    const callsAfterReplace = vi.mocked(findPlants).mock.calls.length;
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.items).toHaveLength(48));
+    expect(vi.mocked(findPlants)).toHaveBeenCalledTimes(callsAfterReplace + 1);
+    expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ careLevels: ['Easy'], page: 2 }),
+      expect.anything()
+    );
   });
 
   it('a language change refetches exactly the loaded pages (1..N) and preserves the slice (SMA-153)', async () => {

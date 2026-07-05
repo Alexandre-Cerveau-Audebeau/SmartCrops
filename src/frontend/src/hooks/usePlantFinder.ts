@@ -261,16 +261,25 @@ export function usePlantFinder({
             setCatalogTotal(data.found);
             setCatalogFacetCounts(data.facetCounts);
           }
+          // Only page 1 was fetched — a caller that changed context without
+          // resetting the page would otherwise desync loadMore/prevRef
+          // bookkeeping and skip pages. (Handlers still OWN the reset; this
+          // only realigns the hook's internal state with what it fetched.)
+          if (page !== 1) setPage(1);
         }
         // Commit the fetched context only AFTER a successful, non-aborted
         // fetch: an aborted run (StrictMode double-invoke, rapid typing,
         // unmount) must leave the snapshot untouched so the next effect run
-        // still sees the change and refetches.
+        // still sees the change and refetches. The committed page is the page
+        // actually FETCHED: a replace serves page 1 whatever the page state
+        // said (see the realignment above).
+        const committedPage =
+          pageAdvanced || (langChanged && !contextChanged) ? page : 1;
         prevRef.current = {
           q: effectiveQuery,
           filtersKey,
           lang: language,
-          page,
+          page: committedPage,
         };
         setError(null);
       } catch (err) {

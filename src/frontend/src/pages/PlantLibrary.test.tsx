@@ -502,6 +502,15 @@ describe('PlantLibrary', () => {
       )
     );
     expect(filtersButton(1)).toBeInTheDocument();
+    // Toggle state is exposed to AT, not only via color (a11y fix).
+    expect(screen.getByRole('button', { name: 'Easy' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: 'Difficult' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
 
     await user.click(screen.getByRole('button', { name: 'Medium' }));
     await waitFor(() =>

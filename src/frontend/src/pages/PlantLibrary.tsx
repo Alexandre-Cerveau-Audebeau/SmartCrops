@@ -226,6 +226,7 @@ export default function PlantLibrary() {
               }
               onClick={() => setPanelOpen((open) => !open)}
               aria-expanded={panelOpen}
+              aria-controls="library-filter-panel"
               sx={{ borderRadius: 999, textTransform: 'none', flexShrink: 0 }}
             >
               {t('library.filters.button', { count: activeFilterCount })}
@@ -244,6 +245,7 @@ export default function PlantLibrary() {
                 filters.plantTypeIds.length === 0 ? 'filled' : 'outlined'
               }
               onClick={handleClearTypes}
+              aria-pressed={filters.plantTypeIds.length === 0}
             />
             {plantTypes.map((pt) => (
               <Chip
@@ -256,6 +258,7 @@ export default function PlantLibrary() {
                   filters.plantTypeIds.includes(pt.id) ? 'filled' : 'outlined'
                 }
                 onClick={() => handleToggleValues('plantTypeIds', [pt.id])}
+                aria-pressed={filters.plantTypeIds.includes(pt.id)}
               />
             ))}
           </Box>
