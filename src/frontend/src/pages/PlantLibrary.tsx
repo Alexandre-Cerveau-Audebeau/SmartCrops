@@ -60,6 +60,7 @@ export default function PlantLibrary() {
     found,
     catalogTotal,
     facetCounts,
+    catalogFacetCounts,
     initialLoading,
     error,
     hasMore,
@@ -171,6 +172,8 @@ export default function PlantLibrary() {
       plantTypes={plantTypes}
       vocabularies={ENUM_FACETS}
       facetCounts={facetCounts}
+      catalogFacetCounts={catalogFacetCounts}
+      catalogTotal={catalogTotal}
       filters={filters}
       onToggleValues={handleToggleValues}
       onReset={handleReset}

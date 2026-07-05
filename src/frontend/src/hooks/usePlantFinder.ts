@@ -86,6 +86,13 @@ export interface UsePlantFinderResult {
   catalogTotal: number;
   facetCounts: FacetFieldCounts[];
   /**
+   * Baseline distribution of the whole catalogue — facetCounts of the last
+   * UNFILTERED fetch (twin of catalogTotal, populated from the mount fetch).
+   * Chip ghost widths derive from it; counts only ever shrink under filters,
+   * so this is each value's natural maximum.
+   */
+  catalogFacetCounts: FacetFieldCounts[];
+  /**
    * True during the initial catalogue load ONLY — later fetches (debounced
    * search, facet/language change, page append) update the list in place, so
    * consumers gating their whole UI on this flag don't flash it on every
@@ -120,6 +127,9 @@ export function usePlantFinder({
   // counts). Counts are scoped to the current filter context, not the page,
   // so every page of one context carries the same values.
   const [facetCounts, setFacetCounts] = useState<FacetFieldCounts[]>([]);
+  const [catalogFacetCounts, setCatalogFacetCounts] = useState<
+    FacetFieldCounts[]
+  >([]);
   // Single transition true→false by design (see UsePlantFinderResult doc):
   // re-arming it per fetch would flash consumers' gates on every keystroke.
   const [initialLoading, setInitialLoading] = useState(true);
@@ -223,24 +233,34 @@ export function usePlantFinder({
           if (signal.aborted) return;
           setItems(pages.flatMap((p) => p.items));
           const lastFound = pages[pages.length - 1]?.found ?? 0;
+          const lastCounts = pages[pages.length - 1]?.facetCounts ?? [];
           setFound(lastFound);
-          if (contextIsUnfiltered) setCatalogTotal(lastFound);
-          setFacetCounts(pages[pages.length - 1]?.facetCounts ?? []);
+          setFacetCounts(lastCounts);
+          if (contextIsUnfiltered) {
+            setCatalogTotal(lastFound);
+            setCatalogFacetCounts(lastCounts);
+          }
         } else if (pageAdvanced) {
           const data = await findPlants({ ...baseParams, page }, signal);
           if (signal.aborted) return;
           setItems((current) => [...current, ...data.items]);
           setFound(data.found);
-          if (contextIsUnfiltered) setCatalogTotal(data.found);
           setFacetCounts(data.facetCounts);
+          if (contextIsUnfiltered) {
+            setCatalogTotal(data.found);
+            setCatalogFacetCounts(data.facetCounts);
+          }
         } else {
           // Context change (or initial load): fetch page 1 and REPLACE.
           const data = await findPlants({ ...baseParams, page: 1 }, signal);
           if (signal.aborted) return;
           setItems(data.items);
           setFound(data.found);
-          if (contextIsUnfiltered) setCatalogTotal(data.found);
           setFacetCounts(data.facetCounts);
+          if (contextIsUnfiltered) {
+            setCatalogTotal(data.found);
+            setCatalogFacetCounts(data.facetCounts);
+          }
         }
         // Commit the fetched context only AFTER a successful, non-aborted
         // fetch: an aborted run (StrictMode double-invoke, rapid typing,
@@ -313,6 +333,7 @@ export function usePlantFinder({
     found,
     catalogTotal,
     facetCounts,
+    catalogFacetCounts,
     initialLoading,
     error,
     hasMore,

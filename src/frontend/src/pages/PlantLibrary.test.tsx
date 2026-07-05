@@ -332,6 +332,53 @@ describe('PlantLibrary', () => {
     expect(filtersButton(0)).toBeInTheDocument();
   });
 
+  it('ghost sizing: chips and the header pill keep the catalogue-count ghost while live counts shrink', async () => {
+    const catalogueCounts = [
+      {
+        field: 'careLevel',
+        counts: [
+          { value: 'Easy', count: 280 },
+          { value: 'Medium', count: 210 },
+        ],
+      },
+    ];
+    const filteredCounts = [
+      { field: 'careLevel', counts: [{ value: 'Easy', count: 3 }] },
+    ];
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+    vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
+      Promise.resolve(
+        params.careLevels
+          ? pageOf(makeMany(3), params.page ?? 1, {
+              facetCounts: filteredCounts,
+            })
+          : pageOf(makeMany(50), params.page ?? 1, {
+              facetCounts: catalogueCounts,
+            })
+      )
+    );
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    await user.click(filtersButton(0));
+    const rail = screen.getByRole('complementary', { name: 'Filters' });
+    await user.click(within(rail).getByRole('button', { name: 'Easy (280)' }));
+
+    // Live layer: Easy shows the filtered count, Medium collapsed to bare —
+    // that's the accessible name (the ghost is aria-hidden).
+    const easy = await within(rail).findByRole('button', { name: 'Easy (3)' });
+    const medium = within(rail).getByRole('button', { name: 'Medium' });
+    // …but the hidden ghosts still reserve the CATALOGUE counts (the width
+    // anchor: a value's unfiltered count is the widest it can ever show).
+    expect(easy).toHaveTextContent('Easy (280)');
+    expect(medium).toHaveTextContent('Medium (210)');
+    // Header pill: visible = live found, ghost = catalogue total.
+    const pill = within(rail).getByText('3 plants').closest('.MuiChip-root');
+    expect(pill).toHaveTextContent('50 plants');
+  });
+
   it('the rail header X closes the rail and keeps the selection', async () => {
     mockFinderCatalog(makeMany(50));
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);

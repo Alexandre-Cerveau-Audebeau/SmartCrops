@@ -35,6 +35,14 @@ export interface FilterPanelProps {
   /** Enum facet configs in display order (ENUM_FACETS; injected for testability). */
   vocabularies: EnumFacetConfig[];
   facetCounts: FacetFieldCounts[];
+  /**
+   * Unfiltered-catalogue distribution (usePlantFinder.catalogFacetCounts) —
+   * a value's count here is the largest it can ever show, so chip ghost
+   * widths derive from it and live count swaps cause zero layout shift.
+   */
+  catalogFacetCounts: FacetFieldCounts[];
+  /** Whole-catalogue total — the header pill's ghost width. */
+  catalogTotal: number;
   filters: PlantFinderFilters;
   /**
    * Toggles a chip's wire values ATOMICALLY: all added, or all removed when
@@ -51,26 +59,70 @@ export interface FilterPanelProps {
 }
 
 /**
+ * Two-layer label that freezes its width at the widest text it can ever
+ * show: a hidden ghost reserves the geometry, the visible layer swaps
+ * freely on top (live counts shrink under filters — 173 → 89 → gone — and
+ * must not re-wrap the rail). tabular-nums keeps digit widths uniform.
+ */
+function GhostSizedLabel({
+  ghost,
+  visible,
+}: {
+  ghost: string;
+  visible: string;
+}) {
+  return (
+    <Box
+      component="span"
+      sx={{
+        position: 'relative',
+        display: 'inline-block',
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      <Box component="span" aria-hidden="true" sx={{ visibility: 'hidden' }}>
+        {ghost}
+      </Box>
+      <Box
+        component="span"
+        sx={{ position: 'absolute', inset: 0, textAlign: 'center' }}
+      >
+        {visible}
+      </Box>
+    </Box>
+  );
+}
+
+/**
  * A facet value pill. Count comes from facetCounts when at least one of the
  * chip's wire values is present in the current distribution (grouped chips
  * sum theirs); a value with no count keeps its label and STAYS clickable —
  * the brief's "everything shown" rule (never hide, never disable). Selected =
- * filled primary, unselected = outlined.
+ * filled primary, unselected = outlined. The width is ghost-frozen on
+ * maxCount (the value's unfiltered-catalogue count — its natural maximum) so
+ * live count changes never shift the layout.
  */
 function FacetChip({
   label,
   count,
+  maxCount,
   selected,
   onClick,
 }: {
   label: string;
   count: number | undefined;
+  maxCount: number | undefined;
   selected: boolean;
   onClick: () => void;
 }) {
   return (
     <Chip
-      label={count === undefined ? label : `${label} (${count})`}
+      label={
+        <GhostSizedLabel
+          ghost={maxCount === undefined ? label : `${label} (${maxCount})`}
+          visible={count === undefined ? label : `${label} (${count})`}
+        />
+      }
       color={selected ? 'primary' : 'default'}
       variant={selected ? 'filled' : 'outlined'}
       onClick={onClick}
@@ -135,11 +187,13 @@ function GroupHeader({ label }: { label: string }) {
  */
 function PanelHeader({
   found,
+  catalogTotal,
   onReset,
   onClose,
   titleComponent,
 }: {
   found: number;
+  catalogTotal: number;
   onReset: () => void;
   onClose: () => void;
   /** 'h2' in the drawer (its modal needs a heading); 'p' in the labeled aside. */
@@ -158,7 +212,14 @@ function PanelHeader({
       <Chip
         size="small"
         color="primary"
-        label={t('library.filters.resultCount', { count: found })}
+        // Ghost-frozen on the catalogue total: shrinking to "6 plants" must
+        // not slide the Reset link and the X.
+        label={
+          <GhostSizedLabel
+            ghost={t('library.filters.resultCount', { count: catalogTotal })}
+            visible={t('library.filters.resultCount', { count: found })}
+          />
+        }
       />
       <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.5 }}>
         <Button
@@ -280,6 +341,8 @@ export default function FilterPanel({
   plantTypes,
   vocabularies,
   facetCounts,
+  catalogFacetCounts,
+  catalogTotal,
   filters,
   onToggleValues,
   onReset,
@@ -288,18 +351,23 @@ export default function FilterPanel({
 }: FilterPanelProps) {
   const { t } = useTranslation();
 
-  const countFor = (field: string, value: string): number | undefined =>
-    facetCounts
+  const countIn = (
+    source: FacetFieldCounts[],
+    field: string,
+    value: string
+  ): number | undefined =>
+    source
       .find((f) => f.field === field)
       ?.counts.find((c) => c.value === value)?.count;
 
   // Grouped chips SUM their wire values' counts; all-absent stays count-less.
-  const sumCounts = (
+  const sumIn = (
+    source: FacetFieldCounts[],
     field: string,
     wireValues: string[]
   ): number | undefined => {
     const present = wireValues
-      .map((v) => countFor(field, v))
+      .map((v) => countIn(source, field, v))
       .filter((c): c is number => c !== undefined);
     if (present.length === 0) return undefined;
     return present.reduce((a, b) => a + b, 0);
@@ -317,7 +385,12 @@ export default function FilterPanel({
           label={t(
             `library.filters.values.${facet.facetField}.${chip.labelKeySuffix}`
           )}
-          count={sumCounts(facet.facetField, chip.wireValues)}
+          count={sumIn(facetCounts, facet.facetField, chip.wireValues)}
+          maxCount={sumIn(
+            catalogFacetCounts,
+            facet.facetField,
+            chip.wireValues
+          )}
           selected={chip.wireValues.every((v) =>
             filters[facet.filterKey].includes(v)
           )}
@@ -340,7 +413,12 @@ export default function FilterPanel({
             key={pt.id}
             label={t(`plantTypes.${pt.name}`, pt.name)}
             // Typesense facet values arrive as strings, ids included.
-            count={countFor('plantTypeId', String(pt.id))}
+            count={countIn(facetCounts, 'plantTypeId', String(pt.id))}
+            maxCount={countIn(
+              catalogFacetCounts,
+              'plantTypeId',
+              String(pt.id)
+            )}
             selected={filters.plantTypeIds.includes(pt.id)}
             onClick={() => onToggleValues('plantTypeIds', [pt.id])}
           />
@@ -374,6 +452,7 @@ export default function FilterPanel({
         <Box sx={{ mb: 2 }}>
           <PanelHeader
             found={found}
+            catalogTotal={catalogTotal}
             onReset={onReset}
             onClose={onClose}
             titleComponent="p"
@@ -403,6 +482,7 @@ export default function FilterPanel({
       >
         <PanelHeader
           found={found}
+          catalogTotal={catalogTotal}
           onReset={onReset}
           onClose={onClose}
           titleComponent="h2"

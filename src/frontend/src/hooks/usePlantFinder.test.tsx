@@ -313,6 +313,52 @@ describe('usePlantFinder', () => {
     expect(result.current.catalogTotal).toBe(50);
   });
 
+  it('catalogFacetCounts records the unfiltered distribution and survives filtered fetches', async () => {
+    const catalogueCounts = [
+      {
+        field: 'careLevel',
+        counts: [
+          { value: 'Easy', count: 280 },
+          { value: 'Medium', count: 217 },
+        ],
+      },
+    ];
+    const filteredCounts = [
+      { field: 'careLevel', counts: [{ value: 'Easy', count: 280 }] },
+    ];
+    vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
+      Promise.resolve(
+        params.careLevels
+          ? pageOf(makeMany(3), params.page ?? 1, {
+              facetCounts: filteredCounts,
+            })
+          : pageOf(makeMany(50), params.page ?? 1, {
+              facetCounts: catalogueCounts,
+            })
+      )
+    );
+    const { result, rerender } = renderFinder();
+    await waitFor(() => expect(result.current.initialLoading).toBe(false));
+    // The mount fetch is always unfiltered — the baseline is known from page one.
+    expect(result.current.catalogFacetCounts).toEqual(catalogueCounts);
+
+    rerender({
+      ...initialInputs,
+      filters: { ...EMPTY_FILTERS, careLevels: ['Easy'] },
+    });
+    await waitFor(() =>
+      expect(result.current.facetCounts).toEqual(filteredCounts)
+    );
+    // Live counts narrowed; the catalogue baseline is untouched.
+    expect(result.current.catalogFacetCounts).toEqual(catalogueCounts);
+
+    rerender(initialInputs);
+    await waitFor(() =>
+      expect(result.current.facetCounts).toEqual(catalogueCounts)
+    );
+    expect(result.current.catalogFacetCounts).toEqual(catalogueCounts);
+  });
+
   it('a facet change resets nothing the handlers do not reset — the hook never self-resets the page', async () => {
     // Callers own the page reset (handlers call resetToFirstPage alongside
     // the input change). Pin that the hook itself does not sneak one in: a
