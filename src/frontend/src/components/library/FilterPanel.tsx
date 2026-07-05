@@ -206,6 +206,9 @@ function PanelHeader({
       <Typography
         variant="subtitle1"
         component={titleComponent}
+        // Stable label target for the drawer's aria-labelledby (unique: only
+        // one panel variant renders at a time).
+        id="library-filter-panel-title"
         sx={{ fontWeight: 600 }}
       >
         {t('library.filters.title')}
@@ -474,7 +477,18 @@ export default function FilterPanel({
       ModalProps={{ disableScrollLock: true }}
       // The id the Filters toggle button's aria-controls points at (the rail
       // aside carries the same id — only one variant renders at a time).
-      PaperProps={{ id: 'library-filter-panel', sx: { width: '100%' } }}
+      // role/aria-modal/aria-labelledby live on the Paper: MUI's Modal root
+      // is role="presentation", so the Paper is the drawer's dialog surface
+      // and the title is its accessible name.
+      slotProps={{
+        paper: {
+          id: 'library-filter-panel',
+          role: 'dialog',
+          'aria-modal': true,
+          'aria-labelledby': 'library-filter-panel-title',
+          sx: { width: '100%' },
+        },
+      }}
     >
       <Box
         sx={{

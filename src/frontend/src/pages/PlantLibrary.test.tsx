@@ -667,6 +667,11 @@ describe('PlantLibrary', () => {
     expect(
       await screen.findByRole('heading', { name: 'Filters' })
     ).toBeInTheDocument();
+    // The drawer is a named modal dialog: its accessible name comes from the
+    // header title via aria-labelledby (Major a11y fix).
+    expect(
+      screen.getByRole('dialog', { name: 'Filters' })
+    ).toBeInTheDocument();
     // Enriched header parity: Reset lives in the header now — exactly one
     // Reset in the drawer, none in the footer.
     expect(screen.getAllByRole('button', { name: 'Reset' })).toHaveLength(1);

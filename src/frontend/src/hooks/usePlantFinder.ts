@@ -196,6 +196,18 @@ export function usePlantFinder({
     const contextIsUnfiltered =
       effectiveQuery === '' && filtersKey === EMPTY_FILTERS_KEY;
 
+    // Single commit point for the catalogue baseline (catalogTotal +
+    // catalogFacetCounts) — every fetch branch calls this so a future change
+    // to the baseline rule can't silently miss one of them.
+    const commitUnfilteredBaseline = (
+      foundCount: number,
+      counts: FacetFieldCounts[]
+    ) => {
+      if (!contextIsUnfiltered) return;
+      setCatalogTotal(foundCount);
+      setCatalogFacetCounts(counts);
+    };
+
     const baseParams = {
       q: effectiveQuery || undefined,
       lang: language,
@@ -236,20 +248,14 @@ export function usePlantFinder({
           const lastCounts = pages[pages.length - 1]?.facetCounts ?? [];
           setFound(lastFound);
           setFacetCounts(lastCounts);
-          if (contextIsUnfiltered) {
-            setCatalogTotal(lastFound);
-            setCatalogFacetCounts(lastCounts);
-          }
+          commitUnfilteredBaseline(lastFound, lastCounts);
         } else if (pageAdvanced) {
           const data = await findPlants({ ...baseParams, page }, signal);
           if (signal.aborted) return;
           setItems((current) => [...current, ...data.items]);
           setFound(data.found);
           setFacetCounts(data.facetCounts);
-          if (contextIsUnfiltered) {
-            setCatalogTotal(data.found);
-            setCatalogFacetCounts(data.facetCounts);
-          }
+          commitUnfilteredBaseline(data.found, data.facetCounts);
         } else {
           // Context change (or initial load): fetch page 1 and REPLACE.
           const data = await findPlants({ ...baseParams, page: 1 }, signal);
@@ -257,10 +263,7 @@ export function usePlantFinder({
           setItems(data.items);
           setFound(data.found);
           setFacetCounts(data.facetCounts);
-          if (contextIsUnfiltered) {
-            setCatalogTotal(data.found);
-            setCatalogFacetCounts(data.facetCounts);
-          }
+          commitUnfilteredBaseline(data.found, data.facetCounts);
           // Only page 1 was fetched — a caller that changed context without
           // resetting the page would otherwise desync loadMore/prevRef
           // bookkeeping and skip pages. (Handlers still OWN the reset; this
