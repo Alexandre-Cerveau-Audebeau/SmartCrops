@@ -173,6 +173,7 @@ function BooleanFacetRow({
   checked: boolean;
   onChange: () => void;
 }) {
+  const captionId = caption ? `${id}-caption` : undefined;
   return (
     <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1.25 }}>
       <Checkbox
@@ -180,9 +181,15 @@ function BooleanFacetRow({
         size="small"
         checked={checked}
         onChange={onChange}
-        // Zero padding so the caption can align flush under the label text
-        // with a plain margin (no theme-dependent ripple-padding math).
-        sx={{ p: 0, mr: 1 }}
+        // The caption is real semantics for AT, not just adjacent text.
+        // slotProps.input: the description must sit on the <input> (the
+        // element carrying the checkbox role) — a root-level prop lands on
+        // MUI's wrapper span, invisible to the accessibility tree.
+        slotProps={{ input: { 'aria-describedby': captionId } }}
+        // Padding buys back a tappable hit area; the negative margin cancels
+        // it out of the layout so the caption still aligns flush under the
+        // label text with a plain margin.
+        sx={{ p: 0.5, m: -0.5, mr: 0.5 }}
       />
       <Box>
         <Typography
@@ -198,7 +205,12 @@ function BooleanFacetRow({
           />
         </Typography>
         {caption && (
-          <Typography variant="caption" component="p" color="text.secondary">
+          <Typography
+            id={captionId}
+            variant="caption"
+            component="p"
+            color="text.secondary"
+          >
             {caption}
           </Typography>
         )}

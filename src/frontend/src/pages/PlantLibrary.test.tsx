@@ -689,6 +689,11 @@ describe('PlantLibrary', () => {
     // traits) — the unknown bucket is never rendered.
     const edible = screen.getByRole('checkbox', { name: 'Edible (72)' });
     expect(edible).not.toBeChecked();
+    // The caption is wired to the checkbox via aria-describedby — real
+    // semantics for AT, not just adjacent text.
+    expect(
+      screen.getByRole('checkbox', { name: 'Pet-safe' })
+    ).toHaveAccessibleDescription('non-toxic to cats and dogs');
     await user.click(edible);
 
     await waitFor(() =>
@@ -895,6 +900,40 @@ describe('PlantLibrary', () => {
     expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByText(/no active filter/)).toBeInTheDocument();
+  });
+
+  it('Retry also recovers the plant types when their mount fetch died with the API (SMA-271 follow-up)', async () => {
+    const catalogue = makeMany(50);
+    // One switch downs BOTH endpoints — the realistic outage shape, and
+    // deterministic under StrictMode (once-rejections are not).
+    let apiDown = true;
+    vi.mocked(fetchPlantTypes).mockImplementation(() =>
+      apiDown
+        ? Promise.reject(new Error('Failed to fetch plant types: 502'))
+        : Promise.resolve([{ id: 4, name: 'Ornamental', description: null }])
+    );
+    vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
+      apiDown
+        ? Promise.reject(new Error('Failed to find plants: 502'))
+        : Promise.resolve(pageOf(catalogue, params.page ?? 1))
+    );
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('alert');
+    // The types died with the API: the quick row is down to "All".
+    expect(
+      screen.queryByRole('button', { name: 'Ornamental' })
+    ).not.toBeInTheDocument();
+
+    apiDown = false;
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    // The grid recovers AND the quick row fills in — no reload needed.
+    await screen.findByRole('heading', { name: 'Plant 00' });
+    expect(
+      await screen.findByRole('button', { name: 'Ornamental' })
+    ).toBeInTheDocument();
   });
 
   it('below md the panel opens as a full-screen drawer whose footer button closes it', async () => {

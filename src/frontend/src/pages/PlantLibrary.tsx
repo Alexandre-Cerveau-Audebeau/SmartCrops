@@ -194,6 +194,20 @@ export default function PlantLibrary() {
 
   const closePanel = () => setPanelOpen(false);
 
+  // SMA-271 follow-up: the mount-only types fetch can have died with the
+  // same outage Retry recovers from — re-attempt it alongside the finder
+  // refetch, or the quick row and the Type facet stay empty until a full
+  // reload. Guarded on emptiness so a healthy list is never refetched; a
+  // late resolve after unmount is a harmless no-op setState (React 18+).
+  const handleRetry = () => {
+    if (plantTypes.length === 0) {
+      fetchPlantTypes()
+        .then(setPlantTypes)
+        .catch((err) => console.error(err));
+    }
+    refetch();
+  };
+
   const filterPanel = (
     <FilterPanel
       open={panelOpen}
@@ -408,10 +422,10 @@ export default function PlantLibrary() {
         <Alert
           severity="error"
           sx={{ mb: 3 }}
-          // SMA-271: in-place recovery — refetch() re-runs the current
-          // context from page 1, no page reload.
+          // SMA-271: in-place recovery — the current context re-runs from
+          // page 1 (plus the types list if its mount fetch died), no reload.
           action={
-            <Button color="inherit" size="small" onClick={refetch}>
+            <Button color="inherit" size="small" onClick={handleRetry}>
               {t('library.retry')}
             </Button>
           }

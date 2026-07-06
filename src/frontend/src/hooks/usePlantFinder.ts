@@ -6,8 +6,15 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+// Value import with no runtime cycle: facetVocabularies' reverse imports are
+// type-only and erased at compile time.
+import { BOOLEAN_FACETS } from '../constants/facetVocabularies';
+import type { BooleanFacetConfig } from '../constants/facetVocabularies';
 import { findPlants } from '../services/plantApi';
-import type { FacetFieldCounts } from '../services/plantApi';
+import type {
+  FacetFieldCounts,
+  FindPlantsParams,
+} from '../services/plantApi';
 import type { Plant } from '../types/Plant';
 
 // SMA-255 T4 — the Library runs on the faceted finder endpoint with REAL
@@ -68,6 +75,13 @@ export type ArrayFilterKey = Exclude<
   BooleanFilterKey
 >;
 
+// Single source of truth for the hero booleans: everything the hook does
+// with them (filtersKey serialization, counting, wire params) iterates
+// BOOLEAN_FACETS, so a future checkbox registers in ONE place. The config's
+// declaration order is the serialization order — it must stay stable, the
+// filtersKey format is compared across renders.
+const BOOLEAN_FILTER_KEYS = BOOLEAN_FACETS.map((facet) => facet.filterKey);
+
 /** All-empty filters — the caller's initial state and the Reset target. */
 export const EMPTY_FILTERS: PlantFinderFilters = {
   plantTypeIds: [],
@@ -96,16 +110,8 @@ function serializeFilters(filters: PlantFinderFilters): string {
     filters.lifeCycles.join(','),
     filters.growthRates.join(','),
     // Boolean flags as a fixed-order bitstring — same stable-key contract as
-    // the arrays above.
-    [
-      filters.indoor,
-      filters.droughtTolerant,
-      filters.edible,
-      filters.petSafe,
-      filters.humanSafe,
-    ]
-      .map((flag) => (flag ? '1' : '0'))
-      .join(''),
+    // the arrays above (order = BOOLEAN_FACETS declaration order).
+    BOOLEAN_FILTER_KEYS.map((key) => (filters[key] ? '1' : '0')).join(''),
   ].join('|');
 }
 
@@ -221,13 +227,7 @@ export function usePlantFinder({
     filters.wateringNeedLevels.length +
     filters.lifeCycles.length +
     filters.growthRates.length +
-    [
-      filters.indoor,
-      filters.droughtTolerant,
-      filters.edible,
-      filters.petSafe,
-      filters.humanSafe,
-    ].filter(Boolean).length;
+    BOOLEAN_FILTER_KEYS.filter((key) => filters[key]).length;
 
   const isFiltered = effectiveQuery !== '' || activeFilterCount > 0;
 
@@ -279,6 +279,23 @@ export function usePlantFinder({
       setCatalogFacetCounts(counts);
     };
 
+    // Hero booleans (T3): each wire param derives from the facet config —
+    // the param NAME is the indexed facet field and the sent value is its
+    // counted bucket, so the two inverted safety traits (the index stores
+    // toxicity, the checkbox promises safety) send FALSE while the direct
+    // traits send true; the backend ORs the unknown bucket in either way
+    // (absence never excludes). Unchecked boxes stay off the wire. The Pick
+    // type pins every facetField to a real FindPlantsParams key.
+    const booleanParams: Pick<
+      FindPlantsParams,
+      BooleanFacetConfig['facetField']
+    > = {};
+    for (const facet of BOOLEAN_FACETS) {
+      booleanParams[facet.facetField] = filters[facet.filterKey]
+        ? facet.countedValue === 'true'
+        : undefined;
+    }
+
     const baseParams = {
       q: effectiveQuery || undefined,
       lang: language,
@@ -295,16 +312,7 @@ export function usePlantFinder({
         filters.lifeCycles.length > 0 ? filters.lifeCycles : undefined,
       growthRates:
         filters.growthRates.length > 0 ? filters.growthRates : undefined,
-      // Hero booleans (T3): sent only when checked. The safety boxes are
-      // INVERTED on the wire — the index stores toxicity, the checkbox
-      // promises safety — so checked sends the field's FALSE polarity; the
-      // backend ORs the unknown bucket in either way (absence never
-      // excludes).
-      isIndoor: filters.indoor ? true : undefined,
-      isDroughtTolerant: filters.droughtTolerant ? true : undefined,
-      isEdible: filters.edible ? true : undefined,
-      isToxicToPets: filters.petSafe ? false : undefined,
-      isToxicToHumans: filters.humanSafe ? false : undefined,
+      ...booleanParams,
     };
 
     const run = async (signal: AbortSignal) => {
