@@ -986,6 +986,57 @@ describe('PlantLibrary', () => {
     expect(screen.getByRole('button', { name: 'Fruit' })).toBeInTheDocument();
   });
 
+  it('a slow mount plant-types response never overwrites a fresher Retry commit (unified loader guard)', async () => {
+    const catalogue = makeMany(50);
+    // The CR round-3 scenario: /planttypes is SLOW (pending, not failed)
+    // while the finder fails fast — Retry then races the still-in-flight
+    // mount fetch. Every types call parks its resolver; the finder heals
+    // via the switch.
+    let finderDown = true;
+    const pendingTypes: Array<(types: PlantType[]) => void> = [];
+    vi.mocked(fetchPlantTypes).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pendingTypes.push(resolve);
+        })
+    );
+    vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
+      finderDown
+        ? Promise.reject(new Error('Failed to find plants: 502'))
+        : Promise.resolve(pageOf(catalogue, params.page ?? 1))
+    );
+
+    renderLibrary();
+    await screen.findByRole('alert');
+    // Only the mount fetch(es) are in flight so far (two under StrictMode —
+    // the first invalidated by the cleanup's sequence bump).
+    const mountCalls = pendingTypes.length;
+    expect(mountCalls).toBeGreaterThan(0);
+
+    finderDown = false;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(pendingTypes).toHaveLength(mountCalls + 1));
+
+    // The Retry fetch (freshest sequence) resolves FIRST and commits…
+    await act(async () => {
+      pendingTypes[mountCalls]!([{ id: 2, name: 'Fruit', description: null }]);
+    });
+    expect(
+      await screen.findByRole('button', { name: 'Fruit' })
+    ).toBeInTheDocument();
+
+    // …then every mount fetch resolves late: all stale, all dropped.
+    await act(async () => {
+      for (const resolveMount of pendingTypes.slice(0, mountCalls)) {
+        resolveMount([{ id: 1, name: 'Vegetable', description: null }]);
+      }
+    });
+    expect(
+      screen.queryByRole('button', { name: 'Vegetable' })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Fruit' })).toBeInTheDocument();
+  });
+
   it('below md the panel opens as a full-screen drawer whose footer button closes it', async () => {
     mockMatchMedia(false); // mobile
     mockFinderCatalog(makeMany(50));

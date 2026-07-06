@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -93,17 +93,35 @@ export default function PlantLibrary() {
     refetch,
   } = usePlantFinder({ query: searchQuery, filters, language });
 
+  // Single guarded path for mount AND Retry — a slow initial response must
+  // never overwrite a fresher Retry commit, and vice versa. Every load
+  // claims the next sequence number and only the LATEST claim may commit.
+  const typesSeq = useRef(0);
+  const loadPlantTypes = useCallback(() => {
+    const seq = ++typesSeq.current;
+    fetchPlantTypes()
+      .then((types) => {
+        if (seq === typesSeq.current) setPlantTypes(types);
+      })
+      .catch((err) => console.error(err));
+  }, []);
+
   // Plant types load once (mount). They're translated client-side via
   // `plantTypes.*`, so there's no need to refetch them on a language change.
   useEffect(() => {
-    const controller = new AbortController();
-    fetchPlantTypes(controller.signal)
-      .then(setPlantTypes)
-      .catch((err) => {
-        if (err.name !== 'AbortError') console.error(err);
-      });
-    return () => controller.abort();
-  }, []);
+    loadPlantTypes();
+    // The sequence bump REPLACES the old AbortController as the cleanup
+    // guard: it invalidates the in-flight mount fetch on unmount/StrictMode
+    // re-run, so a post-cleanup commit is dropped by the same staleness
+    // mechanism that orders mount vs Retry.
+    return () => {
+      // Not a DOM-ref snapshot (the rule's target): bumping the LATEST
+      // sequence value at cleanup time is the point — it invalidates
+      // whatever load is in flight right now.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      typesSeq.current++;
+    };
+  }, [loadPlantTypes]);
 
   // Auto-load the next PAGE when the sentinel scrolls into view (server
   // pagination since SMA-255 T4 — this is a network fetch, guarded against
@@ -197,20 +215,12 @@ export default function PlantLibrary() {
   // SMA-271 follow-up: the mount-only types fetch can have died with the
   // same outage Retry recovers from — re-attempt it alongside the finder
   // refetch, or the quick row and the Type facet stay empty until a full
-  // reload. Guarded on emptiness so a healthy list is never refetched; a
-  // late resolve after unmount is a harmless no-op setState (React 18+).
-  // Sequence guard: two rapid Retry clicks must not let a stale plant-types
-  // resolution overwrite a fresher one — same protection intent as the
-  // mount effect's AbortController.
-  const retrySeq = useRef(0);
+  // reload. Gated on emptiness so a healthy list is never refetched; the
+  // shared loader's sequence guard orders this against the mount fetch and
+  // against rapid repeat clicks alike.
   const handleRetry = () => {
     if (plantTypes.length === 0) {
-      const seq = ++retrySeq.current;
-      fetchPlantTypes()
-        .then((types) => {
-          if (seq === retrySeq.current) setPlantTypes(types);
-        })
-        .catch((err) => console.error(err));
+      loadPlantTypes();
     }
     refetch();
   };
