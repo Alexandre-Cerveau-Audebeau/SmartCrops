@@ -31,6 +31,9 @@ import { fetchPlantTypes, findPlants } from '../services/plantApi';
 // SMA-9 T2 — DELIBERATE updates: the single-select type-chip row is retired
 // in favor of the filter panel (control row + rail/drawer, multi-select
 // facets); the chip tests were replaced by panel tests accordingly.
+// SMA-9 T3 — boolean checkboxes, the removable active-filter chips row, the
+// filtered-empty reset action and the SMA-271 error-state pins live at the
+// end of the suite.
 
 // jsdom has no matchMedia; MUI's useMediaQuery drives the rail (md+) vs
 // drawer (below md) split. Desktop is this suite's default; the mobile test
@@ -142,6 +145,14 @@ function renderLibrary() {
 // The panel-toggle pill; its accessible name carries the live selection count.
 const filtersButton = (count: number) =>
   screen.getByRole('button', { name: `Filters · ${count}` });
+
+// The removable active-filter chips (T3). They are the only deletable chips
+// on the page, so MUI's delete affordance (CancelIcon) is their signature;
+// each entry is the chip root, whose textContent is the chip label.
+const activeChips = () =>
+  screen
+    .queryAllByTestId('CancelIcon')
+    .map((icon) => icon.closest('.MuiChip-root') as HTMLElement);
 
 describe('PlantLibrary', () => {
   it('renders cards from the neutral list DTO (no translations) without crashing (SMA-73)', async () => {
@@ -652,6 +663,238 @@ describe('PlantLibrary', () => {
     expect(
       screen.queryByRole('button', { name: /My gardens/ })
     ).not.toBeInTheDocument();
+  });
+
+  it('checking a boolean sends its wire param, bumps the button count and grows a bare-label active chip (T3)', async () => {
+    mockFinderCatalog(makeMany(50), {
+      facetCounts: [
+        {
+          field: 'isEdible',
+          counts: [
+            { value: 'true', count: 72 },
+            { value: 'false', count: 452 },
+            { value: 'unknown', count: 12 },
+          ],
+        },
+      ],
+    });
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    await user.click(filtersButton(0));
+    // The checkbox label carries the counted bucket ('true' for the direct
+    // traits) — the unknown bucket is never rendered.
+    const edible = screen.getByRole('checkbox', { name: 'Edible (72)' });
+    expect(edible).not.toBeChecked();
+    await user.click(edible);
+
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ isEdible: true, page: 1 }),
+        expect.anything()
+      )
+    );
+    expect(filtersButton(1)).toBeInTheDocument();
+    // Boolean active chips are BARE labels (no "Section : " prefix — mockup).
+    expect(activeChips().map((chip) => chip.textContent)).toEqual(['Edible']);
+  });
+
+  it('an enum selection grows a "Section : Value" active chip whose delete toggles the value off (T3)', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+    expect(activeChips()).toHaveLength(0);
+
+    await user.click(filtersButton(0));
+    await user.click(screen.getByRole('button', { name: 'Easy' }));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ careLevels: ['Easy'] }),
+        expect.anything()
+      )
+    );
+    expect(activeChips().map((chip) => chip.textContent)).toEqual([
+      'Care level : Easy',
+    ]);
+
+    // Deleting the chip = un-toggling the value (same state, same wire).
+    await user.click(screen.getByTestId('CancelIcon'));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ careLevels: undefined }),
+        expect.anything()
+      )
+    );
+    expect(activeChips()).toHaveLength(0);
+    expect(filtersButton(0)).toBeInTheDocument();
+  });
+
+  it('the grouped Vivace active chip is ONE chip whose delete removes BOTH wire values (T3)', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    await user.click(filtersButton(0));
+    await user.click(screen.getByRole('button', { name: 'Perennial' }));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          lifeCycles: ['Perennial', 'HerbaceousPerennial'],
+        }),
+        expect.anything()
+      )
+    );
+    // Two wire values, ONE chip (the button count still says 2 — T2 rule).
+    expect(activeChips().map((chip) => chip.textContent)).toEqual([
+      'Life cycle : Perennial',
+    ]);
+    expect(filtersButton(2)).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('CancelIcon'));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ lifeCycles: undefined }),
+        expect.anything()
+      )
+    );
+    expect(filtersButton(0)).toBeInTheDocument();
+  });
+
+  it('"Clear all" clears every facet — enums and booleans — but keeps the search text (T3)', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    vi.useFakeTimers();
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'lavender' },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    vi.useRealTimers();
+
+    fireEvent.click(filtersButton(0));
+    fireEvent.click(screen.getByRole('button', { name: 'Easy' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Pet-safe' }));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          q: 'lavender',
+          careLevels: ['Easy'],
+          // INVERTED polarity: the safety checkbox filters toxicity on FALSE.
+          isToxicToPets: false,
+        }),
+        expect.anything()
+      )
+    );
+    expect(activeChips().map((chip) => chip.textContent)).toEqual([
+      'Care level : Easy',
+      'Pet-safe',
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          q: 'lavender',
+          careLevels: undefined,
+          isToxicToPets: undefined,
+        }),
+        expect.anything()
+      )
+    );
+    // The whole row (chips + Clear all) is gone; the search text survives.
+    expect(activeChips()).toHaveLength(0);
+    expect(
+      screen.queryByRole('button', { name: 'Clear all' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('textbox', { name: 'Search plants by name...' })
+    ).toHaveValue('lavender');
+  });
+
+  it('the filtered empty state offers a reset that recovers the catalogue (T3)', async () => {
+    const catalogue = makeMany(50);
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+    vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
+      Promise.resolve(
+        params.careLevels
+          ? { items: [], found: 0, page: 1, perPage: 24, facetCounts: [] }
+          : pageOf(catalogue, params.page ?? 1)
+      )
+    );
+
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    await user.click(filtersButton(0));
+    await user.click(screen.getByRole('button', { name: 'Easy' }));
+    expect(
+      await screen.findByText('No plants match your search.')
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reset filters' }));
+    await waitFor(() =>
+      expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24)
+    );
+    expect(
+      screen.queryByText('No plants match your search.')
+    ).not.toBeInTheDocument();
+    expect(filtersButton(0)).toBeInTheDocument();
+  });
+
+  it('an initial-fetch error keeps the finder controls and Retry recovers the grid in place (SMA-271)', async () => {
+    const catalogue = makeMany(50);
+    // Mutable failure switch (NOT a once-rejection): under StrictMode the
+    // aborted first mount run may or may not consume a queued rejection, so
+    // the failure must hold for every call until Retry is clicked.
+    let apiDown = true;
+    vi.mocked(fetchPlantTypes).mockResolvedValue([
+      { id: 4, name: 'Ornamental', description: null },
+    ]);
+    vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
+      apiDown
+        ? Promise.reject(new Error('Failed to find plants: 503'))
+        : Promise.resolve(pageOf(catalogue, params.page ?? 1))
+    );
+
+    const user = userEvent.setup();
+    renderLibrary();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Failed to find plants: 503'
+    );
+    // The controls survive the error (the pre-T3 gate hid them — the page
+    // was dead until a full reload).
+    expect(
+      screen.getByRole('textbox', { name: 'Search plants by name...' })
+    ).toBeInTheDocument();
+    expect(filtersButton(0)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument();
+    // Only the counter hides — its numbers would be stale.
+    expect(screen.queryByText(/no active filter/)).not.toBeInTheDocument();
+
+    apiDown = false;
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    // In-place recovery: grid, counter and alert-lessness — no reload.
+    await screen.findByRole('heading', { name: 'Plant 00' });
+    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(24);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText(/no active filter/)).toBeInTheDocument();
   });
 
   it('below md the panel opens as a full-screen drawer whose footer button closes it', async () => {

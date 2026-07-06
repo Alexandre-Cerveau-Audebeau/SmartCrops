@@ -11,7 +11,8 @@ import InputAdornment from '@mui/material/InputAdornment';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import { useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
+import type { Theme } from '@mui/material/styles';
 import { visuallyHidden } from '@mui/utils';
 import SearchIcon from '@mui/icons-material/Search';
 import SpaIcon from '@mui/icons-material/Spa';
@@ -22,11 +23,18 @@ import {
   MIN_QUERY_LENGTH,
   usePlantFinder,
 } from '../hooks/usePlantFinder';
-import type { PlantFinderFilters } from '../hooks/usePlantFinder';
+import type {
+  ArrayFilterKey,
+  BooleanFilterKey,
+  PlantFinderFilters,
+} from '../hooks/usePlantFinder';
 import { fetchPlantTypes } from '../services/plantApi';
 import type { PlantType } from '../types/PlantType';
 import FilterPanel from '../components/library/FilterPanel';
-import { ENUM_FACETS } from '../constants/facetVocabularies';
+import {
+  BOOLEAN_FACETS,
+  ENUM_FACETS,
+} from '../constants/facetVocabularies';
 import PlantCard from '../components/PlantCard';
 
 // SMA-255 T4 put the Library on the faceted finder endpoint (real server
@@ -34,13 +42,27 @@ import PlantCard from '../components/PlantCard';
 // usePlantFinder; SMA-9 T2 added the filter panel (left rail on desktop,
 // full-screen drawer on mobile) with the five enum facets — the old
 // single-select type-chip row is retired, plant type is now a multi-select
-// facet in the panel. This component is presentation + handlers: it owns the
-// raw inputs (search text, facet selections, panel open state), hands them to
-// the hook, and renders what comes back.
+// facet in the panel. SMA-9 T3 added the hero boolean checkboxes, the
+// removable active-filter chips row, and the resilient empty/error states
+// (SMA-271: the controls survive a fetch error; Retry recovers in place).
+// This component is presentation + handlers: it owns the raw inputs (search
+// text, facet selections, panel open state), hands them to the hook, and
+// renders what comes back.
 
 // Re-exported from its original home so the page size keeps a stable import
 // path (the test suite's finder mock derives its page math from it).
 export { PER_PAGE } from '../hooks/usePlantFinder';
+
+// Active-filter chips wear the project's soft primary tint (the ForMeBlock
+// alpha idiom) — "tinted" per the mockup, distinct from the outlined/filled
+// facet pills.
+const activeChipSx = {
+  bgcolor: (theme: Theme) =>
+    alpha(
+      theme.palette.primary.main,
+      theme.palette.mode === 'dark' ? 0.15 : 0.06
+    ),
+};
 
 export default function PlantLibrary() {
   const { t } = useTranslation();
@@ -68,6 +90,7 @@ export default function PlantLibrary() {
     activeFilterCount,
     loadMore,
     resetToFirstPage,
+    refetch,
   } = usePlantFinder({ query: searchQuery, filters, language });
 
   // Plant types load once (mount). They're translated client-side via
@@ -133,7 +156,7 @@ export default function PlantLibrary() {
   // together — all-selected means remove all, anything missing means add the
   // missing ones.
   const handleToggleValues = (
-    field: keyof PlantFinderFilters,
+    field: ArrayFilterKey,
     wireValues: Array<string | number>
   ) => {
     setFilters((prev) => {
@@ -146,6 +169,12 @@ export default function PlantLibrary() {
       // same element type it was read with.
       return { ...prev, [field]: next } as PlantFinderFilters;
     });
+    resetToFirstPage();
+  };
+
+  // Checkbox flip — one boolean facet on/off (SMA-9 T3).
+  const handleToggleBoolean = (field: BooleanFilterKey) => {
+    setFilters((prev) => ({ ...prev, [field]: !prev[field] }));
     resetToFirstPage();
   };
 
@@ -171,11 +200,13 @@ export default function PlantLibrary() {
       onClose={closePanel}
       plantTypes={plantTypes}
       vocabularies={ENUM_FACETS}
+      booleanFacets={BOOLEAN_FACETS}
       facetCounts={facetCounts}
       catalogFacetCounts={catalogFacetCounts}
       catalogTotal={catalogTotal}
       filters={filters}
       onToggleValues={handleToggleValues}
+      onToggleBoolean={handleToggleBoolean}
       onReset={handleReset}
       found={found}
       variant={isDesktop ? 'rail' : 'drawer'}
@@ -188,7 +219,12 @@ export default function PlantLibrary() {
         {t('library.title')}
       </Typography>
 
-      {!initialLoading && !error && (
+      {/* The finder controls render whenever the initial load settled — a
+          fetch error INCLUDED (SMA-271): the search field, the quick row and
+          the Filters button stay reachable next to the error Alert, so the
+          user can retry or change context without a page reload. Only the
+          counter line hides under an error (its numbers would be stale). */}
+      {!initialLoading && (
         <>
           {/* Search + panel toggle on ONE line (mockup). */}
           <Box
@@ -263,23 +299,102 @@ export default function PlantLibrary() {
             ))}
           </Box>
 
+          {/* Active-filter chips (T3, mockup): one removable chip per
+              selected value, between the quick row and the counter. Enum and
+              type chips read "Section : Valeur"; boolean chips are bare
+              labels. A grouped chip (Vivace) is ONE chip whose delete removes
+              ALL its wire values. Appears/disappears with content — NO ghost
+              sizing here, the motion is deliberate. */}
+          {activeFilterCount > 0 && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                flexWrap: 'wrap',
+                mb: 2,
+              }}
+            >
+              {filters.plantTypeIds.map((id) => {
+                const pt = plantTypes.find((p) => p.id === id);
+                return (
+                  <Chip
+                    key={`type-${id}`}
+                    size="small"
+                    label={`${t('library.filters.activeType')} : ${
+                      pt ? t(`plantTypes.${pt.name}`, pt.name) : id
+                    }`}
+                    onDelete={() => handleToggleValues('plantTypeIds', [id])}
+                    sx={activeChipSx}
+                  />
+                );
+              })}
+              {ENUM_FACETS.flatMap((facet) =>
+                facet.chips
+                  .filter((chip) =>
+                    chip.wireValues.every((v) =>
+                      filters[facet.filterKey].includes(v)
+                    )
+                  )
+                  .map((chip) => (
+                    <Chip
+                      key={`${facet.facetField}-${chip.labelKeySuffix}`}
+                      size="small"
+                      label={`${t(facet.titleKey)} : ${t(
+                        `library.filters.values.${facet.facetField}.${chip.labelKeySuffix}`
+                      )}`}
+                      onDelete={() =>
+                        handleToggleValues(facet.filterKey, chip.wireValues)
+                      }
+                      sx={activeChipSx}
+                    />
+                  ))
+              )}
+              {BOOLEAN_FACETS.filter((b) => filters[b.filterKey]).map((b) => (
+                <Chip
+                  key={b.filterKey}
+                  size="small"
+                  label={t(b.labelKey)}
+                  onDelete={() => handleToggleBoolean(b.filterKey)}
+                  sx={activeChipSx}
+                />
+              ))}
+              {/* Same reset as the panel header: facets only, search text
+                  preserved. */}
+              <Button
+                variant="text"
+                size="small"
+                onClick={handleReset}
+                sx={{
+                  textTransform: 'none',
+                  textDecoration: 'underline',
+                  '&:hover': { textDecoration: 'underline' },
+                }}
+              >
+                {t('library.filters.clearAll')}
+              </Button>
+            </Box>
+          )}
+
           {/* Rich left-aligned counter line (mockup): the found count in
               bold/primary, the context tail in secondary. */}
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            <Box
-              component="span"
-              sx={{ fontWeight: 700, color: 'primary.main' }}
-            >
-              {t('library.filters.resultCount', {
-                count: isFiltered ? found : catalogTotal,
-              })}
-            </Box>
-            {isFiltered
-              ? t('library.filters.counterFilteredTail', {
-                  total: catalogTotal,
-                })
-              : t('library.filters.counterRestTail')}
-          </Typography>
+          {!error && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              <Box
+                component="span"
+                sx={{ fontWeight: 700, color: 'primary.main' }}
+              >
+                {t('library.filters.resultCount', {
+                  count: isFiltered ? found : catalogTotal,
+                })}
+              </Box>
+              {isFiltered
+                ? t('library.filters.counterFilteredTail', {
+                    total: catalogTotal,
+                  })
+                : t('library.filters.counterRestTail')}
+            </Typography>
+          )}
         </>
       )}
 
@@ -290,7 +405,17 @@ export default function PlantLibrary() {
       )}
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert
+          severity="error"
+          sx={{ mb: 3 }}
+          // SMA-271: in-place recovery — refetch() re-runs the current
+          // context from page 1, no page reload.
+          action={
+            <Button color="inherit" size="small" onClick={refetch}>
+              {t('library.retry')}
+            </Button>
+          }
+        >
           {error}
         </Alert>
       )}
@@ -302,9 +427,10 @@ export default function PlantLibrary() {
       {!initialLoading && (
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 3 }}>
           {/* Rendered unconditionally (visibility is panelOpen's job): a
-              transient fetch error must not yank an open rail out of the
-              layout. On an INITIAL error the control row is gated away, so
-              the panel can never have been opened. */}
+              fetch error must not yank an open rail out of the layout. Since
+              SMA-271 the controls stay reachable during an error too, so the
+              panel can be open next to the Alert — its counts are simply
+              absent until a Retry succeeds. */}
           {filterPanel}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {/* found === 0 with no active filter = genuinely empty catalogue;
@@ -321,6 +447,17 @@ export default function PlantLibrary() {
             {!error && found === 0 && isFiltered && (
               <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
                 <Typography>{t('library.noResults')}</Typography>
+                {/* Same reset as the header/"Tout effacer": facets only, the
+                    search text stays (it may be the only active narrowing —
+                    then the button is a no-op by design; the mockup's reset
+                    affordance is unconditional). */}
+                <Button
+                  variant="outlined"
+                  onClick={handleReset}
+                  sx={{ mt: 2, borderRadius: 999, textTransform: 'none' }}
+                >
+                  {t('library.resetFilters')}
+                </Button>
               </Box>
             )}
 

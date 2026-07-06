@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
@@ -13,8 +14,15 @@ import { alpha } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import ComingSoonChip from '../ComingSoonChip';
-import type { EnumFacetConfig } from '../../constants/facetVocabularies';
-import type { PlantFinderFilters } from '../../hooks/usePlantFinder';
+import type {
+  BooleanFacetConfig,
+  EnumFacetConfig,
+} from '../../constants/facetVocabularies';
+import type {
+  ArrayFilterKey,
+  BooleanFilterKey,
+  PlantFinderFilters,
+} from '../../hooks/usePlantFinder';
 import type { FacetFieldCounts } from '../../services/plantApi';
 import type { PlantType } from '../../types/PlantType';
 
@@ -34,6 +42,9 @@ export interface FilterPanelProps {
   plantTypes: PlantType[];
   /** Enum facet configs in display order (ENUM_FACETS; injected for testability). */
   vocabularies: EnumFacetConfig[];
+  /** Boolean facet configs in display order (BOOLEAN_FACETS; injected like
+   * `vocabularies`). */
+  booleanFacets: BooleanFacetConfig[];
   facetCounts: FacetFieldCounts[];
   /**
    * Unfiltered-catalogue distribution (usePlantFinder.catalogFacetCounts) —
@@ -49,9 +60,11 @@ export interface FilterPanelProps {
    * every one is already selected (grouped chips like "Vivace" carry several).
    */
   onToggleValues: (
-    field: keyof PlantFinderFilters,
+    field: ArrayFilterKey,
     wireValues: Array<string | number>
   ) => void;
+  /** Flips one boolean (checkbox) filter. */
+  onToggleBoolean: (field: BooleanFilterKey) => void;
   onReset: () => void;
   /** Live result total — header pill and the drawer's "See the N plants". */
   found: number;
@@ -67,9 +80,12 @@ export interface FilterPanelProps {
 function GhostSizedLabel({
   ghost,
   visible,
+  align = 'center',
 }: {
   ghost: string;
   visible: string;
+  /** 'center' inside a pill/chip; 'left' in a flow-text spot (checkbox rows). */
+  align?: 'center' | 'left';
 }) {
   return (
     <Box
@@ -85,7 +101,7 @@ function GhostSizedLabel({
       </Box>
       <Box
         component="span"
-        sx={{ position: 'absolute', inset: 0, textAlign: 'center' }}
+        sx={{ position: 'absolute', inset: 0, textAlign: align }}
       >
         {visible}
       </Box>
@@ -129,6 +145,65 @@ function FacetChip({
       aria-pressed={selected}
       sx={{ borderRadius: 999 }}
     />
+  );
+}
+
+/**
+ * A hero boolean checkbox row (SMA-9 T3): checkbox + counted label +
+ * optional caption. Same count rules as FacetChip — live count from
+ * facetCounts, ghost width frozen on the catalogue maximum, count-less
+ * stays clickable — but left-aligned (flow text, not a pill). The caption
+ * sits OUTSIDE the label element so the checkbox's accessible name stays
+ * "Label (N)"; label association is native (htmlFor/id).
+ */
+function BooleanFacetRow({
+  id,
+  label,
+  caption,
+  count,
+  maxCount,
+  checked,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  caption?: string;
+  count: number | undefined;
+  maxCount: number | undefined;
+  checked: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1.25 }}>
+      <Checkbox
+        id={id}
+        size="small"
+        checked={checked}
+        onChange={onChange}
+        // Zero padding so the caption can align flush under the label text
+        // with a plain margin (no theme-dependent ripple-padding math).
+        sx={{ p: 0, mr: 1 }}
+      />
+      <Box>
+        <Typography
+          component="label"
+          htmlFor={id}
+          variant="body2"
+          sx={{ cursor: 'pointer', display: 'inline-block' }}
+        >
+          <GhostSizedLabel
+            align="left"
+            ghost={maxCount === undefined ? label : `${label} (${maxCount})`}
+            visible={count === undefined ? label : `${label} (${count})`}
+          />
+        </Typography>
+        {caption && (
+          <Typography variant="caption" component="p" color="text.secondary">
+            {caption}
+          </Typography>
+        )}
+      </Box>
+    </Box>
   );
 }
 
@@ -344,11 +419,13 @@ export default function FilterPanel({
   onClose,
   plantTypes,
   vocabularies,
+  booleanFacets,
   facetCounts,
   catalogFacetCounts,
   catalogTotal,
   filters,
   onToggleValues,
+  onToggleBoolean,
   onReset,
   found,
   variant,
@@ -404,6 +481,27 @@ export default function FilterPanel({
     </FacetSection>
   );
 
+  // Live count = the countedValue bucket of the current distribution; ghost
+  // width = the same bucket of the unfiltered catalogue. For the inverted
+  // safety traits countedValue is 'false' — the count of plants KNOWN safe
+  // (the unknown bucket is never counted or rendered).
+  const renderBooleanRow = (facet: BooleanFacetConfig) => (
+    <BooleanFacetRow
+      key={facet.filterKey}
+      id={`library-filter-boolean-${facet.filterKey}`}
+      label={t(facet.labelKey)}
+      caption={facet.captionKey ? t(facet.captionKey) : undefined}
+      count={countIn(facetCounts, facet.facetField, facet.countedValue)}
+      maxCount={countIn(
+        catalogFacetCounts,
+        facet.facetField,
+        facet.countedValue
+      )}
+      checked={filters[facet.filterKey]}
+      onChange={() => onToggleBoolean(facet.filterKey)}
+    />
+  );
+
   const content = (
     <>
       <ForMeBlock />
@@ -432,6 +530,12 @@ export default function FilterPanel({
 
       <GroupHeader label={t('library.filters.groupCare')} />
       {vocabularies.filter((f) => f.group === 'care').map(renderFacet)}
+      <Box sx={{ mb: 2.5 }}>
+        {booleanFacets.filter((b) => b.group === 'care').map(renderBooleanRow)}
+      </Box>
+
+      <GroupHeader label={t('library.filters.groupSafety')} />
+      {booleanFacets.filter((b) => b.group === 'safety').map(renderBooleanRow)}
     </>
   );
 

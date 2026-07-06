@@ -100,6 +100,11 @@ describe('usePlantFinder', () => {
         wateringNeedLevels: undefined,
         lifeCycles: undefined,
         growthRates: undefined,
+        isIndoor: undefined,
+        isDroughtTolerant: undefined,
+        isEdible: undefined,
+        isToxicToPets: undefined,
+        isToxicToHumans: undefined,
         page: 1,
       },
       expect.anything()
@@ -286,6 +291,48 @@ describe('usePlantFinder', () => {
       )
     );
     expect(result.current.activeFilterCount).toBe(3);
+    expect(result.current.isFiltered).toBe(true);
+  });
+
+  it('a checked boolean goes on the wire with its own polarity; unchecked stays absent (T3)', async () => {
+    const { rerender } = await loadedFinder();
+
+    rerender({
+      ...initialInputs,
+      filters: { ...EMPTY_FILTERS, edible: true, petSafe: true },
+    });
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          // Direct trait: checked sends true.
+          isEdible: true,
+          // INVERTED trait: "Pet-safe" filters the toxicity field on FALSE.
+          isToxicToPets: false,
+          page: 1,
+        }),
+        expect.anything()
+      )
+    );
+    // Unchecked booleans never reach the wire — no param, either polarity.
+    const lastParams = vi.mocked(findPlants).mock.lastCall![0];
+    expect(lastParams.isIndoor).toBeUndefined();
+    expect(lastParams.isDroughtTolerant).toBeUndefined();
+    expect(lastParams.isToxicToHumans).toBeUndefined();
+  });
+
+  it('activeFilterCount counts each checked boolean as 1, alongside enum values (T3)', async () => {
+    const { result, rerender } = await loadedFinder();
+
+    rerender({
+      ...initialInputs,
+      filters: {
+        ...EMPTY_FILTERS,
+        careLevels: ['Easy'],
+        edible: true,
+        petSafe: true,
+      },
+    });
+    await waitFor(() => expect(result.current.activeFilterCount).toBe(3));
     expect(result.current.isFiltered).toBe(true);
   });
 
@@ -485,6 +532,36 @@ describe('usePlantFinder', () => {
       filters: { ...EMPTY_FILTERS, plantTypeIds: [4] },
     });
     await waitFor(() => expect(result.current.error).toBeNull());
+    expect(result.current.items).toHaveLength(5);
+  });
+
+  it('refetch() after a failed mount fetch re-runs page 1 of the current context and clears the error (SMA-271)', async () => {
+    // Same once-rejection shape as above, but the recovery is refetch() with
+    // an UNCHANGED context — the epoch bump alone must force the replace.
+    // Real timers throughout: the current context is match-all (no debounce).
+    const catalog = makeMany(5);
+    vi.mocked(findPlants)
+      .mockImplementation((params: FindPlantsParams) =>
+        Promise.resolve(pageOf(catalog, params.page ?? 1))
+      )
+      .mockRejectedValueOnce(new Error('Failed to find plants: 503'));
+
+    const { result } = renderFinder();
+    await waitFor(() =>
+      expect(result.current.error).toBe('Failed to find plants: 503')
+    );
+    expect(result.current.items).toHaveLength(0);
+    const callsBefore = vi.mocked(findPlants).mock.calls.length;
+
+    act(() => result.current.refetch());
+
+    await waitFor(() => expect(result.current.error).toBeNull());
+    // Exactly ONE new call, page 1 of the same (empty) context.
+    expect(vi.mocked(findPlants)).toHaveBeenCalledTimes(callsBefore + 1);
+    expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ q: undefined, page: 1 }),
+      expect.anything()
+    );
     expect(result.current.items).toHaveLength(5);
   });
 

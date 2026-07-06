@@ -32,6 +32,13 @@ export const MIN_QUERY_LENGTH = 2;
  * Multi-select facet state (SMA-9 T2). String values are the exact backend
  * enum member names (PascalCase) — the same strings facetCounts returns.
  * Within one facet the backend ORs the values; facets combine with AND.
+ *
+ * The T3 booleans carry UI semantics (checked = true, unchecked = not
+ * filtered — false is never sent). Two are INVERTED on the wire: the index
+ * stores toxicity, the checkbox promises safety, so petSafe/humanSafe
+ * translate to isToxicToPets=false / isToxicToHumans=false in the fetch
+ * params below. The backend ORs the 'unknown' bucket into every boolean
+ * selection ("absence never excludes", SMA-9 foundation).
  */
 export interface PlantFinderFilters {
   plantTypeIds: number[];
@@ -39,7 +46,27 @@ export interface PlantFinderFilters {
   wateringNeedLevels: string[];
   lifeCycles: string[];
   growthRates: string[];
+  indoor: boolean;
+  droughtTolerant: boolean;
+  edible: boolean;
+  petSafe: boolean;
+  humanSafe: boolean;
 }
+
+/** The boolean (checkbox) subset of PlantFinderFilters, derived so a new
+ * flag can't be added without the toggle surfaces seeing it. */
+export type BooleanFilterKey = {
+  [K in keyof PlantFinderFilters]: PlantFinderFilters[K] extends boolean
+    ? K
+    : never;
+}[keyof PlantFinderFilters];
+
+/** The multi-select (array) subset — what the atomic toggle-values handler
+ * and the enum facet configs may point at. */
+export type ArrayFilterKey = Exclude<
+  keyof PlantFinderFilters,
+  BooleanFilterKey
+>;
 
 /** All-empty filters — the caller's initial state and the Reset target. */
 export const EMPTY_FILTERS: PlantFinderFilters = {
@@ -48,6 +75,11 @@ export const EMPTY_FILTERS: PlantFinderFilters = {
   wateringNeedLevels: [],
   lifeCycles: [],
   growthRates: [],
+  indoor: false,
+  droughtTolerant: false,
+  edible: false,
+  petSafe: false,
+  humanSafe: false,
 };
 
 // Context-change detection compares this STABLE serialization (fixed field
@@ -63,6 +95,17 @@ function serializeFilters(filters: PlantFinderFilters): string {
     filters.wateringNeedLevels.join(','),
     filters.lifeCycles.join(','),
     filters.growthRates.join(','),
+    // Boolean flags as a fixed-order bitstring — same stable-key contract as
+    // the arrays above.
+    [
+      filters.indoor,
+      filters.droughtTolerant,
+      filters.edible,
+      filters.petSafe,
+      filters.humanSafe,
+    ]
+      .map((flag) => (flag ? '1' : '0'))
+      .join(''),
   ].join('|');
 }
 
@@ -112,6 +155,13 @@ export interface UsePlantFinderResult {
   activeFilterCount: number;
   loadMore: () => void;
   resetToFirstPage: () => void;
+  /**
+   * Re-runs the CURRENT context (query + filters + language) from page 1,
+   * replacing the list. Contract: usable after ANY failed fetch — the
+   * initial one included (SMA-271's Retry) — and always refetches, even
+   * when the last fetch succeeded.
+   */
+  refetch: () => void;
 }
 
 export function usePlantFinder({
@@ -135,14 +185,23 @@ export function usePlantFinder({
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  // refetch()'s force lever (SMA-271): the epoch participates in the
+  // context-change comparison below, so bumping it makes the effect treat
+  // the CURRENT query/filters as a fresh context (replace from page 1).
+  // State — not a prevRef mutation from the handler — so the mechanism
+  // rides the effect's existing StrictMode discipline: the double-invoked
+  // run is aborted, never commits, and the second run fetches exactly once.
+  const [fetchEpoch, setFetchEpoch] = useState(0);
   // Snapshot of the last fetch context so the effect can tell WHAT changed:
   // a filter (q/facets → replace from page 1), the language (refetch the
-  // currently loaded pages), or the page number (append the next page).
+  // currently loaded pages), the page number (append the next page), or a
+  // forced refetch (epoch).
   const prevRef = useRef<{
     q: string;
     filtersKey: string;
     lang: string;
     page: number;
+    epoch: number;
   } | null>(null);
   // In-flight guard: the caller's scroll sentinel can fire repeatedly while a
   // page is still loading; page bumps are ignored until the current fetch
@@ -154,12 +213,21 @@ export function usePlantFinder({
 
   const filtersKey = serializeFilters(filters);
 
+  // Each checked box counts as 1; grouped enum chips still count their wire
+  // values (T2 decision — the count reflects what is SENT, not what is shown).
   const activeFilterCount =
     filters.plantTypeIds.length +
     filters.careLevels.length +
     filters.wateringNeedLevels.length +
     filters.lifeCycles.length +
-    filters.growthRates.length;
+    filters.growthRates.length +
+    [
+      filters.indoor,
+      filters.droughtTolerant,
+      filters.edible,
+      filters.petSafe,
+      filters.humanSafe,
+    ].filter(Boolean).length;
 
   const isFiltered = effectiveQuery !== '' || activeFilterCount > 0;
 
@@ -181,7 +249,10 @@ export function usePlantFinder({
     const contextChanged =
       prev === null ||
       prev.q !== effectiveQuery ||
-      prev.filtersKey !== filtersKey;
+      prev.filtersKey !== filtersKey ||
+      // A bumped epoch forces the replace branch for an OTHERWISE-identical
+      // context — that IS refetch()'s contract.
+      prev.epoch !== fetchEpoch;
     const queryChanged = prev !== null && prev.q !== effectiveQuery;
     const langChanged = prev !== null && prev.lang !== language;
     const pageAdvanced =
@@ -224,6 +295,16 @@ export function usePlantFinder({
         filters.lifeCycles.length > 0 ? filters.lifeCycles : undefined,
       growthRates:
         filters.growthRates.length > 0 ? filters.growthRates : undefined,
+      // Hero booleans (T3): sent only when checked. The safety boxes are
+      // INVERTED on the wire — the index stores toxicity, the checkbox
+      // promises safety — so checked sends the field's FALSE polarity; the
+      // backend ORs the unknown bucket in either way (absence never
+      // excludes).
+      isIndoor: filters.indoor ? true : undefined,
+      isDroughtTolerant: filters.droughtTolerant ? true : undefined,
+      isEdible: filters.edible ? true : undefined,
+      isToxicToPets: filters.petSafe ? false : undefined,
+      isToxicToHumans: filters.humanSafe ? false : undefined,
     };
 
     const run = async (signal: AbortSignal) => {
@@ -283,6 +364,7 @@ export function usePlantFinder({
           filtersKey,
           lang: language,
           page: committedPage,
+          epoch: fetchEpoch,
         };
         setError(null);
       } catch (err) {
@@ -318,7 +400,7 @@ export function usePlantFinder({
     // `filters` and `filtersKey` are both deps (the effect reads both); an
     // identity-only filters churn re-runs the effect but the filtersKey
     // comparison early-returns it.
-  }, [effectiveQuery, filters, filtersKey, language, page]);
+  }, [effectiveQuery, fetchEpoch, filters, filtersKey, language, page]);
 
   const hasMore = items.length > 0 && items.length < found;
 
@@ -340,6 +422,14 @@ export function usePlantFinder({
   // so the visible slice is preserved (SMA-153).
   const resetToFirstPage = useCallback(() => setPage(1), []);
 
+  // Force-refetch the current context from page 1 (see the interface doc and
+  // the fetchEpoch declaration for the mechanism). Page first, then epoch:
+  // both are plain state updates batched into one render → one effect run.
+  const refetch = useCallback(() => {
+    setPage(1);
+    setFetchEpoch((epoch) => epoch + 1);
+  }, []);
+
   return {
     items,
     found,
@@ -353,5 +443,6 @@ export function usePlantFinder({
     activeFilterCount,
     loadMore,
     resetToFirstPage,
+    refetch,
   };
 }
