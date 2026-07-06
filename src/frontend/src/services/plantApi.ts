@@ -53,6 +53,16 @@ export interface FindPlantsParams {
   wateringNeedLevels?: string[];
   lifeCycles?: string[];
   growthRates?: string[];
+  // Hero boolean traits (SMA-9 T3). 3-state server-side (true/false/unknown):
+  // the requested polarity is matched and the unknown bucket is ORed in
+  // ("absence never excludes"). The UI only ever sends one polarity per
+  // trait — true for the direct traits, FALSE for the two toxicity fields
+  // (the checkboxes promise safety); undefined = not filtered.
+  isIndoor?: boolean;
+  isDroughtTolerant?: boolean;
+  isEdible?: boolean;
+  isToxicToPets?: boolean;
+  isToxicToHumans?: boolean;
 }
 
 export interface FacetValueCount {
@@ -96,6 +106,19 @@ export async function findPlants(
     for (const value of values ?? []) {
       qs.append(key, String(value));
     }
+  }
+  // Booleans are single-valued nullable params — absent means "not filtered",
+  // so only defined values go on the wire (both polarities are meaningful
+  // server-side even though the UI sends just one per trait).
+  const booleans: Array<[string, boolean | undefined]> = [
+    ['isIndoor', params.isIndoor],
+    ['isDroughtTolerant', params.isDroughtTolerant],
+    ['isEdible', params.isEdible],
+    ['isToxicToPets', params.isToxicToPets],
+    ['isToxicToHumans', params.isToxicToHumans],
+  ];
+  for (const [key, value] of booleans) {
+    if (value !== undefined) qs.set(key, String(value));
   }
   const res = await fetch(`${API_BASE}/plants/finder?${qs}`, { signal });
   if (!res.ok) throw new Error(`Failed to find plants: ${res.status}`);

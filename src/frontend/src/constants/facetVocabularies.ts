@@ -1,4 +1,7 @@
-import type { PlantFinderFilters } from '../hooks/usePlantFinder';
+import type {
+  ArrayFilterKey,
+  BooleanFilterKey,
+} from '../hooks/usePlantFinder';
 
 /**
  * One chip of an enum facet (SMA-9 T2). A chip may GROUP several wire values
@@ -24,7 +27,7 @@ export interface FacetChipConfig {
  */
 export interface EnumFacetConfig {
   /** Key into PlantFinderFilters (the query param name). */
-  filterKey: Exclude<keyof PlantFinderFilters, 'plantTypeIds'>;
+  filterKey: Exclude<ArrayFilterKey, 'plantTypeIds'>;
   /** Field name in the API's facetCounts payload. */
   facetField: 'careLevel' | 'wateringNeedLevel' | 'lifeCycle' | 'growthRate';
   /** i18n key of the section title. */
@@ -76,5 +79,77 @@ export const ENUM_FACETS: EnumFacetConfig[] = [
     titleKey: 'library.filters.watering',
     group: 'care',
     chips: [single('Low'), single('Average'), single('Frequent')], // PlantWateringNeed sans High (0 rows)
+  },
+];
+
+/**
+ * One hero boolean checkbox of the filter panel (SMA-9 T3). The index stores
+ * these as 3-state string facets (true/false/unknown); `countedValue` is the
+ * bucket the checkbox filters on AND counts — 'true' for the direct traits,
+ * 'false' for the two toxicity fields, where the checkbox promises SAFETY
+ * (inverted polarity: "Pet-safe" = isToxicToPets false). The unknown bucket
+ * is never counted and never rendered — the backend ORs it into every
+ * selection ("absence never excludes").
+ */
+export interface BooleanFacetConfig {
+  /** Key into PlantFinderFilters (UI semantics: checked = true). */
+  filterKey: BooleanFilterKey;
+  /** Field name in the API's facetCounts payload. */
+  facetField:
+    | 'isIndoor'
+    | 'isDroughtTolerant'
+    | 'isEdible'
+    | 'isToxicToPets'
+    | 'isToxicToHumans';
+  /** Facet bucket the checkbox filters on/counts (see interface doc). */
+  countedValue: 'true' | 'false';
+  /** i18n key of the checkbox label. */
+  labelKey: string;
+  /** Optional explanatory microcopy under the label (mockup captions). */
+  captionKey?: string;
+  /** Mockup group the row renders under. */
+  group: 'care' | 'safety';
+}
+
+/** Panel display order (care rows follow the Watering facet; safety rows form
+ * the SÉCURITÉ & USAGE group). */
+export const BOOLEAN_FACETS: BooleanFacetConfig[] = [
+  {
+    filterKey: 'indoor',
+    facetField: 'isIndoor',
+    countedValue: 'true',
+    labelKey: 'library.filters.booleans.indoor',
+    group: 'care',
+  },
+  {
+    filterKey: 'droughtTolerant',
+    facetField: 'isDroughtTolerant',
+    countedValue: 'true',
+    labelKey: 'library.filters.booleans.droughtTolerant',
+    group: 'care',
+  },
+  {
+    filterKey: 'edible',
+    facetField: 'isEdible',
+    countedValue: 'true',
+    labelKey: 'library.filters.booleans.edible',
+    captionKey: 'library.filters.booleans.edibleHint',
+    group: 'safety',
+  },
+  {
+    filterKey: 'petSafe',
+    facetField: 'isToxicToPets',
+    countedValue: 'false',
+    labelKey: 'library.filters.booleans.petSafe',
+    captionKey: 'library.filters.booleans.petSafeHint',
+    group: 'safety',
+  },
+  {
+    filterKey: 'humanSafe',
+    facetField: 'isToxicToHumans',
+    countedValue: 'false',
+    labelKey: 'library.filters.booleans.humanSafe',
+    captionKey: 'library.filters.booleans.humanSafeHint',
+    group: 'safety',
   },
 ];
