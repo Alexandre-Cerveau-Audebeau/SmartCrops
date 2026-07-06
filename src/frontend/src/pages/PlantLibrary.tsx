@@ -199,10 +199,17 @@ export default function PlantLibrary() {
   // refetch, or the quick row and the Type facet stay empty until a full
   // reload. Guarded on emptiness so a healthy list is never refetched; a
   // late resolve after unmount is a harmless no-op setState (React 18+).
+  // Sequence guard: two rapid Retry clicks must not let a stale plant-types
+  // resolution overwrite a fresher one — same protection intent as the
+  // mount effect's AbortController.
+  const retrySeq = useRef(0);
   const handleRetry = () => {
     if (plantTypes.length === 0) {
+      const seq = ++retrySeq.current;
       fetchPlantTypes()
-        .then(setPlantTypes)
+        .then((types) => {
+          if (seq === retrySeq.current) setPlantTypes(types);
+        })
         .catch((err) => console.error(err));
     }
     refetch();

@@ -13,6 +13,7 @@ import i18next from '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { useLanguage } from '../hooks/useLanguage';
 import type { Plant } from '../types/Plant';
+import type { PlantType } from '../types/PlantType';
 import type { FindPlantsParams, PlantFinderResult } from '../services/plantApi';
 
 vi.mock('../services/plantApi', () => ({
@@ -934,6 +935,55 @@ describe('PlantLibrary', () => {
     expect(
       await screen.findByRole('button', { name: 'Ornamental' })
     ).toBeInTheDocument();
+  });
+
+  it('a stale Retry plant-types resolution never overwrites a fresher one (double-click race)', async () => {
+    const catalogue = makeMany(50);
+    let apiDown = true;
+    // Controllable promises: each healthy fetchPlantTypes call parks its
+    // resolver here so the test dictates resolution ORDER — no timers.
+    const pendingTypes: Array<(types: PlantType[]) => void> = [];
+    vi.mocked(fetchPlantTypes).mockImplementation(() =>
+      apiDown
+        ? Promise.reject(new Error('Failed to fetch plant types: 502'))
+        : new Promise((resolve) => {
+            pendingTypes.push(resolve);
+          })
+    );
+    vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
+      apiDown
+        ? Promise.reject(new Error('Failed to find plants: 502'))
+        : Promise.resolve(pageOf(catalogue, params.page ?? 1))
+    );
+
+    renderLibrary();
+    await screen.findByRole('alert');
+
+    apiDown = false;
+    // Two SYNCHRONOUS clicks: no microtask runs in between, so both see the
+    // still-empty types list and issue two in-flight fetches (seq 1, seq 2).
+    const retry = screen.getByRole('button', { name: 'Retry' });
+    fireEvent.click(retry);
+    fireEvent.click(retry);
+    await waitFor(() => expect(pendingTypes).toHaveLength(2));
+
+    // The SECOND (fresher) request resolves first and commits…
+    await act(async () => {
+      pendingTypes[1]!([{ id: 2, name: 'Fruit', description: null }]);
+    });
+    expect(
+      await screen.findByRole('button', { name: 'Fruit' })
+    ).toBeInTheDocument();
+
+    // …then the FIRST (stale) one resolves late: the sequence guard must
+    // drop it — the committed list stays the fresher call's result.
+    await act(async () => {
+      pendingTypes[0]!([{ id: 1, name: 'Vegetable', description: null }]);
+    });
+    expect(
+      screen.queryByRole('button', { name: 'Vegetable' })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Fruit' })).toBeInTheDocument();
   });
 
   it('below md the panel opens as a full-screen drawer whose footer button closes it', async () => {
