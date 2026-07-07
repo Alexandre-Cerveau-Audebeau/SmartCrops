@@ -951,7 +951,9 @@ describe('PlantLibrary', () => {
     fireEvent.click(filtersButton(0));
 
     // Collapsed at rest: N = the 8 controls inside (3 sliders + 5 traits),
-    // hint line listing the content, nothing from inside in the tree.
+    // hint line listing the content. The content stays MOUNTED (so the
+    // toggle's aria-controls resolves) but Collapse's visibility:hidden
+    // keeps it out of the a11y tree — role queries must come up empty.
     const moreButton = screen.getByRole('button', {
       name: 'More filters (8)',
     });

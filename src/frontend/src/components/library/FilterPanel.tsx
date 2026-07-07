@@ -592,9 +592,21 @@ function ComingSoonSection() {
   return (
     <>
       <Divider sx={{ my: 2 }} />
-      <Box aria-disabled="true" sx={{ opacity: 0.55, pointerEvents: 'none' }}>
+      {/* A named group so aria-disabled is semantically valid here (the
+          role supports the attribute) instead of decorating a plain div. */}
+      <Box
+        role="group"
+        aria-labelledby="library-filter-coming-soon-title"
+        aria-disabled="true"
+        sx={{ opacity: 0.55, pointerEvents: 'none' }}
+      >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-          <Typography variant="subtitle2" component="p" sx={{ fontWeight: 600 }}>
+          <Typography
+            variant="subtitle2"
+            component="p"
+            id="library-filter-coming-soon-title"
+            sx={{ fontWeight: 600 }}
+          >
             {t(`${base}.title`)}
           </Typography>
           <ComingSoonChip labelKey="library.filters.soon" size="small" />
@@ -921,9 +933,11 @@ export default function FilterPanel({
           {t('library.filters.moreFiltersHint')}
         </Typography>
       )}
-      {/* unmountOnExit: the collapsed controls leave the tree entirely —
-          nothing focusable or queryable while closed. */}
-      <Collapse in={moreOpen} id="library-filter-more" unmountOnExit>
+      {/* Content stays MOUNTED while closed so the toggle's aria-controls
+          always references an existing node; MUI Collapse applies
+          `visibility: hidden` to the exited state, which keeps the collapsed
+          controls out of the tab order and the a11y tree. */}
+      <Collapse in={moreOpen} id="library-filter-more">
         <Box sx={{ pt: 1.5 }}>
           {moreRangeFacets.map(renderRangeRow)}
           <Typography
