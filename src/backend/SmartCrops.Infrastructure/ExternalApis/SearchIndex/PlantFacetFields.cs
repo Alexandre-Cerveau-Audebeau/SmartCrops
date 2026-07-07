@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 namespace SmartCrops.Infrastructure.ExternalApis.SearchIndex;
 
 /// <summary>
@@ -29,9 +31,12 @@ internal static class PlantFacetFields
 
     /// <summary>
     /// The counted facets in the canonical order — the search service derives
-    /// its facet_by from this list, and its disjunctive roster mirrors it.
+    /// its facet_by AND its disjunctive roster membership from this list.
+    /// ImmutableArray: the single source of truth must not be mutable at a
+    /// distance (a writable element would be exactly the silent desync this
+    /// registry exists to prevent).
     /// </summary>
-    public static readonly string[] CountedFields =
+    public static readonly ImmutableArray<string> CountedFields =
     [
         PlantTypeId,
         CareLevel,

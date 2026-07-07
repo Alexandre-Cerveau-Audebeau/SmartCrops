@@ -79,6 +79,23 @@ public class TypesensePlantSearchServiceTests
             ? filterBy.GetString()
             : null;
 
+    // ── Roster/registry parity (SMA-274 round 2) ─────────────────────────────
+
+    [Fact]
+    public void CountedFacetRoster_StaysInParityWith_PlantFacetFieldsRegistry()
+    {
+        // Membership single-source invariant: the disjunctive roster derives
+        // from PlantFacetFields.CountedFields with predicates looked up by
+        // field name. A registry field WITHOUT a predicate already fails
+        // fast at type load (KeyNotFoundException — every test in this class
+        // would explode); the direction the derivation CANNOT crash on is an
+        // ORPHAN predicate for a field removed from the registry. Ordered
+        // sequence equality over unique keys pins both directions at once.
+        Assert.Equal(
+            PlantFacetFields.CountedFields.OrderBy(field => field),
+            TypesensePlantSearchService.SelectionPredicates.Keys.OrderBy(field => field));
+    }
+
     // ── No selection: the original single-search path ───────────────────────
 
     [Fact]

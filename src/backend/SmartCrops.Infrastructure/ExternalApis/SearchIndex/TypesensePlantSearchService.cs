@@ -46,6 +46,11 @@ public class TypesensePlantSearchService : IPlantSearchService
     private static readonly string FacetBy =
         string.Join(",", PlantFacetFields.CountedFields);
 
+    // The counted facets are low-cardinality by design: enums and tri-state
+    // booleans cap at a handful of values, and plantTypeId is a closed
+    // product taxonomy (5 types today: Vegetable/Fruit/Herb/Ornamental/
+    // Medicinal). Revisit with a per-facet cap only if the taxonomy ever
+    // approaches 20.
     private const int MaxFacetValues = 20;
 
     // Common name is what people type; scientific name still matters;
@@ -53,30 +58,48 @@ public class TypesensePlantSearchService : IPlantSearchService
     private const string QueryByWeights = "4,2,1";
 
     /// <summary>
-    /// The counted facets of <see cref="FacetBy"/> paired with "does this
-    /// query select inside it" — the disjunctive roster (SMA-274). Ranges are
-    /// deliberately absent: they have no counts, so they never get a
-    /// sub-search, while their fragments stay in every sub-search's
-    /// filter_by.
+    /// "Does this query select inside that facet", keyed by the
+    /// <see cref="PlantFacetFields"/> constants. Roster MEMBERSHIP is not
+    /// defined here — <see cref="CountedFacets"/> derives it from the
+    /// registry, so a field added to the registry without a predicate fails
+    /// fast (KeyNotFoundException at type load: every service test explodes
+    /// immediately) instead of silently never getting its disjunctive
+    /// sub-search. The parity test pins the direction the derivation cannot
+    /// crash on: an orphan predicate for a field removed from the registry.
+    /// Internal (not private) for exactly that test.
+    /// </summary>
+    internal static readonly Dictionary<string, Func<PlantSearchQuery, bool>> SelectionPredicates = new()
+    {
+        [PlantFacetFields.PlantTypeId] = q => q.PlantTypeIds is { Length: > 0 },
+        [PlantFacetFields.CareLevel] = q => q.CareLevels is { Length: > 0 },
+        [PlantFacetFields.WateringNeedLevel] = q => q.WateringNeedLevels is { Length: > 0 },
+        [PlantFacetFields.GrowthRate] = q => q.GrowthRates is { Length: > 0 },
+        [PlantFacetFields.LifeCycle] = q => q.LifeCycles is { Length: > 0 },
+        [PlantFacetFields.IsEdible] = q => q.IsEdible is not null,
+        [PlantFacetFields.IsToxicToHumans] = q => q.IsToxicToHumans is not null,
+        [PlantFacetFields.IsToxicToPets] = q => q.IsToxicToPets is not null,
+        [PlantFacetFields.IsIndoor] = q => q.IsIndoor is not null,
+        [PlantFacetFields.IsDroughtTolerant] = q => q.IsDroughtTolerant is not null,
+        [PlantFacetFields.IsMedicinal] = q => q.IsMedicinal is not null,
+        [PlantFacetFields.IsSaltTolerant] = q => q.IsSaltTolerant is not null,
+        [PlantFacetFields.IsThorny] = q => q.IsThorny is not null,
+        [PlantFacetFields.IsTropical] = q => q.IsTropical is not null,
+        [PlantFacetFields.IsInvasive] = q => q.IsInvasive is not null,
+    };
+
+    /// <summary>
+    /// The disjunctive roster (SMA-274): membership AND order come from the
+    /// <see cref="PlantFacetFields.CountedFields"/> registry, predicates from
+    /// <see cref="SelectionPredicates"/> (see its doc for the fail-fast
+    /// invariant). NOTE: declared after SelectionPredicates — static
+    /// initializers run in declaration order. Ranges are deliberately absent:
+    /// they have no counts, so they never get a sub-search, while their
+    /// fragments stay in every sub-search's filter_by.
     /// </summary>
     private static readonly (string Field, Func<PlantSearchQuery, bool> HasSelection)[] CountedFacets =
-    [
-        (PlantFacetFields.PlantTypeId, q => q.PlantTypeIds is { Length: > 0 }),
-        (PlantFacetFields.CareLevel, q => q.CareLevels is { Length: > 0 }),
-        (PlantFacetFields.WateringNeedLevel, q => q.WateringNeedLevels is { Length: > 0 }),
-        (PlantFacetFields.GrowthRate, q => q.GrowthRates is { Length: > 0 }),
-        (PlantFacetFields.LifeCycle, q => q.LifeCycles is { Length: > 0 }),
-        (PlantFacetFields.IsEdible, q => q.IsEdible is not null),
-        (PlantFacetFields.IsToxicToHumans, q => q.IsToxicToHumans is not null),
-        (PlantFacetFields.IsToxicToPets, q => q.IsToxicToPets is not null),
-        (PlantFacetFields.IsIndoor, q => q.IsIndoor is not null),
-        (PlantFacetFields.IsDroughtTolerant, q => q.IsDroughtTolerant is not null),
-        (PlantFacetFields.IsMedicinal, q => q.IsMedicinal is not null),
-        (PlantFacetFields.IsSaltTolerant, q => q.IsSaltTolerant is not null),
-        (PlantFacetFields.IsThorny, q => q.IsThorny is not null),
-        (PlantFacetFields.IsTropical, q => q.IsTropical is not null),
-        (PlantFacetFields.IsInvasive, q => q.IsInvasive is not null),
-    ];
+        PlantFacetFields.CountedFields
+            .Select(field => (field, SelectionPredicates[field]))
+            .ToArray();
 
     private readonly ITypesenseClient _typesense;
     private readonly ILogger<TypesensePlantSearchService> _logger;
