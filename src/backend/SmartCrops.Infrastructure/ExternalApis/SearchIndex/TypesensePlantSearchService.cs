@@ -36,14 +36,15 @@ public class TypesensePlantSearchService : IPlantSearchService
 {
     /// <summary>
     /// Faceted fields returned with every response: the 4 enums, the 10
-    /// tri-state booleans and the plant type. Numeric fields are deliberately
-    /// NOT facet-counted — their UI is slider-driven (T4), distributions would
-    /// be wasted payload — and the *Known companions are an indexing detail.
+    /// tri-state booleans and the plant type — derived from the
+    /// <see cref="PlantFacetFields"/> registry so this list can't drift from
+    /// the builder's emit sites or the collection schema. Numeric fields are
+    /// deliberately NOT facet-counted — their UI is slider-driven (T4),
+    /// distributions would be wasted payload — and the *Known companions are
+    /// an indexing detail.
     /// </summary>
-    private const string FacetBy =
-        "plantTypeId,careLevel,wateringNeedLevel,growthRate,lifeCycle,"
-        + "isEdible,isToxicToHumans,isToxicToPets,isIndoor,isDroughtTolerant,"
-        + "isMedicinal,isSaltTolerant,isThorny,isTropical,isInvasive";
+    private static readonly string FacetBy =
+        string.Join(",", PlantFacetFields.CountedFields);
 
     private const int MaxFacetValues = 20;
 
@@ -60,21 +61,21 @@ public class TypesensePlantSearchService : IPlantSearchService
     /// </summary>
     private static readonly (string Field, Func<PlantSearchQuery, bool> HasSelection)[] CountedFacets =
     [
-        ("plantTypeId", q => q.PlantTypeIds is { Length: > 0 }),
-        ("careLevel", q => q.CareLevels is { Length: > 0 }),
-        ("wateringNeedLevel", q => q.WateringNeedLevels is { Length: > 0 }),
-        ("growthRate", q => q.GrowthRates is { Length: > 0 }),
-        ("lifeCycle", q => q.LifeCycles is { Length: > 0 }),
-        ("isEdible", q => q.IsEdible is not null),
-        ("isToxicToHumans", q => q.IsToxicToHumans is not null),
-        ("isToxicToPets", q => q.IsToxicToPets is not null),
-        ("isIndoor", q => q.IsIndoor is not null),
-        ("isDroughtTolerant", q => q.IsDroughtTolerant is not null),
-        ("isMedicinal", q => q.IsMedicinal is not null),
-        ("isSaltTolerant", q => q.IsSaltTolerant is not null),
-        ("isThorny", q => q.IsThorny is not null),
-        ("isTropical", q => q.IsTropical is not null),
-        ("isInvasive", q => q.IsInvasive is not null),
+        (PlantFacetFields.PlantTypeId, q => q.PlantTypeIds is { Length: > 0 }),
+        (PlantFacetFields.CareLevel, q => q.CareLevels is { Length: > 0 }),
+        (PlantFacetFields.WateringNeedLevel, q => q.WateringNeedLevels is { Length: > 0 }),
+        (PlantFacetFields.GrowthRate, q => q.GrowthRates is { Length: > 0 }),
+        (PlantFacetFields.LifeCycle, q => q.LifeCycles is { Length: > 0 }),
+        (PlantFacetFields.IsEdible, q => q.IsEdible is not null),
+        (PlantFacetFields.IsToxicToHumans, q => q.IsToxicToHumans is not null),
+        (PlantFacetFields.IsToxicToPets, q => q.IsToxicToPets is not null),
+        (PlantFacetFields.IsIndoor, q => q.IsIndoor is not null),
+        (PlantFacetFields.IsDroughtTolerant, q => q.IsDroughtTolerant is not null),
+        (PlantFacetFields.IsMedicinal, q => q.IsMedicinal is not null),
+        (PlantFacetFields.IsSaltTolerant, q => q.IsSaltTolerant is not null),
+        (PlantFacetFields.IsThorny, q => q.IsThorny is not null),
+        (PlantFacetFields.IsTropical, q => q.IsTropical is not null),
+        (PlantFacetFields.IsInvasive, q => q.IsInvasive is not null),
     ];
 
     private readonly ITypesenseClient _typesense;
@@ -107,21 +108,31 @@ public class TypesensePlantSearchService : IPlantSearchService
             : await DisjunctiveSearchAsync(query, text, queryBy, selectedFacets, ct);
     }
 
+    /// <summary>
+    /// The full main-search parameter shape, shared by the single-search path
+    /// and searches[0] of the disjunctive path — "searches[0] is the EXACT
+    /// main search" is guaranteed structurally by this single source instead
+    /// of two hand-synced initializer blocks. No custom SortBy in this
+    /// tranche: relevance (_text_match) when Q is present, natural order for
+    /// match-all.
+    /// </summary>
+    private static T ApplyCommon<T>(T parameters, PlantSearchQuery query)
+        where T : SearchParameters
+    {
+        parameters.QueryByWeights = QueryByWeights;
+        parameters.FilterBy = PlantSearchFilterBuilder.Build(query);
+        parameters.FacetBy = FacetBy;
+        parameters.MaxFacetValues = MaxFacetValues;
+        parameters.Page = query.Page;
+        parameters.PerPage = query.PerPage;
+        return parameters;
+    }
+
     /// <summary>No counted facet selected: the original single-search path.</summary>
     private async Task<PlantSearchResult> SingleSearchAsync(
         PlantSearchQuery query, string text, string queryBy, CancellationToken ct)
     {
-        var parameters = new SearchParameters(text, queryBy)
-        {
-            QueryByWeights = QueryByWeights,
-            FilterBy = PlantSearchFilterBuilder.Build(query),
-            FacetBy = FacetBy,
-            MaxFacetValues = MaxFacetValues,
-            Page = query.Page,
-            PerPage = query.PerPage,
-            // No custom SortBy in this tranche: relevance (_text_match) when Q
-            // is present, natural order for match-all.
-        };
+        var parameters = ApplyCommon(new SearchParameters(text, queryBy), query);
 
         var result = await _typesense.Search<PlantSearchHitDocument>(
             PlantsSearchCollection.Name, parameters, ct);
@@ -148,17 +159,12 @@ public class TypesensePlantSearchService : IPlantSearchService
     {
         var searches = new List<MultiSearchParameters>
         {
-            // searches[0] — the EXACT main search (same parameters as the
-            // single-search path sends).
-            new(PlantsSearchCollection.Name, text, queryBy)
-            {
-                QueryByWeights = QueryByWeights,
-                FilterBy = PlantSearchFilterBuilder.Build(query),
-                FacetBy = FacetBy,
-                MaxFacetValues = MaxFacetValues,
-                Page = query.Page,
-                PerPage = query.PerPage,
-            },
+            // searches[0] — the EXACT main search: routed through the same
+            // ApplyCommon as the single-search path, so the equivalence is
+            // structural, not a convention between two initializer blocks.
+            ApplyCommon(
+                new MultiSearchParameters(PlantsSearchCollection.Name, text, queryBy),
+                query),
         };
         foreach (var field in selectedFacets)
         {

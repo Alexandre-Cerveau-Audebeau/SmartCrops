@@ -48,27 +48,29 @@ internal static class PlantSearchFilterBuilder
     {
         var groups = new List<string>();
 
-        if (query.PlantTypeIds is { Length: > 0 } && excludedFacetField != "plantTypeId")
+        if (query.PlantTypeIds is { Length: > 0 }
+            && excludedFacetField != PlantFacetFields.PlantTypeId)
         {
             // plantTypeId is never null in Postgres — no unknown branch.
-            groups.Add($"plantTypeId:=[{string.Join(",", query.PlantTypeIds)}]");
+            groups.Add(
+                $"{PlantFacetFields.PlantTypeId}:=[{string.Join(",", query.PlantTypeIds)}]");
         }
 
-        AddEnumFacet<PlantCareLevel>(groups, "careLevel", query.CareLevels, excludedFacetField);
-        AddEnumFacet<PlantWateringNeed>(groups, "wateringNeedLevel", query.WateringNeedLevels, excludedFacetField);
-        AddEnumFacet<PlantGrowthRate>(groups, "growthRate", query.GrowthRates, excludedFacetField);
-        AddEnumFacet<PlantLifeCycle>(groups, "lifeCycle", query.LifeCycles, excludedFacetField);
+        AddEnumFacet<PlantCareLevel>(groups, PlantFacetFields.CareLevel, query.CareLevels, excludedFacetField);
+        AddEnumFacet<PlantWateringNeed>(groups, PlantFacetFields.WateringNeedLevel, query.WateringNeedLevels, excludedFacetField);
+        AddEnumFacet<PlantGrowthRate>(groups, PlantFacetFields.GrowthRate, query.GrowthRates, excludedFacetField);
+        AddEnumFacet<PlantLifeCycle>(groups, PlantFacetFields.LifeCycle, query.LifeCycles, excludedFacetField);
 
-        AddTriStateBoolean(groups, "isEdible", query.IsEdible, excludedFacetField);
-        AddTriStateBoolean(groups, "isToxicToHumans", query.IsToxicToHumans, excludedFacetField);
-        AddTriStateBoolean(groups, "isToxicToPets", query.IsToxicToPets, excludedFacetField);
-        AddTriStateBoolean(groups, "isIndoor", query.IsIndoor, excludedFacetField);
-        AddTriStateBoolean(groups, "isDroughtTolerant", query.IsDroughtTolerant, excludedFacetField);
-        AddTriStateBoolean(groups, "isMedicinal", query.IsMedicinal, excludedFacetField);
-        AddTriStateBoolean(groups, "isSaltTolerant", query.IsSaltTolerant, excludedFacetField);
-        AddTriStateBoolean(groups, "isThorny", query.IsThorny, excludedFacetField);
-        AddTriStateBoolean(groups, "isTropical", query.IsTropical, excludedFacetField);
-        AddTriStateBoolean(groups, "isInvasive", query.IsInvasive, excludedFacetField);
+        AddTriStateBoolean(groups, PlantFacetFields.IsEdible, query.IsEdible, excludedFacetField);
+        AddTriStateBoolean(groups, PlantFacetFields.IsToxicToHumans, query.IsToxicToHumans, excludedFacetField);
+        AddTriStateBoolean(groups, PlantFacetFields.IsToxicToPets, query.IsToxicToPets, excludedFacetField);
+        AddTriStateBoolean(groups, PlantFacetFields.IsIndoor, query.IsIndoor, excludedFacetField);
+        AddTriStateBoolean(groups, PlantFacetFields.IsDroughtTolerant, query.IsDroughtTolerant, excludedFacetField);
+        AddTriStateBoolean(groups, PlantFacetFields.IsMedicinal, query.IsMedicinal, excludedFacetField);
+        AddTriStateBoolean(groups, PlantFacetFields.IsSaltTolerant, query.IsSaltTolerant, excludedFacetField);
+        AddTriStateBoolean(groups, PlantFacetFields.IsThorny, query.IsThorny, excludedFacetField);
+        AddTriStateBoolean(groups, PlantFacetFields.IsTropical, query.IsTropical, excludedFacetField);
+        AddTriStateBoolean(groups, PlantFacetFields.IsInvasive, query.IsInvasive, excludedFacetField);
 
         AddPairedRange(groups, "hardinessZoneMin", "hardinessZoneMax",
             Num(query.HardinessZoneMin), Num(query.HardinessZoneMax));

@@ -266,6 +266,76 @@ public class TypesensePlantSearchServiceTests
     }
 
     [Fact]
+    public async Task Search_EmptySubResult_YieldsEmptyCounts_NeverTheCollapsedMainValues()
+    {
+        // A sub-search whose disjunctive context matches nothing returns no
+        // facet_counts entry for its field. The facet's counts must come back
+        // EMPTY — falling back to the main search's collapsed values would
+        // leak exactly the stale numbers this feature removes.
+        var handler = new StubTypesenseHttpHandler
+        {
+            OnSend = _ => Json(new
+            {
+                results = new[]
+                {
+                    SearchResult(303, [Guid1],
+                        Facet("careLevel", ("Easy", 280), ("unknown", 23)),
+                        Facet("wateringNeedLevel", ("Average", 185))),
+                    // found 0, hits [], facet_counts [] — no careLevel entry.
+                    SearchResult(0, []),
+                },
+            }),
+        };
+        var service = ServiceOver(handler);
+
+        var result = await service.SearchAsync(new PlantSearchQuery
+        {
+            CareLevels = ["Easy"],
+        });
+
+        var careLevel = result.FacetCounts.Single(f => f.Field == "careLevel");
+        Assert.Empty(careLevel.Counts);
+        // The rest of the response is untouched: main items/found, and the
+        // unselected facet keeps the main search's counts.
+        Assert.Equal(303, result.Found);
+        Assert.Equal(185, CountsOf(result, "wateringNeedLevel")["Average"]);
+    }
+
+    [Fact]
+    public async Task Search_FacetMissingFromMainCounts_IsAddedFromItsSubSearch()
+    {
+        // Mirror case of the empty-sub-result pin: a fully-filtered MAIN
+        // search that matches nothing returns no facet_counts at all, while
+        // the self-excluding sub-search still carries the what-if
+        // distribution — the selected facet must be ADDED to the response,
+        // not silently dropped with the main's (absent) counts.
+        var handler = new StubTypesenseHttpHandler
+        {
+            OnSend = _ => Json(new
+            {
+                results = new[]
+                {
+                    // found 0, hits [], facet_counts [] — a dead-end context.
+                    SearchResult(0, []),
+                    SearchResult(536, [],
+                        Facet("careLevel", ("Easy", 280), ("Medium", 217))),
+                },
+            }),
+        };
+        var service = ServiceOver(handler);
+
+        var result = await service.SearchAsync(new PlantSearchQuery
+        {
+            CareLevels = ["Easy"],
+        });
+
+        Assert.Equal(0, result.Found);
+        Assert.Equal(
+            new Dictionary<string, int> { ["Easy"] = 280, ["Medium"] = 217 },
+            CountsOf(result, "careLevel"));
+    }
+
+    [Fact]
     public async Task Search_SelectionWithRangeAndQuery_ContextPropagatesToSubSearches()
     {
         var handler = new StubTypesenseHttpHandler
