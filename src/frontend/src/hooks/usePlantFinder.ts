@@ -8,8 +8,11 @@ import {
 import { useTranslation } from 'react-i18next';
 // Value import with no runtime cycle: facetVocabularies' reverse imports are
 // type-only and erased at compile time.
-import { BOOLEAN_FACETS } from '../constants/facetVocabularies';
-import type { BooleanFacetConfig } from '../constants/facetVocabularies';
+import { BOOLEAN_FACETS, RANGE_FACETS } from '../constants/facetVocabularies';
+import type {
+  BooleanFacetConfig,
+  RangeFacetConfig,
+} from '../constants/facetVocabularies';
 import { findPlants } from '../services/plantApi';
 import type {
   FacetFieldCounts,
@@ -58,6 +61,31 @@ export interface PlantFinderFilters {
   edible: boolean;
   petSafe: boolean;
   humanSafe: boolean;
+  medicinal: boolean;
+  saltTolerant: boolean;
+  thorny: boolean;
+  tropical: boolean;
+  invasive: boolean;
+  // T4 range sliders — null = inactive (full track); see RangeBounds.
+  heightCm: RangeBounds | null;
+  hardinessZone: RangeBounds | null;
+  wateringPh: RangeBounds | null;
+  spacingCm: RangeBounds | null;
+  wateringTempC: RangeBounds | null;
+}
+
+/**
+ * One active numeric range (SMA-9 T4), in the facet's FILTER unit (cm, USDA
+ * zone, pH, °C — spacing is UI cm here; the facet's toWire converts to the
+ * wire's inches). Either bound may be absent: a missing max is a thumb on the
+ * open-ended top ("3 m +" sends no heightCmMax at all), a missing min a thumb
+ * resting on the track floor. The fully-rested slider is `null` on the filter
+ * itself, never `{}` — null is the single "inactive" representation, so
+ * activeFilterCount and the chips row can gate on it directly.
+ */
+export interface RangeBounds {
+  min?: number;
+  max?: number;
 }
 
 /** The boolean (checkbox) subset of PlantFinderFilters, derived so a new
@@ -68,19 +96,30 @@ export type BooleanFilterKey = {
     : never;
 }[keyof PlantFinderFilters];
 
+/** The range (slider) subset, derived like BooleanFilterKey so a new slider
+ * can't be added without the range surfaces seeing it. */
+export type RangeFilterKey = {
+  [K in keyof PlantFinderFilters]: PlantFinderFilters[K] extends
+    | RangeBounds
+    | null
+    ? K
+    : never;
+}[keyof PlantFinderFilters];
+
 /** The multi-select (array) subset — what the atomic toggle-values handler
  * and the enum facet configs may point at. */
 export type ArrayFilterKey = Exclude<
   keyof PlantFinderFilters,
-  BooleanFilterKey
+  BooleanFilterKey | RangeFilterKey
 >;
 
-// Single source of truth for the hero booleans: everything the hook does
-// with them (filtersKey serialization, counting, wire params) iterates
-// BOOLEAN_FACETS, so a future checkbox registers in ONE place. The config's
-// declaration order is the serialization order — it must stay stable, the
-// filtersKey format is compared across renders.
+// Single source of truth for the checkboxes and sliders: everything the hook
+// does with them (filtersKey serialization, counting, wire params) iterates
+// BOOLEAN_FACETS / RANGE_FACETS, so a future checkbox or slider registers in
+// ONE place. The configs' declaration order is the serialization order — it
+// must stay stable, the filtersKey format is compared across renders.
 const BOOLEAN_FILTER_KEYS = BOOLEAN_FACETS.map((facet) => facet.filterKey);
+const RANGE_FILTER_KEYS = RANGE_FACETS.map((facet) => facet.filterKey);
 
 /** All-empty filters — the caller's initial state and the Reset target. */
 export const EMPTY_FILTERS: PlantFinderFilters = {
@@ -94,6 +133,16 @@ export const EMPTY_FILTERS: PlantFinderFilters = {
   edible: false,
   petSafe: false,
   humanSafe: false,
+  medicinal: false,
+  saltTolerant: false,
+  thorny: false,
+  tropical: false,
+  invasive: false,
+  heightCm: null,
+  hardinessZone: null,
+  wateringPh: null,
+  spacingCm: null,
+  wateringTempC: null,
 };
 
 // Context-change detection compares this STABLE serialization (fixed field
@@ -112,6 +161,12 @@ function serializeFilters(filters: PlantFinderFilters): string {
     // Boolean flags as a fixed-order bitstring — same stable-key contract as
     // the arrays above (order = BOOLEAN_FACETS declaration order).
     BOOLEAN_FILTER_KEYS.map((key) => (filters[key] ? '1' : '0')).join(''),
+    // Ranges as fixed-order `min~max` segments ('' = inactive, absent bounds
+    // stay empty-sided) — order = RANGE_FACETS declaration order.
+    RANGE_FILTER_KEYS.map((key) => {
+      const range = filters[key];
+      return range ? `${range.min ?? ''}~${range.max ?? ''}` : '';
+    }).join(','),
   ].join('|');
 }
 
@@ -221,13 +276,16 @@ export function usePlantFinder({
 
   // Each checked box counts as 1; grouped enum chips still count their wire
   // values (T2 decision — the count reflects what is SENT, not what is shown).
+  // A range slider narrowed AT ALL (either bound off its track end) counts as
+  // exactly 1, whatever its bounds — T4 mockup rule.
   const activeFilterCount =
     filters.plantTypeIds.length +
     filters.careLevels.length +
     filters.wateringNeedLevels.length +
     filters.lifeCycles.length +
     filters.growthRates.length +
-    BOOLEAN_FILTER_KEYS.filter((key) => filters[key]).length;
+    BOOLEAN_FILTER_KEYS.filter((key) => filters[key]).length +
+    RANGE_FILTER_KEYS.filter((key) => filters[key] !== null).length;
 
   const isFiltered = effectiveQuery !== '' || activeFilterCount > 0;
 
@@ -296,6 +354,24 @@ export function usePlantFinder({
         : undefined;
     }
 
+    // Range sliders (T4): both wire params derive from the facet config. An
+    // inactive range (null) or an absent bound stays off the wire — the
+    // open-ended tops ("3 m +", "150 cm +") are exactly a missing max. toWire
+    // converts the filter unit to the wire unit where the two differ
+    // (spacing: UI centimetres → indexed inches).
+    const rangeParams: Pick<
+      FindPlantsParams,
+      RangeFacetConfig['minParam'] | RangeFacetConfig['maxParam']
+    > = {};
+    for (const facet of RANGE_FACETS) {
+      const range = filters[facet.filterKey];
+      const toWire = facet.toWire ?? ((value: number) => value);
+      rangeParams[facet.minParam] =
+        range?.min === undefined ? undefined : toWire(range.min);
+      rangeParams[facet.maxParam] =
+        range?.max === undefined ? undefined : toWire(range.max);
+    }
+
     const baseParams = {
       q: effectiveQuery || undefined,
       lang: language,
@@ -313,6 +389,7 @@ export function usePlantFinder({
       growthRates:
         filters.growthRates.length > 0 ? filters.growthRates : undefined,
       ...booleanParams,
+      ...rangeParams,
     };
 
     const run = async (signal: AbortSignal) => {

@@ -73,4 +73,54 @@ describe('findPlants query serialization', () => {
     expect(url.searchParams.getAll('plantTypeIds')).toEqual(['1', '3']);
     expect(url.searchParams.get('isIndoor')).toBe('true');
   });
+
+  it('emits only the DEFINED range bounds — an open-ended top has no max key at all (T4)', async () => {
+    const spy = mockFetch();
+    await findPlants({
+      heightCmMin: 50,
+      hardinessZoneMin: 4,
+      hardinessZoneMax: 9,
+      xWateringPhMin: 5.5,
+    });
+
+    const url = requestedUrl(spy);
+    expect(url.searchParams.get('heightCmMin')).toBe('50');
+    // The open-ended "3 m +" contract: NO heightCmMax on the wire.
+    expect(url.searchParams.has('heightCmMax')).toBe(false);
+    expect(url.searchParams.get('hardinessZoneMin')).toBe('4');
+    expect(url.searchParams.get('hardinessZoneMax')).toBe('9');
+    // Decimal bound serializes with the invariant dot.
+    expect(url.searchParams.get('xWateringPhMin')).toBe('5.5');
+    for (const absent of [
+      'xWateringPhMax',
+      'xPlantSpacingValueMin',
+      'xPlantSpacingValueMax',
+      'xWateringBasedTempCMin',
+      'xWateringBasedTempCMax',
+    ]) {
+      expect(url.searchParams.has(absent)).toBe(false);
+    }
+  });
+
+  it('emits a ZERO bound (falsy but defined) — only undefined means "open" (T4)', async () => {
+    // Same truthiness trap as the inverted booleans: a min of 0 must survive.
+    const spy = mockFetch();
+    await findPlants({ xWateringBasedTempCMin: 0, xWateringBasedTempCMax: 20 });
+
+    const url = requestedUrl(spy);
+    expect(url.searchParams.get('xWateringBasedTempCMin')).toBe('0');
+    expect(url.searchParams.get('xWateringBasedTempCMax')).toBe('20');
+  });
+
+  it('emits the bonus trait booleans like the hero ones (T4)', async () => {
+    const spy = mockFetch();
+    await findPlants({ isMedicinal: true, isThorny: true });
+
+    const url = requestedUrl(spy);
+    expect(url.searchParams.get('isMedicinal')).toBe('true');
+    expect(url.searchParams.get('isThorny')).toBe('true');
+    for (const absent of ['isSaltTolerant', 'isTropical', 'isInvasive']) {
+      expect(url.searchParams.has(absent)).toBe(false);
+    }
+  });
 });

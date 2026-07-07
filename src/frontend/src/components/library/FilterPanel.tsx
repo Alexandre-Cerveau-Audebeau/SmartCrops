@@ -1,27 +1,43 @@
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
+import Collapse from '@mui/material/Collapse';
 import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
+import Slider from '@mui/material/Slider';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import ComingSoonChip from '../ComingSoonChip';
+import {
+  formatRangeValue,
+  rangeLabelParts,
+  rangeToSlider,
+  sliderDomain,
+  sliderToFilterValue,
+  sliderToRange,
+} from '../../constants/facetVocabularies';
 import type {
   BooleanFacetConfig,
   EnumFacetConfig,
+  RangeFacetConfig,
 } from '../../constants/facetVocabularies';
+import { useUnitSystem } from '../../hooks/useUnitSystem';
 import type {
   ArrayFilterKey,
   BooleanFilterKey,
   PlantFinderFilters,
+  RangeBounds,
+  RangeFilterKey,
 } from '../../hooks/usePlantFinder';
 import type { FacetFieldCounts } from '../../services/plantApi';
 import type { PlantType } from '../../types/PlantType';
@@ -45,6 +61,9 @@ export interface FilterPanelProps {
   /** Boolean facet configs in display order (BOOLEAN_FACETS; injected like
    * `vocabularies`). */
   booleanFacets: BooleanFacetConfig[];
+  /** Range slider configs in display order (RANGE_FACETS; injected like
+   * `vocabularies`). */
+  rangeFacets: RangeFacetConfig[];
   facetCounts: FacetFieldCounts[];
   /**
    * Unfiltered-catalogue distribution (usePlantFinder.catalogFacetCounts) —
@@ -65,6 +84,8 @@ export interface FilterPanelProps {
   ) => void;
   /** Flips one boolean (checkbox) filter. */
   onToggleBoolean: (field: BooleanFilterKey) => void;
+  /** Commits one slider selection (null = back to the full track). */
+  onSetRange: (field: RangeFilterKey, range: RangeBounds | null) => void;
   onReset: () => void;
   /** Live result total — header pill and the drawer's "See the N plants". */
   found: number;
@@ -215,6 +236,103 @@ function BooleanFacetRow({
           </Typography>
         )}
       </Box>
+    </Box>
+  );
+}
+
+/**
+ * A dual-thumb range slider row (SMA-9 T4): title left, dynamic range label
+ * right (rest = the full track, live selection during a drag), slider with
+ * per-facet marks, optional caption under. The thumbs track a local draft
+ * while dragging — the label follows live — but the selection only COMMITS
+ * on release (onChangeCommitted): zero requests mid-drag, then the standard
+ * live pipeline (counter, counts, chips) takes over. No ghost sizing: the
+ * label has no live count, tabular-nums + nowrap keep it steady.
+ */
+function RangeFacetRow({
+  id,
+  title,
+  caption,
+  domain,
+  marks,
+  value,
+  formatLabel,
+  ariaValueText,
+  onCommit,
+}: {
+  id: string;
+  title: string;
+  caption?: string;
+  domain: { min: number; max: number; step: number };
+  marks?: Array<{ value: number; label: string }>;
+  value: [number, number];
+  formatLabel: (value: [number, number]) => string;
+  ariaValueText: (position: number) => string;
+  onCommit: (value: [number, number]) => void;
+}) {
+  // Draft = the thumbs during a drag; null between drags so an external
+  // reset (chips, Reset) snaps the slider back through the `value` prop.
+  const [draft, setDraft] = useState<[number, number] | null>(null);
+  const shown = draft ?? value;
+  const titleId = `${id}-title`;
+  return (
+    <Box sx={{ mb: 2.5 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
+          gap: 1,
+        }}
+      >
+        <Typography
+          variant="subtitle2"
+          component="p"
+          id={titleId}
+          sx={{ fontWeight: 600 }}
+        >
+          {title}
+        </Typography>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
+        >
+          {formatLabel(shown)}
+        </Typography>
+      </Box>
+      {/* px buys the outermost mark labels room — they center on the track
+          ends and would otherwise clip on the rail edge. */}
+      <Box sx={{ px: 1 }}>
+        <Slider
+          size="small"
+          min={domain.min}
+          max={domain.max}
+          step={domain.step}
+          marks={marks}
+          value={shown}
+          onChange={(_, next) => setDraft(next as [number, number])}
+          onChangeCommitted={(_, next) => {
+            setDraft(null);
+            onCommit(next as [number, number]);
+          }}
+          valueLabelDisplay="off"
+          disableSwap
+          aria-labelledby={titleId}
+          getAriaValueText={ariaValueText}
+          sx={{ '& .MuiSlider-markLabel': { fontSize: 12 } }}
+        />
+      </Box>
+      {caption && (
+        <Typography
+          variant="caption"
+          component="p"
+          color="text.secondary"
+          sx={{ mt: marks ? 1.5 : 0 }}
+        >
+          {caption}
+        </Typography>
+      )}
     </Box>
   );
 }
@@ -426,23 +544,171 @@ function ForMeBlock() {
   );
 }
 
+// Representative flower-color swatches for the Coming-soon preview dots —
+// pure decoration on a disabled block, not a data vocabulary.
+const FLOWER_DOT_COLORS = [
+  '#FFFFFF',
+  '#F6E05E',
+  '#F687B3',
+  '#E53E3E',
+  '#805AD5',
+  '#4299E1',
+];
+
+// Month initials of the season preview — identical in French and English
+// (J F M A M J J A S O N D), so no i18n key.
+const MONTH_INITIALS = [...'JFMAMJJASOND'];
+
+/** One labelled preview row of the Coming-soon block. */
+function ComingSoonRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <Box sx={{ mb: 1.5 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+        {label}
+      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75 }}>
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * "Bientôt dans le Finder" (SMA-9 T4 mockup): previews of the facets whose
+ * data is not complete enough to filter honestly yet — flower color, habit,
+ * bloom/harvest season, ACTUAL soil pH (the shipped slider is watering pH)
+ * and light level. Entirely NON-interactive: disabled controls, dimmed,
+ * pointer-events off — a promise like the For-me block, never a filter.
+ */
+function ComingSoonSection() {
+  const { t } = useTranslation();
+  const base = 'library.filters.comingSoon';
+  return (
+    <>
+      <Divider sx={{ my: 2 }} />
+      <Box aria-disabled="true" sx={{ opacity: 0.55, pointerEvents: 'none' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+          <Typography variant="subtitle2" component="p" sx={{ fontWeight: 600 }}>
+            {t(`${base}.title`)}
+          </Typography>
+          <ComingSoonChip labelKey="library.filters.soon" size="small" />
+        </Box>
+        <Typography
+          variant="caption"
+          component="p"
+          color="text.secondary"
+          sx={{ mb: 1.5 }}
+        >
+          {t(`${base}.caption`)}
+        </Typography>
+
+        <ComingSoonRow label={t(`${base}.flowerColor`)}>
+          {FLOWER_DOT_COLORS.map((color) => (
+            <Box
+              key={color}
+              sx={{
+                width: 14,
+                height: 14,
+                borderRadius: '50%',
+                bgcolor: color,
+                border: '1px solid',
+                borderColor: 'divider',
+              }}
+            />
+          ))}
+        </ComingSoonRow>
+
+        <ComingSoonRow label={t(`${base}.habit`)}>
+          {(['habitTree', 'habitShrub', 'habitClimber', 'habitHerbaceous'] as const).map(
+            (key) => (
+              <Chip
+                key={key}
+                size="small"
+                variant="outlined"
+                disabled
+                label={t(`${base}.${key}`)}
+              />
+            )
+          )}
+        </ComingSoonRow>
+
+        <ComingSoonRow label={t(`${base}.season`)}>
+          {MONTH_INITIALS.map((initial, index) => (
+            <Button
+              // Months repeat their initials (J ×3, M ×2, A ×2) — index keys.
+              key={index}
+              size="small"
+              variant="outlined"
+              disabled
+              sx={{ minWidth: 26, px: 0, py: 0.25 }}
+            >
+              {initial}
+            </Button>
+          ))}
+        </ComingSoonRow>
+
+        <Box sx={{ mb: 1.5 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+            {t(`${base}.soilPh`)}
+          </Typography>
+          <Box sx={{ px: 1 }}>
+            <Slider
+              size="small"
+              disabled
+              value={[5.5, 7.5]}
+              min={4}
+              max={9}
+              step={0.5}
+              aria-label={t(`${base}.soilPh`)}
+            />
+          </Box>
+        </Box>
+
+        <ComingSoonRow label={t(`${base}.lightLevel`)}>
+          {(['lightLow', 'lightMedium', 'lightHigh'] as const).map((key) => (
+            <Chip
+              key={key}
+              size="small"
+              variant="outlined"
+              disabled
+              label={t(`${base}.${key}`)}
+            />
+          ))}
+        </ComingSoonRow>
+      </Box>
+    </>
+  );
+}
+
 export default function FilterPanel({
   open,
   onClose,
   plantTypes,
   vocabularies,
   booleanFacets,
+  rangeFacets,
   facetCounts,
   catalogFacetCounts,
   catalogTotal,
   filters,
   onToggleValues,
   onToggleBoolean,
+  onSetRange,
   onReset,
   found,
   variant,
 }: FilterPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { system } = useUnitSystem();
+  // "Plus de filtres" starts collapsed on every panel open (the rail
+  // unmounts on close) — the secondary facets stay out of the first read.
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const countIn = (
     source: FacetFieldCounts[],
@@ -514,6 +780,73 @@ export default function FilterPanel({
     />
   );
 
+  // Per-facet slider marks (T4 mockup): the compressed height scale marks
+  // every selectable value, hardiness anchors 1/7/13, spacing anchors the cm
+  // quarters with the open top; pH and temperature ship bare — their rest
+  // label already spells the bounds.
+  const marksFor = (facet: RangeFacetConfig) => {
+    switch (facet.filterKey) {
+      case 'heightCm':
+        return (facet.scale ?? []).map((cm, index, scale) => ({
+          value: index,
+          label:
+            index === 0
+              ? '0'
+              : index === scale.length - 1
+                ? t(`${facet.labelKeyBase}.markOpen`)
+                : `${formatRangeValue(facet, cm, i18n.language, system)} m`,
+        }));
+      case 'hardinessZone':
+        return [
+          { value: 1, label: t(`${facet.labelKeyBase}.markMin`) },
+          { value: 7, label: '7' },
+          { value: 13, label: t(`${facet.labelKeyBase}.markMax`) },
+        ];
+      case 'spacingCm':
+        return [
+          { value: 0, label: '0' },
+          { value: 50, label: '50' },
+          { value: 100, label: '100' },
+          { value: 150, label: t(`${facet.labelKeyBase}.markOpen`) },
+        ];
+      default:
+        return undefined;
+    }
+  };
+
+  const renderRangeRow = (facet: RangeFacetConfig) => (
+    <RangeFacetRow
+      key={facet.filterKey}
+      id={`library-filter-range-${facet.filterKey}`}
+      title={t(facet.titleKey)}
+      caption={facet.captionKey ? t(facet.captionKey) : undefined}
+      domain={sliderDomain(facet)}
+      marks={marksFor(facet)}
+      value={rangeToSlider(facet, filters[facet.filterKey])}
+      formatLabel={(value) => {
+        const parts = rangeLabelParts(facet, value, i18n.language, system);
+        return t(
+          `${facet.labelKeyBase}.${parts.open ? 'labelOpen' : 'label'}`,
+          { ...parts }
+        );
+      }}
+      ariaValueText={(position) =>
+        formatRangeValue(
+          facet,
+          sliderToFilterValue(facet, position),
+          i18n.language,
+          system
+        )
+      }
+      onCommit={(value) => onSetRange(facet.filterKey, sliderToRange(facet, value))}
+    />
+  );
+
+  const traitFacets = booleanFacets.filter((b) => b.group === 'traits');
+  const moreRangeFacets = rangeFacets.filter((f) => f.group === 'more');
+  // N = the number of controls inside the collapsed section (mockup).
+  const moreFiltersCount = moreRangeFacets.length + traitFacets.length;
+
   const content = (
     <>
       <ForMeBlock />
@@ -539,15 +872,72 @@ export default function FilterPanel({
         ))}
       </FacetSection>
       {vocabularies.filter((f) => f.group === 'plant').map(renderFacet)}
+      {/* Hauteur — right after Vitesse de croissance (mockup). */}
+      {rangeFacets.filter((f) => f.group === 'plant').map(renderRangeRow)}
 
       <GroupHeader label={t('library.filters.groupCare')} />
       {vocabularies.filter((f) => f.group === 'care').map(renderFacet)}
       <Box sx={{ mb: 2.5 }}>
         {booleanFacets.filter((b) => b.group === 'care').map(renderBooleanRow)}
       </Box>
+      {/* Résiste au froid — after the two care checkboxes, before SÉCURITÉ
+          & USAGE (mockup). */}
+      {rangeFacets.filter((f) => f.group === 'care').map(renderRangeRow)}
 
       <GroupHeader label={t('library.filters.groupSafety')} />
       {booleanFacets.filter((b) => b.group === 'safety').map(renderBooleanRow)}
+
+      {/* ── Plus de filtres (T4): collapsible tail for the secondary sliders
+          and the bonus traits — collapsed by default, the hint line lists
+          what's inside while closed. */}
+      <Divider sx={{ mb: 0.5 }} />
+      <Button
+        fullWidth
+        variant="text"
+        onClick={() => setMoreOpen((wasOpen) => !wasOpen)}
+        aria-expanded={moreOpen}
+        aria-controls="library-filter-more"
+        endIcon={
+          <ExpandMoreIcon
+            sx={{
+              transform: moreOpen ? 'rotate(180deg)' : 'none',
+              transition: 'transform 150ms',
+            }}
+          />
+        }
+        sx={{
+          justifyContent: 'space-between',
+          textTransform: 'none',
+          px: 0,
+          color: 'text.primary',
+        }}
+      >
+        <Typography variant="overline" component="span" sx={{ fontWeight: 600 }}>
+          {t('library.filters.moreFilters', { count: moreFiltersCount })}
+        </Typography>
+      </Button>
+      {!moreOpen && (
+        <Typography variant="caption" component="p" color="text.secondary">
+          {t('library.filters.moreFiltersHint')}
+        </Typography>
+      )}
+      {/* unmountOnExit: the collapsed controls leave the tree entirely —
+          nothing focusable or queryable while closed. */}
+      <Collapse in={moreOpen} id="library-filter-more" unmountOnExit>
+        <Box sx={{ pt: 1.5 }}>
+          {moreRangeFacets.map(renderRangeRow)}
+          <Typography
+            variant="subtitle2"
+            component="p"
+            sx={{ fontWeight: 600, mb: 1 }}
+          >
+            {t('library.filters.otherTraits')}
+          </Typography>
+          {traitFacets.map(renderBooleanRow)}
+        </Box>
+      </Collapse>
+
+      <ComingSoonSection />
     </>
   );
 

@@ -174,6 +174,9 @@
       "activeType": "Type",
       "seeResults_one": "See the plant",
       "seeResults_other": "See the {{count}} plants",
+      "moreFilters": "More filters ({{count}})",
+      "moreFiltersHint": "watering pH · spacing · temperature · other traits",
+      "otherTraits": "Other traits",
       "booleans": {
         "indoor": "Grows indoors",
         "droughtTolerant": "Drought tolerant",
@@ -182,7 +185,65 @@
         "petSafe": "Pet-safe",
         "petSafeHint": "non-toxic to cats and dogs",
         "humanSafe": "Human-safe",
-        "humanSafeHint": "non-toxic if ingested"
+        "humanSafeHint": "non-toxic if ingested",
+        "medicinal": "Medicinal",
+        "saltTolerant": "Salt tolerant",
+        "thorny": "Thorny",
+        "tropical": "Tropical",
+        "invasive": "Invasive"
+      },
+      "ranges": {
+        "height": {
+          "title": "Height",
+          "caption": "compressed scale: most plants stay under 3 m — the last band is open-ended",
+          "label": "{{lo}} – {{hi}} m",
+          "labelOpen": "{{lo}} – {{hi}} m +",
+          "chip": "Height : {{lo}} – {{hi}} m",
+          "chipOpen": "Height : {{lo}} – {{hi}} m +",
+          "markOpen": "3 m +"
+        },
+        "hardiness": {
+          "title": "Cold hardiness",
+          "caption": "USDA hardiness zone — from 1 (arctic) to 13 (tropical)",
+          "label": "Zones {{lo}} – {{hi}}",
+          "chip": "Hardiness : zones {{lo}} – {{hi}}",
+          "markMin": "Zone 1",
+          "markMax": "Zone 13"
+        },
+        "ph": {
+          "title": "Watering pH",
+          "label": "{{lo}} – {{hi}}",
+          "chip": "Watering pH : {{lo}} – {{hi}}"
+        },
+        "spacing": {
+          "title": "Spacing",
+          "label": "{{lo}} – {{hi}} cm",
+          "labelOpen": "{{lo}} – {{hi}} cm +",
+          "chip": "Spacing : {{lo}} – {{hi}} cm",
+          "chipOpen": "Spacing : {{lo}} – {{hi}} cm +",
+          "markOpen": "150 cm +"
+        },
+        "temp": {
+          "title": "Temperature",
+          "label": "{{lo}} – {{hi}} {{unit}}",
+          "chip": "Temperature : {{lo}} – {{hi}} {{unit}}"
+        }
+      },
+      "comingSoon": {
+        "title": "Coming soon in the Finder",
+        "caption": "These facets exist but their data is still incomplete — they don't filter so no plant gets hidden.",
+        "flowerColor": "Flower color",
+        "habit": "Habit / silhouette",
+        "habitTree": "Tree",
+        "habitShrub": "Shrub",
+        "habitClimber": "Climber",
+        "habitHerbaceous": "Herbaceous",
+        "season": "Bloom / harvest season",
+        "soilPh": "Actual soil pH",
+        "lightLevel": "Light level",
+        "lightLow": "Low",
+        "lightMedium": "Medium",
+        "lightHigh": "High"
       },
       "values": {
         "careLevel": {

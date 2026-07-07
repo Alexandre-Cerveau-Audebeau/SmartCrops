@@ -105,6 +105,21 @@ describe('usePlantFinder', () => {
         isEdible: undefined,
         isToxicToPets: undefined,
         isToxicToHumans: undefined,
+        isMedicinal: undefined,
+        isSaltTolerant: undefined,
+        isThorny: undefined,
+        isTropical: undefined,
+        isInvasive: undefined,
+        heightCmMin: undefined,
+        heightCmMax: undefined,
+        hardinessZoneMin: undefined,
+        hardinessZoneMax: undefined,
+        xWateringPhMin: undefined,
+        xWateringPhMax: undefined,
+        xPlantSpacingValueMin: undefined,
+        xPlantSpacingValueMax: undefined,
+        xWateringBasedTempCMin: undefined,
+        xWateringBasedTempCMax: undefined,
         page: 1,
       },
       expect.anything()
@@ -334,6 +349,118 @@ describe('usePlantFinder', () => {
     });
     await waitFor(() => expect(result.current.activeFilterCount).toBe(3));
     expect(result.current.isFiltered).toBe(true);
+  });
+
+  it('a committed range sends both bounds and counts as ONE active filter (T4)', async () => {
+    const { result, rerender } = await loadedFinder();
+
+    rerender({
+      ...initialInputs,
+      filters: { ...EMPTY_FILTERS, heightCm: { min: 50, max: 200 } },
+    });
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          heightCmMin: 50,
+          heightCmMax: 200,
+          page: 1,
+        }),
+        expect.anything()
+      )
+    );
+    // Whatever its bounds, a narrowed slider is exactly ONE filter.
+    expect(result.current.activeFilterCount).toBe(1);
+    expect(result.current.isFiltered).toBe(true);
+  });
+
+  it('an open-ended range sends NO max param; clearing to null removes both (T4)', async () => {
+    const { result, rerender } = await loadedFinder();
+
+    // Top thumb on the "3 m +" band: {min} only.
+    rerender({
+      ...initialInputs,
+      filters: { ...EMPTY_FILTERS, heightCm: { min: 200 } },
+    });
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ heightCmMin: 200 }),
+        expect.anything()
+      )
+    );
+    expect(
+      vi.mocked(findPlants).mock.lastCall![0].heightCmMax
+    ).toBeUndefined();
+
+    // Back to the full track (null): both bounds off the wire, count 0.
+    rerender(initialInputs);
+    await waitFor(() => expect(result.current.activeFilterCount).toBe(0));
+    const lastParams = vi.mocked(findPlants).mock.lastCall![0];
+    expect(lastParams.heightCmMin).toBeUndefined();
+    expect(lastParams.heightCmMax).toBeUndefined();
+    expect(result.current.isFiltered).toBe(false);
+  });
+
+  it('the spacing range converts its UI centimetres to wire inches (T4)', async () => {
+    const { rerender } = await loadedFinder();
+
+    rerender({
+      ...initialInputs,
+      filters: { ...EMPTY_FILTERS, spacingCm: { min: 50, max: 100 } },
+    });
+    // 50 cm → 20 in, 100 cm → 39 in (whole inches — the indexed unit).
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          xPlantSpacingValueMin: 20,
+          xPlantSpacingValueMax: 39,
+        }),
+        expect.anything()
+      )
+    );
+  });
+
+  it('each active range adds 1 alongside enums and booleans (T4)', async () => {
+    const { result, rerender } = await loadedFinder();
+
+    rerender({
+      ...initialInputs,
+      filters: {
+        ...EMPTY_FILTERS,
+        careLevels: ['Easy'],
+        edible: true,
+        heightCm: { min: 50, max: 200 },
+        hardinessZone: { min: 4, max: 9 },
+      },
+    });
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          hardinessZoneMin: 4,
+          hardinessZoneMax: 9,
+        }),
+        expect.anything()
+      )
+    );
+    expect(result.current.activeFilterCount).toBe(4);
+  });
+
+  it('a checked bonus trait sends its direct-polarity param; unchecked stays absent (T4)', async () => {
+    const { rerender } = await loadedFinder();
+
+    rerender({
+      ...initialInputs,
+      filters: { ...EMPTY_FILTERS, medicinal: true, invasive: true },
+    });
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ isMedicinal: true, isInvasive: true }),
+        expect.anything()
+      )
+    );
+    const lastParams = vi.mocked(findPlants).mock.lastCall![0];
+    expect(lastParams.isSaltTolerant).toBeUndefined();
+    expect(lastParams.isThorny).toBeUndefined();
+    expect(lastParams.isTropical).toBeUndefined();
   });
 
   it('catalogTotal records the unfiltered catalogue size and survives filtered fetches', async () => {

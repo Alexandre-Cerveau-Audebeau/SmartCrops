@@ -174,6 +174,9 @@
       "activeType": "Type",
       "seeResults_one": "Voir la plante",
       "seeResults_other": "Voir les {{count}} plantes",
+      "moreFilters": "Plus de filtres ({{count}})",
+      "moreFiltersHint": "pH d'arrosage · espacement · température · autres traits",
+      "otherTraits": "Autres traits",
       "booleans": {
         "indoor": "Se cultive en intérieur",
         "droughtTolerant": "Tolère la sécheresse",
@@ -182,7 +185,65 @@
         "petSafe": "Sûre pour les animaux",
         "petSafeHint": "non toxique pour les chats et les chiens",
         "humanSafe": "Sûre pour les humains",
-        "humanSafeHint": "non toxique par ingestion"
+        "humanSafeHint": "non toxique par ingestion",
+        "medicinal": "Médicinale",
+        "saltTolerant": "Tolère le sel",
+        "thorny": "Épineuse",
+        "tropical": "Tropicale",
+        "invasive": "Invasive"
+      },
+      "ranges": {
+        "height": {
+          "title": "Hauteur",
+          "caption": "échelle tassée : la plupart des plantes font moins de 3 m — la dernière tranche est ouverte",
+          "label": "{{lo}} – {{hi}} m",
+          "labelOpen": "{{lo}} – {{hi}} m et +",
+          "chip": "Hauteur : {{lo}} – {{hi}} m",
+          "chipOpen": "Hauteur : {{lo}} – {{hi}} m et +",
+          "markOpen": "3 m +"
+        },
+        "hardiness": {
+          "title": "Résiste au froid",
+          "caption": "zone de rusticité USDA — de 1 (arctique) à 13 (tropical)",
+          "label": "Zones {{lo}} – {{hi}}",
+          "chip": "Rusticité : zones {{lo}} – {{hi}}",
+          "markMin": "Zone 1",
+          "markMax": "Zone 13"
+        },
+        "ph": {
+          "title": "pH d'arrosage",
+          "label": "{{lo}} – {{hi}}",
+          "chip": "pH d'arrosage : {{lo}} – {{hi}}"
+        },
+        "spacing": {
+          "title": "Espacement",
+          "label": "{{lo}} – {{hi}} cm",
+          "labelOpen": "{{lo}} – {{hi}} cm et +",
+          "chip": "Espacement : {{lo}} – {{hi}} cm",
+          "chipOpen": "Espacement : {{lo}} – {{hi}} cm et +",
+          "markOpen": "150 cm +"
+        },
+        "temp": {
+          "title": "Température",
+          "label": "{{lo}} – {{hi}} {{unit}}",
+          "chip": "Température : {{lo}} – {{hi}} {{unit}}"
+        }
+      },
+      "comingSoon": {
+        "title": "Bientôt dans le Finder",
+        "caption": "Ces facettes existent mais leurs données sont encore incomplètes — elles ne filtrent pas pour ne masquer aucune plante.",
+        "flowerColor": "Couleur de fleur",
+        "habit": "Port / silhouette",
+        "habitTree": "Arbre",
+        "habitShrub": "Arbuste",
+        "habitClimber": "Grimpante",
+        "habitHerbaceous": "Herbacée",
+        "season": "Saison de floraison / récolte",
+        "soilPh": "pH du sol réel",
+        "lightLevel": "Niveau de lumière",
+        "lightLow": "Faible",
+        "lightMedium": "Moyen",
+        "lightHigh": "Élevé"
       },
       "values": {
         "careLevel": {
