@@ -31,30 +31,44 @@ internal static class PlantSearchFilterBuilder
 
     /// <summary>Returns the filter_by expression, or null when no facet is active.</summary>
     public static string? Build(PlantSearchQuery query)
+        => Build(query, excludedFacetField: null);
+
+    /// <summary>
+    /// Same expression MINUS the fragment of one COUNTED facet — the
+    /// disjunctive sub-search rule (SMA-274): a facet's counts are computed
+    /// without its own filter, so sibling values keep their "what-if"
+    /// numbers. Only the counted facets (plantTypeId, the enums, the
+    /// tri-state booleans) are addressable here; range fragments carry no
+    /// counts and survive every exclusion. Excluding a facet with no
+    /// selection is a no-op (there is no fragment to omit), and the
+    /// vocabulary guard still runs for the excluded facet — exclusion skips
+    /// the emission, never the validation.
+    /// </summary>
+    public static string? Build(PlantSearchQuery query, string? excludedFacetField)
     {
         var groups = new List<string>();
 
-        if (query.PlantTypeIds is { Length: > 0 })
+        if (query.PlantTypeIds is { Length: > 0 } && excludedFacetField != "plantTypeId")
         {
             // plantTypeId is never null in Postgres — no unknown branch.
             groups.Add($"plantTypeId:=[{string.Join(",", query.PlantTypeIds)}]");
         }
 
-        AddEnumFacet<PlantCareLevel>(groups, "careLevel", query.CareLevels);
-        AddEnumFacet<PlantWateringNeed>(groups, "wateringNeedLevel", query.WateringNeedLevels);
-        AddEnumFacet<PlantGrowthRate>(groups, "growthRate", query.GrowthRates);
-        AddEnumFacet<PlantLifeCycle>(groups, "lifeCycle", query.LifeCycles);
+        AddEnumFacet<PlantCareLevel>(groups, "careLevel", query.CareLevels, excludedFacetField);
+        AddEnumFacet<PlantWateringNeed>(groups, "wateringNeedLevel", query.WateringNeedLevels, excludedFacetField);
+        AddEnumFacet<PlantGrowthRate>(groups, "growthRate", query.GrowthRates, excludedFacetField);
+        AddEnumFacet<PlantLifeCycle>(groups, "lifeCycle", query.LifeCycles, excludedFacetField);
 
-        AddTriStateBoolean(groups, "isEdible", query.IsEdible);
-        AddTriStateBoolean(groups, "isToxicToHumans", query.IsToxicToHumans);
-        AddTriStateBoolean(groups, "isToxicToPets", query.IsToxicToPets);
-        AddTriStateBoolean(groups, "isIndoor", query.IsIndoor);
-        AddTriStateBoolean(groups, "isDroughtTolerant", query.IsDroughtTolerant);
-        AddTriStateBoolean(groups, "isMedicinal", query.IsMedicinal);
-        AddTriStateBoolean(groups, "isSaltTolerant", query.IsSaltTolerant);
-        AddTriStateBoolean(groups, "isThorny", query.IsThorny);
-        AddTriStateBoolean(groups, "isTropical", query.IsTropical);
-        AddTriStateBoolean(groups, "isInvasive", query.IsInvasive);
+        AddTriStateBoolean(groups, "isEdible", query.IsEdible, excludedFacetField);
+        AddTriStateBoolean(groups, "isToxicToHumans", query.IsToxicToHumans, excludedFacetField);
+        AddTriStateBoolean(groups, "isToxicToPets", query.IsToxicToPets, excludedFacetField);
+        AddTriStateBoolean(groups, "isIndoor", query.IsIndoor, excludedFacetField);
+        AddTriStateBoolean(groups, "isDroughtTolerant", query.IsDroughtTolerant, excludedFacetField);
+        AddTriStateBoolean(groups, "isMedicinal", query.IsMedicinal, excludedFacetField);
+        AddTriStateBoolean(groups, "isSaltTolerant", query.IsSaltTolerant, excludedFacetField);
+        AddTriStateBoolean(groups, "isThorny", query.IsThorny, excludedFacetField);
+        AddTriStateBoolean(groups, "isTropical", query.IsTropical, excludedFacetField);
+        AddTriStateBoolean(groups, "isInvasive", query.IsInvasive, excludedFacetField);
 
         AddPairedRange(groups, "hardinessZoneMin", "hardinessZoneMax",
             Num(query.HardinessZoneMin), Num(query.HardinessZoneMax));
@@ -74,7 +88,8 @@ internal static class PlantSearchFilterBuilder
         return groups.Count == 0 ? null : string.Join(" && ", groups);
     }
 
-    private static void AddEnumFacet<TEnum>(List<string> groups, string field, string[]? values)
+    private static void AddEnumFacet<TEnum>(
+        List<string> groups, string field, string[]? values, string? excludedFacetField)
         where TEnum : struct, Enum
     {
         if (values is not { Length: > 0 })
@@ -88,13 +103,19 @@ internal static class PlantSearchFilterBuilder
                 $"Unknown {field} filter value(s): {string.Join(", ", invalid)}.");
         }
 
+        // The injection guard above runs unconditionally — exclusion only
+        // omits the fragment (disjunctive sub-search, SMA-274).
+        if (field == excludedFacetField)
+            return;
+
         var selected = values.Distinct().ToList();
         groups.Add($"{field}:=[{string.Join(",", selected)},{Unknown}]");
     }
 
-    private static void AddTriStateBoolean(List<string> groups, string field, bool? value)
+    private static void AddTriStateBoolean(
+        List<string> groups, string field, bool? value, string? excludedFacetField)
     {
-        if (value is null)
+        if (value is null || field == excludedFacetField)
             return;
 
         groups.Add($"{field}:=[{(value.Value ? "true" : "false")},{Unknown}]");
