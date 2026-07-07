@@ -20,7 +20,7 @@ import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import ComingSoonChip from '../ComingSoonChip';
 import {
   formatRangeValue,
-  rangeLabelParts,
+  rangeRowLabel,
   rangeToSlider,
   sliderDomain,
   sliderToFilterValue,
@@ -808,18 +808,21 @@ export default function FilterPanel({
                 ? t(`${facet.labelKeyBase}.markOpen`)
                 : `${formatRangeValue(facet, cm, i18n.language, system)} m`,
         }));
+      // Boundary marks derive from the facet bounds so a future floor/
+      // ceiling tweak can't silently misalign them with the real track;
+      // only the mid-track anchors stay literal.
       case 'hardinessZone':
         return [
-          { value: 1, label: t(`${facet.labelKeyBase}.markMin`) },
+          { value: facet.floor, label: t(`${facet.labelKeyBase}.markMin`) },
           { value: 7, label: '7' },
-          { value: 13, label: t(`${facet.labelKeyBase}.markMax`) },
+          { value: facet.ceiling, label: t(`${facet.labelKeyBase}.markMax`) },
         ];
       case 'spacingCm':
         return [
-          { value: 0, label: '0' },
+          { value: facet.floor, label: '0' },
           { value: 50, label: '50' },
           { value: 100, label: '100' },
-          { value: 150, label: t(`${facet.labelKeyBase}.markOpen`) },
+          { value: facet.ceiling, label: t(`${facet.labelKeyBase}.markOpen`) },
         ];
       default:
         return undefined;
@@ -835,13 +838,9 @@ export default function FilterPanel({
       domain={sliderDomain(facet)}
       marks={marksFor(facet)}
       value={rangeToSlider(facet, filters[facet.filterKey])}
-      formatLabel={(value) => {
-        const parts = rangeLabelParts(facet, value, i18n.language, system);
-        return t(
-          `${facet.labelKeyBase}.${parts.open ? 'labelOpen' : 'label'}`,
-          { ...parts }
-        );
-      }}
+      formatLabel={(value) =>
+        rangeRowLabel(t, facet, value, i18n.language, system)
+      }
       ariaValueText={(position) =>
         formatRangeValue(
           facet,

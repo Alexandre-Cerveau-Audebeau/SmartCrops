@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import type {
   ArrayFilterKey,
   BooleanFilterKey,
@@ -382,8 +383,10 @@ export function sliderToRange(
     value[1] >= domain.max
       ? undefined
       : snapToStep(sliderToFilterValue(facet, value[1]), facet.step);
-  if (min === undefined && max === undefined) return null;
-  return { min, max };
+  // Branch on the defined bound so the at-least-one-bound union type-checks.
+  if (min !== undefined) return { min, max };
+  if (max !== undefined) return { max };
+  return null;
 }
 
 /** Filter state → slider pair (absent bounds rest on the track ends). */
@@ -473,4 +476,42 @@ export function rangeLabelParts(
           : '°C'
         : '',
   };
+}
+
+/**
+ * The slider row's dynamic label — takes the LIVE slider pair so the label
+ * keeps tracking the thumbs mid-drag (before any commit). Single home of the
+ * open/closed key pick, shared with {@link rangeChipLabel} so the two
+ * surfaces can't drift.
+ */
+export function rangeRowLabel(
+  t: TFunction,
+  facet: RangeFacetConfig,
+  sliderValue: [number, number],
+  language: string,
+  system: UnitSystem
+): string {
+  const parts = rangeLabelParts(facet, sliderValue, language, system);
+  return t(`${facet.labelKeyBase}.${parts.open ? 'labelOpen' : 'label'}`, {
+    ...parts,
+  });
+}
+
+/** The active chip's label — from the COMMITTED filter state. */
+export function rangeChipLabel(
+  t: TFunction,
+  facet: RangeFacetConfig,
+  range: RangeBounds | null,
+  language: string,
+  system: UnitSystem
+): string {
+  const parts = rangeLabelParts(
+    facet,
+    rangeToSlider(facet, range),
+    language,
+    system
+  );
+  return t(`${facet.labelKeyBase}.${parts.open ? 'chipOpen' : 'chip'}`, {
+    ...parts,
+  });
 }

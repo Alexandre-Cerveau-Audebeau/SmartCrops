@@ -38,8 +38,7 @@ import {
   BOOLEAN_FACETS,
   ENUM_FACETS,
   RANGE_FACETS,
-  rangeLabelParts,
-  rangeToSlider,
+  rangeChipLabel,
 } from '../constants/facetVocabularies';
 import PlantCard from '../components/PlantCard';
 
@@ -407,29 +406,24 @@ export default function PlantLibrary() {
                 />
               ))}
               {/* Range chips (T4): "Section : plage" through the same
-                  label-parts source as the slider's dynamic label; delete
+                  shared helper family as the slider's dynamic label; delete
                   resets that range to the full track. */}
               {RANGE_FACETS.filter((f) => filters[f.filterKey] !== null).map(
-                (facet) => {
-                  const parts = rangeLabelParts(
-                    facet,
-                    rangeToSlider(facet, filters[facet.filterKey]),
-                    language,
-                    system
-                  );
-                  return (
-                    <Chip
-                      key={facet.filterKey}
-                      size="small"
-                      label={t(
-                        `${facet.labelKeyBase}.${parts.open ? 'chipOpen' : 'chip'}`,
-                        { ...parts }
-                      )}
-                      onDelete={() => handleSetRange(facet.filterKey, null)}
-                      sx={activeChipSx}
-                    />
-                  );
-                }
+                (facet) => (
+                  <Chip
+                    key={facet.filterKey}
+                    size="small"
+                    label={rangeChipLabel(
+                      t,
+                      facet,
+                      filters[facet.filterKey],
+                      language,
+                      system
+                    )}
+                    onDelete={() => handleSetRange(facet.filterKey, null)}
+                    sx={activeChipSx}
+                  />
+                )
               )}
               {/* Same reset as the panel header: facets only, search text
                   preserved. */}

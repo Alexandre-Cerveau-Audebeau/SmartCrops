@@ -79,14 +79,13 @@ export interface PlantFinderFilters {
  * zone, pH, °C — spacing is UI cm here; the facet's toWire converts to the
  * wire's inches). Either bound may be absent: a missing max is a thumb on the
  * open-ended top ("3 m +" sends no heightCmMax at all), a missing min a thumb
- * resting on the track floor. The fully-rested slider is `null` on the filter
- * itself, never `{}` — null is the single "inactive" representation, so
- * activeFilterCount and the chips row can gate on it directly.
+ * resting on the track floor. null is the ONLY inactive state — `{}` must be
+ * unrepresentable so a phantom active range can't count in activeFilterCount
+ * while sending no params; hence the at-least-one-bound union.
  */
-export interface RangeBounds {
-  min?: number;
-  max?: number;
-}
+export type RangeBounds =
+  | { min: number; max?: number }
+  | { min?: number; max: number };
 
 /** The boolean (checkbox) subset of PlantFinderFilters, derived so a new
  * flag can't be added without the toggle surfaces seeing it. */
