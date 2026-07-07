@@ -11,6 +11,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { useLanguage } from '../hooks/useLanguage';
 import type { Plant } from '../types/Plant';
 import type { PlantType } from '../types/PlantType';
@@ -136,9 +137,12 @@ function mockFinderCatalog(
 function renderLibrary() {
   return render(
     <LanguageProvider>
-      <MemoryRouter initialEntries={['/library']}>
-        <PlantLibrary />
-      </MemoryRouter>
+      {/* T4: the temperature slider reads the metric/imperial preference. */}
+      <UnitSystemProvider>
+        <MemoryRouter initialEntries={['/library']}>
+          <PlantLibrary />
+        </MemoryRouter>
+      </UnitSystemProvider>
     </LanguageProvider>
   );
 }
@@ -654,7 +658,8 @@ describe('PlantLibrary', () => {
     await user.click(filtersButton(0));
     expect(screen.getByText('My gardens')).toBeInTheDocument();
     expect(screen.getByText('Location / climate')).toBeInTheDocument();
-    expect(screen.getAllByText('Soon')).toHaveLength(2);
+    // 3 Soon pills since T4: the two For-me rows + the Coming-soon header.
+    expect(screen.getAllByText('Soon')).toHaveLength(3);
     // Future controls are visible as a promise but disabled until their
     // features land (SMA-256 / SMA-257).
     expect(screen.getByText('All my gardens')).toBeInTheDocument();
@@ -829,6 +834,241 @@ describe('PlantLibrary', () => {
     expect(
       screen.getByRole('textbox', { name: 'Search plants by name...' })
     ).toHaveValue('lavender');
+  });
+
+  // T4 sliders: the two hidden <input type=range> thumbs carry the row title
+  // as their accessible name (aria-labelledby); a `change` on one commits
+  // immediately (MUI fires onChangeCommitted for input-driven changes — the
+  // keyboard path), which is exactly the component's commit-on-release seam.
+  const sliderThumbs = (name: string | RegExp) =>
+    screen.getAllByRole('slider', { name });
+
+  it('committing the height slider sends the mapped cm range, grows the chip, delete resets to full (T4)', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+    fireEvent.click(filtersButton(0));
+
+    // Compressed scale: indices 0..4 ↔ 0/50/100/200/300+ cm. Thumbs to
+    // 1 ("0,5 m") and 3 ("2 m") → the mockup's 0.5–2 m example.
+    const [minThumb, maxThumb] = sliderThumbs('Height');
+    fireEvent.change(minThumb!, { target: { value: '1' } });
+    fireEvent.change(maxThumb!, { target: { value: '3' } });
+
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          heightCmMin: 50,
+          heightCmMax: 200,
+          page: 1,
+        }),
+        expect.anything()
+      )
+    );
+    expect(filtersButton(1)).toBeInTheDocument();
+    expect(activeChips().map((chip) => chip.textContent)).toEqual([
+      'Height : 0.5 – 2 m',
+    ]);
+
+    // Chip delete = reset THAT range to the full track: params gone, slider
+    // thumbs back on the ends, button count back to zero.
+    fireEvent.click(screen.getByTestId('CancelIcon'));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          heightCmMin: undefined,
+          heightCmMax: undefined,
+        }),
+        expect.anything()
+      )
+    );
+    expect(activeChips()).toHaveLength(0);
+    expect(filtersButton(0)).toBeInTheDocument();
+    const [minAfter, maxAfter] = sliderThumbs('Height');
+    expect(minAfter).toHaveValue('0');
+    expect(maxAfter).toHaveValue('4');
+  });
+
+  it('the height top thumb on "3 m +" sends NO max param and reads the open label (T4)', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+    fireEvent.click(filtersButton(0));
+
+    // Only the min thumb moves (index 3 = 2 m); the max stays on the open
+    // band → half-open range.
+    const [minThumb] = sliderThumbs('Height');
+    fireEvent.change(minThumb!, { target: { value: '3' } });
+
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ heightCmMin: 200 }),
+        expect.anything()
+      )
+    );
+    expect(
+      vi.mocked(findPlants).mock.lastCall![0].heightCmMax
+    ).toBeUndefined();
+    expect(activeChips().map((chip) => chip.textContent)).toEqual([
+      'Height : 2 – 3 m +',
+    ]);
+  });
+
+  it('the hardiness slider sends the USDA zone bounds and chips "zones 4 – 9" (T4 mockup example)', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+    fireEvent.click(filtersButton(0));
+
+    const [minThumb, maxThumb] = sliderThumbs('Cold hardiness');
+    fireEvent.change(minThumb!, { target: { value: '4' } });
+    fireEvent.change(maxThumb!, { target: { value: '9' } });
+
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ hardinessZoneMin: 4, hardinessZoneMax: 9 }),
+        expect.anything()
+      )
+    );
+    expect(activeChips().map((chip) => chip.textContent)).toEqual([
+      'Hardiness : zones 4 – 9',
+    ]);
+    expect(filtersButton(1)).toBeInTheDocument();
+  });
+
+  it('"More filters" is collapsed by default with its hint, expands to the secondary sliders and traits (T4)', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+    fireEvent.click(filtersButton(0));
+
+    // Collapsed at rest: N = the 8 controls inside (3 sliders + 5 traits),
+    // hint line listing the content. The content stays MOUNTED (so the
+    // toggle's aria-controls resolves) but Collapse's visibility:hidden
+    // keeps it out of the a11y tree — role queries must come up empty.
+    const moreButton = screen.getByRole('button', {
+      name: 'More filters (8)',
+    });
+    expect(moreButton).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.getByText('watering pH · spacing · temperature · other traits')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('checkbox', { name: /Medicinal/ })
+    ).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('slider', { name: 'Watering pH' })).toHaveLength(0);
+
+    fireEvent.click(moreButton);
+    expect(moreButton).toHaveAttribute('aria-expanded', 'true');
+    // The hint collapses away once open; the three sliders and the five
+    // trait checkboxes are live controls now.
+    expect(
+      screen.queryByText('watering pH · spacing · temperature · other traits')
+    ).not.toBeInTheDocument();
+    expect(sliderThumbs('Watering pH')).toHaveLength(2);
+    expect(sliderThumbs('Spacing')).toHaveLength(2);
+    expect(sliderThumbs('Temperature')).toHaveLength(2);
+    for (const trait of [
+      'Medicinal',
+      'Salt tolerant',
+      'Thorny',
+      'Tropical',
+      'Invasive',
+    ]) {
+      expect(screen.getByRole('checkbox', { name: trait })).not.toBeChecked();
+    }
+
+    // A bonus trait behaves like any hero boolean: direct-polarity wire
+    // param + bare-label chip. N stays 8 — it counts controls, not picks.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Medicinal' }));
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({ isMedicinal: true }),
+        expect.anything()
+      )
+    );
+    expect(activeChips().map((chip) => chip.textContent)).toEqual([
+      'Medicinal',
+    ]);
+    expect(filtersButton(1)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'More filters (8)' })
+    ).toBeInTheDocument();
+  });
+
+  it('the spacing slider maps its cm track to wire inches (T4)', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+    fireEvent.click(filtersButton(0));
+    fireEvent.click(screen.getByRole('button', { name: 'More filters (8)' }));
+
+    const [minThumb, maxThumb] = sliderThumbs('Spacing');
+    fireEvent.change(minThumb!, { target: { value: '50' } });
+    fireEvent.change(maxThumb!, { target: { value: '100' } });
+
+    // Display/wire split: the 50–100 cm selection travels as 20–39 in.
+    await waitFor(() =>
+      expect(vi.mocked(findPlants)).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          xPlantSpacingValueMin: 20,
+          xPlantSpacingValueMax: 39,
+        }),
+        expect.anything()
+      )
+    );
+    expect(activeChips().map((chip) => chip.textContent)).toEqual([
+      'Spacing : 50 – 100 cm',
+    ]);
+  });
+
+  it('the Coming-soon block renders disabled previews that never fetch (T4)', async () => {
+    mockFinderCatalog(makeMany(50));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+    fireEvent.click(filtersButton(0));
+
+    // Scope every query to the block itself — 'Low'/'High' also exist as
+    // enum facet chips higher in the panel.
+    const blockRoot = screen
+      .getByText('Coming soon in the Finder')
+      .closest('[aria-disabled="true"]') as HTMLElement;
+    expect(blockRoot).not.toBeNull();
+    const block = within(blockRoot);
+    expect(
+      block.getByText(/their data is still incomplete/)
+    ).toBeInTheDocument();
+    // Every preview control is disabled: the habit and light chips, the 12
+    // month buttons, the soil-pH slider.
+    for (const label of ['Tree', 'Shrub', 'Climber', 'Herbaceous', 'Low', 'High']) {
+      expect(block.getByText(label).closest('.MuiChip-root')).toHaveClass(
+        'Mui-disabled'
+      );
+    }
+    const monthButtons = block
+      .getAllByRole('button', { hidden: true })
+      .filter((b) => /^[JFMASOND]$/.test(b.textContent ?? ''));
+    expect(monthButtons).toHaveLength(12);
+    for (const month of monthButtons) {
+      expect(month).toBeDisabled();
+    }
+    // Clicking through the previews fires nothing — the fetch count is flat.
+    const callsBefore = vi.mocked(findPlants).mock.calls.length;
+    fireEvent.click(block.getByText('Tree'));
+    fireEvent.click(monthButtons[0]!);
+    expect(vi.mocked(findPlants).mock.calls.length).toBe(callsBefore);
   });
 
   it('the filtered empty state offers a reset that recovers the catalogue (T3)', async () => {
@@ -1114,10 +1354,12 @@ describe('PlantLibrary', () => {
     const user = userEvent.setup();
     render(
       <LanguageProvider>
-        <MemoryRouter initialEntries={['/library']}>
-          <LangSwitch />
-          <PlantLibrary />
-        </MemoryRouter>
+        <UnitSystemProvider>
+          <MemoryRouter initialEntries={['/library']}>
+            <LangSwitch />
+            <PlantLibrary />
+          </MemoryRouter>
+        </UnitSystemProvider>
       </LanguageProvider>
     );
     await screen.findByRole('heading', { name: 'Plant 00' });

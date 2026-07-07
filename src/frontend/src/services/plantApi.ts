@@ -63,6 +63,29 @@ export interface FindPlantsParams {
   isEdible?: boolean;
   isToxicToPets?: boolean;
   isToxicToHumans?: boolean;
+  // Bonus traits (SMA-9 T4, "Autres traits") — direct polarity only.
+  isMedicinal?: boolean;
+  isSaltTolerant?: boolean;
+  isThorny?: boolean;
+  isTropical?: boolean;
+  isInvasive?: boolean;
+  // Numeric ranges (SMA-9 T4). Either bound optional; a missing bound means
+  // "open on that side" — the open-ended slider tops send no max at all.
+  // Server-side: interval overlap against the plant's own min/max pair, with
+  // the unknown branch ORed in ("absence never excludes"). Units are cm
+  // (height), USDA zone, pH, °C — EXCEPT xPlantSpacingValue*, which are
+  // INCHES (the indexed Perenual unit); the UI's cm display converts before
+  // calling (RANGE_FACETS.toWire).
+  heightCmMin?: number;
+  heightCmMax?: number;
+  hardinessZoneMin?: number;
+  hardinessZoneMax?: number;
+  xWateringPhMin?: number;
+  xWateringPhMax?: number;
+  xPlantSpacingValueMin?: number;
+  xPlantSpacingValueMax?: number;
+  xWateringBasedTempCMin?: number;
+  xWateringBasedTempCMax?: number;
 }
 
 export interface FacetValueCount {
@@ -116,8 +139,30 @@ export async function findPlants(
     ['isEdible', params.isEdible],
     ['isToxicToPets', params.isToxicToPets],
     ['isToxicToHumans', params.isToxicToHumans],
+    ['isMedicinal', params.isMedicinal],
+    ['isSaltTolerant', params.isSaltTolerant],
+    ['isThorny', params.isThorny],
+    ['isTropical', params.isTropical],
+    ['isInvasive', params.isInvasive],
   ];
   for (const [key, value] of booleans) {
+    if (value !== undefined) qs.set(key, String(value));
+  }
+  // Range bounds are single-valued numbers with the same absence rule: only
+  // defined bounds go on the wire (an open-ended top has NO max key at all).
+  const rangeBounds: Array<[string, number | undefined]> = [
+    ['heightCmMin', params.heightCmMin],
+    ['heightCmMax', params.heightCmMax],
+    ['hardinessZoneMin', params.hardinessZoneMin],
+    ['hardinessZoneMax', params.hardinessZoneMax],
+    ['xWateringPhMin', params.xWateringPhMin],
+    ['xWateringPhMax', params.xWateringPhMax],
+    ['xPlantSpacingValueMin', params.xPlantSpacingValueMin],
+    ['xPlantSpacingValueMax', params.xPlantSpacingValueMax],
+    ['xWateringBasedTempCMin', params.xWateringBasedTempCMin],
+    ['xWateringBasedTempCMax', params.xWateringBasedTempCMax],
+  ];
+  for (const [key, value] of rangeBounds) {
     if (value !== undefined) qs.set(key, String(value));
   }
   const res = await fetch(`${API_BASE}/plants/finder?${qs}`, { signal });

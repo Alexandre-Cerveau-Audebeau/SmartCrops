@@ -27,13 +27,18 @@ import type {
   ArrayFilterKey,
   BooleanFilterKey,
   PlantFinderFilters,
+  RangeBounds,
+  RangeFilterKey,
 } from '../hooks/usePlantFinder';
+import { useUnitSystem } from '../hooks/useUnitSystem';
 import { fetchPlantTypes } from '../services/plantApi';
 import type { PlantType } from '../types/PlantType';
 import FilterPanel from '../components/library/FilterPanel';
 import {
   BOOLEAN_FACETS,
   ENUM_FACETS,
+  RANGE_FACETS,
+  rangeChipLabel,
 } from '../constants/facetVocabularies';
 import PlantCard from '../components/PlantCard';
 
@@ -73,6 +78,7 @@ export default function PlantLibrary() {
   // catalogue with no rail.
   const [panelOpen, setPanelOpen] = useState(false);
   const { language } = useLanguage();
+  const { system } = useUnitSystem();
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -196,6 +202,13 @@ export default function PlantLibrary() {
     resetToFirstPage();
   };
 
+  // Slider commit (SMA-9 T4) — the panel maps thumb positions to
+  // RangeBounds (null = full track = inactive); a chip delete passes null.
+  const handleSetRange = (field: RangeFilterKey, range: RangeBounds | null) => {
+    setFilters((prev) => ({ ...prev, [field]: range }));
+    resetToFirstPage();
+  };
+
   // "All" quick chip — clears the type selection only (the other facets and
   // the search text are untouched).
   const handleClearTypes = () => {
@@ -232,12 +245,14 @@ export default function PlantLibrary() {
       plantTypes={plantTypes}
       vocabularies={ENUM_FACETS}
       booleanFacets={BOOLEAN_FACETS}
+      rangeFacets={RANGE_FACETS}
       facetCounts={facetCounts}
       catalogFacetCounts={catalogFacetCounts}
       catalogTotal={catalogTotal}
       filters={filters}
       onToggleValues={handleToggleValues}
       onToggleBoolean={handleToggleBoolean}
+      onSetRange={handleSetRange}
       onReset={handleReset}
       found={found}
       variant={isDesktop ? 'rail' : 'drawer'}
@@ -390,6 +405,26 @@ export default function PlantLibrary() {
                   sx={activeChipSx}
                 />
               ))}
+              {/* Range chips (T4): "Section : plage" through the same
+                  shared helper family as the slider's dynamic label; delete
+                  resets that range to the full track. */}
+              {RANGE_FACETS.filter((f) => filters[f.filterKey] !== null).map(
+                (facet) => (
+                  <Chip
+                    key={facet.filterKey}
+                    size="small"
+                    label={rangeChipLabel(
+                      t,
+                      facet,
+                      filters[facet.filterKey],
+                      language,
+                      system
+                    )}
+                    onDelete={() => handleSetRange(facet.filterKey, null)}
+                    sx={activeChipSx}
+                  />
+                )
+              )}
               {/* Same reset as the panel header: facets only, search text
                   preserved. */}
               <Button
