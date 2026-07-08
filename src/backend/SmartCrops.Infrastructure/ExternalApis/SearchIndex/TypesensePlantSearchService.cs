@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using SmartCrops.Core.Interfaces;
@@ -68,7 +69,7 @@ public class TypesensePlantSearchService : IPlantSearchService
     /// crash on: an orphan predicate for a field removed from the registry.
     /// Internal (not private) for exactly that test.
     /// </summary>
-    internal static readonly Dictionary<string, Func<PlantSearchQuery, bool>> SelectionPredicates = new()
+    internal static readonly IReadOnlyDictionary<string, Func<PlantSearchQuery, bool>> SelectionPredicates = new Dictionary<string, Func<PlantSearchQuery, bool>>
     {
         [PlantFacetFields.PlantTypeId] = q => q.PlantTypeIds is { Length: > 0 },
         [PlantFacetFields.CareLevel] = q => q.CareLevels is { Length: > 0 },
@@ -85,7 +86,7 @@ public class TypesensePlantSearchService : IPlantSearchService
         [PlantFacetFields.IsThorny] = q => q.IsThorny is not null,
         [PlantFacetFields.IsTropical] = q => q.IsTropical is not null,
         [PlantFacetFields.IsInvasive] = q => q.IsInvasive is not null,
-    };
+    }.ToFrozenDictionary();
 
     /// <summary>
     /// The disjunctive roster (SMA-274): membership AND order come from the
@@ -204,6 +205,16 @@ public class TypesensePlantSearchService : IPlantSearchService
 
         var results = await _typesense.MultiSearch<PlantSearchHitDocument>(
             searches, limitMultiSearches: null, ct);
+
+        // The replacement loop below indexes results[i + 1] positionally — a
+        // short results array (a malformed engine response with no inline
+        // error) must surface on the 503 contract, not as an
+        // IndexOutOfRangeException masquerading as a 500.
+        if (results.Count != searches.Count)
+        {
+            throw new TypesenseApiException(
+                $"multi_search returned {results.Count} results for {searches.Count} searches.");
+        }
 
         // multi_search reports per-search failures inline in a 200 body; a
         // failed sub-search must surface as the same 503 contract as a failed

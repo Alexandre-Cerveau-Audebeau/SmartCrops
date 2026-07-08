@@ -397,6 +397,31 @@ public class TypesensePlantSearchServiceTests
     }
 
     [Fact]
+    public async Task Search_ShortResultsArray_SurfacesAsTypesenseApiException()
+    {
+        // Defensive branch gets its test: the replacement loop indexes
+        // results positionally, so a malformed response with FEWER results
+        // than searches (and no inline error to blame) must fail on the 503
+        // contract — never as an IndexOutOfRangeException.
+        var handler = new StubTypesenseHttpHandler
+        {
+            OnSend = _ => Json(new
+            {
+                // ONE result for a 2-search request (main + careLevel sub).
+                results = new[]
+                {
+                    SearchResult(303, [Guid1], Facet("careLevel", ("Easy", 280))),
+                },
+            }),
+        };
+        var service = ServiceOver(handler);
+
+        var ex = await Assert.ThrowsAsync<TypesenseApiException>(
+            () => service.SearchAsync(new PlantSearchQuery { CareLevels = ["Easy"] }));
+        Assert.Contains("1 results for 2 searches", ex.Message);
+    }
+
+    [Fact]
     public async Task Search_SubSearchError_SurfacesAsTypesenseApiException()
     {
         // multi_search reports per-search failures inline in a 200 body —
