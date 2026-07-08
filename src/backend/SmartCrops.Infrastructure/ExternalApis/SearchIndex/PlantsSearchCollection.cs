@@ -32,26 +32,27 @@ public static class PlantsSearchCollection
         new("descriptionEn", FieldType.String, false, true),
         new("descriptionFr", FieldType.String, false, true),
 
-        // ── Facets: plant type ─────────────────────────────────────────────
-        new("plantTypeId", FieldType.Int32, true),
+        // ── Facets: plant type (names from the PlantFacetFields registry —
+        // shared with the filter builder and the search service) ───────────
+        new(PlantFacetFields.PlantTypeId, FieldType.Int32, true),
 
         // ── Facets: booleans as 3-state strings ────────────────────────────
-        new("isEdible", FieldType.String, true),
-        new("isToxicToHumans", FieldType.String, true),
-        new("isToxicToPets", FieldType.String, true),
-        new("isIndoor", FieldType.String, true),
-        new("isDroughtTolerant", FieldType.String, true),
-        new("isMedicinal", FieldType.String, true),
-        new("isSaltTolerant", FieldType.String, true),
-        new("isThorny", FieldType.String, true),
-        new("isTropical", FieldType.String, true),
-        new("isInvasive", FieldType.String, true),
+        new(PlantFacetFields.IsEdible, FieldType.String, true),
+        new(PlantFacetFields.IsToxicToHumans, FieldType.String, true),
+        new(PlantFacetFields.IsToxicToPets, FieldType.String, true),
+        new(PlantFacetFields.IsIndoor, FieldType.String, true),
+        new(PlantFacetFields.IsDroughtTolerant, FieldType.String, true),
+        new(PlantFacetFields.IsMedicinal, FieldType.String, true),
+        new(PlantFacetFields.IsSaltTolerant, FieldType.String, true),
+        new(PlantFacetFields.IsThorny, FieldType.String, true),
+        new(PlantFacetFields.IsTropical, FieldType.String, true),
+        new(PlantFacetFields.IsInvasive, FieldType.String, true),
 
         // ── Facets: enums as strings ───────────────────────────────────────
-        new("careLevel", FieldType.String, true),
-        new("wateringNeedLevel", FieldType.String, true),
-        new("growthRate", FieldType.String, true),
-        new("lifeCycle", FieldType.String, true),
+        new(PlantFacetFields.CareLevel, FieldType.String, true),
+        new(PlantFacetFields.WateringNeedLevel, FieldType.String, true),
+        new(PlantFacetFields.GrowthRate, FieldType.String, true),
+        new(PlantFacetFields.LifeCycle, FieldType.String, true),
 
         // ── Facets: numerics (optional) + <field>Known companions ──────────
         new("hardinessZoneMin", FieldType.Int32, true, true),

@@ -166,4 +166,94 @@ public class PlantSearchFilterBuilderTests
             + "|| hardinessZoneMinKnown:=false || hardinessZoneMaxKnown:=false)",
             filter);
     }
+
+    // ── Disjunctive exclusion (SMA-274): a counted facet's sub-search builds
+    // the same expression minus that one facet's own fragment. ──────────────
+
+    private static PlantSearchQuery FullSelectionQuery() => new()
+    {
+        PlantTypeIds = [2],
+        CareLevels = ["Easy"],
+        IsEdible = true,
+        HardinessZoneMin = 4,
+        HardinessZoneMax = 9,
+    };
+
+    [Fact]
+    public void Build_ExcludingEnumFacet_DropsExactlyItsGroup()
+    {
+        var filter = PlantSearchFilterBuilder.Build(FullSelectionQuery(), "careLevel");
+
+        Assert.Equal(
+            "plantTypeId:=[2] && isEdible:=[true,unknown] "
+            + "&& ((hardinessZoneMax:>=4 && hardinessZoneMin:<=9) "
+            + "|| hardinessZoneMinKnown:=false || hardinessZoneMaxKnown:=false)",
+            filter);
+    }
+
+    [Fact]
+    public void Build_ExcludingBooleanFacet_DropsExactlyItsGroup()
+    {
+        var filter = PlantSearchFilterBuilder.Build(FullSelectionQuery(), "isEdible");
+
+        Assert.Equal(
+            "plantTypeId:=[2] && careLevel:=[Easy,unknown] "
+            + "&& ((hardinessZoneMax:>=4 && hardinessZoneMin:<=9) "
+            + "|| hardinessZoneMinKnown:=false || hardinessZoneMaxKnown:=false)",
+            filter);
+    }
+
+    [Fact]
+    public void Build_ExcludingPlantTypeFacet_DropsExactlyItsGroup()
+    {
+        var filter = PlantSearchFilterBuilder.Build(FullSelectionQuery(), "plantTypeId");
+
+        Assert.Equal(
+            "careLevel:=[Easy,unknown] && isEdible:=[true,unknown] "
+            + "&& ((hardinessZoneMax:>=4 && hardinessZoneMin:<=9) "
+            + "|| hardinessZoneMinKnown:=false || hardinessZoneMaxKnown:=false)",
+            filter);
+    }
+
+    [Fact]
+    public void Build_ExcludingUnselectedFacet_IsANoOp()
+    {
+        // No lifeCycle selection in the query: excluding it must yield the
+        // exact expression the plain overload builds.
+        Assert.Equal(
+            PlantSearchFilterBuilder.Build(FullSelectionQuery()),
+            PlantSearchFilterBuilder.Build(FullSelectionQuery(), "lifeCycle"));
+    }
+
+    [Fact]
+    public void Build_RangeFragments_SurviveEveryExclusion()
+    {
+        // Ranges have no counts, so no sub-search ever addresses them — their
+        // fragments must stay in the expression whatever facet is excluded.
+        foreach (var excluded in new[] { "plantTypeId", "careLevel", "isEdible" })
+        {
+            var filter = PlantSearchFilterBuilder.Build(FullSelectionQuery(), excluded);
+
+            Assert.Contains("hardinessZoneMax:>=4", filter);
+            Assert.Contains("hardinessZoneMinKnown:=false", filter);
+        }
+    }
+
+    [Fact]
+    public void Build_ExcludedFacet_StillValidatesItsVocabulary()
+    {
+        // Exclusion skips the fragment, never the injection guard.
+        var query = new PlantSearchQuery { CareLevels = ["DROP TABLE"] };
+
+        Assert.Throws<ArgumentException>(
+            () => PlantSearchFilterBuilder.Build(query, "careLevel"));
+    }
+
+    [Fact]
+    public void Build_ExcludingTheOnlySelectedFacet_ReturnsNull()
+    {
+        // A single-facet context minus itself is an unfiltered sub-search.
+        Assert.Null(PlantSearchFilterBuilder.Build(
+            new PlantSearchQuery { CareLevels = ["Easy"] }, "careLevel"));
+    }
 }
