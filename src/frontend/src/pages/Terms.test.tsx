@@ -17,15 +17,18 @@ describe('Terms (SMA-35)', () => {
     await i18next.changeLanguage('en');
   });
 
-  it('renders title, sections and placeholder chips in English', () => {
-    renderPage();
+  it('renders title, sections and the real date in English', () => {
+    const { container } = renderPage();
     expect(
       screen.getByRole('heading', { level: 1, name: 'Terms of Use' })
     ).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Governing law' })
     ).toBeInTheDocument();
-    expect(screen.getAllByText(/OPTION/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/July 10, 2026/)).toBeInTheDocument();
+    // SMA-157 regression: no unresolved [À REMPLIR/CONFIRMER/ACTIVER] marker.
+    expect(container.textContent).not.toContain('[À');
+    expect(container.textContent).not.toContain('[OPTION');
   });
 
   it('keeps the botanical-data disclaimer (information, not prescription)', () => {
@@ -40,9 +43,9 @@ describe('Terms (SMA-35)', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders in French with the full disclaimer', async () => {
+  it('renders in French with the full disclaimer and the real date', async () => {
     await i18next.changeLanguage('fr');
-    renderPage();
+    const { container } = renderPage();
     expect(
       screen.getByRole('heading', {
         level: 1,
@@ -57,5 +60,8 @@ describe('Terms (SMA-35)', () => {
         /ne constituent en aucun cas un avis médical, vétérinaire/
       )
     ).toBeInTheDocument();
+    expect(screen.getByText(/10 juillet 2026/)).toBeInTheDocument();
+    expect(container.textContent).not.toContain('[À');
+    expect(container.textContent).not.toContain('[OPTION');
   });
 });

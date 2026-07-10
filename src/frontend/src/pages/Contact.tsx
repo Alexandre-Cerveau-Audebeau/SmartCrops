@@ -28,7 +28,6 @@ import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
 import LockIcon from '@mui/icons-material/Lock';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import ComingSoonChip from '../components/ComingSoonChip';
-import PlaceholderChip from '../components/Legal/PlaceholderChip';
 
 /**
  * Stable Reason enum — this is the CONTRACT for the SMA-30 backend (SMTP).
@@ -519,7 +518,7 @@ export default function Contact() {
                   {t('contact.goodToKnow.emailLabel')}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  contact@smartcrops.fr <PlaceholderChip text="[À CONFIRMER]" />
+                  contact@smartcrops.fr
                 </Typography>
               </Box>
               <Typography variant="body2" color="text.secondary">

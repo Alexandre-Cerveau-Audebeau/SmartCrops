@@ -1038,7 +1038,7 @@
   "legal": {
     "layout": {
       "lastUpdated": "Dernière mise à jour :",
-      "updatedDate": "[À REMPLIR : date]",
+      "updatedDate": "10 juillet 2026",
       "courtesy": "Version originale française — en cas de divergence avec la traduction, la version française fait foi."
     },
     "mentions": {
@@ -1046,30 +1046,21 @@
       "subtitle": "Loi n° 2004-575 du 21 juin 2004 pour la confiance dans l'économie numérique (LCEN)",
       "s01": {
         "title": "Éditeur du site",
-        "intro": "**Choix à faire — deux options légales :**",
-        "optionA": {
-          "title": "Option A — Identité publiée (recommandée ici)",
-          "body": "Le site est édité à titre non professionnel par : [À REMPLIR : Prénom NOM] — particulier. Contact : [À REMPLIR : email de contact].",
-          "note": "L'adresse postale d'un particulier n'a pas à être publiée si un moyen de contact effectif est fourni ; elle doit en revanche être connue de l'hébergeur."
-        },
-        "optionB": {
-          "title": "Option B — Éditeur non professionnel anonyme (art. 6-III-2 LCEN)",
-          "body": "Un particulier éditant un site à titre non professionnel peut ne pas publier son identité, à condition d'avoir communiqué ses coordonnées complètes à l'hébergeur. La page indique alors seulement : « Le site est édité à titre non professionnel. Conformément à l'article 6-III-2 de la LCEN, l'éditeur a transmis ses éléments d'identification personnelle à l'hébergeur ci-dessous. »"
-        },
-        "recommendation": "**Recommandation** : Option A — le dépôt GitHub du projet est public et déjà au nom de son auteur ; l'anonymat n'apporterait rien et l'identité affichée sert l'objectif portfolio."
+        "p1": "Le site est édité à titre non professionnel par **Alexandre Cerveau Audebeau**, particulier.",
+        "p2": "Contact : **contact@smartcrops.fr**.",
+        "p3": "L'adresse postale de l'éditeur, qui n'a pas à être publiée dès lors qu'un moyen de contact effectif est fourni, a été communiquée à l'hébergeur."
       },
       "s02": {
         "title": "Directeur de la publication",
-        "body": "[À REMPLIR : Prénom NOM] (l'éditeur)."
+        "body": "**Alexandre Cerveau Audebeau** (l'éditeur)."
       },
       "s03": {
         "title": "Hébergement",
-        "body": "Le site est hébergé par : **OVH** [À CONFIRMER : dénomination exacte — OVH SAS / OVHcloud — et adresse du siège (Roubaix, France) sur https://www.ovhcloud.com]",
-        "option": "[OPTION : numéro de téléphone public de l'hébergeur]"
+        "body": "Le site est hébergé par : **OVH SAS**, 2 rue Kellermann - 59100 Roubaix - France."
       },
       "s04": {
         "title": "Propriété intellectuelle",
-        "p1": "La structure du site, ses textes originaux, son logo et sa charte graphique sont la propriété de l'éditeur, sauf mention contraire. Le code source du projet est publié sur GitHub sous licence [À CONFIRMER : licence du dépôt].",
+        "p1": "La structure du site, ses textes originaux, son logo et sa charte graphique sont la propriété de l'éditeur, sauf mention contraire. Le code source du projet est publié sur GitHub ; tous droits réservés.",
         "p2": "**Données et médias botaniques** : les fiches de plantes agrègent des données et images issues de sources tierces, utilisées conformément à leurs conditions et licences respectives :",
         "credits": {
           "gbif": "**GBIF** (Global Biodiversity Information Facility) — taxonomie ;",
@@ -1081,14 +1072,14 @@
       },
       "s05": {
         "title": "Contact",
-        "body": "Pour toute question relative au site : [À REMPLIR : email de contact] (ou via la page Contact)."
+        "body": "Pour toute question relative au site : **contact@smartcrops.fr** (ou via la page Contact)."
       }
     },
     "privacy": {
       "title": "Politique de confidentialité",
       "s01": {
         "title": "Qui est responsable du traitement ?",
-        "body": "Le responsable du traitement des données personnelles collectées sur **SmartCrops** est l'éditeur du site : [À REMPLIR : Prénom NOM], joignable à [À REMPLIR : email]. **SmartCrops** est un projet personnel, gratuit et sans finalité commerciale."
+        "body": "Le responsable du traitement des données personnelles collectées sur **SmartCrops** est l'éditeur du site : **Alexandre Cerveau Audebeau**, joignable à **contact@smartcrops.fr**. **SmartCrops** est un projet personnel, gratuit et sans finalité commerciale."
       },
       "s02": {
         "title": "Quelles données sont collectées, et pourquoi ?",
@@ -1131,9 +1122,9 @@
             "basis": "Intérêt légitime (fonctionnement du service) — cookie strictement nécessaire"
           },
           "language": {
-            "name": "Préférence de langue",
-            "data": "Choix FR/EN [À CONFIRMER : stocké en localStorage du navigateur]",
-            "purpose": "Affichage dans votre langue",
+            "name": "Préférences d'affichage",
+            "data": "Langue (FR/EN), thème clair/sombre, unités de mesure — stockés en localStorage du navigateur",
+            "purpose": "Affichage selon vos préférences",
             "basis": "Intérêt légitime"
           },
           "logs": {
@@ -1143,20 +1134,13 @@
             "basis": "Intérêt légitime"
           },
           "contact": {
-            "name": "Formulaire de contact [À ACTIVER quand le backend contact sera livré]",
+            "name": "Formulaire de contact",
             "data": "Nom, email, sujet, message",
             "purpose": "Répondre à votre demande",
-            "basis": "Intérêt légitime / consentement"
-          },
-          "newsletter": {
-            "name": "Newsletter [À ACTIVER quand le backend newsletter sera livré]",
-            "data": "Email",
-            "purpose": "Envoi d'astuces et d'actualités du projet",
-            "basis": "**Consentement** (désinscription possible à tout moment via le lien de chaque email)"
+            "basis": "Intérêt légitime"
           }
         },
-        "note": "**SmartCrops** **ne collecte pas** de données dites « sensibles », **ne vend pas** vos données, et **n'affiche pas** de publicité.",
-        "futureProfile": "[OPTION — à publier quand le profil enrichi existera] Si le profil est étendu (zone climatique, coordonnées GPS, type de jardin…), ce tableau sera complété — finalité : recommandations personnalisées ; base légale : exécution du contrat et/ou consentement pour la géolocalisation."
+        "note": "**SmartCrops** **ne collecte pas** de données dites « sensibles », **ne vend pas** vos données, et **n'affiche pas** de publicité."
       },
       "s03": {
         "title": "Qui a accès à vos données ?",
@@ -1168,35 +1152,34 @@
       },
       "s04": {
         "title": "Vos données quittent-elles l'Union européenne ?",
-        "body": "Les données du service sont hébergées **en France (OVH)**. Si vous utilisez la connexion Google, l'authentification implique Google LLC, susceptible de traiter des données hors UE dans le cadre des mécanismes de transfert reconnus [À CONFIRMER : encadrement actuel des transferts Google (clauses contractuelles types / cadre UE–États-Unis)]."
+        "body": "Les données du service sont hébergées **en France (OVH)**. Si vous utilisez la connexion Google, l'authentification implique Google LLC, susceptible de traiter des données hors UE dans le cadre des mécanismes de transfert reconnus (décision d'adéquation UE–États-Unis ou clauses contractuelles types)."
       },
       "s05": {
         "title": "Combien de temps vos données sont-elles conservées ?",
-        "intro": "Durées proposées (à trancher) :",
+        "intro": "Durées de conservation :",
         "items": {
-          "account": "**Compte et contenus associés** — durée de vie du compte ; suppression effective dans un délai de [À REMPLIR : ex. 30 jours] après suppression du compte.",
-          "logs": "**Journaux techniques** — [À REMPLIR : ex. 12 mois maximum].",
-          "contact": "**Messages de contact** — [À REMPLIR : ex. 12 mois après le dernier échange].",
-          "newsletter": "**Email newsletter** — jusqu'à désinscription."
+          "account": "**Compte et contenus associés** — durée de vie du compte ; suppression effective dans un délai de 30 jours après suppression du compte.",
+          "logs": "**Journaux techniques** — 12 mois maximum.",
+          "contact": "**Messages de contact** — 12 mois après le dernier échange."
         }
       },
       "s06": {
         "title": "Comment vos données sont-elles protégées ?",
-        "body": "Mesures en place : mots de passe stockés sous forme hachée ; cookie de session **HttpOnly** (inaccessible aux scripts) ; chiffrement des échanges via HTTPS [À CONFIRMER : en production] ; accès administrateur restreint ; secrets de configuration tenus hors du dépôt public."
+        "body": "Mesures en place : mots de passe stockés sous forme hachée ; cookie de session **HttpOnly** (inaccessible aux scripts) ; chiffrement des échanges via HTTPS ; accès administrateur restreint ; secrets de configuration tenus hors du dépôt public."
       },
       "s07": {
         "title": "Quels sont vos droits ?",
         "p1": "Conformément au RGPD et à la loi Informatique et Libertés, vous disposez des droits suivants sur vos données : **accès**, **rectification**, **effacement**, **limitation du traitement**, **opposition**, **portabilité**, ainsi que du droit de définir des directives post-mortem.",
-        "p2": "**Pour exercer ces droits** : écrivez à **contact@smartcrops.fr** [À CONFIRMER : adresse email définitive] depuis l'adresse associée à votre compte (une vérification d'identité pourra être demandée). Réponse sous un mois. Vous pouvez aussi supprimer vous-même vos contenus (jardins) depuis l'application [À CONFIRMER : et le compte lui-même, selon les fonctionnalités disponibles].",
+        "p2": "**Pour exercer ces droits** : écrivez à **contact@smartcrops.fr** depuis l'adresse associée à votre compte (une vérification d'identité pourra être demandée). Réponse sous un mois. Vous pouvez supprimer vous-même vos contenus (jardins) depuis l'application ; la suppression du compte s'effectue sur demande à l'adresse ci-dessus (réponse sous un mois).",
         "p3": "Si vous estimez que vos droits ne sont pas respectés, vous pouvez introduire une réclamation auprès de la **CNIL** (www.cnil.fr)."
       },
       "s08": {
-        "title": "Mineurs [OPTION]",
+        "title": "Mineurs",
         "body": "Le service ne s'adresse pas aux enfants de moins de 15 ans sans l'accord du titulaire de l'autorité parentale (article 45 de la loi Informatique et Libertés)."
       },
       "s09": {
         "title": "Cookies",
-        "intro": "État actuel de **SmartCrops** : un **cookie d'authentification HttpOnly** (strictement nécessaire) et une préférence de langue [À CONFIRMER : localStorage]. **Aucun cookie publicitaire ni de mesure d'audience.** Les traceurs strictement nécessaires sont exemptés de consentement (CNIL) : une information claire suffit.",
+        "intro": "État actuel de **SmartCrops** : deux cookies **strictement nécessaires** (**HttpOnly**) et des préférences stockées en localStorage du navigateur (langue, thème, unités, fermeture du bandeau). **Aucun cookie publicitaire ni de mesure d'audience.** Les traceurs strictement nécessaires sont exemptés de consentement (CNIL) : une information claire suffit.",
         "tableAriaLabel": "Cookies et stockage local utilisés",
         "cols": {
           "name": "Nom",
@@ -1206,22 +1189,40 @@
         },
         "rows": {
           "auth": {
-            "name": "[À CONFIRMER : nom du cookie d'auth]",
-            "type": "Strictement nécessaire (HttpOnly)",
+            "name": "smartcrops_token",
+            "type": "Cookie strictement nécessaire (HttpOnly)",
             "purpose": "Maintien de la session connectée",
-            "duration": "[À CONFIRMER : durée du jeton/session]"
+            "duration": "7 jours"
+          },
+          "binding": {
+            "name": "auth_binding",
+            "type": "Cookie technique transitoire (HttpOnly)",
+            "purpose": "Sécurisation de la connexion Google (anti-CSRF)",
+            "duration": "2 minutes"
           },
           "language": {
-            "name": "Préférence de langue",
+            "name": "smartcrops-language",
             "type": "Stockage local",
-            "purpose": "Mémoriser FR/EN",
-            "duration": "Persistant (jusqu'à effacement par l'utilisateur)"
+            "purpose": "Mémoriser la langue (FR/EN)",
+            "duration": "Persistant (jusqu'à effacement)"
+          },
+          "colorMode": {
+            "name": "smartcrops-color-mode",
+            "type": "Stockage local",
+            "purpose": "Mémoriser le thème clair/sombre",
+            "duration": "Persistant (jusqu'à effacement)"
+          },
+          "unitSystem": {
+            "name": "smartcrops.unitSystem",
+            "type": "Stockage local",
+            "purpose": "Mémoriser les unités (métrique/impérial)",
+            "duration": "Persistant (jusqu'à effacement)"
           },
           "choice": {
-            "name": "Choix cookies",
+            "name": "sc_cookie_notice_ack",
             "type": "Stockage local",
-            "purpose": "Mémoriser votre choix sur le bandeau",
-            "duration": "[À REMPLIR : ex. 6 mois]"
+            "purpose": "Mémoriser la fermeture du bandeau cookies",
+            "duration": "Persistant (jusqu'à effacement)"
           }
         }
       },
@@ -1270,7 +1271,7 @@
       "s07": {
         "title": "Responsabilité",
         "items": {
-          "bestEffort": "L'éditeur s'efforce d'assurer le bon fonctionnement du Service mais ne garantit ni l'absence d'erreurs, ni la disponibilité continue, ni la conservation des données : pensez à conserver une copie de ce qui vous est précieux [OPTION : jusqu'à la disponibilité d'une fonction d'export].",
+          "bestEffort": "L'éditeur s'efforce d'assurer le bon fonctionnement du Service mais ne garantit ni l'absence d'erreurs, ni la disponibilité continue, ni la conservation des données : pensez à conserver une copie de ce qui vous est précieux.",
           "links": "Le Service peut contenir des liens vers des sites tiers, dont l'éditeur ne contrôle pas le contenu.",
           "liability": "La responsabilité de l'éditeur ne saurait être engagée qu'en cas de faute prouvée, et dans les limites permises par la loi pour un service gratuit."
         }
