@@ -11,7 +11,9 @@ import {
   vi,
 } from 'vitest';
 import i18next from '../i18n/i18n';
-import Contact, { ContactServerError } from './Contact';
+import en from '../i18n/en.json';
+import fr from '../i18n/fr.json';
+import Contact, { CONTACT_EMAIL, ContactServerError } from './Contact';
 
 function renderContact() {
   return render(
@@ -147,5 +149,29 @@ describe('Contact (SMA-36)', () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('CONTACT_EMAIL parity (SMA-157)', () => {
+  // Drift lock replacing the rejected i18n interpolation (SMA-278): the legal
+  // and contact copy hard-code the published address, so any future edit that
+  // introduces a different email in either locale must fail this test.
+  it('every email in the legal + contact i18n copy equals CONTACT_EMAIL (FR + EN)', () => {
+    const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+    const flatten = (node: unknown): string[] =>
+      typeof node === 'string'
+        ? [node]
+        : node && typeof node === 'object'
+          ? Object.values(node).flatMap(flatten)
+          : [];
+    for (const locale of [en, fr]) {
+      const emails = [locale.legal, locale.contact]
+        .flatMap(flatten)
+        .flatMap((s) => s.match(EMAIL_RE) ?? []);
+      expect(new Set(emails)).toEqual(new Set([CONTACT_EMAIL]));
+      // Measured floor at 3f74ddc: 4 occurrences per locale (mentions s01/s05,
+      // privacy s01/s07). Raise if legitimate copy adds more; never lower to 0.
+      expect(emails.length).toBeGreaterThanOrEqual(4);
+    }
   });
 });

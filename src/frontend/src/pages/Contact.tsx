@@ -60,7 +60,7 @@ const reasonLabelKey: Record<ContactReason, string> = {
 };
 
 // Single source for the published contact address (rendered as a mailto link).
-const CONTACT_EMAIL = 'contact@smartcrops.fr';
+export const CONTACT_EMAIL = 'contact@smartcrops.fr';
 
 // Simulated-send latency (ms) before the success/error state shows (mockup B5).
 const SEND_DELAY_MS = 1100;
