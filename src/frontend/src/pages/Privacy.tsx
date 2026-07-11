@@ -15,10 +15,16 @@ const DATA_ROW_KEYS = [
   'language',
   'logs',
   'contact',
-  'newsletter',
 ] as const;
 
-const COOKIE_ROW_KEYS = ['auth', 'language', 'choice'] as const;
+const COOKIE_ROW_KEYS = [
+  'auth',
+  'binding',
+  'language',
+  'colorMode',
+  'unitSystem',
+  'choice',
+] as const;
 
 /** SMA-35: /privacy — Politique de confidentialité (trame §2 + tableau cookies §4.3). */
 export default function Privacy() {
@@ -47,7 +53,6 @@ export default function Privacy() {
           ])}
         />
         <LegalParagraph text={t('legal.privacy.s02.note')} />
-        <LegalParagraph text={t('legal.privacy.s02.futureProfile')} />
       </LegalSection>
 
       <LegalSection number="03" title={t('legal.privacy.s03.title')}>
@@ -76,7 +81,6 @@ export default function Privacy() {
             t('legal.privacy.s05.items.account'),
             t('legal.privacy.s05.items.logs'),
             t('legal.privacy.s05.items.contact'),
-            t('legal.privacy.s05.items.newsletter'),
           ]}
         />
       </LegalSection>

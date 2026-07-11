@@ -17,40 +17,56 @@ describe('LegalNotice (SMA-35)', () => {
     await i18next.changeLanguage('en');
   });
 
-  it('renders title, sections and placeholder chips in English, with the courtesy notice', () => {
-    renderPage();
+  it('renders the real publisher identity, host and date in English, with the courtesy notice', () => {
+    const { container } = renderPage();
     expect(
       screen.getByRole('heading', { level: 1, name: 'Legal Notice' })
     ).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Hosting' })
     ).toBeInTheDocument();
-    expect(screen.getAllByText(/À REMPLIR/).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText('Alexandre Cerveau Audebeau').length
+    ).toBeGreaterThan(0);
+    expect(screen.getByText('OVH SAS')).toBeInTheDocument();
+    expect(
+      screen.getByText(/2 rue Kellermann - 59100 Roubaix - France/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/July 10, 2026/)).toBeInTheDocument();
     expect(screen.getByText(/the French version prevails/)).toBeInTheDocument();
+    // SMA-157 regression: no unresolved [À REMPLIR/CONFIRMER/ACTIVER] marker.
+    expect(container.textContent).not.toContain('[À');
+    expect(container.textContent).not.toContain('[OPTION');
   });
 
-  it('renders in French without the courtesy notice', async () => {
+  it('renders the real content in French without the courtesy notice', async () => {
     await i18next.changeLanguage('fr');
-    renderPage();
+    const { container } = renderPage();
     expect(
       screen.getByRole('heading', { level: 1, name: 'Mentions légales' })
     ).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Hébergement' })
     ).toBeInTheDocument();
-    expect(screen.getAllByText(/À REMPLIR/).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText('Alexandre Cerveau Audebeau').length
+    ).toBeGreaterThan(0);
+    expect(screen.getByText('OVH SAS')).toBeInTheDocument();
+    expect(screen.getByText(/10 juillet 2026/)).toBeInTheDocument();
     expect(
       screen.queryByText(/the French version prevails/)
     ).not.toBeInTheDocument();
+    expect(container.textContent).not.toContain('[À');
+    expect(container.textContent).not.toContain('[OPTION');
   });
 
-  it('renders both LCEN publisher options (A and B)', () => {
+  it('resolves the publisher as a single published identity (no more A/B options)', () => {
     renderPage();
     expect(
-      screen.getByRole('heading', { name: /Option A/ })
-    ).toBeInTheDocument();
+      screen.queryByRole('heading', { name: /Option A/ })
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: /Option B/ })
-    ).toBeInTheDocument();
+      screen.queryByRole('heading', { name: /Option B/ })
+    ).not.toBeInTheDocument();
   });
 });

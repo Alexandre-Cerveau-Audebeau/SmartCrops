@@ -10,7 +10,6 @@ import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import TranslateIcon from '@mui/icons-material/Translate';
 import { adaptBadge } from '../../utils/badgeColors';
-import PlaceholderChip from './PlaceholderChip';
 
 interface LegalPageLayoutProps {
   title: string;
@@ -20,7 +19,7 @@ interface LegalPageLayoutProps {
 
 /**
  * SMA-35: shared template for the three legal pages — centered header
- * (title, optional subtitle, last-updated placeholder), a courtesy-translation
+ * (title, optional subtitle, last-updated date), a courtesy-translation
  * notice when the active language is EN (the French version prevails), and a
  * white reading-column card whose numbered sections are separated by dividers.
  */
@@ -56,8 +55,7 @@ export default function LegalPageLayout({
             </Typography>
           )}
           <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-            {t('legal.layout.lastUpdated')}{' '}
-            <PlaceholderChip text={t('legal.layout.updatedDate')} />
+            {t('legal.layout.lastUpdated')} {t('legal.layout.updatedDate')}
           </Typography>
         </Box>
 

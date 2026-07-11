@@ -28,7 +28,6 @@ import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
 import LockIcon from '@mui/icons-material/Lock';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import ComingSoonChip from '../components/ComingSoonChip';
-import PlaceholderChip from '../components/Legal/PlaceholderChip';
 
 /**
  * Stable Reason enum — this is the CONTRACT for the SMA-30 backend (SMTP).
@@ -59,6 +58,9 @@ const reasonLabelKey: Record<ContactReason, string> = {
   privacy: 'contact.form.reasons.privacy',
   other: 'contact.form.reasons.other',
 };
+
+// Single source for the published contact address (rendered as a mailto link).
+export const CONTACT_EMAIL = 'contact@smartcrops.fr';
 
 // Simulated-send latency (ms) before the success/error state shows (mockup B5).
 const SEND_DELAY_MS = 1100;
@@ -518,9 +520,13 @@ export default function Contact() {
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
                   {t('contact.goodToKnow.emailLabel')}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  contact@smartcrops.fr <PlaceholderChip text="[À CONFIRMER]" />
-                </Typography>
+                <Link
+                  href={`mailto:${CONTACT_EMAIL}`}
+                  variant="body2"
+                  color="text.secondary"
+                >
+                  {CONTACT_EMAIL}
+                </Link>
               </Box>
               <Typography variant="body2" color="text.secondary">
                 {t('contact.goodToKnow.replyTime')}
