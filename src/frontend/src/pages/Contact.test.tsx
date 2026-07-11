@@ -51,6 +51,11 @@ describe('Contact (SMA-36)', () => {
     ].forEach((title) => {
       expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
     });
+    // SMA-157 R2: the contact card renders the address as a mailto link.
+    const emailLink = screen.getByRole('link', {
+      name: 'contact@smartcrops.fr',
+    });
+    expect(emailLink).toHaveAttribute('href', 'mailto:contact@smartcrops.fr');
   });
 
   it('renders in French', async () => {

@@ -34,7 +34,11 @@ describe('Privacy (SMA-35)', () => {
     expect(screen.getByText('Alexandre Cerveau Audebeau')).toBeInTheDocument();
     // SMA-157: the cookie table carries the audited real inventory.
     expect(screen.getByText('smartcrops_token')).toBeInTheDocument();
+    expect(screen.getByText('auth_binding')).toBeInTheDocument();
+    expect(screen.getByText('smartcrops-color-mode')).toBeInTheDocument();
+    expect(screen.getByText('smartcrops.unitSystem')).toBeInTheDocument();
     expect(screen.getByText('7 days')).toBeInTheDocument();
+    expect(screen.getByText('2 minutes')).toBeInTheDocument();
     expect(screen.getByText('sc_cookie_notice_ack')).toBeInTheDocument();
     // Newsletter has no backend: its rows are gone from the page.
     expect(screen.queryByText(/Newsletter/)).not.toBeInTheDocument();
