@@ -54,7 +54,7 @@ public class SmtpEmailService(
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(SendTimeout);
 
-        using var client = new SmtpClient { Timeout = 10000 };
+        using var client = new SmtpClient { Timeout = (int)SendTimeout.TotalMilliseconds };
         await client.ConnectAsync(smtp.Host, smtp.Port, SecureSocketOptions.SslOnConnect, cts.Token);
         await client.AuthenticateAsync(smtp.User, smtp.Password, cts.Token);
         await client.SendAsync(message, cts.Token);
