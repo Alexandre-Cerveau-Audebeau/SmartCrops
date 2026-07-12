@@ -5,11 +5,14 @@
  * logged on SMA-30).
  */
 export class HttpStatusError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number
-  ) {
+  // Explicit declaration + assignment (not a constructor parameter property):
+  // the frontend tsconfig enables `erasableSyntaxOnly`, which rejects
+  // non-erasable TS syntax at `tsc -b` time (TS1294 — broke the CI build).
+  readonly status: number;
+
+  constructor(message: string, status: number) {
     super(message);
     this.name = 'HttpStatusError';
+    this.status = status;
   }
 }
