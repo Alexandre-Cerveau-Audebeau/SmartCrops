@@ -40,6 +40,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         Fixture.PlantSearchStub.Reset();
         Fixture.PerenualHttpStub.Reset();
         Fixture.GbifHttpStub.Reset();
+        Fixture.EmailStub.Reset();
 
         Client = Fixture.Factory.CreateClient();
     }

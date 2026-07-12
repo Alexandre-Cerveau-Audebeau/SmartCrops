@@ -1,14 +1,17 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using SmartCrops.Api.Configuration;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure;
+using SmartCrops.Infrastructure.Email;
 using SmartCrops.Infrastructure.ExternalApis.Gbif;
 using SmartCrops.Infrastructure.ExternalApis.Logging;
 using SmartCrops.Infrastructure.ExternalApis.Perenual;
@@ -102,6 +105,29 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod()
               .AllowCredentials();
     });
+});
+
+// ── Rate limiting (SMA-30) ───────────────────────────────────────────────
+// Built-in .NET 8 limiter, opt-in per endpoint via [EnableRateLimiting] — a
+// global limiter would also throttle authenticated traffic. The "contact"
+// policy shields the public unauthenticated POST /api/contact (and the paid
+// SMTP relay behind it) from bursts. The IP partition keys on the direct peer
+// (Connection.RemoteIpAddress); behind the future reverse proxy this needs
+// UseForwardedHeaders — deliberately deferred to the OVH deployment ticket
+// (SMA-41). Limits are config-driven so integration tests can pin them
+// deterministically (RateLimiting:Contact:*).
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("contact", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = builder.Configuration.GetValue("RateLimiting:Contact:PermitLimit", 5),
+                Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:Contact:WindowMinutes", 10)),
+                QueueLimit = 0,
+            }));
 });
 
 // ── External taxonomy API: GBIF ──────────────────────────────────────────
@@ -240,6 +266,20 @@ builder.Services.AddTypesenseClient(config =>
 builder.Services.AddScoped<ISearchIndexingService, TypesenseSearchIndexingService>();
 builder.Services.AddScoped<IPlantSearchService, TypesensePlantSearchService>();
 
+// ── Transverse email: OVH SMTP via MailKit (SMA-30) ──────────────────────
+// Options validated at startup (missing password fails the host boot), same
+// contract as Trefle/Perenual/Typesense above. MailKit because OVH MX Plan
+// documents implicit TLS on 465 only, which the BCL SmtpClient cannot speak.
+// The service connects per send, so the API boots (and stays healthy) with
+// the mail relay unreachable; delivery failures surface as 502 on the
+// endpoints that send.
+builder.Services.AddOptions<SmtpOptions>()
+    .Bind(builder.Configuration.GetSection(SmtpOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -270,6 +310,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

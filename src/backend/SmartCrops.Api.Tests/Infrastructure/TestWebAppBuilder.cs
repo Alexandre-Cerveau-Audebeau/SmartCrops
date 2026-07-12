@@ -140,6 +140,21 @@ public sealed class TestWebAppBuilder
     }
 
     /// <summary>
+    /// Registers <c>Smtp:Password</c>. <c>SmtpOptions.Password</c> is
+    /// <c>[Required]</c> with an empty default and validated at host boot via
+    /// <c>ValidateOnStart</c>; any non-empty placeholder keeps the host alive.
+    /// Every other <c>SmtpOptions</c> property carries a real non-secret
+    /// default, and tests swap <c>IEmailService</c> for a stub, so nothing
+    /// ever dials the relay — but every booting factory needs this method
+    /// called so the host starts.
+    /// </summary>
+    public TestWebAppBuilder WithSmtp(string password = "test-password")
+    {
+        _config["Smtp:Password"] = password;
+        return this;
+    }
+
+    /// <summary>
     /// Registers <c>ConnectionStrings:DefaultConnection</c>. Use this for
     /// fixtures backed by a real database (e.g. Postgres Testcontainers).
     /// Mutually exclusive with <see cref="WithInMemoryDatabase"/>: calling

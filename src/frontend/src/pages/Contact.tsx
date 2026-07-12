@@ -28,27 +28,8 @@ import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
 import LockIcon from '@mui/icons-material/Lock';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import ComingSoonChip from '../components/ComingSoonChip';
-
-/**
- * Stable Reason enum — this is the CONTRACT for the SMA-30 backend (SMTP).
- * Do NOT rename these values; the labels are i18n-driven but the values ship.
- */
-export type ContactReason =
-  | 'plant-data'
-  | 'support'
-  | 'partnership'
-  | 'api'
-  | 'privacy'
-  | 'other';
-
-const REASONS: ContactReason[] = [
-  'plant-data',
-  'support',
-  'partnership',
-  'api',
-  'privacy',
-  'other',
-];
+import { REASONS, type ContactReason } from '../constants/contactReasons';
+import { sendContactMessage } from '../services/contactApi';
 
 const reasonLabelKey: Record<ContactReason, string> = {
   'plant-data': 'contact.form.reasons.plantData',
@@ -62,17 +43,20 @@ const reasonLabelKey: Record<ContactReason, string> = {
 // Single source for the published contact address (rendered as a mailto link).
 export const CONTACT_EMAIL = 'contact@smartcrops.fr';
 
-// Simulated-send latency (ms) before the success/error state shows (mockup B5).
-const SEND_DELAY_MS = 1100;
+type FormStatus =
+  | 'idle'
+  | 'sending'
+  | 'success'
+  | 'server-error'
+  | 'rate-limited'
+  | 'network-error';
 
-/**
- * Temporary test harness for SMA-30: flip to true to exercise the server-error
- * state (mockup B7). Typed `boolean` (not the `false` literal) so both branches
- * stay reachable; unreachable in normal use. Remove when the real POST lands.
- */
-const SIMULATE_SERVER_ERROR: boolean = false;
-
-type FormStatus = 'idle' | 'sending' | 'success' | 'server-error';
+// One error panel, three causes — the message key follows the failure state.
+const SUBMIT_ERROR_MESSAGE_KEY = {
+  'server-error': 'contact.serverError.message',
+  'rate-limited': 'contact.rateLimited.message',
+  'network-error': 'contact.networkError.message',
+} as const;
 
 interface FieldErrors {
   name?: string;
@@ -150,11 +134,18 @@ const intentCards: IntentCardDef[] = [
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /**
- * SMA-36: server-error panel (mockup B7). Exported so it can be unit-tested
- * directly — in normal use it is only reachable via the SIMULATE_SERVER_ERROR
- * harness (SMA-30 will wire the real failure path).
+ * SMA-36: server-error panel (mockup B7), exported so it can be unit-tested
+ * directly. SMA-30: reused for all three submit-failure states — the message
+ * key varies (server error / rate limited / network error), the presentation
+ * and retry affordance stay identical.
  */
-export function ContactServerError({ onRetry }: { onRetry: () => void }) {
+export function ContactServerError({
+  onRetry,
+  messageKey = 'contact.serverError.message',
+}: {
+  onRetry: () => void;
+  messageKey?: string;
+}) {
   const { t } = useTranslation();
   return (
     <Alert
@@ -165,7 +156,7 @@ export function ContactServerError({ onRetry }: { onRetry: () => void }) {
         </Button>
       }
     >
-      {t('contact.serverError.message')}
+      {t(messageKey)}
     </Alert>
   );
 }
@@ -207,7 +198,6 @@ function ContactSuccess() {
 export default function Contact() {
   const { t } = useTranslation();
   const formRef = useRef<HTMLDivElement>(null);
-  const sendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -216,12 +206,6 @@ export default function Contact() {
   const [message, setMessage] = useState('');
   const [errors, setErrors] = useState<FieldErrors>({});
   const [status, setStatus] = useState<FormStatus>('idle');
-
-  useEffect(() => {
-    return () => {
-      if (sendTimer.current) clearTimeout(sendTimer.current);
-    };
-  }, []);
 
   const selectIntent = (r: ContactReason) => {
     setReason(r);
@@ -242,22 +226,33 @@ export default function Contact() {
     return next;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Guard against re-entry while a send is in flight (the disabled button is
-    // not bulletproof against rapid/keyboard submits) so we never orphan a timer.
+    // not bulletproof against rapid/keyboard submits).
     if (status === 'sending') return;
     const found = validate();
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 
     setStatus('sending');
-    if (sendTimer.current) clearTimeout(sendTimer.current);
-    // TODO SMA-30: replace simulated success with real POST to the contact
-    // endpoint (map server error -> 'server-error' state).
-    sendTimer.current = setTimeout(() => {
-      setStatus(SIMULATE_SERVER_ERROR ? 'server-error' : 'success');
-    }, SEND_DELAY_MS);
+    try {
+      await sendContactMessage({
+        name,
+        email,
+        reason: reason as ContactReason,
+        subject: subject || undefined,
+        message,
+      });
+      setStatus('success');
+    } catch (err) {
+      // contactApi attaches the HTTP status on non-OK responses; a fetch
+      // TypeError (offline, DNS failure) carries none.
+      const httpStatus = (err as { status?: number }).status;
+      if (httpStatus === 429) setStatus('rate-limited');
+      else if (httpStatus === undefined) setStatus('network-error');
+      else setStatus('server-error');
+    }
   };
 
   const handleReasonChange = (e: SelectChangeEvent) => {
@@ -405,9 +400,14 @@ export default function Contact() {
                   {t('contact.form.title')}
                 </Typography>
 
-                {status === 'server-error' && (
+                {(status === 'server-error' ||
+                  status === 'rate-limited' ||
+                  status === 'network-error') && (
                   <Box sx={{ mb: 2 }}>
-                    <ContactServerError onRetry={() => setStatus('idle')} />
+                    <ContactServerError
+                      messageKey={SUBMIT_ERROR_MESSAGE_KEY[status]}
+                      onRetry={() => setStatus('idle')}
+                    />
                   </Box>
                 )}
 

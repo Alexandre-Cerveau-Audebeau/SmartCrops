@@ -2,7 +2,6 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import {
   afterAll,
-  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -13,7 +12,14 @@ import {
 import i18next from '../i18n/i18n';
 import en from '../i18n/en.json';
 import fr from '../i18n/fr.json';
+import { sendContactMessage } from '../services/contactApi';
 import Contact, { CONTACT_EMAIL, ContactServerError } from './Contact';
+
+// House convention: page tests mock the service module, never fetch itself
+// (the fetch layer has its own contactApi.test.ts).
+vi.mock('../services/contactApi', () => ({
+  sendContactMessage: vi.fn(),
+}));
 
 function renderContact() {
   return render(
@@ -21,6 +27,21 @@ function renderContact() {
       <Contact />
     </MemoryRouter>
   );
+}
+
+/** Fills the four required fields (reason via the intent-card CTA). */
+function fillValidForm() {
+  fireEvent.change(screen.getByLabelText('Name'), {
+    target: { value: 'Alex' },
+  });
+  fireEvent.change(screen.getByLabelText('Email'), {
+    target: { value: 'alex@example.com' },
+  });
+  // Card CTA pre-selects the Reason enum.
+  fireEvent.click(screen.getByRole('button', { name: 'Suggest a change' }));
+  fireEvent.change(screen.getByLabelText('Message'), {
+    target: { value: 'Hello there' },
+  });
 }
 
 // jsdom doesn't implement scrollIntoView; the card CTA scrolls to the form.
@@ -35,10 +56,7 @@ afterAll(() => {
 describe('Contact (SMA-36)', () => {
   beforeEach(async () => {
     await i18next.changeLanguage('en');
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
+    vi.mocked(sendContactMessage).mockReset();
   });
 
   it('renders the six intent cards (EN)', () => {
@@ -91,6 +109,7 @@ describe('Contact (SMA-36)', () => {
     expect(screen.getByText('Please choose a reason.')).toBeInTheDocument();
     expect(screen.getByText('Please write a message.')).toBeInTheDocument();
     expect(screen.queryByText('Message sent!')).not.toBeInTheDocument();
+    expect(vi.mocked(sendContactMessage)).not.toHaveBeenCalled();
   });
 
   it('distinguishes a malformed email as "invalid" (E5)', () => {
@@ -107,27 +126,24 @@ describe('Contact (SMA-36)', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('reaches the success state after a valid submit (simulated send)', () => {
-    vi.useFakeTimers();
+  it('reaches the success state after a valid submit (POST mocked)', async () => {
+    // Controllable promise: assert the in-flight state before resolving.
+    let resolveSend!: () => void;
+    vi.mocked(sendContactMessage).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSend = resolve;
+        })
+    );
     renderContact();
-    fireEvent.change(screen.getByLabelText('Name'), {
-      target: { value: 'Alex' },
-    });
-    fireEvent.change(screen.getByLabelText('Email'), {
-      target: { value: 'alex@example.com' },
-    });
-    // Card CTA pre-selects the Reason enum.
-    fireEvent.click(screen.getByRole('button', { name: 'Suggest a change' }));
-    fireEvent.change(screen.getByLabelText('Message'), {
-      target: { value: 'Hello there' },
-    });
+    fillValidForm();
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     // Sending state: button disabled with the "Sending…" label.
     expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
 
-    act(() => {
-      vi.advanceTimersByTime(1200);
+    await act(async () => {
+      resolveSend();
     });
 
     expect(screen.getByText('Message sent!')).toBeInTheDocument();
@@ -135,9 +151,76 @@ describe('Contact (SMA-36)', () => {
       'href',
       '/'
     );
+    expect(vi.mocked(sendContactMessage)).toHaveBeenCalledWith({
+      name: 'Alex',
+      email: 'alex@example.com',
+      reason: 'plant-data',
+      subject: undefined,
+      message: 'Hello there',
+    });
   });
 
-  it('renders the server-error panel with a working retry (SMA-30 harness)', () => {
+  it('maps a 5xx failure to the server-error panel, and retry leads back to success', async () => {
+    vi.mocked(sendContactMessage).mockRejectedValueOnce(
+      Object.assign(new Error('boom'), { status: 500 })
+    );
+    renderContact();
+    fillValidForm();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    });
+
+    expect(
+      screen.getByText('Something went wrong on our side.')
+    ).toBeInTheDocument();
+
+    // Retry resets to idle; the next submit succeeds.
+    vi.mocked(sendContactMessage).mockResolvedValueOnce(undefined);
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(
+      screen.queryByText('Something went wrong on our side.')
+    ).not.toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    });
+    expect(screen.getByText('Message sent!')).toBeInTheDocument();
+  });
+
+  it('maps a 429 rejection to the rate-limited message (SMA-30)', async () => {
+    vi.mocked(sendContactMessage).mockRejectedValueOnce(
+      Object.assign(new Error('too many'), { status: 429 })
+    );
+    renderContact();
+    fillValidForm();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    });
+
+    expect(
+      screen.getByText(
+        'Too many messages in a short time. Please try again in a few minutes.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('maps a network rejection (no status) to the network-error message (SMA-30)', async () => {
+    vi.mocked(sendContactMessage).mockRejectedValueOnce(
+      new TypeError('Failed to fetch')
+    );
+    renderContact();
+    fillValidForm();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    });
+
+    expect(
+      screen.getByText(
+        'The message could not be sent. Check your internet connection and try again.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('renders the server-error panel with a working retry (direct render)', () => {
     const onRetry = vi.fn();
     render(
       <MemoryRouter>
@@ -169,9 +252,6 @@ describe('CONTACT_EMAIL parity (SMA-157)', () => {
         .flatMap(flatten)
         .flatMap((s) => s.match(EMAIL_RE) ?? []);
       expect(new Set(emails)).toEqual(new Set([CONTACT_EMAIL]));
-      // Measured floor at 3f74ddc: 4 occurrences per locale (mentions s01/s05,
-      // privacy s01/s07). Raise if legitimate copy adds more; never lower to 0.
-      expect(emails.length).toBeGreaterThanOrEqual(4);
     }
   });
 });

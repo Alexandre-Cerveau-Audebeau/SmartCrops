@@ -115,6 +115,13 @@ public sealed class PostgresFixture : IAsyncLifetime
     public StubGbifHttpHandler GbifHttpStub =>
         Factory.Services.GetRequiredService<StubGbifHttpHandler>();
 
+    /// <summary>
+    /// Shared stub for <see cref="IEmailService"/> (SMA-30 contact endpoint).
+    /// Same lifecycle as the other stubs — reset per test.
+    /// </summary>
+    public StubEmailService EmailStub =>
+        Factory.Services.GetRequiredService<StubEmailService>();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
@@ -131,6 +138,13 @@ public sealed class PostgresFixture : IAsyncLifetime
             .WithTrefle()
             .WithPerenual()
             .WithTypesense()
+            .WithSmtp()
+            // SMA-30: the contact endpoint's "contact" rate-limit policy keys
+            // every TestServer request on the same partition (no remote IP), so
+            // the production limit (5/10min) would 429 the collection. Pin it
+            // high here; the dedicated 429 proof uses its own factory with a
+            // limit of 2.
+            .WithConfig("RateLimiting:Contact:PermitLimit", "100")
             .WithConnectionString(ConnectionString)
             .WithServices(services =>
             {
@@ -191,6 +205,15 @@ public sealed class PostgresFixture : IAsyncLifetime
                 services.AddSingleton<StubPlantSearchService>();
                 services.AddSingleton<IPlantSearchService>(sp =>
                     sp.GetRequiredService<StubPlantSearchService>());
+
+                // SMA-30: no SMTP relay exists in the integration environment,
+                // so the contact endpoint is exercised against a deterministic
+                // stub (the real OVH round-trip is validated against the live
+                // docker stack instead).
+                services.RemoveAll<IEmailService>();
+                services.AddSingleton<StubEmailService>();
+                services.AddSingleton<IEmailService>(sp =>
+                    sp.GetRequiredService<StubEmailService>());
 
                 // SMA-93: the raw-cache controller injects the concrete PerenualClient
                 // (no service interface to swap), so we stub the transport instead —

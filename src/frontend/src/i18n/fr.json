@@ -1412,6 +1412,12 @@
       "message": "Un problème est survenu de notre côté.",
       "tryAgain": "Réessayer"
     },
+    "rateLimited": {
+      "message": "Trop de messages envoyés en peu de temps. Merci de réessayer dans quelques minutes."
+    },
+    "networkError": {
+      "message": "Impossible d'envoyer le message. Vérifiez votre connexion internet et réessayez."
+    },
     "goodToKnow": {
       "title": "Bon à savoir",
       "emailLabel": "Écrivez-nous directement :",

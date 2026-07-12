@@ -32,6 +32,11 @@ services:
       # the API boot via ValidateOnStart (same contract as the Perenual/Trefle
       # keys).
       Typesense__ApiKey: ${TYPESENSE_API_KEY:-}
+      # SMA-30 — OVH SMTP password for the transverse email service (contact
+      # form; future account emails SMA-31). Set the real value in
+      # docker-compose.override.yml (gitignored); an empty value fails the API
+      # boot via ValidateOnStart (same contract as the Typesense/Trefle keys).
+      Smtp__Password: ${SMTP_PASSWORD:-}
     ports:
       - "5000:8080"
     depends_on:
