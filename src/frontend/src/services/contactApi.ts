@@ -3,7 +3,7 @@ import { HttpStatusError } from './httpStatusError';
 
 const API_BASE = '/api';
 
-// must exceed the backend SMTP cap (10s): never abort a request whose email already left the relay
+// 15s: sized above the backend's 10s wall-clock SMTP deadline (SmtpEmailService.SendTimeout) so a slow-but-successful relay is never aborted client-side.
 const REQUEST_TIMEOUT_MS = 15_000;
 
 export interface ContactPayload {
@@ -15,11 +15,12 @@ export interface ContactPayload {
 }
 
 /**
- * POST the contact-form payload to the SMA-30 backend. Public endpoint — no
- * credentials, matching the plantApi pattern. Non-OK responses throw
- * HttpStatusError so the page can map 429 to its rate-limited state; network
- * rejections (fetch TypeError, AbortError on timeout — both statusless)
- * propagate untouched for the offline state.
+ * POST the contact-form payload to the SMA-30 backend. Public endpoint —
+ * credentials explicitly omitted (fetch's default same-origin would still
+ * attach the auth cookie). Non-OK responses throw HttpStatusError so the page
+ * can map 429 to its rate-limited state; network rejections (fetch TypeError,
+ * AbortError on timeout — both statusless) propagate untouched for the
+ * offline state.
  */
 export async function sendContactMessage(
   payload: ContactPayload
@@ -31,6 +32,7 @@ export async function sendContactMessage(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      credentials: 'omit',
       signal: controller.signal,
     });
     if (!res.ok) {

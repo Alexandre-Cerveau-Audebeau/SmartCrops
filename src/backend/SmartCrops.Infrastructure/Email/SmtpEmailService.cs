@@ -19,6 +19,14 @@ public class SmtpEmailService(
     IOptions<SmtpOptions> options,
     ILogger<SmtpEmailService> logger) : IEmailService
 {
+    /// <summary>
+    /// Wall-clock budget for the WHOLE SMTP sequence (Connect+Auth+Send) —
+    /// the frontend's 15s abort (contactApi REQUEST_TIMEOUT_MS) is sized
+    /// against this contract. MailKit's <c>Timeout</c> property is
+    /// per-operation only, so it cannot bound the sequence by itself.
+    /// </summary>
+    private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(10);
+
     public async Task SendAsync(
         string toAddress,
         string subject,
@@ -37,12 +45,19 @@ public class SmtpEmailService(
         message.Subject = subject;
         message.Body = new TextPart("plain") { Text = textBody };
 
-        // 10s hard cap so a wedged relay surfaces as a fast 502 upstream
-        // instead of pinning the request until Kestrel gives up.
+        // Wall-clock deadline over the whole sequence via a linked CTS; the
+        // MailKit Timeout below stays as a per-operation socket guard (belt,
+        // the CTS is the suspenders). Controller-side routing: if this
+        // internal deadline fires, the caller's ct is NOT canceled, so the
+        // OperationCanceledException falls into the generic catch → opaque
+        // 502; a genuine client abort hits the existing rethrow filter.
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(SendTimeout);
+
         using var client = new SmtpClient { Timeout = 10000 };
-        await client.ConnectAsync(smtp.Host, smtp.Port, SecureSocketOptions.SslOnConnect, ct);
-        await client.AuthenticateAsync(smtp.User, smtp.Password, ct);
-        await client.SendAsync(message, ct);
+        await client.ConnectAsync(smtp.Host, smtp.Port, SecureSocketOptions.SslOnConnect, cts.Token);
+        await client.AuthenticateAsync(smtp.User, smtp.Password, cts.Token);
+        await client.SendAsync(message, cts.Token);
         try
         {
             await client.DisconnectAsync(true, CancellationToken.None);

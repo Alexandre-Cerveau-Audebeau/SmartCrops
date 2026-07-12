@@ -32,8 +32,9 @@ describe('sendContactMessage (SMA-30)', () => {
     expect(init.method).toBe('POST');
     expect(init.headers).toEqual({ 'Content-Type': 'application/json' });
     expect(JSON.parse(init.body as string)).toEqual(payload);
-    // Public endpoint: no credentials ride along (plantApi model).
-    expect(init.credentials).toBeUndefined();
+    // Public endpoint: credentials explicitly omitted (the fetch default
+    // same-origin would still attach the auth cookie).
+    expect(init.credentials).toBe('omit');
   });
 
   it('rejects with status 429 attached when rate-limited', async () => {
