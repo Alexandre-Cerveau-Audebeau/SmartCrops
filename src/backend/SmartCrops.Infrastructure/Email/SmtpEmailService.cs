@@ -1,5 +1,6 @@
 using MailKit.Net.Smtp;
 using MailKit.Security;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
 using SmartCrops.Core.Interfaces;
@@ -14,7 +15,9 @@ namespace SmartCrops.Infrastructure.Email;
 /// a pooled connection would just go stale between sends. From is ALWAYS the
 /// service identity; a visitor address only ever rides in Reply-To.
 /// </summary>
-public class SmtpEmailService(IOptions<SmtpOptions> options) : IEmailService
+public class SmtpEmailService(
+    IOptions<SmtpOptions> options,
+    ILogger<SmtpEmailService> logger) : IEmailService
 {
     public async Task SendAsync(
         string toAddress,
@@ -40,6 +43,15 @@ public class SmtpEmailService(IOptions<SmtpOptions> options) : IEmailService
         await client.ConnectAsync(smtp.Host, smtp.Port, SecureSocketOptions.SslOnConnect, ct);
         await client.AuthenticateAsync(smtp.User, smtp.Password, ct);
         await client.SendAsync(message, ct);
-        await client.DisconnectAsync(true, ct);
+        try
+        {
+            await client.DisconnectAsync(true, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            // The relay already accepted the message: a failed QUIT must never
+            // bubble up as a 502 and invite a duplicate resend. Best-effort only.
+            logger.LogWarning(ex, "SMTP disconnect after successful send failed — ignored");
+        }
     }
 }

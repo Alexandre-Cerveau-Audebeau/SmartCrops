@@ -13,6 +13,7 @@ import i18next from '../i18n/i18n';
 import en from '../i18n/en.json';
 import fr from '../i18n/fr.json';
 import { sendContactMessage } from '../services/contactApi';
+import { HttpStatusError } from '../services/httpStatusError';
 import Contact, { CONTACT_EMAIL, ContactServerError } from './Contact';
 
 // House convention: page tests mock the service module, never fetch itself
@@ -162,7 +163,7 @@ describe('Contact (SMA-36)', () => {
 
   it('maps a 5xx failure to the server-error panel, and retry leads back to success', async () => {
     vi.mocked(sendContactMessage).mockRejectedValueOnce(
-      Object.assign(new Error('boom'), { status: 500 })
+      new HttpStatusError('boom', 500)
     );
     renderContact();
     fillValidForm();
@@ -188,7 +189,7 @@ describe('Contact (SMA-36)', () => {
 
   it('maps a 429 rejection to the rate-limited message (SMA-30)', async () => {
     vi.mocked(sendContactMessage).mockRejectedValueOnce(
-      Object.assign(new Error('too many'), { status: 429 })
+      new HttpStatusError('too many', 429)
     );
     renderContact();
     fillValidForm();

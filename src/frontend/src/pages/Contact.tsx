@@ -30,6 +30,7 @@ import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import ComingSoonChip from '../components/ComingSoonChip';
 import { REASONS, type ContactReason } from '../constants/contactReasons';
 import { sendContactMessage } from '../services/contactApi';
+import { HttpStatusError } from '../services/httpStatusError';
 
 const reasonLabelKey: Record<ContactReason, string> = {
   'plant-data': 'contact.form.reasons.plantData',
@@ -57,6 +58,9 @@ const SUBMIT_ERROR_MESSAGE_KEY = {
   'rate-limited': 'contact.rateLimited.message',
   'network-error': 'contact.networkError.message',
 } as const;
+
+type SubmitErrorMessageKey =
+  (typeof SUBMIT_ERROR_MESSAGE_KEY)[keyof typeof SUBMIT_ERROR_MESSAGE_KEY];
 
 interface FieldErrors {
   name?: string;
@@ -144,7 +148,7 @@ export function ContactServerError({
   messageKey = 'contact.serverError.message',
 }: {
   onRetry: () => void;
-  messageKey?: string;
+  messageKey?: SubmitErrorMessageKey;
 }) {
   const { t } = useTranslation();
   return (
@@ -246,12 +250,12 @@ export default function Contact() {
       });
       setStatus('success');
     } catch (err) {
-      // contactApi attaches the HTTP status on non-OK responses; a fetch
-      // TypeError (offline, DNS failure) carries none.
-      const httpStatus = (err as { status?: number }).status;
-      if (httpStatus === 429) setStatus('rate-limited');
-      else if (httpStatus === undefined) setStatus('network-error');
-      else setStatus('server-error');
+      // contactApi throws HttpStatusError on non-OK responses; anything else
+      // (fetch TypeError offline, AbortError on timeout) is network-class.
+      if (err instanceof HttpStatusError && err.status === 429)
+        setStatus('rate-limited');
+      else if (err instanceof HttpStatusError) setStatus('server-error');
+      else setStatus('network-error');
     }
   };
 
