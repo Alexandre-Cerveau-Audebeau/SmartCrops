@@ -14,7 +14,7 @@ Operational guide for AI coding agents and context for automated review.
 - **Docker**: `docker compose up --build -d` to (re)build the stack. **Never pass `-f`** — Compose auto-merges `docker-compose.override.yml`, which injects the secrets. **Never pass `-v`** unless a migration changed: `down -v` destroys the database. `docker compose down` at end of session.
 - **Database is `smartcrops`** (not `smartcrops_dev`). Inspect it via `docker exec -it <postgres-container> psql -U smartcrops -d smartcrops` (container name from `docker ps`). A native Windows Postgres may squat port 5432, so the container is ground truth. Postman tests HTTP endpoints, not the DB.
 - **API** host port: 5000.
-- **Verification suite** (before every commit): `dotnet build SmartCrops.sln && dotnet test SmartCrops.sln && dotnet format SmartCrops.sln --verify-no-changes && cd src/frontend && npm run lint && npm test`.
+- **Verification suite** (before every commit): `dotnet build SmartCrops.sln && dotnet test SmartCrops.sln && dotnet format SmartCrops.sln --verify-no-changes && cd src/frontend && npm run lint && npm test && npm run build`.
 - **Frontend tests**: the extended timeout (20000 ms) is baked into the package.json test script (`vitest run --testTimeout=20000`), so plain `npm test` carries it — the default 5000 ms flakes `PlantLibrary.test.tsx` under load (SMA-174). **Never pass `--testTimeout` on the npm CLI** (`npm test -- --testTimeout=20000`): vitest 4 rejects the duplicated flag. For single-file runs use `npx vitest run <file> --testTimeout=20000`.
 
 ## Git & review workflow (STOP-gated, human merges)

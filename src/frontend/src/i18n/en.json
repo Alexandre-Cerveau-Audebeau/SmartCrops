@@ -1412,6 +1412,12 @@
       "message": "Something went wrong on our side.",
       "tryAgain": "Try again"
     },
+    "rateLimited": {
+      "message": "Too many messages in a short time. Please try again in a few minutes."
+    },
+    "networkError": {
+      "message": "The message could not be sent. Check your internet connection and try again."
+    },
     "goodToKnow": {
       "title": "Good to know",
       "emailLabel": "Email us directly:",

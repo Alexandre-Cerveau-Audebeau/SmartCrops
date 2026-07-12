@@ -22,6 +22,7 @@ public class InterceptorTestFactory : WebApplicationFactory<Program>
             .WithTrefle()
             .WithPerenual()
             .WithTypesense()
+            .WithSmtp()
             // WithInMemoryDatabase isn't used: these tests assert the production
             // UpdateTimestampInterceptor still fires against the in-memory provider,
             // so the DbContext registration has to re-attach the interceptor that

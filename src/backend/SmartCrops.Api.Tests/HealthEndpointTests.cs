@@ -19,6 +19,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             .WithTrefle()
             .WithPerenual()
             .WithTypesense()
+            .WithSmtp()
             .ApplyTo(builder);
     }
 }
