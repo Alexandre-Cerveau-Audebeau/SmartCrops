@@ -361,7 +361,8 @@
     "title": "404",
     "heading": "Oops — looks like this page didn't sprout.",
     "message": "The page you're looking for has gone to seed. Let's get you back to the garden.",
-    "backHome": "Back to Home"
+    "backHome": "Back to Home",
+    "browseLibrary": "Browse the Library"
   },
   "plantValues": {
     "full_sun": "Full Sun",
@@ -1291,7 +1292,7 @@
     }
   },
   "cookies": {
-    "message": "🍪 **SmartCrops** only uses cookies that are **strictly necessary** to run the site (keeping you signed in) and remembers your language. No advertising or tracking cookies.",
+    "message": "SmartCrops only uses cookies strictly necessary for the site to work (signing in to your account) and stores your display preferences (language, theme, units) in your browser.",
     "learnMore": "Learn more",
     "ok": "OK",
     "ariaLabel": "Cookie information"

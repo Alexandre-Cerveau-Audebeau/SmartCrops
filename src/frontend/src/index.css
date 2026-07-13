@@ -8,7 +8,8 @@ body {
   margin: 0;
 }
 
-/* Material Symbols Outlined (loaded in index.html) — used via the <Sym> helper. */
+/* Material Symbols Outlined (self-hosted via material-symbols, imported in
+   main.tsx) — used via the <Sym> helper. */
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined';
   font-weight: normal;

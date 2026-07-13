@@ -29,9 +29,14 @@ export default function NotFound() {
       <Typography variant="body1" color="text.secondary">
         {t('notFound.message')}
       </Typography>
-      <Button component={RouterLink} to="/" variant="contained" color="primary" size="large" sx={{ mt: 1 }}>
-        {t('notFound.backHome')}
-      </Button>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 2, mt: 1 }}>
+        <Button component={RouterLink} to="/" variant="contained" color="primary" size="large">
+          {t('notFound.backHome')}
+        </Button>
+        <Button component={RouterLink} to="/library" variant="outlined" color="primary" size="large">
+          {t('notFound.browseLibrary')}
+        </Button>
+      </Box>
     </Box>
   );
 }

@@ -361,7 +361,8 @@
     "title": "404",
     "heading": "Oups — on dirait que cette page n'a pas germé.",
     "message": "La page que vous cherchez est introuvable. Retournons au jardin.",
-    "backHome": "Retour à l'accueil"
+    "backHome": "Retour à l'accueil",
+    "browseLibrary": "Parcourir la bibliothèque"
   },
   "plantValues": {
     "full_sun": "Plein soleil",
@@ -1291,7 +1292,7 @@
     }
   },
   "cookies": {
-    "message": "🍪 **SmartCrops** utilise uniquement des cookies **strictement nécessaires** au fonctionnement du site (connexion à votre compte) et mémorise votre langue. Aucun cookie publicitaire ou de suivi.",
+    "message": "SmartCrops utilise uniquement des cookies strictement nécessaires au fonctionnement du site (connexion à votre compte) et mémorise vos préférences d'affichage (langue, thème, unités) dans votre navigateur.",
     "learnMore": "En savoir plus",
     "ok": "OK",
     "ariaLabel": "Information sur les cookies"

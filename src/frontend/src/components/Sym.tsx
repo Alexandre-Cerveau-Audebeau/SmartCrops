@@ -1,6 +1,6 @@
 /**
- * Material Symbols Outlined glyph (SMA-78). The font is loaded in index.html and
- * its base class lives in index.css; this renders one icon by its ligature name
+ * Material Symbols Outlined glyph (SMA-78). The font is self-hosted (material-symbols,
+ * imported in main.tsx) and its base class lives in index.css; this renders one icon by its ligature name
  * (e.g. `spa`, `grass`, `schedule`). Decorative by default (`aria-hidden`), so it
  * never leaks an icon name to assistive tech — pair with a visible/labelled
  * sibling when the icon carries meaning.
