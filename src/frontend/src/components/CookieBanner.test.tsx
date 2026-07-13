@@ -79,4 +79,10 @@ describe('CookieBanner (SMA-35)', () => {
       screen.queryByRole('button', { name: 'OK' })
     ).not.toBeInTheDocument();
   });
+
+  it('re-shows after a prior v1 acknowledgement', () => {
+    localStorage.setItem(COOKIE_NOTICE_STORAGE_KEY, 'v1'); // literal on purpose: locks the v1->v2 bump against regression
+    renderBanner();
+    expect(screen.getByRole('button', { name: 'OK' })).toBeInTheDocument();
+  });
 });
