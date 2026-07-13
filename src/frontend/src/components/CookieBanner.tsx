@@ -9,8 +9,8 @@ import CookieIcon from '@mui/icons-material/Cookie';
 import LegalText from './Legal/LegalText';
 
 export const COOKIE_NOTICE_STORAGE_KEY = 'sc_cookie_notice_ack';
-// Bump when the notice text changes substantially so the banner reappears.
-export const COOKIE_NOTICE_ACK_VALUE = 'v1';
+// Bumped so the updated wording shows once to users who dismissed v1.
+export const COOKIE_NOTICE_ACK_VALUE = 'v2';
 
 function hasAcknowledged(): boolean {
   try {
@@ -53,7 +53,11 @@ export default function CookieBanner() {
       elevation={6}
       sx={{
         position: 'fixed',
-        zIndex: (theme) => theme.zIndex.snackbar,
+        // 1199 — strictly below MUI drawers (1200) and modals (1300): an
+        // informative banner never covers a modal surface (SMA-272: it used
+        // to sit at snackbar/1400 and masked the mobile filters Drawer's
+        // sticky footer).
+        zIndex: (theme) => theme.zIndex.drawer - 1,
         // Below md the banner spans nearly the full width, so it sits above the
         // BackToTop FAB zone (bottom 16/24 + 40px small Fab); from md up the
         // centered 720px banner leaves the bottom-right corner clear.

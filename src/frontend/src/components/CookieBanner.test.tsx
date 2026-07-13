@@ -27,11 +27,35 @@ describe('CookieBanner (SMA-35)', () => {
     expect(
       screen.getByRole('region', { name: 'Cookie information' })
     ).toBeInTheDocument();
+    // SMA-277: the copy discloses the real preference inventory.
+    expect(
+      screen.getByText(/display preferences \(language, theme, units\)/)
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'OK' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Learn more' })).toHaveAttribute(
       'href',
       '/privacy'
     );
+  });
+
+  it('discloses the real preference inventory in French', async () => {
+    await i18next.changeLanguage('fr');
+    renderBanner();
+    expect(
+      screen.getByText(/préférences d'affichage \(langue, thème, unités\)/)
+    ).toBeInTheDocument();
+  });
+
+  it('layers strictly below MUI drawers and modals (SMA-272)', () => {
+    renderBanner();
+    // The banner used to sit at snackbar/1400 and masked the mobile filters
+    // Drawer's sticky footer (drawer tier = 1200); it must resolve to
+    // drawer - 1 = 1199 so it never covers a modal surface.
+    const paper = screen
+      .getByText(/display preferences/)
+      .closest('.MuiPaper-root');
+    expect(paper).not.toBeNull();
+    expect(getComputedStyle(paper as Element).zIndex).toBe('1199');
   });
 
   it('hides and stores the versioned ack key on OK', async () => {
