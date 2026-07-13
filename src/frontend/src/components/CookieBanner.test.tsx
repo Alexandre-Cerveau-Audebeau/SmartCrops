@@ -1,3 +1,4 @@
+import { createTheme } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -48,14 +49,15 @@ describe('CookieBanner (SMA-35)', () => {
 
   it('layers strictly below MUI drawers and modals (SMA-272)', () => {
     renderBanner();
-    // The banner used to sit at snackbar/1400 and masked the mobile filters
-    // Drawer's sticky footer (drawer tier = 1200); it must resolve to
-    // drawer - 1 = 1199 so it never covers a modal surface.
+    // The banner used to sit at snackbar tier and masked the mobile filters
+    // Drawer's sticky footer; the contract is "strictly below the drawer
+    // tier", derived from the same source the component resolves.
+    const expectedZ = createTheme().zIndex.drawer - 1; // same default tiers the component resolves (app doesn't customize zIndex)
     const paper = screen
       .getByText(/display preferences/)
       .closest('.MuiPaper-root');
     expect(paper).not.toBeNull();
-    expect(getComputedStyle(paper as Element).zIndex).toBe('1199');
+    expect(getComputedStyle(paper as Element).zIndex).toBe(String(expectedZ));
   });
 
   it('hides and stores the versioned ack key on OK', async () => {
