@@ -48,6 +48,10 @@ function cellSizeToMeters(cellSize: string): number {
   return 0.25;
 }
 
+// Referentially stable empty catalog for the not-ready renders — a fresh []
+// per render would defeat every downstream memo/effect dep on `allPlants`.
+const EMPTY_PLANTS: Plant[] = [];
+
 const addBtnSx = {
   cursor: 'pointer',
   display: 'flex',
@@ -122,15 +126,21 @@ export default function GardenPlanner() {
     type: 'success' | 'error' | 'info';
     text: string;
   } | null>(null);
-  const [allPlants, setAllPlants] = useState<Plant[]>([]);
-  // Explicit request state (5.2 R2, CR): "catalog loaded" must not be inferred
-  // from array length — a legitimately empty catalog would otherwise read as
-  // "still pending" forever and suppress the unknown-plant fallback.
-  // 5.2 R3: readiness is scoped to the ACTIVE language — the fetch effect
-  // resets both flag and data at each locale request, so a language switch
-  // re-enters neutral/pending instead of transiently rendering stale-locale
-  // names, and a failed refetch can never leave a stale catalog "loaded".
-  const [catalogLoaded, setCatalogLoaded] = useState(false);
+  // The catalog CARRIES its language, and readiness is DERIVED at render
+  // (5.2 R4, CR Major): `catalogReady` is true only when the loaded data's
+  // locale matches the active one, so the one-render stale-name window
+  // between a locale switch and the fetch effect's flush no longer exists —
+  // no render can ever observe another locale's names. Explicit object (not
+  // array length) so a legitimately empty catalog in the ACTIVE language
+  // still reads as loaded and shows the unknown-plant fallback (R2), and a
+  // failed request (catalog stays null) can never pin stale data (R3).
+  const [catalog, setCatalog] = useState<{
+    plants: Plant[];
+    lang: string;
+  } | null>(null);
+  const catalogReady = catalog !== null && catalog.lang === language;
+  // Keeping the derived name `allPlants` leaves every consumer untouched.
+  const allPlants = catalogReady ? catalog.plants : EMPTY_PLANTS;
   const [searchQuery, setSearchQuery] = useState('');
 
   // Client-only ids for placements created since the last save — server ids
@@ -161,16 +171,15 @@ export default function GardenPlanner() {
     // localized server-side per `lang`, so the effect re-runs on language
     // switch — otherwise sidebar/grid/panel names would stay in the old
     // locale while gardenName etc. flip. Abort guards the stale response.
-    // The reset lives HERE (not at declaration) because it must run per
-    // locale request: drop the previous locale's catalog before fetching.
-    setCatalogLoaded(false);
-    setAllPlants([]);
+    // Eager reset (R3 shape): correctness no longer depends on it — the
+    // render-time `catalogReady` derivation already gates mismatched-locale
+    // data — but dropping the old catalog keeps memory honest per request.
+    setCatalog(null);
     const controller = new AbortController();
     fetchPlants(controller.signal, language)
       .then((plants) => {
         if (!controller.signal.aborted) {
-          setAllPlants(plants);
-          setCatalogLoaded(true);
+          setCatalog({ plants, lang: language });
         }
       })
       .catch(() => {
@@ -407,13 +416,14 @@ export default function GardenPlanner() {
 
   const enrichedPlacements = useMemo(() => {
     const plantMap = new Map(allPlants.map((p) => [p.id, p]));
-    // While the catalog request is still pending, placements have no
-    // resolvable name yet — leave plantName undefined so cells render their
-    // neutral state instead of flashing the initial of the unknown-plant
-    // fallback (a placement can hydrate before the catalog lands). The
-    // fallback is reserved for plants genuinely absent from a LOADED catalog —
-    // including a legitimately empty one (5.2 R2: explicit flag, not length).
-    const catalogPending = !catalogLoaded;
+    // While the ACTIVE-LANGUAGE catalog is not ready (request pending, failed,
+    // or data from another locale), placements have no resolvable name yet —
+    // leave plantName undefined so cells render their neutral state instead
+    // of flashing the initial of the unknown-plant fallback (a placement can
+    // hydrate before the catalog lands). The fallback is reserved for plants
+    // genuinely absent from a READY catalog — including a legitimately empty
+    // one (5.2 R2: explicit readiness, not length).
+    const catalogPending = !catalogReady;
     return placements.map((p) => {
       const plant = plantMap.get(p.plantId);
       return {
@@ -425,7 +435,7 @@ export default function GardenPlanner() {
             : t('planner.unknownPlant'),
       };
     });
-  }, [placements, allPlants, catalogLoaded, language, t]);
+  }, [placements, allPlants, catalogReady, language, t]);
 
   // "Plants in this garden" reads PLACEMENTS ONLY (SMA-6 Option A): the legacy
   // link-table rows (garden.gardenPlants) are deliberately not merged anymore —

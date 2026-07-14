@@ -150,15 +150,23 @@ describe('GardenPlanner placement initials', () => {
     renderPlanner();
     const grid = await screen.findByRole('grid');
 
-    // EN catalog resolves — the placement renders its EN-derived initial.
+    // EN catalog resolves — the placement renders its EN-derived initial and
+    // the sidebar lists the EN label (positive baseline for the pins below).
     resolvers[0]!([basil]); // no flat commonName -> 'Basilicum fixture' -> 'B'
     await waitFor(() =>
       expect(within(grid).getByText('B')).toBeInTheDocument()
     );
+    expect(screen.getAllByText('Basilicum fixture').length).toBeGreaterThan(0);
 
     // Switch to FR while the FR response is DELAYED: the previous locale's
     // catalog must be dropped immediately — neutral cell, never the stale 'B'.
     fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    // (a) Render-window pin (5.2 R4): synchronously after the switch — before
+    // fetch #2 resolves — no render may show the previous locale's names.
+    expect(within(grid).queryByText('B')).toBeNull();
+    // (b) Sidebar path: no stale-locale label there (nor in the plants
+    // section) — pending/empty presentation instead.
+    expect(screen.queryAllByText('Basilicum fixture')).toHaveLength(0);
     await waitFor(() => expect(resolvers.length).toBe(2));
     expect(within(grid).queryByText('B')).toBeNull();
     // Pending means NEUTRAL — no unknown-plant fallback initial in either
@@ -176,10 +184,44 @@ describe('GardenPlanner placement initials', () => {
     expect(within(grid).queryByText('B')).toBeNull();
   });
 
+  it('a rejected second-locale request never resurrects the previous catalog (5.2 R4)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    const deferred: Array<{
+      resolve: (plants: Plant[]) => void;
+      reject: (err: Error) => void;
+    }> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve, reject) => {
+          deferred.push({ resolve, reject });
+        })
+    );
+
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    deferred[0]!.resolve([basil]);
+    await waitFor(() =>
+      expect(within(grid).getByText('B')).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    await waitFor(() => expect(deferred.length).toBe(2));
+    deferred[1]!.reject(new Error('network down'));
+
+    // (c) Failure path: a failed refetch cannot resurrect the old catalog —
+    // the previous locale's names stay gone; pending presentation remains.
+    await waitFor(() =>
+      expect(screen.queryAllByText('Basilicum fixture')).toHaveLength(0)
+    );
+    expect(within(grid).queryByText('B')).toBeNull();
+  });
+
   it('shows the unknown-plant fallback once an EMPTY catalog has resolved (explicit loaded flag, 5.2 R2)', async () => {
     // Length-based pending inference would leave a legitimately empty catalog
-    // "pending" forever and suppress the fallback — the explicit catalogLoaded
-    // flag must let the placement degrade to the localized Unknown instead.
+    // "pending" forever and suppress the fallback — explicit readiness (the
+    // catalog carries its language, derived at render since 5.2 R4) must let
+    // the placement degrade to the localized Unknown instead.
     vi.mocked(fetchGarden).mockResolvedValue(garden);
     vi.mocked(fetchLayout).mockResolvedValue(layout);
     vi.mocked(fetchPlants).mockResolvedValue([]);
