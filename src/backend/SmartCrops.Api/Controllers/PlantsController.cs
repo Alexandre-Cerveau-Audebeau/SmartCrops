@@ -34,20 +34,9 @@ public class PlantsController(
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] bool? isMedicinal = null, [FromQuery] string lang = "en")
     {
-        var language = NormalizeLang(lang);
+        var language = LanguageCodes.Normalize(lang);
         var plants = await repository.GetAllAsync(isMedicinal, language);
         return Ok(plants.Select(p => PlantListItemMapper.ToListItem(p, language)));
-    }
-
-    // CodeRabbit: normalise the user-supplied lang code (default gracefully to "en"
-    // for empty/whitespace or implausibly long input). Trim + lowercase so "FR" / " fr "
-    // match the stored lower-case Language ("fr"). No BadRequest/throw — the mapper +
-    // repository already tolerate an unknown code via the en→first fallback; this just
-    // keeps the input bounded, canonical, and consistent across endpoints.
-    private static string NormalizeLang(string? lang)
-    {
-        var v = lang?.Trim();
-        return string.IsNullOrEmpty(v) || v.Length > 10 ? "en" : v.ToLowerInvariant();
     }
 
     /// <summary>
@@ -68,7 +57,7 @@ public class PlantsController(
     [HttpGet("type/{plantTypeId:int}")]
     public async Task<IActionResult> GetByType(int plantTypeId, [FromQuery] string lang = "en")
     {
-        var language = NormalizeLang(lang);
+        var language = LanguageCodes.Normalize(lang);
         var plants = await repository.GetByTypeAsync(plantTypeId, language);
         return Ok(plants.Select(p => PlantListItemMapper.ToListItem(p, language)));
     }
@@ -86,7 +75,7 @@ public class PlantsController(
         if (string.IsNullOrWhiteSpace(query))
             return BadRequest("query parameter is required.");
 
-        var language = NormalizeLang(lang);
+        var language = LanguageCodes.Normalize(lang);
         var plants = await repository.SearchAsync(query, language);
         return Ok(plants.Select(p => PlantListItemMapper.ToListItem(p, language)));
     }

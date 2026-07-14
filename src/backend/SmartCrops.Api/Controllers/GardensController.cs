@@ -73,7 +73,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
-        var language = NormalizeLang(lang);
+        var language = LanguageCodes.Normalize(lang);
 
         var gardens = await context
             .Gardens.Where(g => g.UserId == userId)
@@ -357,13 +357,4 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         User.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
 
-    // Mirrors PlantsController.NormalizeLang so the gardens list speaks the same
-    // `lang` dialect as every plants list endpoint: trim + lowercase, default to
-    // "en" for empty/whitespace or implausibly long input. No BadRequest — the
-    // mapper already tolerates unknown codes via its en fallback.
-    private static string NormalizeLang(string? lang)
-    {
-        var v = lang?.Trim();
-        return string.IsNullOrEmpty(v) || v.Length > 10 ? "en" : v.ToLowerInvariant();
-    }
 }

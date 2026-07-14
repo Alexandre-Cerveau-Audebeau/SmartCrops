@@ -121,4 +121,20 @@ describe('GardenPlanner placement initials', () => {
       expect(within(grid).getByText('U')).toBeInTheDocument()
     );
   });
+
+  it('shows the unknown-plant fallback once an EMPTY catalog has resolved (explicit loaded flag, 5.2 R2)', async () => {
+    // Length-based pending inference would leave a legitimately empty catalog
+    // "pending" forever and suppress the fallback — the explicit catalogLoaded
+    // flag must let the placement degrade to the localized Unknown instead.
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([]);
+
+    renderPlanner();
+
+    const grid = await screen.findByRole('grid');
+    await waitFor(() =>
+      expect(within(grid).getByText('U')).toBeInTheDocument()
+    );
+  });
 });

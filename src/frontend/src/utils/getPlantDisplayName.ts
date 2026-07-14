@@ -18,6 +18,11 @@ import { resolveTranslatedField } from './getTranslation';
  * the Library shows for the same plant.
  */
 export function getPlantDisplayName(plant: Plant, language: string): string {
+  // Empty/whitespace-only names fall through EXACTLY like null (5.2 R2):
+  // enrichment gaps make '' a real wire value, and rendering an empty name is
+  // indefensible. Both tiers ride capitalizeFirst, whose contract returns null
+  // for null/empty/whitespace input — pinned by getPlantDisplayName.test.ts;
+  // do not replace these wrappers with raw field access.
   return (
     capitalizeFirst(plant.commonName) ??
     capitalizeFirst(resolveTranslatedField(plant, language, 'commonName')) ??

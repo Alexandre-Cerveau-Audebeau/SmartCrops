@@ -123,6 +123,10 @@ export default function GardenPlanner() {
     text: string;
   } | null>(null);
   const [allPlants, setAllPlants] = useState<Plant[]>([]);
+  // Explicit request state (5.2 R2, CR): "catalog loaded" must not be inferred
+  // from array length — a legitimately empty catalog would otherwise read as
+  // "still pending" forever and suppress the unknown-plant fallback.
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Client-only ids for placements created since the last save — server ids
@@ -156,7 +160,10 @@ export default function GardenPlanner() {
     const controller = new AbortController();
     fetchPlants(controller.signal, language)
       .then((plants) => {
-        if (!controller.signal.aborted) setAllPlants(plants);
+        if (!controller.signal.aborted) {
+          setAllPlants(plants);
+          setCatalogLoaded(true);
+        }
       })
       .catch(() => {
         /* plant fetch failure is non-blocking; abort lands here too */
@@ -392,12 +399,13 @@ export default function GardenPlanner() {
 
   const enrichedPlacements = useMemo(() => {
     const plantMap = new Map(allPlants.map((p) => [p.id, p]));
-    // While the catalog is still loading, placements have no resolvable name
-    // yet — leave plantName undefined so cells render their neutral state
-    // instead of flashing the initial of the unknown-plant fallback (a
-    // placement can hydrate before the catalog lands). The fallback is
-    // reserved for plants genuinely absent from the loaded catalog.
-    const catalogPending = allPlants.length === 0;
+    // While the catalog request is still pending, placements have no
+    // resolvable name yet — leave plantName undefined so cells render their
+    // neutral state instead of flashing the initial of the unknown-plant
+    // fallback (a placement can hydrate before the catalog lands). The
+    // fallback is reserved for plants genuinely absent from a LOADED catalog —
+    // including a legitimately empty one (5.2 R2: explicit flag, not length).
+    const catalogPending = !catalogLoaded;
     return placements.map((p) => {
       const plant = plantMap.get(p.plantId);
       return {
@@ -409,7 +417,7 @@ export default function GardenPlanner() {
             : t('planner.unknownPlant'),
       };
     });
-  }, [placements, allPlants, language, t]);
+  }, [placements, allPlants, catalogLoaded, language, t]);
 
   // "Plants in this garden" reads PLACEMENTS ONLY (SMA-6 Option A): the legacy
   // link-table rows (garden.gardenPlants) are deliberately not merged anymore —

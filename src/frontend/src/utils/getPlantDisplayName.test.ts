@@ -43,6 +43,32 @@ describe('getPlantDisplayName', () => {
     expect(getPlantDisplayName(plant, 'fr')).toBe('Lady fern');
   });
 
+  it('treats an empty or whitespace-only flat commonName exactly like null (5.2 R2)', () => {
+    // Enrichment gaps make '' real on the wire — it must never render.
+    const emptyFlat = {
+      ...base,
+      commonName: '',
+      translations: [
+        { id: 5, language: 'fr', commonName: 'lierre', description: null },
+      ],
+    } as Plant;
+    expect(getPlantDisplayName(emptyFlat, 'fr')).toBe('Lierre');
+
+    const whitespaceFlat = { ...base, commonName: '   ' } as Plant;
+    expect(getPlantDisplayName(whitespaceFlat, 'fr')).toBe('Hedera helix');
+
+    // Empty strings in the translations tier fall through too.
+    const emptyTranslation = {
+      ...base,
+      commonName: null,
+      translations: [
+        { id: 6, language: 'fr', commonName: '', description: null },
+        { id: 7, language: 'en', commonName: '', description: null },
+      ],
+    } as Plant;
+    expect(getPlantDisplayName(emptyTranslation, 'fr')).toBe('Hedera helix');
+  });
+
   it('falls back to scientificName when no common name exists in any shape', () => {
     // Bauhinia blakeana-like case: enrichment gap, no translation rows at all.
     const plant = { id: 'p3', scientificName: 'Bauhinia blakeana' } as Plant;
