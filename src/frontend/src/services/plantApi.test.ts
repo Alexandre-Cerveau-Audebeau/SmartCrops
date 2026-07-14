@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { findPlants } from './plantApi';
+import { fetchPlantById, fetchPlants, findPlants } from './plantApi';
+import { HttpStatusError } from './httpStatusError';
 
 // SMA-9 T3 — pins findPlants' QUERY-STRING serialization, the layer under
 // the hook's param building. The regression trap is the inverted safety
@@ -122,5 +123,43 @@ describe('findPlants query serialization', () => {
     for (const absent of ['isSaltTolerant', 'isTropical', 'isInvasive']) {
       expect(url.searchParams.has(absent)).toBe(false);
     }
+  });
+});
+
+// SMA-280 contract locks (gardenApi.test.ts model): explicit public-endpoint
+// credentials and the single HttpStatusError shape across the module.
+describe('plantApi error/credentials contract (SMA-280)', () => {
+  it('fetchPlants sends credentials: omit', async () => {
+    const spy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+    vi.stubGlobal('fetch', spy);
+
+    await expect(fetchPlants()).resolves.toEqual([]);
+
+    const [url, init] = spy.mock.calls[0]! as [string, RequestInit];
+    expect(url).toBe('/api/plants');
+    expect(init.credentials).toBe('omit');
+  });
+
+  it('fetchPlants rejects with HttpStatusError carrying status 500', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 500 })
+    );
+
+    await expect(fetchPlants()).rejects.toBeInstanceOf(HttpStatusError);
+    await expect(fetchPlants()).rejects.toMatchObject({ status: 500 });
+  });
+
+  it('fetchPlantById rejects with HttpStatusError carrying status 404', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 404 })
+    );
+
+    await expect(fetchPlantById('p1')).rejects.toBeInstanceOf(HttpStatusError);
+    await expect(fetchPlantById('p1')).rejects.toMatchObject({ status: 404 });
   });
 });

@@ -15,13 +15,13 @@ const API_BASE = '/api';
 export async function fetchPlants(signal?: AbortSignal, lang?: string): Promise<Plant[]> {
   const qs = lang ? `?lang=${encodeURIComponent(lang)}` : '';
   const res = await fetch(`${API_BASE}/plants${qs}`, { credentials: 'omit', signal });
-  if (!res.ok) throw new Error(`Failed to fetch plants: ${res.status}`);
+  if (!res.ok) throw new HttpStatusError(`Failed to fetch plants: ${res.status}`, res.status);
   return res.json();
 }
 
 export async function fetchPlantTypes(signal?: AbortSignal): Promise<PlantType[]> {
   const res = await fetch(`${API_BASE}/planttypes`, { credentials: 'omit', signal });
-  if (!res.ok) throw new Error(`Failed to fetch plant types: ${res.status}`);
+  if (!res.ok) throw new HttpStatusError(`Failed to fetch plant types: ${res.status}`, res.status);
   return res.json();
 }
 
@@ -39,7 +39,7 @@ export async function searchPlants(query: string, language: string, signal?: Abo
   // Query key is `lang` to match the list endpoints (CodeRabbit — unified locale key).
   const params = new URLSearchParams({ query, lang: language });
   const res = await fetch(`${API_BASE}/plants/search?${params}`, { credentials: 'omit', signal });
-  if (!res.ok) throw new Error(`Failed to search plants: ${res.status}`);
+  if (!res.ok) throw new HttpStatusError(`Failed to search plants: ${res.status}`, res.status);
   return res.json();
 }
 
@@ -175,6 +175,6 @@ export async function findPlants(
     if (value !== undefined) qs.set(key, String(value));
   }
   const res = await fetch(`${API_BASE}/plants/finder?${qs}`, { credentials: 'omit', signal });
-  if (!res.ok) throw new Error(`Failed to find plants: ${res.status}`);
+  if (!res.ok) throw new HttpStatusError(`Failed to find plants: ${res.status}`, res.status);
   return res.json();
 }

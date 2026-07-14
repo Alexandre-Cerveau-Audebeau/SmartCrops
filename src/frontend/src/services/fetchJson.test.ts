@@ -156,12 +156,8 @@ describe('fetchJson (SMA-280)', () => {
       signal: controller.signal,
     });
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-    await expect(
-      fetchJson('/api/gardens', {
-        credentials: 'include',
-        signal: controller.signal,
-      })
-    ).rejects.not.toHaveProperty('status');
+    await expect(pending).rejects.not.toHaveProperty('status');
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it('forwards the exact credentials value to fetch', async () => {
