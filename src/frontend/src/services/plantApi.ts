@@ -1,5 +1,6 @@
 import type { Plant } from '../types/Plant';
 import type { PlantType } from '../types/PlantType';
+import { HttpStatusError } from './httpStatusError';
 
 const API_BASE = '/api';
 
@@ -27,9 +28,9 @@ export async function fetchPlantTypes(signal?: AbortSignal): Promise<PlantType[]
 export async function fetchPlantById(id: string, signal?: AbortSignal): Promise<Plant> {
   const res = await fetch(`${API_BASE}/plants/${encodeURIComponent(id)}`, { credentials: 'omit', signal });
   if (!res.ok) {
-    const error = new Error(`Failed to fetch plant: ${res.status}`) as Error & { status: number };
-    error.status = res.status;
-    throw error;
+    // Same typed error class as the rest of the codebase; the message is
+    // user-visible (PlantDetail renders err.message) and must not change.
+    throw new HttpStatusError(`Failed to fetch plant: ${res.status}`, res.status);
   }
   return res.json();
 }

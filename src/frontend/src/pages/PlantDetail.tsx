@@ -307,7 +307,7 @@ export default function PlantDetail() {
       })
       .catch((err) => {
         if (err.name === 'AbortError') return;
-        if (err.status === 404) return;
+        if (err instanceof HttpStatusError && err.status === 404) return;
         if (!controller.signal.aborted) {
           setError(err instanceof Error ? err.message : t('library.error'));
         }

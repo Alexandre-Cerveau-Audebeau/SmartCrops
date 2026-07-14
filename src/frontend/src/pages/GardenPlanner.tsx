@@ -33,6 +33,7 @@ import { useLanguage } from '../hooks/useLanguage';
 import { useScrollHold } from '../hooks/useScrollHold';
 import { saveLayout } from '../services/gardenLayoutApi';
 import type { SavePlacementData } from '../services/gardenLayoutApi';
+import { fetchPlants } from '../services/plantApi';
 import type { Garden } from '../types/Garden';
 import type { Plant } from '../types/Plant';
 import type { CellData } from '../types/GardenLayout';
@@ -155,9 +156,10 @@ export default function GardenPlanner() {
   useEffect(() => {
     mountedRef.current = true;
     if (!id) return;
-    fetch('/api/plants', { credentials: 'include' })
-      .then((res) => res.json())
-      .then((plants: Plant[]) => {
+    // Shared public-plants contract (credentials: 'omit'); the previous
+    // hand-rolled call was not locale-aware, so no lang argument here.
+    fetchPlants()
+      .then((plants) => {
         if (mountedRef.current) setAllPlants(plants);
       })
       .catch(() => {
@@ -507,13 +509,21 @@ export default function GardenPlanner() {
 
   const enrichedPlacements = useMemo(() => {
     const plantMap = new Map(allPlants.map((p) => [p.id, p]));
+    // While the catalog is still loading, placements have no resolvable name
+    // yet — leave plantName undefined so cells render their neutral state
+    // instead of flashing the 'U' of the 'Unknown' fallback (a placement can
+    // hydrate before the catalog lands). 'Unknown' is reserved for plants
+    // genuinely absent from the loaded catalog.
+    const catalogPending = allPlants.length === 0;
     return placements.map((p) => {
       const plant = plantMap.get(p.plantId);
       return {
         ...p,
         plantName: plant
           ? getTranslation(plant, language)?.commonName || plant.scientificName
-          : 'Unknown',
+          : catalogPending
+            ? undefined
+            : 'Unknown',
       };
     });
   }, [placements, allPlants, language]);

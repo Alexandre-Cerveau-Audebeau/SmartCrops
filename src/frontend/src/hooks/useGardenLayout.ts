@@ -22,7 +22,9 @@ export interface GardenLayoutSnapshot {
  * only flips false once — switching gardens keeps the previous garden
  * rendered until the new payload lands, without re-showing the spinner.
  * `error` keeps the rejection object (a fresh identity per failure) so
- * consumers can re-trigger their error UI on every failed load.
+ * consumers can re-trigger their error UI on every failed load; a successful
+ * load clears it, so a gardenId change or refetch() that succeeds never
+ * leaves a stale failure flag behind.
  */
 export function useGardenLayout(gardenId: string | undefined) {
   const [data, setData] = useState<GardenLayoutSnapshot | null>(null);
@@ -42,6 +44,11 @@ export function useGardenLayout(gardenId: string | undefined) {
     ])
       .then(([layout, garden]) => {
         if (stale) return;
+        // Clear any previous failure so a successful reload (gardenId change
+        // or refetch) never leaves a stale error flag behind. Cleared here
+        // rather than at cycle start: a synchronous setState in the effect
+        // body trips react-hooks/set-state-in-effect.
+        setError(null);
         setData({ garden, layout });
       })
       .catch((err: unknown) => {

@@ -85,15 +85,16 @@ describe('fetchJson (SMA-280)', () => {
     ).rejects.not.toHaveProperty('status');
   });
 
-  it('aborts at timeoutMs with a statusless AbortError', async () => {
+  it('aborts at timeoutMs with a statusless TimeoutError', async () => {
     vi.useFakeTimers();
+    // Like real fetch, the stub rejects with the signal's abort reason.
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation(
         (_url: string, init: RequestInit) =>
           new Promise((_resolve, reject) => {
             init.signal?.addEventListener('abort', () =>
-              reject(new DOMException('Aborted', 'AbortError'))
+              reject((init.signal as AbortSignal).reason)
             );
           })
       )
@@ -105,7 +106,7 @@ describe('fetchJson (SMA-280)', () => {
     });
     // Attach the expectations before advancing so the rejection is handled.
     const nameExpectation = expect(pending).rejects.toMatchObject({
-      name: 'AbortError',
+      name: 'TimeoutError',
     });
     const statusExpectation = expect(pending).rejects.not.toHaveProperty(
       'status'
@@ -116,13 +117,15 @@ describe('fetchJson (SMA-280)', () => {
   });
 
   it('honours a caller-supplied signal alongside the timeout', async () => {
+    // Like real fetch, the stub rejects with the signal's abort reason —
+    // here the caller's default AbortError, forwarded by fetchJson.
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation(
         (_url: string, init: RequestInit) =>
           new Promise((_resolve, reject) => {
             init.signal?.addEventListener('abort', () =>
-              reject(new DOMException('Aborted', 'AbortError'))
+              reject((init.signal as AbortSignal).reason)
             );
           })
       )
@@ -138,6 +141,27 @@ describe('fetchJson (SMA-280)', () => {
     });
     caller.abort();
     await expectation;
+  });
+
+  it('rejects immediately when passed an already-aborted signal', async () => {
+    // The stub must not matter: the early-abort path rejects from fetchJson
+    // itself with the caller's reason, before any response handling.
+    const spy = vi.fn();
+    vi.stubGlobal('fetch', spy);
+    const controller = new AbortController();
+    controller.abort();
+
+    const pending = fetchJson('/api/gardens', {
+      credentials: 'include',
+      signal: controller.signal,
+    });
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(
+      fetchJson('/api/gardens', {
+        credentials: 'include',
+        signal: controller.signal,
+      })
+    ).rejects.not.toHaveProperty('status');
   });
 
   it('forwards the exact credentials value to fetch', async () => {

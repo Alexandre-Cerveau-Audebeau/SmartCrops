@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { addPlantToGarden, fetchGarden, fetchGardens } from './gardenApi';
+import {
+  addPlantToGarden,
+  fetchGarden,
+  fetchGardens,
+  removePlantFromGarden,
+} from './gardenApi';
 import { HttpStatusError } from './httpStatusError';
 
 // SMA-280 migration locks: gardenApi now goes through fetchJson. What must
@@ -88,5 +93,12 @@ describe('gardenApi (SMA-280 migration)', () => {
 
     const [url] = spy.mock.calls[0]! as [string];
     expect(url).toBe('/api/gardens/a%2Fb%20c');
+  });
+
+  it('URL-encodes both gardenId and plantId in removePlantFromGarden', async () => {
+    const spy = mockFetch({ ok: true, status: 204 });
+    await removePlantFromGarden('a/b', 'c d');
+    const [url] = spy.mock.calls[0]! as [string];
+    expect(url).toBe('/api/gardens/a%2Fb/plants/c%20d');
   });
 });

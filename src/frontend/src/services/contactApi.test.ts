@@ -59,15 +59,17 @@ describe('sendContactMessage (SMA-30)', () => {
     );
   });
 
-  it('aborts after 15s (above the 10s backend SMTP cap) with a statusless AbortError', async () => {
+  it('aborts after 15s (above the 10s backend SMTP cap) with a statusless TimeoutError', async () => {
     vi.useFakeTimers();
+    // Like real fetch, the stub rejects with the signal's abort reason —
+    // fetchJson's timeout aborts with a 'TimeoutError' DOMException.
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation(
         (_url: string, init: RequestInit) =>
           new Promise((_resolve, reject) => {
             init.signal?.addEventListener('abort', () =>
-              reject(new DOMException('Aborted', 'AbortError'))
+              reject((init.signal as AbortSignal).reason)
             );
           })
       )
@@ -76,7 +78,7 @@ describe('sendContactMessage (SMA-30)', () => {
     const pending = sendContactMessage(payload);
     // Attach the expectations before advancing so the rejection is handled.
     const nameExpectation = expect(pending).rejects.toMatchObject({
-      name: 'AbortError',
+      name: 'TimeoutError',
     });
     const statusExpectation = expect(pending).rejects.not.toHaveProperty(
       'status'

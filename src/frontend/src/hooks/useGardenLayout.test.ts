@@ -108,6 +108,38 @@ describe('useGardenLayout (SMA-213)', () => {
     expect(result.current.loading).toBe(false);
   });
 
+  it('clears a previous error when a gardenId change succeeds', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(gardenOf('a'));
+    vi.mocked(fetchLayout).mockRejectedValueOnce(new Error('boom'));
+
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string }) => useGardenLayout(id),
+      { initialProps: { id: 'a' } }
+    );
+    await waitFor(() => expect(result.current.error).toBeInstanceOf(Error));
+
+    vi.mocked(fetchGarden).mockResolvedValue(gardenOf('b'));
+    vi.mocked(fetchLayout).mockResolvedValue(layoutOf('b'));
+    rerender({ id: 'b' });
+
+    await waitFor(() => expect(result.current.data?.garden.id).toBe('b'));
+    expect(result.current.error).toBeNull();
+  });
+
+  it('clears a previous error when refetch() succeeds', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(gardenOf('a'));
+    vi.mocked(fetchLayout).mockRejectedValueOnce(new Error('boom'));
+
+    const { result } = renderHook(() => useGardenLayout('a'));
+    await waitFor(() => expect(result.current.error).toBeInstanceOf(Error));
+
+    vi.mocked(fetchLayout).mockResolvedValue(layoutOf('a'));
+    act(() => result.current.refetch());
+
+    await waitFor(() => expect(result.current.data?.garden.id).toBe('a'));
+    expect(result.current.error).toBeNull();
+  });
+
   it('refetch() reloads the same id', async () => {
     vi.mocked(fetchGarden).mockResolvedValue(gardenOf('a'));
     vi.mocked(fetchLayout).mockResolvedValue(layoutOf('a'));

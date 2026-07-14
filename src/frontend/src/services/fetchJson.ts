@@ -23,9 +23,11 @@ export interface FetchJsonOptions extends Omit<RequestInit, 'credentials'> {
  * Contract:
  * - Non-OK responses throw {@link HttpStatusError} carrying `res.status`, so
  *   callers narrow with `instanceof` instead of duck-typing a `status` field.
- * - Abort rejections (timeout or caller signal) and network failures (fetch
- *   `TypeError`) propagate untouched — both are statusless by design so
- *   callers can tell "server said no" from "no server".
+ * - Abort rejections and network failures (fetch `TypeError`) propagate
+ *   untouched — both are statusless by design so callers can tell "server
+ *   said no" from "no server". The timeout aborts with a `'TimeoutError'`
+ *   DOMException while a caller abort forwards the caller signal's own
+ *   `reason` (default `'AbortError'`), so the two stay distinguishable.
  * - A 204 or empty body resolves `undefined`; anything else is parsed as
  *   JSON and returned as `T`.
  * - A caller-supplied `signal` is honoured alongside the timeout: whichever
@@ -37,13 +39,22 @@ export async function fetchJson<T = void>(
 ): Promise<T> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...init } = options;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const onCallerAbort = () => controller.abort();
+  const timeout = setTimeout(
+    () => controller.abort(new DOMException('Timed out', 'TimeoutError')),
+    timeoutMs
+  );
+  const onCallerAbort = () => controller.abort(signal!.reason);
   if (signal) {
-    if (signal.aborted) controller.abort();
+    if (signal.aborted) controller.abort(signal.reason);
     else signal.addEventListener('abort', onCallerAbort, { once: true });
   }
   try {
+    // Already-aborted caller signal: reject from here with the caller's
+    // reason instead of relying on the fetch implementation to honour an
+    // aborted signal.
+    if (controller.signal.aborted) {
+      throw controller.signal.reason ?? new DOMException('Aborted', 'AbortError');
+    }
     const res = await fetch(url, { ...init, signal: controller.signal });
     if (!res.ok) {
       throw new HttpStatusError(`Request failed (${res.status})`, res.status);
