@@ -361,14 +361,51 @@ describe('plannerReducer', () => {
     expect(s.zoom).toBe(0.5);
   });
 
-  it('MARK_SAVED clears dirty and re-snapshots the CURRENT layout (deep copy)', () => {
-    let s = plannerReducer(hydrated(), { type: 'ADD_ROW_BOTTOM' });
-    expect(s.isDirty).toBe(true);
-    s = plannerReducer(s, { type: 'MARK_SAVED' });
+  it('MARK_SAVED with no edits in flight clears dirty and snapshots the submitted revision (deep copy)', () => {
+    const s0 = plannerReducer(hydrated(), { type: 'ADD_ROW_BOTTOM' });
+    expect(s0.isDirty).toBe(true);
+    // No edits between submission and completion: submitted === current refs.
+    const submitted = {
+      grid: s0.grid,
+      layoutWidth: s0.layoutWidth,
+      layoutHeight: s0.layoutHeight,
+      cellSize: s0.cellSize,
+      placements: s0.placements,
+    };
+    const s = plannerReducer(s0, { type: 'MARK_SAVED', submitted });
     expect(s.isDirty).toBe(false);
     expect(s.lastSaved!.layoutHeight).toBe(4);
     expect(s.lastSaved!.grid).not.toBe(s.grid);
     expect(s.lastSaved!.placements[0]).not.toBe(s.placements[0]);
+  });
+
+  it('MARK_SAVED with an edit landed mid-save keeps dirty and snapshots the SUBMITTED revision', () => {
+    const before = hydrated();
+    // handleSave captures the submitted revision, then the request departs…
+    const submitted = {
+      grid: before.grid,
+      layoutWidth: before.layoutWidth,
+      layoutHeight: before.layoutHeight,
+      cellSize: before.cellSize,
+      placements: before.placements,
+    };
+    // …and the user keeps editing while saveLayout is in flight.
+    const edited = plannerReducer(before, {
+      type: 'ADD_PLACEMENT',
+      id: 'new-1',
+      plantId: 'p9',
+      row: 2,
+      col: 2,
+    });
+    const s = plannerReducer(edited, { type: 'MARK_SAVED', submitted });
+    // The newer revision is NOT persisted — dirty stays on.
+    expect(s.isDirty).toBe(true);
+    // lastSaved reflects what the server actually received (1 placement)…
+    expect(s.lastSaved!.placements).toHaveLength(1);
+    expect(s.lastSaved!.placements[0].id).toBe('srv-1');
+    // …while the current, newer state is untouched (2 placements).
+    expect(s.placements).toHaveLength(2);
+    expect(s.grid).toBe(edited.grid);
   });
 
   it('RESTORE_LAST_SAVED (the Cancel "undo") restores the snapshot wholesale and clears dirty', () => {

@@ -18,7 +18,7 @@ export interface PlannerPlacement {
   notes: string | null;
 }
 
-interface LayoutSnapshot {
+export interface LayoutSnapshot {
   grid: CellData[][] | null;
   layoutWidth: number;
   layoutHeight: number;
@@ -104,7 +104,7 @@ export type PlannerAction =
   | { type: 'SET_SHAPE_EDIT_MODE'; enabled: boolean }
   | { type: 'ZOOM_IN' }
   | { type: 'ZOOM_OUT' }
-  | { type: 'MARK_SAVED' }
+  | { type: 'MARK_SAVED'; submitted: LayoutSnapshot }
   | { type: 'RESTORE_LAST_SAVED' }
   | { type: 'DISCARD_DRAFT' };
 
@@ -123,13 +123,6 @@ const isInsideGrid = (
 const copyPlacements = (placements: PlannerPlacement[]): PlannerPlacement[] =>
   placements.map((p) => ({ ...p }));
 
-const snapshotOf = (state: PlannerState): LayoutSnapshot => ({
-  grid: copyGrid(state.grid),
-  layoutWidth: state.layoutWidth,
-  layoutHeight: state.layoutHeight,
-  cellSize: state.cellSize,
-  placements: copyPlacements(state.placements),
-});
 
 /** Bump the transient removal event only when placements were dropped. */
 const withRemoval = (
@@ -414,8 +407,28 @@ export function plannerReducer(
     case 'ZOOM_OUT':
       return { ...state, zoom: Math.max(ZOOM_MIN, state.zoom - 0.2) };
 
-    case 'MARK_SAVED':
-      return { ...state, isDirty: false, lastSaved: snapshotOf(state) };
+    case 'MARK_SAVED': {
+      // The snapshot is built from the SUBMITTED revision — what the server
+      // actually received — never from post-request state. Edits made while
+      // saveLayout was in flight produced fresh grid/placements references
+      // (immutable reducer), so a referential check tells the two apart:
+      // only a still-current revision clears the dirty flag.
+      const { submitted } = action;
+      const isCurrentRevision =
+        state.grid === submitted.grid &&
+        state.placements === submitted.placements;
+      return {
+        ...state,
+        isDirty: !isCurrentRevision,
+        lastSaved: {
+          grid: copyGrid(submitted.grid),
+          layoutWidth: submitted.layoutWidth,
+          layoutHeight: submitted.layoutHeight,
+          cellSize: submitted.cellSize,
+          placements: copyPlacements(submitted.placements),
+        },
+      };
+    }
 
     case 'RESTORE_LAST_SAVED': {
       if (!state.lastSaved) return state;

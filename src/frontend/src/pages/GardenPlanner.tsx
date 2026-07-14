@@ -481,6 +481,16 @@ export default function GardenPlanner() {
       placements: currentPlacements,
     } = saveInputsRef.current;
     if (!gardenId || !currentGrid) return;
+    // The exact revision being submitted, captured BEFORE the await — the
+    // reducer compares references against it so edits landing while the
+    // request is in flight are never falsely marked persisted.
+    const submitted = {
+      grid: currentGrid,
+      layoutWidth: width,
+      layoutHeight: height,
+      cellSize: currentCellSize,
+      placements: currentPlacements,
+    };
     setSaving(true);
     setMessage(null);
     try {
@@ -500,7 +510,7 @@ export default function GardenPlanner() {
           notes: p.notes,
         })),
       });
-      dispatch({ type: 'MARK_SAVED' });
+      dispatch({ type: 'MARK_SAVED', submitted });
       setMessage({ type: 'success', text: t('planner.toolbar.saveSuccess') });
     } catch {
       setMessage({ type: 'error', text: t('planner.toolbar.saveError') });
