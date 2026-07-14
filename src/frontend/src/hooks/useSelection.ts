@@ -6,30 +6,42 @@ import type { PlannerPlacement } from '../pages/gardenPlanner/plannerReducer';
  * placement, held by ID instead of array index. ID-based selection survives
  * placement-array rebuilds (row/column shifts, layout refreshes) as long as
  * the placement itself survives, and degrades gracefully when it does not:
- * `selectedPlacement` derives to null and the detail panel simply closes.
+ * `selectedPlacement` derives to null, the detail panel closes, and the
+ * EXPOSED `selectedPlacementId` derives to null with it (F2, develop-store
+ * review on ef076f0) — consumers can never observe a selection that no longer
+ * exists. The reconciliation is derived rather than a state-clearing effect
+ * because `react-hooks/set-state-in-effect` forbids the effect variant (same
+ * lint precedent as the #169 cycle); reducer-driven removals additionally
+ * clear the stored id via the removal-toast `selectPlacement(null)`.
  */
 export function useSelection(placements: PlannerPlacement[]) {
   const [selectedPlantId, setSelectedPlantId] = useState<string | null>(null);
-  const [selectedPlacementId, setSelectedPlacementId] = useState<
-    string | null
-  >(null);
+  const [storedPlacementId, setStoredPlacementId] = useState<string | null>(
+    null
+  );
 
   const selectedPlacement = useMemo(
-    () => placements.find((p) => p.id === selectedPlacementId) ?? null,
-    [placements, selectedPlacementId]
+    () => placements.find((p) => p.id === storedPlacementId) ?? null,
+    [placements, storedPlacementId]
   );
+
+  // Never expose a stale id: when the stored id no longer resolves to a live
+  // placement, the public id is null in the SAME commit — no effect, no
+  // cascading render, no window where a future placement reusing the id could
+  // be silently re-selected through a consumer's eyes.
+  const selectedPlacementId = selectedPlacement?.id ?? null;
 
   const selectPlant = useCallback(
     (plantId: string | null) => setSelectedPlantId(plantId),
     []
   );
   const selectPlacement = useCallback(
-    (placementId: string | null) => setSelectedPlacementId(placementId),
+    (placementId: string | null) => setStoredPlacementId(placementId),
     []
   );
   const clearSelection = useCallback(() => {
     setSelectedPlantId(null);
-    setSelectedPlacementId(null);
+    setStoredPlacementId(null);
   }, []);
 
   return {

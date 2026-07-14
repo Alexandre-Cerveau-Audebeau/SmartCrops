@@ -116,7 +116,13 @@ export const GridControls = memo(function GridControls({
       )}
 
       {isDirty && (
-        <Button variant="outlined" size="small" color="inherit" onClick={onCancel}>
+        <Button
+          variant="outlined"
+          size="small"
+          color="inherit"
+          onClick={onCancel}
+          disabled={saving}
+        >
           {t('planner.toolbar.cancel')}
         </Button>
       )}

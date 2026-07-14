@@ -33,7 +33,7 @@ import { fetchPlants } from '../services/plantApi';
 import type { Garden } from '../types/Garden';
 import type { Plant } from '../types/Plant';
 import { serializeCellsJson } from '../types/GardenLayout';
-import { getTranslation } from '../utils/getTranslation';
+import { getPlantDisplayName } from '../utils/getPlantDisplayName';
 import { GridControls } from './gardenPlanner/GridControls';
 import { PlacementDetailPanel } from './gardenPlanner/PlacementDetailPanel';
 import { PlantsInGardenSection } from './gardenPlanner/PlantsInGardenSection';
@@ -83,7 +83,6 @@ export default function GardenPlanner() {
   const { language } = useLanguage();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const mountedRef = useRef(true);
   const {
     data: layoutSnapshot,
     loading,
@@ -149,21 +148,21 @@ export default function GardenPlanner() {
   }, []);
 
   useEffect(() => {
-    mountedRef.current = true;
     if (!id) return;
-    // Shared public-plants contract (credentials: 'omit'); the previous
-    // hand-rolled call was not locale-aware, so no lang argument here.
-    fetchPlants()
+    // Locale-aware catalog (SMA-194): the list DTO's flat `commonName` is
+    // localized server-side per `lang`, so the effect re-runs on language
+    // switch — otherwise sidebar/grid/panel names would stay in the old
+    // locale while gardenName etc. flip. Abort guards the stale response.
+    const controller = new AbortController();
+    fetchPlants(controller.signal, language)
       .then((plants) => {
-        if (mountedRef.current) setAllPlants(plants);
+        if (!controller.signal.aborted) setAllPlants(plants);
       })
       .catch(() => {
-        /* plant fetch failure is non-blocking */
+        /* plant fetch failure is non-blocking; abort lands here too */
       });
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [id]);
+    return () => controller.abort();
+  }, [id, language]);
 
   // Hydrate the reducer from the hook's snapshot. useLayoutEffect so the grid
   // lands in the same paint as `loading` flipping false — the pre-hook
@@ -395,23 +394,26 @@ export default function GardenPlanner() {
     const plantMap = new Map(allPlants.map((p) => [p.id, p]));
     // While the catalog is still loading, placements have no resolvable name
     // yet — leave plantName undefined so cells render their neutral state
-    // instead of flashing the 'U' of the 'Unknown' fallback (a placement can
-    // hydrate before the catalog lands). 'Unknown' is reserved for plants
-    // genuinely absent from the loaded catalog.
+    // instead of flashing the initial of the unknown-plant fallback (a
+    // placement can hydrate before the catalog lands). The fallback is
+    // reserved for plants genuinely absent from the loaded catalog.
     const catalogPending = allPlants.length === 0;
     return placements.map((p) => {
       const plant = plantMap.get(p.plantId);
       return {
         ...p,
         plantName: plant
-          ? getTranslation(plant, language)?.commonName || plant.scientificName
+          ? getPlantDisplayName(plant, language)
           : catalogPending
             ? undefined
-            : 'Unknown',
+            : t('planner.unknownPlant'),
       };
     });
-  }, [placements, allPlants, language]);
+  }, [placements, allPlants, language, t]);
 
+  // "Plants in this garden" reads PLACEMENTS ONLY (SMA-6 Option A): the legacy
+  // link-table rows (garden.gardenPlants) are deliberately not merged anymore —
+  // a plant is in the garden iff it is placed on the map.
   const plantsToShow = useMemo(() => {
     const plantMap = new Map(allPlants.map((p) => [p.id, p]));
     const seen = new Set<string>();
@@ -420,18 +422,6 @@ export default function GardenPlanner() {
       plantName: string;
       scientificName: string;
     }> = [];
-    garden?.gardenPlants?.forEach((gp) => {
-      if (gp.plant && !seen.has(gp.plant.id)) {
-        seen.add(gp.plant.id);
-        list.push({
-          plantId: gp.plant.id,
-          plantName:
-            getTranslation(gp.plant, language)?.commonName ||
-            gp.plant.scientificName,
-          scientificName: gp.plant.scientificName,
-        });
-      }
-    });
     placements.forEach((p) => {
       if (seen.has(p.plantId)) return;
       const plant = plantMap.get(p.plantId);
@@ -439,13 +429,12 @@ export default function GardenPlanner() {
       seen.add(p.plantId);
       list.push({
         plantId: plant.id,
-        plantName:
-          getTranslation(plant, language)?.commonName || plant.scientificName,
+        plantName: getPlantDisplayName(plant, language),
         scientificName: plant.scientificName,
       });
     });
     return list;
-  }, [garden, placements, allPlants, language]);
+  }, [placements, allPlants, language]);
 
   // Latest-ref pattern: handleSave reads its inputs from a ref refreshed on
   // every commit, so its identity depends only on `t` and the GridControls
@@ -520,6 +509,12 @@ export default function GardenPlanner() {
   }, [t]);
 
   const handleCancel = useCallback(() => {
+    // Never cancel while a save is in flight (develop-store review F3 on
+    // ef076f0): saveLayout will still persist the submitted snapshot, so a
+    // local restore/discard here would toast "changes discarded" while the
+    // server keeps those changes. Both Cancel buttons are also disabled on
+    // `saving`; this guard covers any race between click and state flip.
+    if (saving) return;
     if (!hasLastSaved) {
       // No save yet — discard the setup draft and re-show the setup dialog
       dispatch({ type: 'DISCARD_DRAFT' });
@@ -531,7 +526,7 @@ export default function GardenPlanner() {
     dispatch({ type: 'RESTORE_LAST_SAVED' });
     clearSelection();
     setMessage({ type: 'info', text: t('planner.toolbar.changesDiscarded') });
-  }, [hasLastSaved, clearSelection, t]);
+  }, [saving, hasLastSaved, clearSelection, t]);
 
   const m = cellSizeToMeters(cellSize);
   const activeCells = grid ? grid.flat().filter((c) => c.active).length : 0;
@@ -639,6 +634,7 @@ export default function GardenPlanner() {
                 color="inherit"
                 size="small"
                 onClick={handleCancel}
+                disabled={saving}
                 sx={{ mr: 1 }}
               >
                 {t('planner.toolbar.cancel')}

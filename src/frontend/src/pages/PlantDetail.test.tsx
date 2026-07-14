@@ -17,10 +17,8 @@ import type { Plant, PlantPerenualData } from '../types/Plant';
 vi.mock('../services/plantApi', () => ({
   fetchPlantById: vi.fn(),
 }));
-vi.mock('../services/gardenApi', () => ({
-  fetchGardens: vi.fn().mockResolvedValue([]),
-  addPlantToGarden: vi.fn().mockResolvedValue(undefined),
-}));
+// gardenApi mock dropped with the Add-to-my-garden flow (SMA-6 Option A):
+// PlantDetail no longer imports it — the hero/CTA actions are plain links.
 vi.mock('../services/authApi', () => ({
   fetchMe: vi.fn().mockRejectedValue(new Error('Not authenticated')),
 }));
@@ -202,6 +200,16 @@ describe('PlantDetail', () => {
     expect(
       screen.queryByRole('heading', { name: 'Botanical synonyms' })
     ).not.toBeInTheDocument();
+  });
+
+  it('has no Add-to-my-garden action anymore — the hero/CTA route to the gardens page (SMA-6 Option A)', async () => {
+    renderAtPlant(makePlant());
+
+    await screen.findByRole('heading', { name: 'Basil' });
+    expect(screen.queryByText('Add to my garden')).not.toBeInTheDocument();
+    const planLinks = screen.getAllByRole('link', { name: 'Plan my garden' });
+    expect(planLinks.length).toBeGreaterThan(0);
+    planLinks.forEach((link) => expect(link).toHaveAttribute('href', '/gardens'));
   });
 
   it('renders the rich (tomato-shaped) plant with images and pests', async () => {

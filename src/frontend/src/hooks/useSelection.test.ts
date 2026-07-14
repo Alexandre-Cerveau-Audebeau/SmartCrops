@@ -64,9 +64,12 @@ describe('useSelection', () => {
     act(() => result.current.selectPlacement('srv-2'));
     expect(result.current.selectedPlacement?.id).toBe('srv-2');
 
-    // The selected placement is removed (e.g. dropped by a shrink).
+    // The selected placement is removed (e.g. dropped by a shrink). Both the
+    // derived object AND the stored id must clear — a stale id would silently
+    // re-select a later placement reusing it (develop-store review F1/F2).
     rerender({ placements: [placement('srv-1')] });
     expect(result.current.selectedPlacement).toBeNull();
+    expect(result.current.selectedPlacementId).toBeNull();
 
     // And selecting something else afterwards still works.
     act(() => result.current.selectPlacement('srv-1'));

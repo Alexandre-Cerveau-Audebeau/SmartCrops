@@ -1,4 +1,4 @@
-import type { Plant, PlantTranslation } from '../types/Plant';
+import type { Plant } from '../types/Plant';
 
 /**
  * SMA-120: resolve a single translated field independently (requested language →
@@ -16,14 +16,7 @@ export function resolveTranslatedField(
   return requested?.[field] ?? english?.[field] ?? null;
 }
 
-export function getTranslation(plant: Plant, language = 'en'): PlantTranslation | null {
-  // The neutral list DTO (PlantListItemResponse, PR #100) ships no
-  // `translations`, so `plant.translations` can be undefined at runtime. Guard
-  // every access so a missing array degrades to null instead of throwing during
-  // render — an unguarded `.find` here previously blanked the Library (SMA-73).
-  return (
-    plant.translations?.find((t) => t.language === language) ??
-    plant.translations?.[0] ??
-    null
-  );
-}
+// getTranslation (requested-language → translations[0] → null) was DELETED
+// with SMA-194: every garden surface now goes through getPlantDisplayName,
+// and its `translations[0]` tier could surface an arbitrary non-requested
+// language — divergent from the SMA-120 per-field contract above.

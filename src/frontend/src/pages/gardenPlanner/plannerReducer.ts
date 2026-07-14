@@ -123,6 +123,22 @@ const isInsideGrid = (
 const copyPlacements = (placements: PlannerPlacement[]): PlannerPlacement[] =>
   placements.map((p) => ({ ...p }));
 
+/** Does the placement's span cover the given cell? (F7 — painting a cell
+ * inactive must evict whatever occupies it, like RESIZED already does.) */
+const occupiesCell = (
+  p: PlannerPlacement,
+  row: number,
+  col: number
+): boolean =>
+  row >= p.startRow &&
+  row < p.startRow + p.spanRows &&
+  col >= p.startCol &&
+  col < p.startCol + p.spanCols;
+
+/** Painting state must not survive an editing-context change (F6): hydration,
+ * restore, draft discard and shape-edit off all reset through this. */
+const disarmedPainting = { isPainting: false, paintAction: null } as const;
+
 
 /** Bump the transient removal event only when placements were dropped. */
 const withRemoval = (
@@ -142,6 +158,7 @@ export function plannerReducer(
       const grid = parseCellsJson(action.cellsJson, action.width, action.height);
       return {
         ...state,
+        ...disarmedPainting,
         grid,
         layoutWidth: action.width,
         layoutHeight: action.height,
@@ -206,17 +223,33 @@ export function plannerReducer(
         ...copy[action.row][action.col],
         active: !currentActive,
       };
+      // Painting a cell INACTIVE evicts whatever occupied it (F7) — same
+      // semantics (filter + removal toast) as the RESIZED out-of-bounds drop.
+      const filtered = currentActive
+        ? state.placements.filter(
+            (p) => !occupiesCell(p, action.row, action.col)
+          )
+        : state.placements;
       return {
         ...state,
         grid: copy,
+        placements: filtered,
         isPainting: true,
         paintAction: !currentActive,
         isDirty: true,
+        ...withRemoval(state, state.placements.length - filtered.length),
       };
     }
 
     case 'PAINT_ENTER': {
-      if (!state.isPainting || state.paintAction === null || !state.grid) {
+      // shapeEditMode is re-checked (F6): leaving shape-edit mid-drag must not
+      // let a queued pointer-enter keep mutating the grid.
+      if (
+        !state.shapeEditMode ||
+        !state.isPainting ||
+        state.paintAction === null ||
+        !state.grid
+      ) {
         return state;
       }
       if (!isInsideGrid(state.grid, action.row, action.col)) return state;
@@ -225,7 +258,19 @@ export function plannerReducer(
         ...copy[action.row][action.col],
         active: state.paintAction,
       };
-      return { ...state, grid: copy, isDirty: true };
+      const filtered =
+        state.paintAction === false
+          ? state.placements.filter(
+              (p) => !occupiesCell(p, action.row, action.col)
+            )
+          : state.placements;
+      return {
+        ...state,
+        grid: copy,
+        placements: filtered,
+        isDirty: true,
+        ...withRemoval(state, state.placements.length - filtered.length),
+      };
     }
 
     case 'PAINT_END':
@@ -233,12 +278,17 @@ export function plannerReducer(
 
     case 'SET_ALL_CELLS': {
       if (!state.grid) return state;
+      // Deactivating EVERY cell leaves no garden space — placements cannot
+      // survive it (F7); activating all never drops anything.
+      const filtered = action.active ? state.placements : [];
       return {
         ...state,
         grid: state.grid.map((row) =>
           row.map((cell) => ({ ...cell, active: action.active }))
         ),
+        placements: filtered,
         isDirty: true,
+        ...withRemoval(state, state.placements.length - filtered.length),
       };
     }
 
@@ -399,7 +449,10 @@ export function plannerReducer(
       };
 
     case 'SET_SHAPE_EDIT_MODE':
-      return { ...state, shapeEditMode: action.enabled };
+      // Disabling shape-edit disarms any in-flight paint drag (F6).
+      return action.enabled
+        ? { ...state, shapeEditMode: true }
+        : { ...state, shapeEditMode: false, ...disarmedPainting };
 
     case 'ZOOM_IN':
       return { ...state, zoom: Math.min(ZOOM_MAX, state.zoom + 0.2) };
@@ -435,6 +488,7 @@ export function plannerReducer(
       const snap = state.lastSaved;
       return {
         ...state,
+        ...disarmedPainting,
         grid: copyGrid(snap.grid),
         layoutWidth: snap.layoutWidth,
         layoutHeight: snap.layoutHeight,
@@ -447,6 +501,7 @@ export function plannerReducer(
     case 'DISCARD_DRAFT':
       return {
         ...state,
+        ...disarmedPainting,
         grid: null,
         placements: [],
         layoutWidth: 0,

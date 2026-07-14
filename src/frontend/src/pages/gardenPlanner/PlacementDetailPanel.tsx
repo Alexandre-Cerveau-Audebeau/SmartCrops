@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import type { Plant } from '../../types/Plant';
-import { getTranslation } from '../../utils/getTranslation';
+import { getPlantDisplayName } from '../../utils/getPlantDisplayName';
 import type { PlannerPlacement } from './plannerReducer';
 
 // Extension point (Phase-5 mockups): exposure info and footprint controls
@@ -46,9 +46,8 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
       }}
     >
       <Typography variant="subtitle1" fontWeight={600}>
-        {plant
-          ? getTranslation(plant, language)?.commonName || plant.scientificName
-          : 'Unknown'}
+        {/* Shared Library resolver (SMA-194); localized unknown fallback (F4). */}
+        {plant ? getPlantDisplayName(plant, language) : t('planner.unknownPlant')}
       </Typography>
       {plant && (
         <Typography

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  addPlantToGarden,
   fetchGarden,
   fetchGardens,
   removePlantFromGarden,
@@ -11,7 +10,8 @@ import { HttpStatusError } from './httpStatusError';
 // never regress: the auth cookie policy (credentials: 'include' — every
 // garden endpoint sits behind [Authorize]), the caller AbortSignal reaching
 // fetch (useGardenLayout aborts on garden switch), and the HttpStatusError
-// contract the 409 consumers narrow on.
+// contract consumers narrow on. (addPlantToGarden was removed with SMA-6
+// Option A — the status-carrying lock now rides removePlantFromGarden.)
 
 // contactApi.test.ts pattern: stub global fetch, restore after each test.
 function mockFetch(response: {
@@ -70,16 +70,29 @@ describe('gardenApi (SMA-280 migration)', () => {
     expect(init.signal?.aborted).toBe(true);
   });
 
-  it('rejects with HttpStatusError carrying the status (409 duplicate plant)', async () => {
-    mockFetch({ ok: false, status: 409 });
+  it('rejects with HttpStatusError carrying the status (404 plant not in garden)', async () => {
+    mockFetch({ ok: false, status: 404 });
 
     const rejection = expect(
-      addPlantToGarden('g1', 'p1')
+      removePlantFromGarden('g1', 'p1')
     ).rejects;
     await rejection.toBeInstanceOf(HttpStatusError);
-    await expect(addPlantToGarden('g1', 'p1')).rejects.toMatchObject({
-      status: 409,
+    await expect(removePlantFromGarden('g1', 'p1')).rejects.toMatchObject({
+      status: 404,
     });
+  });
+
+  it('fetchGardens forwards the lang query (server-localized card names, SMA-155)', async () => {
+    const spy = mockFetch({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve('[]'),
+    });
+
+    await fetchGardens(undefined, 'fr');
+
+    const [url] = spy.mock.calls[0]! as [string];
+    expect(url).toBe('/api/gardens?lang=fr');
   });
 
   it('URL-encodes the garden id', async () => {

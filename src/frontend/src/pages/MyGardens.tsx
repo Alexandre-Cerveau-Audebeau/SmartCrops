@@ -21,13 +21,13 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import { useLanguage } from '../hooks/useLanguage';
 import { createGarden, deleteGarden, fetchGardens, updateGarden } from '../services/gardenApi';
-import type { Garden } from '../types/Garden';
-import { getTranslation } from '../utils/getTranslation';
+import type { GardenListItem } from '../types/Garden';
+import { getPlantDisplayName } from '../utils/getPlantDisplayName';
 
 export default function MyGardens() {
   const { t } = useTranslation();
   const { language } = useLanguage();
-  const [gardens, setGardens] = useState<Garden[]>([]);
+  const [gardens, setGardens] = useState<GardenListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
@@ -38,15 +38,15 @@ export default function MyGardens() {
   const [newGardenName, setNewGardenName] = useState('');
   const [newGardenDescription, setNewGardenDescription] = useState('');
 
-  const [editingGarden, setEditingGarden] = useState<Garden | null>(null);
+  const [editingGarden, setEditingGarden] = useState<GardenListItem | null>(null);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
 
-  const [deleteConfirmGarden, setDeleteConfirmGarden] = useState<Garden | null>(null);
+  const [deleteConfirmGarden, setDeleteConfirmGarden] = useState<GardenListItem | null>(null);
 
   const loadGardens = async (signal?: AbortSignal) => {
     try {
-      const data = await fetchGardens(signal);
+      const data = await fetchGardens(signal, language);
       setGardens(data);
       setLoadError(false);
     } catch (err) {
@@ -56,11 +56,14 @@ export default function MyGardens() {
     }
   };
 
+  // Re-runs on language switch: preview names ride the server-localized flat
+  // `commonName`, so a locale change must re-fetch, not re-resolve (SMA-155).
   useEffect(() => {
     const controller = new AbortController();
     loadGardens(controller.signal);
     return () => controller.abort();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language]);
 
   const handleCreate = async () => {
     if (isMutating) return;
@@ -109,7 +112,7 @@ export default function MyGardens() {
     }
   };
 
-  const openEditDialog = (garden: Garden) => {
+  const openEditDialog = (garden: GardenListItem) => {
     setEditingGarden(garden);
     setEditName(garden.name);
     setEditDescription(garden.description ?? '');
@@ -249,23 +252,21 @@ export default function MyGardens() {
                       {expandedDescriptions.has(garden.id) ? t('gardens.seeLess') : t('gardens.seeMore')}
                     </Button>
                   )}
+                  {/* Counter + preview = DISTINCT plants actually placed in the
+                      map (SMA-6) — names through the shared Library resolver. */}
                   <Chip
-                    label={t('gardens.plantsCount', { count: garden.gardenPlants.length })}
+                    label={t('gardens.plantsCount', { count: garden.plants.length })}
                     size="small"
                     variant="outlined"
                   />
-                  {garden.gardenPlants.length > 0 && (
+                  {garden.plants.length > 0 && (
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                      {garden.gardenPlants
+                      {garden.plants
                         .slice(0, 3)
-                        .map((gp) => {
-                          if (!gp.plant) return 'Unknown';
-                          const tr = getTranslation(gp.plant, language);
-                          return tr?.commonName || gp.plant.translations?.[0]?.commonName || gp.plant.scientificName;
-                        })
+                        .map((plant) => getPlantDisplayName(plant, language))
                         .join(', ')}
-                      {garden.gardenPlants.length > 3 &&
-                        ` ${t('gardens.more', { count: garden.gardenPlants.length - 3 })}`}
+                      {garden.plants.length > 3 &&
+                        ` ${t('gardens.more', { count: garden.plants.length - 3 })}`}
                     </Typography>
                   )}
                 </CardContent>
