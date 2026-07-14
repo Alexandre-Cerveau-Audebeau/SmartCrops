@@ -3,13 +3,13 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Alert from '@mui/material/Alert';
-import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -20,10 +20,6 @@ import { alpha, type Theme } from '@mui/material/styles';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import SaveIcon from '@mui/icons-material/Save';
-import SettingsIcon from '@mui/icons-material/Settings';
-import ZoomInIcon from '@mui/icons-material/ZoomIn';
-import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import GardenGrid from '../components/Garden/GardenGrid';
 import PlantSidebar from '../components/Garden/PlantSidebar';
 import SetupLayoutDialog from '../components/Garden/SetupLayoutDialog';
@@ -31,15 +27,20 @@ import { STICKY_OFFSET } from '../constants/layout';
 import { useGardenLayout } from '../hooks/useGardenLayout';
 import { useLanguage } from '../hooks/useLanguage';
 import { useScrollHold } from '../hooks/useScrollHold';
+import { useSelection } from '../hooks/useSelection';
 import { saveLayout } from '../services/gardenLayoutApi';
-import type { SavePlacementData } from '../services/gardenLayoutApi';
 import { fetchPlants } from '../services/plantApi';
 import type { Garden } from '../types/Garden';
 import type { Plant } from '../types/Plant';
-import type { CellData } from '../types/GardenLayout';
-import { parseCellsJson, serializeCellsJson } from '../types/GardenLayout';
+import { serializeCellsJson } from '../types/GardenLayout';
 import { getTranslation } from '../utils/getTranslation';
-import { getPlantColor } from '../utils/plantColor';
+import { GridControls } from './gardenPlanner/GridControls';
+import { PlacementDetailPanel } from './gardenPlanner/PlacementDetailPanel';
+import { PlantsInGardenSection } from './gardenPlanner/PlantsInGardenSection';
+import {
+  initialPlannerState,
+  plannerReducer,
+} from './gardenPlanner/plannerReducer';
 
 function cellSizeToMeters(cellSize: string): number {
   if (cellSize === '1m') return 1;
@@ -89,14 +90,31 @@ export default function GardenPlanner() {
     error: loadError,
   } = useGardenLayout(id);
 
+  const [state, dispatch] = useReducer(plannerReducer, initialPlannerState);
+  const {
+    grid,
+    layoutWidth,
+    layoutHeight,
+    cellSize,
+    placements,
+    isDirty,
+    shapeEditMode,
+    zoom,
+    removedCount,
+    removedSeq,
+  } = state;
+  const hasLastSaved = state.lastSaved !== null;
+
+  const {
+    selectedPlantId,
+    selectPlant,
+    selectedPlacementId,
+    selectPlacement,
+    selectedPlacement,
+    clearSelection,
+  } = useSelection(placements);
+
   const [garden, setGarden] = useState<Garden | null>(null);
-  const [placements, setPlacements] = useState<SavePlacementData[]>([]);
-  const [grid, setGrid] = useState<CellData[][] | null>(null);
-  const [layoutWidth, setLayoutWidth] = useState(0);
-  const [layoutHeight, setLayoutHeight] = useState(0);
-  const [cellSize, setCellSize] = useState('50cm');
-  const [shapeEditMode, setShapeEditMode] = useState(false);
-  const [isDirty, setIsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [showResize, setShowResize] = useState(false);
@@ -107,34 +125,11 @@ export default function GardenPlanner() {
   } | null>(null);
   const [allPlants, setAllPlants] = useState<Plant[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPlantId, setSelectedPlantId] = useState<string | null>(null);
-  const [selectedPlacementIndex, setSelectedPlacementIndex] = useState<
-    number | null
-  >(null);
 
-  // Drag-to-paint state
-  const [isPainting, setIsPainting] = useState(false);
-  const paintActionRef = useRef<boolean | null>(null);
+  // Client-only ids for placements created since the last save — server ids
+  // are GUIDs, so the `new-` prefix can never collide. Stripped at save.
+  const placementSeq = useRef(0);
 
-  // Snapshot of the last saved layout (used by Cancel)
-  const lastSavedRef = useRef<{
-    grid: CellData[][] | null;
-    layoutWidth: number;
-    layoutHeight: number;
-    cellSize: string;
-    placements: SavePlacementData[];
-  } | null>(null);
-
-  // Visual zoom (purely view-state — does not affect saved data)
-  const [zoom, setZoom] = useState(1);
-  const handleZoomIn = useCallback(
-    () => setZoom((z) => Math.min(2, z + 0.2)),
-    []
-  );
-  const handleZoomOut = useCallback(
-    () => setZoom((z) => Math.max(0.5, z - 0.2)),
-    []
-  );
   const cellSizePx = Math.round(44 * zoom);
 
   // Horizontal scroll state for grid container
@@ -170,43 +165,31 @@ export default function GardenPlanner() {
     };
   }, [id]);
 
-  // Hydrate the local layout state from the hook's snapshot. useLayoutEffect
-  // so the grid lands in the same paint as `loading` flipping false — the
-  // pre-hook version applied both in one promise callback.
+  // Hydrate the reducer from the hook's snapshot. useLayoutEffect so the grid
+  // lands in the same paint as `loading` flipping false — the pre-hook
+  // version applied both in one promise callback.
   useLayoutEffect(() => {
     if (!layoutSnapshot) return;
     const { garden: gardenData, layout: layoutData } = layoutSnapshot;
     setGarden(gardenData);
     if (layoutData.width && layoutData.height && layoutData.cellSize) {
-      const loadedGrid = parseCellsJson(
-        layoutData.cellsJson,
-        layoutData.width,
-        layoutData.height
-      );
-      const loadedPlacements: SavePlacementData[] = (
-        layoutData.placements ?? []
-      ).map((p) => ({
-        plantId: p.plantId,
-        startRow: p.startRow,
-        startCol: p.startCol,
-        spanRows: p.spanRows,
-        spanCols: p.spanCols,
-        notes: p.notes,
-      }));
-      setLayoutWidth(layoutData.width);
-      setLayoutHeight(layoutData.height);
-      setCellSize(layoutData.cellSize);
-      setGrid(loadedGrid);
-      setPlacements(loadedPlacements);
-      lastSavedRef.current = {
-        grid: loadedGrid
-          ? loadedGrid.map((row) => row.map((cell) => ({ ...cell })))
-          : null,
-        layoutWidth: layoutData.width,
-        layoutHeight: layoutData.height,
+      dispatch({
+        type: 'HYDRATE_FROM_LAYOUT',
+        width: layoutData.width,
+        height: layoutData.height,
         cellSize: layoutData.cellSize,
-        placements: loadedPlacements.map((p) => ({ ...p })),
-      };
+        cellsJson: layoutData.cellsJson,
+        placements: (layoutData.placements ?? []).map((p) => ({
+          // The server placement id doubles as the stable selection identity.
+          id: p.id,
+          plantId: p.plantId,
+          startRow: p.startRow,
+          startCol: p.startCol,
+          spanRows: p.spanRows,
+          spanCols: p.spanCols,
+          notes: p.notes,
+        })),
+      });
     } else {
       setShowSetup(true);
     }
@@ -220,27 +203,23 @@ export default function GardenPlanner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadError]);
 
-  const notifyRemovedPlacements = useCallback(
-    (removedCount: number) => {
-      if (removedCount > 0) {
-        setMessage({
-          type: 'info',
-          text: t('planner.placementsRemoved', { count: removedCount }),
-        });
-        setSelectedPlacementIndex(null);
-      }
-    },
-    [t]
-  );
+  // The old notifyRemovedPlacements side effects, driven by the reducer's
+  // transient removal event: info toast + placement-selection clear.
+  // useLayoutEffect so the toast shares the removal's paint, as before.
+  useLayoutEffect(() => {
+    if (removedSeq === 0) return;
+    setMessage({
+      type: 'info',
+      text: t('planner.placementsRemoved', { count: removedCount }),
+    });
+    selectPlacement(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [removedSeq]);
 
   const handleSetupConfirm = useCallback(
     (cols: number, rows: number, cs: string) => {
-      setLayoutWidth(cols);
-      setLayoutHeight(rows);
-      setCellSize(cs);
-      setGrid(parseCellsJson(null, cols, rows));
+      dispatch({ type: 'SETUP_CONFIRMED', cols, rows, cellSize: cs });
       setShowSetup(false);
-      setIsDirty(true);
     },
     []
   );
@@ -248,167 +227,78 @@ export default function GardenPlanner() {
   const handleResize = useCallback(
     (newWidth: number, newHeight: number, newCellSize: string) => {
       setShowResize(false);
-      const newGrid: CellData[][] = [];
-      for (let r = 0; r < newHeight; r++) {
-        newGrid[r] = [];
-        for (let c = 0; c < newWidth; c++) {
-          if (grid && r < grid.length && c < grid[r].length) {
-            newGrid[r][c] = grid[r][c];
-          } else {
-            newGrid[r][c] = { active: true };
-          }
-        }
-      }
-      setGrid(newGrid);
-      setLayoutWidth(newWidth);
-      setLayoutHeight(newHeight);
-      setCellSize(newCellSize);
-      const filtered = placements.filter(
-        (p) =>
-          p.startRow + p.spanRows <= newHeight &&
-          p.startCol + p.spanCols <= newWidth
-      );
-      notifyRemovedPlacements(placements.length - filtered.length);
-      setPlacements(filtered);
-      setIsDirty(true);
+      dispatch({
+        type: 'RESIZED',
+        width: newWidth,
+        height: newHeight,
+        cellSize: newCellSize,
+      });
     },
-    [grid, placements, notifyRemovedPlacements]
+    []
   );
 
-  // Drag-to-paint handlers
+  // Drag-to-paint handlers (guards live in the reducer)
   const handleCellDragStart = useCallback(
-    (row: number, col: number) => {
-      if (!shapeEditMode) return;
-      setIsPainting(true);
-      setGrid((prev) => {
-        if (!prev) return prev;
-        const currentActive = prev[row][col].active;
-        paintActionRef.current = !currentActive;
-        const copy = prev.map((r) => r.map((c) => ({ ...c })));
-        copy[row][col] = { ...copy[row][col], active: !currentActive };
-        return copy;
-      });
-      setIsDirty(true);
-    },
-    [shapeEditMode]
+    (row: number, col: number) => dispatch({ type: 'PAINT_START', row, col }),
+    []
   );
-
   const handleCellDragEnter = useCallback(
-    (row: number, col: number) => {
-      if (!isPainting || paintActionRef.current === null) return;
-      const action = paintActionRef.current;
-      setGrid((prev) => {
-        if (!prev) return prev;
-        const copy = prev.map((r) => r.map((c) => ({ ...c })));
-        copy[row][col] = { ...copy[row][col], active: action };
-        return copy;
-      });
-      setIsDirty(true);
-    },
-    [isPainting]
+    (row: number, col: number) => dispatch({ type: 'PAINT_ENTER', row, col }),
+    []
+  );
+  const handleCellDragEnd = useCallback(
+    () => dispatch({ type: 'PAINT_END' }),
+    []
   );
 
-  const handleCellDragEnd = useCallback(() => {
-    setIsPainting(false);
-    paintActionRef.current = null;
-  }, []);
+  const handleSelectAll = useCallback(
+    () => dispatch({ type: 'SET_ALL_CELLS', active: true }),
+    []
+  );
+  const handleDeselectAll = useCallback(
+    () => dispatch({ type: 'SET_ALL_CELLS', active: false }),
+    []
+  );
+  const handleZoomIn = useCallback(() => dispatch({ type: 'ZOOM_IN' }), []);
+  const handleZoomOut = useCallback(() => dispatch({ type: 'ZOOM_OUT' }), []);
+  const handleOpenResize = useCallback(() => setShowResize(true), []);
+  const handleShapeEditToggle = useCallback(
+    (enabled: boolean) => dispatch({ type: 'SET_SHAPE_EDIT_MODE', enabled }),
+    []
+  );
 
-  // Add row/column handlers
-  const addRowTop = useCallback(() => {
-    if (!grid) return;
-    const newRow: CellData[] = Array.from({ length: layoutWidth }, () => ({
-      active: true,
-    }));
-    setGrid([newRow, ...grid]);
-    setLayoutHeight((h) => h + 1);
-    setPlacements((prev) =>
-      prev.map((p) => ({ ...p, startRow: p.startRow + 1 }))
-    );
-    setIsDirty(true);
-  }, [grid, layoutWidth]);
-
-  const addRowBottom = useCallback(() => {
-    if (!grid) return;
-    const newRow: CellData[] = Array.from({ length: layoutWidth }, () => ({
-      active: true,
-    }));
-    setGrid([...grid, newRow]);
-    setLayoutHeight((h) => h + 1);
-    setIsDirty(true);
-  }, [grid, layoutWidth]);
-
-  const addColLeft = useCallback(() => {
-    if (!grid) return;
-    setGrid(grid.map((row) => [{ active: true }, ...row]));
-    setLayoutWidth((w) => w + 1);
-    setPlacements((prev) =>
-      prev.map((p) => ({ ...p, startCol: p.startCol + 1 }))
-    );
-    setIsDirty(true);
-  }, [grid]);
-
-  const addColRight = useCallback(() => {
-    if (!grid) return;
-    setGrid(grid.map((row) => [...row, { active: true }]));
-    setLayoutWidth((w) => w + 1);
-    setIsDirty(true);
-  }, [grid]);
-
-  const removeRowTop = useCallback(() => {
-    if (!grid || grid.length <= 2) return;
-    setGrid(grid.slice(1));
-    setLayoutHeight((h) => h - 1);
-    const filtered = placements
-      .filter((p) => p.startRow >= 1)
-      .map((p) => ({ ...p, startRow: p.startRow - 1 }));
-    notifyRemovedPlacements(placements.length - filtered.length);
-    setPlacements(filtered);
-    setIsDirty(true);
-  }, [grid, placements, notifyRemovedPlacements]);
-
-  const removeRowBottom = useCallback(() => {
-    if (!grid || grid.length <= 2) return;
-    setGrid(grid.slice(0, -1));
-    const newHeight = grid.length - 1;
-    setLayoutHeight((h) => h - 1);
-    const filtered = placements.filter(
-      (p) => p.startRow + p.spanRows <= newHeight
-    );
-    notifyRemovedPlacements(placements.length - filtered.length);
-    setPlacements(filtered);
-    setIsDirty(true);
-  }, [grid, placements, notifyRemovedPlacements]);
-
-  const removeColLeft = useCallback(() => {
-    if (!grid || !grid[0] || grid[0].length <= 2) return;
-    setGrid(grid.map((row) => row.slice(1)));
-    setLayoutWidth((w) => w - 1);
-    const filtered = placements
-      .filter((p) => p.startCol >= 1)
-      .map((p) => ({ ...p, startCol: p.startCol - 1 }));
-    notifyRemovedPlacements(placements.length - filtered.length);
-    setPlacements(filtered);
-    setIsDirty(true);
-  }, [grid, placements, notifyRemovedPlacements]);
-
-  const removeColRight = useCallback(() => {
-    if (!grid || !grid[0] || grid[0].length <= 2) return;
-    setGrid(grid.map((row) => row.slice(0, -1)));
-    const newWidth = grid[0].length - 1;
-    setLayoutWidth((w) => w - 1);
-    const filtered = placements.filter(
-      (p) => p.startCol + p.spanCols <= newWidth
-    );
-    notifyRemovedPlacements(placements.length - filtered.length);
-    setPlacements(filtered);
-    setIsDirty(true);
-  }, [grid, placements, notifyRemovedPlacements]);
+  const addRowTop = useCallback(() => dispatch({ type: 'ADD_ROW_TOP' }), []);
+  const addRowBottom = useCallback(
+    () => dispatch({ type: 'ADD_ROW_BOTTOM' }),
+    []
+  );
+  const addColLeft = useCallback(() => dispatch({ type: 'ADD_COL_LEFT' }), []);
+  const addColRight = useCallback(
+    () => dispatch({ type: 'ADD_COL_RIGHT' }),
+    []
+  );
+  const removeRowTop = useCallback(
+    () => dispatch({ type: 'REMOVE_ROW_TOP' }),
+    []
+  );
+  const removeRowBottom = useCallback(
+    () => dispatch({ type: 'REMOVE_ROW_BOTTOM' }),
+    []
+  );
+  const removeColLeft = useCallback(
+    () => dispatch({ type: 'REMOVE_COL_LEFT' }),
+    []
+  );
+  const removeColRight = useCallback(
+    () => dispatch({ type: 'REMOVE_COL_RIGHT' }),
+    []
+  );
 
   const handleCellClick = useCallback(
     (row: number, col: number) => {
       if (shapeEditMode || !grid) return;
 
-      const existingIndex = placements.findIndex(
+      const existing = placements.find(
         (p) =>
           row >= p.startRow &&
           row < p.startRow + p.spanRows &&
@@ -417,51 +307,45 @@ export default function GardenPlanner() {
       );
 
       // Block clicks on inactive cells only when there's no placement to interact with
-      if (!grid[row][col].active && existingIndex < 0) return;
+      if (!grid[row][col].active && !existing) return;
 
       if (selectedPlantId) {
-        if (existingIndex >= 0) {
-          setPlacements((prev) =>
-            prev.map((p, i) =>
-              i === existingIndex ? { ...p, plantId: selectedPlantId } : p
-            )
-          );
+        if (existing) {
+          dispatch({
+            type: 'REPLACE_PLACEMENT',
+            placementId: existing.id,
+            plantId: selectedPlantId,
+          });
         } else {
-          setPlacements((prev) => [
-            ...prev,
-            {
-              plantId: selectedPlantId,
-              startRow: row,
-              startCol: col,
-              spanRows: 1,
-              spanCols: 1,
-              notes: null,
-            },
-          ]);
+          dispatch({
+            type: 'ADD_PLACEMENT',
+            id: `new-${++placementSeq.current}`,
+            plantId: selectedPlantId,
+            row,
+            col,
+          });
         }
-        setIsDirty(true);
         return;
       }
 
-      if (existingIndex >= 0) {
-        setSelectedPlacementIndex(existingIndex);
-      } else {
-        setSelectedPlacementIndex(null);
-      }
+      selectPlacement(existing ? existing.id : null);
     },
-    [shapeEditMode, selectedPlantId, grid, placements]
+    [shapeEditMode, grid, placements, selectedPlantId, selectPlacement]
   );
+
+  const handleRemoveSelectedPlacement = useCallback(() => {
+    if (!selectedPlacementId) return;
+    dispatch({ type: 'REMOVE_PLACEMENT', placementId: selectedPlacementId });
+    selectPlacement(null);
+  }, [selectedPlacementId, selectPlacement]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setSelectedPlantId(null);
-        setSelectedPlacementIndex(null);
-      }
+      if (e.key === 'Escape') clearSelection();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [clearSelection]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -500,12 +384,12 @@ export default function GardenPlanner() {
   // Recompute panel top whenever the panel becomes visible — first appearance
   // would otherwise stick to the initial value of 100.
   useEffect(() => {
-    if (selectedPlacementIndex === null) return;
+    if (selectedPlacementId === null) return;
     const node = gridWrapperRef.current;
     if (!node) return;
     const rect = node.getBoundingClientRect();
     setPanelTop(Math.max(rect.top, STICKY_OFFSET));
-  }, [selectedPlacementIndex]);
+  }, [selectedPlacementId]);
 
   const enrichedPlacements = useMemo(() => {
     const plantMap = new Map(allPlants.map((p) => [p.id, p]));
@@ -563,63 +447,91 @@ export default function GardenPlanner() {
     return list;
   }, [garden, placements, allPlants, language]);
 
-  const handleSave = async () => {
-    if (!id || !grid) return;
+  // Latest-ref pattern: handleSave reads its inputs from a ref refreshed on
+  // every commit, so its identity depends only on `t` and the GridControls
+  // memo stays effective across layout edits. useLayoutEffect (no deps) runs
+  // synchronously after each render — the ref is always fresh before any
+  // user click can invoke the callback.
+  const saveInputsRef = useRef({
+    id,
+    grid,
+    layoutWidth,
+    layoutHeight,
+    cellSize,
+    placements,
+  });
+  useLayoutEffect(() => {
+    saveInputsRef.current = {
+      id,
+      grid,
+      layoutWidth,
+      layoutHeight,
+      cellSize,
+      placements,
+    };
+  });
+
+  const handleSave = useCallback(async () => {
+    const {
+      id: gardenId,
+      grid: currentGrid,
+      layoutWidth: width,
+      layoutHeight: height,
+      cellSize: currentCellSize,
+      placements: currentPlacements,
+    } = saveInputsRef.current;
+    if (!gardenId || !currentGrid) return;
+    // The exact revision being submitted, captured BEFORE the await — the
+    // reducer compares references against it so edits landing while the
+    // request is in flight are never falsely marked persisted.
+    const submitted = {
+      grid: currentGrid,
+      layoutWidth: width,
+      layoutHeight: height,
+      cellSize: currentCellSize,
+      placements: currentPlacements,
+    };
     setSaving(true);
     setMessage(null);
     try {
-      await saveLayout(id, {
-        width: layoutWidth,
-        height: layoutHeight,
-        cellSize,
-        cellsJson: serializeCellsJson(grid),
-        placements,
+      await saveLayout(gardenId, {
+        width,
+        height,
+        cellSize: currentCellSize,
+        cellsJson: serializeCellsJson(currentGrid),
+        // Explicit field mapping: the client-only `id` must NOT reach the
+        // wire — the save payload stays byte-identical to pre-5.1B.
+        placements: currentPlacements.map((p) => ({
+          plantId: p.plantId,
+          startRow: p.startRow,
+          startCol: p.startCol,
+          spanRows: p.spanRows,
+          spanCols: p.spanCols,
+          notes: p.notes,
+        })),
       });
-      setIsDirty(false);
-      lastSavedRef.current = {
-        grid: grid.map((row) => row.map((cell) => ({ ...cell }))),
-        layoutWidth,
-        layoutHeight,
-        cellSize,
-        placements: placements.map((p) => ({ ...p })),
-      };
+      dispatch({ type: 'MARK_SAVED', submitted });
       setMessage({ type: 'success', text: t('planner.toolbar.saveSuccess') });
     } catch {
       setMessage({ type: 'error', text: t('planner.toolbar.saveError') });
     } finally {
       setSaving(false);
     }
-  };
+  }, [t]);
 
   const handleCancel = useCallback(() => {
-    if (!lastSavedRef.current) {
+    if (!hasLastSaved) {
       // No save yet — discard the setup draft and re-show the setup dialog
-      setGrid(null);
-      setPlacements([]);
-      setLayoutWidth(0);
-      setLayoutHeight(0);
-      setSelectedPlacementIndex(null);
-      setSelectedPlantId(null);
-      setIsDirty(false);
+      dispatch({ type: 'DISCARD_DRAFT' });
+      clearSelection();
       setShowSetup(true);
       setMessage({ type: 'info', text: t('planner.toolbar.changesDiscarded') });
       return;
     }
-    const snap = lastSavedRef.current;
-    setGrid(
-      snap.grid
-        ? snap.grid.map((row) => row.map((cell) => ({ ...cell })))
-        : null
-    );
-    setLayoutWidth(snap.layoutWidth);
-    setLayoutHeight(snap.layoutHeight);
-    setCellSize(snap.cellSize);
-    setPlacements(snap.placements.map((p) => ({ ...p })));
-    setIsDirty(false);
-    setSelectedPlacementIndex(null);
-    setSelectedPlantId(null);
+    dispatch({ type: 'RESTORE_LAST_SAVED' });
+    clearSelection();
     setMessage({ type: 'info', text: t('planner.toolbar.changesDiscarded') });
-  }, [t]);
+  }, [hasLastSaved, clearSelection, t]);
 
   const m = cellSizeToMeters(cellSize);
   const activeCells = grid ? grid.flat().filter((c) => c.active).length : 0;
@@ -635,8 +547,6 @@ export default function GardenPlanner() {
       })
     : '';
 
-  const selectedPlacement =
-    selectedPlacementIndex !== null ? placements[selectedPlacementIndex] : null;
   const selectedPlant = selectedPlacement
     ? (allPlants.find((p) => p.id === selectedPlacement.plantId) ?? null)
     : null;
@@ -690,121 +600,21 @@ export default function GardenPlanner() {
         {t('planner.toolbar.backToGardens')}
       </Button>
 
-      <Box
-        sx={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          gap: 2,
-          mb: 2,
-        }}
-      >
-        <Typography
-          variant="h5"
-          fontWeight={700}
-          color="primary"
-          sx={{ mr: 'auto' }}
-        >
-          {garden?.name || t('planner.title')}
-        </Typography>
-
-        {shapeEditMode && grid && (
-          <>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => {
-                setGrid(
-                  grid.map((row) =>
-                    row.map((cell) => ({ ...cell, active: true }))
-                  )
-                );
-                setIsDirty(true);
-              }}
-            >
-              {t('planner.shape.selectAll')}
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => {
-                setGrid(
-                  grid.map((row) =>
-                    row.map((cell) => ({ ...cell, active: false }))
-                  )
-                );
-                setIsDirty(true);
-              }}
-            >
-              {t('planner.shape.deselectAll')}
-            </Button>
-          </>
-        )}
-
-        {grid && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <IconButton
-              size="small"
-              onClick={handleZoomOut}
-              disabled={zoom <= 0.5}
-              aria-label={t('planner.toolbar.zoomOut')}
-            >
-              <ZoomOutIcon fontSize="small" />
-            </IconButton>
-            <Typography
-              variant="caption"
-              sx={{ minWidth: 40, textAlign: 'center' }}
-            >
-              {Math.round(zoom * 100)}%
-            </Typography>
-            <IconButton
-              size="small"
-              onClick={handleZoomIn}
-              disabled={zoom >= 2}
-              aria-label={t('planner.toolbar.zoomIn')}
-            >
-              <ZoomInIcon fontSize="small" />
-            </IconButton>
-          </Box>
-        )}
-
-        {grid && (
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<SettingsIcon />}
-            onClick={() => setShowResize(true)}
-          >
-            {t('planner.toolbar.resize')}
-          </Button>
-        )}
-
-        {isDirty && (
-          <Button
-            variant="outlined"
-            size="small"
-            color="inherit"
-            onClick={handleCancel}
-          >
-            {t('planner.toolbar.cancel')}
-          </Button>
-        )}
-
-        <Button
-          variant="contained"
-          startIcon={
-            saving ? (
-              <CircularProgress size={18} color="inherit" />
-            ) : (
-              <SaveIcon />
-            )
-          }
-          disabled={!isDirty || saving}
-          onClick={handleSave}
-        >
-          {saving ? t('planner.toolbar.saving') : t('planner.toolbar.save')}
-        </Button>
-      </Box>
+      <GridControls
+        gardenName={garden?.name}
+        hasGrid={grid !== null}
+        shapeEditMode={shapeEditMode}
+        zoom={zoom}
+        isDirty={isDirty}
+        saving={saving}
+        onSelectAll={handleSelectAll}
+        onDeselectAll={handleDeselectAll}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onOpenResize={handleOpenResize}
+        onCancel={handleCancel}
+        onSave={handleSave}
+      />
 
       {dimensionsText && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -889,10 +699,10 @@ export default function GardenPlanner() {
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             selectedPlantId={selectedPlantId}
-            onPlantSelect={setSelectedPlantId}
+            onPlantSelect={selectPlant}
             language={language}
             shapeEditMode={shapeEditMode}
-            onShapeEditToggle={setShapeEditMode}
+            onShapeEditToggle={handleShapeEditToggle}
           />
 
           <Box
@@ -1185,133 +995,23 @@ export default function GardenPlanner() {
 
       {/* Floating detail panel — anchored at the top of the map area, sticks while scrolling */}
       {selectedPlacement && (
-        <Box
-          sx={{
-            position: 'fixed',
-            top: panelTop,
-            right: 20,
-            width: 280,
-            zIndex: 10,
-            p: 2,
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: 1,
-            bgcolor: 'background.paper',
-            boxShadow: 3,
-          }}
-        >
-          <Typography variant="subtitle1" fontWeight={600}>
-            {selectedPlant
-              ? getTranslation(selectedPlant, language)?.commonName ||
-                selectedPlant.scientificName
-              : 'Unknown'}
-          </Typography>
-          {selectedPlant && (
-            <Typography
-              variant="body2"
-              sx={{ fontStyle: 'italic', color: 'text.secondary', mb: 1 }}
-            >
-              {selectedPlant.scientificName}
-            </Typography>
-          )}
-          <Typography variant="body2" color="text.secondary">
-            {t('planner.placement.position', {
-              row: selectedPlacement.startRow,
-              col: selectedPlacement.startCol,
-            })}
-          </Typography>
-          {selectedCellSoil && (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              {t('planner.placement.soil', { soil: selectedCellSoil })}
-            </Typography>
-          )}
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ display: 'block', mt: 1.5, fontStyle: 'italic' }}
-          >
-            {t('planner.placement.replaceHint')}
-          </Typography>
-          <Button
-            color="error"
-            size="small"
-            onClick={() => {
-              setPlacements((prev) =>
-                prev.filter((_, i) => i !== selectedPlacementIndex)
-              );
-              setSelectedPlacementIndex(null);
-              setIsDirty(true);
-            }}
-            sx={{ mt: 1.5 }}
-          >
-            {t('planner.placement.remove')}
-          </Button>
-        </Box>
+        <PlacementDetailPanel
+          placement={selectedPlacement}
+          plant={selectedPlant}
+          soil={selectedCellSoil}
+          top={panelTop}
+          language={language}
+          onRemove={handleRemoveSelectedPlacement}
+        />
       )}
 
       {/* Plants in this garden (gardenPlants + placements, deduplicated) */}
       {plantsToShow.length > 0 && (
-        <Box sx={{ mt: 3, mb: 2 }}>
-          <Typography variant="h6" sx={{ mb: 1.5 }}>
-            {t('planner.plantsInGarden')} ({plantsToShow.length})
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-            {plantsToShow.map((p) => {
-              const color = getPlantColor(p.plantId);
-              return (
-                <Box
-                  key={p.plantId}
-                  component={RouterLink}
-                  to={`/library/${p.plantId}`}
-                  state={{
-                    from: 'planner',
-                    gardenId: id,
-                    gardenName: garden?.name,
-                  }}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                    p: 1,
-                    minWidth: 200,
-                    textDecoration: 'none',
-                    color: 'text.primary',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    borderRadius: 1,
-                    bgcolor: 'background.paper',
-                    transition:
-                      'border-color 0.2s, transform 0.2s, box-shadow 0.2s',
-                    '&:hover': {
-                      borderColor: 'primary.main',
-                      transform: 'translateY(-1px)',
-                      boxShadow: 1,
-                    },
-                  }}
-                >
-                  <Avatar
-                    sx={{ width: 32, height: 32, fontSize: 14, bgcolor: color }}
-                  >
-                    {p.plantName.charAt(0).toUpperCase()}
-                  </Avatar>
-                  <Box sx={{ minWidth: 0, flex: 1 }}>
-                    <Typography variant="body2" noWrap>
-                      {p.plantName}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{ fontStyle: 'italic', color: 'text.secondary' }}
-                      noWrap
-                      component="div"
-                    >
-                      {p.scientificName}
-                    </Typography>
-                  </Box>
-                </Box>
-              );
-            })}
-          </Box>
-        </Box>
+        <PlantsInGardenSection
+          plants={plantsToShow}
+          gardenId={id}
+          gardenName={garden?.name}
+        />
       )}
 
       {/* Status bar */}
