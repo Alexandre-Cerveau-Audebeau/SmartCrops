@@ -126,6 +126,10 @@ export default function GardenPlanner() {
   // Explicit request state (5.2 R2, CR): "catalog loaded" must not be inferred
   // from array length — a legitimately empty catalog would otherwise read as
   // "still pending" forever and suppress the unknown-plant fallback.
+  // 5.2 R3: readiness is scoped to the ACTIVE language — the fetch effect
+  // resets both flag and data at each locale request, so a language switch
+  // re-enters neutral/pending instead of transiently rendering stale-locale
+  // names, and a failed refetch can never leave a stale catalog "loaded".
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -157,6 +161,10 @@ export default function GardenPlanner() {
     // localized server-side per `lang`, so the effect re-runs on language
     // switch — otherwise sidebar/grid/panel names would stay in the old
     // locale while gardenName etc. flip. Abort guards the stale response.
+    // The reset lives HERE (not at declaration) because it must run per
+    // locale request: drop the previous locale's catalog before fetching.
+    setCatalogLoaded(false);
+    setAllPlants([]);
     const controller = new AbortController();
     fetchPlants(controller.signal, language)
       .then((plants) => {

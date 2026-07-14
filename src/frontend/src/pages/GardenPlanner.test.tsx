@@ -1,8 +1,9 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import { useLanguage } from '../hooks/useLanguage';
 import type { GardenLayoutData } from '../services/gardenLayoutApi';
 import type { Garden } from '../types/Garden';
 import type { Plant } from '../types/Plant';
@@ -71,9 +72,21 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+// Minimal consumer to flip the app language mid-test — same LanguageProvider
+// mechanics the planner itself uses (useLanguage().setLanguage).
+function SwitchToFrench() {
+  const { setLanguage } = useLanguage();
+  return (
+    <button type="button" onClick={() => setLanguage('fr')}>
+      switch-to-fr
+    </button>
+  );
+}
+
 function renderPlanner() {
   return render(
     <LanguageProvider>
+      <SwitchToFrench />
       <MemoryRouter initialEntries={['/gardens/g1/planner']}>
         <Routes>
           <Route path="/gardens/:id/planner" element={<GardenPlanner />} />
@@ -120,6 +133,47 @@ describe('GardenPlanner placement initials', () => {
     await waitFor(() =>
       expect(within(grid).getByText('U')).toBeInTheDocument()
     );
+  });
+
+  it('drops the previous locale catalog on language switch — neutral while pending, never a stale-language name (5.2 R3)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    // Per-call controllable promises: calls[0] = EN catalog, calls[1] = FR.
+    const resolvers: Array<(plants: Plant[]) => void> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve) => {
+          resolvers.push(resolve);
+        })
+    );
+
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+
+    // EN catalog resolves — the placement renders its EN-derived initial.
+    resolvers[0]!([basil]); // no flat commonName -> 'Basilicum fixture' -> 'B'
+    await waitFor(() =>
+      expect(within(grid).getByText('B')).toBeInTheDocument()
+    );
+
+    // Switch to FR while the FR response is DELAYED: the previous locale's
+    // catalog must be dropped immediately — neutral cell, never the stale 'B'.
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    await waitFor(() => expect(resolvers.length).toBe(2));
+    expect(within(grid).queryByText('B')).toBeNull();
+    // Pending means NEUTRAL — no unknown-plant fallback initial in either
+    // locale ('U' = EN "Unknown", 'I' = FR "Inconnue").
+    expect(within(grid).queryByText('U')).toBeNull();
+    expect(within(grid).queryByText('I')).toBeNull();
+
+    // FR response lands — the localized name takes over.
+    resolvers[1]!([
+      { ...basil, commonName: 'framboisier' } as Plant, // -> 'Framboisier' -> 'F'
+    ]);
+    await waitFor(() =>
+      expect(within(grid).getByText('F')).toBeInTheDocument()
+    );
+    expect(within(grid).queryByText('B')).toBeNull();
   });
 
   it('shows the unknown-plant fallback once an EMPTY catalog has resolved (explicit loaded flag, 5.2 R2)', async () => {
