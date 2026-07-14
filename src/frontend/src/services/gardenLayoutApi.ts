@@ -1,3 +1,5 @@
+import { fetchJson } from './fetchJson';
+
 export interface GardenLayoutData {
   width: number | null;
   height: number | null;
@@ -35,18 +37,30 @@ export interface SavePlacementData {
   notes: string | null;
 }
 
-export async function fetchLayout(gardenId: string): Promise<GardenLayoutData> {
-  const res = await fetch(`/api/gardens/${gardenId}/layout`, { credentials: 'include' });
-  if (!res.ok) throw new Error('Failed to load layout');
-  return res.json();
+// Layout endpoints sit behind [Authorize] like the rest of GardensController —
+// credentials: 'include' so the HttpOnly auth cookie flows. Non-OK responses
+// reject with HttpStatusError (fetchJson contract, SMA-280).
+
+export async function fetchLayout(
+  gardenId: string,
+  signal?: AbortSignal,
+): Promise<GardenLayoutData> {
+  return fetchJson<GardenLayoutData>(
+    `/api/gardens/${encodeURIComponent(gardenId)}/layout`,
+    { credentials: 'include', signal },
+  );
 }
 
-export async function saveLayout(gardenId: string, data: SaveLayoutData): Promise<void> {
-  const res = await fetch(`/api/gardens/${gardenId}/layout`, {
+export async function saveLayout(
+  gardenId: string,
+  data: SaveLayoutData,
+  signal?: AbortSignal,
+): Promise<void> {
+  return fetchJson<void>(`/api/gardens/${encodeURIComponent(gardenId)}/layout`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(data),
+    signal,
   });
-  if (!res.ok) throw new Error('Failed to save layout');
 }

@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { findPlants } from './plantApi';
+import {
+  fetchPlantById,
+  fetchPlants,
+  fetchPlantTypes,
+  findPlants,
+  searchPlants,
+} from './plantApi';
+import { HttpStatusError } from './httpStatusError';
 
 // SMA-9 T3 — pins findPlants' QUERY-STRING serialization, the layer under
 // the hook's param building. The regression trap is the inverted safety
@@ -122,5 +129,125 @@ describe('findPlants query serialization', () => {
     for (const absent of ['isSaltTolerant', 'isTropical', 'isInvasive']) {
       expect(url.searchParams.has(absent)).toBe(false);
     }
+  });
+});
+
+// SMA-280 contract locks (gardenApi.test.ts model): explicit public-endpoint
+// credentials and the single HttpStatusError shape across the module.
+describe('plantApi error/credentials contract (SMA-280)', () => {
+  it('fetchPlants sends credentials: omit', async () => {
+    const spy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+    vi.stubGlobal('fetch', spy);
+
+    await expect(fetchPlants()).resolves.toEqual([]);
+
+    const [url, init] = spy.mock.calls[0]! as [string, RequestInit];
+    expect(url).toBe('/api/plants');
+    expect(init.credentials).toBe('omit');
+  });
+
+  it('fetchPlants rejects with HttpStatusError carrying status 500', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 500 })
+    );
+
+    await expect(fetchPlants()).rejects.toBeInstanceOf(HttpStatusError);
+    await expect(fetchPlants()).rejects.toMatchObject({ status: 500 });
+  });
+
+  it('fetchPlantById rejects with HttpStatusError carrying status 404', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 404 })
+    );
+
+    await expect(fetchPlantById('p1')).rejects.toBeInstanceOf(HttpStatusError);
+    await expect(fetchPlantById('p1')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('fetchPlantTypes sends credentials: omit', async () => {
+    const spy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+    vi.stubGlobal('fetch', spy);
+
+    await expect(fetchPlantTypes()).resolves.toEqual([]);
+
+    const [url, init] = spy.mock.calls[0]! as [string, RequestInit];
+    expect(url).toBe('/api/planttypes');
+    expect(init.credentials).toBe('omit');
+  });
+
+  it('fetchPlantTypes rejects with HttpStatusError carrying status 500', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 500 })
+    );
+
+    const pending = fetchPlantTypes();
+    await expect(pending).rejects.toBeInstanceOf(HttpStatusError);
+    await expect(pending).rejects.toMatchObject({ status: 500 });
+  });
+
+  it('searchPlants sends credentials: omit with the query/lang pair', async () => {
+    const spy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+    vi.stubGlobal('fetch', spy);
+
+    await expect(searchPlants('rose', 'fr')).resolves.toEqual([]);
+
+    const [url, init] = spy.mock.calls[0]! as [string, RequestInit];
+    expect(url).toBe('/api/plants/search?query=rose&lang=fr');
+    expect(init.credentials).toBe('omit');
+  });
+
+  it('searchPlants rejects with HttpStatusError carrying status 502', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 502 })
+    );
+
+    const pending = searchPlants('rose', 'fr');
+    await expect(pending).rejects.toBeInstanceOf(HttpStatusError);
+    await expect(pending).rejects.toMatchObject({ status: 502 });
+  });
+
+  it('findPlants sends credentials: omit', async () => {
+    const spy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          items: [],
+          found: 0,
+          page: 1,
+          perPage: 24,
+          facetCounts: [],
+        }),
+    });
+    vi.stubGlobal('fetch', spy);
+
+    await findPlants({ q: 'rose' });
+
+    const [url, init] = spy.mock.calls[0]! as [string, RequestInit];
+    expect(url).toBe('/api/plants/finder?q=rose');
+    expect(init.credentials).toBe('omit');
+  });
+
+  it('findPlants rejects with HttpStatusError carrying status 503', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 503 })
+    );
+
+    const pending = findPlants({ q: 'rose' });
+    await expect(pending).rejects.toBeInstanceOf(HttpStatusError);
+    await expect(pending).rejects.toMatchObject({ status: 503 });
   });
 });

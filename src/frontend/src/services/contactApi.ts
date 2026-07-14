@@ -1,10 +1,7 @@
 import type { ContactReason } from '../constants/contactReasons';
-import { HttpStatusError } from './httpStatusError';
+import { fetchJson } from './fetchJson';
 
 const API_BASE = '/api';
-
-// 15s: sized above the backend's 10s wall-clock SMTP deadline (SmtpEmailService.SendTimeout) so a slow-but-successful relay is never aborted client-side.
-const REQUEST_TIMEOUT_MS = 15_000;
 
 export interface ContactPayload {
   name: string;
@@ -25,20 +22,14 @@ export interface ContactPayload {
 export async function sendContactMessage(
   payload: ContactPayload
 ): Promise<void> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${API_BASE}/contact`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      credentials: 'omit',
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      throw new HttpStatusError('Contact message failed', res.status);
-    }
-  } finally {
-    clearTimeout(timeout);
-  }
+  return fetchJson<void>(`${API_BASE}/contact`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    credentials: 'omit',
+    // 15s: sized above the backend's 10s wall-clock SMTP deadline
+    // (SmtpEmailService.SendTimeout) so a slow-but-successful relay is never
+    // aborted client-side.
+    timeoutMs: 15_000,
+  });
 }

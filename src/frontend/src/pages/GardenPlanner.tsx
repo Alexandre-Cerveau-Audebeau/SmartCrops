@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Alert from '@mui/material/Alert';
@@ -21,11 +28,12 @@ import GardenGrid from '../components/Garden/GardenGrid';
 import PlantSidebar from '../components/Garden/PlantSidebar';
 import SetupLayoutDialog from '../components/Garden/SetupLayoutDialog';
 import { STICKY_OFFSET } from '../constants/layout';
+import { useGardenLayout } from '../hooks/useGardenLayout';
 import { useLanguage } from '../hooks/useLanguage';
 import { useScrollHold } from '../hooks/useScrollHold';
-import { fetchGarden } from '../services/gardenApi';
-import { fetchLayout, saveLayout } from '../services/gardenLayoutApi';
+import { saveLayout } from '../services/gardenLayoutApi';
 import type { SavePlacementData } from '../services/gardenLayoutApi';
+import { fetchPlants } from '../services/plantApi';
 import type { Garden } from '../types/Garden';
 import type { Plant } from '../types/Plant';
 import type { CellData } from '../types/GardenLayout';
@@ -75,6 +83,11 @@ export default function GardenPlanner() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const mountedRef = useRef(true);
+  const {
+    data: layoutSnapshot,
+    loading,
+    error: loadError,
+  } = useGardenLayout(id);
 
   const [garden, setGarden] = useState<Garden | null>(null);
   const [placements, setPlacements] = useState<SavePlacementData[]>([]);
@@ -85,7 +98,6 @@ export default function GardenPlanner() {
   const [shapeEditMode, setShapeEditMode] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [showSetup, setShowSetup] = useState(false);
   const [showResize, setShowResize] = useState(false);
   const [showHelp, setShowHelp] = useState(true);
@@ -144,64 +156,69 @@ export default function GardenPlanner() {
   useEffect(() => {
     mountedRef.current = true;
     if (!id) return;
-    fetch('/api/plants', { credentials: 'include' })
-      .then((res) => res.json())
-      .then((plants: Plant[]) => {
+    // Shared public-plants contract (credentials: 'omit'); the previous
+    // hand-rolled call was not locale-aware, so no lang argument here.
+    fetchPlants()
+      .then((plants) => {
         if (mountedRef.current) setAllPlants(plants);
       })
       .catch(() => {
         /* plant fetch failure is non-blocking */
       });
-    Promise.all([fetchLayout(id), fetchGarden(id)])
-      .then(([layoutData, gardenData]) => {
-        if (!mountedRef.current) return;
-        setGarden(gardenData);
-        if (layoutData.width && layoutData.height && layoutData.cellSize) {
-          const loadedGrid = parseCellsJson(
-            layoutData.cellsJson,
-            layoutData.width,
-            layoutData.height
-          );
-          const loadedPlacements: SavePlacementData[] = (
-            layoutData.placements ?? []
-          ).map((p) => ({
-            plantId: p.plantId,
-            startRow: p.startRow,
-            startCol: p.startCol,
-            spanRows: p.spanRows,
-            spanCols: p.spanCols,
-            notes: p.notes,
-          }));
-          setLayoutWidth(layoutData.width);
-          setLayoutHeight(layoutData.height);
-          setCellSize(layoutData.cellSize);
-          setGrid(loadedGrid);
-          setPlacements(loadedPlacements);
-          lastSavedRef.current = {
-            grid: loadedGrid
-              ? loadedGrid.map((row) => row.map((cell) => ({ ...cell })))
-              : null,
-            layoutWidth: layoutData.width,
-            layoutHeight: layoutData.height,
-            cellSize: layoutData.cellSize,
-            placements: loadedPlacements.map((p) => ({ ...p })),
-          };
-        } else {
-          setShowSetup(true);
-        }
-      })
-      .catch(() => {
-        if (mountedRef.current)
-          setMessage({ type: 'error', text: t('planner.toolbar.saveError') });
-      })
-      .finally(() => {
-        if (mountedRef.current) setLoading(false);
-      });
     return () => {
       mountedRef.current = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Hydrate the local layout state from the hook's snapshot. useLayoutEffect
+  // so the grid lands in the same paint as `loading` flipping false — the
+  // pre-hook version applied both in one promise callback.
+  useLayoutEffect(() => {
+    if (!layoutSnapshot) return;
+    const { garden: gardenData, layout: layoutData } = layoutSnapshot;
+    setGarden(gardenData);
+    if (layoutData.width && layoutData.height && layoutData.cellSize) {
+      const loadedGrid = parseCellsJson(
+        layoutData.cellsJson,
+        layoutData.width,
+        layoutData.height
+      );
+      const loadedPlacements: SavePlacementData[] = (
+        layoutData.placements ?? []
+      ).map((p) => ({
+        plantId: p.plantId,
+        startRow: p.startRow,
+        startCol: p.startCol,
+        spanRows: p.spanRows,
+        spanCols: p.spanCols,
+        notes: p.notes,
+      }));
+      setLayoutWidth(layoutData.width);
+      setLayoutHeight(layoutData.height);
+      setCellSize(layoutData.cellSize);
+      setGrid(loadedGrid);
+      setPlacements(loadedPlacements);
+      lastSavedRef.current = {
+        grid: loadedGrid
+          ? loadedGrid.map((row) => row.map((cell) => ({ ...cell })))
+          : null,
+        layoutWidth: layoutData.width,
+        layoutHeight: layoutData.height,
+        cellSize: layoutData.cellSize,
+        placements: loadedPlacements.map((p) => ({ ...p })),
+      };
+    } else {
+      setShowSetup(true);
+    }
+  }, [layoutSnapshot]);
+
+  // Load failure → the same toast the pre-hook catch produced (text resolved
+  // at failure time, not re-resolved on language change — as before).
+  useLayoutEffect(() => {
+    if (loadError === null) return;
+    setMessage({ type: 'error', text: t('planner.toolbar.saveError') });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadError]);
 
   const notifyRemovedPlacements = useCallback(
     (removedCount: number) => {
@@ -492,13 +509,21 @@ export default function GardenPlanner() {
 
   const enrichedPlacements = useMemo(() => {
     const plantMap = new Map(allPlants.map((p) => [p.id, p]));
+    // While the catalog is still loading, placements have no resolvable name
+    // yet — leave plantName undefined so cells render their neutral state
+    // instead of flashing the 'U' of the 'Unknown' fallback (a placement can
+    // hydrate before the catalog lands). 'Unknown' is reserved for plants
+    // genuinely absent from the loaded catalog.
+    const catalogPending = allPlants.length === 0;
     return placements.map((p) => {
       const plant = plantMap.get(p.plantId);
       return {
         ...p,
         plantName: plant
           ? getTranslation(plant, language)?.commonName || plant.scientificName
-          : 'Unknown',
+          : catalogPending
+            ? undefined
+            : 'Unknown',
       };
     });
   }, [placements, allPlants, language]);

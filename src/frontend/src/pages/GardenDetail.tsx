@@ -27,6 +27,7 @@ import {
   removePlantFromGarden,
   updatePlantNotes,
 } from '../services/gardenApi';
+import { HttpStatusError } from '../services/httpStatusError';
 import { fetchPlants } from '../services/plantApi';
 import type { Garden } from '../types/Garden';
 import type { Plant } from '../types/Plant';
@@ -134,7 +135,7 @@ export default function GardenDetail() {
         setAddPlantSuccess(null);
       }, 1500);
     } catch (err) {
-      if ((err as Error & { status?: number }).status === 409) {
+      if (err instanceof HttpStatusError && err.status === 409) {
         setAddPlantError(t('gardens.alreadyInGarden'));
       } else {
         setAddPlantError(t('gardens.failedToAddPlant'));
