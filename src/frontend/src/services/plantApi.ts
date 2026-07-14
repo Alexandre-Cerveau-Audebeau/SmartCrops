@@ -3,21 +3,29 @@ import type { PlantType } from '../types/PlantType';
 
 const API_BASE = '/api';
 
+// Every plant endpoint is public (no [Authorize], no user context read
+// server-side) — credentials: 'omit' per the SMA-280 policy: state the cookie
+// policy explicitly instead of relying on fetch's implicit same-origin
+// default, and never send the auth cookie where it is not consumed.
+// NOT migrated onto fetchJson: fetchPlantById's error message is rendered
+// verbatim by PlantDetail's error state, and fetchJson's fixed
+// `Request failed (N)` message would change that user-visible text.
+
 export async function fetchPlants(signal?: AbortSignal, lang?: string): Promise<Plant[]> {
   const qs = lang ? `?lang=${encodeURIComponent(lang)}` : '';
-  const res = await fetch(`${API_BASE}/plants${qs}`, { signal });
+  const res = await fetch(`${API_BASE}/plants${qs}`, { credentials: 'omit', signal });
   if (!res.ok) throw new Error(`Failed to fetch plants: ${res.status}`);
   return res.json();
 }
 
 export async function fetchPlantTypes(signal?: AbortSignal): Promise<PlantType[]> {
-  const res = await fetch(`${API_BASE}/planttypes`, { signal });
+  const res = await fetch(`${API_BASE}/planttypes`, { credentials: 'omit', signal });
   if (!res.ok) throw new Error(`Failed to fetch plant types: ${res.status}`);
   return res.json();
 }
 
 export async function fetchPlantById(id: string, signal?: AbortSignal): Promise<Plant> {
-  const res = await fetch(`${API_BASE}/plants/${encodeURIComponent(id)}`, { signal });
+  const res = await fetch(`${API_BASE}/plants/${encodeURIComponent(id)}`, { credentials: 'omit', signal });
   if (!res.ok) {
     const error = new Error(`Failed to fetch plant: ${res.status}`) as Error & { status: number };
     error.status = res.status;
@@ -29,7 +37,7 @@ export async function fetchPlantById(id: string, signal?: AbortSignal): Promise<
 export async function searchPlants(query: string, language: string, signal?: AbortSignal): Promise<Plant[]> {
   // Query key is `lang` to match the list endpoints (CodeRabbit — unified locale key).
   const params = new URLSearchParams({ query, lang: language });
-  const res = await fetch(`${API_BASE}/plants/search?${params}`, { signal });
+  const res = await fetch(`${API_BASE}/plants/search?${params}`, { credentials: 'omit', signal });
   if (!res.ok) throw new Error(`Failed to search plants: ${res.status}`);
   return res.json();
 }
@@ -165,7 +173,7 @@ export async function findPlants(
   for (const [key, value] of rangeBounds) {
     if (value !== undefined) qs.set(key, String(value));
   }
-  const res = await fetch(`${API_BASE}/plants/finder?${qs}`, { signal });
+  const res = await fetch(`${API_BASE}/plants/finder?${qs}`, { credentials: 'omit', signal });
   if (!res.ok) throw new Error(`Failed to find plants: ${res.status}`);
   return res.json();
 }

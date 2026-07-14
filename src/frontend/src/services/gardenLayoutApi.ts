@@ -35,8 +35,11 @@ export interface SavePlacementData {
   notes: string | null;
 }
 
-export async function fetchLayout(gardenId: string): Promise<GardenLayoutData> {
-  const res = await fetch(`/api/gardens/${gardenId}/layout`, { credentials: 'include' });
+export async function fetchLayout(
+  gardenId: string,
+  signal?: AbortSignal,
+): Promise<GardenLayoutData> {
+  const res = await fetch(`/api/gardens/${gardenId}/layout`, { credentials: 'include', signal });
   if (!res.ok) throw new Error('Failed to load layout');
   return res.json();
 }

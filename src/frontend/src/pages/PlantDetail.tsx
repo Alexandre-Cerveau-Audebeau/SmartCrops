@@ -46,6 +46,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../hooks/useLanguage';
 import { useUnitSystem } from '../hooks/useUnitSystem';
 import { addPlantToGarden, fetchGardens } from '../services/gardenApi';
+import { HttpStatusError } from '../services/httpStatusError';
 import { fetchPlantById } from '../services/plantApi';
 import {
   classifyReEnrich,
@@ -241,7 +242,7 @@ export default function PlantDetail() {
         await addPlantToGarden(gardenId, plant.id);
         results.push({ gardenName: garden?.name ?? '', success: true });
       } catch (err) {
-        const status = (err as Error & { status?: number }).status;
+        const status = err instanceof HttpStatusError ? err.status : undefined;
         results.push({
           gardenName: garden?.name ?? '',
           success: false,
