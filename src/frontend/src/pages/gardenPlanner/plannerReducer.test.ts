@@ -82,6 +82,31 @@ describe('plannerReducer', () => {
     expect(s.lastSaved).toBeNull();
   });
 
+  it('SETUP_CONFIRMED with pre-existing placements pins the current behavior: placements and snapshot carry over untouched', () => {
+    // Current reducer behavior (spread): a new draft grid replaces the layout
+    // but state.placements and state.lastSaved are NOT reset — placements
+    // survive even if they no longer fit the new grid. Unreachable through
+    // today's UI (setup only opens on empty layouts / after DISCARD_DRAFT,
+    // which clears placements) — pinned as-is, not endorsed.
+    const s = plannerReducer(hydrated(), {
+      type: 'SETUP_CONFIRMED',
+      cols: 2,
+      rows: 2,
+      cellSize: '25cm',
+    });
+    expect(s.grid).toHaveLength(2);
+    expect(s.grid![0]).toHaveLength(2);
+    // The (1,1) placement from the hydrated state is still there, untouched…
+    expect(s.placements).toHaveLength(1);
+    expect(s.placements[0].id).toBe('srv-1');
+    expect(s.placements[0].startRow).toBe(1);
+    // …and so is the pre-setup snapshot; only the layout fields moved.
+    expect(s.lastSaved).not.toBeNull();
+    expect(s.lastSaved!.layoutWidth).toBe(3);
+    expect(s.isDirty).toBe(true);
+    expect(s.removedSeq).toBe(0); // no removal event — nothing was dropped
+  });
+
   it('RESIZED keeps surviving cells, pads with active ones, drops out-of-bounds placements and reports them', () => {
     let s = hydrated();
     s = plannerReducer(s, { type: 'PAINT_END' }); // no-op guard warm-up
@@ -118,6 +143,43 @@ describe('plannerReducer', () => {
     expect(s.isPainting).toBe(true);
     expect(s.paintAction).toBe(false); // polarity = !previous
     expect(s.isDirty).toBe(true);
+  });
+
+  it('PAINT_START is a guarded no-op for out-of-bounds coordinates', () => {
+    const armed = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    for (const [row, col] of [
+      [-1, 0],
+      [0, -1],
+      [3, 0],
+      [0, 3],
+    ] as const) {
+      const s = plannerReducer(armed, { type: 'PAINT_START', row, col });
+      expect(s).toBe(armed); // unchanged state, no throw
+      expect(s.isPainting).toBe(false);
+      expect(s.paintAction).toBeNull();
+    }
+  });
+
+  it('PAINT_ENTER is a guarded no-op for out-of-bounds coordinates mid-drag', () => {
+    let painting = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    painting = plannerReducer(painting, { type: 'PAINT_START', row: 0, col: 0 });
+    for (const [row, col] of [
+      [-1, 0],
+      [0, -1],
+      [3, 0],
+      [0, 3],
+    ] as const) {
+      const s = plannerReducer(painting, { type: 'PAINT_ENTER', row, col });
+      expect(s).toBe(painting); // unchanged state, no throw
+      expect(s.isPainting).toBe(true); // the drag itself stays armed
+      expect(s.paintAction).toBe(false);
+    }
   });
 
   it('PAINT_ENTER applies the armed polarity only while painting', () => {

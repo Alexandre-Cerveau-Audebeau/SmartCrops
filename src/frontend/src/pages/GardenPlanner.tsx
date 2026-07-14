@@ -447,19 +447,51 @@ export default function GardenPlanner() {
     return list;
   }, [garden, placements, allPlants, language]);
 
+  // Latest-ref pattern: handleSave reads its inputs from a ref refreshed on
+  // every commit, so its identity depends only on `t` and the GridControls
+  // memo stays effective across layout edits. useLayoutEffect (no deps) runs
+  // synchronously after each render — the ref is always fresh before any
+  // user click can invoke the callback.
+  const saveInputsRef = useRef({
+    id,
+    grid,
+    layoutWidth,
+    layoutHeight,
+    cellSize,
+    placements,
+  });
+  useLayoutEffect(() => {
+    saveInputsRef.current = {
+      id,
+      grid,
+      layoutWidth,
+      layoutHeight,
+      cellSize,
+      placements,
+    };
+  });
+
   const handleSave = useCallback(async () => {
-    if (!id || !grid) return;
+    const {
+      id: gardenId,
+      grid: currentGrid,
+      layoutWidth: width,
+      layoutHeight: height,
+      cellSize: currentCellSize,
+      placements: currentPlacements,
+    } = saveInputsRef.current;
+    if (!gardenId || !currentGrid) return;
     setSaving(true);
     setMessage(null);
     try {
-      await saveLayout(id, {
-        width: layoutWidth,
-        height: layoutHeight,
-        cellSize,
-        cellsJson: serializeCellsJson(grid),
+      await saveLayout(gardenId, {
+        width,
+        height,
+        cellSize: currentCellSize,
+        cellsJson: serializeCellsJson(currentGrid),
         // Explicit field mapping: the client-only `id` must NOT reach the
         // wire — the save payload stays byte-identical to pre-5.1B.
-        placements: placements.map((p) => ({
+        placements: currentPlacements.map((p) => ({
           plantId: p.plantId,
           startRow: p.startRow,
           startCol: p.startCol,
@@ -475,7 +507,7 @@ export default function GardenPlanner() {
     } finally {
       setSaving(false);
     }
-  }, [id, grid, layoutWidth, layoutHeight, cellSize, placements, t]);
+  }, [t]);
 
   const handleCancel = useCallback(() => {
     if (!hasLastSaved) {

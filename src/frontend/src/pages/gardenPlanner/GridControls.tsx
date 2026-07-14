@@ -9,6 +9,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
+import { ZOOM_MAX, ZOOM_MIN } from './plannerReducer';
 
 // Extension point (Phase-5 mockups): the exposure-layer toggles
 // (moment/season) will slot into this toolbar.
@@ -81,7 +82,7 @@ export const GridControls = memo(function GridControls({
           <IconButton
             size="small"
             onClick={onZoomOut}
-            disabled={zoom <= 0.5}
+            disabled={zoom <= ZOOM_MIN}
             aria-label={t('planner.toolbar.zoomOut')}
           >
             <ZoomOutIcon fontSize="small" />
@@ -95,7 +96,7 @@ export const GridControls = memo(function GridControls({
           <IconButton
             size="small"
             onClick={onZoomIn}
-            disabled={zoom >= 2}
+            disabled={zoom >= ZOOM_MAX}
             aria-label={t('planner.toolbar.zoomIn')}
           >
             <ZoomInIcon fontSize="small" />

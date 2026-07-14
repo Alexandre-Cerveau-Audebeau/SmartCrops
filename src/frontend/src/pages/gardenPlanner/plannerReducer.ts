@@ -54,6 +54,11 @@ export interface PlannerState {
   removedSeq: number;
 }
 
+/** Zoom clamp bounds — single source of truth, shared with the toolbar's
+ * disabled checks (GridControls). */
+export const ZOOM_MIN = 0.5;
+export const ZOOM_MAX = 2;
+
 export const initialPlannerState: PlannerState = {
   grid: null,
   layoutWidth: 0,
@@ -105,6 +110,15 @@ export type PlannerAction =
 
 const copyGrid = (grid: CellData[][] | null): CellData[][] | null =>
   grid ? grid.map((row) => row.map((cell) => ({ ...cell }))) : null;
+
+/** Paint actions receive pointer-derived coordinates — validate them against
+ * the grid BEFORE any indexing (an out-of-bounds read would crash render). */
+const isInsideGrid = (
+  grid: CellData[][],
+  row: number,
+  col: number
+): boolean =>
+  row >= 0 && row < grid.length && col >= 0 && col < (grid[row]?.length ?? 0);
 
 const copyPlacements = (placements: PlannerPlacement[]): PlannerPlacement[] =>
   placements.map((p) => ({ ...p }));
@@ -192,6 +206,7 @@ export function plannerReducer(
 
     case 'PAINT_START': {
       if (!state.shapeEditMode || !state.grid) return state;
+      if (!isInsideGrid(state.grid, action.row, action.col)) return state;
       const currentActive = state.grid[action.row][action.col].active;
       const copy = copyGrid(state.grid)!;
       copy[action.row][action.col] = {
@@ -211,6 +226,7 @@ export function plannerReducer(
       if (!state.isPainting || state.paintAction === null || !state.grid) {
         return state;
       }
+      if (!isInsideGrid(state.grid, action.row, action.col)) return state;
       const copy = copyGrid(state.grid)!;
       copy[action.row][action.col] = {
         ...copy[action.row][action.col],
@@ -393,10 +409,10 @@ export function plannerReducer(
       return { ...state, shapeEditMode: action.enabled };
 
     case 'ZOOM_IN':
-      return { ...state, zoom: Math.min(2, state.zoom + 0.2) };
+      return { ...state, zoom: Math.min(ZOOM_MAX, state.zoom + 0.2) };
 
     case 'ZOOM_OUT':
-      return { ...state, zoom: Math.max(0.5, state.zoom - 0.2) };
+      return { ...state, zoom: Math.max(ZOOM_MIN, state.zoom - 0.2) };
 
     case 'MARK_SAVED':
       return { ...state, isDirty: false, lastSaved: snapshotOf(state) };
