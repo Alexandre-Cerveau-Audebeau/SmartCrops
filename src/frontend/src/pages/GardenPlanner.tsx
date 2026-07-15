@@ -194,6 +194,11 @@ export default function GardenPlanner() {
     // render-time `catalogReady` derivation already gates mismatched-locale
     // data — but dropping the old catalog keeps memory honest per request.
     setCatalog(null);
+    // Returning to a previously FAILED language must read as neutral PENDING
+    // until the fresh request settles — never as the stale error (CR R1,
+    // SMA-288 R2). Cleared alongside the catalog hygiene reset; a genuine
+    // failure of THIS cycle re-records it in the rejection path below.
+    setCatalogError(null);
     const controller = new AbortController();
     fetchPlants(controller.signal, language)
       .then((plants) => {

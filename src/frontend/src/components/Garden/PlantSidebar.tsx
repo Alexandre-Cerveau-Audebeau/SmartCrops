@@ -70,7 +70,7 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
         <Tab label={t('planner.tabs.infrastructure')} value="infrastructure" disabled />
       </Tabs>
       {activeTab === 'plants' && catalogFailed && (
-        <Box sx={{ p: 2, textAlign: 'center' }}>
+        <Box role="alert" sx={{ p: 2, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
             {t('planner.catalogError')}
           </Typography>

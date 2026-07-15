@@ -20,6 +20,22 @@ export function useSelection(placements: PlannerPlacement[]) {
     null
   );
 
+  // Purge the STORED id the moment its placement leaves the collection —
+  // React's render-time adjust pattern (no effect, so no
+  // react-hooks/set-state-in-effect surface). Without this, a later
+  // placement REUSING the id would silently re-select itself (SMA-288 R2,
+  // Extension finding on ef076f0).
+  const [prevPlacements, setPrevPlacements] = useState(placements);
+  if (placements !== prevPlacements) {
+    setPrevPlacements(placements);
+    if (
+      storedPlacementId !== null &&
+      !placements.some((p) => p.id === storedPlacementId)
+    ) {
+      setStoredPlacementId(null);
+    }
+  }
+
   const selectedPlacement = useMemo(
     () => placements.find((p) => p.id === storedPlacementId) ?? null,
     [placements, storedPlacementId]

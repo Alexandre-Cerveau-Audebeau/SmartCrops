@@ -73,13 +73,20 @@ afterEach(() => {
 });
 
 // Minimal consumer to flip the app language mid-test — same LanguageProvider
-// mechanics the planner itself uses (useLanguage().setLanguage).
+// mechanics the planner itself uses (useLanguage().setLanguage). Both
+// directions are exposed so round-trip scenarios (fail FR → EN → back to FR)
+// can be driven (SMA-288 R2).
 function SwitchToFrench() {
   const { setLanguage } = useLanguage();
   return (
-    <button type="button" onClick={() => setLanguage('fr')}>
-      switch-to-fr
-    </button>
+    <>
+      <button type="button" onClick={() => setLanguage('fr')}>
+        switch-to-fr
+      </button>
+      <button type="button" onClick={() => setLanguage('en')}>
+        switch-to-en
+      </button>
+    </>
   );
 }
 
@@ -240,6 +247,13 @@ describe('GardenPlanner placement initials', () => {
     expect(
       await screen.findByText("Couldn't load the plant catalog.")
     ).toBeInTheDocument();
+    // a11y live region (CR R1): the failure box itself announces (the
+    // planner's help banner is ALSO role="alert", so anchor via the text).
+    expect(
+      screen
+        .getByText("Couldn't load the plant catalog.")
+        .closest('[role="alert"]')
+    ).not.toBeNull();
     const retry = screen.getByRole('button', { name: 'Retry' });
     expect(within(grid).queryByText('U')).toBeNull();
     expect(screen.queryAllByText('Basilicum fixture')).toHaveLength(0);
@@ -289,6 +303,51 @@ describe('GardenPlanner placement initials', () => {
       { ...basil, commonName: 'framboisier' } as Plant,
     ]);
     const grid = screen.getByRole('grid');
+    await waitFor(() =>
+      expect(within(grid).getByText('F')).toBeInTheDocument()
+    );
+  });
+
+  it('returning to a previously failed language shows pending, not the stale error (SMA-288 R2)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    const deferred: Array<{
+      resolve: (plants: Plant[]) => void;
+      reject: (err: Error) => void;
+    }> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve, reject) => {
+          deferred.push({ resolve, reject });
+        })
+    );
+
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+
+    // Fail on FR: switch first, then reject the FR fetch (#2, non-abort).
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    await waitFor(() => expect(deferred.length).toBe(2));
+    deferred[1]!.reject(new Error('network down'));
+    await screen.findByText('Impossible de charger le catalogue de plantes.');
+
+    // Leave to EN, then RETURN to FR while fetch #4 is still pending: the
+    // old FR failure may not resurface — neutral pending until it settles.
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-en' }));
+    await waitFor(() => expect(deferred.length).toBe(3));
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    await waitFor(() => expect(deferred.length).toBe(4));
+    expect(
+      screen.queryByText('Impossible de charger le catalogue de plantes.')
+    ).toBeNull();
+    expect(
+      screen.queryByText("Couldn't load the plant catalog.")
+    ).toBeNull();
+
+    // The fresh FR request settles -> names render.
+    deferred[3]!.resolve([
+      { ...basil, commonName: 'framboisier' } as Plant,
+    ]);
     await waitFor(() =>
       expect(within(grid).getByText('F')).toBeInTheDocument()
     );
