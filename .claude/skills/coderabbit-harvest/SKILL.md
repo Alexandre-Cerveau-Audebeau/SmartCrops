@@ -48,7 +48,7 @@ If no flag is provided, the skill harvests HEAD on the current branch.
 
 ### 1. Single commit / PR (default)
 
-The 4-stage flow below, unchanged. Use for mid-cycle rounds on an open PR.
+The 4-stage flow below, unchanged. Use for mid-cycle rounds on an open PR (GitHub-surface-centric). NOT sufficient for the pre-merge Extension harvest: any harvest that informs a merge decision MUST route to FULL-BRANCH mode (project hard rule), even when invoked without flags.
 
 ### 2. FULL-BRANCH (project hard rule for pre-merge Extension harvests)
 
@@ -66,6 +66,8 @@ foreach ($sha in $shas) {
 
 Then run the full 4-stage flow (Classify + Report) for each SHA that produced an entry, and list the exit-3 SHAs verbatim in the final report. **Why HEAD closes the branch anyway:** the Extension reviews the branch's CUMULATIVE diff (`reviewedCommitIds`) — a completed run on HEAD covers intermediate commits that were never individually reviewed, so definitive exit-3s on intermediate SHAs are **not coverage holes**. They must still be listed (the orchestrator decides), never silently dropped.
 
+Readiness rule for the branch HEAD: an exit-3 on the HEAD may be a review still in flight (Locate excludes in_progress entries). Re-poll Locate-Review on the HEAD (bounded, ~3-5 min) until completed / explicitly skipped / timeout — only then report a definitive exit-3. Older intermediate SHAs: a single exit-3 is definitive (no run can still be in flight for them).
+
 ### 3. Develop post-merge (Extension-only, no PR) — official cycle step
 
 After every merge, Alexandre runs an Extension review **on develop**; harvesting it is an official step before the next workstream. There is **no PR** and no GitHub surface for this review. Protocol that works with the current scripts (no .ps1 change needed):
@@ -80,6 +82,8 @@ pwsh -NoProfile -File "$skillRoot\scripts\Locate-Review.ps1" -CommitSha $targetC
 # exit 3 -> no completed develop review for this SHA: report as-is and ask whether the
 #           Extension review has actually been run/synced yet
 ```
+
+Mandatory artifacts (reporting contract applies to this mode too): (a) the persisted entry JSON at `/tmp/cr-entry-develop-<sha>.json` as machine proof, and (b) an in-session markdown summary in the standard report format (Sanity / Counts per classification / Substantive comments / Details). The run is NOT closed without both. Once candidate .ps1 improvement #1 (optional `-GitHubPrNumber`) is applied, this mode routes through the full Classify/Write-Report pipeline instead.
 
 Do NOT route this mode through the default invocation (it would exit 2 on "No open PR" — that guard is correct for PR mode only). The historical develop-review backlog is closed without backfill: only harvest develop reviews from the current cycle onward (the net re-detects what matters — proven by SMA-283, re-surfaced by CR on a later PR).
 
@@ -106,7 +110,7 @@ If `--compare-with` is set, stage 3 additionally tags each comment with a transi
 ## Reporting contract (hardened Jul 2026)
 
 - **HARVEST = STOP AND REPORT.** The harvest session ends at the report; fixes/dispositions are a separate, explicitly-instructed step. Never auto-merge, never auto-fix.
-- **Disposition equation, mandatory in every per-run report:** `Actionable posted N + outside-diff M = N+M written dispositions`. `N` = the `actionableMarker` (remember: **absence is not zero** — a nitpicks-only review omits the marker); `M` = the count of `type='outsideDiffRange'` comments in the harvest JSON. The harvest is not closed until N+M dispositions (ACCEPT/DEFER/REJECT, each deferred/rejected one carrying its Linear `cr-*` ticket) are written by the orchestrator.
+- **Disposition equation, mandatory in every per-run report:** `Actionable posted N + outside-diff M = N+M written dispositions`. `N` = the `actionableMarker` (remember: **absence is not zero** — a nitpicks-only review omits the marker); `M` = the count of `type='outsideDiffRange'` comments in the harvest JSON. The harvest is not closed until N+M dispositions (ACCEPT/DEFER/REJECT, each deferred/rejected one carrying its Linear `cr-*` ticket) are written by the orchestrator. When `actionableMarker` is null, N = UNKNOWN and the equation CANNOT close the run: the harvest stays open until the review body's grouped nitpicks are read and counted; closure then uses N_effective = the count of substantive findings read from the body, stated explicitly in the report ("N=UNKNOWN, N_effective=<k> from body read").
 - **Machine-proof outputs:** the markdown summary and the JSON path are the proof; claims about review state without them count as not done.
 
 ## Comparison mode
@@ -237,7 +241,7 @@ For `--help`, just print this SKILL.md content. The `Classify-Comments.ps1` scri
 
 The skill STOPs and reports without producing output if any of these happens:
 
-- `gh` CLI not installed (precheck via `Get-Command gh`), not authenticated, or rate-limited — the **inline** GitHub surface is critical (exit 3). The review-body and walkthrough surfaces are additive: a transient there warns and continues rather than sinking the harvest.
+- `gh` CLI not installed (precheck via `Get-Command gh`), not authenticated, or rate-limited — the **inline** GitHub surface is critical (exit 3). The review-body and walkthrough surfaces are additive: a transient there warns and continues rather than sinking the harvest. PR-backed modes only: the develop post-merge (Extension-only) mode skips ALL gh prechecks and GitHub surfaces by design.
 - Target PR closed/merged at harvest time (the harvest is for an in-progress PR; closed PRs should be queried via the JSON file from a prior harvest). **Exception:** the develop post-merge mode is by definition after a merge — it is Extension-only and never touches the PR surfaces (see Harvest modes §3).
 - Target commit not part of any open PR (when not explicitly passed `--pr`) — **unless** running the develop post-merge (Extension-only) protocol.
 - `--compare-with <sha>` provided but `/tmp/harvest-<sha-prefix>.json` doesn't exist

@@ -19,7 +19,7 @@ Ce n'est PAS un changelog mécanique (`git log`). Un changelog liste des commits
 
 - Alexandre dit "fais-moi un diff", "documente la session", "diff vN→vN+1", "complète le diff".
 - Fin d'une session dense, ou après une grappe de PRs formant un tout cohérent (un scale-up, une feature, une refonte).
-- Avant de fusionner le contenu dans `SmartCrops_v2_Project_Description` (le diff devient la prochaine version vN+1, fusion par la skill `smartcrops-consolidation`).
+- Avant de fusionner le contenu dans `SmartCrops_v2_Project_Description` (le diff ALIMENTE la prochaine version vN+1 du doc projet — la fusion est faite par la skill `smartcrops-consolidation` ; le diff reste un artefact distinct, jamais la description elle-même).
 
 ## Étape 0 — déterminer le périmètre (la frontière vN → vN+1)
 
@@ -31,14 +31,14 @@ Ce n'est PAS un changelog mécanique (`git log`). Un changelog liste des commits
    - La **conversation visible** — couvre la fin.
    - Le **transcript** sur disque (`/mnt/transcripts/...`) si mentionné — pour les détails fins (SHAs, raisons exactes, options écartées) que la compaction a pu abréger. Le lire de façon **ciblée** (grep des SHAs, tickets, noms de décisions, mots-clés d'environnement comme `pgAdmin`/`5432`/`setx`), PAS ligne par ligne : les transcripts sont massifs et peuvent contenir des blocs de pensée corrompus. Croiser, ne pas se fier à une seule source.
    - Les **récaps de session/délégation** présents au projet (ex. `SmartCrops_Recap_Session_Delegation_*.md`) — trace exhaustive d'un segment mené hors du chat courant : SHAs finaux, counts, ledgers. Source de rang élevé pour ce qu'un kit/une compaction abrège.
-   - **Linear — par REQUÊTE LIVE, pas de mémoire** : `list_issues` filtré `updatedAt` sur la période pour l'état exact des tickets créés/clos. **C'est cette vérification machine qui attrape ce que les sources narratives ratent** — cas réel (15/07/2026) : SMA-5 auto-fermé au merge #171 parce que Linear a parsé la branche `sma-5-2-garden-plants-truth` comme SMA-5 ; ni le kit ni le récap ne le mentionnaient, seuls les `completedAt` identiques à la milliseconde l'ont révélé. ⚠️ Gotcha gravé : **Linear auto-lie/auto-ferme par parsing des noms de branche `sma-N-…`** — vérifier les tickets fermés « en trop » au timestamp de chaque merge.
-4. **Dater sans inventer.** Une date de merge absente des sources peut être **bornée par la machine** (ex. entre les `completedAt` Linear du merge précédent et le `createdAt` du premier ticket cr-* de la PR, les tickets cr-* précédant le merge par la règle harvest) — le bornage se **signale comme tel** dans le diff, jamais présenté comme une date directe.
+   - **Linear — par REQUÊTE LIVE, pas de mémoire** : `list_issues` filtré `updatedAt` sur la période pour l'état exact des tickets créés/clos. **C'est cette vérification machine qui attrape ce que les sources narratives ratent** — cas réel (15/07/2026) : SMA-5 auto-fermé au merge #171 parce que Linear a parsé la branche `sma-5-2-garden-plants-truth` comme SMA-5 ; ni le kit ni le récap ne le mentionnaient, seuls les `completedAt` identiques à la milliseconde l'ont révélé. ⚠️ Gotcha gravé : **Linear AUTO-LIE (auto-link) puis AUTO-FERME le ticket SMA-N quand une branche nommée `sma-N-…` est mergée** — vérifier les tickets fermés « en trop » au timestamp de chaque merge.
+4. **Dater sans inventer.** Une date de merge absente des sources peut être **bornée par la machine** (bornes valides : borne INFÉRIEURE du merge = un événement qui le précède démontrablement, ex. le `createdAt` d'un ticket cr-* de la PR — le harvest précède le merge, donc merge ≥ ce timestamp ; borne SUPÉRIEURE = un événement démontrablement POSTÉRIEUR au merge, ex. son auto-close Linear, la base de la branche/du commit suivant, le push suivant. Ne JAMAIS utiliser un timestamp pré-merge comme borne supérieure ; à défaut, date = borne basse unilatérale ou inconnue) — le bornage se **signale comme tel** dans le diff, jamais présenté comme une date directe.
 
 ## Étape 1 — collecter le contenu OBLIGATOIRE
 
 Un bon diff répond à TOUTES ces questions (c'est ce qui le distingue d'un changelog). Pour la période :
 
-- **Ce qui a été fait** : PRs mergées (numéro + SHA squash + date + nb de rounds CR **+ run IDs CodeRabbit par round quand disponibles**), features livrées, tickets clos. Données chiffrées (tests avant→après, lignes, volumes DB).
+- **Ce qui a été fait** : PRs mergées (numéro + SHA squash + date + nb de rounds CR **+ run IDs CodeRabbit par round (run ID = le "Run ID" du bloc "Review info" GitHub, un par round ; si non capturé, marqueur explicite "run ID non capturé — voir ledger Linear" ; ne PAS confondre avec `comments[].id` du JSON harvest, qui identifie un commentaire, pas un run)**), features livrées, tickets clos. Données chiffrées (tests avant→après, lignes, volumes DB).
 - **Les choix FAITS et POURQUOI** : chaque décision d'architecture/produit non triviale, avec son rationale. Pas "on a choisi X" mais "on a choisi X parce que Y, malgré Z".
 - **Les choix NON faits et POURQUOI** : les options explicitement rejetées (souvent le plus précieux — ça évite de re-débattre). Ex. "on n'a PAS porté en cross-platform parce que…", "l'annexe Perenual n'a PAS d'API donc hors scope".
 - **Ce qu'on a appris** : apprentissages empiriques, surtout ceux qu'on ne pouvait découvrir qu'en faisant (bugs révélés par le volume, comportements d'outils, quirks d'environnement). Distinguer "confirmé empiriquement" de "supposé".
@@ -80,7 +80,7 @@ Structure narrative, en **français** (le workflow d'Alexandre est en français 
 
 ## 0. Vue d'ensemble
   Bloc ``` ``` ASCII qui schématise le flux global de la période.
-  Puis : PRs mergées (SHA + date + rounds CR), tests (avant→après), état data/projet, develop HEAD.
+  Puis : PRs mergées (SHA + date + rounds CR + run IDs par round ou marqueur d'indisponibilité), tests (avant→après), état data/projet, develop HEAD.
 
 ## 1..N. (une section par thème majeur)
   Feature/PR/chantier : metadata (branche, commits, SHA squash, rounds CR, endpoints),
@@ -127,7 +127,7 @@ Structure narrative, en **français** (le workflow d'Alexandre est en français 
 
 - Nom : `SmartCrops_vN+1_to_vN+2_diff.md` (suivre la nomenclature exacte de la série) ; ou `..._COMPLEMENT.md` pour un complément à un diff déjà livré.
 - Créer dans le répertoire de sortie, puis le présenter à Alexandre (présenter le fichier, pas le coller intégralement dans le chat).
-- **Donner les critères machine** avec la livraison : `wc -l`, `md5sum`, première/dernière ligne — pour qu'Alexandre puisse vérifier l'upload (le montage `/mnt/project` peut avoir un tour de latence). Ne JAMAIS annoncer un compte de lignes de tête : re-mesurer après la dernière édition.
+- **Donner les critères machine** avec la livraison : `wc -l`, `md5sum`, première/dernière ligne — pour qu'Alexandre puisse vérifier l'upload (le montage `/mnt/project` peut avoir un tour de latence). Ne JAMAIS annoncer un compte de lignes de tête : re-mesurer après la dernière édition. (commandes exécutées côté chat claude.ai, environnement Linux ; équivalents PowerShell si exécution côté Claude Code : `Get-Content <fichier> | Measure-Object -Line`, et `Get-FileHash <fichier> -Algorithm MD5`)
 - Si une info manque (un SHA, une date, un motif de décision introuvable dans les sources), le **signaler** plutôt que d'inventer — proposer à Alexandre de combler le trou. Ne jamais fabriquer un SHA ou une attribution. (Une date peut être **bornée machine** — voir Étape 0.4 — à condition d'être présentée comme un bornage.)
 
 ## Garde-fous
