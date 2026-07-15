@@ -27,11 +27,15 @@ interface Props {
   language: string;
   shapeEditMode: boolean;
   onShapeEditToggle: (value: boolean) => void;
+  // SMA-288: active-language catalog failure — the plants area swaps to a
+  // compact error + Retry instead of an empty (pending-looking) list.
+  catalogFailed: boolean;
+  onCatalogRetry: () => void;
 }
 
 type TabValue = 'plants' | 'soils' | 'infrastructure';
 
-export default function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, language, shapeEditMode, onShapeEditToggle }: Props) {
+export default function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabValue>('plants');
 
@@ -65,7 +69,17 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
         <Tab label={t('planner.tabs.soils')} value="soils" disabled />
         <Tab label={t('planner.tabs.infrastructure')} value="infrastructure" disabled />
       </Tabs>
-      {activeTab === 'plants' && (
+      {activeTab === 'plants' && catalogFailed && (
+        <Box sx={{ p: 2, textAlign: 'center' }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            {t('planner.catalogError')}
+          </Typography>
+          <Button size="small" variant="outlined" onClick={onCatalogRetry}>
+            {t('planner.retry')}
+          </Button>
+        </Box>
+      )}
+      {activeTab === 'plants' && !catalogFailed && (
         <>
           <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
             <TextField

@@ -217,6 +217,116 @@ describe('GardenPlanner placement initials', () => {
     expect(within(grid).queryByText('B')).toBeNull();
   });
 
+  it('surfaces the catalog error with Retry on a real failure, and Retry recovers (SMA-288)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    const deferred: Array<{
+      resolve: (plants: Plant[]) => void;
+      reject: (err: Error) => void;
+    }> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve, reject) => {
+          deferred.push({ resolve, reject });
+        })
+    );
+
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+
+    // Non-abort rejection -> compact error state in the sidebar plants area,
+    // and STILL no name anywhere (error must not degrade to stale/unknown).
+    deferred[0]!.reject(new Error('network down'));
+    expect(
+      await screen.findByText("Couldn't load the plant catalog.")
+    ).toBeInTheDocument();
+    const retry = screen.getByRole('button', { name: 'Retry' });
+    expect(within(grid).queryByText('U')).toBeNull();
+    expect(screen.queryAllByText('Basilicum fixture')).toHaveLength(0);
+
+    // Retry -> a NEW fetch runs; success clears the error and names appear.
+    fireEvent.click(retry);
+    await waitFor(() => expect(deferred.length).toBe(2));
+    deferred[1]!.resolve([basil]);
+    await waitFor(() =>
+      expect(within(grid).getByText('B')).toBeInTheDocument()
+    );
+    expect(screen.queryByText("Couldn't load the plant catalog.")).toBeNull();
+  });
+
+  it('a stale-language catalog error is inert after a locale switch (SMA-288)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    const deferred: Array<{
+      resolve: (plants: Plant[]) => void;
+      reject: (err: Error) => void;
+    }> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve, reject) => {
+          deferred.push({ resolve, reject });
+        })
+    );
+
+    renderPlanner();
+    await screen.findByRole('grid');
+    deferred[0]!.reject(new Error('network down'));
+    await screen.findByText("Couldn't load the plant catalog.");
+
+    // Locale switch: the EN-keyed error may not leak into the FR cycle — the
+    // fresh fetch drives the state (pending, neither error text visible).
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    await waitFor(() => expect(deferred.length).toBe(2));
+    expect(
+      screen.queryByText("Couldn't load the plant catalog.")
+    ).toBeNull();
+    expect(
+      screen.queryByText('Impossible de charger le catalogue de plantes.')
+    ).toBeNull();
+
+    // The FR fetch resolving proves the new cycle owns the state machine.
+    deferred[1]!.resolve([
+      { ...basil, commonName: 'framboisier' } as Plant,
+    ]);
+    const grid = screen.getByRole('grid');
+    await waitFor(() =>
+      expect(within(grid).getByText('F')).toBeInTheDocument()
+    );
+  });
+
+  it('an aborted catalog request never surfaces the error state (SMA-288)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    const deferred: Array<{
+      resolve: (plants: Plant[]) => void;
+      reject: (err: Error) => void;
+    }> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve, reject) => {
+          deferred.push({ resolve, reject });
+        })
+    );
+
+    renderPlanner();
+    await screen.findByRole('grid');
+
+    // Switch FIRST (the cleanup aborts controller #1), THEN reject fetch #1 —
+    // the abort path must stay silent: no error text, no Retry.
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    await waitFor(() => expect(deferred.length).toBe(2));
+    deferred[0]!.reject(new Error('aborted'));
+    await waitFor(() => expect(deferred.length).toBe(2));
+    expect(
+      screen.queryByText("Couldn't load the plant catalog.")
+    ).toBeNull();
+    expect(
+      screen.queryByText('Impossible de charger le catalogue de plantes.')
+    ).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Réessayer' })).toBeNull();
+  });
+
   it('shows the unknown-plant fallback once an EMPTY catalog has resolved (explicit loaded flag, 5.2 R2)', async () => {
     // Length-based pending inference would leave a legitimately empty catalog
     // "pending" forever and suppress the fallback — explicit readiness (the

@@ -6,6 +6,12 @@ import type { Plant } from '../types/Plant';
  * from masking the EN description (and vice-versa) — the same per-field contract the
  * list DTO mapper applies server-side.
  */
+// Blank ('' / whitespace-only) values are real wire data (enrichment gaps) and
+// must not short-circuit the fallback chain: `??` only falls through nullish,
+// so a blank requested translation used to mask a valid English one (SMA-288).
+const nonBlank = (value: string | null | undefined): string | null =>
+  value && value.trim() ? value : null;
+
 export function resolveTranslatedField(
   plant: Plant,
   language: string,
@@ -13,7 +19,7 @@ export function resolveTranslatedField(
 ): string | null {
   const requested = plant.translations?.find((tr) => tr.language === language);
   const english = plant.translations?.find((tr) => tr.language === 'en');
-  return requested?.[field] ?? english?.[field] ?? null;
+  return nonBlank(requested?.[field]) ?? nonBlank(english?.[field]) ?? null;
 }
 
 // getTranslation (requested-language → translations[0] → null) was DELETED

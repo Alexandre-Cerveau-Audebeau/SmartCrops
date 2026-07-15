@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import { useLanguage } from '../hooks/useLanguage';
 import type { GardenListItem } from '../types/Garden';
 import type { Plant } from '../types/Plant';
 
@@ -82,5 +83,51 @@ describe('MyGardens cards (SMA-6 / SMA-155)', () => {
     await waitFor(() => expect(fetchGardens).toHaveBeenCalled());
     const [, lang] = vi.mocked(fetchGardens).mock.calls[0]!;
     expect(lang).toBe('en');
+  });
+
+  it('discards a stale gardens response that resolves after a newer one (SMA-288)', async () => {
+    // Minimal consumer to flip the locale mid-test — flipping re-runs the
+    // gardens effect, giving two overlapping in-flight loads.
+    function SwitchToFrench() {
+      const { setLanguage } = useLanguage();
+      return (
+        <button type="button" onClick={() => setLanguage('fr')}>
+          switch-to-fr
+        </button>
+      );
+    }
+    const deferred: Array<(gardens: GardenListItem[]) => void> = [];
+    vi.mocked(fetchGardens).mockImplementation(
+      () =>
+        new Promise<GardenListItem[]>((resolve) => {
+          deferred.push(resolve);
+        })
+    );
+
+    render(
+      <LanguageProvider>
+        <SwitchToFrench />
+        <MemoryRouter>
+          <MyGardens />
+        </MemoryRouter>
+      </LanguageProvider>
+    );
+
+    // Load #1 (EN) is in flight; the switch starts load #2 (FR).
+    await waitFor(() => expect(deferred.length).toBe(1));
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    await waitFor(() => expect(deferred.length).toBe(2));
+
+    // Newest response lands first...
+    deferred[1]!([{ ...gardenWith([]), id: 'g2', name: 'Jardin frais' }]);
+    expect(await screen.findByText('Jardin frais')).toBeInTheDocument();
+
+    // ...then the STALE first response resolves last: it must be discarded,
+    // never overwriting the newer cards.
+    deferred[0]!([{ ...gardenWith([]), id: 'g1', name: 'Vieux jardin' }]);
+    await waitFor(() =>
+      expect(screen.queryByText('Vieux jardin')).toBeNull()
+    );
+    expect(screen.getByText('Jardin frais')).toBeInTheDocument();
   });
 });

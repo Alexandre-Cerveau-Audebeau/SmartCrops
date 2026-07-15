@@ -31,6 +31,8 @@ function renderSidebar(overrides: { searchQuery?: string } = {}) {
       language="fr"
       shapeEditMode={false}
       onShapeEditToggle={vi.fn()}
+      catalogFailed={false}
+      onCatalogRetry={vi.fn()}
     />
   );
 }

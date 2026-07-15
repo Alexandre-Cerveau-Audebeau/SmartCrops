@@ -138,9 +138,28 @@ export default function GardenPlanner() {
     plants: Plant[];
     lang: string;
   } | null>(null);
+  // Failure marker, language-keyed like the catalog itself (SMA-288): a
+  // rejection recorded for another locale is inert by derivation, so a
+  // language switch cleanly leaves the error behind and lets the new fetch
+  // drive the state. Aborts never set it. `catalogAttempt` is the manual
+  // retry lever — bumped from an event handler only, so the fetch effect
+  // re-runs without any set-state-in-effect surface.
+  const [catalogError, setCatalogError] = useState<{ lang: string } | null>(
+    null
+  );
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
   const catalogReady = catalog !== null && catalog.lang === language;
   // Keeping the derived name `allPlants` leaves every consumer untouched.
   const allPlants = catalogReady ? catalog.plants : EMPTY_PLANTS;
+  // pending / ready / error are mutually exclusive per CURRENT language:
+  // ready wins (a stale error can never mask fresh data), and anything
+  // neither ready nor failed renders the existing neutral pending state.
+  const catalogFailed =
+    catalogError !== null && catalogError.lang === language && !catalogReady;
+  const handleCatalogRetry = useCallback(() => {
+    setCatalogError(null);
+    setCatalogAttempt((n) => n + 1);
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Client-only ids for placements created since the last save — server ids
@@ -183,10 +202,14 @@ export default function GardenPlanner() {
         }
       })
       .catch(() => {
-        /* plant fetch failure is non-blocking; abort lands here too */
+        // A real failure surfaces the sidebar error + Retry (SMA-288); an
+        // abort (unmount / locale switch) must never read as a failure.
+        if (!controller.signal.aborted) {
+          setCatalogError({ lang: language });
+        }
       });
     return () => controller.abort();
-  }, [id, language]);
+  }, [id, language, catalogAttempt]);
 
   // Hydrate the reducer from the hook's snapshot. useLayoutEffect so the grid
   // lands in the same paint as `loading` flipping false — the pre-hook
@@ -725,6 +748,8 @@ export default function GardenPlanner() {
             language={language}
             shapeEditMode={shapeEditMode}
             onShapeEditToggle={handleShapeEditToggle}
+            catalogFailed={catalogFailed}
+            onCatalogRetry={handleCatalogRetry}
           />
 
           <Box
@@ -1023,6 +1048,7 @@ export default function GardenPlanner() {
           soil={selectedCellSoil}
           top={panelTop}
           language={language}
+          catalogReady={catalogReady}
           onRemove={handleRemoveSelectedPlacement}
         />
       )}

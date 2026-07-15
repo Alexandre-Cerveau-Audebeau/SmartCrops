@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
@@ -44,15 +44,30 @@ export default function MyGardens() {
 
   const [deleteConfirmGarden, setDeleteConfirmGarden] = useState<GardenListItem | null>(null);
 
+  // Monotonic sequencing over EVERY loadGardens call-site (SMA-288): the
+  // post-mutation refreshes run without a signal, so an older response (e.g.
+  // a pre-locale-switch fetch) could land last and overwrite newer state.
+  // Every state commit is gated on still being the latest request; the
+  // effect's AbortController stays as the cancellation fast-path.
+  const latestRequestRef = useRef(0);
+
   const loadGardens = async (signal?: AbortSignal) => {
+    const requestId = ++latestRequestRef.current;
     try {
       const data = await fetchGardens(signal, language);
-      setGardens(data);
-      setLoadError(false);
+      if (requestId === latestRequestRef.current) {
+        setGardens(data);
+        setLoadError(false);
+      }
     } catch (err) {
-      if ((err as Error).name !== 'AbortError') setLoadError(true);
+      if (
+        (err as Error).name !== 'AbortError' &&
+        requestId === latestRequestRef.current
+      ) {
+        setLoadError(true);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === latestRequestRef.current) setLoading(false);
     }
   };
 
