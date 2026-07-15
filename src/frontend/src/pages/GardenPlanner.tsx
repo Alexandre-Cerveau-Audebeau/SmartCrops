@@ -1027,7 +1027,7 @@ export default function GardenPlanner() {
         />
       )}
 
-      {/* Plants in this garden (gardenPlants + placements, deduplicated) */}
+      {/* Plants in this garden — derived from placements only (SMA-6 Option A) */}
       {plantsToShow.length > 0 && (
         <PlantsInGardenSection
           plants={plantsToShow}
