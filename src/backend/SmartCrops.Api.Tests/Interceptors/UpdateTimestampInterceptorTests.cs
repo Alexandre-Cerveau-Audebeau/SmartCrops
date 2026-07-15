@@ -238,30 +238,40 @@ public class UpdateTimestampInterceptorTests : IClassFixture<InterceptorTestFact
     [Fact]
     public async Task EntityWithoutMarker_IsIgnored()
     {
-        // GardenPlant is a junction entity that does NOT implement IHasUpdatedAt.
-        // It only carries an AddedAt timestamp, which must remain untouched.
+        // GardenPlacement does NOT implement IHasUpdatedAt (it only carries a
+        // PlacedAt timestamp, which must remain untouched). The original
+        // no-marker subject, the GardenPlant junction entity, was dropped with
+        // its table (SMA-285) — the contract itself is unchanged.
         var (plantId, gardenId, _) = await SeedAggregateAsync();
 
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
 
-        var addedAt = DateTime.UtcNow.AddDays(-7);
-        var gardenPlant = new GardenPlant
+        var placedAt = DateTime.UtcNow.AddDays(-7);
+        var placement = new GardenPlacement
         {
+            Id = Guid.NewGuid(),
             GardenId = gardenId,
             PlantId = plantId,
-            AddedAt = addedAt,
+            StartRow = 0,
+            StartCol = 0,
+            PlacedAt = placedAt,
             Notes = "initial",
         };
-        db.GardenPlants.Add(gardenPlant);
+        db.GardenPlacements.Add(placement);
         await db.SaveChangesAsync();
 
         // Modify a scalar; the interceptor must not throw and must not invent
         // any timestamp on this entity (no IHasUpdatedAt to refresh).
-        gardenPlant.Notes = "updated";
+        placement.Notes = "updated";
         await db.SaveChangesAsync();
 
-        Assert.Equal(addedAt, gardenPlant.AddedAt);
-        Assert.Equal("updated", gardenPlant.Notes);
+        // Assert on a RELOADED row (SMA-285 R2): the tracked instance already
+        // held these values before SaveChangesAsync, so only a fresh read
+        // proves the update — and the untouched PlacedAt — reached the store.
+        db.ChangeTracker.Clear();
+        var persisted = await db.GardenPlacements.SingleAsync(p => p.Id == placement.Id);
+        Assert.Equal(placedAt, persisted.PlacedAt);
+        Assert.Equal("updated", persisted.Notes);
     }
 }

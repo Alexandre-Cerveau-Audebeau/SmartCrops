@@ -9,14 +9,36 @@ import type { Garden } from '../types/Garden';
 vi.mock('../services/gardenApi', () => ({ fetchGarden: vi.fn() }));
 vi.mock('../services/gardenLayoutApi', () => ({ fetchLayout: vi.fn() }));
 
-const gardenOf = (id: string): Garden =>
-  ({ id, name: `Garden ${id}`, gardenPlants: [] }) as unknown as Garden;
+// Fully-typed contract fixture (SMA-285 R2): `satisfies Garden` makes any
+// future API-contract drift fail compilation — no `as` casts hiding missing
+// or renamed fields.
+const gardenOf = (id: string) =>
+  ({
+    id,
+    name: `Garden ${id}`,
+    description: null,
+    layoutWidth: null,
+    layoutHeight: null,
+    cellSize: null,
+    orientation: null,
+    gardenType: null,
+    lightSchedule: null,
+    hemisphere: null,
+    latitudeBand: null,
+  }) satisfies Garden;
 
 const layoutOf = (id: string): GardenLayoutData => ({
   width: 4,
   height: 3,
   cellSize: '50cm',
   cellsJson: null,
+  config: {
+    orientation: null,
+    gardenType: null,
+    lightSchedule: null,
+    hemisphere: null,
+    latitudeBand: null,
+  },
   placements: [],
   // Tag the payload so the race test can tell which id produced it.
   ...({ tag: id } as object),

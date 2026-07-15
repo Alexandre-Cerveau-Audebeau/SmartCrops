@@ -212,7 +212,6 @@ public class Plant : IHasUpdatedAt
 
     public ICollection<PlantTranslation> Translations { get; set; } = [];
     public ICollection<PlantSuggestion> Suggestions { get; set; } = [];
-    public ICollection<GardenPlant> GardenPlants { get; set; } = [];
 
     public ICollection<PlantLongDescription> LongDescriptions { get; set; } = [];
     public ICollection<PlantCommonName> CommonNames { get; set; } = [];

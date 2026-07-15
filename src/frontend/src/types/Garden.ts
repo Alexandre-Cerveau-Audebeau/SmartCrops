@@ -1,28 +1,42 @@
 import type { Plant } from './Plant';
 
-/**
- * DEPRECATED (SMA-6 Option A): rows of the legacy link table. Nothing creates
- * them anymore — placements are the sole plant-membership truth. Still served
- * by GET /api/gardens/{id} (GardenDetail notes editing / removal) until the
- * dedicated link-table DROP ticket.
- */
-export interface GardenPlant {
-  gardenId: string;
-  plantId: string;
-  addedAt: string;
-  notes?: string;
-  plant?: Plant;
+/** One indoor light slot — "HH:mm" 24h, start < end (SMA-285). */
+export interface LightSlot {
+  start: string;
+  end: string;
 }
 
-/** Raw-entity detail shape — GET /api/gardens/{id} (GardenDetail, planner). */
+/**
+ * Exposure config block (SMA-285 / SMA-17): served by GET /{id} and the
+ * layout endpoints. All nullable — the app-level defaults (hemisphere
+ * null -> 'N', latitudeBand null -> 'mid') belong to the future READ-time
+ * exposure engine (5.3-C), never to storage.
+ */
+export interface GardenConfig {
+  orientation: string | null;
+  gardenType: string | null;
+  lightSchedule: LightSlot[] | null;
+  hemisphere: string | null;
+  latitudeBand: string | null;
+}
+
+/**
+ * GET /api/gardens/{id} — the GardenResponse DTO (SMA-285): the raw entity
+ * (and its legacy gardenPlants graph) is no longer serialized. The planner
+ * reads name/description; the config block feeds 5.3.
+ */
 export interface Garden {
   id: string;
   name: string;
-  description?: string;
-  userId: string;
-  createdAt: string;
-  updatedAt: string;
-  gardenPlants: GardenPlant[];
+  description?: string | null;
+  layoutWidth?: number | null;
+  layoutHeight?: number | null;
+  cellSize?: string | null;
+  orientation?: string | null;
+  gardenType?: string | null;
+  lightSchedule?: LightSlot[] | null;
+  hemisphere?: string | null;
+  latitudeBand?: string | null;
 }
 
 /**

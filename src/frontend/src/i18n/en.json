@@ -286,14 +286,6 @@
     "mutationError": "An error occurred. Please try again.",
     "seeMore": "See more",
     "seeLess": "See less",
-    "backToGardens": "Back to Gardens",
-    "gardenNotFound": "Garden not found.",
-    "removePlant": "Remove",
-    "emptyGarden": "No plants in this garden yet. Place some in the planner!",
-    "browseLibrary": "Browse Library",
-    "plantDataUnavailable": "Plant data unavailable",
-    "removeFromGarden": "Remove {{name}} from garden",
-    "failedToRemove": "Failed to remove plant. Please try again.",
     "planMyGarden": "Plan my garden"
   },
   "common": {
@@ -979,14 +971,6 @@
       "notMatched": "No match found in the upstream catalogue.",
       "error": "Re-enrichment failed: {{reason}}"
     }
-  },
-  "editableNotes": {
-    "notes": "Notes: {{notes}}",
-    "addNotes": "Add notes...",
-    "editNotes": "Edit notes",
-    "saveNotes": "Save notes",
-    "cancelEditing": "Cancel editing",
-    "failedToSave": "Failed to save notes."
   },
   "periods": {
     "yearRound": "Year-round",

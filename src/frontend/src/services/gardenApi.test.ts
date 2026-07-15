@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  deleteGarden,
   fetchGarden,
   fetchGardens,
-  removePlantFromGarden,
 } from './gardenApi';
 import { HttpStatusError } from './httpStatusError';
 
@@ -10,8 +10,10 @@ import { HttpStatusError } from './httpStatusError';
 // never regress: the auth cookie policy (credentials: 'include' — every
 // garden endpoint sits behind [Authorize]), the caller AbortSignal reaching
 // fetch (useGardenLayout aborts on garden switch), and the HttpStatusError
-// contract consumers narrow on. (addPlantToGarden was removed with SMA-6
-// Option A — the status-carrying lock now rides removePlantFromGarden.)
+// contract consumers narrow on. (removePlantFromGarden/updatePlantNotes left
+// with the GardenPlants table — SMA-285 — so the status-carrying lock now
+// rides deleteGarden; the dual-param URL-encode lock retired with its route,
+// single-id encoding stays pinned below.)
 
 // contactApi.test.ts pattern: stub global fetch, restore after each test.
 function mockFetch(response: {
@@ -70,14 +72,15 @@ describe('gardenApi (SMA-280 migration)', () => {
     expect(init.signal?.aborted).toBe(true);
   });
 
-  it('rejects with HttpStatusError carrying the status (404 plant not in garden)', async () => {
+  it('rejects with HttpStatusError carrying the status (404 garden not found)', async () => {
     mockFetch({ ok: false, status: 404 });
 
-    const rejection = expect(
-      removePlantFromGarden('g1', 'p1')
-    ).rejects;
+    // One request, two assertions (SMA-285 R2): both rejection checks ride
+    // the SAME captured promise so the test models a single operation.
+    const request = deleteGarden('g1');
+    const rejection = expect(request).rejects;
     await rejection.toBeInstanceOf(HttpStatusError);
-    await expect(removePlantFromGarden('g1', 'p1')).rejects.toMatchObject({
+    await expect(request).rejects.toMatchObject({
       status: 404,
     });
   });
@@ -108,10 +111,4 @@ describe('gardenApi (SMA-280 migration)', () => {
     expect(url).toBe('/api/gardens/a%2Fb%20c');
   });
 
-  it('URL-encodes both gardenId and plantId in removePlantFromGarden', async () => {
-    const spy = mockFetch({ ok: true, status: 204 });
-    await removePlantFromGarden('a/b', 'c d');
-    const [url] = spy.mock.calls[0]! as [string];
-    expect(url).toBe('/api/gardens/a%2Fb/plants/c%20d');
-  });
 });

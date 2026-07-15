@@ -1,3 +1,4 @@
+import type { GardenConfig } from '../types/Garden';
 import { fetchJson } from './fetchJson';
 
 export interface GardenLayoutData {
@@ -5,13 +6,16 @@ export interface GardenLayoutData {
   height: number | null;
   cellSize: string | null;
   cellsJson: string | null;
+  // SMA-285: exposure config block, served with the layout for 5.3.
+  config: GardenConfig;
   placements: PlacementData[];
 }
 
+// plantName left the wire with SMA-285: display names are rebuilt client-side
+// from the locale-keyed catalog via the shared resolver (getPlantDisplayName).
 export interface PlacementData {
   id: string;
   plantId: string;
-  plantName: string | null;
   plantScientificName: string | null;
   startRow: number;
   startCol: number;

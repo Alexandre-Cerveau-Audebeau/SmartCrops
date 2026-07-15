@@ -1,4 +1,4 @@
-import type { Garden, GardenListItem, GardenPlant } from '../types/Garden';
+import type { Garden, GardenListItem } from '../types/Garden';
 import { fetchJson } from './fetchJson';
 
 const API_BASE = '/api';
@@ -57,34 +57,7 @@ export async function deleteGarden(id: string): Promise<void> {
   });
 }
 
-// addPlantToGarden was REMOVED (SMA-6 Option A): plants enter a garden by being
-// placed in the planner (saveLayout) — the backend POST endpoint is gone too.
-
-export async function removePlantFromGarden(
-  gardenId: string,
-  plantId: string,
-): Promise<void> {
-  return fetchJson<void>(
-    `${API_BASE}/gardens/${encodeURIComponent(gardenId)}/plants/${encodeURIComponent(plantId)}`,
-    {
-      method: 'DELETE',
-      credentials: 'include',
-    },
-  );
-}
-
-export async function updatePlantNotes(
-  gardenId: string,
-  plantId: string,
-  notes: string | null,
-): Promise<GardenPlant> {
-  return fetchJson<GardenPlant>(
-    `${API_BASE}/gardens/${encodeURIComponent(gardenId)}/plants/${encodeURIComponent(plantId)}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ notes }),
-    },
-  );
-}
+// addPlantToGarden was REMOVED (SMA-6 Option A) and the per-plant
+// removePlantFromGarden/updatePlantNotes pair followed with the GardenPlants
+// table (SMA-285): plants enter a garden by being PLACED in the planner
+// (saveLayout), notes live on placements, membership IS placement.

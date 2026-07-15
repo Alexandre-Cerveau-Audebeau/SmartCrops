@@ -85,6 +85,16 @@ describe('MyGardens cards (SMA-6 / SMA-155)', () => {
     expect(lang).toBe('en');
   });
 
+  it('opens a garden card straight into the planner (SMA-285 pin — no detail page)', async () => {
+    vi.mocked(fetchGardens).mockResolvedValue([gardenWith([])]);
+
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    const link = screen.getByRole('link', { name: /Casa Lolo/ });
+    expect(link).toHaveAttribute('href', '/gardens/g1/planner');
+  });
+
   it('discards a stale gardens response that resolves after a newer one (SMA-288)', async () => {
     // Minimal consumer to flip the locale mid-test — flipping re-runs the
     // gardens effect, giving two overlapping in-flight loads.

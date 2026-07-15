@@ -294,7 +294,7 @@ public class GardenLayoutEndpointsTests : IntegrationTestBase
     // Minimal DTOs mirroring the production contract — kept private so the test file
     // can stand on its own without depending on internal API surface that may evolve.
     private record LayoutResponseDto(int? Width, int? Height, string? CellSize, string? CellsJson, List<PlacementDto> Placements);
-    private record PlacementDto(Guid Id, Guid PlantId, string? PlantName, string? PlantScientificName, int StartRow, int StartCol, int SpanRows, int SpanCols, string? Notes);
+    private record PlacementDto(Guid Id, Guid PlantId, string? PlantScientificName, int StartRow, int StartCol, int SpanRows, int SpanCols, string? Notes);
     private record SaveLayoutRequestDto(int Width, int Height, string CellSize, string? CellsJson, List<SavePlacementRequestDto> Placements);
     private record SavePlacementRequestDto(Guid PlantId, int StartRow, int StartCol, int SpanRows, int SpanCols, string? Notes);
 }
