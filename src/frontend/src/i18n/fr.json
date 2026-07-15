@@ -286,14 +286,6 @@
     "mutationError": "Une erreur est survenue. Veuillez réessayer.",
     "seeMore": "Voir plus",
     "seeLess": "Voir moins",
-    "backToGardens": "Retour aux jardins",
-    "gardenNotFound": "Jardin introuvable.",
-    "removePlant": "Retirer",
-    "emptyGarden": "Pas encore de plantes dans ce jardin. Placez-en dans le planificateur !",
-    "browseLibrary": "Parcourir la bibliothèque",
-    "plantDataUnavailable": "Données de plante indisponibles",
-    "removeFromGarden": "Retirer {{name}} du jardin",
-    "failedToRemove": "Impossible de retirer la plante. Veuillez réessayer.",
     "planMyGarden": "Planifier mon jardin"
   },
   "common": {
@@ -979,14 +971,6 @@
       "notMatched": "Aucune correspondance trouvée dans le catalogue source.",
       "error": "Échec de l'enrichissement : {{reason}}"
     }
-  },
-  "editableNotes": {
-    "notes": "Notes : {{notes}}",
-    "addNotes": "Ajouter des notes...",
-    "editNotes": "Modifier les notes",
-    "saveNotes": "Enregistrer les notes",
-    "cancelEditing": "Annuler la modification",
-    "failedToSave": "Impossible d'enregistrer les notes."
   },
   "periods": {
     "yearRound": "Toute l'année",

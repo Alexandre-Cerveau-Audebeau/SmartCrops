@@ -38,32 +38,8 @@ public class GardensEndpointsTests : IntegrationTestBase
         Assert.Equal(2, garden.Plants.Count);
     }
 
-    [Fact]
-    public async Task GetGardens_LinkTableRowsWithoutPlacements_DoNotCount()
-    {
-        // Option A regression lock: a legacy GardenPlants row (old add-path)
-        // with NO placement contributes NOTHING to the card list/counter.
-        var (userId, gardenId, plantId) = await SeedAsync();
-        using (var scope = CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
-            db.GardenPlants.Add(new GardenPlant
-            {
-                GardenId = gardenId,
-                PlantId = plantId,
-                AddedAt = DateTime.UtcNow,
-            });
-            await db.SaveChangesAsync();
-        }
-        AuthAs(userId);
-
-        var response = await Client.GetAsync("/api/gardens");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<List<GardenListItemDto>>();
-        var garden = Assert.Single(body!);
-        Assert.Empty(garden.Plants);
-    }
+    // (The SMA-6 "link-table rows don't count" lock was retired with the
+    // GardenPlants table itself — SMA-285 makes the invariant structural.)
 
     [Fact]
     public async Task GetGardens_LocalizesCommonName_RequestedLanguageThenEnglish()
@@ -108,9 +84,10 @@ public class GardensEndpointsTests : IntegrationTestBase
     [Fact]
     public async Task AddPlantToGarden_Endpoint_IsRemoved()
     {
-        // SMA-6 Option A: the add endpoint is gone. The route template is still
-        // bound by PATCH/DELETE, so ASP.NET answers 405 Method Not Allowed for
-        // POST (not 404 — that would require unbinding the whole template).
+        // SMA-285: the whole {id}/plants/{plantId} template is UNBOUND now that
+        // the PATCH-notes/DELETE pair left with the GardenPlants table — POST
+        // answers 404 (the SMA-6-era pin asserted 405 while PATCH/DELETE still
+        // bound the route; this is the DECLARED flip tied to their removal).
         var (userId, gardenId, plantId) = await SeedAsync();
         AuthAs(userId);
 
@@ -118,11 +95,137 @@ public class GardensEndpointsTests : IntegrationTestBase
             $"/api/gardens/{gardenId}/plants/{plantId}",
             new { Notes = "should never land" });
 
-        Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
 
-        using var scope = CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
-        Assert.False(await db.GardenPlants.AnyAsync(gp => gp.GardenId == gardenId));
+    [Fact]
+    public async Task LegacyPlantEndpoints_PatchAndDelete_Return404()
+    {
+        // SMA-285 Option A end-state: notes live on placements, membership IS
+        // placement — the legacy per-plant route no longer exists at all.
+        var (userId, gardenId, plantId) = await SeedAsync();
+        AuthAs(userId);
+
+        var patch = await Client.PatchAsJsonAsync(
+            $"/api/gardens/{gardenId}/plants/{plantId}",
+            new { Notes = "ghost" });
+        Assert.Equal(HttpStatusCode.NotFound, patch.StatusCode);
+
+        var delete = await Client.DeleteAsync(
+            $"/api/gardens/{gardenId}/plants/{plantId}");
+        Assert.Equal(HttpStatusCode.NotFound, delete.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetGarden_ReturnsCleanDto_NoEntityGraph()
+    {
+        // SMA-285: GET {id} serves the GardenResponse DTO — config fields in,
+        // raw-entity artifacts (userId, gardenPlants graph) out.
+        var (userId, gardenId, _) = await SeedAsync();
+        AuthAs(userId);
+        await PutLayoutAsync(gardenId, ValidIndoorConfig());
+
+        var response = await Client.GetAsync($"/api/gardens/{gardenId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        Assert.Equal(gardenId, json.GetProperty("id").GetGuid());
+        Assert.Equal("S", json.GetProperty("orientation").GetString());
+        Assert.Equal("indoor", json.GetProperty("gardenType").GetString());
+        Assert.Equal("mid", json.GetProperty("latitudeBand").GetString());
+        Assert.False(json.TryGetProperty("gardenPlants", out _));
+        Assert.False(json.TryGetProperty("userId", out _));
+        Assert.False(json.TryGetProperty("placements", out _));
+    }
+
+    [Fact]
+    public async Task Layout_ConfigRoundtrip_PersistsThenPreservesWhenOmitted()
+    {
+        var (userId, gardenId, _) = await SeedAsync();
+        AuthAs(userId);
+
+        // PUT with config -> GET /layout serves it back.
+        var putWith = await PutLayoutAsync(gardenId, ValidIndoorConfig());
+        Assert.Equal(HttpStatusCode.NoContent, putWith.StatusCode);
+
+        var layout = await Client.GetFromJsonAsync<LayoutDto>(
+            $"/api/gardens/{gardenId}/layout");
+        Assert.Equal("S", layout!.Config.Orientation);
+        Assert.Equal("indoor", layout.Config.GardenType);
+        var slot = Assert.Single(layout.Config.LightSchedule!);
+        Assert.Equal("08:00", slot.Start);
+        Assert.Equal("12:30", slot.End);
+        Assert.Equal("N", layout.Config.Hemisphere);
+        Assert.Equal("mid", layout.Config.LatitudeBand);
+
+        // PUT WITHOUT config afterwards -> stored config PRESERVED untouched
+        // (the pre-5.3-B save dialog never sends it).
+        var putWithout = await PutLayoutAsync(gardenId, config: null, width: 3);
+        Assert.Equal(HttpStatusCode.NoContent, putWithout.StatusCode);
+
+        var after = await Client.GetFromJsonAsync<LayoutDto>(
+            $"/api/gardens/{gardenId}/layout");
+        Assert.Equal(3, after!.Width);
+        Assert.Equal("S", after.Config.Orientation);
+        Assert.Equal("indoor", after.Config.GardenType);
+        Assert.NotNull(after.Config.LightSchedule);
+        Assert.Equal("N", after.Config.Hemisphere);
+        Assert.Equal("mid", after.Config.LatitudeBand);
+    }
+
+    [Theory]
+    [InlineData("X", "inground", null, null, "orientation")]
+    [InlineData(null, "rooftop", null, null, "gardenType")]
+    [InlineData(null, "balcony", "08:00", "12:00", "indoor")]
+    [InlineData(null, "indoor", "8h00", "12:00", "HH:mm")]
+    [InlineData(null, "indoor", "12:00", "12:00", "start < end")]
+    public async Task Layout_InvalidConfig_Returns400(
+        string? orientation,
+        string? gardenType,
+        string? slotStart,
+        string? slotEnd,
+        string expectedFragment)
+    {
+        var (userId, gardenId, _) = await SeedAsync();
+        AuthAs(userId);
+
+        var lightSchedule = slotStart == null
+            ? null
+            : new[] { new { Start = slotStart, End = slotEnd } };
+        var response = await PutLayoutAsync(gardenId, new
+        {
+            Orientation = orientation,
+            GardenType = gardenType,
+            LightSchedule = lightSchedule,
+            Hemisphere = (string?)null,
+            LatitudeBand = (string?)null,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains(expectedFragment, body);
+    }
+
+    [Fact]
+    public async Task Layout_MoreThanSixLightSlots_Returns400()
+    {
+        var (userId, gardenId, _) = await SeedAsync();
+        AuthAs(userId);
+
+        var slots = Enumerable.Range(8, 7)
+            .Select(h => new { Start = $"{h:00}:00", End = $"{h:00}:30" })
+            .ToArray();
+        var response = await PutLayoutAsync(gardenId, new
+        {
+            Orientation = (string?)null,
+            GardenType = "indoor",
+            LightSchedule = slots,
+            Hemisphere = (string?)null,
+            LatitudeBand = (string?)null,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("at most 6", await response.Content.ReadAsStringAsync());
     }
 
     // ── Helpers (same standalone pattern as GardenLayoutEndpointsTests) ───────
@@ -224,6 +327,31 @@ public class GardensEndpointsTests : IntegrationTestBase
             userId);
     }
 
+    private static object ValidIndoorConfig() => new
+    {
+        Orientation = "S",
+        GardenType = "indoor",
+        LightSchedule = new[] { new { Start = "08:00", End = "12:30" } },
+        Hemisphere = "N",
+        LatitudeBand = "mid",
+    };
+
+    private Task<HttpResponseMessage> PutLayoutAsync(
+        Guid gardenId,
+        object? config,
+        int width = 2)
+    {
+        return Client.PutAsJsonAsync($"/api/gardens/{gardenId}/layout", new
+        {
+            Width = width,
+            Height = 2,
+            CellSize = "50cm",
+            CellsJson = (string?)null,
+            Placements = Array.Empty<object>(),
+            Config = config,
+        });
+    }
+
     // Private wire mirrors (the file stands alone — GardenLayoutEndpointsTests pattern).
     private record GardenListItemDto(
         Guid Id,
@@ -234,4 +362,20 @@ public class GardensEndpointsTests : IntegrationTestBase
         List<PlantItemDto> Plants);
 
     private record PlantItemDto(Guid Id, string ScientificName, string? CommonName);
+
+    private record LayoutDto(
+        int? Width,
+        int? Height,
+        string? CellSize,
+        string? CellsJson,
+        ConfigDto Config);
+
+    private record ConfigDto(
+        string? Orientation,
+        string? GardenType,
+        List<SlotDto>? LightSchedule,
+        string? Hemisphere,
+        string? LatitudeBand);
+
+    private record SlotDto(string? Start, string? End);
 }

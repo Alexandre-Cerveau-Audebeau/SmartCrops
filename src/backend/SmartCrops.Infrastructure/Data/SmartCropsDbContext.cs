@@ -12,7 +12,6 @@ public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options)
     public DbSet<PlantTranslation> PlantTranslations => Set<PlantTranslation>();
     public DbSet<PlantSuggestion> PlantSuggestions => Set<PlantSuggestion>();
     public DbSet<Garden> Gardens => Set<Garden>();
-    public DbSet<GardenPlant> GardenPlants => Set<GardenPlant>();
     public DbSet<GardenPlacement> GardenPlacements => Set<GardenPlacement>();
 
     public DbSet<PlantTrefleData> PlantTrefleData => Set<PlantTrefleData>();

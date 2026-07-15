@@ -12,7 +12,6 @@ import { UnitSystemProvider } from './contexts/UnitSystemContext';
 import About from './pages/About';
 import AuthCallback from './pages/AuthCallback';
 import Contact from './pages/Contact';
-import GardenDetail from './pages/GardenDetail';
 import GardenPlanner from './pages/GardenPlanner';
 import Home from './pages/Home';
 import LegalNotice from './pages/LegalNotice';
@@ -55,7 +54,6 @@ export default function App() {
                     <Route path="/terms" element={<Terms />} />
                     <Route element={<ProtectedRoute />}>
                       <Route path="/gardens" element={<MyGardens />} />
-                      <Route path="/gardens/:id" element={<GardenDetail />} />
                       <Route
                         path="/gardens/:id/planner"
                         element={<GardenPlanner />}

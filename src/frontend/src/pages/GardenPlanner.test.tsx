@@ -31,19 +31,26 @@ const maize = { id: 'p2', scientificName: 'Zea mays' } as Plant;
 const garden = {
   id: 'g1',
   name: 'Test garden',
-  gardenPlants: [],
 } as unknown as Garden;
 
+// SMA-285: the layout wire carries the config block (all-null here) and no
+// plantName — names are rebuilt client-side via the shared resolver.
 const layout: GardenLayoutData = {
   width: 2,
   height: 2,
   cellSize: '50cm',
   cellsJson: null,
+  config: {
+    orientation: null,
+    gardenType: null,
+    lightSchedule: null,
+    hemisphere: null,
+    latitudeBand: null,
+  },
   placements: [
     {
       id: 'pl1',
       plantId: 'p1',
-      plantName: null,
       plantScientificName: null,
       startRow: 0,
       startCol: 0,

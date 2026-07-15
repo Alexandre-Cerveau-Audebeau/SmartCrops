@@ -10,13 +10,20 @@ vi.mock('../services/gardenApi', () => ({ fetchGarden: vi.fn() }));
 vi.mock('../services/gardenLayoutApi', () => ({ fetchLayout: vi.fn() }));
 
 const gardenOf = (id: string): Garden =>
-  ({ id, name: `Garden ${id}`, gardenPlants: [] }) as unknown as Garden;
+  ({ id, name: `Garden ${id}` }) as unknown as Garden;
 
 const layoutOf = (id: string): GardenLayoutData => ({
   width: 4,
   height: 3,
   cellSize: '50cm',
   cellsJson: null,
+  config: {
+    orientation: null,
+    gardenType: null,
+    lightSchedule: null,
+    hemisphere: null,
+    latitudeBand: null,
+  },
   placements: [],
   // Tag the payload so the race test can tell which id produced it.
   ...({ tag: id } as object),
