@@ -20,10 +20,16 @@ const fern = {
   commonName: null, // enrichment gap -> scientific fallback
 } as Plant;
 
-function renderSidebar(overrides: { searchQuery?: string } = {}) {
+function renderSidebar(
+  overrides: {
+    searchQuery?: string;
+    plants?: Plant[];
+    catalogReady?: boolean;
+  } = {}
+) {
   return render(
     <PlantSidebar
-      plants={[ivy, fern]}
+      plants={overrides.plants ?? [ivy, fern]}
       searchQuery={overrides.searchQuery ?? ''}
       onSearchChange={vi.fn()}
       selectedPlantId={null}
@@ -33,6 +39,7 @@ function renderSidebar(overrides: { searchQuery?: string } = {}) {
       onShapeEditToggle={vi.fn()}
       catalogFailed={false}
       onCatalogRetry={vi.fn()}
+      catalogReady={overrides.catalogReady ?? true}
     />
   );
 }
@@ -58,5 +65,18 @@ describe('PlantSidebar (SMA-194)', () => {
     renderSidebar({ searchQuery: 'lierre' });
     expect(screen.getByText('Lierre')).toBeInTheDocument();
     expect(screen.queryByText('Athyrium vidalii')).toBeNull();
+  });
+
+  it('shows the neutral loading state while the catalog is pending — never "no plants found" (SMA-288 R3)', () => {
+    renderSidebar({ plants: [], catalogReady: false });
+    expect(screen.getByText('Loading plants…')).toBeInTheDocument();
+    expect(screen.queryByText('No plants found')).toBeNull();
+    expect(screen.queryByText('Lierre')).toBeNull();
+  });
+
+  it('reserves the no-results message for a READY catalog (SMA-288 R3)', () => {
+    renderSidebar({ plants: [], catalogReady: true });
+    expect(screen.getByText('No plants found')).toBeInTheDocument();
+    expect(screen.queryByText('Loading plants…')).toBeNull();
   });
 });

@@ -386,6 +386,51 @@ describe('GardenPlanner placement initials', () => {
     expect(screen.queryByRole('button', { name: 'Réessayer' })).toBeNull();
   });
 
+  it('placement is inert while the catalog is unavailable — an armed selection cannot act invisibly (SMA-288 R3)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    const resolvers: Array<(plants: Plant[]) => void> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve) => {
+          resolvers.push(resolve);
+        })
+    );
+
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+
+    // Catalog ready (EN) -> arm basil from the sidebar list.
+    resolvers[0]!([basil]);
+    await waitFor(() =>
+      expect(within(grid).getByText('B')).toBeInTheDocument()
+    );
+    // Primary AND secondary line both read the scientific name here (no
+    // commonName on the fixture), so match with the *AllBy* variant.
+    const plantRow = screen
+      .getAllByRole('button')
+      .find((el) => within(el).queryAllByText('Basilicum fixture').length > 0);
+    expect(plantRow).toBeTruthy();
+    fireEvent.click(plantRow!);
+
+    // Locale switch -> catalog pending again; the armed raw id survives.
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    await waitFor(() => expect(resolvers.length).toBe(2));
+
+    // Click an EMPTY active cell in place mode: with the catalog unavailable
+    // the click must be a NO-OP (no ADD_PLACEMENT dispatched).
+    const cells = screen.getAllByRole('gridcell');
+    expect(cells.length).toBe(4); // 2x2 layout, placement at (0,0)
+    fireEvent.click(cells[1]!);
+
+    // Catalog recovers (FR) -> exactly ONE placement initial renders: the
+    // original at (0,0). A second 'F' would prove the gated click leaked.
+    resolvers[1]!([{ ...basil, commonName: 'framboisier' } as Plant]);
+    await waitFor(() =>
+      expect(within(grid).getAllByText('F')).toHaveLength(1)
+    );
+  });
+
   it('shows the unknown-plant fallback once an EMPTY catalog has resolved (explicit loaded flag, 5.2 R2)', async () => {
     // Length-based pending inference would leave a legitimately empty catalog
     // "pending" forever and suppress the fallback — explicit readiness (the

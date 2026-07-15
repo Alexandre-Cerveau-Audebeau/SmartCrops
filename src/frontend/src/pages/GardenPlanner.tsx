@@ -361,6 +361,13 @@ export default function GardenPlanner() {
       if (!grid[row][col].active && !existing) return;
 
       if (selectedPlantId) {
+        // Placement is INERT while the active-language catalog is unavailable
+        // (pending or failed): the armed selection raw id could otherwise act
+        // invisibly — the sidebar shows no rows, so the user cannot see what
+        // is armed (SMA-288 R3, Extension 3223e82b). The stored selection is
+        // intentionally KEPT and re-materializes visibly once the catalog
+        // recovers.
+        if (!catalogReady) return;
         if (existing) {
           dispatch({
             type: 'REPLACE_PLACEMENT',
@@ -381,7 +388,7 @@ export default function GardenPlanner() {
 
       selectPlacement(existing ? existing.id : null);
     },
-    [shapeEditMode, grid, placements, selectedPlantId, selectPlacement]
+    [shapeEditMode, grid, placements, selectedPlantId, catalogReady, selectPlacement]
   );
 
   const handleRemoveSelectedPlacement = useCallback(() => {
@@ -753,6 +760,7 @@ export default function GardenPlanner() {
             language={language}
             shapeEditMode={shapeEditMode}
             onShapeEditToggle={handleShapeEditToggle}
+            catalogReady={catalogReady}
             catalogFailed={catalogFailed}
             onCatalogRetry={handleCatalogRetry}
           />

@@ -31,11 +31,15 @@ interface Props {
   // compact error + Retry instead of an empty (pending-looking) list.
   catalogFailed: boolean;
   onCatalogRetry: () => void;
+  // SMA-288 R3: pending ≠ empty — while the active-language catalog resolves,
+  // the results area shows a neutral loading state; the localized no-results
+  // message is reserved for a READY catalog.
+  catalogReady: boolean;
 }
 
 type TabValue = 'plants' | 'soils' | 'infrastructure';
 
-export default function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry }: Props) {
+export default function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabValue>('plants');
 
@@ -102,7 +106,11 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
             )}
           </Box>
           <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-            {filtered.length === 0 ? (
+            {!catalogReady ? (
+              <Typography variant="body2" color="text.secondary" sx={{ p: 2, textAlign: 'center' }}>
+                {t('planner.catalogLoading')}
+              </Typography>
+            ) : filtered.length === 0 ? (
               <Typography variant="body2" color="text.secondary" sx={{ p: 2, textAlign: 'center' }}>
                 {t('planner.sidebar.noResults')}
               </Typography>
