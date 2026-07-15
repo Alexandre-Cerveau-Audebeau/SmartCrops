@@ -266,7 +266,12 @@ public class UpdateTimestampInterceptorTests : IClassFixture<InterceptorTestFact
         placement.Notes = "updated";
         await db.SaveChangesAsync();
 
-        Assert.Equal(placedAt, placement.PlacedAt);
-        Assert.Equal("updated", placement.Notes);
+        // Assert on a RELOADED row (SMA-285 R2): the tracked instance already
+        // held these values before SaveChangesAsync, so only a fresh read
+        // proves the update — and the untouched PlacedAt — reached the store.
+        db.ChangeTracker.Clear();
+        var persisted = await db.GardenPlacements.SingleAsync(p => p.Id == placement.Id);
+        Assert.Equal(placedAt, persisted.PlacedAt);
+        Assert.Equal("updated", persisted.Notes);
     }
 }

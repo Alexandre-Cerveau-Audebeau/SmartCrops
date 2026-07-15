@@ -75,9 +75,12 @@ describe('gardenApi (SMA-280 migration)', () => {
   it('rejects with HttpStatusError carrying the status (404 garden not found)', async () => {
     mockFetch({ ok: false, status: 404 });
 
-    const rejection = expect(deleteGarden('g1')).rejects;
+    // One request, two assertions (SMA-285 R2): both rejection checks ride
+    // the SAME captured promise so the test models a single operation.
+    const request = deleteGarden('g1');
+    const rejection = expect(request).rejects;
     await rejection.toBeInstanceOf(HttpStatusError);
-    await expect(deleteGarden('g1')).rejects.toMatchObject({
+    await expect(request).rejects.toMatchObject({
       status: 404,
     });
   });
