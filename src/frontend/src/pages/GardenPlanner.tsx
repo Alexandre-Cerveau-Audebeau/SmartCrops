@@ -138,9 +138,28 @@ export default function GardenPlanner() {
     plants: Plant[];
     lang: string;
   } | null>(null);
+  // Failure marker, language-keyed like the catalog itself (SMA-288): a
+  // rejection recorded for another locale is inert by derivation, so a
+  // language switch cleanly leaves the error behind and lets the new fetch
+  // drive the state. Aborts never set it. `catalogAttempt` is the manual
+  // retry lever — bumped from an event handler only, so the fetch effect
+  // re-runs without any set-state-in-effect surface.
+  const [catalogError, setCatalogError] = useState<{ lang: string } | null>(
+    null
+  );
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
   const catalogReady = catalog !== null && catalog.lang === language;
   // Keeping the derived name `allPlants` leaves every consumer untouched.
   const allPlants = catalogReady ? catalog.plants : EMPTY_PLANTS;
+  // pending / ready / error are mutually exclusive per CURRENT language:
+  // ready wins (a stale error can never mask fresh data), and anything
+  // neither ready nor failed renders the existing neutral pending state.
+  const catalogFailed =
+    catalogError !== null && catalogError.lang === language && !catalogReady;
+  const handleCatalogRetry = useCallback(() => {
+    setCatalogError(null);
+    setCatalogAttempt((n) => n + 1);
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Client-only ids for placements created since the last save — server ids
@@ -175,6 +194,11 @@ export default function GardenPlanner() {
     // render-time `catalogReady` derivation already gates mismatched-locale
     // data — but dropping the old catalog keeps memory honest per request.
     setCatalog(null);
+    // Returning to a previously FAILED language must read as neutral PENDING
+    // until the fresh request settles — never as the stale error (CR R1,
+    // SMA-288 R2). Cleared alongside the catalog hygiene reset; a genuine
+    // failure of THIS cycle re-records it in the rejection path below.
+    setCatalogError(null);
     const controller = new AbortController();
     fetchPlants(controller.signal, language)
       .then((plants) => {
@@ -183,10 +207,14 @@ export default function GardenPlanner() {
         }
       })
       .catch(() => {
-        /* plant fetch failure is non-blocking; abort lands here too */
+        // A real failure surfaces the sidebar error + Retry (SMA-288); an
+        // abort (unmount / locale switch) must never read as a failure.
+        if (!controller.signal.aborted) {
+          setCatalogError({ lang: language });
+        }
       });
     return () => controller.abort();
-  }, [id, language]);
+  }, [id, language, catalogAttempt]);
 
   // Hydrate the reducer from the hook's snapshot. useLayoutEffect so the grid
   // lands in the same paint as `loading` flipping false — the pre-hook
@@ -333,6 +361,13 @@ export default function GardenPlanner() {
       if (!grid[row][col].active && !existing) return;
 
       if (selectedPlantId) {
+        // Placement is INERT while the active-language catalog is unavailable
+        // (pending or failed): the armed selection raw id could otherwise act
+        // invisibly — the sidebar shows no rows, so the user cannot see what
+        // is armed (SMA-288 R3, Extension 3223e82b). The stored selection is
+        // intentionally KEPT and re-materializes visibly once the catalog
+        // recovers.
+        if (!catalogReady) return;
         if (existing) {
           dispatch({
             type: 'REPLACE_PLACEMENT',
@@ -353,7 +388,7 @@ export default function GardenPlanner() {
 
       selectPlacement(existing ? existing.id : null);
     },
-    [shapeEditMode, grid, placements, selectedPlantId, selectPlacement]
+    [shapeEditMode, grid, placements, selectedPlantId, catalogReady, selectPlacement]
   );
 
   const handleRemoveSelectedPlacement = useCallback(() => {
@@ -725,6 +760,9 @@ export default function GardenPlanner() {
             language={language}
             shapeEditMode={shapeEditMode}
             onShapeEditToggle={handleShapeEditToggle}
+            catalogReady={catalogReady}
+            catalogFailed={catalogFailed}
+            onCatalogRetry={handleCatalogRetry}
           />
 
           <Box
@@ -1023,6 +1061,7 @@ export default function GardenPlanner() {
           soil={selectedCellSoil}
           top={panelTop}
           language={language}
+          catalogReady={catalogReady}
           onRemove={handleRemoveSelectedPlacement}
         />
       )}

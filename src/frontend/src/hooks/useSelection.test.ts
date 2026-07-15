@@ -75,4 +75,31 @@ describe('useSelection', () => {
     act(() => result.current.selectPlacement('srv-1'));
     expect(result.current.selectedPlacement?.id).toBe('srv-1');
   });
+
+  it('a reintroduced placement with a previously-selected id does not auto-reselect (SMA-288 R2 pin)', () => {
+    const { result, rerender } = renderHook(
+      ({ placements }: { placements: PlannerPlacement[] }) =>
+        useSelection(placements),
+      { initialProps: { placements: [placement('srv-1'), placement('srv-2')] } }
+    );
+
+    act(() => result.current.selectPlacement('srv-2'));
+    expect(result.current.selectedPlacement?.id).toBe('srv-2');
+
+    // Removal degrades the selection to null AND purges the stored id
+    // (render-time adjust)...
+    rerender({ placements: [placement('srv-1')] });
+    expect(result.current.selectedPlacement).toBeNull();
+    expect(result.current.selectedPlacementId).toBeNull();
+
+    // ...so a LATER placement reusing the same id does NOT become selected
+    // without an explicit new selection.
+    rerender({ placements: [placement('srv-1'), placement('srv-2')] });
+    expect(result.current.selectedPlacement).toBeNull();
+    expect(result.current.selectedPlacementId).toBeNull();
+
+    // Explicit re-selection still works.
+    act(() => result.current.selectPlacement('srv-2'));
+    expect(result.current.selectedPlacement?.id).toBe('srv-2');
+  });
 });

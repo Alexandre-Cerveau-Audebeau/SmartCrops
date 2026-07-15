@@ -73,13 +73,20 @@ afterEach(() => {
 });
 
 // Minimal consumer to flip the app language mid-test — same LanguageProvider
-// mechanics the planner itself uses (useLanguage().setLanguage).
+// mechanics the planner itself uses (useLanguage().setLanguage). Both
+// directions are exposed so round-trip scenarios (fail FR → EN → back to FR)
+// can be driven (SMA-288 R2).
 function SwitchToFrench() {
   const { setLanguage } = useLanguage();
   return (
-    <button type="button" onClick={() => setLanguage('fr')}>
-      switch-to-fr
-    </button>
+    <>
+      <button type="button" onClick={() => setLanguage('fr')}>
+        switch-to-fr
+      </button>
+      <button type="button" onClick={() => setLanguage('en')}>
+        switch-to-en
+      </button>
+    </>
   );
 }
 
@@ -215,6 +222,213 @@ describe('GardenPlanner placement initials', () => {
       expect(screen.queryAllByText('Basilicum fixture')).toHaveLength(0)
     );
     expect(within(grid).queryByText('B')).toBeNull();
+  });
+
+  it('surfaces the catalog error with Retry on a real failure, and Retry recovers (SMA-288)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    const deferred: Array<{
+      resolve: (plants: Plant[]) => void;
+      reject: (err: Error) => void;
+    }> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve, reject) => {
+          deferred.push({ resolve, reject });
+        })
+    );
+
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+
+    // Non-abort rejection -> compact error state in the sidebar plants area,
+    // and STILL no name anywhere (error must not degrade to stale/unknown).
+    deferred[0]!.reject(new Error('network down'));
+    expect(
+      await screen.findByText("Couldn't load the plant catalog.")
+    ).toBeInTheDocument();
+    // a11y live region (CR R1): the failure box itself announces (the
+    // planner's help banner is ALSO role="alert", so anchor via the text).
+    expect(
+      screen
+        .getByText("Couldn't load the plant catalog.")
+        .closest('[role="alert"]')
+    ).not.toBeNull();
+    const retry = screen.getByRole('button', { name: 'Retry' });
+    expect(within(grid).queryByText('U')).toBeNull();
+    expect(screen.queryAllByText('Basilicum fixture')).toHaveLength(0);
+
+    // Retry -> a NEW fetch runs; success clears the error and names appear.
+    fireEvent.click(retry);
+    await waitFor(() => expect(deferred.length).toBe(2));
+    deferred[1]!.resolve([basil]);
+    await waitFor(() =>
+      expect(within(grid).getByText('B')).toBeInTheDocument()
+    );
+    expect(screen.queryByText("Couldn't load the plant catalog.")).toBeNull();
+  });
+
+  it('a stale-language catalog error is inert after a locale switch (SMA-288)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    const deferred: Array<{
+      resolve: (plants: Plant[]) => void;
+      reject: (err: Error) => void;
+    }> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve, reject) => {
+          deferred.push({ resolve, reject });
+        })
+    );
+
+    renderPlanner();
+    await screen.findByRole('grid');
+    deferred[0]!.reject(new Error('network down'));
+    await screen.findByText("Couldn't load the plant catalog.");
+
+    // Locale switch: the EN-keyed error may not leak into the FR cycle — the
+    // fresh fetch drives the state (pending, neither error text visible).
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    await waitFor(() => expect(deferred.length).toBe(2));
+    expect(
+      screen.queryByText("Couldn't load the plant catalog.")
+    ).toBeNull();
+    expect(
+      screen.queryByText('Impossible de charger le catalogue de plantes.')
+    ).toBeNull();
+
+    // The FR fetch resolving proves the new cycle owns the state machine.
+    deferred[1]!.resolve([
+      { ...basil, commonName: 'framboisier' } as Plant,
+    ]);
+    const grid = screen.getByRole('grid');
+    await waitFor(() =>
+      expect(within(grid).getByText('F')).toBeInTheDocument()
+    );
+  });
+
+  it('returning to a previously failed language shows pending, not the stale error (SMA-288 R2)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    const deferred: Array<{
+      resolve: (plants: Plant[]) => void;
+      reject: (err: Error) => void;
+    }> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve, reject) => {
+          deferred.push({ resolve, reject });
+        })
+    );
+
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+
+    // Fail on FR: switch first, then reject the FR fetch (#2, non-abort).
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    await waitFor(() => expect(deferred.length).toBe(2));
+    deferred[1]!.reject(new Error('network down'));
+    await screen.findByText('Impossible de charger le catalogue de plantes.');
+
+    // Leave to EN, then RETURN to FR while fetch #4 is still pending: the
+    // old FR failure may not resurface — neutral pending until it settles.
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-en' }));
+    await waitFor(() => expect(deferred.length).toBe(3));
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    await waitFor(() => expect(deferred.length).toBe(4));
+    expect(
+      screen.queryByText('Impossible de charger le catalogue de plantes.')
+    ).toBeNull();
+    expect(
+      screen.queryByText("Couldn't load the plant catalog.")
+    ).toBeNull();
+
+    // The fresh FR request settles -> names render.
+    deferred[3]!.resolve([
+      { ...basil, commonName: 'framboisier' } as Plant,
+    ]);
+    await waitFor(() =>
+      expect(within(grid).getByText('F')).toBeInTheDocument()
+    );
+  });
+
+  it('an aborted catalog request never surfaces the error state (SMA-288)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    const deferred: Array<{
+      resolve: (plants: Plant[]) => void;
+      reject: (err: Error) => void;
+    }> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve, reject) => {
+          deferred.push({ resolve, reject });
+        })
+    );
+
+    renderPlanner();
+    await screen.findByRole('grid');
+
+    // Switch FIRST (the cleanup aborts controller #1), THEN reject fetch #1 —
+    // the abort path must stay silent: no error text, no Retry.
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    await waitFor(() => expect(deferred.length).toBe(2));
+    deferred[0]!.reject(new Error('aborted'));
+    await waitFor(() => expect(deferred.length).toBe(2));
+    expect(
+      screen.queryByText("Couldn't load the plant catalog.")
+    ).toBeNull();
+    expect(
+      screen.queryByText('Impossible de charger le catalogue de plantes.')
+    ).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Réessayer' })).toBeNull();
+  });
+
+  it('placement is inert while the catalog is unavailable — an armed selection cannot act invisibly (SMA-288 R3)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    const resolvers: Array<(plants: Plant[]) => void> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve) => {
+          resolvers.push(resolve);
+        })
+    );
+
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+
+    // Catalog ready (EN) -> arm basil from the sidebar list.
+    resolvers[0]!([basil]);
+    await waitFor(() =>
+      expect(within(grid).getByText('B')).toBeInTheDocument()
+    );
+    // Primary AND secondary line both read the scientific name here (no
+    // commonName on the fixture), so match with the *AllBy* variant.
+    const plantRow = screen
+      .getAllByRole('button')
+      .find((el) => within(el).queryAllByText('Basilicum fixture').length > 0);
+    expect(plantRow).toBeTruthy();
+    fireEvent.click(plantRow!);
+
+    // Locale switch -> catalog pending again; the armed raw id survives.
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    await waitFor(() => expect(resolvers.length).toBe(2));
+
+    // Click an EMPTY active cell in place mode: with the catalog unavailable
+    // the click must be a NO-OP (no ADD_PLACEMENT dispatched).
+    const cells = screen.getAllByRole('gridcell');
+    expect(cells.length).toBe(4); // 2x2 layout, placement at (0,0)
+    fireEvent.click(cells[1]!);
+
+    // Catalog recovers (FR) -> exactly ONE placement initial renders: the
+    // original at (0,0). A second 'F' would prove the gated click leaked.
+    resolvers[1]!([{ ...basil, commonName: 'framboisier' } as Plant]);
+    await waitFor(() =>
+      expect(within(grid).getAllByText('F')).toHaveLength(1)
+    );
   });
 
   it('shows the unknown-plant fallback once an EMPTY catalog has resolved (explicit loaded flag, 5.2 R2)', async () => {

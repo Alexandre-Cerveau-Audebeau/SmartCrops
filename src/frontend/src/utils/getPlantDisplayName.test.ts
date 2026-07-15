@@ -69,6 +69,30 @@ describe('getPlantDisplayName', () => {
     expect(getPlantDisplayName(emptyTranslation, 'fr')).toBe('Hedera helix');
   });
 
+  it('a blank requested translation falls through to a valid English one (SMA-288)', () => {
+    // Previously `??` let the blank FR row short-circuit the chain and the
+    // resolver degraded to the scientific name despite a usable EN name.
+    const emptyFr = {
+      ...base,
+      commonName: null,
+      translations: [
+        { id: 8, language: 'fr', commonName: '', description: null },
+        { id: 9, language: 'en', commonName: 'english ivy', description: null },
+      ],
+    } as Plant;
+    expect(getPlantDisplayName(emptyFr, 'fr')).toBe('English ivy');
+
+    const whitespaceFr = {
+      ...base,
+      commonName: null,
+      translations: [
+        { id: 10, language: 'fr', commonName: '   ', description: null },
+        { id: 11, language: 'en', commonName: 'english ivy', description: null },
+      ],
+    } as Plant;
+    expect(getPlantDisplayName(whitespaceFr, 'fr')).toBe('English ivy');
+  });
+
   it('falls back to scientificName when no common name exists in any shape', () => {
     // Bauhinia blakeana-like case: enrichment gap, no translation rows at all.
     const plant = { id: 'p3', scientificName: 'Bauhinia blakeana' } as Plant;

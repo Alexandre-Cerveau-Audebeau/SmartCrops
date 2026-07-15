@@ -379,6 +379,9 @@
   "planner": {
     "title": "Planificateur de jardin",
     "unknownPlant": "Inconnue",
+    "catalogError": "Impossible de charger le catalogue de plantes.",
+    "catalogLoading": "Chargement des plantes…",
+    "retry": "Réessayer",
     "setup": {
       "title": "Configurez votre jardin",
       "columns": "Colonnes",

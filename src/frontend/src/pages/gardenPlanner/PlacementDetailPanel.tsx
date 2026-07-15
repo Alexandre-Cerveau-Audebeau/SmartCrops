@@ -16,6 +16,10 @@ interface PlacementDetailPanelProps {
   soil: string | undefined;
   top: number;
   language: string;
+  // SMA-288: while the active-language catalog is pending, a missing plant is
+  // indistinguishable from a not-yet-loaded one — the name slot stays empty
+  // instead of flashing the unknown-plant fallback.
+  catalogReady: boolean;
   onRemove: () => void;
 }
 
@@ -25,6 +29,7 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
   soil,
   top,
   language,
+  catalogReady,
   onRemove,
 }: PlacementDetailPanelProps) {
   const { t } = useTranslation();
@@ -46,8 +51,13 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
       }}
     >
       <Typography variant="subtitle1" fontWeight={600}>
-        {/* Shared Library resolver (SMA-194); localized unknown fallback (F4). */}
-        {plant ? getPlantDisplayName(plant, language) : t('planner.unknownPlant')}
+        {/* Shared Library resolver (SMA-194); localized unknown fallback (F4),
+            reserved for plants missing from a READY catalog (SMA-288). */}
+        {plant
+          ? getPlantDisplayName(plant, language)
+          : catalogReady
+            ? t('planner.unknownPlant')
+            : null}
       </Typography>
       {plant && (
         <Typography

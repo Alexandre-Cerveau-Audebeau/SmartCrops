@@ -379,6 +379,9 @@
   "planner": {
     "title": "Garden planner",
     "unknownPlant": "Unknown",
+    "catalogError": "Couldn't load the plant catalog.",
+    "catalogLoading": "Loading plants…",
+    "retry": "Retry",
     "setup": {
       "title": "Set up your garden",
       "columns": "Columns",
