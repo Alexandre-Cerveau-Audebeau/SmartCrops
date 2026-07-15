@@ -451,4 +451,120 @@ describe('plannerReducer', () => {
     expect(s.layoutHeight).toBe(0);
     expect(s.isDirty).toBe(false);
   });
+
+  // ── develop-store review absorption (ef076f0): F7 — placements cannot sit
+  // on inactive cells; F6 — painting disarms on every context change. ──────
+
+  it('painting a cell inactive evicts the placement occupying it and reports the removal (F7)', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    const before = s.removedSeq;
+    s = plannerReducer(s, { type: 'PAINT_START', row: 1, col: 1 });
+    expect(s.grid![1][1].active).toBe(false);
+    expect(s.placements).toHaveLength(0);
+    expect(s.removedCount).toBe(1);
+    expect(s.removedSeq).toBe(before + 1);
+  });
+
+  it('PAINT_ENTER with inactive polarity evicts swept placements; active polarity never drops (F7)', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 }); // polarity: inactive
+    s = plannerReducer(s, { type: 'PAINT_ENTER', row: 1, col: 1 });
+    expect(s.grid![1][1].active).toBe(false);
+    expect(s.placements).toHaveLength(0);
+    expect(s.removedCount).toBe(1);
+
+    // Active-polarity drag over the same cell drops nothing.
+    let a = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    a = plannerReducer(a, { type: 'SET_ALL_CELLS', active: false }); // (also clears placements)
+    a = plannerReducer(a, {
+      type: 'ADD_PLACEMENT',
+      id: 'new-1',
+      plantId: 'p9',
+      row: 1,
+      col: 1,
+    });
+    const seqBefore = a.removedSeq;
+    a = plannerReducer(a, { type: 'PAINT_START', row: 0, col: 0 }); // inactive -> active polarity
+    a = plannerReducer(a, { type: 'PAINT_ENTER', row: 1, col: 1 });
+    expect(a.grid![1][1].active).toBe(true);
+    expect(a.placements).toHaveLength(1);
+    expect(a.removedSeq).toBe(seqBefore);
+  });
+
+  it('SET_ALL_CELLS(false) clears every placement and reports; SET_ALL_CELLS(true) drops nothing (F7)', () => {
+    const off = plannerReducer(hydrated(), {
+      type: 'SET_ALL_CELLS',
+      active: false,
+    });
+    expect(off.placements).toHaveLength(0);
+    expect(off.removedCount).toBe(1);
+    expect(off.removedSeq).toBe(1);
+
+    const on = plannerReducer(hydrated(), {
+      type: 'SET_ALL_CELLS',
+      active: true,
+    });
+    expect(on.placements).toHaveLength(1);
+    expect(on.removedSeq).toBe(0);
+  });
+
+  it('hydration, restore, discard and shape-edit-off all disarm an in-flight paint drag (F6)', () => {
+    let painting = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    painting = plannerReducer(painting, {
+      type: 'PAINT_START',
+      row: 0,
+      col: 0,
+    });
+    expect(painting.isPainting).toBe(true);
+
+    const hydratedAgain = plannerReducer(painting, {
+      type: 'HYDRATE_FROM_LAYOUT',
+      width: 3,
+      height: 3,
+      cellSize: '50cm',
+      cellsJson: null,
+      placements: [],
+    });
+    expect(hydratedAgain.isPainting).toBe(false);
+    expect(hydratedAgain.paintAction).toBeNull();
+
+    const restored = plannerReducer(painting, { type: 'RESTORE_LAST_SAVED' });
+    expect(restored.isPainting).toBe(false);
+    expect(restored.paintAction).toBeNull();
+
+    const discarded = plannerReducer(painting, { type: 'DISCARD_DRAFT' });
+    expect(discarded.isPainting).toBe(false);
+    expect(discarded.paintAction).toBeNull();
+
+    const modeOff = plannerReducer(painting, {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: false,
+    });
+    expect(modeOff.isPainting).toBe(false);
+    expect(modeOff.paintAction).toBeNull();
+  });
+
+  it('PAINT_ENTER is inert once shape-edit mode is disabled mid-drag (F6)', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 });
+    s = plannerReducer(s, { type: 'SET_SHAPE_EDIT_MODE', enabled: false });
+    const after = plannerReducer(s, { type: 'PAINT_ENTER', row: 0, col: 1 });
+    expect(after).toBe(s); // guarded no-op — grid untouched
+    expect(after.grid![0][1].active).toBe(true);
+  });
 });

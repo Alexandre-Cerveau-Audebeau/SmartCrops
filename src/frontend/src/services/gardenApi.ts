@@ -1,4 +1,4 @@
-import type { Garden, GardenPlant } from '../types/Garden';
+import type { Garden, GardenListItem, GardenPlant } from '../types/Garden';
 import { fetchJson } from './fetchJson';
 
 const API_BASE = '/api';
@@ -8,8 +8,14 @@ const API_BASE = '/api';
 // Non-OK responses reject with HttpStatusError (fetchJson contract, SMA-280);
 // consumers narrow with `instanceof HttpStatusError`.
 
-export async function fetchGardens(signal?: AbortSignal): Promise<Garden[]> {
-  return fetchJson<Garden[]>(`${API_BASE}/gardens`, {
+// `lang` mirrors the plants list endpoints' unified locale key: the response's
+// plant items carry a server-localized flat `commonName` (SMA-155).
+export async function fetchGardens(
+  signal?: AbortSignal,
+  lang?: string,
+): Promise<GardenListItem[]> {
+  const qs = lang ? `?lang=${encodeURIComponent(lang)}` : '';
+  return fetchJson<GardenListItem[]>(`${API_BASE}/gardens${qs}`, {
     credentials: 'include',
     signal,
   });
@@ -51,21 +57,8 @@ export async function deleteGarden(id: string): Promise<void> {
   });
 }
 
-export async function addPlantToGarden(
-  gardenId: string,
-  plantId: string,
-  notes?: string,
-): Promise<void> {
-  return fetchJson<void>(
-    `${API_BASE}/gardens/${encodeURIComponent(gardenId)}/plants/${encodeURIComponent(plantId)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(notes ? { notes } : {}),
-    },
-  );
-}
+// addPlantToGarden was REMOVED (SMA-6 Option A): plants enter a garden by being
+// placed in the planner (saveLayout) — the backend POST endpoint is gone too.
 
 export async function removePlantFromGarden(
   gardenId: string,

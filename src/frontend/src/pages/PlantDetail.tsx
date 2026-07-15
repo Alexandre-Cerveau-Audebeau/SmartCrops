@@ -11,18 +11,11 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
-import List from '@mui/material/List';
-import ListItemButton from '@mui/material/ListItemButton';
-import ListItemText from '@mui/material/ListItemText';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Snackbar from '@mui/material/Snackbar';
@@ -31,7 +24,6 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { visuallyHidden } from '@mui/utils';
-import AddIcon from '@mui/icons-material/Add';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloseIcon from '@mui/icons-material/Close';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
@@ -45,7 +37,6 @@ import { NAV_BG } from '../constants/colors';
 import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../hooks/useLanguage';
 import { useUnitSystem } from '../hooks/useUnitSystem';
-import { addPlantToGarden, fetchGardens } from '../services/gardenApi';
 import { HttpStatusError } from '../services/httpStatusError';
 import { fetchPlantById } from '../services/plantApi';
 import {
@@ -54,7 +45,6 @@ import {
   reEnrichTrefle,
   type ReEnrichResponse,
 } from '../services/adminApi';
-import type { Garden } from '../types/Garden';
 import type { Plant, PlantImage } from '../types/Plant';
 import { Sym } from '../components/Sym';
 import PlantDetailToc from '../components/plantDetail/PlantDetailToc';
@@ -132,7 +122,7 @@ export default function PlantDetail() {
   const { language } = useLanguage();
   const { system } = useUnitSystem();
   const mode = useTheme().palette.mode;
-  const { isAuthenticated, user } = useAuth();
+  const { user } = useAuth();
   // SMA-33: admin UI gated on the backend role surfaced via /me (was the
   // VITE_ADMIN_EMAILS front whitelist). UX only — the real barrier is the
   // backend [Authorize(Roles = "Admin")] on the admin endpoints.
@@ -143,18 +133,6 @@ export default function PlantDetail() {
   const [error, setError] = useState<string | null>(null);
   const [reloadCounter, setReloadCounter] = useState(0);
   const mountedRef = useRef(true);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // ── Add-to-garden dialog (unchanged from the previous implementation) ─────
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [gardens, setGardens] = useState<Garden[]>([]);
-  const [gardensLoading, setGardensLoading] = useState(false);
-  const [selectedGardenIds, setSelectedGardenIds] = useState<Set<string>>(
-    new Set()
-  );
-  const [addError, setAddError] = useState<string | null>(null);
-  const [addSuccess, setAddSuccess] = useState<string | null>(null);
-  const [isAdding, setIsAdding] = useState(false);
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   // The lightbox can be driven by the full gallery (hero) OR by the filtered
@@ -193,96 +171,9 @@ export default function PlantDetail() {
   >(null);
   const [toast, setToast] = useState<Toast | null>(null);
 
-  const toggleGarden = (gardenId: string) => {
-    setSelectedGardenIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(gardenId)) next.delete(gardenId);
-      else next.add(gardenId);
-      return next;
-    });
-  };
-
-  const openAddDialog = async () => {
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-    if (!isAuthenticated) {
-      navigate('/login');
-      return;
-    }
-    setDialogOpen(true);
-    setGardensLoading(true);
-    setAddError(null);
-    setAddSuccess(null);
-    setSelectedGardenIds(new Set());
-    setGardens([]);
-    setIsAdding(false);
-    try {
-      const data = await fetchGardens();
-      setGardens(data);
-    } catch {
-      setGardens([]);
-      setAddError(t('gardens.failedToLoadGardens'));
-    } finally {
-      setGardensLoading(false);
-    }
-  };
-
-  const handleAddToGarden = async () => {
-    if (selectedGardenIds.size === 0 || !plant) return;
-    if (isAdding) return;
-    setIsAdding(true);
-    setAddError(null);
-    const results: { gardenName: string; success: boolean; error?: string }[] =
-      [];
-    for (const gardenId of selectedGardenIds) {
-      const garden = gardens.find((g) => g.id === gardenId);
-      try {
-        await addPlantToGarden(gardenId, plant.id);
-        results.push({ gardenName: garden?.name ?? '', success: true });
-      } catch (err) {
-        const status = err instanceof HttpStatusError ? err.status : undefined;
-        results.push({
-          gardenName: garden?.name ?? '',
-          success: false,
-          error: status === 409 ? 'already added' : 'failed',
-        });
-      }
-    }
-    const successes = results.filter((r) => r.success).length;
-    const alreadyAdded = results.filter(
-      (r) => r.error === 'already added'
-    ).length;
-    const failed = results.filter((r) => r.error === 'failed').length;
-
-    if (failed > 0) {
-      let errorMsg =
-        successes > 0
-          ? t('gardens.addedButFailed', { count: successes, failed })
-          : t('gardens.failedCount', { count: failed });
-      if (alreadyAdded > 0)
-        errorMsg += ` ${t('gardens.addedWithExisting', { count: alreadyAdded })}`;
-      setAddError(errorMsg);
-    } else if (successes > 0) {
-      let message = t('gardens.addedToCount', { count: successes });
-      if (alreadyAdded > 0)
-        message += ` ${t('gardens.addedWithExisting', { count: alreadyAdded })}`;
-      setAddSuccess(message);
-      setSelectedGardenIds(new Set());
-      closeTimerRef.current = setTimeout(() => {
-        if (!mountedRef.current) return;
-        setDialogOpen(false);
-        setAddSuccess(null);
-        setIsAdding(false);
-        closeTimerRef.current = null;
-      }, 2000);
-      return;
-    } else if (alreadyAdded > 0) {
-      setAddError(t('gardens.addedWithExisting', { count: alreadyAdded }));
-    }
-    setIsAdding(false);
-  };
+  // The Add-to-my-garden flow (dialog, fetchGardens, addPlantToGarden) was
+  // REMOVED (SMA-6 Option A): plants enter a garden by being placed in the
+  // planner. The hero/CTA actions now route to /gardens instead.
 
   // ── Plant fetch with abort + reload trigger after admin re-enrich ─────────
   useEffect(() => {
@@ -319,10 +210,6 @@ export default function PlantDetail() {
     return () => {
       mountedRef.current = false;
       controller.abort();
-      if (closeTimerRef.current) {
-        clearTimeout(closeTimerRef.current);
-        closeTimerRef.current = null;
-      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, reloadCounter]);
@@ -1049,10 +936,10 @@ export default function PlantDetail() {
                       <Button
                         variant="contained"
                         color="primary"
-                        startIcon={<AddIcon />}
-                        onClick={openAddDialog}
+                        component={RouterLink}
+                        to="/gardens"
                       >
-                        {t('library.addToGarden')}
+                        {t('gardens.planMyGarden')}
                       </Button>
                       {isAdmin && (
                         <>
@@ -1222,8 +1109,8 @@ export default function PlantDetail() {
             </Box>
             <Button
               variant="contained"
-              startIcon={<AddIcon />}
-              onClick={openAddDialog}
+              component={RouterLink}
+              to="/gardens"
               sx={{
                 bgcolor: '#fff',
                 color: '#1B5E3A',
@@ -1239,90 +1126,11 @@ export default function PlantDetail() {
                 },
               }}
             >
-              {t('library.addToGarden')}
+              {t('gardens.planMyGarden')}
             </Button>
           </Box>
         </Box>
       </Box>
-
-      {/* Add to garden dialog */}
-      <Dialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        disableScrollLock
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>{t('library.addToGardenDialog')}</DialogTitle>
-        <DialogContent>
-          {gardensLoading && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
-            </Box>
-          )}
-
-          {!gardensLoading && gardens.length === 0 && !addError && (
-            <Box sx={{ textAlign: 'center', py: 2 }}>
-              <Typography sx={{ mb: 2 }}>
-                {t('library.noGardensYet')}
-              </Typography>
-              <Button variant="contained" component={RouterLink} to="/gardens">
-                {t('library.createAGarden')}
-              </Button>
-            </Box>
-          )}
-
-          {addSuccess && (
-            <Typography color="success.main" sx={{ mb: 2 }}>
-              {addSuccess}
-            </Typography>
-          )}
-
-          {addError && (
-            <Typography color="error" sx={{ mb: 2 }}>
-              {addError}
-            </Typography>
-          )}
-
-          {!gardensLoading && gardens.length > 0 && !addSuccess && (
-            <List>
-              {gardens.map((garden) => (
-                <ListItemButton
-                  key={garden.id}
-                  onClick={() => toggleGarden(garden.id)}
-                >
-                  <Checkbox
-                    checked={selectedGardenIds.has(garden.id)}
-                    edge="start"
-                    tabIndex={-1}
-                    disableRipple
-                  />
-                  <ListItemText
-                    primary={garden.name}
-                    secondary={t('gardens.plantsCount', {
-                      count: garden.gardenPlants.length,
-                    })}
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>
-            {t('gardens.cancel')}
-          </Button>
-          <Button
-            variant="contained"
-            disabled={selectedGardenIds.size === 0 || isAdding}
-            onClick={handleAddToGarden}
-          >
-            {selectedGardenIds.size > 0
-              ? t('library.addToCount', { count: selectedGardenIds.size })
-              : t('library.add')}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Photo lightbox */}
       <PhotoLightbox

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Entities;
+using SmartCrops.Core.Enums;
 using SmartCrops.Infrastructure.Data;
 
 namespace SmartCrops.Api.Controllers;
@@ -19,8 +20,6 @@ public record UpdateGardenRequest(
     [Required, MaxLength(100)] string Name,
     [MaxLength(500)] string? Description
 );
-
-public record AddPlantToGardenRequest([MaxLength(500)] string? Notes);
 
 public record GardenLayoutResponse(
     int? Width,
@@ -60,22 +59,53 @@ public record SavePlacementRequest(
 [Authorize]
 public class GardensController(SmartCropsDbContext context) : ControllerBase
 {
+    /// <summary>
+    /// Garden cards list (SMA-6 / SMA-155): each garden ships its DISTINCT placed
+    /// plants (from Placements — the sole plant-membership truth post SMA-6
+    /// Option A) as the same <see cref="PlantListItemResponse"/> items the Library
+    /// endpoints serve, localized per <paramref name="lang"/>. The deprecated
+    /// GardenPlants link table is deliberately not read here.
+    /// </summary>
     [HttpGet]
-    public async Task<IActionResult> GetGardens()
+    public async Task<IActionResult> GetGardens([FromQuery] string lang = "en")
     {
         var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
+        var language = LanguageCodes.Normalize(lang);
+
         var gardens = await context
             .Gardens.Where(g => g.UserId == userId)
-            .Include(g => g.GardenPlants)
-            .ThenInclude(gp => gp.Plant)
+            .Include(g => g.Placements)
+            .ThenInclude(p => p.Plant)
+            .ThenInclude(p => p.Translations.Where(t =>
+                t.Language == language || t.Language == "en"))
+            .Include(g => g.Placements)
+            .ThenInclude(p => p.Plant)
+            .ThenInclude(p => p.PlantType)
+            .Include(g => g.Placements)
+            .ThenInclude(p => p.Plant)
+            .ThenInclude(p => p.Images.Where(i =>
+                i.Source == PlantSourceType.Trefle || i.Source == PlantSourceType.PlantNet))
             .OrderByDescending(g => g.CreatedAt)
+            .AsSplitQuery()
             .AsNoTracking()
             .ToListAsync();
 
-        return Ok(gardens);
+        var items = gardens.Select(g => new GardenListItemResponse(
+            g.Id,
+            g.Name,
+            g.Description,
+            g.CreatedAt,
+            g.UpdatedAt,
+            g.Placements
+                .OrderBy(p => p.PlacedAt)
+                .DistinctBy(p => p.PlantId)
+                .Select(p => PlantListItemMapper.ToListItem(p.Plant, language))
+                .ToList()));
+
+        return Ok(items);
     }
 
     [HttpGet("{id:guid}")]
@@ -168,57 +198,12 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         return NoContent();
     }
 
-    [HttpPost("{id:guid}/plants/{plantId:guid}")]
-    public async Task<IActionResult> AddPlantToGarden(
-        Guid id,
-        Guid plantId,
-        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)]
-            AddPlantToGardenRequest? request
-    )
-    {
-        var userId = GetCurrentUserId();
-        if (string.IsNullOrEmpty(userId))
-            return Unauthorized();
-
-        var garden = await context.Gardens.FirstOrDefaultAsync(g =>
-            g.Id == id && g.UserId == userId
-        );
-
-        if (garden == null)
-            return NotFound();
-
-        var plantExists = await context.Plants.AnyAsync(p => p.Id == plantId);
-        if (!plantExists)
-            return NotFound("Plant not found");
-
-        var alreadyAdded = await context.GardenPlants.AnyAsync(gp =>
-            gp.GardenId == id && gp.PlantId == plantId
-        );
-        if (alreadyAdded)
-            return Conflict("Plant already in garden");
-
-        var gardenPlant = new GardenPlant
-        {
-            GardenId = id,
-            PlantId = plantId,
-            AddedAt = DateTime.UtcNow,
-            Notes = request?.Notes,
-        };
-
-        context.GardenPlants.Add(gardenPlant);
-        try
-        {
-            await context.SaveChangesAsync();
-        }
-        catch (DbUpdateException ex)
-            when (ex.InnerException is Npgsql.NpgsqlException { SqlState: "23505" })
-        {
-            return Conflict("Plant already in garden");
-        }
-
-        return CreatedAtAction(nameof(GetGarden), new { id }, gardenPlant);
-    }
-
+    // POST {id}/plants/{plantId} (AddPlantToGarden) was REMOVED here (SMA-6
+    // Option A): placements are the sole plant-membership truth — plants enter a
+    // garden by being placed in the planner (PUT /layout). The GardenPlants rows
+    // remain readable/editable below (PATCH notes, DELETE) until the dedicated
+    // link-table DROP ticket. A POST to the shared route now yields
+    // 405 Method Not Allowed (PATCH/DELETE still bind the template).
     [HttpPatch("{id:guid}/plants/{plantId:guid}")]
     public async Task<IActionResult> UpdatePlantNotes(
         Guid id,
@@ -371,4 +356,5 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     private string? GetCurrentUserId() =>
         User.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
 }

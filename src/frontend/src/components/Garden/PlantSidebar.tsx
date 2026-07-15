@@ -15,7 +15,7 @@ import Typography from '@mui/material/Typography';
 import { useTranslation } from 'react-i18next';
 import { STICKY_OFFSET } from '../../constants/layout';
 import type { Plant } from '../../types/Plant';
-import { getTranslation } from '../../utils/getTranslation';
+import { getPlantDisplayName } from '../../utils/getPlantDisplayName';
 import { getPlantColor } from '../../utils/plantColor';
 
 interface Props {
@@ -35,10 +35,12 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabValue>('plants');
 
+  // Search matches the DISPLAYED name (shared Library resolver, SMA-194) OR the
+  // scientific name — typing "tomate"/"tomato" must hit, not just "solanum".
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
     return plants.filter((p) => {
-      const name = getTranslation(p, language)?.commonName || '';
+      const name = getPlantDisplayName(p, language);
       return name.toLowerCase().includes(q) || p.scientificName.toLowerCase().includes(q);
     });
   }, [plants, searchQuery, language]);
@@ -93,8 +95,10 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
             ) : (
               <List dense disablePadding>
                 {filtered.map((plant) => {
-                  const tr = getTranslation(plant, language);
-                  const name = tr?.commonName || plant.scientificName;
+                  // SMA-194: the picker's primary label is the SAME localized
+                  // common name the Library shows (scientific fallback inside
+                  // the resolver); the secondary stays the scientific name.
+                  const name = getPlantDisplayName(plant, language);
                   const color = getPlantColor(plant.id);
                   const selected = plant.id === selectedPlantId;
                   return (
