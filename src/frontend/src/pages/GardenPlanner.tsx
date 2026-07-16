@@ -22,15 +22,18 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import GardenGrid from '../components/Garden/GardenGrid';
 import PlantSidebar from '../components/Garden/PlantSidebar';
-import SetupLayoutDialog from '../components/Garden/SetupLayoutDialog';
+import GardenConfigDialog, {
+  type DialogDimensions,
+} from '../components/Garden/GardenConfigDialog';
 import { STICKY_OFFSET } from '../constants/layout';
 import { useGardenLayout } from '../hooks/useGardenLayout';
 import { useLanguage } from '../hooks/useLanguage';
 import { useScrollHold } from '../hooks/useScrollHold';
 import { useSelection } from '../hooks/useSelection';
+import { updateGarden } from '../services/gardenApi';
 import { saveLayout } from '../services/gardenLayoutApi';
 import { fetchPlants } from '../services/plantApi';
-import type { Garden } from '../types/Garden';
+import type { Garden, GardenConfig } from '../types/Garden';
 import type { Plant } from '../types/Plant';
 import { serializeCellsJson } from '../types/GardenLayout';
 import { getPlantDisplayName } from '../utils/getPlantDisplayName';
@@ -120,7 +123,7 @@ export default function GardenPlanner() {
   const [garden, setGarden] = useState<Garden | null>(null);
   const [saving, setSaving] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
-  const [showResize, setShowResize] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
   const [showHelp, setShowHelp] = useState(true);
   const [message, setMessage] = useState<{
     type: 'success' | 'error' | 'info';
@@ -267,26 +270,70 @@ export default function GardenPlanner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [removedSeq]);
 
-  const handleSetupConfirm = useCallback(
-    (cols: number, rows: number, cs: string) => {
-      dispatch({ type: 'SETUP_CONFIRMED', cols, rows, cellSize: cs });
-      setShowSetup(false);
-    },
-    []
-  );
+  // Config is GARDEN-resource state (not reducer grid geometry, #170): the
+  // dialog hydrates from the GardenResponse the planner already loaded, and
+  // persists back through updateGarden — separate from the layout Save flow.
+  const configFromGarden: GardenConfig = {
+    orientation: garden?.orientation ?? null,
+    gardenType: garden?.gardenType ?? null,
+    lightSchedule: garden?.lightSchedule ?? null,
+    hemisphere: garden?.hemisphere ?? null,
+    latitudeBand: garden?.latitudeBand ?? null,
+  };
 
-  const handleResize = useCallback(
-    (newWidth: number, newHeight: number, newCellSize: string) => {
-      setShowResize(false);
+  const persistConfig = async (config: GardenConfig) => {
+    if (!id || !garden) return;
+    try {
+      const updated = await updateGarden(
+        id,
+        garden.name,
+        garden.description ?? undefined,
+        config
+      );
+      setGarden(updated);
+    } catch {
+      setMessage({ type: 'error', text: t('planner.toolbar.saveError') });
+    }
+  };
+
+  // First setup (no layout yet): SETUP_CONFIRMED establishes a fresh layout
+  // (F5/F8), and the config persists immediately on the garden resource.
+  const handleSetupConfigConfirm = (
+    dims: DialogDimensions,
+    config: GardenConfig
+  ) => {
+    setShowSetup(false);
+    dispatch({
+      type: 'SETUP_CONFIRMED',
+      cols: dims.cols,
+      rows: dims.rows,
+      cellSize: dims.cellSize,
+    });
+    void persistConfig(config);
+  };
+
+  // "Réglages" on an existing garden: a dimension change goes through RESIZED
+  // (cells preserved, out-of-bounds evicted — never a wipe); config persists
+  // via updateGarden. Dimensions still commit on the next layout Save.
+  const handleSettingsConfigConfirm = (
+    dims: DialogDimensions,
+    config: GardenConfig
+  ) => {
+    setShowConfig(false);
+    if (
+      dims.cols !== layoutWidth ||
+      dims.rows !== layoutHeight ||
+      dims.cellSize !== cellSize
+    ) {
       dispatch({
         type: 'RESIZED',
-        width: newWidth,
-        height: newHeight,
-        cellSize: newCellSize,
+        width: dims.cols,
+        height: dims.rows,
+        cellSize: dims.cellSize,
       });
-    },
-    []
-  );
+    }
+    void persistConfig(config);
+  };
 
   // Drag-to-paint handlers (guards live in the reducer)
   const handleCellDragStart = useCallback(
@@ -312,7 +359,7 @@ export default function GardenPlanner() {
   );
   const handleZoomIn = useCallback(() => dispatch({ type: 'ZOOM_IN' }), []);
   const handleZoomOut = useCallback(() => dispatch({ type: 'ZOOM_OUT' }), []);
-  const handleOpenResize = useCallback(() => setShowResize(true), []);
+  const handleOpenSettings = useCallback(() => setShowConfig(true), []);
   const handleShapeEditToggle = useCallback(
     (enabled: boolean) => dispatch({ type: 'SET_SHAPE_EDIT_MODE', enabled }),
     []
@@ -628,22 +675,28 @@ export default function GardenPlanner() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Setup dialog for new layouts */}
-      <SetupLayoutDialog
+      {/* Config dialog — first setup (a garden with no layout yet) */}
+      <GardenConfigDialog
         open={showSetup}
-        onConfirm={handleSetupConfirm}
-        onCancel={() => navigate('/gardens')}
-      />
-
-      {/* Resize dialog */}
-      <SetupLayoutDialog
-        open={showResize}
-        isEdit
+        isFirstSetup
         initialWidth={layoutWidth}
         initialHeight={layoutHeight}
         initialCellSize={cellSize}
-        onConfirm={handleResize}
-        onCancel={() => setShowResize(false)}
+        initialConfig={configFromGarden}
+        onConfirm={handleSetupConfigConfirm}
+        onCancel={() => navigate('/gardens')}
+      />
+
+      {/* Config dialog — "Réglages" on an existing garden */}
+      <GardenConfigDialog
+        open={showConfig}
+        isFirstSetup={false}
+        initialWidth={layoutWidth}
+        initialHeight={layoutHeight}
+        initialCellSize={cellSize}
+        initialConfig={configFromGarden}
+        onConfirm={handleSettingsConfigConfirm}
+        onCancel={() => setShowConfig(false)}
       />
 
       {/* Toolbar */}
@@ -667,7 +720,7 @@ export default function GardenPlanner() {
         onDeselectAll={handleDeselectAll}
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
-        onOpenResize={handleOpenResize}
+        onOpenSettings={handleOpenSettings}
         onCancel={handleCancel}
         onSave={handleSave}
       />

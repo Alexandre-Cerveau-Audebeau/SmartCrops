@@ -25,7 +25,7 @@ interface GridControlsProps {
   onDeselectAll: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
-  onOpenResize: () => void;
+  onOpenSettings: () => void;
   onCancel: () => void;
   onSave: () => void;
 }
@@ -41,7 +41,7 @@ export const GridControls = memo(function GridControls({
   onDeselectAll,
   onZoomIn,
   onZoomOut,
-  onOpenResize,
+  onOpenSettings,
   onCancel,
   onSave,
 }: GridControlsProps) {
@@ -109,9 +109,9 @@ export const GridControls = memo(function GridControls({
           variant="outlined"
           size="small"
           startIcon={<SettingsIcon />}
-          onClick={onOpenResize}
+          onClick={onOpenSettings}
         >
-          {t('planner.toolbar.resize')}
+          {t('planner.toolbar.settings')}
         </Button>
       )}
 

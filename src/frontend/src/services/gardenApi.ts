@@ -1,4 +1,4 @@
-import type { Garden, GardenListItem } from '../types/Garden';
+import type { Garden, GardenConfig, GardenListItem } from '../types/Garden';
 import { fetchJson } from './fetchJson';
 
 const API_BASE = '/api';
@@ -37,16 +37,21 @@ export async function createGarden(name: string, description?: string): Promise<
   });
 }
 
+// `config` is OPTIONAL (SMA-17): omitted -> the server PRESERVES the stored
+// config (a plain rename from MyGardens never sends it); present -> the backend
+// validates it and overwrites the five fields as a block. Config lives on the
+// GARDEN resource, so the config dialog persists here (not via the layout PUT).
 export async function updateGarden(
   id: string,
   name: string,
   description?: string,
+  config?: GardenConfig,
 ): Promise<Garden> {
   return fetchJson<Garden>(`${API_BASE}/gardens/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ name, description }),
+    body: JSON.stringify({ name, description, config }),
   });
 }
 

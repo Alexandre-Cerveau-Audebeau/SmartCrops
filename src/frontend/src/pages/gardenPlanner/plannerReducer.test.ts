@@ -82,12 +82,11 @@ describe('plannerReducer', () => {
     expect(s.lastSaved).toBeNull();
   });
 
-  it('SETUP_CONFIRMED with pre-existing placements pins the current behavior: placements and snapshot carry over untouched', () => {
-    // Current reducer behavior (spread): a new draft grid replaces the layout
-    // but state.placements and state.lastSaved are NOT reset — placements
-    // survive even if they no longer fit the new grid. Unreachable through
-    // today's UI (setup only opens on empty layouts / after DISCARD_DRAFT,
-    // which clears placements) — pinned as-is, not endorsed.
+  it('SETUP_CONFIRMED establishes a FRESH layout: placements and snapshot RESET (F5/F8, SMA-17)', () => {
+    // F5/F8 flip (SMA-17): a first setup is a fresh layout — placements: [] and
+    // lastSaved: null, so the reducer contract no longer depends on setup being
+    // reachable only from an empty layout. Editing an existing garden goes
+    // through RESIZED (cells preserved, out-of-bounds filtered), never here.
     const s = plannerReducer(hydrated(), {
       type: 'SETUP_CONFIRMED',
       cols: 2,
@@ -96,15 +95,12 @@ describe('plannerReducer', () => {
     });
     expect(s.grid).toHaveLength(2);
     expect(s.grid![0]).toHaveLength(2);
-    // The (1,1) placement from the hydrated state is still there, untouched…
-    expect(s.placements).toHaveLength(1);
-    expect(s.placements[0].id).toBe('srv-1');
-    expect(s.placements[0].startRow).toBe(1);
-    // …and so is the pre-setup snapshot; only the layout fields moved.
-    expect(s.lastSaved).not.toBeNull();
-    expect(s.lastSaved!.layoutWidth).toBe(3);
+    // The hydrated placement and the pre-setup snapshot are both cleared.
+    expect(s.placements).toHaveLength(0);
+    expect(s.lastSaved).toBeNull();
     expect(s.isDirty).toBe(true);
-    expect(s.removedSeq).toBe(0); // no removal event — nothing was dropped
+    // Reset is not a "removal event" (no eviction toast) — that is RESIZED's job.
+    expect(s.removedSeq).toBe(0);
   });
 
   it('RESIZED keeps surviving cells, pads with active ones, drops out-of-bounds placements and reports them', () => {
