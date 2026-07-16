@@ -4,16 +4,17 @@ import '../../i18n/i18n';
 import type { Moment, Season } from '../../utils/exposure';
 import { GridControls } from './GridControls';
 
-// F3 lock (develop-store review on ef076f0): while a save is in flight, the
-// Cancel action must be unavailable — a local restore/discard would report
-// "changes discarded" while saveLayout still persists the submitted snapshot.
+// R2 (SMA-17 5.3-D): GridControls is now the TOOLBAR CARD only — the garden
+// title and the Réglages/Annuler/Enregistrer actions moved to the page
+// header, so the F3 save/cancel gating pin lives in GardenPlanner.test.tsx.
 
 function renderControls(
   overrides: {
-    saving?: boolean;
+    canUndo?: boolean;
     exposureVisible?: boolean;
     exposureMoment?: Moment;
     exposureSeason?: Season;
+    onUndo?: () => void;
     onToggleExposure?: () => void;
     onSetExposureMoment?: (moment: Moment) => void;
     onSetExposureSeason?: (season: Season) => void;
@@ -21,22 +22,18 @@ function renderControls(
 ) {
   return render(
     <GridControls
-      gardenName="Test garden"
       hasGrid
       shapeEditMode={false}
       zoom={1}
-      isDirty
-      saving={overrides.saving ?? false}
+      canUndo={overrides.canUndo ?? false}
       exposureVisible={overrides.exposureVisible ?? false}
       exposureMoment={overrides.exposureMoment ?? 'noon'}
       exposureSeason={overrides.exposureSeason ?? 'summer'}
       onSelectAll={vi.fn()}
       onDeselectAll={vi.fn()}
+      onUndo={overrides.onUndo ?? vi.fn()}
       onZoomIn={vi.fn()}
       onZoomOut={vi.fn()}
-      onOpenSettings={vi.fn()}
-      onCancel={vi.fn()}
-      onSave={vi.fn()}
       onToggleExposure={overrides.onToggleExposure ?? vi.fn()}
       onSetExposureMoment={overrides.onSetExposureMoment ?? vi.fn()}
       onSetExposureSeason={overrides.onSetExposureSeason ?? vi.fn()}
@@ -44,16 +41,23 @@ function renderControls(
   );
 }
 
-describe('GridControls save/cancel gating (F3)', () => {
-  it('enables Cancel on a dirty layout when no save is in flight', () => {
-    renderControls();
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
+// SMA-17 5.3-D R2 — the undo button: disabled state comes from the history
+// stack (canUndo), the click dispatches UNDO.
+describe('GridControls undo (SMA-17 5.3-D R2)', () => {
+  it('is disabled while the history is empty', () => {
+    renderControls({ canUndo: false });
+    expect(
+      screen.getByRole('button', { name: 'Undo last action' })
+    ).toBeDisabled();
   });
 
-  it('disables BOTH Cancel and Save while saving', () => {
-    renderControls({ saving: true });
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
+  it('is enabled with history and fires onUndo', () => {
+    const onUndo = vi.fn();
+    renderControls({ canUndo: true, onUndo });
+    const undo = screen.getByRole('button', { name: 'Undo last action' });
+    expect(undo).toBeEnabled();
+    fireEvent.click(undo);
+    expect(onUndo).toHaveBeenCalledTimes(1);
   });
 });
 

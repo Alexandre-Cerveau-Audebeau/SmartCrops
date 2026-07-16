@@ -59,6 +59,28 @@ function getCellHoverBg(cell: CellData, tk: PlannerTokens): string {
   return tk.cellOnBd;
 }
 
+/** Spreadsheet-style column label (A…Z, AA…) for the §4 axes. */
+function columnLabel(index: number): string {
+  let label = '';
+  let i = index;
+  do {
+    label = String.fromCharCode(65 + (i % 26)) + label;
+    i = Math.floor(i / 26) - 1;
+  } while (i >= 0);
+  return label;
+}
+
+// §4 axes: fs 10.5 (8.5 mobile) · w700 · --muted. The rail width is layout
+// plumbing (not a doc token): 18 px fits two digits at fs 10.5.
+const AXIS_RAIL_PX = 18;
+const axisLabelSx = {
+  fontSize: { xs: 8.5, sm: 10.5 },
+  fontWeight: 700,
+} as const;
+// §4: inter-cell gap 3 px desktop / 2 px mobile — shared by the cell grid and
+// both axis rails so the labels track the cell tracks at any zoom.
+const CELL_GAP = { xs: '2px', sm: '3px' } as const;
+
 export default function GardenGrid({ grid, shapeEditMode, placements, exposure, onCellClick, onCellDragStart, onCellDragEnter, onCellDragEnd, cellSizePx = 44 }: Props) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -91,6 +113,56 @@ export default function GardenGrid({ grid, shapeEditMode, placements, exposure, 
   }, [placements]);
 
   return (
+    <Box sx={{ display: 'inline-flex', flexDirection: 'column' }}>
+      {/* Column letters (§4 axes) — presentational: the grid itself already
+          carries aria-rowcount/colcount. ml = rail width + cell gap so the
+          letters align to the cell tracks. */}
+      <Box
+        aria-hidden
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${width}, ${cellSizePx}px)`,
+          gap: CELL_GAP,
+          ml: { xs: `${AXIS_RAIL_PX + 2}px`, sm: `${AXIS_RAIL_PX + 3}px` },
+          mb: '2px',
+          color: tk.muted,
+        }}
+      >
+        {Array.from({ length: width }, (_, c) => (
+          <Box key={c} sx={{ ...axisLabelSx, textAlign: 'center' }}>
+            {columnLabel(c)}
+          </Box>
+        ))}
+      </Box>
+
+      <Box sx={{ display: 'inline-flex', gap: CELL_GAP }}>
+        {/* Row numbers (§4 axes) — same presentational treatment. */}
+        <Box
+          aria-hidden
+          sx={{
+            display: 'grid',
+            gridTemplateRows: `repeat(${height}, ${cellSizePx}px)`,
+            gap: CELL_GAP,
+            width: AXIS_RAIL_PX,
+            color: tk.muted,
+          }}
+        >
+          {Array.from({ length: height }, (_, r) => (
+            <Box
+              key={r}
+              sx={{
+                ...axisLabelSx,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {r + 1}
+            </Box>
+          ))}
+        </Box>
+
+    {/* §4: no hardcoded outer frame — the grid CARD provides it (R2). */}
     <Box
       role="grid"
       aria-label={t('planner.grid.label')}
@@ -101,8 +173,7 @@ export default function GardenGrid({ grid, shapeEditMode, placements, exposure, 
       sx={{
         display: 'inline-grid',
         gridTemplateColumns: `repeat(${width}, ${cellSizePx}px)`,
-        border: '1px solid rgba(0,0,0,0.15)',
-        borderRadius: 1,
+        gap: CELL_GAP,
         ...(shapeEditMode && { userSelect: 'none', touchAction: 'none' }),
       }}
     >
@@ -124,10 +195,14 @@ export default function GardenGrid({ grid, shapeEditMode, placements, exposure, 
             : (placement ? plantColor! : (cell.active && !tint ? tk.cellOnBd : baseBg));
           const placementOnInactive = !cell.active && !!placement;
           const opacity = placementOnInactive ? 0.4 : (cell.active ? 1 : 0.5);
+          // Placement borders mapped to tokens (R2): the anomaly marker
+          // (placement on an inactive cell) uses the strong `muted` dashed;
+          // a normal placement gets the subtle active-cell border. No hex
+          // invention — both are existing mode-aware tokens.
           const border = placementOnInactive
-            ? '1px dashed rgba(0,0,0,0.5)'
+            ? `1px dashed ${tk.muted}`
             : placement
-              ? '1px solid rgba(0,0,0,0.2)'
+              ? `1px solid ${tk.cellOnBd}`
               : `1px solid ${
                   tint
                     ? tk.expo[tint].border
@@ -219,6 +294,8 @@ export default function GardenGrid({ grid, shapeEditMode, placements, exposure, 
           );
         }),
       )}
+    </Box>
+      </Box>
     </Box>
   );
 }

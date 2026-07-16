@@ -585,4 +585,61 @@ describe('GardenPlanner exposure layer (SMA-17 5.3-D)', () => {
       screen.getByRole('img', { name: 'Compass — the garden faces E' })
     ).toBeInTheDocument();
   });
+
+  it('undo reverts the last content edit (override → back to computed)', async () => {
+    const grid = await renderReady();
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    const cells = within(grid).getAllByRole('gridcell');
+    const undo = screen.getByRole('button', { name: 'Undo last action' });
+    expect(undo).toBeDisabled(); // no content edit yet
+
+    fireEvent.click(cells[1]!);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Shade' }));
+    expect(cells[1]).toHaveAttribute('data-exposure', 'shade');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo last action' }));
+    expect(cells[1]).toHaveAttribute('data-exposure', 'full');
+  });
+});
+
+// F3 lock (develop-store review on ef076f0), RELOCATED with the markup in
+// 5.3-D R2: Save/Cancel now live in the PAGE HEADER — while a save is in
+// flight, Cancel must be unavailable (a local restore would report "changes
+// discarded" while saveLayout still persists the submitted snapshot).
+describe('GardenPlanner header save/cancel gating (F3, relocated in R2)', () => {
+  it('disables every Cancel and Save while a save is in flight', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    let resolveSave!: () => void;
+    vi.mocked(saveLayout).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        })
+    );
+
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    await waitFor(() =>
+      expect(within(grid).getByText('B')).toBeInTheDocument()
+    );
+
+    // Dirty the draft (override via the exposure popover), then save.
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    fireEvent.click(within(grid).getAllByRole('gridcell')[1]!);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Shade' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
+
+    // In flight: the header (and alert) Cancel/Save are all disabled.
+    for (const btn of screen.getAllByRole('button', { name: 'Saving...' })) {
+      expect(btn).toBeDisabled();
+    }
+    for (const btn of screen.getAllByRole('button', { name: 'Cancel' })) {
+      expect(btn).toBeDisabled();
+    }
+
+    resolveSave();
+    await waitFor(() => expect(saveLayout).toHaveBeenCalledTimes(1));
+  });
 });

@@ -665,3 +665,147 @@ describe('plannerReducer exposure layer (SMA-17 5.3-D)', () => {
     ).toBe(initialPlannerState);
   });
 });
+
+// SMA-17 5.3-D R2 — undo: draft-content history (cells + placements), pushed
+// by content-mutating actions only, capped, popped by UNDO.
+describe('plannerReducer undo history (SMA-17 5.3-D R2)', () => {
+  it('starts empty and is cleared by HYDRATE (new garden context)', () => {
+    expect(initialPlannerState.past).toHaveLength(0);
+    let s = plannerReducer(hydrated(), {
+      type: 'ADD_PLACEMENT',
+      id: 'new-1',
+      plantId: 'p9',
+      row: 0,
+      col: 0,
+    });
+    expect(s.past).toHaveLength(1);
+    s = plannerReducer(s, {
+      type: 'HYDRATE_FROM_LAYOUT',
+      width: 2,
+      height: 2,
+      cellSize: '50cm',
+      cellsJson: null,
+      placements: [],
+    });
+    expect(s.past).toHaveLength(0);
+  });
+
+  it('content-mutating actions push; view/save actions do not', () => {
+    let s = plannerReducer(hydrated(), { type: 'SET_SHAPE_EDIT_MODE', enabled: true });
+    expect(s.past).toHaveLength(0); // mode flip = view state
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 });
+    expect(s.past).toHaveLength(1);
+    s = plannerReducer(s, { type: 'PAINT_ENTER', row: 0, col: 1 });
+    expect(s.past).toHaveLength(2);
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    expect(s.past).toHaveLength(2); // drag end mutates nothing
+    s = plannerReducer(s, { type: 'ZOOM_IN' });
+    s = plannerReducer(s, { type: 'TOGGLE_EXPOSURE' });
+    s = plannerReducer(s, { type: 'SET_EXPOSURE_MOMENT', moment: 'evening' });
+    expect(s.past).toHaveLength(2); // view state never pushes
+    s = plannerReducer(s, {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE',
+      row: 1,
+      col: 1,
+      value: 'shade',
+    });
+    expect(s.past).toHaveLength(3);
+    s = plannerReducer(s, {
+      type: 'RESIZED',
+      width: 4,
+      height: 3,
+      cellSize: '50cm',
+    });
+    expect(s.past).toHaveLength(4);
+    s = plannerReducer(s, {
+      type: 'MARK_SAVED',
+      submitted: {
+        grid: s.grid,
+        layoutWidth: s.layoutWidth,
+        layoutHeight: s.layoutHeight,
+        cellSize: s.cellSize,
+        placements: s.placements,
+      },
+    });
+    expect(s.past).toHaveLength(4); // save never pushes
+  });
+
+  it('UNDO pops: restores cells, placements and derived dimensions, marks dirty', () => {
+    const base = hydrated(); // 3x3, one placement at (1,1)
+    let s = plannerReducer(base, {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE',
+      row: 0,
+      col: 0,
+      value: 'full',
+    });
+    s = plannerReducer(s, {
+      type: 'RESIZED',
+      width: 5,
+      height: 4,
+      cellSize: '50cm',
+    });
+    expect(s.layoutWidth).toBe(5);
+    // Undo the resize → back to 3x3 WITH the override still present.
+    s = plannerReducer(s, { type: 'UNDO' });
+    expect(s.layoutWidth).toBe(3);
+    expect(s.layoutHeight).toBe(3);
+    expect(s.grid![0][0].exposureOverride).toBe('full');
+    expect(s.isDirty).toBe(true);
+    // Undo the override → pristine hydrated content, placement intact.
+    s = plannerReducer(s, { type: 'UNDO' });
+    expect(s.grid![0][0]).not.toHaveProperty('exposureOverride');
+    expect(s.placements).toHaveLength(1);
+    expect(s.past).toHaveLength(0);
+    // Empty stack → guarded no-op (the button's disabled source).
+    expect(plannerReducer(s, { type: 'UNDO' })).toBe(s);
+  });
+
+  it('UNDO restores placements dropped by a destructive edit', () => {
+    const base = hydrated();
+    let s = plannerReducer(base, { type: 'SET_ALL_CELLS', active: false });
+    expect(s.placements).toHaveLength(0);
+    s = plannerReducer(s, { type: 'UNDO' });
+    expect(s.placements).toHaveLength(1);
+    expect(s.grid![1][1].active).toBe(true);
+  });
+
+  it('caps the history at 50 snapshots (oldest falls off)', () => {
+    let s = hydrated();
+    for (let i = 0; i < 55; i++) {
+      s = plannerReducer(s, {
+        type: 'SET_CELL_EXPOSURE_OVERRIDE',
+        row: 0,
+        col: 0,
+        value: i % 2 === 0 ? 'shade' : 'full',
+      });
+    }
+    expect(s.past).toHaveLength(50);
+  });
+
+  it('SETUP_CONFIRMED pushes (undoable content change)', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SETUP_CONFIRMED',
+      cols: 4,
+      rows: 4,
+      cellSize: '25cm',
+    });
+    expect(s.past).toHaveLength(1);
+    s = plannerReducer(s, { type: 'UNDO' });
+    expect(s.layoutWidth).toBe(3); // back to the pre-setup content
+  });
+
+  it('RESTORE_LAST_SAVED clears the history (draft-lifecycle reset)', () => {
+    // From a hydrated state (lastSaved exists), a content edit pushes, then
+    // Cancel's wholesale restore must reset the history — the abandoned
+    // draft's steps may not resurface through UNDO.
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE',
+      row: 0,
+      col: 0,
+      value: 'shade',
+    });
+    expect(s.past).toHaveLength(1);
+    s = plannerReducer(s, { type: 'RESTORE_LAST_SAVED' });
+    expect(s.past).toHaveLength(0);
+  });
+});

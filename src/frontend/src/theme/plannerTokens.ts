@@ -71,24 +71,29 @@ export interface PlannerTokens {
   hatch: string;
 }
 
+// Day-contrast deviation (product decision, 16/07/2026): the mockup's day
+// palette is judged too low-contrast — muted/border day values are DARKENED
+// vs the mockup, in sync with the tokens doc §1 annotation (same commit).
+// The mockup stays the STRUCTURE reference; these values win for day COLORS.
+// Night (§2) untouched.
 const LIGHT: PlannerTokens = {
   card: '#FFFFFF',
-  cardBd: '#F0F4EE',
-  divider: '#EDF2EC',
+  cardBd: '#E0E7DF', // contrast deviation 16/07 (mockup #F0F4EE)
+  divider: '#DFE6DE', // contrast deviation 16/07 (mockup #EDF2EC)
   shadow: '0 2px 10px rgba(27,94,58,0.07)',
   scrim: 'rgba(9,22,16,0.52)',
   tTitle: '#22302A',
   tMeta: '#3C4A42',
-  muted: '#7A8781',
+  muted: '#66716B', // contrast deviation 16/07 (mockup #7A8781)
   prim: '#2E8B57',
   expoIcc: '#E8890C',
-  inputBd: '#D8E0D8',
+  inputBd: '#C8D2C8', // contrast deviation 16/07 (mockup #D8E0D8)
   searchBg: '#FBFDFA',
   segBg: '#EFF3EE',
   segOnBg: '#FFFFFF',
   segOnTx: '#1B5E3A',
   segShadow: '0 1px 4px rgba(0,0,0,0.18)',
-  obtnBd: '#D8E0D8',
+  obtnBd: '#C8D2C8', // contrast deviation 16/07 (mockup #D8E0D8)
   obtnTx: '#3C4A42',
   cntChipBg: '#E4F3E9',
   zoneABg: '#EEF7F0',
@@ -98,12 +103,12 @@ const LIGHT: PlannerTokens = {
   compNeedle: '#D64545',
   compSTail: '#D3DAD2',
   compTx: '#22302A',
-  compMut: '#7A8781',
+  compMut: '#66716B', // = --muted (SMA-17 decision) → follows the 16/07 deviation
   track: '#E2EADF',
   cellOn: '#F1F7EE',
-  cellOnBd: '#DEE9DA',
+  cellOnBd: '#CFDCCA', // contrast deviation 16/07 (mockup #DEE9DA)
   cellOff: '#ECEEEA',
-  cellOffBd: '#E3E6E1',
+  cellOffBd: '#D5DAD3', // contrast deviation 16/07 (mockup #E3E6E1)
   expo: {
     full: { fill: '#FFE7A3', border: '#EFD27E' },
     morning: { fill: '#EDF3B4', border: '#D9E38C' },

@@ -27,6 +27,18 @@ export interface LayoutSnapshot {
   placements: PlannerPlacement[];
 }
 
+/**
+ * One undo step (SMA-17 5.3-D R2): the DRAFT CONTENT only — cells +
+ * placements, per the product spec. Dimensions are derived from the restored
+ * grid at pop time; cellSize is deliberately NOT part of the snapshot (a
+ * documented limitation: undoing a RESIZED restores the cells but keeps the
+ * new cellSize).
+ */
+interface DraftSnapshot {
+  grid: CellData[][] | null;
+  placements: PlannerPlacement[];
+}
+
 export interface PlannerState {
   grid: CellData[][] | null;
   layoutWidth: number;
@@ -63,12 +75,22 @@ export interface PlannerState {
   exposureVisible: boolean;
   exposureMoment: Moment;
   exposureSeason: Season;
+  /**
+   * Undo history (SMA-17 5.3-D R2): past DRAFT snapshots, pushed by every
+   * content-mutating action (paint/shape edits, placements, override,
+   * RESIZED, SETUP_CONFIRMED), capped at UNDO_CAP. View/save/lifecycle
+   * actions never push; HYDRATE (new garden context) clears.
+   */
+  past: DraftSnapshot[];
 }
 
 /** Zoom clamp bounds — single source of truth, shared with the toolbar's
  * disabled checks (GridControls). */
 export const ZOOM_MIN = 0.5;
 export const ZOOM_MAX = 2;
+
+/** Undo history cap — the oldest snapshot falls off beyond this. */
+export const UNDO_CAP = 50;
 
 export const initialPlannerState: PlannerState = {
   grid: null,
@@ -87,6 +109,7 @@ export const initialPlannerState: PlannerState = {
   exposureVisible: false,
   exposureMoment: 'noon',
   exposureSeason: 'summer',
+  past: [],
 };
 
 export type PlannerAction =
@@ -129,7 +152,8 @@ export type PlannerAction =
       row: number;
       col: number;
       value: ExposureCategory | null;
-    };
+    }
+  | { type: 'UNDO' };
 
 const copyGrid = (grid: CellData[][] | null): CellData[][] | null =>
   grid ? grid.map((row) => row.map((cell) => ({ ...cell }))) : null;
@@ -162,6 +186,20 @@ const occupiesCell = (
  * restore, draft discard and shape-edit off all reset through this. */
 const disarmedPainting = { isPainting: false, paintAction: null } as const;
 
+/**
+ * Push the CURRENT draft content onto the undo stack (deep-copied — the live
+ * grid/placements keep mutating immutably after this), dropping the oldest
+ * snapshot beyond UNDO_CAP. Called by every content-mutating case AFTER its
+ * guards, so a guarded no-op never pushes.
+ */
+const pushHistory = (state: PlannerState): DraftSnapshot[] => {
+  const past = [
+    ...state.past,
+    { grid: copyGrid(state.grid), placements: copyPlacements(state.placements) },
+  ];
+  return past.length > UNDO_CAP ? past.slice(past.length - UNDO_CAP) : past;
+};
+
 
 /** Bump the transient removal event only when placements were dropped. */
 const withRemoval = (
@@ -182,6 +220,7 @@ export function plannerReducer(
       return {
         ...state,
         ...disarmedPainting,
+        past: [], // new garden context — history cleared (5.3-D R2)
         grid,
         layoutWidth: action.width,
         layoutHeight: action.height,
@@ -209,6 +248,7 @@ export function plannerReducer(
       return {
         ...state,
         ...disarmedPainting,
+        past: pushHistory(state), // undoable content change (5.3-D R2)
         grid: parseCellsJson(null, action.cols, action.rows),
         layoutWidth: action.cols,
         layoutHeight: action.rows,
@@ -238,6 +278,7 @@ export function plannerReducer(
       );
       return {
         ...state,
+        past: pushHistory(state),
         grid: newGrid,
         layoutWidth: action.width,
         layoutHeight: action.height,
@@ -266,6 +307,7 @@ export function plannerReducer(
         : state.placements;
       return {
         ...state,
+        past: pushHistory(state),
         grid: copy,
         placements: filtered,
         isPainting: true,
@@ -300,6 +342,7 @@ export function plannerReducer(
           : state.placements;
       return {
         ...state,
+        past: pushHistory(state),
         grid: copy,
         placements: filtered,
         isDirty: true,
@@ -317,6 +360,7 @@ export function plannerReducer(
       const filtered = action.active ? state.placements : [];
       return {
         ...state,
+        past: pushHistory(state),
         grid: state.grid.map((row) =>
           row.map((cell) => ({ ...cell, active: action.active }))
         ),
@@ -334,6 +378,7 @@ export function plannerReducer(
       );
       return {
         ...state,
+        past: pushHistory(state),
         grid: [newRow, ...state.grid],
         layoutHeight: state.layoutHeight + 1,
         placements: state.placements.map((p) => ({
@@ -352,6 +397,7 @@ export function plannerReducer(
       );
       return {
         ...state,
+        past: pushHistory(state),
         grid: [...state.grid, newRow],
         layoutHeight: state.layoutHeight + 1,
         isDirty: true,
@@ -362,6 +408,7 @@ export function plannerReducer(
       if (!state.grid) return state;
       return {
         ...state,
+        past: pushHistory(state),
         grid: state.grid.map((row) => [{ active: true }, ...row]),
         layoutWidth: state.layoutWidth + 1,
         placements: state.placements.map((p) => ({
@@ -376,6 +423,7 @@ export function plannerReducer(
       if (!state.grid) return state;
       return {
         ...state,
+        past: pushHistory(state),
         grid: state.grid.map((row) => [...row, { active: true }]),
         layoutWidth: state.layoutWidth + 1,
         isDirty: true,
@@ -389,6 +437,7 @@ export function plannerReducer(
         .map((p) => ({ ...p, startRow: p.startRow - 1 }));
       return {
         ...state,
+        past: pushHistory(state),
         grid: state.grid.slice(1),
         layoutHeight: state.layoutHeight - 1,
         placements: filtered,
@@ -405,6 +454,7 @@ export function plannerReducer(
       );
       return {
         ...state,
+        past: pushHistory(state),
         grid: state.grid.slice(0, -1),
         layoutHeight: state.layoutHeight - 1,
         placements: filtered,
@@ -422,6 +472,7 @@ export function plannerReducer(
         .map((p) => ({ ...p, startCol: p.startCol - 1 }));
       return {
         ...state,
+        past: pushHistory(state),
         grid: state.grid.map((row) => row.slice(1)),
         layoutWidth: state.layoutWidth - 1,
         placements: filtered,
@@ -440,6 +491,7 @@ export function plannerReducer(
       );
       return {
         ...state,
+        past: pushHistory(state),
         grid: state.grid.map((row) => row.slice(0, -1)),
         layoutWidth: state.layoutWidth - 1,
         placements: filtered,
@@ -451,6 +503,7 @@ export function plannerReducer(
     case 'ADD_PLACEMENT':
       return {
         ...state,
+        past: pushHistory(state),
         placements: [
           ...state.placements,
           {
@@ -469,6 +522,7 @@ export function plannerReducer(
     case 'REPLACE_PLACEMENT':
       return {
         ...state,
+        past: pushHistory(state),
         placements: state.placements.map((p) =>
           p.id === action.placementId ? { ...p, plantId: action.plantId } : p
         ),
@@ -478,6 +532,7 @@ export function plannerReducer(
     case 'REMOVE_PLACEMENT':
       return {
         ...state,
+        past: pushHistory(state),
         placements: state.placements.filter((p) => p.id !== action.placementId),
         isDirty: true,
       };
@@ -523,6 +578,9 @@ export function plannerReducer(
       return {
         ...state,
         ...disarmedPainting,
+        // Draft-lifecycle reset (like HYDRATE): the abandoned draft's history
+        // must not resurface through UNDO after a wholesale restore.
+        past: [],
         grid: copyGrid(snap.grid),
         layoutWidth: snap.layoutWidth,
         layoutHeight: snap.layoutHeight,
@@ -536,6 +594,7 @@ export function plannerReducer(
       return {
         ...state,
         ...disarmedPainting,
+        past: [], // draft-lifecycle reset, same rationale as RESTORE_LAST_SAVED
         grid: null,
         placements: [],
         layoutWidth: 0,
@@ -568,7 +627,24 @@ export function plannerReducer(
       }
       // Same dirty mechanics as painting: a fresh grid reference, so
       // MARK_SAVED's referential revision check keeps working unchanged.
-      return { ...state, grid: copy, isDirty: true };
+      return { ...state, past: pushHistory(state), grid: copy, isDirty: true };
+    }
+
+    case 'UNDO': {
+      if (state.past.length === 0) return state;
+      const previous = state.past[state.past.length - 1];
+      return {
+        ...state,
+        ...disarmedPainting,
+        past: state.past.slice(0, -1),
+        grid: copyGrid(previous.grid),
+        placements: copyPlacements(previous.placements),
+        // Dimensions FOLLOW the restored cells (undoing RESIZED/add-row must
+        // restore them); a null grid means back to the pre-setup draft.
+        layoutWidth: previous.grid?.[0]?.length ?? 0,
+        layoutHeight: previous.grid?.length ?? 0,
+        isDirty: true,
+      };
     }
 
     default: {

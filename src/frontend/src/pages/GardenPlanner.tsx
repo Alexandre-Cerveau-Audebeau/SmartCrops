@@ -21,6 +21,8 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import SaveIcon from '@mui/icons-material/Save';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { CompassRose } from '../components/Garden/CompassRose';
 import GardenGrid from '../components/Garden/GardenGrid';
 import PlantSidebar from '../components/Garden/PlantSidebar';
@@ -463,6 +465,7 @@ export default function GardenPlanner() {
     (season: Season) => dispatch({ type: 'SET_EXPOSURE_SEASON', season }),
     []
   );
+  const handleUndo = useCallback(() => dispatch({ type: 'UNDO' }), []);
 
   const addRowTop = useCallback(() => dispatch({ type: 'ADD_ROW_TOP' }), []);
   const addRowBottom = useCallback(
@@ -822,27 +825,65 @@ export default function GardenPlanner() {
         {t('planner.toolbar.backToGardens')}
       </Button>
 
-      <GridControls
-        gardenName={garden?.name}
-        hasGrid={grid !== null}
-        shapeEditMode={shapeEditMode}
-        zoom={zoom}
-        isDirty={isDirty}
-        saving={saving}
-        exposureVisible={exposureVisible}
-        exposureMoment={exposureMoment}
-        exposureSeason={exposureSeason}
-        onSelectAll={handleSelectAll}
-        onDeselectAll={handleDeselectAll}
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
-        onOpenSettings={handleOpenSettings}
-        onCancel={handleCancel}
-        onSave={handleSave}
-        onToggleExposure={handleToggleExposure}
-        onSetExposureMoment={handleSetExposureMoment}
-        onSetExposureSeason={handleSetExposureSeason}
-      />
+      {/* Page header (R2): garden title + Réglages/Annuler/Enregistrer,
+          relocated out of the toolbar. Exporter arrives with chantier F. */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 2,
+          mb: 2,
+        }}
+      >
+        <Typography
+          variant="h5"
+          component="h1"
+          fontWeight={700}
+          color="primary"
+          sx={{ mr: 'auto' }}
+        >
+          {garden?.name || t('planner.title')}
+        </Typography>
+
+        {grid && (
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<SettingsIcon />}
+            onClick={handleOpenSettings}
+          >
+            {t('planner.toolbar.settings')}
+          </Button>
+        )}
+
+        {isDirty && (
+          <Button
+            variant="outlined"
+            size="small"
+            color="inherit"
+            onClick={handleCancel}
+            disabled={saving}
+          >
+            {t('planner.toolbar.cancel')}
+          </Button>
+        )}
+
+        <Button
+          variant="contained"
+          startIcon={
+            saving ? (
+              <CircularProgress size={18} color="inherit" />
+            ) : (
+              <SaveIcon />
+            )
+          }
+          disabled={!isDirty || saving}
+          onClick={handleSave}
+        >
+          {saving ? t('planner.toolbar.saving') : t('planner.toolbar.save')}
+        </Button>
+      </Box>
 
       {dimensionsText && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -937,19 +978,44 @@ export default function GardenPlanner() {
             onCatalogRetry={handleCatalogRetry}
           />
 
+          <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            {/* Toolbar card (R2, §10) — grid column only, above the grid card */}
+            <GridControls
+              hasGrid={grid !== null}
+              shapeEditMode={shapeEditMode}
+              zoom={zoom}
+              canUndo={state.past.length > 0}
+              exposureVisible={exposureVisible}
+              exposureMoment={exposureMoment}
+              exposureSeason={exposureSeason}
+              onSelectAll={handleSelectAll}
+              onDeselectAll={handleDeselectAll}
+              onUndo={handleUndo}
+              onZoomIn={handleZoomIn}
+              onZoomOut={handleZoomOut}
+              onToggleExposure={handleToggleExposure}
+              onSetExposureMoment={handleSetExposureMoment}
+              onSetExposureSeason={handleSetExposureSeason}
+            />
+
+          {/* Grid CARD (§4: radius 12, border card-bd, shadow, padding 20/12) —
+              it provides the grid's frame; the compass overflows ITS corner. */}
           <Box
             ref={gridWrapperRef}
             sx={{
               position: 'relative',
-              flex: 1,
-              minWidth: 0,
               overflow: 'visible',
               display: 'flex',
               flexDirection: 'column',
+              bgcolor: tk.card,
+              border: `1px solid ${tk.cardBd}`,
+              borderRadius: '12px',
+              boxShadow: tk.shadow,
+              p: { xs: '12px', sm: '20px' },
             }}
           >
             {/* Permanent compass (5.3-D, tokens §8): top-right corner of the
-                grid area, overflowing it (right:-6, top:-10), card chrome,
+                grid card, overflowing it (right:-6, top:-10), card chrome,
                 z-index 10, NO sun arc on the planner variant. The whole rose
                 rotates so the garden's facing sits at the top (option b). */}
             <Box
@@ -981,64 +1047,6 @@ export default function GardenPlanner() {
                       : (garden?.orientation ?? 'S'),
                 })}
               />
-            </Box>
-
-            {/* Scroll arrows — sticky to top of viewport (page scroll) so they stay visible */}
-            <Box
-              sx={{
-                position: 'sticky',
-                top: STICKY_OFFSET,
-                zIndex: 5,
-                height: 0,
-                alignSelf: 'stretch',
-              }}
-            >
-              {showLeftArrow && (
-                <IconButton
-                  size="small"
-                  aria-label={t('planner.toolbar.scrollLeft')}
-                  onClick={() => {
-                    if (!leftHold.consumeWasHeld()) handleScrollLeftStep();
-                  }}
-                  onPointerDown={leftHold.start}
-                  onPointerUp={leftHold.stop}
-                  onPointerLeave={leftHold.stop}
-                  onPointerCancel={leftHold.stop}
-                  sx={{
-                    position: 'absolute',
-                    left: 4,
-                    top: 4,
-                    bgcolor: 'background.paper',
-                    boxShadow: 2,
-                    '&:hover': { bgcolor: 'background.paper' },
-                  }}
-                >
-                  <ChevronLeftIcon />
-                </IconButton>
-              )}
-              {showRightArrow && (
-                <IconButton
-                  size="small"
-                  aria-label={t('planner.toolbar.scrollRight')}
-                  onClick={() => {
-                    if (!rightHold.consumeWasHeld()) handleScrollRightStep();
-                  }}
-                  onPointerDown={rightHold.start}
-                  onPointerUp={rightHold.stop}
-                  onPointerLeave={rightHold.stop}
-                  onPointerCancel={rightHold.stop}
-                  sx={{
-                    position: 'absolute',
-                    right: 4,
-                    top: 4,
-                    bgcolor: 'background.paper',
-                    boxShadow: 2,
-                    '&:hover': { bgcolor: 'background.paper' },
-                  }}
-                >
-                  <ChevronRightIcon />
-                </IconButton>
-              )}
             </Box>
 
             {/* TOP +/- row — OUTSIDE scroll, centered in wrapper width (= visible viewport) */}
@@ -1089,16 +1097,77 @@ export default function GardenPlanner() {
               </Box>
             )}
 
+            {/* Scroll viewport wrapper — the arrows anchor HERE (the wrapper,
+                not the scrolling content) at the viewport's vertical center,
+                so they stay visible while the user scrolls (R2). */}
+            <Box
+              sx={{
+                position: 'relative',
+                flex: '0 1 auto',
+                minWidth: 0,
+                maxWidth: '100%',
+                alignSelf: 'center',
+              }}
+            >
+              {showLeftArrow && (
+                <IconButton
+                  size="small"
+                  aria-label={t('planner.toolbar.scrollLeft')}
+                  onClick={() => {
+                    if (!leftHold.consumeWasHeld()) handleScrollLeftStep();
+                  }}
+                  onPointerDown={leftHold.start}
+                  onPointerUp={leftHold.stop}
+                  onPointerLeave={leftHold.stop}
+                  onPointerCancel={leftHold.stop}
+                  sx={{
+                    position: 'absolute',
+                    left: 4,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    zIndex: 5,
+                    bgcolor: 'background.paper',
+                    boxShadow: 2,
+                    '&:hover': { bgcolor: 'background.paper' },
+                  }}
+                >
+                  <ChevronLeftIcon />
+                </IconButton>
+              )}
+              {showRightArrow && (
+                <IconButton
+                  size="small"
+                  aria-label={t('planner.toolbar.scrollRight')}
+                  onClick={() => {
+                    if (!rightHold.consumeWasHeld()) handleScrollRightStep();
+                  }}
+                  onPointerDown={rightHold.start}
+                  onPointerUp={rightHold.stop}
+                  onPointerLeave={rightHold.stop}
+                  onPointerCancel={rightHold.stop}
+                  sx={{
+                    position: 'absolute',
+                    right: 4,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    zIndex: 5,
+                    bgcolor: 'background.paper',
+                    boxShadow: 2,
+                    '&:hover': { bgcolor: 'background.paper' },
+                  }}
+                >
+                  <ChevronRightIcon />
+                </IconButton>
+              )}
+
             {/* Scroll container — only the middle row (left col | grid | right col) */}
             <Box
               ref={scrollRef}
               sx={{
                 overflowX: 'auto',
                 overflowY: 'hidden',
-                flex: '0 1 auto',
                 minWidth: 0,
                 maxWidth: '100%',
-                alignSelf: 'center',
               }}
             >
               <Box
@@ -1209,6 +1278,7 @@ export default function GardenPlanner() {
                 )}
               </Box>
             </Box>
+            </Box>
 
             {/* BOTTOM +/- row — OUTSIDE scroll, centered in wrapper width */}
             {shapeEditMode && (
@@ -1257,6 +1327,7 @@ export default function GardenPlanner() {
                 </Box>
               </Box>
             )}
+          </Box>
 
             {/* Exposure legend (5.3-D, tokens §9) — only while the layer is on */}
             {exposureVisible && (

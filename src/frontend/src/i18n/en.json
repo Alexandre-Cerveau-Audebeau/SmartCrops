@@ -480,6 +480,7 @@
       "changesDiscarded": "Changes discarded",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
+      "undo": "Undo last action",
       "scrollLeft": "Scroll grid left",
       "scrollRight": "Scroll grid right",
       "saved": "All changes saved",
