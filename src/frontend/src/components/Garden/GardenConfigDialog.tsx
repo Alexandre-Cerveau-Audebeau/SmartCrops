@@ -9,10 +9,12 @@ import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import AddIcon from '@mui/icons-material/Add';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
+import ScheduleIcon from '@mui/icons-material/Schedule';
 import SettingsIcon from '@mui/icons-material/Settings';
 import BalconyIcon from '@mui/icons-material/Balcony';
 import DeckIcon from '@mui/icons-material/Deck';
@@ -191,6 +193,24 @@ function GardenConfigDialogInner({
       '& fieldset': { borderColor: tk.inputBd },
       '&:hover fieldset': { borderColor: tk.inputBd },
     },
+  } as const;
+
+  // Compact NATIVE time input (SMA-17 R5): a full MUI TextField is too tall/wide
+  // to keep a slot on one line; a styled `<input type="time">` stays editable
+  // (same HH:mm value + onChange) while fitting the single-row mockup. The
+  // color-scheme keeps the native picker/spinners readable in dark mode.
+  const timeInputSx = {
+    fontFamily: 'inherit',
+    fontSize: '12.5px',
+    fontWeight: 600,
+    color: tk.tTitle,
+    backgroundColor: tk.searchBg,
+    border: `1px solid ${tk.inputBd}`,
+    borderRadius: '6px',
+    px: '6px',
+    py: '4px',
+    colorScheme: theme.palette.mode,
+    '&:focus': { outline: 'none', borderColor: tk.prim },
   } as const;
 
   const [cols, setCols] = useState(initialWidth || 10);
@@ -534,39 +554,50 @@ function GardenConfigDialogInner({
             {t('planner.config.lightSubtitle')}
           </Typography>
 
+          {/* Each slot is ONE compact row (mockup): clock · start · arrow ·
+              end · duration badge (pushed right) · remove. */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {lightSlots.map((slot, index) => (
               <Box
                 key={index}
-                sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '11px',
+                  bgcolor: tk.card,
+                  border: `1px solid ${tk.inputBd}`,
+                  borderRadius: '9px',
+                  p: '10px 12px',
+                }}
               >
-                <TextField
+                <ScheduleIcon sx={{ color: tk.prim, fontSize: 18, flexShrink: 0 }} />
+                <Box
+                  component="input"
                   type="time"
-                  size="small"
                   value={slot.start}
                   onChange={(e) => updateSlot(index, { start: e.target.value })}
-                  inputProps={{ 'aria-label': `${t('planner.config.slotStart')} ${index + 1}` }}
-                  sx={{ width: 120, ...inputSx }}
+                  aria-label={`${t('planner.config.slotStart')} ${index + 1}`}
+                  sx={timeInputSx}
                 />
-                <Box component="span" sx={{ color: tk.muted }}>
-                  →
-                </Box>
-                <TextField
+                <ArrowForwardIcon sx={{ color: tk.muted, fontSize: 15, flexShrink: 0 }} />
+                <Box
+                  component="input"
                   type="time"
-                  size="small"
                   value={slot.end}
                   onChange={(e) => updateSlot(index, { end: e.target.value })}
-                  inputProps={{ 'aria-label': `${t('planner.config.slotEnd')} ${index + 1}` }}
-                  sx={{ width: 120, ...inputSx }}
+                  aria-label={`${t('planner.config.slotEnd')} ${index + 1}`}
+                  sx={timeInputSx}
                 />
                 <Box
                   sx={{
-                    px: 1,
-                    py: '2px',
+                    ml: 'auto',
+                    flexShrink: 0,
+                    px: '9px',
+                    py: '3px',
                     borderRadius: '999px',
-                    bgcolor: tk.segBg,
-                    color: tk.tMeta,
-                    fontSize: 11,
+                    bgcolor: tk.cntChipBg,
+                    color: tk.prim,
+                    fontSize: 11.5,
                     fontWeight: 700,
                   }}
                 >
@@ -578,26 +609,30 @@ function GardenConfigDialogInner({
                   size="small"
                   aria-label={`${t('planner.config.removeSlot')} ${index + 1}`}
                   onClick={() => removeSlot(index)}
-                  sx={{ color: tk.muted }}
+                  sx={{ color: tk.muted, p: 0, flexShrink: 0 }}
                 >
-                  <CloseIcon fontSize="small" />
+                  <CloseIcon sx={{ fontSize: 17 }} />
                 </IconButton>
               </Box>
             ))}
           </Box>
 
-          <Button
-            startIcon={<AddCircleOutlineIcon />}
-            onClick={addSlot}
-            disabled={lightSlots.length >= MAX_LIGHT_SLOTS}
-            sx={{ mt: 1, color: tk.prim, textTransform: 'none' }}
-          >
-            {t('planner.config.addSlot')}
-          </Button>
-
-          <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: tk.tMeta, mt: 1 }}>
-            {t('planner.config.lightTotal', { hours: formatHours(totalLightHours) })}
-          </Typography>
+          {/* Footer: add-slot (left) + daily total (pushed right), one line. */}
+          <Box sx={{ display: 'flex', alignItems: 'center', mt: 1.5 }}>
+            <Button
+              startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+              onClick={addSlot}
+              disabled={lightSlots.length >= MAX_LIGHT_SLOTS}
+              sx={{ color: tk.prim, textTransform: 'none', p: 0, minWidth: 0 }}
+            >
+              {t('planner.config.addSlot')}
+            </Button>
+            <Typography
+              sx={{ ml: 'auto', fontSize: 12, fontWeight: 600, color: tk.tMeta }}
+            >
+              {t('planner.config.lightTotal', { hours: formatHours(totalLightHours) })}
+            </Typography>
+          </Box>
         </Box>
       )}
 

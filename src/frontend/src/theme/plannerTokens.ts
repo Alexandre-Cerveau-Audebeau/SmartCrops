@@ -38,6 +38,8 @@ export interface PlannerTokens {
   // Outlined button (Annuler)
   obtnBd: string;
   obtnTx: string;
+  // Counter/duration chip (§1/§2)
+  cntChipBg: string;
   // lightSchedule green zone (§12)
   zoneABg: string;
   zoneABd: string;
@@ -70,6 +72,7 @@ const LIGHT: PlannerTokens = {
   segShadow: '0 1px 4px rgba(0,0,0,0.18)',
   obtnBd: '#D8E0D8',
   obtnTx: '#3C4A42',
+  cntChipBg: '#E4F3E9',
   zoneABg: '#EEF7F0',
   zoneABd: '#CDE6D6',
   typeSelBg: '#F0F9F3',
@@ -99,6 +102,7 @@ const DARK: PlannerTokens = {
   segShadow: '0 1px 4px rgba(0,0,0,0.18)',
   obtnBd: '#31456B',
   obtnTx: '#DCE4F0',
+  cntChipBg: 'rgba(76,180,124,0.16)',
   zoneABg: 'rgba(76,180,124,0.10)',
   zoneABd: 'rgba(76,180,124,0.32)',
   typeSelBg: 'rgba(76,180,124,0.12)',
