@@ -12,6 +12,13 @@ export interface CellData {
   exposureOverride?: ExposureCategory;
 }
 
+// Runtime guard at the JSON boundary (SMA-17 5.3-C R2): the TypeScript
+// annotation alone does not validate persisted JSON — a malformed override
+// must be dropped here, never enter CellData as a fake ExposureCategory.
+function isExposureCategory(value: unknown): value is ExposureCategory {
+  return value === 'full' || value === 'morning' || value === 'afternoon' || value === 'shade';
+}
+
 export function parseCellsJson(json: string | null, width: number, height: number): CellData[][] {
   const grid: CellData[][] = [];
   for (let r = 0; r < height; r++) {
@@ -22,14 +29,14 @@ export function parseCellsJson(json: string | null, width: number, height: numbe
   }
   if (!json) return grid;
   try {
-    const cells: Array<{ row: number; col: number; active?: boolean; soil?: string; infrastructure?: string; exposureOverride?: ExposureCategory }> = JSON.parse(json);
+    const cells: Array<{ row: number; col: number; active?: boolean; soil?: string; infrastructure?: string; exposureOverride?: unknown }> = JSON.parse(json);
     for (const cell of cells) {
       if (cell.row >= 0 && cell.row < height && cell.col >= 0 && cell.col < width) {
         grid[cell.row][cell.col] = {
           active: cell.active !== false,
           soil: cell.soil,
           infrastructure: cell.infrastructure,
-          exposureOverride: cell.exposureOverride,
+          ...(isExposureCategory(cell.exposureOverride) && { exposureOverride: cell.exposureOverride }),
         };
       }
     }

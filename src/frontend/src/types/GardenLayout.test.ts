@@ -38,6 +38,20 @@ describe('CellData.exposureOverride serialization (sparse)', () => {
     expect(serializeCellsJson(grid)).toBeNull();
   });
 
+  it('drops a malformed exposureOverride at the parsing boundary (CR 01158dd3)', () => {
+    // Persisted JSON is untrusted: "sunny" is not an ExposureCategory and must
+    // be dropped (tolerate-and-drop, the parser's established malformed-input
+    // behavior) — never enter CellData as a fake category.
+    const json = JSON.stringify([
+      { row: 0, col: 0, exposureOverride: 'sunny' },
+      { row: 0, col: 1, exposureOverride: 'shade' },
+    ]);
+    const grid = parseCellsJson(json, 2, 1);
+    expect(grid[0][0]).not.toHaveProperty('exposureOverride');
+    expect(grid[0][0].active).toBe(true); // the rest of the cell still parses
+    expect(grid[0][1].exposureOverride).toBe('shade'); // valid value kept
+  });
+
   it('round-trips through parse: override, soil, infrastructure and inactive survive', () => {
     const grid: CellData[][] = [
       [
