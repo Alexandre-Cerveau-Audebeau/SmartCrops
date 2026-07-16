@@ -63,4 +63,30 @@ describe('CompassRose', () => {
     const svg = container.querySelector('svg');
     expect(svg).toHaveAttribute('aria-hidden', 'true');
   });
+
+  // SMA-17 R4 — the rose rotates to bring the selected facing to the top.
+  // NOTE: this only pins the transform value; the real acceptance is the
+  // STEP-3 on-screen check that the rose visibly turns (E ends at the top).
+  it('rotates the whole rose to the selected facing (N/E/S/W)', () => {
+    const cases: Array<[string, string]> = [
+      ['N', 'rotate(0 20 20)'],
+      ['E', 'rotate(-90 20 20)'],
+      ['S', 'rotate(-180 20 20)'],
+      ['W', 'rotate(-270 20 20)'],
+    ];
+    for (const [orientation, expected] of cases) {
+      const { getByRole, unmount } = render(
+        <CompassRose
+          size={84}
+          mode="light"
+          sunArc
+          orientation={orientation}
+          ariaLabel="Compass"
+        />
+      );
+      const g = getByRole('img', { name: 'Compass' }).querySelector('g');
+      expect(g).toHaveAttribute('transform', expected);
+      unmount();
+    }
+  });
 });

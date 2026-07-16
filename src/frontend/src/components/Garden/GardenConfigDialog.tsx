@@ -396,6 +396,7 @@ function GardenConfigDialogInner({
               size={84}
               mode={theme.palette.mode}
               sunArc
+              orientation={orientation}
               ariaLabel={compassAria}
               labels={{ n: 'N', e: 'E', s: 'S', w: westLabel }}
             />
@@ -458,7 +459,11 @@ function GardenConfigDialogInner({
         <Box
           role="radiogroup"
           aria-label={t('planner.config.sectionGardenType')}
-          sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}
+          // Mockup: the 5 cards compress onto ONE row at any width (flex:1, no
+          // wrap, no min-width). A prior flex-wrap + fixed 104px width wrapped
+          // the row when the indoor lightSchedule appeared and a scrollbar
+          // narrowed the content — removed (SMA-17 R4).
+          sx={{ display: 'flex', gap: '9px' }}
         >
           {GARDEN_TYPES.map(({ value, Icon }) => {
             const active = gardenType === value;
@@ -472,7 +477,8 @@ function GardenConfigDialogInner({
                 onClick={() => setGardenType(value)}
                 sx={{
                   cursor: 'pointer',
-                  width: 104,
+                  flex: 1,
+                  minWidth: 0,
                   py: 1.5,
                   display: 'flex',
                   flexDirection: 'column',
@@ -491,7 +497,14 @@ function GardenConfigDialogInner({
                 }}
               >
                 <Icon sx={{ color: active ? tk.prim : tk.muted }} />
-                <Typography sx={{ fontSize: 13, fontWeight: 600, color: 'inherit' }}>
+                <Typography
+                  sx={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: 'inherit',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
                   {t(`planner.config.type.${value}`)}
                 </Typography>
               </Box>
