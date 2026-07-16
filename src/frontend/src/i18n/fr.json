@@ -424,6 +424,29 @@
       "cancel": "Annuler",
       "saveError": "Impossible d'enregistrer les réglages du jardin. Veuillez réessayer."
     },
+    "exposure": {
+      "toggle": "Exposition",
+      "moments": {
+        "morning": "Matin",
+        "noon": "Midi",
+        "evening": "Soir"
+      },
+      "seasons": {
+        "summer": "Été",
+        "winter": "Hiver"
+      },
+      "legendTitle": "Exposition — {{season}} · {{moment}}",
+      "categories": {
+        "full": "Plein soleil",
+        "morning": "Soleil du matin",
+        "afternoon": "Soleil d'après-midi",
+        "shade": "Ombre"
+      },
+      "override": {
+        "title": "Exposition de la case",
+        "auto": "Auto (calculée)"
+      }
+    },
     "shape": {
       "selectAll": "Tout sélectionner",
       "deselectAll": "Tout désélectionner",

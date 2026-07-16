@@ -424,6 +424,29 @@
       "cancel": "Cancel",
       "saveError": "Couldn't save the garden settings. Please try again."
     },
+    "exposure": {
+      "toggle": "Exposure",
+      "moments": {
+        "morning": "Morning",
+        "noon": "Noon",
+        "evening": "Evening"
+      },
+      "seasons": {
+        "summer": "Summer",
+        "winter": "Winter"
+      },
+      "legendTitle": "Exposure — {{season}} · {{moment}}",
+      "categories": {
+        "full": "Full sun",
+        "morning": "Morning sun",
+        "afternoon": "Afternoon sun",
+        "shade": "Shade"
+      },
+      "override": {
+        "title": "Cell exposure",
+        "auto": "Auto (computed)"
+      }
+    },
     "shape": {
       "selectAll": "Select all",
       "deselectAll": "Deselect all",

@@ -578,3 +578,90 @@ describe('plannerReducer', () => {
     expect(after.grid![0][1].active).toBe(true);
   });
 });
+
+// SMA-17 5.3-D — exposure layer state: the three view-state actions never
+// touch the draft; the per-cell override is a LAYOUT edit (sparse, dirty).
+describe('plannerReducer exposure layer (SMA-17 5.3-D)', () => {
+  it('defaults: layer hidden, noon, summer', () => {
+    expect(initialPlannerState.exposureVisible).toBe(false);
+    expect(initialPlannerState.exposureMoment).toBe('noon');
+    expect(initialPlannerState.exposureSeason).toBe('summer');
+  });
+
+  it('TOGGLE_EXPOSURE flips visibility without dirtying the draft', () => {
+    const s = hydrated();
+    const on = plannerReducer(s, { type: 'TOGGLE_EXPOSURE' });
+    expect(on.exposureVisible).toBe(true);
+    expect(on.isDirty).toBe(false);
+    expect(on.grid).toBe(s.grid); // view state only — the draft is untouched
+    const off = plannerReducer(on, { type: 'TOGGLE_EXPOSURE' });
+    expect(off.exposureVisible).toBe(false);
+  });
+
+  it('SET_EXPOSURE_MOMENT / SET_EXPOSURE_SEASON update the presets, clean', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_EXPOSURE_MOMENT',
+      moment: 'evening',
+    });
+    expect(s.exposureMoment).toBe('evening');
+    s = plannerReducer(s, { type: 'SET_EXPOSURE_SEASON', season: 'winter' });
+    expect(s.exposureSeason).toBe('winter');
+    expect(s.isDirty).toBe(false);
+  });
+
+  it('SET_CELL_EXPOSURE_OVERRIDE writes the sparse override and marks dirty', () => {
+    const s = hydrated();
+    const after = plannerReducer(s, {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE',
+      row: 0,
+      col: 2,
+      value: 'shade',
+    });
+    expect(after.grid![0][2].exposureOverride).toBe('shade');
+    expect(after.isDirty).toBe(true);
+    // Fresh grid reference (same mechanics as painting) so MARK_SAVED's
+    // referential revision check can tell the edit apart.
+    expect(after.grid).not.toBe(s.grid);
+    // Sparse: no other cell gained the key.
+    expect(after.grid![0][0]).not.toHaveProperty('exposureOverride');
+  });
+
+  it('SET_CELL_EXPOSURE_OVERRIDE with null clears the key (sparse) and marks dirty', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE',
+      row: 0,
+      col: 2,
+      value: 'full',
+    });
+    s = plannerReducer(s, {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE',
+      row: 0,
+      col: 2,
+      value: null,
+    });
+    // The property is REMOVED, not set to undefined — an undefined-valued key
+    // would still make serializeCellsJson emit the cell.
+    expect(s.grid![0][2]).not.toHaveProperty('exposureOverride');
+    expect(s.isDirty).toBe(true);
+  });
+
+  it('SET_CELL_EXPOSURE_OVERRIDE is a guarded no-op out of bounds or without a grid', () => {
+    const s = hydrated();
+    expect(
+      plannerReducer(s, {
+        type: 'SET_CELL_EXPOSURE_OVERRIDE',
+        row: 9,
+        col: 0,
+        value: 'shade',
+      })
+    ).toBe(s);
+    expect(
+      plannerReducer(initialPlannerState, {
+        type: 'SET_CELL_EXPOSURE_OVERRIDE',
+        row: 0,
+        col: 0,
+        value: 'shade',
+      })
+    ).toBe(initialPlannerState);
+  });
+});

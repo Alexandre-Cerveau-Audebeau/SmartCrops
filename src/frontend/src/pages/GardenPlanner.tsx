@@ -16,10 +16,12 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import { alpha, type Theme } from '@mui/material/styles';
+import { alpha, useTheme, type Theme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { CompassRose } from '../components/Garden/CompassRose';
 import GardenGrid from '../components/Garden/GardenGrid';
 import PlantSidebar from '../components/Garden/PlantSidebar';
 import GardenConfigDialog, {
@@ -33,10 +35,20 @@ import { useSelection } from '../hooks/useSelection';
 import { updateGarden } from '../services/gardenApi';
 import { saveLayout } from '../services/gardenLayoutApi';
 import { fetchPlants } from '../services/plantApi';
+import { getPlannerTokens } from '../theme/plannerTokens';
 import type { Garden, GardenConfig } from '../types/Garden';
 import type { Plant } from '../types/Plant';
 import { serializeCellsJson } from '../types/GardenLayout';
+import {
+  computeExposureGrid,
+  type Blocker,
+  type ExposureCategory,
+  type Moment,
+  type Season,
+} from '../utils/exposure';
 import { getPlantDisplayName } from '../utils/getPlantDisplayName';
+import { ExposureLegend } from './gardenPlanner/ExposureLegend';
+import { ExposureOverridePopover } from './gardenPlanner/ExposureOverridePopover';
 import { GridControls } from './gardenPlanner/GridControls';
 import { PlacementDetailPanel } from './gardenPlanner/PlacementDetailPanel';
 import { PlantsInGardenSection } from './gardenPlanner/PlantsInGardenSection';
@@ -54,6 +66,10 @@ function cellSizeToMeters(cellSize: string): number {
 // Referentially stable empty catalog for the not-ready renders — a fresh []
 // per render would defeat every downstream memo/effect dep on `allPlants`.
 const EMPTY_PLANTS: Plant[] = [];
+
+// No blockers before 5.4 (infrastructures) — a stable [] keeps the exposure
+// memo honest about its deps.
+const EMPTY_BLOCKERS: Blocker[] = [];
 
 const addBtnSx = {
   cursor: 'pointer',
@@ -108,6 +124,9 @@ export default function GardenPlanner() {
     zoom,
     removedCount,
     removedSeq,
+    exposureVisible,
+    exposureMoment,
+    exposureSeason,
   } = state;
   const hasLastSaved = state.lastSaved !== null;
 
@@ -124,6 +143,13 @@ export default function GardenPlanner() {
   const [saving, setSaving] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  // Per-cell override picker (5.3-D): anchored to the clicked cell while the
+  // exposure layer is visible in selection mode.
+  const [overridePopover, setOverridePopover] = useState<{
+    row: number;
+    col: number;
+    anchor: HTMLElement;
+  } | null>(null);
   // Config-save pending + error state (SMA-17 R2): the config dialog is kept
   // open until its updateGarden succeeds, Save is disabled while pending, and
   // a failure surfaces inline without discarding the entered values.
@@ -175,6 +201,41 @@ export default function GardenPlanner() {
   const placementSeq = useRef(0);
 
   const cellSizePx = Math.round(44 * zoom);
+
+  const theme = useTheme();
+  const plannerMode = theme.palette.mode === 'dark' ? 'dark' : 'light';
+  const tk = getPlannerTokens(plannerMode);
+  // §8 responsive compass: 56 px container / 42 px SVG desktop, 40/30 mobile.
+  const compassMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  // Derived exposure grid (5.3-D, the #171 derived-at-render pattern): NOT
+  // stored — recomputed from the draft grid + garden config when a dep
+  // changes. AGGREGATE mode only in 5.3-D: with no blockers yet (5.4), a
+  // per-moment view would be uniformly lit — the moment preset only feeds
+  // the legend title (honesty constraint: no fake variation).
+  const exposureCells = useMemo(() => {
+    if (!exposureVisible || !grid) return null;
+    const overrides: Record<string, ExposureCategory> = {};
+    grid.forEach((row, r) =>
+      row.forEach((cell, c) => {
+        if (cell.exposureOverride) overrides[`${r},${c}`] = cell.exposureOverride;
+      })
+    );
+    const result = computeExposureGrid({
+      rows: layoutHeight,
+      cols: layoutWidth,
+      activeCells: grid.map((row) => row.map((cell) => cell.active)),
+      orientation: garden?.orientation ?? null,
+      hemisphere: garden?.hemisphere ?? null,
+      latitudeBand: garden?.latitudeBand ?? null,
+      gardenType: garden?.gardenType ?? null,
+      lightSchedule: garden?.lightSchedule ?? null,
+      blockers: EMPTY_BLOCKERS,
+      overrides,
+      season: exposureSeason,
+    });
+    return result.mode === 'aggregate' ? result.cells : null;
+  }, [exposureVisible, grid, layoutWidth, layoutHeight, garden, exposureSeason]);
 
   // Horizontal scroll state for grid container
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -390,6 +451,18 @@ export default function GardenPlanner() {
     (enabled: boolean) => dispatch({ type: 'SET_SHAPE_EDIT_MODE', enabled }),
     []
   );
+  const handleToggleExposure = useCallback(
+    () => dispatch({ type: 'TOGGLE_EXPOSURE' }),
+    []
+  );
+  const handleSetExposureMoment = useCallback(
+    (moment: Moment) => dispatch({ type: 'SET_EXPOSURE_MOMENT', moment }),
+    []
+  );
+  const handleSetExposureSeason = useCallback(
+    (season: Season) => dispatch({ type: 'SET_EXPOSURE_SEASON', season }),
+    []
+  );
 
   const addRowTop = useCallback(() => dispatch({ type: 'ADD_ROW_TOP' }), []);
   const addRowBottom = useCallback(
@@ -419,7 +492,7 @@ export default function GardenPlanner() {
   );
 
   const handleCellClick = useCallback(
-    (row: number, col: number) => {
+    (row: number, col: number, anchorEl?: HTMLElement) => {
       if (shapeEditMode || !grid) return;
 
       const existing = placements.find(
@@ -459,9 +532,19 @@ export default function GardenPlanner() {
         return;
       }
 
+      // Exposure override picker (5.3-D): layer visible, selection mode (no
+      // armed plant — that branch returned above), ACTIVE cell WITHOUT a
+      // placement. Cells WITH a placement keep the selection behavior below
+      // (overriding under a placement is a documented v1 limitation).
+      if (exposureVisible && !existing && anchorEl) {
+        selectPlacement(null);
+        setOverridePopover({ row, col, anchor: anchorEl });
+        return;
+      }
+
       selectPlacement(existing ? existing.id : null);
     },
-    [shapeEditMode, grid, placements, selectedPlantId, catalogReady, selectPlacement]
+    [shapeEditMode, grid, placements, selectedPlantId, catalogReady, exposureVisible, selectPlacement]
   );
 
   const handleRemoveSelectedPlacement = useCallback(() => {
@@ -746,6 +829,9 @@ export default function GardenPlanner() {
         zoom={zoom}
         isDirty={isDirty}
         saving={saving}
+        exposureVisible={exposureVisible}
+        exposureMoment={exposureMoment}
+        exposureSeason={exposureSeason}
         onSelectAll={handleSelectAll}
         onDeselectAll={handleDeselectAll}
         onZoomIn={handleZoomIn}
@@ -753,6 +839,9 @@ export default function GardenPlanner() {
         onOpenSettings={handleOpenSettings}
         onCancel={handleCancel}
         onSave={handleSave}
+        onToggleExposure={handleToggleExposure}
+        onSetExposureMoment={handleSetExposureMoment}
+        onSetExposureSeason={handleSetExposureSeason}
       />
 
       {dimensionsText && (
@@ -859,6 +948,41 @@ export default function GardenPlanner() {
               flexDirection: 'column',
             }}
           >
+            {/* Permanent compass (5.3-D, tokens §8): top-right corner of the
+                grid area, overflowing it (right:-6, top:-10), card chrome,
+                z-index 10, NO sun arc on the planner variant. The whole rose
+                rotates so the garden's facing sits at the top (option b). */}
+            <Box
+              sx={{
+                position: 'absolute',
+                right: -6,
+                top: -10,
+                zIndex: 10,
+                width: { xs: 40, sm: 56 },
+                height: { xs: 40, sm: 56 },
+                borderRadius: '50%',
+                bgcolor: tk.card,
+                border: `1px solid ${tk.cardBd}`,
+                boxShadow: tk.shadow,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <CompassRose
+                size={compassMobile ? 30 : 42}
+                mode={plannerMode}
+                orientation={garden?.orientation ?? 'S'}
+                labels={{ n: 'N', e: 'E', s: 'S', w: t('planner.config.west') }}
+                ariaLabel={t('planner.config.compassLabel', {
+                  orientation:
+                    (garden?.orientation ?? 'S') === 'W'
+                      ? t('planner.config.west')
+                      : (garden?.orientation ?? 'S'),
+                })}
+              />
+            </Box>
+
             {/* Scroll arrows — sticky to top of viewport (page scroll) so they stay visible */}
             <Box
               sx={{
@@ -1030,6 +1154,7 @@ export default function GardenPlanner() {
                   grid={grid}
                   shapeEditMode={shapeEditMode}
                   placements={enrichedPlacements}
+                  exposure={exposureCells}
                   onCellClick={handleCellClick}
                   onCellDragStart={handleCellDragStart}
                   onCellDragEnter={handleCellDragEnter}
@@ -1132,9 +1257,38 @@ export default function GardenPlanner() {
                 </Box>
               </Box>
             )}
+
+            {/* Exposure legend (5.3-D, tokens §9) — only while the layer is on */}
+            {exposureVisible && (
+              <ExposureLegend season={exposureSeason} moment={exposureMoment} />
+            )}
           </Box>
         </Box>
       )}
+
+      {/* Per-cell exposure override picker (5.3-D) */}
+      <ExposureOverridePopover
+        open={overridePopover !== null}
+        anchorEl={overridePopover?.anchor ?? null}
+        current={
+          overridePopover
+            ? (grid?.[overridePopover.row]?.[overridePopover.col]
+                ?.exposureOverride ?? null)
+            : null
+        }
+        onSelect={(value) => {
+          if (overridePopover) {
+            dispatch({
+              type: 'SET_CELL_EXPOSURE_OVERRIDE',
+              row: overridePopover.row,
+              col: overridePopover.col,
+              value,
+            });
+          }
+          setOverridePopover(null);
+        }}
+        onClose={() => setOverridePopover(null)}
+      />
 
       {/* Floating detail panel — anchored at the top of the map area, sticks while scrolling */}
       {selectedPlacement && (

@@ -20,7 +20,7 @@ vi.mock('../services/gardenLayoutApi', () => ({
 
 import GardenPlanner from './GardenPlanner';
 import { fetchGarden, updateGarden } from '../services/gardenApi';
-import { fetchLayout } from '../services/gardenLayoutApi';
+import { fetchLayout, saveLayout } from '../services/gardenLayoutApi';
 import { fetchPlants } from '../services/plantApi';
 
 // Locks the transient wrong-initial artifact: a placement hydrating before
@@ -478,5 +478,111 @@ describe('GardenPlanner placement initials', () => {
     await waitFor(() =>
       expect(within(grid).getByText('U')).toBeInTheDocument()
     );
+  });
+});
+
+// SMA-17 5.3-D — the exposure layer wired end-to-end: toggle → derived tint +
+// legend; presets drive the legend title; indoor gardens tint uniformly from
+// the lightSchedule; the per-cell override popover edits the draft and the
+// sparse override reaches the save payload; the permanent compass shows the
+// garden's facing. HONESTY: an outdoor garden with no blockers (5.4) computes
+// to a UNIFORM full-sun tint — the assertions below expect exactly that.
+describe('GardenPlanner exposure layer (SMA-17 5.3-D)', () => {
+  async function renderReady(gardenFixture: Garden = garden) {
+    vi.mocked(fetchGarden).mockResolvedValue(gardenFixture);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    await waitFor(() =>
+      expect(within(grid).getByText('B')).toBeInTheDocument()
+    );
+    return grid;
+  }
+
+  it('toggle ON tints the active cells (uniform full sun outdoors) and shows the legend; OFF hides both', async () => {
+    const grid = await renderReady();
+    // Layer starts hidden: no tint, no legend.
+    expect(within(grid).queryAllByRole('gridcell')).toHaveLength(4);
+    expect(document.querySelector('[data-exposure]')).toBeNull();
+    expect(screen.queryByText('Exposure — summer · noon')).toBeNull();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    // 2×2 all-active outdoor grid, placement at (0,0): the three empty cells
+    // tint 'full' (uniform, no blockers before 5.4); the placement renders on
+    // top unchanged (no tint attribute).
+    const cells = within(grid).getAllByRole('gridcell');
+    expect(cells[1]).toHaveAttribute('data-exposure', 'full');
+    expect(cells[2]).toHaveAttribute('data-exposure', 'full');
+    expect(cells[3]).toHaveAttribute('data-exposure', 'full');
+    expect(cells[0]).not.toHaveAttribute('data-exposure');
+    expect(screen.getByText('Exposure — summer · noon')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    expect(document.querySelector('[data-exposure]')).toBeNull();
+    expect(screen.queryByText('Exposure — summer · noon')).toBeNull();
+  });
+
+  it('presets are disabled while the layer is off and drive the legend title once on', async () => {
+    await renderReady();
+    expect(screen.getByRole('button', { name: 'Winter' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Winter' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Evening' }));
+    expect(
+      screen.getByText('Exposure — winter · evening')
+    ).toBeInTheDocument();
+  });
+
+  it('an indoor garden tints uniformly from its lightSchedule (6h → morning)', async () => {
+    const indoor = {
+      ...garden,
+      gardenType: 'indoor',
+      lightSchedule: [{ start: '06:00', end: '12:00' }],
+    } as Garden;
+    const grid = await renderReady(indoor);
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    const cells = within(grid).getAllByRole('gridcell');
+    expect(cells[1]).toHaveAttribute('data-exposure', 'morning');
+    expect(cells[2]).toHaveAttribute('data-exposure', 'morning');
+    expect(cells[3]).toHaveAttribute('data-exposure', 'morning');
+  });
+
+  it('the cell popover sets a manual override (tint + dirty + sparse save payload) and Auto clears it', async () => {
+    vi.mocked(saveLayout).mockResolvedValue(undefined);
+    const grid = await renderReady();
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+
+    // Click the empty active cell (0,1) → the labelled popover opens.
+    const cells = within(grid).getAllByRole('gridcell');
+    fireEvent.click(cells[1]!);
+    expect(await screen.findByText('Cell exposure')).toBeInTheDocument();
+
+    // Choose Ombre → the tint updates immediately and the draft is dirty.
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Shade' }));
+    expect(cells[1]).toHaveAttribute('data-exposure', 'shade');
+
+    // The existing save flow persists the SPARSE override in CellsJson.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
+    await waitFor(() => expect(saveLayout).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(saveLayout).mock.calls[0]![1];
+    expect(JSON.parse(payload.cellsJson!)).toEqual([
+      { row: 0, col: 1, exposureOverride: 'shade' },
+    ]);
+
+    // Auto (computed) clears the override — back to the computed full sun.
+    fireEvent.click(cells[1]!);
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Auto (computed)' })
+    );
+    expect(cells[1]).toHaveAttribute('data-exposure', 'full');
+  });
+
+  it('renders the permanent compass with the garden facing in its accessible name', async () => {
+    await renderReady({ ...garden, orientation: 'E' } as Garden);
+    expect(
+      screen.getByRole('img', { name: 'Compass — the garden faces E' })
+    ).toBeInTheDocument();
   });
 });

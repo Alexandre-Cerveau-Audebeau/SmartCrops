@@ -1,5 +1,6 @@
 import type { CellData } from '../../types/GardenLayout';
 import { parseCellsJson } from '../../types/GardenLayout';
+import type { ExposureCategory, Moment, Season } from '../../utils/exposure';
 
 /**
  * A placement with a CLIENT identity. The `id` is the server placement id
@@ -52,6 +53,16 @@ export interface PlannerState {
    */
   removedCount: number;
   removedSeq: number;
+  /**
+   * Exposure layer (SMA-17 5.3-D) — pure VIEW state, session-only (never
+   * persisted, deliberately opt-in per visit): the layer starts hidden, the
+   * presets default to the mockup's "été · midi". The moment preset is wired
+   * but visually inert until 5.4 ships cast shadows — only the legend title
+   * reflects it (honesty: no fake variation).
+   */
+  exposureVisible: boolean;
+  exposureMoment: Moment;
+  exposureSeason: Season;
 }
 
 /** Zoom clamp bounds — single source of truth, shared with the toolbar's
@@ -73,6 +84,9 @@ export const initialPlannerState: PlannerState = {
   lastSaved: null,
   removedCount: 0,
   removedSeq: 0,
+  exposureVisible: false,
+  exposureMoment: 'noon',
+  exposureSeason: 'summer',
 };
 
 export type PlannerAction =
@@ -106,7 +120,16 @@ export type PlannerAction =
   | { type: 'ZOOM_OUT' }
   | { type: 'MARK_SAVED'; submitted: LayoutSnapshot }
   | { type: 'RESTORE_LAST_SAVED' }
-  | { type: 'DISCARD_DRAFT' };
+  | { type: 'DISCARD_DRAFT' }
+  | { type: 'TOGGLE_EXPOSURE' }
+  | { type: 'SET_EXPOSURE_MOMENT'; moment: Moment }
+  | { type: 'SET_EXPOSURE_SEASON'; season: Season }
+  | {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE';
+      row: number;
+      col: number;
+      value: ExposureCategory | null;
+    };
 
 const copyGrid = (grid: CellData[][] | null): CellData[][] | null =>
   grid ? grid.map((row) => row.map((cell) => ({ ...cell }))) : null;
@@ -519,6 +542,34 @@ export function plannerReducer(
         layoutHeight: 0,
         isDirty: false,
       };
+
+    // ── Exposure layer (SMA-17 5.3-D) ────────────────────────────────────────
+    // The three view-state actions never touch the draft (no isDirty change);
+    // only the per-cell override edits the layout itself.
+    case 'TOGGLE_EXPOSURE':
+      return { ...state, exposureVisible: !state.exposureVisible };
+
+    case 'SET_EXPOSURE_MOMENT':
+      return { ...state, exposureMoment: action.moment };
+
+    case 'SET_EXPOSURE_SEASON':
+      return { ...state, exposureSeason: action.season };
+
+    case 'SET_CELL_EXPOSURE_OVERRIDE': {
+      if (!state.grid) return state;
+      if (!isInsideGrid(state.grid, action.row, action.col)) return state;
+      const copy = copyGrid(state.grid)!;
+      if (action.value === null) {
+        // Sparse contract: clearing back to Auto REMOVES the key (an
+        // `undefined`-valued property would still serialize the cell).
+        delete copy[action.row][action.col].exposureOverride;
+      } else {
+        copy[action.row][action.col].exposureOverride = action.value;
+      }
+      // Same dirty mechanics as painting: a fresh grid reference, so
+      // MARK_SAVED's referential revision check keeps working unchanged.
+      return { ...state, grid: copy, isDirty: true };
+    }
 
     default: {
       const exhaustive: never = action;

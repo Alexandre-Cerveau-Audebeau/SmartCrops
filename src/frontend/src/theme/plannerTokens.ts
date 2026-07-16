@@ -11,7 +11,15 @@
 // compTx -> --t-title, compMut -> --muted. Do NOT invent other values here — if
 // a token is missing from the doc, STOP AND REPORT rather than guessing.
 
+import type { ExposureCategory } from '../utils/exposure';
+
 export type PlannerThemeMode = 'light' | 'dark';
+
+/** Fill + border of one exposure category (§3 — day solids / night veils). */
+export interface ExposureSwatch {
+  fill: string;
+  border: string;
+}
 
 export interface PlannerTokens {
   // Surfaces / chrome
@@ -51,6 +59,16 @@ export interface PlannerTokens {
   compSTail: string;
   compTx: string; // N letter — --t-title (SMA-17 decision)
   compMut: string; // E/S/O letters — --muted (SMA-17 decision)
+  // Switch track (§10 row 2 — inactive toggle)
+  track: string;
+  // Grid cells (§1/§2 — SMA-209 night grid palette)
+  cellOn: string;
+  cellOnBd: string;
+  cellOff: string;
+  cellOffBd: string;
+  // Exposure layer (§3): per-category fill/border + the "Ombre" hatch
+  expo: Record<ExposureCategory, ExposureSwatch>;
+  hatch: string;
 }
 
 const LIGHT: PlannerTokens = {
@@ -81,6 +99,19 @@ const LIGHT: PlannerTokens = {
   compSTail: '#D3DAD2',
   compTx: '#22302A',
   compMut: '#7A8781',
+  track: '#E2EADF',
+  cellOn: '#F1F7EE',
+  cellOnBd: '#DEE9DA',
+  cellOff: '#ECEEEA',
+  cellOffBd: '#E3E6E1',
+  expo: {
+    full: { fill: '#FFE7A3', border: '#EFD27E' },
+    morning: { fill: '#EDF3B4', border: '#D9E38C' },
+    afternoon: { fill: '#FFD6A6', border: '#EFBD7F' },
+    shade: { fill: '#CBD8E4', border: '#B4C5D6' },
+  },
+  hatch:
+    'repeating-linear-gradient(45deg, rgba(71,94,120,0.18) 0px, rgba(71,94,120,0.18) 3px, transparent 3px, transparent 8px)',
 };
 
 const DARK: PlannerTokens = {
@@ -111,6 +142,19 @@ const DARK: PlannerTokens = {
   compSTail: '#31456B',
   compTx: '#F2F6FA',
   compMut: '#7E8CA6',
+  track: '#31456B',
+  cellOn: '#132740',
+  cellOnBd: '#1F3556',
+  cellOff: '#0B1830',
+  cellOffBd: '#152742',
+  expo: {
+    full: { fill: 'rgba(255,203,84,0.36)', border: 'rgba(255,203,84,0.55)' },
+    morning: { fill: 'rgba(196,214,100,0.30)', border: 'rgba(196,214,100,0.48)' },
+    afternoon: { fill: 'rgba(255,148,92,0.34)', border: 'rgba(255,148,92,0.52)' },
+    shade: { fill: 'rgba(124,152,190,0.22)', border: 'rgba(124,152,190,0.42)' },
+  },
+  hatch:
+    'repeating-linear-gradient(45deg, rgba(142,170,206,0.30) 0px, rgba(142,170,206,0.30) 3px, transparent 3px, transparent 8px)',
 };
 
 export function getPlannerTokens(mode: PlannerThemeMode): PlannerTokens {
