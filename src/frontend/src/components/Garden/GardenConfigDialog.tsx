@@ -76,6 +76,12 @@ function cellSizeToMeters(cellSize: string): number {
   return 0.25;
 }
 
+// Grid dimensions are whole cells: truncate any decimal the number input lets
+// through before clamping to the 2–50 bounds (SMA-17 R6).
+function clampGridDimension(value: string): number {
+  return Math.max(2, Math.min(50, Math.trunc(Number(value)) || 2));
+}
+
 // ── Small segmented control (tokens §10) ─────────────────────────────────────
 interface SegmentedOption {
   value: string;
@@ -210,7 +216,13 @@ function GardenConfigDialogInner({
     px: '6px',
     py: '4px',
     colorScheme: theme.palette.mode,
-    '&:focus': { outline: 'none', borderColor: tk.prim },
+    // Keyboard focus stays visible (forced-colors/low-contrast safe); mouse
+    // focus is unchanged (SMA-17 R6, a11y).
+    '&:focus-visible': {
+      outline: `2px solid ${tk.prim}`,
+      outlineOffset: '2px',
+      borderColor: tk.prim,
+    },
   } as const;
 
   const [cols, setCols] = useState(initialWidth || 10);
@@ -222,8 +234,17 @@ function GardenConfigDialogInner({
   const [gardenType, setGardenType] = useState<string | null>(
     initialConfig.gardenType
   );
-  const [lightSlots, setLightSlots] = useState<LightSlot[]>(
-    initialConfig.lightSchedule ?? []
+  const [lightSlots, setLightSlots] = useState<LightSlot[]>(() =>
+    // Legacy stored JSON can deserialize to [null] or entries missing a time —
+    // dereferencing slot.start would crash the dialog on open (SMA-17 R6, the
+    // frontend leg of the backend null-slot guard b62dbb77). Keep only
+    // well-shaped slots; validation of their VALUES stays with isInvalidSlot.
+    (initialConfig.lightSchedule ?? []).filter(
+      (slot): slot is LightSlot =>
+        !!slot &&
+        typeof slot.start === 'string' &&
+        typeof slot.end === 'string'
+    )
   );
   const [hemisphere, setHemisphere] = useState<string>(
     initialConfig.hemisphere ?? 'N'
@@ -334,10 +355,13 @@ function GardenConfigDialogInner({
               type="number"
               size="small"
               value={cols}
-              onChange={(e) =>
-                setCols(Math.max(2, Math.min(50, Number(e.target.value) || 2)))
-              }
-              inputProps={{ min: 2, max: 50, 'aria-label': t('planner.setup.columns') }}
+              onChange={(e) => setCols(clampGridDimension(e.target.value))}
+              inputProps={{
+                min: 2,
+                max: 50,
+                step: 1,
+                'aria-label': t('planner.setup.columns'),
+              }}
               sx={{ width: 110, ...inputSx }}
             />
           </Box>
@@ -347,10 +371,13 @@ function GardenConfigDialogInner({
               type="number"
               size="small"
               value={rows}
-              onChange={(e) =>
-                setRows(Math.max(2, Math.min(50, Number(e.target.value) || 2)))
-              }
-              inputProps={{ min: 2, max: 50, 'aria-label': t('planner.setup.rows') }}
+              onChange={(e) => setRows(clampGridDimension(e.target.value))}
+              inputProps={{
+                min: 2,
+                max: 50,
+                step: 1,
+                'aria-label': t('planner.setup.rows'),
+              }}
               sx={{ width: 110, ...inputSx }}
             />
           </Box>
@@ -479,11 +506,11 @@ function GardenConfigDialogInner({
         <Box
           role="radiogroup"
           aria-label={t('planner.config.sectionGardenType')}
-          // Mockup: the 5 cards compress onto ONE row at any width (flex:1, no
-          // wrap, no min-width). A prior flex-wrap + fixed 104px width wrapped
-          // the row when the indoor lightSchedule appeared and a scrollbar
-          // narrowed the content — removed (SMA-17 R4).
-          sx={{ display: 'flex', gap: '9px' }}
+          // Mockup: the 5 cards stay on ONE row at any width — no wrap (a prior
+          // flex-wrap + fixed 104px width broke this, SMA-17 R4). R6: cards keep
+          // a 96px readable floor; below 5×96px the ROW scrolls horizontally
+          // instead of letting the labels overlap.
+          sx={{ display: 'flex', gap: '9px', overflowX: 'auto', pb: '4px' }}
         >
           {GARDEN_TYPES.map(({ value, Icon }) => {
             const active = gardenType === value;
@@ -497,8 +524,7 @@ function GardenConfigDialogInner({
                 onClick={() => setGardenType(value)}
                 sx={{
                   cursor: 'pointer',
-                  flex: 1,
-                  minWidth: 0,
+                  flex: '1 0 96px',
                   py: 1.5,
                   display: 'flex',
                   flexDirection: 'column',

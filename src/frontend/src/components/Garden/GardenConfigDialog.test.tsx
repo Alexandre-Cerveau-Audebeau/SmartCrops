@@ -117,6 +117,53 @@ describe('GardenConfigDialog (SMA-17, §12)', () => {
     expect(config.lightSchedule).toEqual([{ start: '08:00', end: '12:00' }]);
   });
 
+  it('filters null/malformed lightSchedule entries at hydration instead of crashing (SMA-17 R6)', () => {
+    // Legacy stored JSON can deserialize to [null] — the dialog must open and
+    // render only the well-shaped slot, never dereference slot.start on null.
+    const { onConfirm } = renderDialog({
+      initialConfig: {
+        orientation: null,
+        gardenType: 'indoor',
+        lightSchedule: [
+          null,
+          { start: '06:00', end: '10:00' },
+        ] as unknown as GardenConfig['lightSchedule'],
+        hemisphere: null,
+        latitudeBand: null,
+      },
+    });
+
+    // Dialog opened (no crash) and exactly ONE slot row survived the filter.
+    expect(screen.getByText('Garden settings')).toBeInTheDocument();
+    expect(screen.getByLabelText('Start time 1')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Start time 2')).toBeNull();
+
+    // The surviving valid slot saves cleanly.
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(savedConfig(onConfirm).lightSchedule).toEqual([
+      { start: '06:00', end: '10:00' },
+    ]);
+  });
+
+  it('keeps grid dimensions integer-only: decimals are truncated (SMA-17 R6)', () => {
+    const { onConfirm } = renderDialog();
+
+    fireEvent.change(screen.getByLabelText('Columns'), {
+      target: { value: '7.9' },
+    });
+    fireEvent.change(screen.getByLabelText('Rows'), {
+      target: { value: '3.5' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    // Stored state holds only integers (trunc, 2–50 bounds preserved).
+    expect(onConfirm.mock.calls[0]![0]).toEqual({
+      cols: 7,
+      rows: 3,
+      cellSize: '50cm',
+    });
+  });
+
   it('disables Save when an indoor slot is invalid, and never confirms (CR b16df5ac)', () => {
     const { onConfirm } = renderDialog();
     fireEvent.click(screen.getByRole('radio', { name: 'Indoor' }));
