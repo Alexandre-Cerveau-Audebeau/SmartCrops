@@ -101,9 +101,11 @@ export function createAppTheme(mode: 'light' | 'dark'): Theme {
       MuiCssBaseline: {
         styleOverrides: (theme) => ({
           // A permanent scrollbar + reserved gutter keep the viewport width
-          // constant. The no-overlay-shift fix lives per-overlay now
-          // (disableScrollLock on the menus/dialog, mirroring the profile menu),
-          // so there is no body padding-right reset here (SMA-216).
+          // constant, which makes MUI's modal scroll-lock padding-right on
+          // <body> spurious — it only SHIFTS the page when an overlay opens.
+          // Neutralize it globally (SMA-216); this covers overlays that don't
+          // pass disableScrollLock (e.g. the garden config dialog, SMA-17) and
+          // is harmless for those that do (they add no padding to begin with).
           // SMA-247: the page-level horizontal-scroll guard (`overflowX: clip`)
           // is NOT set on <html> — on the document element it clips fixed-position
           // descendants (their containing block is the ICB), which made the fixed
@@ -113,6 +115,9 @@ export function createAppTheme(mode: 'light' | 'dark'): Theme {
           html: {
             overflowY: 'scroll',
             scrollbarGutter: 'stable',
+          },
+          body: {
+            paddingRight: '0 !important',
           },
           // Global thin theme-aware scrollbar (borderSubtle thumb on a
           // transparent track), generalised from the TOC (SMA-184 → SMA-216).

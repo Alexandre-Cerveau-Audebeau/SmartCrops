@@ -55,59 +55,60 @@ export const CompassRose = memo(function CompassRose({
         r="18"
         fill="none"
         stroke={tk.compRing}
-        strokeWidth="1.4"
+        strokeWidth="1.2"
       />
       {sunArc && (
-        <path
-          d="M33 20 A13 13 0 0 1 7 20"
-          fill="none"
-          stroke={tk.expoIcc}
-          strokeWidth="1.4"
-          strokeLinecap="round"
-          strokeDasharray="1.6 1.8"
-        />
+        <>
+          {/* Dashed sun arc over the top + sun dot at N; the color is the
+              mode-aware exposure accent (§8: arc = --expo-icc). */}
+          <path
+            d="M 6 20 A 14 14 0 0 1 34 20"
+            fill="none"
+            stroke={tk.expoIcc}
+            strokeWidth="1.6"
+            strokeDasharray="2.5 2.2"
+          />
+          <circle cx="20" cy="6" r="2.1" fill={tk.expoIcc} />
+        </>
       )}
-      <polygon points="20,7 23.2,20 16.8,20" fill={tk.compNeedle} />
-      <polygon points="20,33 23.2,20 16.8,20" fill={tk.compSTail} />
+      <polygon points="20,10 22.6,20 17.4,20" fill={tk.compNeedle} />
+      <polygon points="20,30 22.6,20 17.4,20" fill={tk.compSTail} />
       <text
         x="20"
-        y="4.8"
+        y="5"
         textAnchor="middle"
-        dominantBaseline="central"
-        fontSize="6.6"
+        fontSize="5.4"
         fontWeight="800"
         fill={tk.compTx}
       >
         {labels.n}
       </text>
       <text
-        x="35.2"
-        y="20.8"
+        x="36.4"
+        y="21.8"
         textAnchor="middle"
-        dominantBaseline="central"
-        fontSize="6"
+        fontSize="5.2"
         fontWeight="700"
         fill={tk.compMut}
       >
         {labels.e}
       </text>
+      {/* S letter is PRIMARY GREEN in the mockup, not muted. */}
       <text
         x="20"
-        y="35.4"
+        y="38.8"
         textAnchor="middle"
-        dominantBaseline="central"
-        fontSize="6"
-        fontWeight="700"
-        fill={tk.compMut}
+        fontSize="5.2"
+        fontWeight="800"
+        fill={tk.prim}
       >
         {labels.s}
       </text>
       <text
-        x="4.8"
-        y="20.8"
+        x="3.6"
+        y="21.8"
         textAnchor="middle"
-        dominantBaseline="central"
-        fontSize="6"
+        fontSize="5.2"
         fontWeight="700"
         fill={tk.compMut}
       >

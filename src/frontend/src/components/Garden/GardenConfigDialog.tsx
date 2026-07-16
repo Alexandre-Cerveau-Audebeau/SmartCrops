@@ -183,6 +183,16 @@ function GardenConfigDialogInner({
   const theme = useTheme();
   const tk = getPlannerTokens(theme.palette.mode);
 
+  // Inputs/steppers use the token surface (searchBg) + border (inputBd) so
+  // they read dark at night (#0F2038) instead of the default paper (SMA-17 R3).
+  const inputSx = {
+    '& .MuiOutlinedInput-root': {
+      backgroundColor: tk.searchBg,
+      '& fieldset': { borderColor: tk.inputBd },
+      '&:hover fieldset': { borderColor: tk.inputBd },
+    },
+  } as const;
+
   const [cols, setCols] = useState(initialWidth || 10);
   const [rows, setRows] = useState(initialHeight || 8);
   const [cellSize, setCellSize] = useState(initialCellSize || '50cm');
@@ -308,7 +318,7 @@ function GardenConfigDialogInner({
                 setCols(Math.max(2, Math.min(50, Number(e.target.value) || 2)))
               }
               inputProps={{ min: 2, max: 50, 'aria-label': t('planner.setup.columns') }}
-              sx={{ width: 110 }}
+              sx={{ width: 110, ...inputSx }}
             />
           </Box>
           <Box>
@@ -321,7 +331,7 @@ function GardenConfigDialogInner({
                 setRows(Math.max(2, Math.min(50, Number(e.target.value) || 2)))
               }
               inputProps={{ min: 2, max: 50, 'aria-label': t('planner.setup.rows') }}
-              sx={{ width: 110 }}
+              sx={{ width: 110, ...inputSx }}
             />
           </Box>
           <Box>
@@ -340,11 +350,21 @@ function GardenConfigDialogInner({
         </Typography>
       </Box>
 
-      {/* ORIENTATION (+ hemisphere / latitude — SMA-17 code-only controls) */}
+      {/* ORIENTATION — label + prompt + segmented + note in the LEFT column,
+          the compass at the TOP-RIGHT aligned with the label (mockup layout). */}
       <Box sx={{ mb: 3 }}>
-        <SectionLabel tk={tk}>{t('planner.config.sectionOrientation')}</SectionLabel>
-        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            gap: '20px',
+            flexWrap: 'wrap',
+            alignItems: 'flex-start',
+          }}
+        >
           <Box sx={{ flex: 1, minWidth: 240 }}>
+            <SectionLabel tk={tk}>
+              {t('planner.config.sectionOrientation')}
+            </SectionLabel>
             <Typography sx={{ fontSize: 13.5, color: tk.tMeta, mb: '10px' }}>
               {t('planner.config.orientationPrompt')}
             </Typography>
@@ -373,7 +393,7 @@ function GardenConfigDialogInner({
             }}
           >
             <CompassRose
-              size={92}
+              size={84}
               mode={theme.palette.mode}
               sunArc
               ariaLabel={compassAria}
@@ -381,16 +401,21 @@ function GardenConfigDialogInner({
             />
           </Box>
         </Box>
+      </Box>
 
-        {/* Hemisphere + latitude band (engraved SMA-17 amendment, not in the
-            mockup). MANUAL, OVERRIDABLE estimate — exactly like the future
-            per-cell exposure override. When the Phase-6 geolocation/weather API
-            lands it will PRE-FILL these two from the user's real latitude
-            WITHOUT changing the stored contract or the downstream engine: the
-            API refines the same variables, it does not replace the schema. The
-            labels/structure are framed so an "auto-filled from my location"
-            mode slots in later with no refactor. */}
-        <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap', mt: 2.5 }}>
+      {/* Full-width divider — separates the mockup ORIENTATION section from the
+          code-only hemisphere/latitude controls (SMA-17 R3 layout). */}
+      <Box sx={{ height: '1px', bgcolor: tk.divider, mb: 3 }} />
+
+      {/* Hemisphere + latitude band (engraved SMA-17 amendment, not in the
+          mockup): its OWN section below the divider, so it never pushes the
+          compass down. MANUAL, OVERRIDABLE estimate — like the future per-cell
+          exposure override; the Phase-6 geolocation/weather API will PRE-FILL
+          both from the user's real latitude WITHOUT changing the stored contract
+          or the downstream engine (an "auto-filled from my location" mode slots
+          in later with no refactor). */}
+      <Box sx={{ mb: 3 }}>
+        <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <Box>
             <FieldLabel tk={tk}>{t('planner.config.hemisphere')}</FieldLabel>
             <Segmented
@@ -508,7 +533,7 @@ function GardenConfigDialogInner({
                   value={slot.start}
                   onChange={(e) => updateSlot(index, { start: e.target.value })}
                   inputProps={{ 'aria-label': `${t('planner.config.slotStart')} ${index + 1}` }}
-                  sx={{ width: 120 }}
+                  sx={{ width: 120, ...inputSx }}
                 />
                 <Box component="span" sx={{ color: tk.muted }}>
                   →
@@ -519,7 +544,7 @@ function GardenConfigDialogInner({
                   value={slot.end}
                   onChange={(e) => updateSlot(index, { end: e.target.value })}
                   inputProps={{ 'aria-label': `${t('planner.config.slotEnd')} ${index + 1}` }}
-                  sx={{ width: 120 }}
+                  sx={{ width: 120, ...inputSx }}
                 />
                 <Box
                   sx={{
@@ -626,6 +651,10 @@ export default function GardenConfigDialog({ open, ...rest }: Props) {
             borderRadius: '14px',
             boxShadow: '0 30px 80px rgba(0,0,0,0.4)',
             bgcolor: tk.card,
+            // Kill MUI's dark-mode elevation overlay (a lightening gradient on
+            // Paper) so the box is EXACTLY tk.card (#16294A at night) instead of
+            // washed-out (SMA-17 R3 fidelity).
+            backgroundImage: 'none',
           },
         },
       }}

@@ -17,6 +17,7 @@ export interface PlannerTokens {
   // Surfaces / chrome
   card: string;
   cardBd: string;
+  divider: string;
   shadow: string;
   scrim: string;
   // Text
@@ -53,6 +54,7 @@ export interface PlannerTokens {
 const LIGHT: PlannerTokens = {
   card: '#FFFFFF',
   cardBd: '#F0F4EE',
+  divider: '#EDF2EC',
   shadow: '0 2px 10px rgba(27,94,58,0.07)',
   scrim: 'rgba(9,22,16,0.52)',
   tTitle: '#22302A',
@@ -81,6 +83,7 @@ const LIGHT: PlannerTokens = {
 const DARK: PlannerTokens = {
   card: '#16294A',
   cardBd: '#22375C',
+  divider: '#24395F',
   shadow: '0 2px 10px rgba(0,0,0,0.28)',
   scrim: 'rgba(9,22,16,0.52)',
   tTitle: '#F2F6FA',
