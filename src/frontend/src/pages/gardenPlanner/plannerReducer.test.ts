@@ -82,12 +82,22 @@ describe('plannerReducer', () => {
     expect(s.lastSaved).toBeNull();
   });
 
-  it('SETUP_CONFIRMED establishes a FRESH layout: placements and snapshot RESET (F5/F8, SMA-17)', () => {
+  it('SETUP_CONFIRMED establishes a FRESH layout: placements/snapshot RESET and painting/shape-edit disarmed (F5/F8, SMA-17)', () => {
     // F5/F8 flip (SMA-17): a first setup is a fresh layout — placements: [] and
     // lastSaved: null, so the reducer contract no longer depends on setup being
     // reachable only from an empty layout. Editing an existing garden goes
     // through RESIZED (cells preserved, out-of-bounds filtered), never here.
-    const s = plannerReducer(hydrated(), {
+    // Start from a state mid-shape-edit with a paint drag armed so the reset of
+    // the transient editing fields (CR 496d6f2a) is observable.
+    let base = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    base = plannerReducer(base, { type: 'PAINT_START', row: 0, col: 0 });
+    expect(base.shapeEditMode).toBe(true);
+    expect(base.isPainting).toBe(true);
+
+    const s = plannerReducer(base, {
       type: 'SETUP_CONFIRMED',
       cols: 2,
       rows: 2,
@@ -99,6 +109,10 @@ describe('plannerReducer', () => {
     expect(s.placements).toHaveLength(0);
     expect(s.lastSaved).toBeNull();
     expect(s.isDirty).toBe(true);
+    // Transient editing fields reset with the fresh layout.
+    expect(s.shapeEditMode).toBe(false);
+    expect(s.isPainting).toBe(false);
+    expect(s.paintAction).toBeNull();
     // Reset is not a "removal event" (no eviction toast) — that is RESIZED's job.
     expect(s.removedSeq).toBe(0);
   });

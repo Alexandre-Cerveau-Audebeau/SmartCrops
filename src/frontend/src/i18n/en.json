@@ -393,8 +393,8 @@
       "sectionOrientation": "ORIENTATION",
       "sectionGardenType": "GARDEN TYPE",
       "orientationPrompt": "Which way does the garden face?",
-      "orientationNote": "Drives the per-cell Exposure layer: morning = east lit, noon = south, evening = west, never = north.",
-      "compassLabel": "Compass",
+      "orientationNote": "Stored for future per-cell exposure calculations.",
+      "compassLabel": "Compass — the garden faces {{orientation}}",
       "west": "W",
       "type": {
         "balcony": "Balcony",
@@ -408,12 +408,12 @@
       "hemisphereNorth": "Northern",
       "hemisphereSouth": "Southern",
       "latitudeBand": "LATITUDE BAND",
-      "latitudeBandHelp": "Low (Spain) · Mid (France/UK) · High (Norway).",
+      "latitudeBandHelp": "Low = tropical · Mid = temperate · High = subpolar.",
       "latitudeLow": "Low",
       "latitudeMid": "Mid",
       "latitudeHigh": "High",
       "lightTitle": "Automated lighting (lightSchedule)",
-      "lightSubtitle": "Indoor garden: these ranges replace the layer's natural exposure.",
+      "lightSubtitle": "Indoor garden: define the intended automated lighting periods.",
       "addSlot": "Add a time slot",
       "removeSlot": "Remove time slot",
       "slotStart": "Start time",
@@ -421,7 +421,8 @@
       "slotDuration": "{{hours}} h",
       "lightTotal": "{{hours}} h of light / day · uniform across the grid",
       "save": "Save",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "saveError": "Couldn't save the garden settings. Please try again."
     },
     "shape": {
       "selectAll": "Select all",

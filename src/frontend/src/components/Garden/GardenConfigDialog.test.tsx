@@ -117,6 +117,20 @@ describe('GardenConfigDialog (SMA-17, §12)', () => {
     expect(config.lightSchedule).toEqual([{ start: '08:00', end: '12:00' }]);
   });
 
+  it('disables Save when an indoor slot is invalid, and never confirms (CR b16df5ac)', () => {
+    const { onConfirm } = renderDialog();
+    fireEvent.click(screen.getByRole('radio', { name: 'Indoor' }));
+    fireEvent.click(screen.getByRole('button', { name: /Add a time slot/i }));
+    // Make the slot invalid: end before start.
+    fireEvent.change(screen.getByLabelText('End time 1'), {
+      target: { value: '07:00' },
+    });
+    const save = screen.getByRole('button', { name: 'Save' });
+    expect(save).toBeDisabled();
+    fireEvent.click(save);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
   it('hydrates from the loaded GardenResponse config', () => {
     const { onConfirm } = renderDialog({
       initialConfig: {

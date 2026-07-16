@@ -180,15 +180,19 @@ export function plannerReducer(
       // and the saved snapshot RESET, so the reducer contract no longer leans on
       // UI reachability (setup only opens on a garden with no layout). Editing an
       // existing garden's dimensions goes through RESIZED, which preserves cells
-      // and filters out-of-bounds placements — never a wipe.
+      // and filters out-of-bounds placements — never a wipe. The transient
+      // editing fields reset too (CR 496d6f2a): any in-flight paint is disarmed
+      // and shape-edit mode is left, so the fresh grid starts in a clean state.
       return {
         ...state,
+        ...disarmedPainting,
         grid: parseCellsJson(null, action.cols, action.rows),
         layoutWidth: action.cols,
         layoutHeight: action.rows,
         cellSize: action.cellSize,
         placements: [],
         lastSaved: null,
+        shapeEditMode: false,
         isDirty: true,
       };
 

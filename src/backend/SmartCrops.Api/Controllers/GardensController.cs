@@ -411,7 +411,10 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
                 return $"lightSchedule allows at most {MaxLightSlots} slots.";
             foreach (var slot in slots)
             {
-                if (slot.Start is null || slot.End is null
+                // A null array element (e.g. `[null]` in the JSON) must be
+                // rejected via the 400 path BEFORE dereferencing Start/End.
+                if (slot is null
+                    || slot.Start is null || slot.End is null
                     || !TimeSlotPattern.IsMatch(slot.Start)
                     || !TimeSlotPattern.IsMatch(slot.End))
                     return "each lightSchedule slot needs start and end in 24h HH:mm format.";

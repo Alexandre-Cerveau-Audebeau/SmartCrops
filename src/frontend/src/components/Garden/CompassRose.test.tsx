@@ -19,6 +19,15 @@ describe('CompassRose', () => {
     expect(svg.querySelector('path')).toBeNull();
   });
 
+  it('renders no sun-arc path when sunArc is explicitly false', () => {
+    const { getByRole } = render(
+      <CompassRose size={104} mode="light" sunArc={false} ariaLabel="Compass" />
+    );
+    expect(
+      getByRole('img', { name: 'Compass' }).querySelector('path')
+    ).toBeNull();
+  });
+
   it('adds the dashed sun-path arc in the dialog variant and honors the night ring token', () => {
     const { getByRole, rerender } = render(
       <CompassRose size={104} mode="light" sunArc ariaLabel="Compass" />

@@ -338,6 +338,27 @@ public class GardensEndpointsTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task UpdateGarden_NullLightScheduleElement_Returns400()
+    {
+        var (userId, gardenId, _) = await SeedAsync();
+        AuthAs(userId);
+
+        // A null element in the array must be rejected via the 400 path, not
+        // NRE on slot.Start/End (CR b62dbb77).
+        var response = await UpdateGardenAsync(gardenId, "G", new
+        {
+            Orientation = (string?)null,
+            GardenType = "indoor",
+            LightSchedule = new object?[] { null },
+            Hemisphere = (string?)null,
+            LatitudeBand = (string?)null,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("HH:mm", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task UpdateGarden_SwitchingAwayFromIndoor_ClearsLightSchedule()
     {
         var (userId, gardenId, _) = await SeedAsync();

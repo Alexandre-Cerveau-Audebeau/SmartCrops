@@ -1,7 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
@@ -20,6 +22,11 @@ import HomeIcon from '@mui/icons-material/Home';
 import type { SvgIconComponent } from '@mui/icons-material';
 import type { GardenConfig, LightSlot } from '../../types/Garden';
 import { getPlannerTokens, type PlannerTokens } from '../../theme/plannerTokens';
+import {
+  formatHours,
+  isInvalidSlot,
+  slotHours,
+} from '../../utils/lightSchedule';
 import { CompassRose } from './CompassRose';
 
 // Dimensions produced by the dialog alongside the config block — the planner
@@ -39,6 +46,12 @@ interface Props {
   initialHeight: number;
   initialCellSize: string;
   initialConfig: GardenConfig;
+  /** True while the parent persists the config — disables Save and blocks a
+   * second submission until the request settles (SMA-17 R2). */
+  busy?: boolean;
+  /** Config-save error to surface inline; the parent keeps the dialog OPEN on
+   * failure so the entered values survive for a retry (SMA-17 R2). */
+  errorText?: string | null;
   onConfirm: (dimensions: DialogDimensions, config: GardenConfig) => void;
   onCancel: () => void;
 }
@@ -59,27 +72,6 @@ function cellSizeToMeters(cellSize: string): number {
   if (cellSize === '1m') return 1;
   if (cellSize === '50cm') return 0.5;
   return 0.25;
-}
-
-function parseHm(value: string): number | null {
-  const m = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!m) return null;
-  const h = Number(m[1]);
-  const min = Number(m[2]);
-  if (h > 23 || min > 59) return null;
-  return h * 60 + min;
-}
-
-/** Slot length in hours (0 when malformed or non-positive). */
-function slotHours(slot: LightSlot): number {
-  const start = parseHm(slot.start);
-  const end = parseHm(slot.end);
-  if (start === null || end === null || end <= start) return 0;
-  return (end - start) / 60;
-}
-
-function formatHours(hours: number): string {
-  return Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
 }
 
 // ── Small segmented control (tokens §10) ─────────────────────────────────────
@@ -182,6 +174,8 @@ function GardenConfigDialogInner({
   initialHeight,
   initialCellSize,
   initialConfig,
+  busy = false,
+  errorText,
   onConfirm,
   onCancel,
 }: Omit<Props, 'open'>) {
@@ -227,6 +221,21 @@ function GardenConfigDialogInner({
     label: o === 'W' ? westLabel : o,
   }));
 
+  // Block Save when any indoor slot is empty or has end <= start (CR b16df5ac):
+  // the backend would only reject such a payload on submit.
+  const hasInvalidLightSlot = isIndoor && lightSlots.some(isInvalidSlot);
+
+  // The compass announces the current orientation for its accessible name
+  // (CR a1b3c8f2); '—' when no orientation is chosen yet.
+  const orientationDisplay = orientation
+    ? orientation === 'W'
+      ? westLabel
+      : orientation
+    : '—';
+  const compassAria = t('planner.config.compassLabel', {
+    orientation: orientationDisplay,
+  });
+
   const updateSlot = (index: number, patch: Partial<LightSlot>) => {
     setLightSlots((prev) =>
       prev.map((slot, i) => (i === index ? { ...slot, ...patch } : slot))
@@ -246,6 +255,7 @@ function GardenConfigDialogInner({
   };
 
   const handleConfirm = () => {
+    if (hasInvalidLightSlot) return;
     const config: GardenConfig = {
       orientation,
       gardenType,
@@ -366,7 +376,7 @@ function GardenConfigDialogInner({
               size={92}
               mode={theme.palette.mode}
               sunArc
-              ariaLabel={t('planner.config.compassLabel')}
+              ariaLabel={compassAria}
               labels={{ n: 'N', e: 'E', s: 'S', w: westLabel }}
             />
           </Box>
@@ -553,11 +563,19 @@ function GardenConfigDialogInner({
         </Box>
       )}
 
+      {/* Persist failure (parent keeps the dialog open with values intact) */}
+      {errorText && (
+        <Alert severity="error" sx={{ mt: 1 }}>
+          {errorText}
+        </Alert>
+      )}
+
       {/* Footer */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.5, mt: 1 }}>
         <Button
           variant="outlined"
           onClick={onCancel}
+          disabled={busy}
           sx={{
             textTransform: 'none',
             color: tk.obtnTx,
@@ -569,8 +587,11 @@ function GardenConfigDialogInner({
         </Button>
         <Button
           variant="contained"
-          startIcon={<CheckIcon />}
+          startIcon={
+            busy ? <CircularProgress size={18} color="inherit" /> : <CheckIcon />
+          }
           onClick={handleConfirm}
+          disabled={busy || hasInvalidLightSlot}
           sx={{ textTransform: 'none', bgcolor: tk.prim, '&:hover': { bgcolor: tk.prim } }}
         >
           {t('planner.config.save')}

@@ -124,6 +124,11 @@ export default function GardenPlanner() {
   const [saving, setSaving] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  // Config-save pending + error state (SMA-17 R2): the config dialog is kept
+  // open until its updateGarden succeeds, Save is disabled while pending, and
+  // a failure surfaces inline without discarding the entered values.
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(true);
   const [message, setMessage] = useState<{
     type: 'success' | 'error' | 'info';
@@ -281,8 +286,8 @@ export default function GardenPlanner() {
     latitudeBand: garden?.latitudeBand ?? null,
   };
 
-  const persistConfig = async (config: GardenConfig) => {
-    if (!id || !garden) return;
+  const persistConfig = async (config: GardenConfig): Promise<boolean> => {
+    if (!id || !garden) return false;
     try {
       const updated = await updateGarden(
         id,
@@ -291,35 +296,53 @@ export default function GardenPlanner() {
         config
       );
       setGarden(updated);
+      setConfigError(null);
+      return true;
     } catch {
-      setMessage({ type: 'error', text: t('planner.toolbar.saveError') });
+      // A config-specific message (NOT the layout saveError): the dialog stays
+      // open with its values so the user can retry (SMA-17 R2, CR 5bd4c5e9).
+      setConfigError(t('planner.config.saveError'));
+      return false;
     }
   };
 
-  // First setup (no layout yet): SETUP_CONFIRMED establishes a fresh layout
-  // (F5/F8), and the config persists immediately on the garden resource.
-  const handleSetupConfigConfirm = (
+  // Config writes are AWAITED and serialized: a second submission is refused
+  // while one is pending (Save is also disabled), so a slow PUT can never land
+  // after a later one and clobber it. The dialog only closes and dimensions
+  // only apply AFTER persistence succeeds.
+  //
+  // First setup (no layout yet): on success, SETUP_CONFIRMED establishes a
+  // fresh layout (F5/F8).
+  const handleSetupConfigConfirm = async (
     dims: DialogDimensions,
     config: GardenConfig
   ) => {
-    setShowSetup(false);
+    if (configSaving) return;
+    setConfigSaving(true);
+    const ok = await persistConfig(config);
+    setConfigSaving(false);
+    if (!ok) return;
     dispatch({
       type: 'SETUP_CONFIRMED',
       cols: dims.cols,
       rows: dims.rows,
       cellSize: dims.cellSize,
     });
-    void persistConfig(config);
+    setShowSetup(false);
   };
 
-  // "Réglages" on an existing garden: a dimension change goes through RESIZED
-  // (cells preserved, out-of-bounds evicted — never a wipe); config persists
-  // via updateGarden. Dimensions still commit on the next layout Save.
-  const handleSettingsConfigConfirm = (
+  // "Réglages" on an existing garden: on success, a dimension change goes
+  // through RESIZED (cells preserved, out-of-bounds evicted — never a wipe);
+  // dimensions still commit on the next layout Save.
+  const handleSettingsConfigConfirm = async (
     dims: DialogDimensions,
     config: GardenConfig
   ) => {
-    setShowConfig(false);
+    if (configSaving) return;
+    setConfigSaving(true);
+    const ok = await persistConfig(config);
+    setConfigSaving(false);
+    if (!ok) return;
     if (
       dims.cols !== layoutWidth ||
       dims.rows !== layoutHeight ||
@@ -332,7 +355,7 @@ export default function GardenPlanner() {
         cellSize: dims.cellSize,
       });
     }
-    void persistConfig(config);
+    setShowConfig(false);
   };
 
   // Drag-to-paint handlers (guards live in the reducer)
@@ -359,7 +382,10 @@ export default function GardenPlanner() {
   );
   const handleZoomIn = useCallback(() => dispatch({ type: 'ZOOM_IN' }), []);
   const handleZoomOut = useCallback(() => dispatch({ type: 'ZOOM_OUT' }), []);
-  const handleOpenSettings = useCallback(() => setShowConfig(true), []);
+  const handleOpenSettings = useCallback(() => {
+    setConfigError(null);
+    setShowConfig(true);
+  }, []);
   const handleShapeEditToggle = useCallback(
     (enabled: boolean) => dispatch({ type: 'SET_SHAPE_EDIT_MODE', enabled }),
     []
@@ -683,6 +709,8 @@ export default function GardenPlanner() {
         initialHeight={layoutHeight}
         initialCellSize={cellSize}
         initialConfig={configFromGarden}
+        busy={configSaving}
+        errorText={configError}
         onConfirm={handleSetupConfigConfirm}
         onCancel={() => navigate('/gardens')}
       />
@@ -695,6 +723,8 @@ export default function GardenPlanner() {
         initialHeight={layoutHeight}
         initialCellSize={cellSize}
         initialConfig={configFromGarden}
+        busy={configSaving}
+        errorText={configError}
         onConfirm={handleSettingsConfigConfirm}
         onCancel={() => setShowConfig(false)}
       />

@@ -393,8 +393,8 @@
       "sectionOrientation": "ORIENTATION",
       "sectionGardenType": "TYPE DE JARDIN",
       "orientationPrompt": "Vers où le jardin est-il tourné ?",
-      "orientationNote": "Alimente le calque d'exposition par case : matin = Est éclairé, midi = Sud, soir = Ouest, jamais = Nord.",
-      "compassLabel": "Rose des vents",
+      "orientationNote": "Enregistré pour les futurs calculs d'exposition par case.",
+      "compassLabel": "Boussole — le jardin est orienté {{orientation}}",
       "west": "O",
       "type": {
         "balcony": "Balcon",
@@ -408,12 +408,12 @@
       "hemisphereNorth": "Nord",
       "hemisphereSouth": "Sud",
       "latitudeBand": "BANDE DE LATITUDE",
-      "latitudeBandHelp": "Basse (Espagne) · Moyenne (France/UK) · Haute (Norvège).",
+      "latitudeBandHelp": "Basse = tropicale · Moyenne = tempérée · Haute = subpolaire.",
       "latitudeLow": "Basse",
       "latitudeMid": "Moyenne",
       "latitudeHigh": "Haute",
       "lightTitle": "Éclairage automatisé (lightSchedule)",
-      "lightSubtitle": "Jardin intérieur : ces plages remplacent l'exposition naturelle du calque.",
+      "lightSubtitle": "Jardin intérieur : définissez les plages d'éclairage automatisé souhaitées.",
       "addSlot": "Ajouter une plage",
       "removeSlot": "Retirer la plage",
       "slotStart": "Début",
@@ -421,7 +421,8 @@
       "slotDuration": "{{hours}} h",
       "lightTotal": "{{hours}} h de lumière / jour · uniforme sur la grille",
       "save": "Enregistrer",
-      "cancel": "Annuler"
+      "cancel": "Annuler",
+      "saveError": "Impossible d'enregistrer les réglages du jardin. Veuillez réessayer."
     },
     "shape": {
       "selectAll": "Tout sélectionner",
