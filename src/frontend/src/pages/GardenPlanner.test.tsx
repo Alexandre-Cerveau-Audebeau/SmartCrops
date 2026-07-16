@@ -9,14 +9,17 @@ import type { Garden } from '../types/Garden';
 import type { Plant } from '../types/Plant';
 
 vi.mock('../services/plantApi', () => ({ fetchPlants: vi.fn() }));
-vi.mock('../services/gardenApi', () => ({ fetchGarden: vi.fn() }));
+vi.mock('../services/gardenApi', () => ({
+  fetchGarden: vi.fn(),
+  updateGarden: vi.fn(),
+}));
 vi.mock('../services/gardenLayoutApi', () => ({
   fetchLayout: vi.fn(),
   saveLayout: vi.fn(),
 }));
 
 import GardenPlanner from './GardenPlanner';
-import { fetchGarden } from '../services/gardenApi';
+import { fetchGarden, updateGarden } from '../services/gardenApi';
 import { fetchLayout } from '../services/gardenLayoutApi';
 import { fetchPlants } from '../services/plantApi';
 
@@ -436,6 +439,28 @@ describe('GardenPlanner placement initials', () => {
     await waitFor(() =>
       expect(within(grid).getAllByText('F')).toHaveLength(1)
     );
+  });
+
+  it('persists config through updateGarden when "Réglages" is saved (SMA-17)', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    vi.mocked(updateGarden).mockResolvedValue(garden);
+
+    renderPlanner();
+    await screen.findByRole('grid');
+
+    // Open the config dialog from the header, then save (dimensions unchanged,
+    // so only the garden-resource config persists — via updateGarden).
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(updateGarden).toHaveBeenCalledTimes(1));
+    const call = vi.mocked(updateGarden).mock.calls[0]!;
+    expect(call[0]).toBe('g1');
+    // Fourth arg = the config block, with the SMA-17 defaults present.
+    expect(call[3]).toMatchObject({ hemisphere: 'N', latitudeBand: 'mid' });
   });
 
   it('shows the unknown-plant fallback once an EMPTY catalog has resolved (explicit loaded flag, 5.2 R2)', async () => {

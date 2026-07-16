@@ -20,7 +20,16 @@ public record CreateGardenRequest(
 
 public record UpdateGardenRequest(
     [Required, MaxLength(100)] string Name,
-    [MaxLength(500)] string? Description
+    [MaxLength(500)] string? Description,
+    // OPTIONAL (SMA-17): config lives on the GARDEN resource — the config
+    // dialog persists here, not through the layout PUT. null -> the stored
+    // config is PRESERVED untouched (a plain rename never sends it); present
+    // -> strictly validated (the same ValidateConfig contract as the layout
+    // PUT), then the five fields are overwritten as a block. A nested nullable
+    // block is required to tell "omitted" from "explicitly cleared" — flat
+    // nullable fields cannot, and would fail to clear lightSchedule when
+    // gardenType moves away from 'indoor'.
+    GardenConfigDto? Config = null
 );
 
 /// <summary>
@@ -210,6 +219,24 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
 
         garden.Name = request.Name;
         garden.Description = request.Description;
+
+        // Config == null -> the stored config is PRESERVED (a plain rename never
+        // sends it). Config present -> strict validation, then a full overwrite
+        // of the five fields — identical semantics to the layout PUT (SMA-17).
+        if (request.Config is { } config)
+        {
+            var configError = ValidateConfig(config);
+            if (configError != null) return BadRequest(configError);
+
+            garden.Orientation = config.Orientation;
+            garden.GardenType = config.GardenType;
+            garden.LightScheduleJson = config.LightSchedule is { Count: > 0 }
+                ? JsonSerializer.Serialize(config.LightSchedule, JsonWeb)
+                : null;
+            garden.Hemisphere = config.Hemisphere;
+            garden.LatitudeBand = config.LatitudeBand;
+        }
+
         garden.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
@@ -384,7 +411,10 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
                 return $"lightSchedule allows at most {MaxLightSlots} slots.";
             foreach (var slot in slots)
             {
-                if (slot.Start is null || slot.End is null
+                // A null array element (e.g. `[null]` in the JSON) must be
+                // rejected via the 400 path BEFORE dereferencing Start/End.
+                if (slot is null
+                    || slot.Start is null || slot.End is null
                     || !TimeSlotPattern.IsMatch(slot.Start)
                     || !TimeSlotPattern.IsMatch(slot.End))
                     return "each lightSchedule slot needs start and end in 24h HH:mm format.";

@@ -228,6 +228,162 @@ public class GardensEndpointsTests : IntegrationTestBase
         Assert.Contains("at most 6", await response.Content.ReadAsStringAsync());
     }
 
+    // ── SMA-17: config persisted on the GARDEN resource (PUT /gardens/{id}) ────
+    // The config dialog persists through updateGarden, NOT the layout PUT — the
+    // same ValidateConfig contract, exercised on the garden endpoint here.
+
+    [Fact]
+    public async Task UpdateGarden_ConfigRoundtrip_PersistsThenReturnsIt()
+    {
+        var (userId, gardenId, _) = await SeedAsync();
+        AuthAs(userId);
+
+        var put = await UpdateGardenAsync(gardenId, "Renamed", ValidIndoorConfig());
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+        var updated = await put.Content.ReadFromJsonAsync<GardenResponseDto>();
+        Assert.Equal("Renamed", updated!.Name);
+        Assert.Equal("S", updated.Orientation);
+        Assert.Equal("indoor", updated.GardenType);
+        var slot = Assert.Single(updated.LightSchedule!);
+        Assert.Equal("08:00", slot.Start);
+        Assert.Equal("12:30", slot.End);
+        Assert.Equal("N", updated.Hemisphere);
+        Assert.Equal("mid", updated.LatitudeBand);
+
+        // GET {id} serves the same persisted config back.
+        var got = await Client.GetFromJsonAsync<GardenResponseDto>(
+            $"/api/gardens/{gardenId}");
+        Assert.Equal("S", got!.Orientation);
+        Assert.Equal("indoor", got.GardenType);
+        Assert.Single(got.LightSchedule!);
+    }
+
+    [Theory]
+    [InlineData("X", "inground", null, null, "orientation")]
+    [InlineData(null, "rooftop", null, null, "gardenType")]
+    [InlineData(null, "balcony", "08:00", "12:00", "indoor")]
+    [InlineData(null, "indoor", "8h00", "12:00", "HH:mm")]
+    [InlineData(null, "indoor", "12:00", "12:00", "start < end")]
+    public async Task UpdateGarden_InvalidConfig_Returns400(
+        string? orientation,
+        string? gardenType,
+        string? slotStart,
+        string? slotEnd,
+        string expectedFragment)
+    {
+        var (userId, gardenId, _) = await SeedAsync();
+        AuthAs(userId);
+
+        var lightSchedule = slotStart == null
+            ? null
+            : new[] { new { Start = slotStart, End = slotEnd } };
+        var response = await UpdateGardenAsync(gardenId, "Test garden", new
+        {
+            Orientation = orientation,
+            GardenType = gardenType,
+            LightSchedule = lightSchedule,
+            Hemisphere = (string?)null,
+            LatitudeBand = (string?)null,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains(expectedFragment, await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task UpdateGarden_MoreThanSixLightSlots_Returns400()
+    {
+        var (userId, gardenId, _) = await SeedAsync();
+        AuthAs(userId);
+
+        var slots = Enumerable.Range(8, 7)
+            .Select(h => new { Start = $"{h:00}:00", End = $"{h:00}:30" })
+            .ToArray();
+        var response = await UpdateGardenAsync(gardenId, "Test garden", new
+        {
+            Orientation = (string?)null,
+            GardenType = "indoor",
+            LightSchedule = slots,
+            Hemisphere = (string?)null,
+            LatitudeBand = (string?)null,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("at most 6", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task UpdateGarden_OmittedConfig_PreservesExisting()
+    {
+        var (userId, gardenId, _) = await SeedAsync();
+        AuthAs(userId);
+
+        // Establish config, then rename WITHOUT a config block.
+        Assert.Equal(HttpStatusCode.OK,
+            (await UpdateGardenAsync(gardenId, "First", ValidIndoorConfig())).StatusCode);
+
+        var rename = await Client.PutAsJsonAsync($"/api/gardens/{gardenId}",
+            new { Name = "Renamed only", Description = (string?)null });
+        Assert.Equal(HttpStatusCode.OK, rename.StatusCode);
+
+        var got = await Client.GetFromJsonAsync<GardenResponseDto>(
+            $"/api/gardens/{gardenId}");
+        Assert.Equal("Renamed only", got!.Name);
+        // The config-less update preserved every field — none nulled.
+        Assert.Equal("S", got.Orientation);
+        Assert.Equal("indoor", got.GardenType);
+        Assert.NotNull(got.LightSchedule);
+        Assert.Equal("N", got.Hemisphere);
+        Assert.Equal("mid", got.LatitudeBand);
+    }
+
+    [Fact]
+    public async Task UpdateGarden_NullLightScheduleElement_Returns400()
+    {
+        var (userId, gardenId, _) = await SeedAsync();
+        AuthAs(userId);
+
+        // A null element in the array must be rejected via the 400 path, not
+        // NRE on slot.Start/End (CR b62dbb77).
+        var response = await UpdateGardenAsync(gardenId, "G", new
+        {
+            Orientation = (string?)null,
+            GardenType = "indoor",
+            LightSchedule = new object?[] { null },
+            Hemisphere = (string?)null,
+            LatitudeBand = (string?)null,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("HH:mm", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task UpdateGarden_SwitchingAwayFromIndoor_ClearsLightSchedule()
+    {
+        var (userId, gardenId, _) = await SeedAsync();
+        AuthAs(userId);
+        await UpdateGardenAsync(gardenId, "G", ValidIndoorConfig());
+
+        // Re-send with a non-indoor type and no slots: the present-block
+        // overwrite must clear the previously-stored lightSchedule (the exact
+        // case a nested block handles and per-field flat nulls could not).
+        var response = await UpdateGardenAsync(gardenId, "G", new
+        {
+            Orientation = "S",
+            GardenType = "balcony",
+            LightSchedule = (object?)null,
+            Hemisphere = "N",
+            LatitudeBand = "mid",
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var got = await Client.GetFromJsonAsync<GardenResponseDto>(
+            $"/api/gardens/{gardenId}");
+        Assert.Equal("balcony", got!.GardenType);
+        Assert.Null(got.LightSchedule);
+    }
+
     // ── Helpers (same standalone pattern as GardenLayoutEndpointsTests) ───────
 
     private void AuthAs(string userId)
@@ -352,6 +508,20 @@ public class GardensEndpointsTests : IntegrationTestBase
         });
     }
 
+    private Task<HttpResponseMessage> UpdateGardenAsync(
+        Guid gardenId,
+        string name,
+        object? config,
+        string? description = null)
+    {
+        return Client.PutAsJsonAsync($"/api/gardens/{gardenId}", new
+        {
+            Name = name,
+            Description = description,
+            Config = config,
+        });
+    }
+
     // Private wire mirrors (the file stands alone — GardenLayoutEndpointsTests pattern).
     private record GardenListItemDto(
         Guid Id,
@@ -362,6 +532,19 @@ public class GardensEndpointsTests : IntegrationTestBase
         List<PlantItemDto> Plants);
 
     private record PlantItemDto(Guid Id, string ScientificName, string? CommonName);
+
+    private record GardenResponseDto(
+        Guid Id,
+        string Name,
+        string? Description,
+        int? LayoutWidth,
+        int? LayoutHeight,
+        string? CellSize,
+        string? Orientation,
+        string? GardenType,
+        List<SlotDto>? LightSchedule,
+        string? Hemisphere,
+        string? LatitudeBand);
 
     private record LayoutDto(
         int? Width,

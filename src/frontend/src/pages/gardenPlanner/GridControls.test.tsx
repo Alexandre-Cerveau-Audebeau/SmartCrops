@@ -20,7 +20,7 @@ function renderControls(overrides: { saving?: boolean } = {}) {
       onDeselectAll={vi.fn()}
       onZoomIn={vi.fn()}
       onZoomOut={vi.fn()}
-      onOpenResize={vi.fn()}
+      onOpenSettings={vi.fn()}
       onCancel={vi.fn()}
       onSave={vi.fn()}
     />
