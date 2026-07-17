@@ -13,13 +13,17 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
-import Container from '@mui/material/Container';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import { alpha, type Theme } from '@mui/material/styles';
+import { alpha, useTheme, type Theme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import CloseIcon from '@mui/icons-material/Close';
+import SaveIcon from '@mui/icons-material/Save';
+import SettingsIcon from '@mui/icons-material/Settings';
+import { CompassRose } from '../components/Garden/CompassRose';
 import GardenGrid from '../components/Garden/GardenGrid';
 import PlantSidebar from '../components/Garden/PlantSidebar';
 import GardenConfigDialog, {
@@ -33,10 +37,20 @@ import { useSelection } from '../hooks/useSelection';
 import { updateGarden } from '../services/gardenApi';
 import { saveLayout } from '../services/gardenLayoutApi';
 import { fetchPlants } from '../services/plantApi';
+import { usePlannerTokens } from '../theme/usePlannerTokens';
 import type { Garden, GardenConfig } from '../types/Garden';
 import type { Plant } from '../types/Plant';
 import { serializeCellsJson } from '../types/GardenLayout';
+import {
+  computeExposureGrid,
+  type Blocker,
+  type ExposureCategory,
+  type Moment,
+  type Season,
+} from '../utils/exposure';
 import { getPlantDisplayName } from '../utils/getPlantDisplayName';
+import { ExposureLegend } from './gardenPlanner/ExposureLegend';
+import { ExposureOverridePopover } from './gardenPlanner/ExposureOverridePopover';
 import { GridControls } from './gardenPlanner/GridControls';
 import { PlacementDetailPanel } from './gardenPlanner/PlacementDetailPanel';
 import { PlantsInGardenSection } from './gardenPlanner/PlantsInGardenSection';
@@ -54,6 +68,15 @@ function cellSizeToMeters(cellSize: string): number {
 // Referentially stable empty catalog for the not-ready renders — a fresh []
 // per render would defeat every downstream memo/effect dep on `allPlants`.
 const EMPTY_PLANTS: Plant[] = [];
+
+// No blockers before 5.4 (infrastructures) — a stable [] keeps the exposure
+// memo honest about its deps.
+const EMPTY_BLOCKERS: Blocker[] = [];
+
+// Help-banner dismissal (R4): persisted under a VERSIONED key — bumping the
+// version when the copy changes re-shows the banner once. SMA-302 tracks the
+// rotating-tips + account-preference successor.
+const HELP_BANNER_DISMISSED_KEY = 'smartcrops.planner.helpBanner.dismissed.v1';
 
 const addBtnSx = {
   cursor: 'pointer',
@@ -108,6 +131,9 @@ export default function GardenPlanner() {
     zoom,
     removedCount,
     removedSeq,
+    exposureVisible,
+    exposureMoment,
+    exposureSeason,
   } = state;
   const hasLastSaved = state.lastSaved !== null;
 
@@ -124,12 +150,25 @@ export default function GardenPlanner() {
   const [saving, setSaving] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  // Per-cell override picker (5.3-D): anchored to the clicked cell while the
+  // exposure layer is visible in selection mode.
+  const [overridePopover, setOverridePopover] = useState<{
+    row: number;
+    col: number;
+    anchor: HTMLElement;
+  } | null>(null);
   // Config-save pending + error state (SMA-17 R2): the config dialog is kept
   // open until its updateGarden succeeds, Save is disabled while pending, and
   // a failure surfaces inline without discarding the entered values.
   const [configSaving, setConfigSaving] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
-  const [showHelp, setShowHelp] = useState(true);
+  const [showHelp, setShowHelp] = useState(
+    () => localStorage.getItem(HELP_BANNER_DISMISSED_KEY) === null
+  );
+  const handleDismissHelp = useCallback(() => {
+    localStorage.setItem(HELP_BANNER_DISMISSED_KEY, '1');
+    setShowHelp(false);
+  }, []);
   const [message, setMessage] = useState<{
     type: 'success' | 'error' | 'info';
     text: string;
@@ -174,14 +213,47 @@ export default function GardenPlanner() {
   // are GUIDs, so the `new-` prefix can never collide. Stripped at save.
   const placementSeq = useRef(0);
 
-  const cellSizePx = Math.round(44 * zoom);
+  const theme = useTheme();
+  const plannerMode = theme.palette.mode === 'dark' ? 'dark' : 'light';
+  const tk = usePlannerTokens();
+  // The mobile breakpoint drives the §8 compass (56/40 container, 42/30 SVG)
+  // AND the §4 base cell size: 58 px desktop / 30 px mobile at zoom 100% (R3).
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const cellSizePx = Math.round((isMobile ? 30 : 58) * zoom);
+
+  // Derived exposure grid (5.3-D, the #171 derived-at-render pattern): NOT
+  // stored — recomputed from the draft grid + garden config when a dep
+  // changes. AGGREGATE mode only in 5.3-D: with no blockers yet (5.4), a
+  // per-moment view would be uniformly lit — the moment preset only feeds
+  // the legend title (honesty constraint: no fake variation).
+  const exposureCells = useMemo(() => {
+    if (!exposureVisible || !grid) return null;
+    const overrides: Record<string, ExposureCategory> = {};
+    grid.forEach((row, r) =>
+      row.forEach((cell, c) => {
+        if (cell.exposureOverride) overrides[`${r},${c}`] = cell.exposureOverride;
+      })
+    );
+    const result = computeExposureGrid({
+      rows: layoutHeight,
+      cols: layoutWidth,
+      activeCells: grid.map((row) => row.map((cell) => cell.active)),
+      orientation: garden?.orientation ?? null,
+      hemisphere: garden?.hemisphere ?? null,
+      latitudeBand: garden?.latitudeBand ?? null,
+      gardenType: garden?.gardenType ?? null,
+      lightSchedule: garden?.lightSchedule ?? null,
+      blockers: EMPTY_BLOCKERS,
+      overrides,
+      season: exposureSeason,
+    });
+    return result.mode === 'aggregate' ? result.cells : null;
+  }, [exposureVisible, grid, layoutWidth, layoutHeight, garden, exposureSeason]);
 
   // Horizontal scroll state for grid container
   const scrollRef = useRef<HTMLDivElement>(null);
-  const gridWrapperRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
-  const [panelTop, setPanelTop] = useState(100);
   const leftHold = useScrollHold(scrollRef, 'left');
   const rightHold = useScrollHold(scrollRef, 'right');
 
@@ -390,6 +462,19 @@ export default function GardenPlanner() {
     (enabled: boolean) => dispatch({ type: 'SET_SHAPE_EDIT_MODE', enabled }),
     []
   );
+  const handleToggleExposure = useCallback(
+    () => dispatch({ type: 'TOGGLE_EXPOSURE' }),
+    []
+  );
+  const handleSetExposureMoment = useCallback(
+    (moment: Moment) => dispatch({ type: 'SET_EXPOSURE_MOMENT', moment }),
+    []
+  );
+  const handleSetExposureSeason = useCallback(
+    (season: Season) => dispatch({ type: 'SET_EXPOSURE_SEASON', season }),
+    []
+  );
+  const handleUndo = useCallback(() => dispatch({ type: 'UNDO' }), []);
 
   const addRowTop = useCallback(() => dispatch({ type: 'ADD_ROW_TOP' }), []);
   const addRowBottom = useCallback(
@@ -419,7 +504,7 @@ export default function GardenPlanner() {
   );
 
   const handleCellClick = useCallback(
-    (row: number, col: number) => {
+    (row: number, col: number, anchorEl?: HTMLElement) => {
       if (shapeEditMode || !grid) return;
 
       const existing = placements.find(
@@ -459,9 +544,19 @@ export default function GardenPlanner() {
         return;
       }
 
+      // Exposure override picker (5.3-D): layer visible, selection mode (no
+      // armed plant — that branch returned above), ACTIVE cell WITHOUT a
+      // placement. Cells WITH a placement keep the selection behavior below
+      // (overriding under a placement is a documented v1 limitation).
+      if (exposureVisible && !existing && anchorEl) {
+        selectPlacement(null);
+        setOverridePopover({ row, col, anchor: anchorEl });
+        return;
+      }
+
       selectPlacement(existing ? existing.id : null);
     },
-    [shapeEditMode, grid, placements, selectedPlantId, catalogReady, selectPlacement]
+    [shapeEditMode, grid, placements, selectedPlantId, catalogReady, exposureVisible, selectPlacement]
   );
 
   const handleRemoveSelectedPlacement = useCallback(() => {
@@ -495,32 +590,6 @@ export default function GardenPlanner() {
       ro.disconnect();
     };
   }, [layoutWidth, layoutHeight, shapeEditMode, grid]);
-
-  useEffect(() => {
-    const updateTop = () => {
-      const node = gridWrapperRef.current;
-      if (!node) return;
-      const rect = node.getBoundingClientRect();
-      setPanelTop(Math.max(rect.top, STICKY_OFFSET));
-    };
-    updateTop();
-    window.addEventListener('scroll', updateTop, { passive: true });
-    window.addEventListener('resize', updateTop);
-    return () => {
-      window.removeEventListener('scroll', updateTop);
-      window.removeEventListener('resize', updateTop);
-    };
-  }, []);
-
-  // Recompute panel top whenever the panel becomes visible — first appearance
-  // would otherwise stick to the initial value of 100.
-  useEffect(() => {
-    if (selectedPlacementId === null) return;
-    const node = gridWrapperRef.current;
-    if (!node) return;
-    const rect = node.getBoundingClientRect();
-    setPanelTop(Math.max(rect.top, STICKY_OFFSET));
-  }, [selectedPlacementId]);
 
   const enrichedPlacements = useMemo(() => {
     const plantMap = new Map(allPlants.map((p) => [p.id, p]));
@@ -676,6 +745,39 @@ export default function GardenPlanner() {
       })
     : '';
 
+  // Meta line (R3 item C, restyled R4): the figures keep one line of text;
+  // gardenType/orientation render as soft cnt-chip pills appended to it
+  // (owner decoration beyond the mockup) — still ONLY when set; the dialog's
+  // i18n labels are reused (planner.config.type.*, planner.config.west).
+  const metaFigures = grid
+    ? `${dimensionsText} — ${t('planner.toolbar.activeCells', {
+        active: activeCells,
+        total: totalCells,
+        surface: surfaceM2,
+      })}`
+    : '';
+  const metaTypeChip = garden?.gardenType
+    ? t(`planner.config.type.${garden.gardenType}`)
+    : null;
+  const metaFacingChip = garden?.orientation
+    ? t('planner.meta.facing', {
+        facing:
+          garden.orientation === 'W'
+            ? t('planner.config.west')
+            : garden.orientation,
+      })
+    : null;
+  const hasMeta = Boolean(metaFigures || metaTypeChip || metaFacingChip);
+  const metaChipSx = {
+    bgcolor: tk.cntChipBg,
+    color: tk.cntChipTx,
+    borderRadius: '999px',
+    p: '2px 10px',
+    fontSize: 12,
+    fontWeight: 700,
+    lineHeight: 1.4,
+  } as const;
+
   const selectedPlant = selectedPlacement
     ? (allPlants.find((p) => p.id === selectedPlacement.plantId) ?? null)
     : null;
@@ -691,16 +793,19 @@ export default function GardenPlanner() {
 
   if (loading) {
     return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Box sx={{ px: '24px', py: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />
         </Box>
-      </Container>
+      </Box>
     );
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    // Full-width page (R3 item F): the lg Container is replaced by a
+    // full-width wrapper with 24px lateral padding (PROPOSED — orchestrator
+    // ratifies at harvest).
+    <Box sx={{ px: '24px', py: 4 }}>
       {/* Config dialog — first setup (a garden with no layout yet) */}
       <GardenConfigDialog
         open={showSetup}
@@ -739,33 +844,117 @@ export default function GardenPlanner() {
         {t('planner.toolbar.backToGardens')}
       </Button>
 
-      <GridControls
-        gardenName={garden?.name}
-        hasGrid={grid !== null}
-        shapeEditMode={shapeEditMode}
-        zoom={zoom}
-        isDirty={isDirty}
-        saving={saving}
-        onSelectAll={handleSelectAll}
-        onDeselectAll={handleDeselectAll}
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
-        onOpenSettings={handleOpenSettings}
-        onCancel={handleCancel}
-        onSave={handleSave}
-      />
+      {/* Page header (R2, spec'd R3 item E): H1 32/800, meta 7px below, and
+          the Réglages/Annuler/Enregistrer actions at 44px with 19px icons.
+          Exporter arrives with chantier F. */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 2,
+          mb: 2,
+        }}
+      >
+        <Box sx={{ mr: 'auto' }}>
+          <Typography
+            component="h1"
+            sx={{
+              fontSize: 32,
+              fontWeight: 800,
+              letterSpacing: '-0.01em',
+              lineHeight: 1.2,
+              color: tk.prim,
+            }}
+          >
+            {garden?.name || t('planner.title')}
+          </Typography>
+          {hasMeta && (
+            <Box
+              sx={{
+                mt: '7px',
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+              }}
+            >
+              {metaFigures && (
+                // R4 (item C): the numbers-bearing text is semi-bold.
+                <Typography
+                  sx={{ fontSize: 14.5, fontWeight: 600, color: tk.tMeta }}
+                >
+                  {metaFigures}
+                </Typography>
+              )}
+              {metaTypeChip && <Box sx={metaChipSx}>{metaTypeChip}</Box>}
+              {metaFacingChip && <Box sx={metaChipSx}>{metaFacingChip}</Box>}
+            </Box>
+          )}
+        </Box>
 
-      {dimensionsText && (
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          {dimensionsText}
-          {' — '}
-          {t('planner.toolbar.activeCells', {
-            active: activeCells,
-            total: totalCells,
-            surface: surfaceM2,
-          })}
-        </Typography>
-      )}
+        {grid && (
+          <Button
+            variant="outlined"
+            startIcon={<SettingsIcon sx={{ fontSize: 19 }} />}
+            onClick={handleOpenSettings}
+            sx={{
+              height: 44,
+              px: '17px',
+              borderRadius: '8px',
+              fontSize: 14.5,
+              fontWeight: 700,
+              bgcolor: tk.card,
+              borderColor: tk.obtnBd,
+              color: tk.obtnTx,
+            }}
+          >
+            {t('planner.toolbar.settings')}
+          </Button>
+        )}
+
+        {isDirty && (
+          <Button
+            variant="outlined"
+            color="inherit"
+            onClick={handleCancel}
+            disabled={saving}
+            sx={{
+              height: 44,
+              px: '17px',
+              borderRadius: '8px',
+              fontSize: 14.5,
+              fontWeight: 700,
+              borderColor: tk.obtnBd,
+              color: tk.obtnTx,
+            }}
+          >
+            {t('planner.toolbar.cancel')}
+          </Button>
+        )}
+
+        <Button
+          variant="contained"
+          startIcon={
+            saving ? (
+              <CircularProgress size={18} color="inherit" />
+            ) : (
+              <SaveIcon sx={{ fontSize: 19 }} />
+            )
+          }
+          disabled={!isDirty || saving}
+          onClick={handleSave}
+          sx={{
+            height: 44,
+            px: '17px',
+            borderRadius: '8px',
+            fontSize: 14.5,
+            fontWeight: 700,
+          }}
+        >
+          {saving ? t('planner.toolbar.saving') : t('planner.toolbar.save')}
+        </Button>
+      </Box>
 
       {isDirty && (
         <Alert
@@ -811,23 +1000,43 @@ export default function GardenPlanner() {
         </Alert>
       )}
 
+      {/* Help banner (R3 item D — §11 --banner-*, radius 10, padding 13×16,
+          close 19px). R4: dismissal persists via the versioned localStorage
+          key above (SMA-302 = rotating-tips successor). */}
       {grid && showHelp && (
-        <Alert
-          severity="info"
-          variant="outlined"
-          sx={{ mb: 2 }}
-          icon={false}
-          onClose={() => setShowHelp(false)}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 1.5,
+            mb: 2,
+            p: '13px 16px',
+            borderRadius: '10px',
+            bgcolor: tk.bannerBg,
+            border: `1px solid ${tk.bannerBd}`,
+          }}
         >
-          <Typography variant="body2">{t('planner.help.unified')}</Typography>
-        </Alert>
+          <Typography sx={{ fontSize: 14, color: tk.bannerTx, flex: 1 }}>
+            {t('planner.help.unified')}
+          </Typography>
+          <IconButton
+            size="small"
+            onClick={handleDismissHelp}
+            aria-label={t('planner.config.close')}
+            sx={{ p: '2px', color: tk.bannerTx }}
+          >
+            <CloseIcon sx={{ fontSize: 19 }} />
+          </IconButton>
+        </Box>
       )}
 
-      {/* Two-column layout: sidebar | grid (detail panel is a floating overlay below) */}
+      {/* Main row: sidebar | grid | detail lane. R5 (CR accept): below lg the
+          rails stack full-width around the grid — no horizontal overflow. */}
       {grid && (
         <Box
           sx={{
             display: 'flex',
+            flexDirection: { xs: 'column', lg: 'row' },
             gap: 2,
             alignItems: 'flex-start',
             pb: 2,
@@ -848,73 +1057,84 @@ export default function GardenPlanner() {
             onCatalogRetry={handleCatalogRetry}
           />
 
+          <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            {/* Toolbar card (R2, §10) — grid column only, above the grid card */}
+            <GridControls
+              hasGrid={grid !== null}
+              shapeEditMode={shapeEditMode}
+              zoom={zoom}
+              canUndo={state.past.length > 0}
+              exposureVisible={exposureVisible}
+              exposureMoment={exposureMoment}
+              exposureSeason={exposureSeason}
+              onSelectAll={handleSelectAll}
+              onDeselectAll={handleDeselectAll}
+              onUndo={handleUndo}
+              onZoomIn={handleZoomIn}
+              onZoomOut={handleZoomOut}
+              onToggleExposure={handleToggleExposure}
+              onSetExposureMoment={handleSetExposureMoment}
+              onSetExposureSeason={handleSetExposureSeason}
+            />
+
+          {/* Grid CARD (§4: radius 12, border card-bd, shadow, padding 20/12) —
+              it provides the grid's frame; the compass overflows ITS corner. */}
           <Box
-            ref={gridWrapperRef}
             sx={{
               position: 'relative',
-              flex: 1,
-              minWidth: 0,
               overflow: 'visible',
               display: 'flex',
               flexDirection: 'column',
+              bgcolor: tk.card,
+              border: `1px solid ${tk.cardBd}`,
+              borderRadius: '12px',
+              boxShadow: tk.shadow,
+              p: { xs: '12px', sm: '20px' },
             }}
           >
-            {/* Scroll arrows — sticky to top of viewport (page scroll) so they stay visible */}
+            {/* Permanent compass (5.3-D, tokens §8): top-right corner of the
+                grid card, overflowing it (right:-6, top:-10), card chrome,
+                z-index 10, NO sun arc on the planner variant. The whole rose
+                rotates so the garden's facing sits at the top (option b). */}
             <Box
               sx={{
-                position: 'sticky',
-                top: STICKY_OFFSET,
-                zIndex: 5,
-                height: 0,
-                alignSelf: 'stretch',
+                position: 'absolute',
+                right: -6,
+                top: -10,
+                zIndex: 10,
+                // R3 (CR accept): the overlay is non-interactive — clicks
+                // must reach the top-right cells underneath it.
+                pointerEvents: 'none',
+                width: { xs: 40, sm: 56 },
+                height: { xs: 40, sm: 56 },
+                borderRadius: '50%',
+                bgcolor: tk.card,
+                border: `1px solid ${tk.cardBd}`,
+                boxShadow: tk.shadow,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
-              {showLeftArrow && (
-                <IconButton
-                  size="small"
-                  aria-label={t('planner.toolbar.scrollLeft')}
-                  onClick={() => {
-                    if (!leftHold.consumeWasHeld()) handleScrollLeftStep();
-                  }}
-                  onPointerDown={leftHold.start}
-                  onPointerUp={leftHold.stop}
-                  onPointerLeave={leftHold.stop}
-                  onPointerCancel={leftHold.stop}
-                  sx={{
-                    position: 'absolute',
-                    left: 4,
-                    top: 4,
-                    bgcolor: 'background.paper',
-                    boxShadow: 2,
-                    '&:hover': { bgcolor: 'background.paper' },
-                  }}
-                >
-                  <ChevronLeftIcon />
-                </IconButton>
-              )}
-              {showRightArrow && (
-                <IconButton
-                  size="small"
-                  aria-label={t('planner.toolbar.scrollRight')}
-                  onClick={() => {
-                    if (!rightHold.consumeWasHeld()) handleScrollRightStep();
-                  }}
-                  onPointerDown={rightHold.start}
-                  onPointerUp={rightHold.stop}
-                  onPointerLeave={rightHold.stop}
-                  onPointerCancel={rightHold.stop}
-                  sx={{
-                    position: 'absolute',
-                    right: 4,
-                    top: 4,
-                    bgcolor: 'background.paper',
-                    boxShadow: 2,
-                    '&:hover': { bgcolor: 'background.paper' },
-                  }}
-                >
-                  <ChevronRightIcon />
-                </IconButton>
-              )}
+              {/* R3 (CR accept): a null orientation is NOT announced as south
+                  — the rose rests (N up) with an "orientation not set" label
+                  until the user actually configures a facing. */}
+              <CompassRose
+                size={isMobile ? 30 : 42}
+                mode={plannerMode}
+                orientation={garden?.orientation ?? null}
+                labels={{ n: 'N', e: 'E', s: 'S', w: t('planner.config.west') }}
+                ariaLabel={
+                  garden?.orientation
+                    ? t('planner.config.compassLabel', {
+                        orientation:
+                          garden.orientation === 'W'
+                            ? t('planner.config.west')
+                            : garden.orientation,
+                      })
+                    : t('planner.config.compassUnset')
+                }
+              />
             </Box>
 
             {/* TOP +/- row — OUTSIDE scroll, centered in wrapper width (= visible viewport) */}
@@ -965,16 +1185,77 @@ export default function GardenPlanner() {
               </Box>
             )}
 
+            {/* Scroll viewport wrapper — the arrows anchor HERE (the wrapper,
+                not the scrolling content) at the viewport's vertical center,
+                so they stay visible while the user scrolls (R2). */}
+            <Box
+              sx={{
+                position: 'relative',
+                flex: '0 1 auto',
+                minWidth: 0,
+                maxWidth: '100%',
+                alignSelf: 'center',
+              }}
+            >
+              {showLeftArrow && (
+                <IconButton
+                  size="small"
+                  aria-label={t('planner.toolbar.scrollLeft')}
+                  onClick={() => {
+                    if (!leftHold.consumeWasHeld()) handleScrollLeftStep();
+                  }}
+                  onPointerDown={leftHold.start}
+                  onPointerUp={leftHold.stop}
+                  onPointerLeave={leftHold.stop}
+                  onPointerCancel={leftHold.stop}
+                  sx={{
+                    position: 'absolute',
+                    left: 4,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    zIndex: 5,
+                    bgcolor: 'background.paper',
+                    boxShadow: 2,
+                    '&:hover': { bgcolor: 'background.paper' },
+                  }}
+                >
+                  <ChevronLeftIcon />
+                </IconButton>
+              )}
+              {showRightArrow && (
+                <IconButton
+                  size="small"
+                  aria-label={t('planner.toolbar.scrollRight')}
+                  onClick={() => {
+                    if (!rightHold.consumeWasHeld()) handleScrollRightStep();
+                  }}
+                  onPointerDown={rightHold.start}
+                  onPointerUp={rightHold.stop}
+                  onPointerLeave={rightHold.stop}
+                  onPointerCancel={rightHold.stop}
+                  sx={{
+                    position: 'absolute',
+                    right: 4,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    zIndex: 5,
+                    bgcolor: 'background.paper',
+                    boxShadow: 2,
+                    '&:hover': { bgcolor: 'background.paper' },
+                  }}
+                >
+                  <ChevronRightIcon />
+                </IconButton>
+              )}
+
             {/* Scroll container — only the middle row (left col | grid | right col) */}
             <Box
               ref={scrollRef}
               sx={{
                 overflowX: 'auto',
                 overflowY: 'hidden',
-                flex: '0 1 auto',
                 minWidth: 0,
                 maxWidth: '100%',
-                alignSelf: 'center',
               }}
             >
               <Box
@@ -1030,6 +1311,7 @@ export default function GardenPlanner() {
                   grid={grid}
                   shapeEditMode={shapeEditMode}
                   placements={enrichedPlacements}
+                  exposure={exposureCells}
                   onCellClick={handleCellClick}
                   onCellDragStart={handleCellDragStart}
                   onCellDragEnter={handleCellDragEnter}
@@ -1084,6 +1366,7 @@ export default function GardenPlanner() {
                 )}
               </Box>
             </Box>
+            </Box>
 
             {/* BOTTOM +/- row — OUTSIDE scroll, centered in wrapper width */}
             {shapeEditMode && (
@@ -1133,21 +1416,66 @@ export default function GardenPlanner() {
               </Box>
             )}
           </Box>
+
+            {/* Exposure legend (5.3-D, tokens §9) — only while the layer is on */}
+            {exposureVisible && (
+              <ExposureLegend season={exposureSeason} moment={exposureMoment} />
+            )}
+          </Box>
+
+          {/* Right detail LANE (R4, owner reversal of R3's on-demand lane):
+              the 330px column is ALWAYS reserved — an empty spacer when
+              nothing is selected. Sticky rail below the navbar
+              (STICKY_OFFSET = NAVBAR_HEIGHT 64 + 16), viewport-capped and
+              self-scrolling so its content stays on screen. */}
+          <Box
+            sx={{
+              width: { xs: '100%', lg: 330 },
+              flexShrink: 0,
+              position: { xs: 'static', lg: 'sticky' },
+              top: { lg: STICKY_OFFSET },
+              alignSelf: { xs: 'stretch', lg: 'flex-start' },
+              maxHeight: { lg: `calc(100vh - ${STICKY_OFFSET}px)` },
+              overflowY: { lg: 'auto' },
+            }}
+          >
+            {selectedPlacement && (
+              <PlacementDetailPanel
+                placement={selectedPlacement}
+                plant={selectedPlant}
+                soil={selectedCellSoil}
+                language={language}
+                catalogReady={catalogReady}
+                onRemove={handleRemoveSelectedPlacement}
+              />
+            )}
+          </Box>
         </Box>
       )}
 
-      {/* Floating detail panel — anchored at the top of the map area, sticks while scrolling */}
-      {selectedPlacement && (
-        <PlacementDetailPanel
-          placement={selectedPlacement}
-          plant={selectedPlant}
-          soil={selectedCellSoil}
-          top={panelTop}
-          language={language}
-          catalogReady={catalogReady}
-          onRemove={handleRemoveSelectedPlacement}
-        />
-      )}
+      {/* Per-cell exposure override picker (5.3-D) */}
+      <ExposureOverridePopover
+        open={overridePopover !== null}
+        anchorEl={overridePopover?.anchor ?? null}
+        current={
+          overridePopover
+            ? (grid?.[overridePopover.row]?.[overridePopover.col]
+                ?.exposureOverride ?? null)
+            : null
+        }
+        onSelect={(value) => {
+          if (overridePopover) {
+            dispatch({
+              type: 'SET_CELL_EXPOSURE_OVERRIDE',
+              row: overridePopover.row,
+              col: overridePopover.col,
+              value,
+            });
+          }
+          setOverridePopover(null);
+        }}
+        onClose={() => setOverridePopover(null)}
+      />
 
       {/* Plants in this garden — derived from placements only (SMA-6 Option A) */}
       {plantsToShow.length > 0 && (
@@ -1168,6 +1496,6 @@ export default function GardenPlanner() {
           ? t('planner.toolbar.unsavedChanges')
           : t('planner.toolbar.saved')}
       </Typography>
-    </Container>
+    </Box>
   );
 }

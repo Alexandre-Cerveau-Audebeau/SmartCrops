@@ -395,6 +395,7 @@
       "orientationPrompt": "Vers où le jardin est-il tourné ?",
       "orientationNote": "Enregistré pour les futurs calculs d'exposition par case.",
       "compassLabel": "Boussole — le jardin est orienté {{orientation}}",
+      "compassUnset": "Boussole — orientation non configurée",
       "west": "O",
       "type": {
         "balcony": "Balcon",
@@ -423,6 +424,29 @@
       "save": "Enregistrer",
       "cancel": "Annuler",
       "saveError": "Impossible d'enregistrer les réglages du jardin. Veuillez réessayer."
+    },
+    "exposure": {
+      "toggle": "Exposition",
+      "moments": {
+        "morning": "Matin",
+        "noon": "Midi",
+        "evening": "Soir"
+      },
+      "seasons": {
+        "summer": "Été",
+        "winter": "Hiver"
+      },
+      "legendTitle": "Exposition — {{season}} · {{moment}}",
+      "categories": {
+        "full": "Plein soleil",
+        "morning": "Soleil du matin",
+        "afternoon": "Soleil d'après-midi",
+        "shade": "Ombre"
+      },
+      "override": {
+        "title": "Exposition de la case",
+        "auto": "Auto (calculée)"
+      }
     },
     "shape": {
       "selectAll": "Tout sélectionner",
@@ -457,6 +481,7 @@
       "changesDiscarded": "Modifications annulées",
       "zoomIn": "Zoomer",
       "zoomOut": "Dézoomer",
+      "undo": "Annuler la dernière action",
       "scrollLeft": "Faire défiler la grille vers la gauche",
       "scrollRight": "Faire défiler la grille vers la droite",
       "saved": "Toutes les modifications sont enregistrées",
@@ -472,10 +497,14 @@
       "toggleCell": "Basculer la cellule",
       "plantedCell": "{{plant}} à la ligne {{row}}, colonne {{col}}",
       "emptyCell": "Cellule vide à la ligne {{row}}, colonne {{col}}",
-      "inactiveCell": "Cellule inactive à la ligne {{row}}, colonne {{col}}"
+      "inactiveCell": "Cellule inactive à la ligne {{row}}, colonne {{col}}",
+      "exposureCell": "{{category}} — cellule vide à la ligne {{row}}, colonne {{col}}"
     },
     "help": {
-      "unified": "Cliquez sur une plante dans le menu, puis sur les parcelles pour la placer. Cliquez à nouveau pour la remplacer. Activez 'Modifier la forme' pour changer la forme du jardin."
+      "unified": "Cliquez sur une plante dans le menu, puis sur les parcelles pour la placer. Le calque Exposition montre le soleil case par case — réglez le moment et la saison dans la barre d'outils."
+    },
+    "meta": {
+      "facing": "Orienté {{facing}}"
     },
     "dimensions": "{{cols}} × {{rows}} — {{width}} × {{height}} ({{cellSize}}/cellule)",
     "plantsInGarden": "Plantes dans ce jardin",

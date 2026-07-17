@@ -20,7 +20,7 @@ vi.mock('../services/gardenLayoutApi', () => ({
 
 import GardenPlanner from './GardenPlanner';
 import { fetchGarden, updateGarden } from '../services/gardenApi';
-import { fetchLayout } from '../services/gardenLayoutApi';
+import { fetchLayout, saveLayout } from '../services/gardenLayoutApi';
 import { fetchPlants } from '../services/plantApi';
 
 // Locks the transient wrong-initial artifact: a placement hydrating before
@@ -478,5 +478,230 @@ describe('GardenPlanner placement initials', () => {
     await waitFor(() =>
       expect(within(grid).getByText('U')).toBeInTheDocument()
     );
+  });
+});
+
+// SMA-17 5.3-D — the exposure layer wired end-to-end: toggle → derived tint +
+// legend; presets drive the legend title; indoor gardens tint uniformly from
+// the lightSchedule; the per-cell override popover edits the draft and the
+// sparse override reaches the save payload; the permanent compass shows the
+// garden's facing. HONESTY: an outdoor garden with no blockers (5.4) computes
+// to a UNIFORM full-sun tint — the assertions below expect exactly that.
+describe('GardenPlanner exposure layer (SMA-17 5.3-D)', () => {
+  async function renderReady(gardenFixture: Garden = garden) {
+    vi.mocked(fetchGarden).mockResolvedValue(gardenFixture);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    await waitFor(() =>
+      expect(within(grid).getByText('B')).toBeInTheDocument()
+    );
+    return grid;
+  }
+
+  it('toggle ON tints the active cells (uniform full sun outdoors) and shows the legend; OFF hides both', async () => {
+    const grid = await renderReady();
+    // Layer starts hidden: no tint, no legend.
+    expect(within(grid).queryAllByRole('gridcell')).toHaveLength(4);
+    expect(document.querySelector('[data-exposure]')).toBeNull();
+    expect(screen.queryByText('Exposure — summer · noon')).toBeNull();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    // 2×2 all-active outdoor grid, placement at (0,0): the three empty cells
+    // tint 'full' (uniform, no blockers before 5.4); the placement renders on
+    // top unchanged (no tint attribute).
+    const cells = within(grid).getAllByRole('gridcell');
+    expect(cells[1]).toHaveAttribute('data-exposure', 'full');
+    expect(cells[2]).toHaveAttribute('data-exposure', 'full');
+    expect(cells[3]).toHaveAttribute('data-exposure', 'full');
+    expect(cells[0]).not.toHaveAttribute('data-exposure');
+    expect(screen.getByText('Exposure — summer · noon')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    expect(document.querySelector('[data-exposure]')).toBeNull();
+    expect(screen.queryByText('Exposure — summer · noon')).toBeNull();
+  });
+
+  it('presets are disabled while the layer is off and drive the legend title once on', async () => {
+    await renderReady();
+    expect(screen.getByRole('button', { name: 'Winter' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Winter' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Evening' }));
+    expect(
+      screen.getByText('Exposure — winter · evening')
+    ).toBeInTheDocument();
+  });
+
+  it('an indoor garden tints uniformly from its lightSchedule (6h → morning)', async () => {
+    const indoor = {
+      ...garden,
+      gardenType: 'indoor',
+      lightSchedule: [{ start: '06:00', end: '12:00' }],
+    } as Garden;
+    const grid = await renderReady(indoor);
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    const cells = within(grid).getAllByRole('gridcell');
+    expect(cells[1]).toHaveAttribute('data-exposure', 'morning');
+    expect(cells[2]).toHaveAttribute('data-exposure', 'morning');
+    expect(cells[3]).toHaveAttribute('data-exposure', 'morning');
+  });
+
+  it('the cell popover sets a manual override (tint + dirty + sparse save payload) and Auto clears it', async () => {
+    vi.mocked(saveLayout).mockResolvedValue(undefined);
+    const grid = await renderReady();
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+
+    // Click the empty active cell (0,1) → the labelled popover opens.
+    const cells = within(grid).getAllByRole('gridcell');
+    fireEvent.click(cells[1]!);
+    expect(await screen.findByText('Cell exposure')).toBeInTheDocument();
+
+    // Choose Ombre → the tint updates immediately and the draft is dirty.
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Shade' }));
+    expect(cells[1]).toHaveAttribute('data-exposure', 'shade');
+
+    // The existing save flow persists the SPARSE override in CellsJson.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
+    await waitFor(() => expect(saveLayout).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(saveLayout).mock.calls[0]![1];
+    expect(JSON.parse(payload.cellsJson!)).toEqual([
+      { row: 0, col: 1, exposureOverride: 'shade' },
+    ]);
+
+    // Auto (computed) clears the override — back to the computed full sun.
+    fireEvent.click(cells[1]!);
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Auto (computed)' })
+    );
+    expect(cells[1]).toHaveAttribute('data-exposure', 'full');
+  });
+
+  it('renders the permanent compass with the garden facing in its accessible name', async () => {
+    await renderReady({ ...garden, orientation: 'E' } as Garden);
+    expect(
+      screen.getByRole('img', { name: 'Compass — the garden faces E' })
+    ).toBeInTheDocument();
+  });
+
+  it('undo reverts the last content edit (override → back to computed)', async () => {
+    const grid = await renderReady();
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    const cells = within(grid).getAllByRole('gridcell');
+    const undo = screen.getByRole('button', { name: 'Undo last action' });
+    expect(undo).toBeDisabled(); // no content edit yet
+
+    fireEvent.click(cells[1]!);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Shade' }));
+    expect(cells[1]).toHaveAttribute('data-exposure', 'shade');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo last action' }));
+    expect(cells[1]).toHaveAttribute('data-exposure', 'full');
+  });
+});
+
+// R4 — the help banner's dismissal persists via the versioned localStorage
+// key (SMA-302 tracks the rotating-tips successor). localStorage hygiene:
+// the file-level beforeEach already clears it.
+describe('GardenPlanner help banner persistence (SMA-17 5.3-D R4)', () => {
+  const COPY =
+    'Click a plant in the sidebar, then click cells to place it. The Exposure layer shows per-cell sunlight — set the time and season in the toolbar.';
+
+  it('is visible with no stored key; dismissing writes the key and survives a remount', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+
+    const first = renderPlanner();
+    await screen.findByRole('grid');
+    expect(screen.getByText(COPY)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByText(COPY)).toBeNull();
+    expect(
+      localStorage.getItem('smartcrops.planner.helpBanner.dismissed.v1')
+    ).toBe('1');
+
+    first.unmount();
+    renderPlanner();
+    await screen.findByRole('grid');
+    expect(screen.queryByText(COPY)).toBeNull();
+  });
+});
+
+// R4 — the meta chips: gardenType/orientation as soft pills, only when set.
+describe('GardenPlanner meta chips (SMA-17 5.3-D R4)', () => {
+  it('renders type and facing chips when set, omits them when unset', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue({
+      ...garden,
+      gardenType: 'terrace',
+      orientation: 'S',
+    } as Garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+
+    const first = renderPlanner();
+    await screen.findByRole('grid');
+    expect(screen.getByText('Terrace')).toBeInTheDocument();
+    expect(screen.getByText('Facing S')).toBeInTheDocument();
+
+    // Unset config (the default fixture) → no chips.
+    first.unmount();
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    renderPlanner();
+    await screen.findByRole('grid');
+    expect(screen.queryByText(/^Facing /)).toBeNull();
+    expect(screen.queryByText('Terrace')).toBeNull();
+  });
+});
+
+// F3 lock (develop-store review on ef076f0), RELOCATED with the markup in
+// 5.3-D R2: Save/Cancel now live in the PAGE HEADER — while a save is in
+// flight, Cancel must be unavailable (a local restore would report "changes
+// discarded" while saveLayout still persists the submitted snapshot).
+describe('GardenPlanner header save/cancel gating (F3, relocated in R2)', () => {
+  it('disables every Cancel and Save while a save is in flight', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    let resolveSave!: () => void;
+    vi.mocked(saveLayout).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        })
+    );
+
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    await waitFor(() =>
+      expect(within(grid).getByText('B')).toBeInTheDocument()
+    );
+
+    // Dirty the draft (override via the exposure popover), then save.
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    fireEvent.click(within(grid).getAllByRole('gridcell')[1]!);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Shade' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
+
+    // In flight: the header (and alert) Cancel/Save are all disabled.
+    for (const btn of screen.getAllByRole('button', { name: 'Saving...' })) {
+      expect(btn).toBeDisabled();
+    }
+    for (const btn of screen.getAllByRole('button', { name: 'Cancel' })) {
+      expect(btn).toBeDisabled();
+    }
+
+    resolveSave();
+    // R3 (CR accept): settle the pending save — the 'Saving...' state must
+    // fully clear before the test ends.
+    await waitFor(() =>
+      expect(
+        screen.queryAllByRole('button', { name: 'Saving...' })
+      ).toHaveLength(0)
+    );
+    expect(saveLayout).toHaveBeenCalledTimes(1);
   });
 });

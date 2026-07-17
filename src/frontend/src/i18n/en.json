@@ -395,6 +395,7 @@
       "orientationPrompt": "Which way does the garden face?",
       "orientationNote": "Stored for future per-cell exposure calculations.",
       "compassLabel": "Compass — the garden faces {{orientation}}",
+      "compassUnset": "Compass — orientation not set",
       "west": "W",
       "type": {
         "balcony": "Balcony",
@@ -423,6 +424,29 @@
       "save": "Save",
       "cancel": "Cancel",
       "saveError": "Couldn't save the garden settings. Please try again."
+    },
+    "exposure": {
+      "toggle": "Exposure",
+      "moments": {
+        "morning": "Morning",
+        "noon": "Noon",
+        "evening": "Evening"
+      },
+      "seasons": {
+        "summer": "Summer",
+        "winter": "Winter"
+      },
+      "legendTitle": "Exposure — {{season}} · {{moment}}",
+      "categories": {
+        "full": "Full sun",
+        "morning": "Morning sun",
+        "afternoon": "Afternoon sun",
+        "shade": "Shade"
+      },
+      "override": {
+        "title": "Cell exposure",
+        "auto": "Auto (computed)"
+      }
     },
     "shape": {
       "selectAll": "Select all",
@@ -457,6 +481,7 @@
       "changesDiscarded": "Changes discarded",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
+      "undo": "Undo last action",
       "scrollLeft": "Scroll grid left",
       "scrollRight": "Scroll grid right",
       "saved": "All changes saved",
@@ -472,10 +497,14 @@
       "toggleCell": "Toggle cell",
       "plantedCell": "{{plant}} at row {{row}}, column {{col}}",
       "emptyCell": "Empty cell at row {{row}}, column {{col}}",
-      "inactiveCell": "Inactive cell at row {{row}}, column {{col}}"
+      "inactiveCell": "Inactive cell at row {{row}}, column {{col}}",
+      "exposureCell": "{{category}} — empty cell at row {{row}}, column {{col}}"
     },
     "help": {
-      "unified": "Click a plant in the sidebar, then click cells to place it. Click again to replace. Toggle 'Edit shape' to change the garden's shape."
+      "unified": "Click a plant in the sidebar, then click cells to place it. The Exposure layer shows per-cell sunlight — set the time and season in the toolbar."
+    },
+    "meta": {
+      "facing": "Facing {{facing}}"
     },
     "dimensions": "{{cols}} × {{rows}} — {{width}} × {{height}} ({{cellSize}}/cell)",
     "plantsInGarden": "Plants in this garden",
