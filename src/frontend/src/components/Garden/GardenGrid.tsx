@@ -246,6 +246,11 @@ export default function GardenGrid({ grid, shapeEditMode, placements, exposure, 
                 key={`${r}-${c}`}
                 component="button"
                 type="button"
+                // R6 (CR accept): shape-edit buttons stay GRID CELLS for
+                // assistive tech — the row's children are gridcells in both
+                // modes; button behavior and label are unchanged.
+                role="gridcell"
+                aria-colindex={c + 1}
                 data-exposure={tint ?? undefined}
                 onPointerDown={hasDrag ? (e: React.PointerEvent) => { e.preventDefault(); onCellDragStart!(r, c); } : undefined}
                 onPointerEnter={hasDrag ? () => onCellDragEnter!(r, c) : undefined}

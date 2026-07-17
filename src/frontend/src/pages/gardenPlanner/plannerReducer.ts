@@ -28,15 +28,24 @@ export interface LayoutSnapshot {
 }
 
 /**
- * One undo step (SMA-17 5.3-D R2): the DRAFT CONTENT only — cells +
- * placements, per the product spec. Dimensions are derived from the restored
- * grid at pop time; cellSize is deliberately NOT part of the snapshot (a
- * documented limitation: undoing a RESIZED restores the cells but keeps the
- * new cellSize).
+ * One undo step (SMA-17 5.3-D R2, save-state added in R6): the draft content
+ * (cells + placements) PLUS the save context at capture time — the saved
+ * revision reference and the dirty flag. UNDO restores all four, so undoing
+ * can neither fabricate dirtiness (undoing the only post-save edit is clean)
+ * nor strand a saved garden (lastSaved survives an undone SETUP_CONFIRMED).
+ * The captured isDirty IS the existing dirty-tracking's value for that state
+ * — no new content-equality comparison is invented (the only equality in
+ * this reducer, MARK_SAVED's referential revision check, cannot compare
+ * across deep copies). Dimensions are derived from the restored grid at pop
+ * time; cellSize is deliberately NOT part of the snapshot (a documented
+ * limitation: undoing a RESIZED restores the cells but keeps the new
+ * cellSize).
  */
 interface DraftSnapshot {
   grid: CellData[][] | null;
   placements: PlannerPlacement[];
+  lastSaved: LayoutSnapshot | null;
+  isDirty: boolean;
 }
 
 export interface PlannerState {
@@ -195,7 +204,14 @@ const disarmedPainting = { isPainting: false, paintAction: null } as const;
 const pushHistory = (state: PlannerState): DraftSnapshot[] => {
   const past = [
     ...state.past,
-    { grid: copyGrid(state.grid), placements: copyPlacements(state.placements) },
+    {
+      grid: copyGrid(state.grid),
+      placements: copyPlacements(state.placements),
+      // Save context (R6): lastSaved is immutable once created (MARK_SAVED /
+      // HYDRATE build fresh objects), so the reference is safe to share.
+      lastSaved: state.lastSaved,
+      isDirty: state.isDirty,
+    },
   ];
   return past.length > UNDO_CAP ? past.slice(past.length - UNDO_CAP) : past;
 };
@@ -670,7 +686,12 @@ export function plannerReducer(
         // restore them); a null grid means back to the pre-setup draft.
         layoutWidth: previous.grid?.[0]?.length ?? 0,
         layoutHeight: previous.grid?.length ?? 0,
-        isDirty: true,
+        // Save-state restored WITH the content (R6, CR accept): the snapshot
+        // knows whether that state was saved — undoing the only post-save
+        // edit lands clean, and a lastSaved cleared later (SETUP_CONFIRMED)
+        // comes back so Cancel can still reach the saved garden.
+        lastSaved: previous.lastSaved,
+        isDirty: previous.isDirty,
       };
     }
 

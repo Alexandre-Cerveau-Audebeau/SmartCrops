@@ -732,7 +732,7 @@ describe('plannerReducer undo history (SMA-17 5.3-D R2)', () => {
     expect(s.past).toHaveLength(4); // save never pushes
   });
 
-  it('UNDO pops: restores cells, placements and derived dimensions, marks dirty', () => {
+  it('UNDO pops: restores cells, placements, derived dimensions AND save-state', () => {
     const base = hydrated(); // 3x3, one placement at (1,1)
     let s = plannerReducer(base, {
       type: 'SET_CELL_EXPOSURE_OVERRIDE',
@@ -747,16 +747,19 @@ describe('plannerReducer undo history (SMA-17 5.3-D R2)', () => {
       cellSize: '50cm',
     });
     expect(s.layoutWidth).toBe(5);
-    // Undo the resize → back to 3x3 WITH the override still present.
+    // Undo the resize → back to 3x3 WITH the override still present; that
+    // state was dirty (unsaved override), so it restores dirty.
     s = plannerReducer(s, { type: 'UNDO' });
     expect(s.layoutWidth).toBe(3);
     expect(s.layoutHeight).toBe(3);
     expect(s.grid![0][0].exposureOverride).toBe('full');
     expect(s.isDirty).toBe(true);
-    // Undo the override → pristine hydrated content, placement intact.
+    // Undo the override → pristine hydrated content, placement intact — and
+    // CLEAN again (R6: save-state restored with the content, never forced).
     s = plannerReducer(s, { type: 'UNDO' });
     expect(s.grid![0][0]).not.toHaveProperty('exposureOverride');
     expect(s.placements).toHaveLength(1);
+    expect(s.isDirty).toBe(false);
     expect(s.past).toHaveLength(0);
     // Empty stack → guarded no-op (the button's disabled source).
     expect(plannerReducer(s, { type: 'UNDO' })).toBe(s);
@@ -913,5 +916,88 @@ describe('plannerReducer override guards (SMA-17 5.3-D R5)', () => {
     });
     expect(cleared.grid![0][1]).not.toHaveProperty('exposureOverride');
     expect(cleared.isDirty).toBe(true);
+  });
+});
+
+// R6 (CR accept, ROOT fix): undo snapshots carry the save context — undoing
+// restores lastSaved + isDirty with the content, so undo can neither
+// fabricate dirtiness nor strand a saved garden.
+describe('plannerReducer undo save-state (SMA-17 5.3-D R6)', () => {
+  /** MARK_SAVED on the CURRENT revision (what a successful save does). */
+  const save = (s: PlannerState): PlannerState =>
+    plannerReducer(s, {
+      type: 'MARK_SAVED',
+      submitted: {
+        grid: s.grid,
+        layoutWidth: s.layoutWidth,
+        layoutHeight: s.layoutHeight,
+        cellSize: s.cellSize,
+        placements: s.placements,
+      },
+    });
+
+  it('save → one edit → UNDO restores a CLEAN state (no fabricated dirtiness)', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE',
+      row: 0,
+      col: 0,
+      value: 'shade',
+    });
+    s = save(s);
+    expect(s.isDirty).toBe(false);
+    const savedRevision = s.lastSaved;
+    s = plannerReducer(s, {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE',
+      row: 0,
+      col: 2,
+      value: 'full',
+    });
+    expect(s.isDirty).toBe(true);
+    s = plannerReducer(s, { type: 'UNDO' });
+    expect(s.isDirty).toBe(false); // the pre-edit state WAS the saved one
+    expect(s.grid![0][2]).not.toHaveProperty('exposureOverride');
+    expect(s.grid![0][0].exposureOverride).toBe('shade');
+    expect(s.lastSaved).toBe(savedRevision); // saved revision untouched
+  });
+
+  it('save → edit A → edit B → UNDO returns to post-A, still dirty', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE',
+      row: 0,
+      col: 0,
+      value: 'shade',
+    }); // edit A (hydrated = the save baseline)
+    s = plannerReducer(s, {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE',
+      row: 0,
+      col: 2,
+      value: 'full',
+    }); // edit B
+    s = plannerReducer(s, { type: 'UNDO' });
+    expect(s.grid![0][0].exposureOverride).toBe('shade'); // back to post-A
+    expect(s.grid![0][2]).not.toHaveProperty('exposureOverride');
+    expect(s.isDirty).toBe(true); // A is still unsaved
+    expect(s.lastSaved).not.toBeNull();
+  });
+
+  it('undoing across SETUP_CONFIRMED restores the prior lastSaved — Cancel keeps the saved garden', () => {
+    // Reducer-level pin for the hydrated re-setup path: in the UI, setup only
+    // opens on a garden with NO saved layout (hydration no-layout branch or
+    // Cancel's no-snapshot discard), so a saved garden cannot reach
+    // SETUP_CONFIRMED today — the generic snapshot mechanism still covers it
+    // with no dead handling (Extension 033e3378).
+    let s = plannerReducer(hydrated(), {
+      type: 'SETUP_CONFIRMED',
+      cols: 4,
+      rows: 4,
+      cellSize: '25cm',
+    });
+    expect(s.lastSaved).toBeNull(); // fresh-layout invariant kept (F5/F8)
+    s = plannerReducer(s, { type: 'UNDO' });
+    expect(s.lastSaved).not.toBeNull(); // restored WITH the content
+    expect(s.isDirty).toBe(false); // the hydrated state was clean
+    const cancelled = plannerReducer(s, { type: 'RESTORE_LAST_SAVED' });
+    expect(cancelled.placements).toHaveLength(1); // the saved garden survives
+    expect(cancelled.isDirty).toBe(false);
   });
 });

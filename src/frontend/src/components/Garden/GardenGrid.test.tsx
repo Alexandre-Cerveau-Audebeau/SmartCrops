@@ -106,6 +106,22 @@ describe('GardenGrid tokens re-skin + exposure layer', () => {
     expect(within(rows[1]!).getAllByRole('gridcell')).toHaveLength(2);
   });
 
+  it('shape-edit buttons keep gridcell semantics with one-based aria-colindex (R6, CR accept)', () => {
+    render(
+      <ThemeProvider theme={createTheme()}>
+        <GardenGrid grid={grid} shapeEditMode />
+      </ThemeProvider>
+    );
+    const gridEl = screen.getByRole('grid');
+    const rows = within(gridEl).getAllByRole('row');
+    expect(rows).toHaveLength(2);
+    const cells = within(rows[0]!).getAllByRole('gridcell');
+    expect(cells).toHaveLength(2);
+    expect(cells[1]).toHaveAttribute('aria-colindex', '2');
+    // Still a real button underneath (behavior unchanged).
+    expect(cells[0]!.tagName).toBe('BUTTON');
+  });
+
   it('matches the visible axes in cell a11y: one-based indices, letter columns (R3, CR accept)', () => {
     renderGrid({ exposure });
     const cells = screen.getAllByRole('gridcell');
