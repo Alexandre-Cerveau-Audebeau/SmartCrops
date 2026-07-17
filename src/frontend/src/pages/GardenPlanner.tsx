@@ -1030,11 +1030,13 @@ export default function GardenPlanner() {
         </Box>
       )}
 
-      {/* Two-column layout: sidebar | grid (detail panel is a floating overlay below) */}
+      {/* Main row: sidebar | grid | detail lane. R5 (CR accept): below lg the
+          rails stack full-width around the grid — no horizontal overflow. */}
       {grid && (
         <Box
           sx={{
             display: 'flex',
+            flexDirection: { xs: 'column', lg: 'row' },
             gap: 2,
             alignItems: 'flex-start',
             pb: 2,
@@ -1428,13 +1430,13 @@ export default function GardenPlanner() {
               self-scrolling so its content stays on screen. */}
           <Box
             sx={{
-              width: 330,
+              width: { xs: '100%', lg: 330 },
               flexShrink: 0,
-              position: 'sticky',
-              top: STICKY_OFFSET,
-              alignSelf: 'flex-start',
-              maxHeight: `calc(100vh - ${STICKY_OFFSET}px)`,
-              overflowY: 'auto',
+              position: { xs: 'static', lg: 'sticky' },
+              top: { lg: STICKY_OFFSET },
+              alignSelf: { xs: 'stretch', lg: 'flex-start' },
+              maxHeight: { lg: `calc(100vh - ${STICKY_OFFSET}px)` },
+              overflowY: { lg: 'auto' },
             }}
           >
             {selectedPlacement && (

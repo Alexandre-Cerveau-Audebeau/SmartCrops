@@ -703,10 +703,12 @@ describe('plannerReducer undo history (SMA-17 5.3-D R2)', () => {
     s = plannerReducer(s, { type: 'TOGGLE_EXPOSURE' });
     s = plannerReducer(s, { type: 'SET_EXPOSURE_MOMENT', moment: 'evening' });
     expect(s.past).toHaveLength(2); // view state never pushes
+    // (2,2): active and unoccupied — R5's eligibility guard makes overrides
+    // on painted-inactive cells or the placement cell legitimate no-ops.
     s = plannerReducer(s, {
       type: 'SET_CELL_EXPOSURE_OVERRIDE',
-      row: 1,
-      col: 1,
+      row: 2,
+      col: 2,
       value: 'shade',
     });
     expect(s.past).toHaveLength(3);
@@ -839,5 +841,77 @@ describe('plannerReducer undo hardening (SMA-17 5.3-D R3)', () => {
     });
     expect(after).toBe(before); // same reference: no copy, no push, no dirty churn
     expect(after.past).toHaveLength(1);
+  });
+});
+
+// R5 (CR accepts): override guards — idempotence + cell eligibility.
+describe('plannerReducer override guards (SMA-17 5.3-D R5)', () => {
+  it('re-applying the SAME override (or Auto on an already-auto cell) is a no-op', () => {
+    const base = hydrated();
+    // Auto on a cell that has no override: nothing to clear.
+    expect(
+      plannerReducer(base, {
+        type: 'SET_CELL_EXPOSURE_OVERRIDE',
+        row: 0,
+        col: 0,
+        value: null,
+      })
+    ).toBe(base);
+    // Same category twice: the second dispatch changes nothing.
+    const once = plannerReducer(base, {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE',
+      row: 0,
+      col: 0,
+      value: 'shade',
+    });
+    const twice = plannerReducer(once, {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE',
+      row: 0,
+      col: 0,
+      value: 'shade',
+    });
+    expect(twice).toBe(once); // no history entry, no dirty churn
+    expect(twice.past).toHaveLength(1);
+  });
+
+  it('a non-null override is rejected on inactive or occupied cells; clearing always works', () => {
+    // Inactive cell carrying a stale override (hydrated from persisted JSON).
+    const s = plannerReducer(initialPlannerState, {
+      type: 'HYDRATE_FROM_LAYOUT',
+      width: 2,
+      height: 2,
+      cellSize: '50cm',
+      cellsJson: JSON.stringify([
+        { row: 0, col: 1, active: false, exposureOverride: 'shade' },
+      ]),
+      placements: [placement('srv-1', { startRow: 1, startCol: 1 })],
+    });
+    // Non-null on the INACTIVE cell → no-op.
+    expect(
+      plannerReducer(s, {
+        type: 'SET_CELL_EXPOSURE_OVERRIDE',
+        row: 0,
+        col: 1,
+        value: 'full',
+      })
+    ).toBe(s);
+    // Non-null on the OCCUPIED cell (placement at 1,1) → no-op.
+    expect(
+      plannerReducer(s, {
+        type: 'SET_CELL_EXPOSURE_OVERRIDE',
+        row: 1,
+        col: 1,
+        value: 'full',
+      })
+    ).toBe(s);
+    // Clearing (null) still works — even on the inactive cell.
+    const cleared = plannerReducer(s, {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE',
+      row: 0,
+      col: 1,
+      value: null,
+    });
+    expect(cleared.grid![0][1]).not.toHaveProperty('exposureOverride');
+    expect(cleared.isDirty).toBe(true);
   });
 });

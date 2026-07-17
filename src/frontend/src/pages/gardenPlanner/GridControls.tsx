@@ -10,7 +10,7 @@ import UndoIcon from '@mui/icons-material/Undo';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
-import { type PlannerTokens } from '../../theme/plannerTokens';
+import { iosSwitchSx, type PlannerTokens } from '../../theme/plannerTokens';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Moment, Season } from '../../utils/exposure';
 import { ZOOM_MAX, ZOOM_MIN } from './plannerReducer';
@@ -226,8 +226,9 @@ export const GridControls = memo(function GridControls({
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <WbSunnyIcon sx={{ color: tk.expoIcc, fontSize: 20 }} />
-          {/* §10: switch 34×19, thumb 15, active --prim, inactive --track.
-              FormControlLabel (R3, CR accept): clicking the label toggles. */}
+          {/* §10: switch 34×19, thumb 15, active --prim, inactive --track —
+              the shared iosSwitchSx (R5), unchanged look. FormControlLabel
+              (R3, CR accept): clicking the label toggles. */}
           <FormControlLabel
             control={
               <Switch
@@ -239,32 +240,7 @@ export const GridControls = memo(function GridControls({
                     'aria-label': t('planner.exposure.toggle'),
                   },
                 }}
-                sx={{
-                  width: 34,
-                  height: 19,
-                  p: 0,
-                  '& .MuiSwitch-switchBase': {
-                    p: '2px',
-                    '&.Mui-checked': {
-                      transform: 'translateX(15px)',
-                      color: '#fff',
-                      '& + .MuiSwitch-track': {
-                        backgroundColor: tk.prim,
-                        opacity: 1,
-                      },
-                    },
-                  },
-                  '& .MuiSwitch-thumb': {
-                    width: 15,
-                    height: 15,
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
-                  },
-                  '& .MuiSwitch-track': {
-                    borderRadius: 9.5,
-                    backgroundColor: tk.track,
-                    opacity: 1,
-                  },
-                }}
+                sx={iosSwitchSx(tk)}
               />
             }
             label={

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n/i18n';
@@ -93,6 +93,17 @@ describe('GardenGrid tokens re-skin + exposure layer', () => {
     const cell = screen.getAllByRole('gridcell')[0]!;
     fireEvent.click(cell);
     expect(onCellClick).toHaveBeenCalledWith(0, 0, cell);
+  });
+
+  it('exposes a valid ARIA hierarchy: the grid contains only rows, cells sit inside them (R5, CR accept)', () => {
+    renderGrid();
+    const gridEl = screen.getByRole('grid');
+    const rows = within(gridEl).getAllByRole('row');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveAttribute('aria-rowindex', '1');
+    expect(rows[1]).toHaveAttribute('aria-rowindex', '2');
+    expect(within(rows[0]!).getAllByRole('gridcell')).toHaveLength(2);
+    expect(within(rows[1]!).getAllByRole('gridcell')).toHaveLength(2);
   });
 
   it('matches the visible axes in cell a11y: one-based indices, letter columns (R3, CR accept)', () => {

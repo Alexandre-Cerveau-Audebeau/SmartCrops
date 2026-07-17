@@ -162,7 +162,10 @@ export default function GardenGrid({ grid, shapeEditMode, placements, exposure, 
           ))}
         </Box>
 
-    {/* §4: no hardcoded outer frame — the grid CARD provides it (R2). */}
+    {/* §4: no hardcoded outer frame — the grid CARD provides it (R2).
+        R5 (CR accept): valid ARIA hierarchy — role="grid" contains ONLY
+        role="row" wrappers; every cell sits inside its row. Geometry is
+        identical: a column of flex rows sharing CELL_GAP. */}
     <Box
       role="grid"
       aria-label={t('planner.grid.label')}
@@ -171,14 +174,20 @@ export default function GardenGrid({ grid, shapeEditMode, placements, exposure, 
       onPointerUp={hasDrag ? () => onCellDragEnd!() : undefined}
       onPointerLeave={hasDrag ? () => onCellDragEnd!() : undefined}
       sx={{
-        display: 'inline-grid',
-        gridTemplateColumns: `repeat(${width}, ${cellSizePx}px)`,
+        display: 'inline-flex',
+        flexDirection: 'column',
         gap: CELL_GAP,
         ...(shapeEditMode && { userSelect: 'none', touchAction: 'none' }),
       }}
     >
-      {grid.flatMap((row, r) =>
-        row.map((cell, c) => {
+      {grid.map((row, r) => (
+        <Box
+          key={r}
+          role="row"
+          aria-rowindex={r + 1}
+          sx={{ display: 'flex', gap: CELL_GAP }}
+        >
+        {row.map((cell, c) => {
           const placement = placementMap.get(`${r}-${c}`);
           const plantColor = placement ? getPlantColor(placement.plantId) : undefined;
           // Exposure tint (5.3-D): the category swatch REPLACES the cell's
@@ -302,8 +311,9 @@ export default function GardenGrid({ grid, shapeEditMode, placements, exposure, 
               {placement?.plantName ? placement.plantName.charAt(0).toUpperCase() : null}
             </Box>
           );
-        }),
-      )}
+        })}
+        </Box>
+      ))}
     </Box>
       </Box>
     </Box>

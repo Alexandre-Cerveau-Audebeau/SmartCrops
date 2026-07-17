@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
+import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Plant } from '../../types/Plant';
 import { getPlantDisplayName } from '../../utils/getPlantDisplayName';
 import type { PlannerPlacement } from './plannerReducer';
@@ -31,20 +32,21 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
   onRemove,
 }: PlacementDetailPanelProps) {
   const { t } = useTranslation();
+  const tk = usePlannerTokens();
 
   return (
     // R4 (item F, owner preference): the panel is a plain card filling the
     // ALWAYS-reserved 330px right lane — the LANE (in GardenPlanner) owns
     // stickiness and scrolling; the panel no longer positions itself.
+    // R5 (CR accept): planner-token surface (mode-aware, no theme drift).
     <Box
       sx={{
         width: '100%',
         p: 2,
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 1,
-        bgcolor: 'background.paper',
-        boxShadow: 3,
+        border: `1px solid ${tk.cardBd}`,
+        borderRadius: '12px',
+        bgcolor: tk.card,
+        boxShadow: tk.shadow,
       }}
     >
       <Typography variant="subtitle1" fontWeight={600}>

@@ -14,6 +14,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTranslation } from 'react-i18next';
 import { STICKY_OFFSET } from '../../constants/layout';
+import { iosSwitchSx } from '../../theme/plannerTokens';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Plant } from '../../types/Plant';
 import { getPlantDisplayName } from '../../utils/getPlantDisplayName';
@@ -61,11 +62,26 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
     // width; tagged in the tokens doc §11) and a sticky rail: pinned below
     // the navbar, capped to the viewport — the INNER list is the scroll
     // surface (root overflowY:auto would double-scroll against it).
-    <Box sx={{ width: 320, maxHeight: `calc(100vh - ${STICKY_OFFSET}px)`, display: 'flex', flexDirection: 'column', border: `1px solid ${tk.cardBd}`, borderRadius: '12px', boxShadow: tk.shadow, bgcolor: tk.card, flexShrink: 0, overflow: 'hidden', position: 'sticky', top: STICKY_OFFSET, alignSelf: 'flex-start' }}>
-      <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+    // R5 (CR accept): below lg the rails STACK — full width, no sticky.
+    <Box sx={{ width: { xs: '100%', lg: 320 }, maxHeight: { lg: `calc(100vh - ${STICKY_OFFSET}px)` }, display: 'flex', flexDirection: 'column', border: `1px solid ${tk.cardBd}`, borderRadius: '12px', boxShadow: tk.shadow, bgcolor: tk.card, flexShrink: 0, overflow: 'hidden', position: { xs: 'static', lg: 'sticky' }, top: { lg: STICKY_OFFSET }, alignSelf: { lg: 'flex-start' } }}>
+      {/* R5 (owner item): the shape-edit toggle adopts the SHARED iPhone-style
+          switch (identical to Exposition); mockup row padding 13×16 aligns the
+          control with the sidebar content, label 14.5/600 tTitle. */}
+      <Box sx={{ p: '13px 16px', borderBottom: '1px solid', borderColor: 'divider' }}>
         <FormControlLabel
-          control={<Switch checked={shapeEditMode} onChange={(e) => onShapeEditToggle(e.target.checked)} size="small" />}
-          label={t('planner.shapeEditMode')}
+          control={
+            <Switch
+              checked={shapeEditMode}
+              onChange={(e) => onShapeEditToggle(e.target.checked)}
+              sx={iosSwitchSx(tk)}
+            />
+          }
+          label={
+            <Typography sx={{ fontSize: 14.5, fontWeight: 600, color: tk.tTitle }}>
+              {t('planner.shapeEditMode')}
+            </Typography>
+          }
+          sx={{ m: 0, gap: 1 }}
         />
       </Box>
       <Tabs
@@ -155,9 +171,11 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
                       sx={{
                         px: '14px',
                         py: '10px',
-                        ...(selected
-                          ? { borderLeft: '3px solid', borderColor: 'primary.main' }
-                          : { borderLeft: '3px solid transparent' }),
+                        // R5 (CR accept): the selected marker uses the planner
+                        // token, not the generic theme primary.
+                        borderLeft: selected
+                          ? `3px solid ${tk.prim}`
+                          : '3px solid transparent',
                       }}
                     >
                       {/* R3/R4 (mockup metrics): avatar 34px round, w800 fs 14.5. */}

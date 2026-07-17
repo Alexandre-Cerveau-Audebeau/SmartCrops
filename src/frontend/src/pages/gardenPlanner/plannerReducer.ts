@@ -630,6 +630,20 @@ export function plannerReducer(
     case 'SET_CELL_EXPOSURE_OVERRIDE': {
       if (!state.grid) return state;
       if (!isInsideGrid(state.grid, action.row, action.col)) return state;
+      // Idempotence (R5, CR accept): re-selecting the current category — or
+      // Auto on an already-auto cell — must not dirty the draft or spend an
+      // undo entry (nothing would change in the serialized layout).
+      const target = state.grid[action.row][action.col];
+      if ((target.exposureOverride ?? null) === action.value) return state;
+      // Eligibility (R5, CR accept): a NON-NULL override only applies to an
+      // active cell without a placement (the popover's own opening rule,
+      // now enforced at the reducer boundary). Clearing (null) always works.
+      if (action.value !== null) {
+        const occupied = state.placements.some((p) =>
+          occupiesCell(p, action.row, action.col)
+        );
+        if (!target.active || occupied) return state;
+      }
       const copy = copyGrid(state.grid)!;
       if (action.value === null) {
         // Sparse contract: clearing back to Auto REMOVES the key (an

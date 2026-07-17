@@ -181,3 +181,36 @@ const DARK: PlannerTokens = {
 export function getPlannerTokens(mode: PlannerThemeMode): PlannerTokens {
   return mode === 'dark' ? DARK : LIGHT;
 }
+
+/**
+ * iPhone-style switch (§10: 34×19 track fully enclosing the 15px thumb,
+ * active `--prim`, inactive `--track`) — lifted VERBATIM from the Exposition
+ * toggle (R5) so every planner switch shares the exact same look.
+ */
+export const iosSwitchSx = (tk: PlannerTokens) =>
+  ({
+    width: 34,
+    height: 19,
+    p: 0,
+    '& .MuiSwitch-switchBase': {
+      p: '2px',
+      '&.Mui-checked': {
+        transform: 'translateX(15px)',
+        color: '#fff',
+        '& + .MuiSwitch-track': {
+          backgroundColor: tk.prim,
+          opacity: 1,
+        },
+      },
+    },
+    '& .MuiSwitch-thumb': {
+      width: 15,
+      height: 15,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+    },
+    '& .MuiSwitch-track': {
+      borderRadius: 9.5,
+      backgroundColor: tk.track,
+      opacity: 1,
+    },
+  }) as const;
