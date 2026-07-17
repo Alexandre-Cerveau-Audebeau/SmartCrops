@@ -73,6 +73,11 @@ const EMPTY_PLANTS: Plant[] = [];
 // memo honest about its deps.
 const EMPTY_BLOCKERS: Blocker[] = [];
 
+// Help-banner dismissal (R4): persisted under a VERSIONED key — bumping the
+// version when the copy changes re-shows the banner once. SMA-302 tracks the
+// rotating-tips + account-preference successor.
+const HELP_BANNER_DISMISSED_KEY = 'smartcrops.planner.helpBanner.dismissed.v1';
+
 const addBtnSx = {
   cursor: 'pointer',
   display: 'flex',
@@ -157,7 +162,13 @@ export default function GardenPlanner() {
   // a failure surfaces inline without discarding the entered values.
   const [configSaving, setConfigSaving] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
-  const [showHelp, setShowHelp] = useState(true);
+  const [showHelp, setShowHelp] = useState(
+    () => localStorage.getItem(HELP_BANNER_DISMISSED_KEY) === null
+  );
+  const handleDismissHelp = useCallback(() => {
+    localStorage.setItem(HELP_BANNER_DISMISSED_KEY, '1');
+    setShowHelp(false);
+  }, []);
   const [message, setMessage] = useState<{
     type: 'success' | 'error' | 'info';
     text: string;
@@ -241,10 +252,8 @@ export default function GardenPlanner() {
 
   // Horizontal scroll state for grid container
   const scrollRef = useRef<HTMLDivElement>(null);
-  const gridWrapperRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
-  const [panelTop, setPanelTop] = useState(100);
   const leftHold = useScrollHold(scrollRef, 'left');
   const rightHold = useScrollHold(scrollRef, 'right');
 
@@ -582,32 +591,6 @@ export default function GardenPlanner() {
     };
   }, [layoutWidth, layoutHeight, shapeEditMode, grid]);
 
-  useEffect(() => {
-    const updateTop = () => {
-      const node = gridWrapperRef.current;
-      if (!node) return;
-      const rect = node.getBoundingClientRect();
-      setPanelTop(Math.max(rect.top, STICKY_OFFSET));
-    };
-    updateTop();
-    window.addEventListener('scroll', updateTop, { passive: true });
-    window.addEventListener('resize', updateTop);
-    return () => {
-      window.removeEventListener('scroll', updateTop);
-      window.removeEventListener('resize', updateTop);
-    };
-  }, []);
-
-  // Recompute panel top whenever the panel becomes visible — first appearance
-  // would otherwise stick to the initial value of 100.
-  useEffect(() => {
-    if (selectedPlacementId === null) return;
-    const node = gridWrapperRef.current;
-    if (!node) return;
-    const rect = node.getBoundingClientRect();
-    setPanelTop(Math.max(rect.top, STICKY_OFFSET));
-  }, [selectedPlacementId]);
-
   const enrichedPlacements = useMemo(() => {
     const plantMap = new Map(allPlants.map((p) => [p.id, p]));
     // While the ACTIVE-LANGUAGE catalog is not ready (request pending, failed,
@@ -762,33 +745,38 @@ export default function GardenPlanner() {
       })
     : '';
 
-  // Meta line (R3, item C — mockup format §11): dims — active cells · garden
-  // type · facing. Type/facing segments render ONLY when set; the dialog's
+  // Meta line (R3 item C, restyled R4): the figures keep one line of text;
+  // gardenType/orientation render as soft cnt-chip pills appended to it
+  // (owner decoration beyond the mockup) — still ONLY when set; the dialog's
   // i18n labels are reused (planner.config.type.*, planner.config.west).
-  const metaSegments: string[] = [];
-  if (grid) {
-    metaSegments.push(
-      `${dimensionsText} — ${t('planner.toolbar.activeCells', {
+  const metaFigures = grid
+    ? `${dimensionsText} — ${t('planner.toolbar.activeCells', {
         active: activeCells,
         total: totalCells,
         surface: surfaceM2,
       })}`
-    );
-  }
-  if (garden?.gardenType) {
-    metaSegments.push(t(`planner.config.type.${garden.gardenType}`));
-  }
-  if (garden?.orientation) {
-    metaSegments.push(
-      t('planner.meta.facing', {
+    : '';
+  const metaTypeChip = garden?.gardenType
+    ? t(`planner.config.type.${garden.gardenType}`)
+    : null;
+  const metaFacingChip = garden?.orientation
+    ? t('planner.meta.facing', {
         facing:
           garden.orientation === 'W'
             ? t('planner.config.west')
             : garden.orientation,
       })
-    );
-  }
-  const metaText = metaSegments.join(' · ');
+    : null;
+  const hasMeta = Boolean(metaFigures || metaTypeChip || metaFacingChip);
+  const metaChipSx = {
+    bgcolor: tk.cntChipBg,
+    color: tk.cntChipTx,
+    borderRadius: '999px',
+    p: '2px 10px',
+    fontSize: 12,
+    fontWeight: 700,
+    lineHeight: 1.4,
+  } as const;
 
   const selectedPlant = selectedPlacement
     ? (allPlants.find((p) => p.id === selectedPlacement.plantId) ?? null)
@@ -881,10 +869,27 @@ export default function GardenPlanner() {
           >
             {garden?.name || t('planner.title')}
           </Typography>
-          {metaText && (
-            <Typography sx={{ mt: '7px', fontSize: 14.5, color: tk.tMeta }}>
-              {metaText}
-            </Typography>
+          {hasMeta && (
+            <Box
+              sx={{
+                mt: '7px',
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+              }}
+            >
+              {metaFigures && (
+                // R4 (item C): the numbers-bearing text is semi-bold.
+                <Typography
+                  sx={{ fontSize: 14.5, fontWeight: 600, color: tk.tMeta }}
+                >
+                  {metaFigures}
+                </Typography>
+              )}
+              {metaTypeChip && <Box sx={metaChipSx}>{metaTypeChip}</Box>}
+              {metaFacingChip && <Box sx={metaChipSx}>{metaFacingChip}</Box>}
+            </Box>
           )}
         </Box>
 
@@ -996,8 +1001,8 @@ export default function GardenPlanner() {
       )}
 
       {/* Help banner (R3 item D — §11 --banner-*, radius 10, padding 13×16,
-          close 19px). Dismissal is SESSION-ONLY by design: plain component
-          state, nothing persisted — the banner returns on the next visit. */}
+          close 19px). R4: dismissal persists via the versioned localStorage
+          key above (SMA-302 = rotating-tips successor). */}
       {grid && showHelp && (
         <Box
           sx={{
@@ -1016,7 +1021,7 @@ export default function GardenPlanner() {
           </Typography>
           <IconButton
             size="small"
-            onClick={() => setShowHelp(false)}
+            onClick={handleDismissHelp}
             aria-label={t('planner.config.close')}
             sx={{ p: '2px', color: tk.bannerTx }}
           >
@@ -1073,7 +1078,6 @@ export default function GardenPlanner() {
           {/* Grid CARD (§4: radius 12, border card-bd, shadow, padding 20/12) —
               it provides the grid's frame; the compass overflows ITS corner. */}
           <Box
-            ref={gridWrapperRef}
             sx={{
               position: 'relative',
               overflow: 'visible',
@@ -1417,22 +1421,33 @@ export default function GardenPlanner() {
             )}
           </Box>
 
-          {/* Placement panel LANE (R3 item F, product amendment): when a
-              placement is selected the panel occupies a reserved 330px right
-              column — it never overlaps the grid. */}
-          {selectedPlacement && (
-            <Box sx={{ width: 330, flexShrink: 0 }}>
+          {/* Right detail LANE (R4, owner reversal of R3's on-demand lane):
+              the 330px column is ALWAYS reserved — an empty spacer when
+              nothing is selected. Sticky rail below the navbar
+              (STICKY_OFFSET = NAVBAR_HEIGHT 64 + 16), viewport-capped and
+              self-scrolling so its content stays on screen. */}
+          <Box
+            sx={{
+              width: 330,
+              flexShrink: 0,
+              position: 'sticky',
+              top: STICKY_OFFSET,
+              alignSelf: 'flex-start',
+              maxHeight: `calc(100vh - ${STICKY_OFFSET}px)`,
+              overflowY: 'auto',
+            }}
+          >
+            {selectedPlacement && (
               <PlacementDetailPanel
                 placement={selectedPlacement}
                 plant={selectedPlant}
                 soil={selectedCellSoil}
-                top={panelTop}
                 language={language}
                 catalogReady={catalogReady}
                 onRemove={handleRemoveSelectedPlacement}
               />
-            </Box>
-          )}
+            )}
+          </Box>
         </Box>
       )}
 

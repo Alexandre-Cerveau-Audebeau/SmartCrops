@@ -25,7 +25,6 @@ function renderPanel(props: { catalogReady: boolean }) {
       placement={placement}
       plant={null}
       soil={undefined}
-      top={100}
       language={i18n.language}
       catalogReady={props.catalogReady}
       onRemove={vi.fn()}

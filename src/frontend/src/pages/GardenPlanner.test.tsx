@@ -602,6 +602,61 @@ describe('GardenPlanner exposure layer (SMA-17 5.3-D)', () => {
   });
 });
 
+// R4 — the help banner's dismissal persists via the versioned localStorage
+// key (SMA-302 tracks the rotating-tips successor). localStorage hygiene:
+// the file-level beforeEach already clears it.
+describe('GardenPlanner help banner persistence (SMA-17 5.3-D R4)', () => {
+  const COPY =
+    'Click a plant in the sidebar, then click cells to place it. The Exposure layer shows per-cell sunlight — set the time and season in the toolbar.';
+
+  it('is visible with no stored key; dismissing writes the key and survives a remount', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+
+    const first = renderPlanner();
+    await screen.findByRole('grid');
+    expect(screen.getByText(COPY)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByText(COPY)).toBeNull();
+    expect(
+      localStorage.getItem('smartcrops.planner.helpBanner.dismissed.v1')
+    ).toBe('1');
+
+    first.unmount();
+    renderPlanner();
+    await screen.findByRole('grid');
+    expect(screen.queryByText(COPY)).toBeNull();
+  });
+});
+
+// R4 — the meta chips: gardenType/orientation as soft pills, only when set.
+describe('GardenPlanner meta chips (SMA-17 5.3-D R4)', () => {
+  it('renders type and facing chips when set, omits them when unset', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue({
+      ...garden,
+      gardenType: 'terrace',
+      orientation: 'S',
+    } as Garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+
+    const first = renderPlanner();
+    await screen.findByRole('grid');
+    expect(screen.getByText('Terrace')).toBeInTheDocument();
+    expect(screen.getByText('Facing S')).toBeInTheDocument();
+
+    // Unset config (the default fixture) → no chips.
+    first.unmount();
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    renderPlanner();
+    await screen.findByRole('grid');
+    expect(screen.queryByText(/^Facing /)).toBeNull();
+    expect(screen.queryByText('Terrace')).toBeNull();
+  });
+});
+
 // F3 lock (develop-store review on ef076f0), RELOCATED with the markup in
 // 5.3-D R2: Save/Cancel now live in the PAGE HEADER — while a save is in
 // flight, Cancel must be unavailable (a local restore would report "changes

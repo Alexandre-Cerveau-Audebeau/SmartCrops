@@ -56,9 +56,12 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
   }, [plants, searchQuery, language]);
 
   return (
-    // R3 (item G): the mockup sidebar CARD — 288px fixed, card tokens,
-    // radius 12, shadow. Everything inside keeps its behavior.
-    <Box sx={{ width: 288, maxHeight: 480, display: 'flex', flexDirection: 'column', border: `1px solid ${tk.cardBd}`, borderRadius: '12px', boxShadow: tk.shadow, bgcolor: tk.card, flexShrink: 0, overflow: 'hidden', position: 'sticky', top: STICKY_OFFSET }}>
+    // R3 (item G): the mockup sidebar CARD — card tokens, radius 12, shadow.
+    // R4: 320px (OWNER DEVIATION vs the mockup's 288 — readability at full
+    // width; tagged in the tokens doc §11) and a sticky rail: pinned below
+    // the navbar, capped to the viewport — the INNER list is the scroll
+    // surface (root overflowY:auto would double-scroll against it).
+    <Box sx={{ width: 320, maxHeight: `calc(100vh - ${STICKY_OFFSET}px)`, display: 'flex', flexDirection: 'column', border: `1px solid ${tk.cardBd}`, borderRadius: '12px', boxShadow: tk.shadow, bgcolor: tk.card, flexShrink: 0, overflow: 'hidden', position: 'sticky', top: STICKY_OFFSET, alignSelf: 'flex-start' }}>
       <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
         <FormControlLabel
           control={<Switch checked={shapeEditMode} onChange={(e) => onShapeEditToggle(e.target.checked)} size="small" />}
@@ -71,7 +74,15 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
         variant="scrollable"
         scrollButtons="auto"
         allowScrollButtonsMobile
-        sx={{ borderBottom: '1px solid', borderColor: 'divider', minHeight: 40, '& .MuiTab-root': { minHeight: 40, fontSize: 13 } }}
+        // R4 (mockup metrics): tab labels 12.5 w800 — active prim with the
+        // 2px prim underline, inactive muted.
+        sx={{
+          borderBottom: `1px solid ${tk.divider}`,
+          minHeight: 40,
+          '& .MuiTab-root': { minHeight: 40, fontSize: 12.5, fontWeight: 800, color: tk.muted },
+          '& .MuiTab-root.Mui-selected': { color: tk.prim },
+          '& .MuiTabs-indicator': { backgroundColor: tk.prim, height: 2 },
+        }}
       >
         <Tab label={t('planner.tabs.plants')} value="plants" />
         <Tab label={t('planner.tabs.soils')} value="soils" disabled />
@@ -97,6 +108,14 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
               inputProps={{ 'aria-label': t('planner.sidebar.search') }}
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
+              // R4 (mockup metrics): fs 13.5 on searchBg with inputBd.
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  fontSize: 13.5,
+                  bgcolor: tk.searchBg,
+                  '& fieldset': { borderColor: tk.inputBd },
+                },
+              }}
             />
             {selectedPlantId && (
               <Button
@@ -111,11 +130,11 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
           </Box>
           <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {!catalogReady ? (
-              <Typography variant="body2" color="text.secondary" sx={{ p: 2, textAlign: 'center' }}>
+              <Typography sx={{ p: 2, textAlign: 'center', fontSize: 12, color: tk.tMeta }}>
                 {t('planner.catalogLoading')}
               </Typography>
             ) : filtered.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ p: 2, textAlign: 'center' }}>
+              <Typography sx={{ p: 2, textAlign: 'center', fontSize: 12, color: tk.tMeta }}>
                 {t('planner.sidebar.noResults')}
               </Typography>
             ) : (
@@ -132,17 +151,26 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
                       key={plant.id}
                       selected={selected}
                       onClick={() => onPlantSelect(plant.id)}
-                      sx={selected ? { borderLeft: '3px solid', borderColor: 'primary.main' } : { borderLeft: '3px solid transparent' }}
+                      // R4 (mockup metrics): row padding 10×14.
+                      sx={{
+                        px: '14px',
+                        py: '10px',
+                        ...(selected
+                          ? { borderLeft: '3px solid', borderColor: 'primary.main' }
+                          : { borderLeft: '3px solid transparent' }),
+                      }}
                     >
-                      {/* R3 (item G): mockup avatar is 34px (was 28). */}
+                      {/* R3/R4 (mockup metrics): avatar 34px round, w800 fs 14.5. */}
                       <ListItemAvatar sx={{ minWidth: 42 }}>
-                        <Avatar sx={{ width: 34, height: 34, fontSize: 15, bgcolor: color }}>{name.charAt(0).toUpperCase()}</Avatar>
+                        <Avatar sx={{ width: 34, height: 34, fontSize: 14.5, fontWeight: 800, bgcolor: color }}>{name.charAt(0).toUpperCase()}</Avatar>
                       </ListItemAvatar>
                       <ListItemText
                         primary={name}
                         secondary={plant.scientificName}
-                        primaryTypographyProps={{ variant: 'body2', noWrap: true }}
-                        secondaryTypographyProps={{ variant: 'caption', fontStyle: 'italic', noWrap: true }}
+                        // R4: name 13.5 w700 tTitle · sci 11.5 italic tSci —
+                        // the sidebar leg of the day-contrast pass.
+                        primaryTypographyProps={{ noWrap: true, sx: { fontSize: 13.5, fontWeight: 700, color: tk.tTitle } }}
+                        secondaryTypographyProps={{ noWrap: true, sx: { fontSize: 11.5, fontStyle: 'italic', color: tk.tSci } }}
                       />
                     </ListItemButton>
                   );

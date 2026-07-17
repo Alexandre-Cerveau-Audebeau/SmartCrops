@@ -194,6 +194,8 @@ En mode DnD s'ajoutent à droite : « Cible valide » (dashed `--prim`) · « Co
 - Bannière d'aide (desktop) : `--banner-*`, fs 14, fermable.
 - Sidebar **PLANTES / SOLS / INFRAS.** : onglet actif = texte + soulignement `--prim` ;
   chip empreinte inconnue « 1×1 ? » en style pointillé (fpUnk).
+  **Déviation v2 (16/07/2026)** : largeur sidebar **320 px** dans SmartCrops (vs 288 px
+  maquette) — lisibilité en pleine largeur, décision produit.
 - Panneau détail : **330 px** · radius 12 · border `--card-bd` · `--shadow`.
 - Chips « Plantes dans ce jardin (N) » ; note « Toutes les modifications sont enregistrées ».
 - Padding bas de page 30 (76 mobile, au-dessus de la bottom-bar).

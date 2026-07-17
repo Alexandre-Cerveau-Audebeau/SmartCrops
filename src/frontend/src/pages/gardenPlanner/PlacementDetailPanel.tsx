@@ -14,7 +14,6 @@ interface PlacementDetailPanelProps {
   placement: PlannerPlacement;
   plant: Plant | null;
   soil: string | undefined;
-  top: number;
   language: string;
   // SMA-288: while the active-language catalog is pending, a missing plant is
   // indistinguishable from a not-yet-loaded one — the name slot stays empty
@@ -27,7 +26,6 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
   placement,
   plant,
   soil,
-  top,
   language,
   catalogReady,
   onRemove,
@@ -35,13 +33,11 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
   const { t } = useTranslation();
 
   return (
-    // R3 (item F, product amendment): the panel lives in a RESERVED 330px
-    // right lane in the main row — sticky within it, never overlapping the
-    // grid (it was a fixed overlay at right:20 before).
+    // R4 (item F, owner preference): the panel is a plain card filling the
+    // ALWAYS-reserved 330px right lane — the LANE (in GardenPlanner) owns
+    // stickiness and scrolling; the panel no longer positions itself.
     <Box
       sx={{
-        position: 'sticky',
-        top,
         width: '100%',
         p: 2,
         border: '1px solid',

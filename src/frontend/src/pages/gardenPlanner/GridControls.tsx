@@ -175,16 +175,17 @@ export const GridControls = memo(function GridControls({
           </>
         )}
 
-        <IconButton
-          size="small"
-          onClick={onUndo}
-          disabled={!canUndo}
-          aria-label={t('planner.toolbar.undo')}
-        >
-          <UndoIcon fontSize="small" />
-        </IconButton>
-
+        {/* R4 (mockup arrangement): undo sits INSIDE the right cluster,
+            immediately left of the zoom-out magnifier. */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 'auto' }}>
+          <IconButton
+            size="small"
+            onClick={onUndo}
+            disabled={!canUndo}
+            aria-label={t('planner.toolbar.undo')}
+          >
+            <UndoIcon fontSize="small" />
+          </IconButton>
           <IconButton
             size="small"
             onClick={onZoomOut}

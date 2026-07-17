@@ -49,6 +49,7 @@ export interface PlannerTokens {
   obtnTx: string;
   // Counter/duration chip (§1/§2)
   cntChipBg: string;
+  cntChipTx: string;
   // Help banner (§1/§2 --banner-*)
   bannerBg: string;
   bannerBd: string;
@@ -102,6 +103,7 @@ const LIGHT: PlannerTokens = {
   obtnBd: '#B4C1B4', // contrast v2 16/07 (mockup #D8E0D8)
   obtnTx: '#2F3B34', // contrast v2 16/07 (mockup #3C4A42)
   cntChipBg: '#E4F3E9',
+  cntChipTx: '#20713F',
   bannerBg: '#EFF6FD',
   bannerBd: '#BBD8F2',
   bannerTx: '#2C5A8A',
@@ -149,6 +151,7 @@ const DARK: PlannerTokens = {
   obtnBd: '#31456B',
   obtnTx: '#DCE4F0',
   cntChipBg: 'rgba(76,180,124,0.16)',
+  cntChipTx: '#7ED0A4',
   bannerBg: 'rgba(76,140,220,0.12)',
   bannerBd: 'rgba(96,160,235,0.35)',
   bannerTx: '#A8C6EE',
