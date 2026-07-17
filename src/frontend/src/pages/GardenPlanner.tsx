@@ -13,7 +13,6 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
-import Container from '@mui/material/Container';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme, type Theme } from '@mui/material/styles';
@@ -21,6 +20,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import CloseIcon from '@mui/icons-material/Close';
 import SaveIcon from '@mui/icons-material/Save';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { CompassRose } from '../components/Garden/CompassRose';
@@ -37,7 +37,7 @@ import { useSelection } from '../hooks/useSelection';
 import { updateGarden } from '../services/gardenApi';
 import { saveLayout } from '../services/gardenLayoutApi';
 import { fetchPlants } from '../services/plantApi';
-import { getPlannerTokens } from '../theme/plannerTokens';
+import { usePlannerTokens } from '../theme/usePlannerTokens';
 import type { Garden, GardenConfig } from '../types/Garden';
 import type { Plant } from '../types/Plant';
 import { serializeCellsJson } from '../types/GardenLayout';
@@ -202,13 +202,13 @@ export default function GardenPlanner() {
   // are GUIDs, so the `new-` prefix can never collide. Stripped at save.
   const placementSeq = useRef(0);
 
-  const cellSizePx = Math.round(44 * zoom);
-
   const theme = useTheme();
   const plannerMode = theme.palette.mode === 'dark' ? 'dark' : 'light';
-  const tk = getPlannerTokens(plannerMode);
-  // §8 responsive compass: 56 px container / 42 px SVG desktop, 40/30 mobile.
-  const compassMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const tk = usePlannerTokens();
+  // The mobile breakpoint drives the §8 compass (56/40 container, 42/30 SVG)
+  // AND the §4 base cell size: 58 px desktop / 30 px mobile at zoom 100% (R3).
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const cellSizePx = Math.round((isMobile ? 30 : 58) * zoom);
 
   // Derived exposure grid (5.3-D, the #171 derived-at-render pattern): NOT
   // stored — recomputed from the draft grid + garden config when a dep
@@ -762,6 +762,34 @@ export default function GardenPlanner() {
       })
     : '';
 
+  // Meta line (R3, item C — mockup format §11): dims — active cells · garden
+  // type · facing. Type/facing segments render ONLY when set; the dialog's
+  // i18n labels are reused (planner.config.type.*, planner.config.west).
+  const metaSegments: string[] = [];
+  if (grid) {
+    metaSegments.push(
+      `${dimensionsText} — ${t('planner.toolbar.activeCells', {
+        active: activeCells,
+        total: totalCells,
+        surface: surfaceM2,
+      })}`
+    );
+  }
+  if (garden?.gardenType) {
+    metaSegments.push(t(`planner.config.type.${garden.gardenType}`));
+  }
+  if (garden?.orientation) {
+    metaSegments.push(
+      t('planner.meta.facing', {
+        facing:
+          garden.orientation === 'W'
+            ? t('planner.config.west')
+            : garden.orientation,
+      })
+    );
+  }
+  const metaText = metaSegments.join(' · ');
+
   const selectedPlant = selectedPlacement
     ? (allPlants.find((p) => p.id === selectedPlacement.plantId) ?? null)
     : null;
@@ -777,16 +805,19 @@ export default function GardenPlanner() {
 
   if (loading) {
     return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Box sx={{ px: '24px', py: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />
         </Box>
-      </Container>
+      </Box>
     );
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    // Full-width page (R3 item F): the lg Container is replaced by a
+    // full-width wrapper with 24px lateral padding (PROPOSED — orchestrator
+    // ratifies at harvest).
+    <Box sx={{ px: '24px', py: 4 }}>
       {/* Config dialog — first setup (a garden with no layout yet) */}
       <GardenConfigDialog
         open={showSetup}
@@ -825,8 +856,9 @@ export default function GardenPlanner() {
         {t('planner.toolbar.backToGardens')}
       </Button>
 
-      {/* Page header (R2): garden title + Réglages/Annuler/Enregistrer,
-          relocated out of the toolbar. Exporter arrives with chantier F. */}
+      {/* Page header (R2, spec'd R3 item E): H1 32/800, meta 7px below, and
+          the Réglages/Annuler/Enregistrer actions at 44px with 19px icons.
+          Exporter arrives with chantier F. */}
       <Box
         sx={{
           display: 'flex',
@@ -836,22 +868,41 @@ export default function GardenPlanner() {
           mb: 2,
         }}
       >
-        <Typography
-          variant="h5"
-          component="h1"
-          fontWeight={700}
-          color="primary"
-          sx={{ mr: 'auto' }}
-        >
-          {garden?.name || t('planner.title')}
-        </Typography>
+        <Box sx={{ mr: 'auto' }}>
+          <Typography
+            component="h1"
+            sx={{
+              fontSize: 32,
+              fontWeight: 800,
+              letterSpacing: '-0.01em',
+              lineHeight: 1.2,
+              color: tk.prim,
+            }}
+          >
+            {garden?.name || t('planner.title')}
+          </Typography>
+          {metaText && (
+            <Typography sx={{ mt: '7px', fontSize: 14.5, color: tk.tMeta }}>
+              {metaText}
+            </Typography>
+          )}
+        </Box>
 
         {grid && (
           <Button
             variant="outlined"
-            size="small"
-            startIcon={<SettingsIcon />}
+            startIcon={<SettingsIcon sx={{ fontSize: 19 }} />}
             onClick={handleOpenSettings}
+            sx={{
+              height: 44,
+              px: '17px',
+              borderRadius: '8px',
+              fontSize: 14.5,
+              fontWeight: 700,
+              bgcolor: tk.card,
+              borderColor: tk.obtnBd,
+              color: tk.obtnTx,
+            }}
           >
             {t('planner.toolbar.settings')}
           </Button>
@@ -860,10 +911,18 @@ export default function GardenPlanner() {
         {isDirty && (
           <Button
             variant="outlined"
-            size="small"
             color="inherit"
             onClick={handleCancel}
             disabled={saving}
+            sx={{
+              height: 44,
+              px: '17px',
+              borderRadius: '8px',
+              fontSize: 14.5,
+              fontWeight: 700,
+              borderColor: tk.obtnBd,
+              color: tk.obtnTx,
+            }}
           >
             {t('planner.toolbar.cancel')}
           </Button>
@@ -875,27 +934,22 @@ export default function GardenPlanner() {
             saving ? (
               <CircularProgress size={18} color="inherit" />
             ) : (
-              <SaveIcon />
+              <SaveIcon sx={{ fontSize: 19 }} />
             )
           }
           disabled={!isDirty || saving}
           onClick={handleSave}
+          sx={{
+            height: 44,
+            px: '17px',
+            borderRadius: '8px',
+            fontSize: 14.5,
+            fontWeight: 700,
+          }}
         >
           {saving ? t('planner.toolbar.saving') : t('planner.toolbar.save')}
         </Button>
       </Box>
-
-      {dimensionsText && (
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          {dimensionsText}
-          {' — '}
-          {t('planner.toolbar.activeCells', {
-            active: activeCells,
-            total: totalCells,
-            surface: surfaceM2,
-          })}
-        </Typography>
-      )}
 
       {isDirty && (
         <Alert
@@ -941,16 +995,34 @@ export default function GardenPlanner() {
         </Alert>
       )}
 
+      {/* Help banner (R3 item D — §11 --banner-*, radius 10, padding 13×16,
+          close 19px). Dismissal is SESSION-ONLY by design: plain component
+          state, nothing persisted — the banner returns on the next visit. */}
       {grid && showHelp && (
-        <Alert
-          severity="info"
-          variant="outlined"
-          sx={{ mb: 2 }}
-          icon={false}
-          onClose={() => setShowHelp(false)}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 1.5,
+            mb: 2,
+            p: '13px 16px',
+            borderRadius: '10px',
+            bgcolor: tk.bannerBg,
+            border: `1px solid ${tk.bannerBd}`,
+          }}
         >
-          <Typography variant="body2">{t('planner.help.unified')}</Typography>
-        </Alert>
+          <Typography sx={{ fontSize: 14, color: tk.bannerTx, flex: 1 }}>
+            {t('planner.help.unified')}
+          </Typography>
+          <IconButton
+            size="small"
+            onClick={() => setShowHelp(false)}
+            aria-label={t('planner.config.close')}
+            sx={{ p: '2px', color: tk.bannerTx }}
+          >
+            <CloseIcon sx={{ fontSize: 19 }} />
+          </IconButton>
+        </Box>
       )}
 
       {/* Two-column layout: sidebar | grid (detail panel is a floating overlay below) */}
@@ -1024,6 +1096,9 @@ export default function GardenPlanner() {
                 right: -6,
                 top: -10,
                 zIndex: 10,
+                // R3 (CR accept): the overlay is non-interactive — clicks
+                // must reach the top-right cells underneath it.
+                pointerEvents: 'none',
                 width: { xs: 40, sm: 56 },
                 height: { xs: 40, sm: 56 },
                 borderRadius: '50%',
@@ -1035,17 +1110,24 @@ export default function GardenPlanner() {
                 justifyContent: 'center',
               }}
             >
+              {/* R3 (CR accept): a null orientation is NOT announced as south
+                  — the rose rests (N up) with an "orientation not set" label
+                  until the user actually configures a facing. */}
               <CompassRose
-                size={compassMobile ? 30 : 42}
+                size={isMobile ? 30 : 42}
                 mode={plannerMode}
-                orientation={garden?.orientation ?? 'S'}
+                orientation={garden?.orientation ?? null}
                 labels={{ n: 'N', e: 'E', s: 'S', w: t('planner.config.west') }}
-                ariaLabel={t('planner.config.compassLabel', {
-                  orientation:
-                    (garden?.orientation ?? 'S') === 'W'
-                      ? t('planner.config.west')
-                      : (garden?.orientation ?? 'S'),
-                })}
+                ariaLabel={
+                  garden?.orientation
+                    ? t('planner.config.compassLabel', {
+                        orientation:
+                          garden.orientation === 'W'
+                            ? t('planner.config.west')
+                            : garden.orientation,
+                      })
+                    : t('planner.config.compassUnset')
+                }
               />
             </Box>
 
@@ -1334,6 +1416,23 @@ export default function GardenPlanner() {
               <ExposureLegend season={exposureSeason} moment={exposureMoment} />
             )}
           </Box>
+
+          {/* Placement panel LANE (R3 item F, product amendment): when a
+              placement is selected the panel occupies a reserved 330px right
+              column — it never overlaps the grid. */}
+          {selectedPlacement && (
+            <Box sx={{ width: 330, flexShrink: 0 }}>
+              <PlacementDetailPanel
+                placement={selectedPlacement}
+                plant={selectedPlant}
+                soil={selectedCellSoil}
+                top={panelTop}
+                language={language}
+                catalogReady={catalogReady}
+                onRemove={handleRemoveSelectedPlacement}
+              />
+            </Box>
+          )}
         </Box>
       )}
 
@@ -1361,19 +1460,6 @@ export default function GardenPlanner() {
         onClose={() => setOverridePopover(null)}
       />
 
-      {/* Floating detail panel — anchored at the top of the map area, sticks while scrolling */}
-      {selectedPlacement && (
-        <PlacementDetailPanel
-          placement={selectedPlacement}
-          plant={selectedPlant}
-          soil={selectedCellSoil}
-          top={panelTop}
-          language={language}
-          catalogReady={catalogReady}
-          onRemove={handleRemoveSelectedPlacement}
-        />
-      )}
-
       {/* Plants in this garden — derived from placements only (SMA-6 Option A) */}
       {plantsToShow.length > 0 && (
         <PlantsInGardenSection
@@ -1393,6 +1479,6 @@ export default function GardenPlanner() {
           ? t('planner.toolbar.unsavedChanges')
           : t('planner.toolbar.saved')}
       </Typography>
-    </Container>
+    </Box>
   );
 }

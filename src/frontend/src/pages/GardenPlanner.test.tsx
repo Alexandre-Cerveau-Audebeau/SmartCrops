@@ -640,6 +640,13 @@ describe('GardenPlanner header save/cancel gating (F3, relocated in R2)', () => 
     }
 
     resolveSave();
-    await waitFor(() => expect(saveLayout).toHaveBeenCalledTimes(1));
+    // R3 (CR accept): settle the pending save — the 'Saving...' state must
+    // fully clear before the test ends.
+    await waitFor(() =>
+      expect(
+        screen.queryAllByRole('button', { name: 'Saving...' })
+      ).toHaveLength(0)
+    );
+    expect(saveLayout).toHaveBeenCalledTimes(1);
   });
 });

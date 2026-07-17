@@ -240,7 +240,7 @@ export default function GardenGrid({ grid, shapeEditMode, placements, exposure, 
                 data-exposure={tint ?? undefined}
                 onPointerDown={hasDrag ? (e: React.PointerEvent) => { e.preventDefault(); onCellDragStart!(r, c); } : undefined}
                 onPointerEnter={hasDrag ? () => onCellDragEnter!(r, c) : undefined}
-                aria-label={`${t('planner.cell.toggleCell')} (${r}, ${c})`}
+                aria-label={`${t('planner.cell.toggleCell')} (${columnLabel(c)}${r + 1})`}
                 sx={{
                   ...commonSx,
                   cursor: 'pointer',
@@ -264,6 +264,10 @@ export default function GardenGrid({ grid, shapeEditMode, placements, exposure, 
               key={`${r}-${c}`}
               role="gridcell"
               data-exposure={tint ?? undefined}
+              // R3 (CR accept): screen-reader coordinates match the VISIBLE
+              // axes — one-based rows, letter columns, plus explicit indices.
+              aria-rowindex={r + 1}
+              aria-colindex={c + 1}
               tabIndex={interactive ? 0 : -1}
               onClick={interactive ? (e: React.MouseEvent<HTMLElement>) => onCellClick!(r, c, e.currentTarget) : undefined}
               onKeyDown={interactive ? (e: React.KeyboardEvent<HTMLElement>) => {
@@ -274,10 +278,16 @@ export default function GardenGrid({ grid, shapeEditMode, placements, exposure, 
               } : undefined}
               aria-label={
                 cell.active
-                  ? (placement?.plantName
-                      ? t('planner.cell.plantedCell', { plant: placement.plantName, row: r, col: c })
-                      : t('planner.cell.emptyCell', { row: r, col: c }))
-                  : t('planner.cell.inactiveCell', { row: r, col: c })
+                  ? placement?.plantName
+                    ? t('planner.cell.plantedCell', { plant: placement.plantName, row: r + 1, col: columnLabel(c) })
+                    : tint
+                      ? t('planner.cell.exposureCell', {
+                          category: t(`planner.exposure.categories.${tint}`),
+                          row: r + 1,
+                          col: columnLabel(c),
+                        })
+                      : t('planner.cell.emptyCell', { row: r + 1, col: columnLabel(c) })
+                  : t('planner.cell.inactiveCell', { row: r + 1, col: columnLabel(c) })
               }
               sx={{
                 ...commonSx,

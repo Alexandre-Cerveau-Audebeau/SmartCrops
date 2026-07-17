@@ -2,8 +2,7 @@ import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import { getPlannerTokens } from '../../theme/plannerTokens';
+import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { ExposureCategory, Moment, Season } from '../../utils/exposure';
 
 const CATEGORIES: ExposureCategory[] = ['full', 'morning', 'afternoon', 'shade'];
@@ -27,8 +26,7 @@ export const ExposureLegend = memo(function ExposureLegend({
   moment,
 }: ExposureLegendProps) {
   const { t, i18n } = useTranslation();
-  const theme = useTheme();
-  const tk = getPlannerTokens(theme.palette.mode === 'dark' ? 'dark' : 'light');
+  const tk = usePlannerTokens();
 
   // §13 shows the title terms lowercase ("été · midi") while the row-2
   // presets are capitalized ("Été · Midi") — one set of keys, locale-aware

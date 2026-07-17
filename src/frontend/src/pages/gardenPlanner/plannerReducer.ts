@@ -248,7 +248,11 @@ export function plannerReducer(
       return {
         ...state,
         ...disarmedPainting,
-        past: pushHistory(state), // undoable content change (5.3-D R2)
+        // Undoable content change (5.3-D R2) — but NEVER push the pre-setup
+        // null-grid snapshot (R3, CR accept): undoing the very FIRST setup
+        // would restore grid:null with lastSaved:null and strand the user on
+        // a blank planner (the whole layout is gated on `grid &&`).
+        past: state.grid ? pushHistory(state) : state.past,
         grid: parseCellsJson(null, action.cols, action.rows),
         layoutWidth: action.cols,
         layoutHeight: action.rows,
@@ -329,6 +333,15 @@ export function plannerReducer(
         return state;
       }
       if (!isInsideGrid(state.grid, action.row, action.col)) return state;
+      // No-op guard (R3, CR accept): entering a cell that ALREADY matches the
+      // paint polarity — with no placement to evict — must not copy the grid,
+      // dirty the draft, or push an undo snapshot.
+      const alreadyApplied =
+        state.grid[action.row][action.col].active === state.paintAction;
+      const placementWouldBeEvicted =
+        state.paintAction === false &&
+        state.placements.some((p) => occupiesCell(p, action.row, action.col));
+      if (alreadyApplied && !placementWouldBeEvicted) return state;
       const copy = copyGrid(state.grid)!;
       copy[action.row][action.col] = {
         ...copy[action.row][action.col],

@@ -809,3 +809,35 @@ describe('plannerReducer undo history (SMA-17 5.3-D R2)', () => {
     expect(s.past).toHaveLength(0);
   });
 });
+
+// R3 (CR accepts): the first-setup undo dead-end and the PAINT_ENTER no-op.
+describe('plannerReducer undo hardening (SMA-17 5.3-D R3)', () => {
+  it('the very FIRST setup pushes nothing — undo cannot strand a null grid', () => {
+    const s = plannerReducer(initialPlannerState, {
+      type: 'SETUP_CONFIRMED',
+      cols: 3,
+      rows: 3,
+      cellSize: '50cm',
+    });
+    expect(s.past).toHaveLength(0); // no pre-setup null-grid snapshot
+    const after = plannerReducer(s, { type: 'UNDO' });
+    expect(after).toBe(s); // empty stack → guarded no-op
+    expect(after.grid).not.toBeNull();
+  });
+
+  it('PAINT_ENTER over an already-matching cell is a full no-op (no history entry)', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 });
+    const before = s; // (0,0) is now inactive, paintAction=false, past=1
+    const after = plannerReducer(before, {
+      type: 'PAINT_ENTER',
+      row: 0,
+      col: 0,
+    });
+    expect(after).toBe(before); // same reference: no copy, no push, no dirty churn
+    expect(after.past).toHaveLength(1);
+  });
+});

@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import '../../i18n/i18n';
 import type { CellData } from '../../types/GardenLayout';
 import type { ExposureCategory } from '../../utils/exposure';
@@ -81,5 +81,32 @@ describe('GardenGrid tokens re-skin + exposure layer', () => {
     for (const cell of screen.getAllByRole('gridcell')) {
       expect(cell).not.toHaveAttribute('data-exposure');
     }
+  });
+
+  it('forwards the clicked cell element as the popover anchor (R3, CR accept)', () => {
+    const onCellClick = vi.fn();
+    render(
+      <ThemeProvider theme={createTheme()}>
+        <GardenGrid grid={grid} shapeEditMode={false} onCellClick={onCellClick} />
+      </ThemeProvider>
+    );
+    const cell = screen.getAllByRole('gridcell')[0]!;
+    fireEvent.click(cell);
+    expect(onCellClick).toHaveBeenCalledWith(0, 0, cell);
+  });
+
+  it('matches the visible axes in cell a11y: one-based indices, letter columns (R3, CR accept)', () => {
+    renderGrid({ exposure });
+    const cells = screen.getAllByRole('gridcell');
+    expect(cells[0]).toHaveAttribute('aria-rowindex', '1');
+    expect(cells[0]).toHaveAttribute('aria-colindex', '1');
+    expect(cells[0]).toHaveAccessibleName(
+      'Full sun — empty cell at row 1, column A'
+    );
+    expect(cells[2]).toHaveAttribute('aria-rowindex', '2');
+    expect(cells[2]).toHaveAccessibleName('Inactive cell at row 2, column A');
+    expect(cells[3]).toHaveAccessibleName(
+      'Morning sun — empty cell at row 2, column B'
+    );
   });
 });

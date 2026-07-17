@@ -4,8 +4,7 @@ import MenuItem from '@mui/material/MenuItem';
 import MenuList from '@mui/material/MenuList';
 import Popover from '@mui/material/Popover';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import { getPlannerTokens } from '../../theme/plannerTokens';
+import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { ExposureCategory } from '../../utils/exposure';
 
 // Auto (null) first, then the four categories — the engine's aggregate wins
@@ -41,8 +40,7 @@ export const ExposureOverridePopover = memo(function ExposureOverridePopover({
   onClose,
 }: ExposureOverridePopoverProps) {
   const { t } = useTranslation();
-  const theme = useTheme();
-  const tk = getPlannerTokens(theme.palette.mode === 'dark' ? 'dark' : 'light');
+  const tk = usePlannerTokens();
   const titleId = useId();
 
   return (

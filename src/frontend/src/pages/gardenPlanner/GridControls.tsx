@@ -2,15 +2,16 @@ import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
 import UndoIcon from '@mui/icons-material/Undo';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
-import { getPlannerTokens, type PlannerTokens } from '../../theme/plannerTokens';
+import { type PlannerTokens } from '../../theme/plannerTokens';
+import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Moment, Season } from '../../utils/exposure';
 import { ZOOM_MAX, ZOOM_MIN } from './plannerReducer';
 
@@ -127,8 +128,7 @@ export const GridControls = memo(function GridControls({
   onSetExposureSeason,
 }: GridControlsProps) {
   const { t } = useTranslation();
-  const theme = useTheme();
-  const tk = getPlannerTokens(theme.palette.mode === 'dark' ? 'dark' : 'light');
+  const tk = usePlannerTokens();
 
   const momentLabels: Record<Moment, string> = {
     morning: t('planner.exposure.moments.morning'),
@@ -225,48 +225,56 @@ export const GridControls = memo(function GridControls({
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <WbSunnyIcon sx={{ color: tk.expoIcc, fontSize: 20 }} />
-          {/* §10: switch 34×19, thumb 15, active --prim, inactive --track. */}
-          <Switch
-            checked={exposureVisible}
-            onChange={onToggleExposure}
-            slotProps={{
-              input: {
-                role: 'switch',
-                'aria-label': t('planner.exposure.toggle'),
-              },
-            }}
-            sx={{
-              width: 34,
-              height: 19,
-              p: 0,
-              '& .MuiSwitch-switchBase': {
-                p: '2px',
-                '&.Mui-checked': {
-                  transform: 'translateX(15px)',
-                  color: '#fff',
-                  '& + .MuiSwitch-track': {
-                    backgroundColor: tk.prim,
+          {/* §10: switch 34×19, thumb 15, active --prim, inactive --track.
+              FormControlLabel (R3, CR accept): clicking the label toggles. */}
+          <FormControlLabel
+            control={
+              <Switch
+                checked={exposureVisible}
+                onChange={onToggleExposure}
+                slotProps={{
+                  input: {
+                    role: 'switch',
+                    'aria-label': t('planner.exposure.toggle'),
+                  },
+                }}
+                sx={{
+                  width: 34,
+                  height: 19,
+                  p: 0,
+                  '& .MuiSwitch-switchBase': {
+                    p: '2px',
+                    '&.Mui-checked': {
+                      transform: 'translateX(15px)',
+                      color: '#fff',
+                      '& + .MuiSwitch-track': {
+                        backgroundColor: tk.prim,
+                        opacity: 1,
+                      },
+                    },
+                  },
+                  '& .MuiSwitch-thumb': {
+                    width: 15,
+                    height: 15,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                  },
+                  '& .MuiSwitch-track': {
+                    borderRadius: 9.5,
+                    backgroundColor: tk.track,
                     opacity: 1,
                   },
-                },
-              },
-              '& .MuiSwitch-thumb': {
-                width: 15,
-                height: 15,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
-              },
-              '& .MuiSwitch-track': {
-                borderRadius: 9.5,
-                backgroundColor: tk.track,
-                opacity: 1,
-              },
-            }}
+                }}
+              />
+            }
+            label={
+              <Typography
+                sx={{ fontSize: { xs: 12, sm: 13.5 }, fontWeight: 700, color: tk.tMeta }}
+              >
+                {t('planner.exposure.toggle')}
+              </Typography>
+            }
+            sx={{ m: 0, gap: 1 }}
           />
-          <Typography
-            sx={{ fontSize: { xs: 12, sm: 13.5 }, fontWeight: 700, color: tk.tMeta }}
-          >
-            {t('planner.exposure.toggle')}
-          </Typography>
         </Box>
         <PresetSegmented
           options={MOMENTS}

@@ -31,6 +31,7 @@ export interface PlannerTokens {
   // Text
   tTitle: string;
   tMeta: string;
+  tSci: string;
   muted: string;
   // Accents
   prim: string;
@@ -48,6 +49,10 @@ export interface PlannerTokens {
   obtnTx: string;
   // Counter/duration chip (§1/§2)
   cntChipBg: string;
+  // Help banner (§1/§2 --banner-*)
+  bannerBg: string;
+  bannerBd: string;
+  bannerTx: string;
   // lightSchedule green zone (§12)
   zoneABg: string;
   zoneABd: string;
@@ -71,31 +76,35 @@ export interface PlannerTokens {
   hatch: string;
 }
 
-// Day-contrast deviation (product decision, 16/07/2026): the mockup's day
-// palette is judged too low-contrast — muted/border day values are DARKENED
-// vs the mockup, in sync with the tokens doc §1 annotation (same commit).
-// The mockup stays the STRUCTURE reference; these values win for day COLORS.
-// Night (§2) untouched.
+// Day-contrast deviation v2 (product decision, 16/07/2026): the mockup's day
+// palette is judged too low-contrast — font AND border day values are
+// DARKENED vs the mockup, in sync with the tokens doc §1 annotation (same
+// commit). The mockup stays the STRUCTURE reference; these values win for
+// day COLORS. Night (§2) untouched.
 const LIGHT: PlannerTokens = {
   card: '#FFFFFF',
-  cardBd: '#E0E7DF', // contrast deviation 16/07 (mockup #F0F4EE)
-  divider: '#DFE6DE', // contrast deviation 16/07 (mockup #EDF2EC)
+  cardBd: '#CBD5CA', // contrast v2 16/07 (mockup #F0F4EE)
+  divider: '#CBD5CA', // contrast v2 16/07 (mockup #EDF2EC)
   shadow: '0 2px 10px rgba(27,94,58,0.07)',
   scrim: 'rgba(9,22,16,0.52)',
   tTitle: '#22302A',
-  tMeta: '#3C4A42',
-  muted: '#66716B', // contrast deviation 16/07 (mockup #7A8781)
+  tMeta: '#2F3B34', // contrast v2 16/07 (mockup #3C4A42)
+  tSci: '#5E6B64', // contrast v2 16/07 (mockup #75827A)
+  muted: '#4F5A54', // contrast v2 16/07 (mockup #7A8781)
   prim: '#2E8B57',
   expoIcc: '#E8890C',
-  inputBd: '#C8D2C8', // contrast deviation 16/07 (mockup #D8E0D8)
+  inputBd: '#B4C1B4', // contrast v2 16/07 (mockup #D8E0D8)
   searchBg: '#FBFDFA',
   segBg: '#EFF3EE',
   segOnBg: '#FFFFFF',
   segOnTx: '#1B5E3A',
   segShadow: '0 1px 4px rgba(0,0,0,0.18)',
-  obtnBd: '#C8D2C8', // contrast deviation 16/07 (mockup #D8E0D8)
-  obtnTx: '#3C4A42',
+  obtnBd: '#B4C1B4', // contrast v2 16/07 (mockup #D8E0D8)
+  obtnTx: '#2F3B34', // contrast v2 16/07 (mockup #3C4A42)
   cntChipBg: '#E4F3E9',
+  bannerBg: '#EFF6FD',
+  bannerBd: '#BBD8F2',
+  bannerTx: '#2C5A8A',
   zoneABg: '#EEF7F0',
   zoneABd: '#CDE6D6',
   typeSelBg: '#F0F9F3',
@@ -103,12 +112,12 @@ const LIGHT: PlannerTokens = {
   compNeedle: '#D64545',
   compSTail: '#D3DAD2',
   compTx: '#22302A',
-  compMut: '#66716B', // = --muted (SMA-17 decision) → follows the 16/07 deviation
+  compMut: '#4F5A54', // = --muted (SMA-17 decision) → follows the v2 deviation
   track: '#E2EADF',
   cellOn: '#F1F7EE',
-  cellOnBd: '#CFDCCA', // contrast deviation 16/07 (mockup #DEE9DA)
+  cellOnBd: '#BCCBB6', // contrast v2 16/07 (mockup #DEE9DA)
   cellOff: '#ECEEEA',
-  cellOffBd: '#D5DAD3', // contrast deviation 16/07 (mockup #E3E6E1)
+  cellOffBd: '#C4CBC2', // contrast v2 16/07 (mockup #E3E6E1)
   expo: {
     full: { fill: '#FFE7A3', border: '#EFD27E' },
     morning: { fill: '#EDF3B4', border: '#D9E38C' },
@@ -127,6 +136,7 @@ const DARK: PlannerTokens = {
   scrim: 'rgba(9,22,16,0.52)',
   tTitle: '#F2F6FA',
   tMeta: '#D6DEEC',
+  tSci: '#9FACC2',
   muted: '#7E8CA6',
   prim: '#4CB47C',
   expoIcc: '#FFCB54',
@@ -139,6 +149,9 @@ const DARK: PlannerTokens = {
   obtnBd: '#31456B',
   obtnTx: '#DCE4F0',
   cntChipBg: 'rgba(76,180,124,0.16)',
+  bannerBg: 'rgba(76,140,220,0.12)',
+  bannerBd: 'rgba(96,160,235,0.35)',
+  bannerTx: '#A8C6EE',
   zoneABg: 'rgba(76,180,124,0.10)',
   zoneABd: 'rgba(76,180,124,0.32)',
   typeSelBg: 'rgba(76,180,124,0.12)',

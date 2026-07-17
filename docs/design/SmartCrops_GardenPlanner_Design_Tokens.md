@@ -14,30 +14,32 @@
 
 ## 1. Palette globale — Jour
 
-> **Déviation contraste SmartCrops (16/07/2026)** — valeurs jour assombries vs maquette
-> pour la lisibilité ; la maquette reste la référence de STRUCTURE, ces valeurs priment
-> pour les COULEURS jour. Tokens déviés : `--muted` (maquette `#7A8781`), `--card-bd`
-> (`#F0F4EE`), `--divider` (`#EDF2EC`), `--input-bd` (`#D8E0D8`), `--obtn-bd` (`#D8E0D8`),
-> `--cell-on-bd` (`#DEE9DA`), `--cell-off-bd` (`#E3E6E1`). La nuit (§2) est inchangée.
+> **Déviation contraste SmartCrops v2 (16/07/2026)** — valeurs jour assombries vs maquette
+> (polices ET bordures) pour la lisibilité ; la maquette reste la référence de STRUCTURE,
+> ces valeurs priment pour les COULEURS jour. Tokens déviés (valeur maquette d'origine) :
+> polices `--t-meta` (`#3C4A42`), `--muted` (`#7A8781`), `--t-sci` (`#75827A`),
+> `--obtn-tx` (`#3C4A42`) ; bordures `--card-bd` (`#F0F4EE`), `--divider` (`#EDF2EC`),
+> `--input-bd` (`#D8E0D8`), `--obtn-bd` (`#D8E0D8`), `--cell-on-bd` (`#DEE9DA`),
+> `--cell-off-bd` (`#E3E6E1`). La nuit (§2) est inchangée.
 
 ```css
 --page-bg: #FAFDF7;          --nav-bg: #1B5E3A;
---card: #FFFFFF;             --card-bd: #E0E7DF;
+--card: #FFFFFF;             --card-bd: #CBD5CA;
 --shadow: 0 2px 10px rgba(27,94,58,0.07);
---t-title: #22302A;          --t-sci: #75827A;
---t-meta: #3C4A42;           --muted: #66716B;
+--t-title: #22302A;          --t-sci: #5E6B64;
+--t-meta: #2F3B34;           --muted: #4F5A54;
 --prim: #2E8B57;             --h1: #2E8B57;
---divider: #DFE6DE;          --input-bd: #C8D2C8;
+--divider: #CBD5CA;          --input-bd: #B4C1B4;
 --search-bg: #FBFDFA;        --placeholder: #9AA69E;
 --track: #E2EADF;
 --seg-bg: #EFF3EE;           --seg-on-bg: #FFFFFF;        --seg-on-tx: #1B5E3A;
---obtn-bd: #C8D2C8;          --obtn-tx: #3C4A42;          /* boutons outlined */
+--obtn-bd: #B4C1B4;          --obtn-tx: #2F3B34;          /* boutons outlined */
 --banner-bg: #EFF6FD;        --banner-bd: #BBD8F2;        --banner-tx: #2C5A8A;
 --cnt-chip-bg: #E4F3E9;      --cnt-chip-tx: #20713F;      /* chip compteur */
 --dang-bg: #FDEDED;  --dang-bd: #F2B8B5;  --dang-tx: #B3261E;  --dang-solid: #C62828;
 --zoneA-bg: #EEF7F0;         --zoneA-bd: #CDE6D6;         /* zone verte lightSchedule */
---cell-on: #F1F7EE;          --cell-on-bd: #CFDCCA;
---cell-off: #ECEEEA;         --cell-off-bd: #D5DAD3;
+--cell-on: #F1F7EE;          --cell-on-bd: #BCCBB6;
+--cell-off: #ECEEEA;         --cell-off-bd: #C4CBC2;
 --hint-bg: rgba(34,48,42,0.88);  --hint-tx: #fff;
 --expo-icc: #E8890C;         /* accent soleil (arc de la rose, icône calque) */
 --exp-sel-bg: #F4FAF6;

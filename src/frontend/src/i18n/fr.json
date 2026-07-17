@@ -395,6 +395,7 @@
       "orientationPrompt": "Vers où le jardin est-il tourné ?",
       "orientationNote": "Enregistré pour les futurs calculs d'exposition par case.",
       "compassLabel": "Boussole — le jardin est orienté {{orientation}}",
+      "compassUnset": "Boussole — orientation non configurée",
       "west": "O",
       "type": {
         "balcony": "Balcon",
@@ -496,10 +497,14 @@
       "toggleCell": "Basculer la cellule",
       "plantedCell": "{{plant}} à la ligne {{row}}, colonne {{col}}",
       "emptyCell": "Cellule vide à la ligne {{row}}, colonne {{col}}",
-      "inactiveCell": "Cellule inactive à la ligne {{row}}, colonne {{col}}"
+      "inactiveCell": "Cellule inactive à la ligne {{row}}, colonne {{col}}",
+      "exposureCell": "{{category}} — cellule vide à la ligne {{row}}, colonne {{col}}"
     },
     "help": {
-      "unified": "Cliquez sur une plante dans le menu, puis sur les parcelles pour la placer. Cliquez à nouveau pour la remplacer. Activez 'Modifier la forme' pour changer la forme du jardin."
+      "unified": "Cliquez sur une plante dans le menu, puis sur les parcelles pour la placer. Le calque Exposition montre le soleil case par case — réglez le moment et la saison dans la barre d'outils."
+    },
+    "meta": {
+      "facing": "Orienté {{facing}}"
     },
     "dimensions": "{{cols}} × {{rows}} — {{width}} × {{height}} ({{cellSize}}/cellule)",
     "plantsInGarden": "Plantes dans ce jardin",

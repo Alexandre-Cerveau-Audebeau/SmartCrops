@@ -35,13 +35,14 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
   const { t } = useTranslation();
 
   return (
+    // R3 (item F, product amendment): the panel lives in a RESERVED 330px
+    // right lane in the main row — sticky within it, never overlapping the
+    // grid (it was a fixed overlay at right:20 before).
     <Box
       sx={{
-        position: 'fixed',
+        position: 'sticky',
         top,
-        right: 20,
-        width: 280,
-        zIndex: 10,
+        width: '100%',
         p: 2,
         border: '1px solid',
         borderColor: 'divider',

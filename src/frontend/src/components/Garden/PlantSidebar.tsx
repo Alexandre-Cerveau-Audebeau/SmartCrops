@@ -14,6 +14,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTranslation } from 'react-i18next';
 import { STICKY_OFFSET } from '../../constants/layout';
+import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Plant } from '../../types/Plant';
 import { getPlantDisplayName } from '../../utils/getPlantDisplayName';
 import { getPlantColor } from '../../utils/plantColor';
@@ -41,6 +42,7 @@ type TabValue = 'plants' | 'soils' | 'infrastructure';
 
 export default function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
   const { t } = useTranslation();
+  const tk = usePlannerTokens();
   const [activeTab, setActiveTab] = useState<TabValue>('plants');
 
   // Search matches the DISPLAYED name (shared Library resolver, SMA-194) OR the
@@ -54,7 +56,9 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
   }, [plants, searchQuery, language]);
 
   return (
-    <Box sx={{ width: 320, maxHeight: 480, display: 'flex', flexDirection: 'column', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', flexShrink: 0, overflow: 'hidden', position: 'sticky', top: STICKY_OFFSET }}>
+    // R3 (item G): the mockup sidebar CARD — 288px fixed, card tokens,
+    // radius 12, shadow. Everything inside keeps its behavior.
+    <Box sx={{ width: 288, maxHeight: 480, display: 'flex', flexDirection: 'column', border: `1px solid ${tk.cardBd}`, borderRadius: '12px', boxShadow: tk.shadow, bgcolor: tk.card, flexShrink: 0, overflow: 'hidden', position: 'sticky', top: STICKY_OFFSET }}>
       <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
         <FormControlLabel
           control={<Switch checked={shapeEditMode} onChange={(e) => onShapeEditToggle(e.target.checked)} size="small" />}
@@ -130,8 +134,9 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
                       onClick={() => onPlantSelect(plant.id)}
                       sx={selected ? { borderLeft: '3px solid', borderColor: 'primary.main' } : { borderLeft: '3px solid transparent' }}
                     >
-                      <ListItemAvatar sx={{ minWidth: 36 }}>
-                        <Avatar sx={{ width: 28, height: 28, fontSize: 14, bgcolor: color }}>{name.charAt(0).toUpperCase()}</Avatar>
+                      {/* R3 (item G): mockup avatar is 34px (was 28). */}
+                      <ListItemAvatar sx={{ minWidth: 42 }}>
+                        <Avatar sx={{ width: 34, height: 34, fontSize: 15, bgcolor: color }}>{name.charAt(0).toUpperCase()}</Avatar>
                       </ListItemAvatar>
                       <ListItemText
                         primary={name}
