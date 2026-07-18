@@ -49,6 +49,10 @@ import {
   type Season,
 } from '../utils/exposure';
 import { getPlantDisplayName } from '../utils/getPlantDisplayName';
+import {
+  infrastructureBlockers,
+  type InfrastructureType,
+} from '../utils/infrastructure';
 import { ExposureLegend } from './gardenPlanner/ExposureLegend';
 import { ExposureOverridePopover } from './gardenPlanner/ExposureOverridePopover';
 import { GridControls } from './gardenPlanner/GridControls';
@@ -69,8 +73,9 @@ function cellSizeToMeters(cellSize: string): number {
 // per render would defeat every downstream memo/effect dep on `allPlants`.
 const EMPTY_PLANTS: Plant[] = [];
 
-// No blockers before 5.4 (infrastructures) — a stable [] keeps the exposure
-// memo honest about its deps.
+// Stable [] for the no-grid renders — real blockers are derived from the
+// painted infrastructure regions (SMA-15, 5.4); a fresh [] per render would
+// defeat the exposure memo's deps.
 const EMPTY_BLOCKERS: Blocker[] = [];
 
 // Help-banner dismissal (R4): persisted under a VERSIONED key — bumping the
@@ -134,6 +139,8 @@ export default function GardenPlanner() {
     exposureVisible,
     exposureMoment,
     exposureSeason,
+    infraMode,
+    infraType,
   } = state;
   const hasLastSaved = state.lastSaved !== null;
 
@@ -221,12 +228,25 @@ export default function GardenPlanner() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const cellSizePx = Math.round((isMobile ? 30 : 58) * zoom);
 
+  // Real blockers (SMA-15 5.4): blocking infrastructure regions derived from
+  // the per-cell storage — the [] placeholder era ends here.
+  const blockers = useMemo(
+    () => (grid ? infrastructureBlockers(grid) : EMPTY_BLOCKERS),
+    [grid]
+  );
+  // ONE boolean feeds both the moment computation and the legend's 5th
+  // swatch, so they can never diverge: indoor gardens are schedule-driven —
+  // nothing casts, and the legend must not promise a hatch that cannot render.
+  const castsShadow = blockers.length > 0 && garden?.gardenType !== 'indoor';
+
   // Derived exposure grid (5.3-D, the #171 derived-at-render pattern): NOT
   // stored — recomputed from the draft grid + garden config when a dep
-  // changes. AGGREGATE mode only in 5.3-D: with no blockers yet (5.4), a
-  // per-moment view would be uniformly lit — the moment preset only feeds
-  // the legend title (honesty constraint: no fake variation).
-  const exposureCells = useMemo(() => {
+  // changes. Two engine calls since 5.4: the AGGREGATE categories (the §3
+  // tints + overrides, unchanged), plus the MOMENT view whose shadowed set
+  // becomes the §9 "Ombre portée" hatch overlay — that is what the moment
+  // preset visibly moves now that blockers are real. Indoor gardens skip the
+  // moment call: their light is schedule-driven, nothing casts.
+  const exposureView = useMemo(() => {
     if (!exposureVisible || !grid) return null;
     const overrides: Record<string, ExposureCategory> = {};
     grid.forEach((row, r) =>
@@ -234,7 +254,7 @@ export default function GardenPlanner() {
         if (cell.exposureOverride) overrides[`${r},${c}`] = cell.exposureOverride;
       })
     );
-    const result = computeExposureGrid({
+    const params = {
       rows: layoutHeight,
       cols: layoutWidth,
       activeCells: grid.map((row) => row.map((cell) => cell.active)),
@@ -243,12 +263,26 @@ export default function GardenPlanner() {
       latitudeBand: garden?.latitudeBand ?? null,
       gardenType: garden?.gardenType ?? null,
       lightSchedule: garden?.lightSchedule ?? null,
-      blockers: EMPTY_BLOCKERS,
+      blockers,
       overrides,
       season: exposureSeason,
-    });
-    return result.mode === 'aggregate' ? result.cells : null;
-  }, [exposureVisible, grid, layoutWidth, layoutHeight, garden, exposureSeason]);
+    };
+    const aggregate = computeExposureGrid(params);
+    const momentResult = castsShadow
+      ? computeExposureGrid({ ...params, moment: exposureMoment })
+      : null;
+    return {
+      cells: aggregate.mode === 'aggregate' ? aggregate.cells : null,
+      cast:
+        momentResult && momentResult.mode === 'moment'
+          ? momentResult.cells.map((row) =>
+              row.map((cellState) => cellState === 'shadowed')
+            )
+          : null,
+    };
+  }, [exposureVisible, grid, layoutWidth, layoutHeight, garden, exposureSeason, exposureMoment, blockers, castsShadow]);
+  const exposureCells = exposureView?.cells ?? null;
+  const castShadowCells = exposureView?.cast ?? null;
 
   // Horizontal scroll state for grid container
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -462,6 +496,32 @@ export default function GardenPlanner() {
     (enabled: boolean) => dispatch({ type: 'SET_SHAPE_EDIT_MODE', enabled }),
     []
   );
+  // SMA-15 (5.4) — mode plumbing. Arming an infrastructure type enters the
+  // Infrastructures mode (reducer) and disarms any armed plant; selecting a
+  // plant symmetrically disarms the infrastructure. The toolbar's Sélection
+  // button exits both non-default modes.
+  const handleInfraSelect = useCallback(
+    (type: InfrastructureType | null) => {
+      dispatch({ type: 'SET_INFRA_TYPE', infraType: type });
+      if (type) selectPlant(null);
+    },
+    [selectPlant]
+  );
+  const handlePlantSelect = useCallback(
+    (plantId: string | null) => {
+      selectPlant(plantId);
+      if (plantId) dispatch({ type: 'SET_INFRA_TYPE', infraType: null });
+    },
+    [selectPlant]
+  );
+  const handleSelectionMode = useCallback(() => {
+    dispatch({ type: 'SET_INFRA_MODE', enabled: false });
+    dispatch({ type: 'SET_SHAPE_EDIT_MODE', enabled: false });
+  }, []);
+  const handleInfraMode = useCallback(
+    () => dispatch({ type: 'SET_INFRA_MODE', enabled: true }),
+    []
+  );
   const handleToggleExposure = useCallback(
     () => dispatch({ type: 'TOGGLE_EXPOSURE' }),
     []
@@ -505,7 +565,9 @@ export default function GardenPlanner() {
 
   const handleCellClick = useCallback(
     (row: number, col: number, anchorEl?: HTMLElement) => {
-      if (shapeEditMode || !grid) return;
+      // Both paint modes swallow clicks (5.4): infra cells use the drag
+      // surface, like shape-edit.
+      if (shapeEditMode || infraMode || !grid) return;
 
       const existing = placements.find(
         (p) =>
@@ -556,7 +618,7 @@ export default function GardenPlanner() {
 
       selectPlacement(existing ? existing.id : null);
     },
-    [shapeEditMode, grid, placements, selectedPlantId, catalogReady, exposureVisible, selectPlacement]
+    [shapeEditMode, infraMode, grid, placements, selectedPlantId, catalogReady, exposureVisible, selectPlacement]
   );
 
   const handleRemoveSelectedPlacement = useCallback(() => {
@@ -1048,7 +1110,9 @@ export default function GardenPlanner() {
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             selectedPlantId={selectedPlantId}
-            onPlantSelect={selectPlant}
+            onPlantSelect={handlePlantSelect}
+            selectedInfraType={infraType}
+            onInfraSelect={handleInfraSelect}
             language={language}
             shapeEditMode={shapeEditMode}
             onShapeEditToggle={handleShapeEditToggle}
@@ -1062,6 +1126,8 @@ export default function GardenPlanner() {
             <GridControls
               hasGrid={grid !== null}
               shapeEditMode={shapeEditMode}
+              infraMode={infraMode}
+              infraArmed={infraType !== null}
               zoom={zoom}
               canUndo={state.past.length > 0}
               exposureVisible={exposureVisible}
@@ -1075,6 +1141,8 @@ export default function GardenPlanner() {
               onToggleExposure={handleToggleExposure}
               onSetExposureMoment={handleSetExposureMoment}
               onSetExposureSeason={handleSetExposureSeason}
+              onSelectionMode={handleSelectionMode}
+              onInfraMode={handleInfraMode}
             />
 
           {/* Grid CARD (§4: radius 12, border card-bd, shadow, padding 20/12) —
@@ -1310,8 +1378,10 @@ export default function GardenPlanner() {
                 <GardenGrid
                   grid={grid}
                   shapeEditMode={shapeEditMode}
+                  infraPaintMode={infraMode}
                   placements={enrichedPlacements}
                   exposure={exposureCells}
+                  castShadow={castShadowCells}
                   onCellClick={handleCellClick}
                   onCellDragStart={handleCellDragStart}
                   onCellDragEnter={handleCellDragEnter}
@@ -1417,9 +1487,15 @@ export default function GardenPlanner() {
             )}
           </Box>
 
-            {/* Exposure legend (5.3-D, tokens §9) — only while the layer is on */}
+            {/* Exposure legend (5.3-D, tokens §9) — only while the layer is
+                on; the 5th "Ombre portée" swatch needs a blocking structure
+                (SMA-15). */}
             {exposureVisible && (
-              <ExposureLegend season={exposureSeason} moment={exposureMoment} />
+              <ExposureLegend
+                season={exposureSeason}
+                moment={exposureMoment}
+                hasCastShadow={castsShadow}
+              />
             )}
           </Box>
 

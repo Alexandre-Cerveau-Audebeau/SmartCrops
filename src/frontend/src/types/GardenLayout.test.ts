@@ -76,4 +76,17 @@ describe('CellData.exposureOverride serialization (sparse)', () => {
     expect(restored[1][1].infrastructure).toBe('wall');
     expect(restored[1][2].exposureOverride).toBeUndefined();
   });
+
+  // SMA-15 (5.4): infrastructure gets the same JSON-boundary guard as the
+  // override — only the 6 known types enter CellData.
+  it('drops an unknown infrastructure at the parsing boundary, keeps known ones', () => {
+    const json = JSON.stringify([
+      { row: 0, col: 0, infrastructure: 'lava' },
+      { row: 0, col: 1, infrastructure: 'trellis' },
+    ]);
+    const grid = parseCellsJson(json, 2, 1);
+    expect(grid[0][0]).not.toHaveProperty('infrastructure');
+    expect(grid[0][0].active).toBe(true); // the rest of the cell still parses
+    expect(grid[0][1].infrastructure).toBe('trellis');
+  });
 });

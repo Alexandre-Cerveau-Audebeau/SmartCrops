@@ -441,11 +441,31 @@
         "full": "Full sun",
         "morning": "Morning sun",
         "afternoon": "Afternoon sun",
-        "shade": "Shade"
+        "shade": "Shade",
+        "castShadow": "Cast shadow (wall, trellis)"
       },
       "override": {
         "title": "Cell exposure",
         "auto": "Auto (computed)"
+      }
+    },
+    "modes": {
+      "selection": "Selection",
+      "infrastructure": "Infrastructures"
+    },
+    "infra": {
+      "hint": "Place infrastructures on the grid. Blocking elements cast a shadow in the Exposure layer.",
+      "types": {
+        "wall": "Wall",
+        "fence": "Fence",
+        "trellis": "Trellis",
+        "path": "Path",
+        "water": "Water point",
+        "pot": "Pot"
+      },
+      "badge": {
+        "blocks": "Blocks light",
+        "noShadow": "No shadow"
       }
     },
     "shape": {
@@ -498,7 +518,9 @@
       "plantedCell": "{{plant}} at row {{row}}, column {{col}}",
       "emptyCell": "Empty cell at row {{row}}, column {{col}}",
       "inactiveCell": "Inactive cell at row {{row}}, column {{col}}",
-      "exposureCell": "{{category}} — empty cell at row {{row}}, column {{col}}"
+      "exposureCell": "{{category}} — empty cell at row {{row}}, column {{col}}",
+      "infraCell": "{{type}} — row {{row}}, column {{col}}",
+      "paintCell": "Paint infrastructure"
     },
     "help": {
       "unified": "Click a plant in the sidebar, then click cells to place it. The Exposure layer shows per-cell sunlight — set the time and season in the toolbar."

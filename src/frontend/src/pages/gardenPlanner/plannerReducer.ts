@@ -1,6 +1,7 @@
 import type { CellData } from '../../types/GardenLayout';
 import { parseCellsJson } from '../../types/GardenLayout';
 import type { ExposureCategory, Moment, Season } from '../../utils/exposure';
+import type { InfrastructureType } from '../../utils/infrastructure';
 
 /**
  * A placement with a CLIENT identity. The `id` is the server placement id
@@ -62,6 +63,18 @@ export interface PlannerState {
   isPainting: boolean;
   paintAction: boolean | null;
   /**
+   * Infrastructure paint mode (SMA-15 5.4) — the third mutually exclusive
+   * editing mode (selection / shape-edit / infrastructure-paint). Arming a
+   * type from the sidebar ENTERS the mode (and leaves shape-edit); the mode
+   * cannot be entered without an armed type. `infraPaintValue` is the drag
+   * polarity — the type being applied, or null while a drag is CLEARING
+   * (started on a cell already carrying the armed type, mirroring
+   * shape-edit's toggle-polarity model).
+   */
+  infraMode: boolean;
+  infraType: InfrastructureType | null;
+  infraPaintValue: InfrastructureType | null;
+  /**
    * Snapshot of the last saved layout. This is the planner's whole "undo":
    * Cancel restores it wholesale (there is no history stack — pre-5.1B the
    * snapshot lived in a ref and handleCancel deep-copied it back).
@@ -112,6 +125,9 @@ export const initialPlannerState: PlannerState = {
   zoom: 1,
   isPainting: false,
   paintAction: null,
+  infraMode: false,
+  infraType: null,
+  infraPaintValue: null,
   lastSaved: null,
   removedCount: 0,
   removedSeq: 0,
@@ -148,6 +164,8 @@ export type PlannerAction =
   | { type: 'REPLACE_PLACEMENT'; placementId: string; plantId: string }
   | { type: 'REMOVE_PLACEMENT'; placementId: string }
   | { type: 'SET_SHAPE_EDIT_MODE'; enabled: boolean }
+  | { type: 'SET_INFRA_TYPE'; infraType: InfrastructureType | null }
+  | { type: 'SET_INFRA_MODE'; enabled: boolean }
   | { type: 'ZOOM_IN' }
   | { type: 'ZOOM_OUT' }
   | { type: 'MARK_SAVED'; submitted: LayoutSnapshot }
@@ -192,8 +210,13 @@ const occupiesCell = (
   col < p.startCol + p.spanCols;
 
 /** Painting state must not survive an editing-context change (F6): hydration,
- * restore, draft discard and shape-edit off all reset through this. */
-const disarmedPainting = { isPainting: false, paintAction: null } as const;
+ * restore, draft discard and every mode switch all reset through this. The
+ * infra polarity disarms with the shared drag flag (5.4). */
+const disarmedPainting = {
+  isPainting: false,
+  paintAction: null,
+  infraPaintValue: null,
+} as const;
 
 /**
  * Push the CURRENT draft content onto the undo stack (deep-copied — the live
@@ -276,6 +299,10 @@ export function plannerReducer(
         placements: [],
         lastSaved: null,
         shapeEditMode: false,
+        // The fresh grid starts in SELECTION mode (5.4): infrastructure mode
+        // escapes neither — the armed type stays remembered, like every
+        // other mode exit.
+        infraMode: false,
         isDirty: true,
       };
 
@@ -310,77 +337,127 @@ export function plannerReducer(
     }
 
     case 'PAINT_START': {
-      if (!state.shapeEditMode || !state.grid) return state;
+      if (!state.grid) return state;
       if (!isInsideGrid(state.grid, action.row, action.col)) return state;
-      const currentActive = state.grid[action.row][action.col].active;
-      const copy = copyGrid(state.grid)!;
-      copy[action.row][action.col] = {
-        ...copy[action.row][action.col],
-        active: !currentActive,
-      };
-      // Painting a cell INACTIVE evicts whatever occupied it (F7) — same
-      // semantics (filter + removal toast) as the RESIZED out-of-bounds drop.
-      const filtered = currentActive
-        ? state.placements.filter(
-            (p) => !occupiesCell(p, action.row, action.col)
-          )
-        : state.placements;
-      return {
-        ...state,
-        past: pushHistory(state),
-        grid: copy,
-        placements: filtered,
-        isPainting: true,
-        paintAction: !currentActive,
-        isDirty: true,
-        ...withRemoval(state, state.placements.length - filtered.length),
-      };
-    }
-
-    case 'PAINT_ENTER': {
-      // shapeEditMode is re-checked (F6): leaving shape-edit mid-drag must not
-      // let a queued pointer-enter keep mutating the grid.
-      if (
-        !state.shapeEditMode ||
-        !state.isPainting ||
-        state.paintAction === null ||
-        !state.grid
-      ) {
-        return state;
-      }
-      if (!isInsideGrid(state.grid, action.row, action.col)) return state;
-      // No-op guard (R3, CR accept): entering a cell that ALREADY matches the
-      // paint polarity — with no placement to evict — must not copy the grid,
-      // dirty the draft, or push an undo snapshot.
-      const alreadyApplied =
-        state.grid[action.row][action.col].active === state.paintAction;
-      const placementWouldBeEvicted =
-        state.paintAction === false &&
-        state.placements.some((p) => occupiesCell(p, action.row, action.col));
-      if (alreadyApplied && !placementWouldBeEvicted) return state;
-      const copy = copyGrid(state.grid)!;
-      copy[action.row][action.col] = {
-        ...copy[action.row][action.col],
-        active: state.paintAction,
-      };
-      const filtered =
-        state.paintAction === false
+      if (state.shapeEditMode) {
+        const currentActive = state.grid[action.row][action.col].active;
+        const copy = copyGrid(state.grid)!;
+        copy[action.row][action.col] = {
+          ...copy[action.row][action.col],
+          active: !currentActive,
+        };
+        // Painting a cell INACTIVE evicts whatever occupied it (F7) — same
+        // semantics (filter + removal toast) as the RESIZED out-of-bounds drop.
+        const filtered = currentActive
           ? state.placements.filter(
               (p) => !occupiesCell(p, action.row, action.col)
             )
           : state.placements;
-      return {
-        ...state,
-        past: pushHistory(state),
-        grid: copy,
-        placements: filtered,
-        isDirty: true,
-        ...withRemoval(state, state.placements.length - filtered.length),
-      };
+        return {
+          ...state,
+          past: pushHistory(state),
+          grid: copy,
+          placements: filtered,
+          isPainting: true,
+          paintAction: !currentActive,
+          isDirty: true,
+          ...withRemoval(state, state.placements.length - filtered.length),
+        };
+      }
+      // Infrastructure paint (SMA-15 5.4) — same drag pattern, targeting
+      // cell.infrastructure. ACTIVE cells only (an inactive cell renders
+      // cellOff, so a painted value would be invisible — the shape-edit
+      // eligibility precedent); placements do NOT block painting (a plant
+      // over a trellis is the documented layering). Starting on a cell that
+      // already carries the armed type locks a CLEARING drag — the same
+      // toggle-polarity model as shape-edit.
+      if (state.infraMode && state.infraType) {
+        const cell = state.grid[action.row][action.col];
+        if (!cell.active) return state;
+        const apply =
+          cell.infrastructure === state.infraType ? null : state.infraType;
+        const copy = copyGrid(state.grid)!;
+        if (apply === null) {
+          // Sparse contract (like the override): clearing REMOVES the key.
+          delete copy[action.row][action.col].infrastructure;
+        } else {
+          copy[action.row][action.col].infrastructure = apply;
+        }
+        return {
+          ...state,
+          past: pushHistory(state),
+          grid: copy,
+          isPainting: true,
+          infraPaintValue: apply,
+          isDirty: true,
+        };
+      }
+      return state;
+    }
+
+    case 'PAINT_ENTER': {
+      if (!state.isPainting || !state.grid) return state;
+      if (!isInsideGrid(state.grid, action.row, action.col)) return state;
+      // shapeEditMode is re-checked (F6): leaving shape-edit mid-drag must not
+      // let a queued pointer-enter keep mutating the grid.
+      if (state.shapeEditMode && state.paintAction !== null) {
+        // No-op guard (R3, CR accept): entering a cell that ALREADY matches the
+        // paint polarity — with no placement to evict — must not copy the grid,
+        // dirty the draft, or push an undo snapshot.
+        const alreadyApplied =
+          state.grid[action.row][action.col].active === state.paintAction;
+        const placementWouldBeEvicted =
+          state.paintAction === false &&
+          state.placements.some((p) => occupiesCell(p, action.row, action.col));
+        if (alreadyApplied && !placementWouldBeEvicted) return state;
+        const copy = copyGrid(state.grid)!;
+        copy[action.row][action.col] = {
+          ...copy[action.row][action.col],
+          active: state.paintAction,
+        };
+        const filtered =
+          state.paintAction === false
+            ? state.placements.filter(
+                (p) => !occupiesCell(p, action.row, action.col)
+              )
+            : state.placements;
+        return {
+          ...state,
+          past: pushHistory(state),
+          grid: copy,
+          placements: filtered,
+          isDirty: true,
+          ...withRemoval(state, state.placements.length - filtered.length),
+        };
+      }
+      // Infrastructure drag (5.4): the mode + armed type are re-checked (same
+      // F6 contract), the polarity comes from PAINT_START's lock. The no-op
+      // guard mirrors R3's: a cell already matching the polarity must not
+      // copy the grid, dirty the draft, or spend an undo entry.
+      if (state.infraMode && state.infraType) {
+        const cell = state.grid[action.row][action.col];
+        if (!cell.active) return state;
+        if ((cell.infrastructure ?? null) === state.infraPaintValue) {
+          return state;
+        }
+        const copy = copyGrid(state.grid)!;
+        if (state.infraPaintValue === null) {
+          delete copy[action.row][action.col].infrastructure;
+        } else {
+          copy[action.row][action.col].infrastructure = state.infraPaintValue;
+        }
+        return {
+          ...state,
+          past: pushHistory(state),
+          grid: copy,
+          isDirty: true,
+        };
+      }
+      return state;
     }
 
     case 'PAINT_END':
-      return { ...state, isPainting: false, paintAction: null };
+      return { ...state, ...disarmedPainting };
 
     case 'SET_ALL_CELLS': {
       if (!state.grid) return state;
@@ -567,10 +644,42 @@ export function plannerReducer(
       };
 
     case 'SET_SHAPE_EDIT_MODE':
-      // Disabling shape-edit disarms any in-flight paint drag (F6).
+      // Disabling shape-edit disarms any in-flight paint drag (F6). Enabling
+      // it LEAVES infrastructure mode (5.4 mutual exclusion) — the armed type
+      // stays remembered so the toolbar button can re-enter.
       return action.enabled
-        ? { ...state, shapeEditMode: true }
+        ? { ...state, shapeEditMode: true, infraMode: false, ...disarmedPainting }
         : { ...state, shapeEditMode: false, ...disarmedPainting };
+
+    // ── Infrastructure mode (SMA-15 5.4) ─────────────────────────────────────
+    case 'SET_INFRA_TYPE':
+      // Arming a type ENTERS infrastructure mode (and leaves shape-edit);
+      // disarming (null) falls back to selection mode. Both disarm any
+      // in-flight drag (F6 contract).
+      return action.infraType === null
+        ? { ...state, infraType: null, infraMode: false, ...disarmedPainting }
+        : {
+            ...state,
+            infraType: action.infraType,
+            infraMode: true,
+            shapeEditMode: false,
+            ...disarmedPainting,
+          };
+
+    case 'SET_INFRA_MODE':
+      // Entering REQUIRES an armed type (the sidebar arms it) — a guarded
+      // no-op otherwise, mirroring how every reducer guard works. Leaving
+      // keeps the type armed for a later re-entry.
+      if (action.enabled) {
+        if (!state.infraType) return state;
+        return {
+          ...state,
+          infraMode: true,
+          shapeEditMode: false,
+          ...disarmedPainting,
+        };
+      }
+      return { ...state, infraMode: false, ...disarmedPainting };
 
     case 'ZOOM_IN':
       return { ...state, zoom: Math.min(ZOOM_MAX, state.zoom + 0.2) };

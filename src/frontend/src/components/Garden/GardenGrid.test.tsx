@@ -137,3 +137,97 @@ describe('GardenGrid tokens re-skin + exposure layer', () => {
     );
   });
 });
+
+// SMA-15 (5.4) — §6 region render: adjacent same-type infrastructure cells
+// draw as ONE positioned block (single border + centered icon/label), and the
+// selected moment's cast shadows hatch the cells beneath the exposure tints.
+describe('GardenGrid infrastructure regions (SMA-15 5.4)', () => {
+  const withInfra = (
+    cells: CellData[][],
+    opts: { castShadow?: boolean[][] | null; exposure?: (ExposureCategory | null)[][] | null } = {}
+  ) =>
+    render(
+      <ThemeProvider theme={createTheme({ palette: { mode: 'light' } })}>
+        <GardenGrid
+          grid={cells}
+          shapeEditMode={false}
+          exposure={opts.exposure ?? null}
+          castShadow={opts.castShadow ?? null}
+        />
+      </ThemeProvider>
+    );
+
+  it('a 1×6 wall run renders as ONE region block with ONE label (≥4 cells wide)', () => {
+    const cells: CellData[][] = [
+      Array.from({ length: 6 }, () => ({ active: true, infrastructure: 'wall' as const })),
+    ];
+    const { container } = withInfra(cells);
+    const regions = container.querySelectorAll('[data-infra-region="wall"]');
+    expect(regions).toHaveLength(1);
+    expect(regions[0]).toHaveTextContent('Wall');
+    // §6: wall day bg + the single perimeter border.
+    expect(regions[0]).toHaveStyle({ backgroundColor: '#8A919C' });
+  });
+
+  it('two separated walls render as TWO region blocks', () => {
+    const cells: CellData[][] = [
+      [
+        { active: true, infrastructure: 'wall' },
+        { active: true },
+        { active: true, infrastructure: 'wall' },
+      ],
+    ];
+    const { container } = withInfra(cells);
+    expect(container.querySelectorAll('[data-infra-region="wall"]')).toHaveLength(2);
+  });
+
+  it('a narrow region (<4 cells wide) shows no label', () => {
+    const cells: CellData[][] = [
+      [
+        { active: true, infrastructure: 'path' },
+        { active: true, infrastructure: 'path' },
+      ],
+    ];
+    const { container } = withInfra(cells);
+    const region = container.querySelector('[data-infra-region="path"]');
+    expect(region).not.toBeNull();
+    expect(region).not.toHaveTextContent('Path');
+  });
+
+  it('water renders rounded (§6 formes rondes)', () => {
+    const cells: CellData[][] = [[{ active: true, infrastructure: 'water' }]];
+    const { container } = withInfra(cells);
+    expect(container.querySelector('[data-infra-region="water"]')).not.toBeNull();
+    // jsdom never APPLIES media-scoped rules, so the §6 radius pair is
+    // asserted on the emitted styles instead of the computed style: both the
+    // 15px mobile and 29px desktop values must be wired (base cells use 4px).
+    const styles = Array.from(document.head.querySelectorAll('style'))
+      .map((tag) => tag.textContent)
+      .join('');
+    expect(styles).toContain('border-radius:15px');
+    expect(styles).toContain('border-radius:29px');
+  });
+
+  it('infrastructure cells announce their type to assistive tech', () => {
+    const cells: CellData[][] = [[{ active: true, infrastructure: 'trellis' }]];
+    withInfra(cells);
+    expect(screen.getByRole('gridcell')).toHaveAccessibleName(
+      'Trellis — row 1, column A'
+    );
+  });
+
+  it('cast-shadow cells carry the §3 hatch and the data tag while the layer is on', () => {
+    const cells: CellData[][] = [[{ active: true }, { active: true }]];
+    withInfra(cells, {
+      exposure: [['full', 'full']],
+      castShadow: [[true, false]],
+    });
+    const gridCells = screen.getAllByRole('gridcell');
+    expect(gridCells[0]).toHaveAttribute('data-cast-shadow', 'true');
+    expect(gridCells[0]).toHaveStyle({
+      backgroundImage:
+        'repeating-linear-gradient(45deg, rgba(71,94,120,0.18) 0px, rgba(71,94,120,0.18) 3px, transparent 3px, transparent 8px)',
+    });
+    expect(gridCells[1]).not.toHaveAttribute('data-cast-shadow');
+  });
+});

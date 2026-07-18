@@ -85,9 +85,61 @@ function PresetSegmented<T extends string>({
   );
 }
 
+/**
+ * §10 mode button (SMA-15 5.4): h 38 (34 mobile) · padding-x 14 (10) ·
+ * fs 13.5 (12) ; active = `--prim` fill, white text. §10's mobile icon-only
+ * variant is NOT implemented — the doc names no icons for the mode buttons
+ * (labels stay visible at every breakpoint; deviation declared for
+ * ratification). The inactive face reuses the outlined-button tokens
+ * (obtnBd/tMeta — nearest existing, no invented hex).
+ */
+function ModeButton({
+  label,
+  active,
+  disabled,
+  onClick,
+  tk,
+}: {
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  tk: PlannerTokens;
+}) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+      sx={{
+        height: { xs: 34, sm: 38 },
+        px: { xs: '10px', sm: '14px' },
+        fontSize: { xs: 12, sm: 13.5 },
+        fontWeight: 700,
+        fontFamily: 'inherit',
+        lineHeight: 1.2,
+        borderRadius: '8px',
+        cursor: disabled ? 'default' : 'pointer',
+        border: active ? '1px solid transparent' : `1px solid ${tk.obtnBd}`,
+        bgcolor: active ? tk.prim : 'transparent',
+        color: active ? '#fff' : tk.tMeta,
+        opacity: disabled ? 0.5 : 1,
+        transition: 'background-color .15s, color .15s',
+      }}
+    >
+      {label}
+    </Box>
+  );
+}
+
 interface GridControlsProps {
   hasGrid: boolean;
   shapeEditMode: boolean;
+  /** Infrastructure paint mode + whether a type is armed (SMA-15 5.4). */
+  infraMode?: boolean;
+  infraArmed?: boolean;
   zoom: number;
   canUndo: boolean;
   exposureVisible: boolean;
@@ -101,6 +153,8 @@ interface GridControlsProps {
   onToggleExposure: () => void;
   onSetExposureMoment: (moment: Moment) => void;
   onSetExposureSeason: (season: Season) => void;
+  onSelectionMode?: () => void;
+  onInfraMode?: () => void;
 }
 
 /**
@@ -113,6 +167,8 @@ interface GridControlsProps {
 export const GridControls = memo(function GridControls({
   hasGrid,
   shapeEditMode,
+  infraMode = false,
+  infraArmed = false,
   zoom,
   canUndo,
   exposureVisible,
@@ -126,6 +182,8 @@ export const GridControls = memo(function GridControls({
   onToggleExposure,
   onSetExposureMoment,
   onSetExposureSeason,
+  onSelectionMode,
+  onInfraMode,
 }: GridControlsProps) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
@@ -153,9 +211,11 @@ export const GridControls = memo(function GridControls({
         mb: 1.5,
       }}
     >
-      {/* Row 1 — editing actions. The LEFT slot is reserved for the mode
-          buttons (Sélection / Placer / Infrastructures): Infrastructures
-          ships with 5.4, Placer (DnD) with 5.5 — nothing rendered here yet. */}
+      {/* Row 1 — editing actions. The LEFT slot hosts the mode buttons
+          (§10): Sélection + Infrastructures shipped with 5.4 (SMA-15);
+          Placer (DnD) lands with 5.5. Modes are mutually exclusive with
+          shape-edit (the sidebar toggle) — neither button reads active
+          while shape-edit is on. */}
       <Box
         sx={{
           display: 'flex',
@@ -164,6 +224,25 @@ export const GridControls = memo(function GridControls({
           gap: 2,
         }}
       >
+        {onSelectionMode && onInfraMode && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <ModeButton
+              label={t('planner.modes.selection')}
+              active={!shapeEditMode && !infraMode}
+              onClick={onSelectionMode}
+              tk={tk}
+            />
+            {/* Entering Infrastructures REQUIRES an armed type from the
+                sidebar INFRAS. tab (the reducer guards it too). */}
+            <ModeButton
+              label={t('planner.modes.infrastructure')}
+              active={infraMode}
+              disabled={!infraMode && !infraArmed}
+              onClick={onInfraMode}
+              tk={tk}
+            />
+          </Box>
+        )}
         {shapeEditMode && (
           <>
             <Button variant="outlined" size="small" onClick={onSelectAll}>

@@ -12,6 +12,7 @@
 // a token is missing from the doc, STOP AND REPORT rather than guessing.
 
 import type { ExposureCategory } from '../utils/exposure';
+import type { InfrastructureType } from '../utils/infrastructure';
 
 export type PlannerThemeMode = 'light' | 'dark';
 
@@ -19,6 +20,23 @@ export type PlannerThemeMode = 'light' | 'dark';
 export interface ExposureSwatch {
   fill: string;
   border: string;
+}
+
+/**
+ * One §6 infrastructure style: bg + full border CSS + optional pattern
+ * (bricks / lattice / dots as background-image) + icon and label colors.
+ * Where §6 gives only a border COLOR, the width defaults to the table's
+ * explicit 1px solid (the wall row); the trellis carries its own 1.5px
+ * dashed treatment in both modes.
+ */
+export interface InfraStyle {
+  bg: string;
+  bd: string;
+  image?: string;
+  /** background-size for the pattern (§6 path: "size 9×9"). */
+  imageSize?: string;
+  icon: string;
+  label: string;
 }
 
 export interface PlannerTokens {
@@ -75,6 +93,17 @@ export interface PlannerTokens {
   // Exposure layer (§3): per-category fill/border + the "Ombre" hatch
   expo: Record<ExposureCategory, ExposureSwatch>;
   hatch: string;
+  // Danger chip (§1/§2 --dang-* — the INFRAS. "Bloque la lumière" badge)
+  dangBg: string;
+  dangBd: string;
+  dangTx: string;
+  // Infrastructures (§6): per-type region style. The fence row is PROPOSED
+  // (5.4): §6 has no Clôture row — it is COMPOSED of existing §6 values only
+  // (Mur palette + the Treillis dashed border treatment), submitted for
+  // orchestrator ratification at harvest; the doc carries the same PROPOSED
+  // row in this commit. Do NOT invent new hex here — if a §6 value is
+  // missing, STOP AND REPORT (file-header rule).
+  infra: Record<InfrastructureType, InfraStyle>;
 }
 
 // Day-contrast deviation v2 (product decision, 16/07/2026): the mockup's day
@@ -128,6 +157,58 @@ const LIGHT: PlannerTokens = {
   },
   hatch:
     'repeating-linear-gradient(45deg, rgba(71,94,120,0.18) 0px, rgba(71,94,120,0.18) 3px, transparent 3px, transparent 8px)',
+  dangBg: '#FDEDED',
+  dangBd: '#F2B8B5',
+  dangTx: '#B3261E',
+  // §6 day column, verbatim. Pattern line thickness (lattice 1px) is layout
+  // plumbing — §6 specs the angle (±45°), color and 8px pitch only.
+  infra: {
+    wall: {
+      bg: '#8A919C',
+      bd: '1px solid #767E8A',
+      image:
+        'repeating-linear-gradient(0deg, rgba(255,255,255,0.28) 0 1.5px, transparent 1.5px 13px), repeating-linear-gradient(90deg, rgba(255,255,255,0.28) 0 1.5px, transparent 1.5px 24px)',
+      icon: '#fff',
+      label: '#fff',
+    },
+    // PROPOSED (5.4): Mur palette + Treillis dashed treatment — see the
+    // interface note above.
+    fence: {
+      bg: '#8A919C',
+      bd: '1.5px dashed #767E8A',
+      icon: '#fff',
+      label: '#fff',
+    },
+    trellis: {
+      bg: 'rgba(46,139,87,0.08)',
+      bd: '1.5px dashed #2E8B57',
+      image:
+        'repeating-linear-gradient(45deg, rgba(46,139,87,0.30) 0 1px, transparent 1px 8px), repeating-linear-gradient(-45deg, rgba(46,139,87,0.30) 0 1px, transparent 1px 8px)',
+      icon: '#2E8B57',
+      label: '#20713F',
+    },
+    path: {
+      bg: '#EDE4D3',
+      bd: '1px solid #DCCFB8',
+      image:
+        'radial-gradient(circle at 4px 4px, rgba(120,100,70,0.30) 1.4px, transparent 2px)',
+      imageSize: '9px 9px',
+      icon: '#8A7351',
+      label: '#6E5B40',
+    },
+    water: {
+      bg: '#CCE7FA',
+      bd: '1px solid #9FCDEE',
+      icon: '#1565C0',
+      label: '#1565C0',
+    },
+    pot: {
+      bg: '#EFD7C3',
+      bd: '1px solid #DDB894',
+      icon: '#A0522D',
+      label: '#A0522D',
+    },
+  },
 };
 
 const DARK: PlannerTokens = {
@@ -176,6 +257,55 @@ const DARK: PlannerTokens = {
   },
   hatch:
     'repeating-linear-gradient(45deg, rgba(142,170,206,0.30) 0px, rgba(142,170,206,0.30) 3px, transparent 3px, transparent 8px)',
+  dangBg: 'rgba(229,90,90,0.13)',
+  dangBd: 'rgba(229,90,90,0.45)',
+  dangTx: '#F08A8A',
+  // §6 night column, verbatim (fence PROPOSED — night Mur palette + dashed).
+  infra: {
+    wall: {
+      bg: '#3A4556',
+      bd: '1px solid #4A5568',
+      image:
+        'repeating-linear-gradient(0deg, rgba(255,255,255,0.10) 0 1.5px, transparent 1.5px 13px), repeating-linear-gradient(90deg, rgba(255,255,255,0.10) 0 1.5px, transparent 1.5px 24px)',
+      icon: '#B9C4D6',
+      label: '#D6DEEC',
+    },
+    fence: {
+      bg: '#3A4556',
+      bd: '1.5px dashed #4A5568',
+      icon: '#B9C4D6',
+      label: '#D6DEEC',
+    },
+    trellis: {
+      bg: 'rgba(76,180,124,0.10)',
+      bd: '1.5px dashed #4CB47C',
+      image:
+        'repeating-linear-gradient(45deg, rgba(76,180,124,0.35) 0 1px, transparent 1px 8px), repeating-linear-gradient(-45deg, rgba(76,180,124,0.35) 0 1px, transparent 1px 8px)',
+      icon: '#7ED0A4',
+      label: '#7ED0A4',
+    },
+    path: {
+      bg: '#2E3A50',
+      bd: '1px solid #3C4A63',
+      image:
+        'radial-gradient(circle at 4px 4px, rgba(214,222,236,0.28) 1.4px, transparent 2px)',
+      imageSize: '9px 9px',
+      icon: '#9FACC2',
+      label: '#B4C0D4',
+    },
+    water: {
+      bg: 'rgba(100,181,246,0.22)',
+      bd: '1px solid rgba(100,181,246,0.5)',
+      icon: '#90CAF9',
+      label: '#90CAF9',
+    },
+    pot: {
+      bg: 'rgba(200,120,70,0.26)',
+      bd: '1px solid rgba(220,140,90,0.5)',
+      icon: '#E9A06B',
+      label: '#E9A06B',
+    },
+  },
 };
 
 export function getPlannerTokens(mode: PlannerThemeMode): PlannerTokens {
