@@ -318,20 +318,28 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
             cell.active &&
             !placement
           );
+          // Composite render (SMA-15 R2, option a): a plant over an ACTIVE
+          // infrastructure cell must not paint the opaque plant cell — the
+          // §6 region block stays visible and the plant becomes a smaller
+          // centered token floating above it. Bare-cell plants keep the
+          // full-cell look unchanged.
+          const composite = !!placement && !!cell.infrastructure && cell.active;
           const baseBg = tint ? tk.expo[tint].fill : getCellBg(cell, tk);
-          const bg = placement ? plantColor! : baseBg;
+          const bg = placement && !composite ? plantColor! : baseBg;
           const hoverBg = paintMode
             ? getCellHoverBg(cell, tk)
-            : (placement ? plantColor! : (cell.active && !tint ? tk.cellOnBd : baseBg));
+            : (placement && !composite ? plantColor! : (cell.active && !tint ? tk.cellOnBd : baseBg));
           const placementOnInactive = !cell.active && !!placement;
           const opacity = placementOnInactive ? 0.4 : (cell.active ? 1 : 0.5);
           // Placement borders mapped to tokens (R2): the anomaly marker
           // (placement on an inactive cell) uses the strong `muted` dashed;
           // a normal placement gets the subtle active-cell border. No hex
-          // invention — both are existing mode-aware tokens.
+          // invention — both are existing mode-aware tokens. A COMPOSITE
+          // cell takes the generic branch instead — the region's single
+          // perimeter border must stay unfragmented beneath it.
           const border = placementOnInactive
             ? `1px dashed ${tk.muted}`
-            : placement
+            : placement && !composite
               ? `1px solid ${tk.cellOnBd}`
               : `1px solid ${
                   tint
@@ -360,14 +368,53 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
               fontSize: 14,
               fontWeight: 700,
               color: 'rgba(0,0,0,0.6)',
-              // Above the §6 region overlay (5.4): a plant on a trellis
-              // stays visible. `as const` keeps the literal narrow — the
-              // standalone object has no SxProps context and a widened
-              // `position: string` fails tsc at the sx spread site.
-              position: 'relative' as const,
-              zIndex: 2,
+              // Above the §6 region overlay (5.4): a FULL-CELL plant stays
+              // visible over a region. A composite cell must NOT raise —
+              // raising the cell would paint its background over the region
+              // block again; only its TOKEN rises (own zIndex). `as const`
+              // keeps the literal narrow — the standalone object has no
+              // SxProps context and a widened `position: string` fails tsc
+              // at the sx spread site.
+              ...(!composite && {
+                position: 'relative' as const,
+                zIndex: 2,
+              }),
             }),
           };
+          const letter = placement?.plantName
+            ? placement.plantName.charAt(0).toUpperCase()
+            : null;
+          // The composite token: ~2/3 of the cell, plantColor fill, ring +
+          // shadow for separation (both are existing values — the card token
+          // as the ring, the shared switch-thumb shadow). Rises above the
+          // region overlay on its own (the cell itself stays un-raised).
+          const cellContent = composite ? (
+            <Box
+              component="span"
+              data-plant-token
+              sx={{
+                width: '66%',
+                height: '66%',
+                borderRadius: '50%',
+                bgcolor: plantColor!,
+                border: `2px solid ${tk.card}`,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 12,
+                fontWeight: 700,
+                color: 'rgba(0,0,0,0.6)',
+                position: 'relative' as const,
+                zIndex: 2,
+                pointerEvents: 'none',
+              }}
+            >
+              {letter}
+            </Box>
+          ) : (
+            letter
+          );
 
           if (paintMode) {
             // The infra label ANNOUNCES the cell's current type (a paint tap
@@ -419,7 +466,7 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
                   },
                 }}
               >
-                {placement?.plantName ? placement.plantName.charAt(0).toUpperCase() : null}
+                {cellContent}
               </Box>
             );
           }
@@ -472,7 +519,7 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
                 } : undefined,
               }}
             >
-              {placement?.plantName ? placement.plantName.charAt(0).toUpperCase() : null}
+              {cellContent}
             </Box>
           );
         })}
