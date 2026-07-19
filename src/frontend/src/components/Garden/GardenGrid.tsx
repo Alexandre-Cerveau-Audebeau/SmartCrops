@@ -183,6 +183,79 @@ function InfraRegionBlock({
   );
 }
 
+/**
+ * One PLANT block (SMA-15 R4, mockup §5): every plant renders as an
+ * absolutely-positioned rounded block over its footprint, slightly INSET so
+ * the cell's own type (base / infra / exposure) shows around it — never a
+ * full-cell fill, never a circle. Same shape everywhere; the only contextual
+ * difference is the FILL: solid plantColor on bare cells, the R3 translucent
+ * alpha over an infrastructure (the pattern shows through), with the R3
+ * letter halo in that case. Ring + shadow reuse the R2/R3 token values
+ * (tk.card ring, shared switch-thumb shadow). Geometry mirrors
+ * InfraRegionBlock but with RESOLVED numbers (the page's own breakpoint),
+ * radius 7px per the mockup. Decorative overlay — cells keep the accessible
+ * names and all pointer behavior.
+ */
+function PlantBlock({
+  placement,
+  cellSizePx,
+  gapPx,
+  insetPx,
+  translucent,
+  dimmed,
+  tk,
+}: {
+  placement: PlacementOverlay;
+  cellSizePx: number;
+  gapPx: number;
+  insetPx: number;
+  translucent: boolean;
+  dimmed: boolean;
+  tk: PlannerTokens;
+}) {
+  const color = getPlantColor(placement.plantId);
+  const letter = placement.plantName
+    ? placement.plantName.charAt(0).toUpperCase()
+    : null;
+  const track = cellSizePx + gapPx;
+  const span = (cells: number) => cells * cellSizePx + (cells - 1) * gapPx;
+  return (
+    <Box
+      data-plant-block
+      sx={{
+        position: 'absolute',
+        left: `${placement.startCol * track + insetPx}px`,
+        top: `${placement.startRow * track + insetPx}px`,
+        width: `${span(placement.spanCols) - 2 * insetPx}px`,
+        height: `${span(placement.spanRows) - 2 * insetPx}px`,
+        boxSizing: 'border-box',
+        bgcolor: translucent ? alpha(color, 0.6) : color,
+        border: `2px solid ${tk.card}`,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+        borderRadius: '7px', // mockup §5: bloc plante radius 7px
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: { xs: 12, sm: 16 }, // §5: lettre fs 16 (desktop)
+        fontWeight: 800, // §5: w800
+        color: 'rgba(0,0,0,0.6)',
+        ...(translucent && {
+          textShadow: '0 0 3px rgba(255,255,255,0.85)',
+        }),
+        // The placement-on-inactive anomaly keeps reading as dimmed (R4:
+        // block-level — any footprint cell inactive).
+        ...(dimmed && { opacity: 0.4 }),
+        zIndex: 2,
+        pointerEvents: 'none',
+        overflow: 'hidden',
+      }}
+    >
+      {letter}
+    </Box>
+  );
+}
+
 export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, placements, exposure, castShadow, onCellClick, onCellDragStart, onCellDragEnter, onCellDragEnd, cellSizePx = 44 }: Props) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -197,6 +270,27 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
   // §6: icons fs 18 (14 mobile) — same breakpoint as the §4 cell metrics.
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const infraIconSize = isMobile ? 14 : 18;
+  // Plant-overlay geometry (R4): the §4 gap and the mockup's ~5px block
+  // inset, resolved at the same breakpoint (3px inset mobile — scaled).
+  const overlayGapPx = isMobile ? GAP_PX.xs : GAP_PX.sm;
+  const plantInsetPx = isMobile ? 3 : 5;
+  // Per-placement fill context (R4): translucent when ANY footprint cell
+  // carries an infrastructure (the pattern must show through wherever the
+  // block overlaps it); dimmed when ANY footprint cell is inactive (the
+  // pre-existing anomaly semantics, block-level).
+  const placementContext = (p: PlacementOverlay) => {
+    let onInfra = false;
+    let onInactive = false;
+    for (let r = p.startRow; r < p.startRow + p.spanRows; r++) {
+      for (let c = p.startCol; c < p.startCol + p.spanCols; c++) {
+        const cell = grid[r]?.[c];
+        if (!cell) continue;
+        if (cell.infrastructure && cell.active) onInfra = true;
+        if (!cell.active) onInactive = true;
+      }
+    }
+    return { onInfra, onInactive };
+  };
 
   useEffect(() => {
     if (!hasDrag || !onCellDragEnd) return;
@@ -301,57 +395,36 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
         >
         {row.map((cell, c) => {
           const placement = placementMap.get(`${r}-${c}`);
-          const plantColor = placement ? getPlantColor(placement.plantId) : undefined;
-          // Exposure tint (5.3-D): the category swatch REPLACES the cell's
-          // fill/border (§3 "fill + border remplacent cell-on/cell-on-bd").
-          // Placements render on top unchanged; inactive cells stay cellOff.
+          // Exposure tint (5.3-D, revised R4): the category swatch REPLACES
+          // the cell's fill/border (§3). Since R4 the plant no longer paints
+          // the cell — the tint applies under placements too and shows at
+          // the block's inset edges; inactive cells stay cellOff.
           const tint =
-            exposure && cell.active && !placement
-              ? (exposure[r]?.[c] ?? null)
-              : null;
+            exposure && cell.active ? (exposure[r]?.[c] ?? null) : null;
           // Cast shadow at the selected moment (5.4): the §9 "Ombre portée"
-          // hatch rides ON TOP of the aggregate tint; placements stay
-          // untouched (they render above the layer, 5.3-D contract).
-          const cast = !!(
-            exposure &&
-            castShadow?.[r]?.[c] &&
-            cell.active &&
-            !placement
-          );
-          // Composite render (SMA-15 R2, option a): a plant over an ACTIVE
-          // infrastructure cell must not paint the opaque plant cell — the
-          // §6 region block stays visible and the plant becomes a smaller
-          // centered token floating above it. Bare-cell plants keep the
-          // full-cell look unchanged.
-          const composite = !!placement && !!cell.infrastructure && cell.active;
+          // hatch rides ON TOP of the aggregate tint (placement cells too —
+          // visible at the inset edges, R4).
+          const cast = !!(exposure && castShadow?.[r]?.[c] && cell.active);
           const baseBg = tint ? tk.expo[tint].fill : getCellBg(cell, tk);
-          const bg = placement && !composite ? plantColor! : baseBg;
-          const hoverBg = paintMode
-            ? getCellHoverBg(cell, tk)
-            : (placement && !composite ? plantColor! : (cell.active && !tint ? tk.cellOnBd : baseBg));
           const placementOnInactive = !cell.active && !!placement;
           const opacity = placementOnInactive ? 0.4 : (cell.active ? 1 : 0.5);
-          // Placement borders mapped to tokens (R2): the anomaly marker
-          // (placement on an inactive cell) uses the strong `muted` dashed;
-          // a normal placement gets the subtle active-cell border. No hex
-          // invention — both are existing mode-aware tokens. A COMPOSITE
-          // cell takes the generic branch instead — the region's single
-          // perimeter border must stay unfragmented beneath it.
+          // Cell borders mapped to tokens (R2): the anomaly marker
+          // (placement on an inactive cell) keeps the strong `muted` dashed;
+          // every other cell takes the generic token border — the plant is
+          // an OVERLAY since R4 and never restyles its cells.
           const border = placementOnInactive
             ? `1px dashed ${tk.muted}`
-            : placement && !composite
-              ? `1px solid ${tk.cellOnBd}`
-              : `1px solid ${
-                  tint
-                    ? tk.expo[tint].border
-                    : cell.active
-                      ? tk.cellOnBd
-                      : tk.cellOffBd
-                }`;
+            : `1px solid ${
+                tint
+                  ? tk.expo[tint].border
+                  : cell.active
+                    ? tk.cellOnBd
+                    : tk.cellOffBd
+              }`;
           const commonSx = {
             width: cellSizePx,
             height: cellSizePx,
-            bgcolor: bg,
+            bgcolor: baseBg,
             // "Ombre" AND "Ombre portée" carry the §3 hatch (§9) as the
             // cell's background-image — the cast overlay is what the
             // moment/season presets visibly move (5.4).
@@ -360,66 +433,14 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
             borderRadius: '4px', // §4: radius cellule 4px (border 1px)
             transition: 'background-color 0.1s',
             opacity,
-            '&:hover': { bgcolor: hoverBg },
-            ...(placement && {
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 14,
-              fontWeight: 700,
-              color: 'rgba(0,0,0,0.6)',
-              // Above the §6 region overlay (5.4): a FULL-CELL plant stays
-              // visible over a region. A composite cell must NOT raise —
-              // raising the cell would paint its background over the region
-              // block again; only its TOKEN rises (own zIndex). `as const`
-              // keeps the literal narrow — the standalone object has no
-              // SxProps context and a widened `position: string` fails tsc
-              // at the sx spread site.
-              ...(!composite && {
-                position: 'relative' as const,
-                zIndex: 2,
-              }),
-            }),
+            '&:hover': {
+              bgcolor: paintMode
+                ? getCellHoverBg(cell, tk)
+                : cell.active && !tint
+                  ? tk.cellOnBd
+                  : baseBg,
+            },
           };
-          const letter = placement?.plantName
-            ? placement.plantName.charAt(0).toUpperCase()
-            : null;
-          // The composite token: ~2/3 of the cell, TRANSLUCENT plantColor
-          // fill (R3 — the infra pattern must show THROUGH the disc; only
-          // the background is alpha'd, never the whole Box, so ring and
-          // letter stay fully opaque). Ring + shadow are existing values
-          // (the card token, the shared switch-thumb shadow); the letter
-          // keeps a light halo so it reads over both the translucent fill
-          // and the pattern beneath. Rises above the region overlay on its
-          // own (the cell itself stays un-raised).
-          const cellContent = composite ? (
-            <Box
-              component="span"
-              data-plant-token
-              sx={{
-                width: '66%',
-                height: '66%',
-                borderRadius: '50%',
-                bgcolor: alpha(plantColor!, 0.6),
-                border: `2px solid ${tk.card}`,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 12,
-                fontWeight: 700,
-                color: 'rgba(0,0,0,0.6)',
-                textShadow: '0 0 3px rgba(255,255,255,0.85)',
-                position: 'relative' as const,
-                zIndex: 2,
-                pointerEvents: 'none',
-              }}
-            >
-              {letter}
-            </Box>
-          ) : (
-            letter
-          );
 
           if (paintMode) {
             // The infra label ANNOUNCES the cell's current type (a paint tap
@@ -470,9 +491,7 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
                     zIndex: 3,
                   },
                 }}
-              >
-                {cellContent}
-              </Box>
+              />
             );
           }
 
@@ -523,9 +542,7 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
                   outlineOffset: -2,
                 } : undefined,
               }}
-            >
-              {cellContent}
-            </Box>
+            />
           );
         })}
         </Box>
@@ -558,6 +575,38 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
             label={t(`planner.infra.types.${region.type}`)}
           />
         ))}
+      </Box>
+    )}
+    {/* Plant blocks (SMA-15 R4, mockup §5) — the unified inset rounded
+        overlay, ONE block per placement footprint, above the infra layer.
+        Decorative: cells keep the accessible names and pointer behavior. */}
+    {placements && placements.length > 0 && (
+      <Box
+        aria-hidden
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          pointerEvents: 'none',
+        }}
+      >
+        {placements.map((p) => {
+          const context = placementContext(p);
+          return (
+            <PlantBlock
+              key={`${p.plantId}-${p.startRow}-${p.startCol}`}
+              placement={p}
+              cellSizePx={cellSizePx}
+              gapPx={overlayGapPx}
+              insetPx={plantInsetPx}
+              translucent={context.onInfra}
+              dimmed={context.onInactive}
+              tk={tk}
+            />
+          );
+        })}
       </Box>
     )}
     </Box>

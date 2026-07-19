@@ -113,6 +113,16 @@ function renderPlanner() {
   );
 }
 
+/**
+ * SMA-15 R4 (declared adaptation, scope only): plant initials render in the
+ * plant-block OVERLAY beside role="grid", inside their shared relative
+ * wrapper — letter queries scope to that wrapper (`grid.parentElement`), so
+ * the sidebar's avatar initials stay excluded exactly as `within(grid)` did.
+ * Every assertion is unchanged; gridcell queries keep `within(grid)`.
+ */
+const plantArea = (grid: HTMLElement) =>
+  within(grid.parentElement as HTMLElement);
+
 describe('GardenPlanner placement initials', () => {
   it('renders no initial while the catalog is loading, then the real one (no "U" flash)', async () => {
     vi.mocked(fetchGarden).mockResolvedValue(garden);
@@ -129,14 +139,14 @@ describe('GardenPlanner placement initials', () => {
 
     // Layout hydrates first — the grid is up while the catalog is pending.
     const grid = await screen.findByRole('grid');
-    expect(within(grid).queryByText('U')).toBeNull();
+    expect(plantArea(grid).queryByText('U')).toBeNull();
 
     // Catalog lands → the real initial appears, never 'U'.
     resolveCatalog([basil]);
     await waitFor(() =>
-      expect(within(grid).getByText('B')).toBeInTheDocument()
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
     );
-    expect(within(grid).queryByText('U')).toBeNull();
+    expect(plantArea(grid).queryByText('U')).toBeNull();
   });
 
   it('keeps the Unknown fallback for a plant genuinely absent from the loaded catalog', async () => {
@@ -148,7 +158,7 @@ describe('GardenPlanner placement initials', () => {
 
     const grid = await screen.findByRole('grid');
     await waitFor(() =>
-      expect(within(grid).getByText('U')).toBeInTheDocument()
+      expect(plantArea(grid).getByText('U')).toBeInTheDocument()
     );
   });
 
@@ -171,7 +181,7 @@ describe('GardenPlanner placement initials', () => {
     // the sidebar lists the EN label (positive baseline for the pins below).
     resolvers[0]!([basil]); // no flat commonName -> 'Basilicum fixture' -> 'B'
     await waitFor(() =>
-      expect(within(grid).getByText('B')).toBeInTheDocument()
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
     );
     expect(screen.getAllByText('Basilicum fixture').length).toBeGreaterThan(0);
 
@@ -180,25 +190,25 @@ describe('GardenPlanner placement initials', () => {
     fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
     // (a) Render-window pin (5.2 R4): synchronously after the switch — before
     // fetch #2 resolves — no render may show the previous locale's names.
-    expect(within(grid).queryByText('B')).toBeNull();
+    expect(plantArea(grid).queryByText('B')).toBeNull();
     // (b) Sidebar path: no stale-locale label there (nor in the plants
     // section) — pending/empty presentation instead.
     expect(screen.queryAllByText('Basilicum fixture')).toHaveLength(0);
     await waitFor(() => expect(resolvers.length).toBe(2));
-    expect(within(grid).queryByText('B')).toBeNull();
+    expect(plantArea(grid).queryByText('B')).toBeNull();
     // Pending means NEUTRAL — no unknown-plant fallback initial in either
     // locale ('U' = EN "Unknown", 'I' = FR "Inconnue").
-    expect(within(grid).queryByText('U')).toBeNull();
-    expect(within(grid).queryByText('I')).toBeNull();
+    expect(plantArea(grid).queryByText('U')).toBeNull();
+    expect(plantArea(grid).queryByText('I')).toBeNull();
 
     // FR response lands — the localized name takes over.
     resolvers[1]!([
       { ...basil, commonName: 'framboisier' } as Plant, // -> 'Framboisier' -> 'F'
     ]);
     await waitFor(() =>
-      expect(within(grid).getByText('F')).toBeInTheDocument()
+      expect(plantArea(grid).getByText('F')).toBeInTheDocument()
     );
-    expect(within(grid).queryByText('B')).toBeNull();
+    expect(plantArea(grid).queryByText('B')).toBeNull();
   });
 
   it('a rejected second-locale request never resurrects the previous catalog (5.2 R4)', async () => {
@@ -219,7 +229,7 @@ describe('GardenPlanner placement initials', () => {
     const grid = await screen.findByRole('grid');
     deferred[0]!.resolve([basil]);
     await waitFor(() =>
-      expect(within(grid).getByText('B')).toBeInTheDocument()
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
@@ -231,7 +241,7 @@ describe('GardenPlanner placement initials', () => {
     await waitFor(() =>
       expect(screen.queryAllByText('Basilicum fixture')).toHaveLength(0)
     );
-    expect(within(grid).queryByText('B')).toBeNull();
+    expect(plantArea(grid).queryByText('B')).toBeNull();
   });
 
   it('surfaces the catalog error with Retry on a real failure, and Retry recovers (SMA-288)', async () => {
@@ -265,7 +275,7 @@ describe('GardenPlanner placement initials', () => {
         .closest('[role="alert"]')
     ).not.toBeNull();
     const retry = screen.getByRole('button', { name: 'Retry' });
-    expect(within(grid).queryByText('U')).toBeNull();
+    expect(plantArea(grid).queryByText('U')).toBeNull();
     expect(screen.queryAllByText('Basilicum fixture')).toHaveLength(0);
 
     // Retry -> a NEW fetch runs; success clears the error and names appear.
@@ -273,7 +283,7 @@ describe('GardenPlanner placement initials', () => {
     await waitFor(() => expect(deferred.length).toBe(2));
     deferred[1]!.resolve([basil]);
     await waitFor(() =>
-      expect(within(grid).getByText('B')).toBeInTheDocument()
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
     );
     expect(screen.queryByText("Couldn't load the plant catalog.")).toBeNull();
   });
@@ -314,7 +324,7 @@ describe('GardenPlanner placement initials', () => {
     ]);
     const grid = screen.getByRole('grid');
     await waitFor(() =>
-      expect(within(grid).getByText('F')).toBeInTheDocument()
+      expect(plantArea(grid).getByText('F')).toBeInTheDocument()
     );
   });
 
@@ -359,7 +369,7 @@ describe('GardenPlanner placement initials', () => {
       { ...basil, commonName: 'framboisier' } as Plant,
     ]);
     await waitFor(() =>
-      expect(within(grid).getByText('F')).toBeInTheDocument()
+      expect(plantArea(grid).getByText('F')).toBeInTheDocument()
     );
   });
 
@@ -413,7 +423,7 @@ describe('GardenPlanner placement initials', () => {
     // Catalog ready (EN) -> arm basil from the sidebar list.
     resolvers[0]!([basil]);
     await waitFor(() =>
-      expect(within(grid).getByText('B')).toBeInTheDocument()
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
     );
     // Primary AND secondary line both read the scientific name here (no
     // commonName on the fixture), so match with the *AllBy* variant.
@@ -437,7 +447,7 @@ describe('GardenPlanner placement initials', () => {
     // original at (0,0). A second 'F' would prove the gated click leaked.
     resolvers[1]!([{ ...basil, commonName: 'framboisier' } as Plant]);
     await waitFor(() =>
-      expect(within(grid).getAllByText('F')).toHaveLength(1)
+      expect(plantArea(grid).getAllByText('F')).toHaveLength(1)
     );
   });
 
@@ -476,7 +486,7 @@ describe('GardenPlanner placement initials', () => {
 
     const grid = await screen.findByRole('grid');
     await waitFor(() =>
-      expect(within(grid).getByText('U')).toBeInTheDocument()
+      expect(plantArea(grid).getByText('U')).toBeInTheDocument()
     );
   });
 });
@@ -495,7 +505,7 @@ describe('GardenPlanner exposure layer (SMA-17 5.3-D)', () => {
     renderPlanner();
     const grid = await screen.findByRole('grid');
     await waitFor(() =>
-      expect(within(grid).getByText('B')).toBeInTheDocument()
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
     );
     return grid;
   }
@@ -508,14 +518,16 @@ describe('GardenPlanner exposure layer (SMA-17 5.3-D)', () => {
     expect(screen.queryByText('Exposure — summer · noon')).toBeNull();
 
     fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
-    // 2×2 all-active outdoor grid, placement at (0,0): the three empty cells
-    // tint 'full' (uniform, no blockers before 5.4); the placement renders on
-    // top unchanged (no tint attribute).
+    // 2×2 all-active outdoor grid, placement at (0,0): EVERY active cell
+    // tints 'full' (uniform, no blockers). Since SMA-15 R4 the plant is an
+    // inset overlay BLOCK and no longer paints its cell — the tint applies
+    // under it too and shows at the block's inset edges (declared contract
+    // update; pre-R4 the placement cell carried no tint attribute).
     const cells = within(grid).getAllByRole('gridcell');
+    expect(cells[0]).toHaveAttribute('data-exposure', 'full');
     expect(cells[1]).toHaveAttribute('data-exposure', 'full');
     expect(cells[2]).toHaveAttribute('data-exposure', 'full');
     expect(cells[3]).toHaveAttribute('data-exposure', 'full');
-    expect(cells[0]).not.toHaveAttribute('data-exposure');
     expect(screen.getByText('Exposure — summer · noon')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
@@ -677,7 +689,7 @@ describe('GardenPlanner header save/cancel gating (F3, relocated in R2)', () => 
     renderPlanner();
     const grid = await screen.findByRole('grid');
     await waitFor(() =>
-      expect(within(grid).getByText('B')).toBeInTheDocument()
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
     );
 
     // Dirty the draft (override via the exposure popover), then save.

@@ -217,68 +217,83 @@ describe('GardenGrid infrastructure regions (SMA-15 5.4)', () => {
     );
   });
 
-  it('composite plant-on-infrastructure: the region stays visible and the plant shrinks to a token (R2, option a)', () => {
-    const cells: CellData[][] = [
-      [
-        { active: true, infrastructure: 'trellis' },
-        { active: true, infrastructure: 'trellis' },
-      ],
-    ];
-    const { container } = render(
+  // R4 (mockup §5): EVERY plant is the same inset rounded overlay block —
+  // never a full-cell fill, never a circle. Default cellSizePx 44, desktop
+  // gap 3, inset 5 → a 1×1 block is 34px at (5,5); a 2×2 block is 81px.
+  const renderPlants = (
+    cells: CellData[][],
+    placements: Array<{ plantId: string; startRow: number; startCol: number; spanRows: number; spanCols: number; plantName?: string }>
+  ) =>
+    render(
       <ThemeProvider theme={createTheme({ palette: { mode: 'light' } })}>
-        <GardenGrid
-          grid={cells}
-          shapeEditMode={false}
-          placements={[{ plantId: 'p1', startRow: 0, startCol: 0, spanRows: 1, spanCols: 1, plantName: 'Tomato' }]}
-        />
+        <GardenGrid grid={cells} shapeEditMode={false} placements={placements} />
       </ThemeProvider>
     );
-    // The trellis region still renders (one block over both cells).
-    expect(container.querySelectorAll('[data-infra-region="trellis"]')).toHaveLength(1);
-    // The plant is a TOKEN, not an opaque cell: the cell keeps the base fill
-    // (day cellOn) and the token carries a TRANSLUCENT plant fill (R3 — the
-    // pattern must show through) + the fully-opaque letter.
-    const cell = screen.getAllByRole('gridcell')[0]!;
-    expect(cell).toHaveStyle({ backgroundColor: '#F1F7EE' });
-    const token = container.querySelector('[data-plant-token]');
-    expect(token).not.toBeNull();
-    expect(token).toHaveStyle({
-      backgroundColor: alpha(getPlantColor('p1'), 0.6),
+
+  it('a plant on a BARE cell is an inset rounded block with an OPAQUE fill (unified shape, R4)', () => {
+    const { container } = renderPlants(
+      [[{ active: true }]],
+      [{ plantId: 'p1', startRow: 0, startCol: 0, spanRows: 1, spanCols: 1, plantName: 'Tomato' }]
+    );
+    // The cell keeps its own base fill — the plant never paints the cell.
+    expect(screen.getByRole('gridcell')).toHaveStyle({ backgroundColor: '#F1F7EE' });
+    const block = container.querySelector('[data-plant-block]');
+    expect(block).not.toBeNull();
+    expect(block).toHaveStyle({
+      backgroundColor: getPlantColor('p1'),
+      borderRadius: '7px',
+      left: '5px',
+      top: '5px',
+      width: '34px',
+      height: '34px',
     });
-    expect(token).not.toHaveStyle({ backgroundColor: getPlantColor('p1') });
-    expect(token).toHaveTextContent('T');
+    expect(block).toHaveTextContent('T');
   });
 
-  it('a plant on a BARE cell keeps the current full-cell look (no token)', () => {
-    const cells: CellData[][] = [[{ active: true }]];
-    const { container } = render(
-      <ThemeProvider theme={createTheme({ palette: { mode: 'light' } })}>
-        <GardenGrid
-          grid={cells}
-          shapeEditMode={false}
-          placements={[{ plantId: 'p1', startRow: 0, startCol: 0, spanRows: 1, spanCols: 1, plantName: 'Tomato' }]}
-        />
-      </ThemeProvider>
+  it('a plant on an INFRASTRUCTURE keeps the same shape with a TRANSLUCENT fill; the region still renders (R4 + R3)', () => {
+    const { container } = renderPlants(
+      [[
+        { active: true, infrastructure: 'trellis' },
+        { active: true, infrastructure: 'trellis' },
+      ]],
+      [{ plantId: 'p1', startRow: 0, startCol: 0, spanRows: 1, spanCols: 1, plantName: 'Tomato' }]
     );
-    const cell = screen.getByRole('gridcell');
-    expect(cell).toHaveStyle({ backgroundColor: getPlantColor('p1') });
-    expect(cell).toHaveTextContent('T');
-    expect(container.querySelector('[data-plant-token]')).toBeNull();
+    expect(container.querySelectorAll('[data-infra-region="trellis"]')).toHaveLength(1);
+    const block = container.querySelector('[data-plant-block]');
+    expect(block).toHaveStyle({
+      backgroundColor: alpha(getPlantColor('p1'), 0.6),
+      borderRadius: '7px',
+      width: '34px',
+    });
+    expect(block).not.toHaveStyle({ backgroundColor: getPlantColor('p1') });
+    expect(block).toHaveTextContent('T');
   });
 
-  it('a plant on a rounded water point still shows the rounded region with a centered token', () => {
-    const cells: CellData[][] = [[{ active: true, infrastructure: 'water' }]];
-    const { container } = render(
-      <ThemeProvider theme={createTheme({ palette: { mode: 'light' } })}>
-        <GardenGrid
-          grid={cells}
-          shapeEditMode={false}
-          placements={[{ plantId: 'p2', startRow: 0, startCol: 0, spanRows: 1, spanCols: 1, plantName: 'Mint' }]}
-        />
-      </ThemeProvider>
+  it('a plant on a rounded water point shows the rounded region beneath the block', () => {
+    const { container } = renderPlants(
+      [[{ active: true, infrastructure: 'water' }]],
+      [{ plantId: 'p2', startRow: 0, startCol: 0, spanRows: 1, spanCols: 1, plantName: 'Mint' }]
     );
     expect(container.querySelector('[data-infra-region="water"]')).not.toBeNull();
-    expect(container.querySelector('[data-plant-token]')).toHaveTextContent('M');
+    expect(container.querySelector('[data-plant-block]')).toHaveTextContent('M');
+  });
+
+  it('a footprint plant (2×2) sizes its block to the footprint', () => {
+    const cells: CellData[][] = [
+      [{ active: true }, { active: true }, { active: true }],
+      [{ active: true }, { active: true }, { active: true }],
+    ];
+    const { container } = renderPlants(cells, [
+      { plantId: 'p3', startRow: 0, startCol: 1, spanRows: 2, spanCols: 2, plantName: 'Zucchini' },
+    ]);
+    const block = container.querySelector('[data-plant-block]');
+    // 2 cells × 44 + 1 gap × 3 − 2 × 5 inset = 81; left = 1 × 47 + 5 = 52.
+    expect(block).toHaveStyle({
+      width: '81px',
+      height: '81px',
+      left: '52px',
+      top: '5px',
+    });
   });
 
   it('cast-shadow cells carry the §3 hatch and the data tag while the layer is on', () => {
