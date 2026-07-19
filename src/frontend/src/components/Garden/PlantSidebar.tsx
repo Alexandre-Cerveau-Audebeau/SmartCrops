@@ -18,7 +18,13 @@ import { iosSwitchSx } from '../../theme/plannerTokens';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Plant } from '../../types/Plant';
 import { getPlantDisplayName } from '../../utils/getPlantDisplayName';
+import {
+  INFRA_META,
+  INFRASTRUCTURE_TYPES,
+  type InfrastructureType,
+} from '../../utils/infrastructure';
 import { getPlantColor } from '../../utils/plantColor';
+import { Sym } from '../Sym';
 
 interface Props {
   plants: Plant[];
@@ -26,6 +32,10 @@ interface Props {
   onSearchChange: (query: string) => void;
   selectedPlantId: string | null;
   onPlantSelect: (plantId: string | null) => void;
+  // SMA-15 (5.4): the armed infrastructure type — selecting a row arms it
+  // for painting (and enters the Infrastructures mode); re-clicking disarms.
+  selectedInfraType?: InfrastructureType | null;
+  onInfraSelect?: (type: InfrastructureType | null) => void;
   language: string;
   shapeEditMode: boolean;
   onShapeEditToggle: (value: boolean) => void;
@@ -41,7 +51,7 @@ interface Props {
 
 type TabValue = 'plants' | 'soils' | 'infrastructure';
 
-export default function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
+export default function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, selectedInfraType = null, onInfraSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
   const [activeTab, setActiveTab] = useState<TabValue>('plants');
@@ -102,8 +112,114 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
       >
         <Tab label={t('planner.tabs.plants')} value="plants" />
         <Tab label={t('planner.tabs.soils')} value="soils" disabled />
-        <Tab label={t('planner.tabs.infrastructure')} value="infrastructure" disabled />
+        {/* Enabled with SMA-15 (5.4) — soils keep their own chantier. */}
+        <Tab label={t('planner.tabs.infrastructure')} value="infrastructure" />
       </Tabs>
+      {activeTab === 'infrastructure' && (
+        <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {/* Mockup hint: blocking elements cast a shadow in the Exposure
+              layer (SMA-15). */}
+          <Typography
+            sx={{
+              p: '12px 16px',
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: tk.tMeta,
+              borderBottom: `1px solid ${tk.divider}`,
+            }}
+          >
+            {t('planner.infra.hint')}
+          </Typography>
+          <List dense disablePadding>
+            {INFRASTRUCTURE_TYPES.map((type) => {
+              const meta = INFRA_META[type];
+              const style = tk.infra[type];
+              const selected = type === selectedInfraType;
+              return (
+                <ListItemButton
+                  key={type}
+                  selected={selected}
+                  // R5 (CR accept): the armed toggle state reaches AT.
+                  aria-pressed={selected}
+                  onClick={() => onInfraSelect?.(selected ? null : type)}
+                  // The PLANTS row pattern: 10×14 padding, 3px prim marker.
+                  sx={{
+                    px: '14px',
+                    py: '10px',
+                    borderLeft: selected
+                      ? `3px solid ${tk.prim}`
+                      : '3px solid transparent',
+                  }}
+                >
+                  {/* §6 pairing as a chip: the type's bg/border host its
+                      icon color — no values beyond the §6 row. */}
+                  <ListItemAvatar sx={{ minWidth: 42 }}>
+                    <Avatar
+                      sx={{
+                        width: 34,
+                        height: 34,
+                        bgcolor: style.bg,
+                        border: style.bd,
+                      }}
+                    >
+                      <Sym name={meta.icon} size={18} color={style.icon} />
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    disableTypography
+                    primary={
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <Typography
+                          component="span"
+                          sx={{
+                            fontSize: 13.5,
+                            fontWeight: 700,
+                            color: tk.tTitle,
+                          }}
+                        >
+                          {t(`planner.infra.types.${type}`)}
+                        </Typography>
+                        {/* §6/§13 badges: « Bloque la lumière » (soft danger,
+                            --dang-*) vs « Pas d'ombre » (neutral — nearest
+                            existing tokens: segBg/divider/muted). */}
+                        <Box
+                          component="span"
+                          sx={{
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            lineHeight: 1.4,
+                            borderRadius: '999px',
+                            px: '8px',
+                            py: '1px',
+                            bgcolor: meta.blocksLight ? tk.dangBg : tk.segBg,
+                            border: `1px solid ${
+                              meta.blocksLight ? tk.dangBd : tk.divider
+                            }`,
+                            color: meta.blocksLight ? tk.dangTx : tk.muted,
+                          }}
+                        >
+                          {t(
+                            meta.blocksLight
+                              ? 'planner.infra.badge.blocks'
+                              : 'planner.infra.badge.noShadow'
+                          )}
+                        </Box>
+                      </Box>
+                    }
+                  />
+                </ListItemButton>
+              );
+            })}
+          </List>
+        </Box>
+      )}
       {activeTab === 'plants' && catalogFailed && (
         <Box role="alert" sx={{ p: 2, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>

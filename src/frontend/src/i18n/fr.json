@@ -441,11 +441,31 @@
         "full": "Plein soleil",
         "morning": "Soleil du matin",
         "afternoon": "Soleil d'après-midi",
-        "shade": "Ombre"
+        "shade": "Ombre",
+        "castShadow": "Ombre portée (mur, clôture, treillis)"
       },
       "override": {
         "title": "Exposition de la case",
         "auto": "Auto (calculée)"
+      }
+    },
+    "modes": {
+      "selection": "Sélection",
+      "infrastructure": "Infrastructures"
+    },
+    "infra": {
+      "hint": "Posez des infrastructures sur la grille. Les éléments bloquants portent une ombre dans le calque Exposition.",
+      "types": {
+        "wall": "Mur",
+        "fence": "Clôture",
+        "trellis": "Treillis",
+        "path": "Chemin",
+        "water": "Point d'eau",
+        "pot": "Pot"
+      },
+      "badge": {
+        "blocks": "Bloque la lumière",
+        "noShadow": "Pas d'ombre"
       }
     },
     "shape": {
@@ -498,7 +518,10 @@
       "plantedCell": "{{plant}} à la ligne {{row}}, colonne {{col}}",
       "emptyCell": "Cellule vide à la ligne {{row}}, colonne {{col}}",
       "inactiveCell": "Cellule inactive à la ligne {{row}}, colonne {{col}}",
-      "exposureCell": "{{category}} — cellule vide à la ligne {{row}}, colonne {{col}}"
+      "exposureCell": "{{category}} — cellule vide à la ligne {{row}}, colonne {{col}}",
+      "infraCell": "{{type}} — ligne {{row}}, colonne {{col}}",
+      "plantedInfraCell": "{{plant}} sur {{type}} — ligne {{row}}, colonne {{col}}",
+      "paintCell": "Peindre une infrastructure"
     },
     "help": {
       "unified": "Cliquez sur une plante dans le menu, puis sur les parcelles pour la placer. Le calque Exposition montre le soleil case par case — réglez le moment et la saison dans la barre d'outils."

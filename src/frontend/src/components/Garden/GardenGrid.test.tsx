@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider, alpha, createTheme } from '@mui/material/styles';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n/i18n';
 import type { CellData } from '../../types/GardenLayout';
 import type { ExposureCategory } from '../../utils/exposure';
+import { getPlantColor } from '../../utils/plantColor';
 import GardenGrid from './GardenGrid';
 
 // SMA-17 5.3-D / SMA-209 — the grid consumes the planner tokens: base cells
@@ -135,5 +136,188 @@ describe('GardenGrid tokens re-skin + exposure layer', () => {
     expect(cells[3]).toHaveAccessibleName(
       'Morning sun — empty cell at row 2, column B'
     );
+  });
+});
+
+// SMA-15 (5.4) — §6 region render: adjacent same-type infrastructure cells
+// draw as ONE positioned block (single border + centered icon/label), and the
+// selected moment's cast shadows hatch the cells beneath the exposure tints.
+describe('GardenGrid infrastructure regions (SMA-15 5.4)', () => {
+  const withInfra = (
+    cells: CellData[][],
+    opts: { castShadow?: boolean[][] | null; exposure?: (ExposureCategory | null)[][] | null } = {}
+  ) =>
+    render(
+      <ThemeProvider theme={createTheme({ palette: { mode: 'light' } })}>
+        <GardenGrid
+          grid={cells}
+          shapeEditMode={false}
+          exposure={opts.exposure ?? null}
+          castShadow={opts.castShadow ?? null}
+        />
+      </ThemeProvider>
+    );
+
+  it('a 1×6 wall run renders as ONE region block with ONE label (≥4 cells wide)', () => {
+    const cells: CellData[][] = [
+      Array.from({ length: 6 }, () => ({ active: true, infrastructure: 'wall' as const })),
+    ];
+    const { container } = withInfra(cells);
+    const regions = container.querySelectorAll('[data-infra-region="wall"]');
+    expect(regions).toHaveLength(1);
+    expect(regions[0]).toHaveTextContent('Wall');
+    // §6: wall day bg + the single perimeter border.
+    expect(regions[0]).toHaveStyle({ backgroundColor: '#8A919C' });
+  });
+
+  it('two separated walls render as TWO region blocks', () => {
+    const cells: CellData[][] = [
+      [
+        { active: true, infrastructure: 'wall' },
+        { active: true },
+        { active: true, infrastructure: 'wall' },
+      ],
+    ];
+    const { container } = withInfra(cells);
+    expect(container.querySelectorAll('[data-infra-region="wall"]')).toHaveLength(2);
+  });
+
+  it('a narrow region (<4 cells wide) shows no label', () => {
+    const cells: CellData[][] = [
+      [
+        { active: true, infrastructure: 'path' },
+        { active: true, infrastructure: 'path' },
+      ],
+    ];
+    const { container } = withInfra(cells);
+    const region = container.querySelector('[data-infra-region="path"]');
+    expect(region).not.toBeNull();
+    expect(region).not.toHaveTextContent('Path');
+  });
+
+  it('water renders rounded (§6 formes rondes)', () => {
+    const cells: CellData[][] = [[{ active: true, infrastructure: 'water' }]];
+    const { container } = withInfra(cells);
+    expect(container.querySelector('[data-infra-region="water"]')).not.toBeNull();
+    // jsdom never APPLIES media-scoped rules, so the §6 radius pair is
+    // asserted on the emitted styles instead of the computed style: both the
+    // 15px mobile and 29px desktop values must be wired (base cells use 4px).
+    const styles = Array.from(document.head.querySelectorAll('style'))
+      .map((tag) => tag.textContent)
+      .join('');
+    expect(styles).toContain('border-radius:15px');
+    expect(styles).toContain('border-radius:29px');
+  });
+
+  it('infrastructure cells announce their type to assistive tech', () => {
+    const cells: CellData[][] = [[{ active: true, infrastructure: 'trellis' }]];
+    withInfra(cells);
+    expect(screen.getByRole('gridcell')).toHaveAccessibleName(
+      'Trellis — row 1, column A'
+    );
+  });
+
+  // R4 (mockup §5): EVERY plant is the same inset rounded overlay block —
+  // never a full-cell fill, never a circle. Default cellSizePx 44, desktop
+  // gap 3, inset 5 → a 1×1 block is 34px at (5,5); a 2×2 block is 81px.
+  const renderPlants = (
+    cells: CellData[][],
+    placements: Array<{ plantId: string; startRow: number; startCol: number; spanRows: number; spanCols: number; plantName?: string }>
+  ) =>
+    render(
+      <ThemeProvider theme={createTheme({ palette: { mode: 'light' } })}>
+        <GardenGrid grid={cells} shapeEditMode={false} placements={placements} />
+      </ThemeProvider>
+    );
+
+  it('a plant on a BARE cell is an inset rounded block with an OPAQUE fill (unified shape, R4)', () => {
+    const { container } = renderPlants(
+      [[{ active: true }]],
+      [{ plantId: 'p1', startRow: 0, startCol: 0, spanRows: 1, spanCols: 1, plantName: 'Tomato' }]
+    );
+    // The cell keeps its own base fill — the plant never paints the cell.
+    expect(screen.getByRole('gridcell')).toHaveStyle({ backgroundColor: '#F1F7EE' });
+    const block = container.querySelector('[data-plant-block]');
+    expect(block).not.toBeNull();
+    expect(block).toHaveStyle({
+      backgroundColor: getPlantColor('p1'),
+      borderRadius: '7px',
+      left: '5px',
+      top: '5px',
+      width: '34px',
+      height: '34px',
+    });
+    expect(block).toHaveTextContent('T');
+  });
+
+  it('a plant on an INFRASTRUCTURE keeps the same shape with a TRANSLUCENT fill; the region still renders (R4 + R3)', () => {
+    const { container } = renderPlants(
+      [[
+        { active: true, infrastructure: 'trellis' },
+        { active: true, infrastructure: 'trellis' },
+      ]],
+      [{ plantId: 'p1', startRow: 0, startCol: 0, spanRows: 1, spanCols: 1, plantName: 'Tomato' }]
+    );
+    expect(container.querySelectorAll('[data-infra-region="trellis"]')).toHaveLength(1);
+    const block = container.querySelector('[data-plant-block]');
+    expect(block).toHaveStyle({
+      backgroundColor: alpha(getPlantColor('p1'), 0.6),
+      borderRadius: '7px',
+      width: '34px',
+    });
+    expect(block).not.toHaveStyle({ backgroundColor: getPlantColor('p1') });
+    expect(block).toHaveTextContent('T');
+  });
+
+  it('a plant-on-infrastructure cell announces BOTH to assistive tech (R5, CR accept)', () => {
+    renderPlants(
+      [[{ active: true, infrastructure: 'trellis' }]],
+      [{ plantId: 'p1', startRow: 0, startCol: 0, spanRows: 1, spanCols: 1, plantName: 'Tomato' }]
+    );
+    expect(screen.getByRole('gridcell')).toHaveAccessibleName(
+      'Tomato on Trellis — row 1, column A'
+    );
+  });
+
+  it('a plant on a rounded water point shows the rounded region beneath the block', () => {
+    const { container } = renderPlants(
+      [[{ active: true, infrastructure: 'water' }]],
+      [{ plantId: 'p2', startRow: 0, startCol: 0, spanRows: 1, spanCols: 1, plantName: 'Mint' }]
+    );
+    expect(container.querySelector('[data-infra-region="water"]')).not.toBeNull();
+    expect(container.querySelector('[data-plant-block]')).toHaveTextContent('M');
+  });
+
+  it('a footprint plant (2×2) sizes its block to the footprint', () => {
+    const cells: CellData[][] = [
+      [{ active: true }, { active: true }, { active: true }],
+      [{ active: true }, { active: true }, { active: true }],
+    ];
+    const { container } = renderPlants(cells, [
+      { plantId: 'p3', startRow: 0, startCol: 1, spanRows: 2, spanCols: 2, plantName: 'Zucchini' },
+    ]);
+    const block = container.querySelector('[data-plant-block]');
+    // 2 cells × 44 + 1 gap × 3 − 2 × 5 inset = 81; left = 1 × 47 + 5 = 52.
+    expect(block).toHaveStyle({
+      width: '81px',
+      height: '81px',
+      left: '52px',
+      top: '5px',
+    });
+  });
+
+  it('cast-shadow cells carry the §3 hatch and the data tag while the layer is on', () => {
+    const cells: CellData[][] = [[{ active: true }, { active: true }]];
+    withInfra(cells, {
+      exposure: [['full', 'full']],
+      castShadow: [[true, false]],
+    });
+    const gridCells = screen.getAllByRole('gridcell');
+    expect(gridCells[0]).toHaveAttribute('data-cast-shadow', 'true');
+    expect(gridCells[0]).toHaveStyle({
+      backgroundImage:
+        'repeating-linear-gradient(45deg, rgba(71,94,120,0.18) 0px, rgba(71,94,120,0.18) 3px, transparent 3px, transparent 8px)',
+    });
+    expect(gridCells[1]).not.toHaveAttribute('data-cast-shadow');
   });
 });

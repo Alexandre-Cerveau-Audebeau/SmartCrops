@@ -1001,3 +1001,182 @@ describe('plannerReducer undo save-state (SMA-17 5.3-D R6)', () => {
     expect(cancelled.isDirty).toBe(false);
   });
 });
+
+// SMA-15 (5.4) — infrastructure paint: the third mutually exclusive mode,
+// riding the same PAINT_* drag pattern (toggle polarity, reducer guards,
+// undoable via the SAME DraftSnapshot — grid copies carry `infrastructure`).
+describe('plannerReducer infrastructure paint (SMA-15 5.4)', () => {
+  /** Hydrated state with the wall type armed (enters infra mode). */
+  const armed = (type: 'wall' | 'path' = 'wall'): PlannerState =>
+    plannerReducer(hydrated(), { type: 'SET_INFRA_TYPE', infraType: type });
+
+  it('SET_INFRA_TYPE arms the type, enters the mode and leaves shape-edit', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    s = plannerReducer(s, { type: 'SET_INFRA_TYPE', infraType: 'trellis' });
+    expect(s.infraType).toBe('trellis');
+    expect(s.infraMode).toBe(true);
+    expect(s.shapeEditMode).toBe(false);
+    // Disarming (null) falls back to selection mode.
+    s = plannerReducer(s, { type: 'SET_INFRA_TYPE', infraType: null });
+    expect(s.infraType).toBeNull();
+    expect(s.infraMode).toBe(false);
+  });
+
+  it('SET_INFRA_MODE cannot enter without an armed type (guarded no-op)', () => {
+    const s = hydrated();
+    expect(plannerReducer(s, { type: 'SET_INFRA_MODE', enabled: true })).toBe(s);
+  });
+
+  it('SET_INFRA_MODE off keeps the type armed for re-entry', () => {
+    let s = armed();
+    s = plannerReducer(s, { type: 'SET_INFRA_MODE', enabled: false });
+    expect(s.infraMode).toBe(false);
+    expect(s.infraType).toBe('wall');
+    s = plannerReducer(s, { type: 'SET_INFRA_MODE', enabled: true });
+    expect(s.infraMode).toBe(true);
+  });
+
+  it('SET_SHAPE_EDIT_MODE on leaves infrastructure mode (mutual exclusion)', () => {
+    let s = armed();
+    s = plannerReducer(s, { type: 'SET_SHAPE_EDIT_MODE', enabled: true });
+    expect(s.shapeEditMode).toBe(true);
+    expect(s.infraMode).toBe(false);
+    expect(s.infraType).toBe('wall'); // remembered, not painted with
+  });
+
+  it('HYDRATE_FROM_LAYOUT opens the next garden in SELECTION mode (R5, CR accept)', () => {
+    // Paint in garden A with an armed type, then hydrate garden B: B must
+    // not open as a paint surface with A's type still driving the cells.
+    let s = plannerReducer(armed(), { type: 'PAINT_START', row: 0, col: 0 });
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    expect(s.infraMode).toBe(true);
+    s = plannerReducer(s, {
+      type: 'HYDRATE_FROM_LAYOUT',
+      width: 2,
+      height: 2,
+      cellSize: '1m',
+      cellsJson: null,
+      placements: [],
+    });
+    expect(s.infraMode).toBe(false);
+    expect(s.infraType).toBe('wall'); // remembered for re-entry, mode off
+  });
+
+  it('SETUP_CONFIRMED starts the fresh grid in SELECTION mode (infra mode reset too)', () => {
+    // Arm on a draft, discard it, re-setup: the new grid must not open as a
+    // paint surface with the stale type still armed (workflow finding).
+    let s = plannerReducer(armed(), { type: 'DISCARD_DRAFT' });
+    s = plannerReducer(s, {
+      type: 'SETUP_CONFIRMED',
+      cols: 3,
+      rows: 3,
+      cellSize: '50cm',
+    });
+    expect(s.infraMode).toBe(false);
+    expect(s.shapeEditMode).toBe(false);
+    expect(s.infraType).toBe('wall'); // remembered for re-entry, mode off
+  });
+
+  it('PAINT_START paints the armed type, pushes history and dirties', () => {
+    const before = armed();
+    const s = plannerReducer(before, { type: 'PAINT_START', row: 0, col: 0 });
+    expect(s.grid![0][0].infrastructure).toBe('wall');
+    expect(s.isPainting).toBe(true);
+    expect(s.infraPaintValue).toBe('wall');
+    expect(s.isDirty).toBe(true);
+    expect(s.past).toHaveLength(before.past.length + 1);
+    // The cell's active flag is untouched (this is NOT shape-edit).
+    expect(s.grid![0][0].active).toBe(true);
+  });
+
+  it('PAINT_START on a same-type cell locks a CLEARING drag (toggle polarity)', () => {
+    let s = plannerReducer(armed(), { type: 'PAINT_START', row: 0, col: 0 });
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 });
+    expect(s.grid![0][0]).not.toHaveProperty('infrastructure'); // sparse clear
+    expect(s.infraPaintValue).toBeNull();
+    expect(s.isPainting).toBe(true);
+  });
+
+  it('PAINT_ENTER extends the drag; a matching cell is a guarded no-op (no push, no dirty)', () => {
+    let s = plannerReducer(armed(), { type: 'PAINT_START', row: 0, col: 0 });
+    const afterStart = s;
+    s = plannerReducer(s, { type: 'PAINT_ENTER', row: 0, col: 1 });
+    expect(s.grid![0][1].infrastructure).toBe('wall');
+    // Re-entering an already-painted cell changes NOTHING.
+    expect(plannerReducer(s, { type: 'PAINT_ENTER', row: 0, col: 1 })).toBe(s);
+    expect(s.past).toHaveLength(afterStart.past.length + 1);
+  });
+
+  it('painting over a DIFFERENT type replaces it', () => {
+    let s = plannerReducer(armed(), { type: 'PAINT_START', row: 0, col: 0 });
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    s = plannerReducer(s, { type: 'SET_INFRA_TYPE', infraType: 'path' });
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 });
+    expect(s.grid![0][0].infrastructure).toBe('path');
+  });
+
+  it('an INACTIVE cell is not paintable (guarded — nothing pushed)', () => {
+    // Deactivate (0,2) via shape-edit first, then arm and try to paint it.
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 2 });
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    s = plannerReducer(s, { type: 'SET_INFRA_TYPE', infraType: 'wall' });
+    const before = s;
+    expect(plannerReducer(s, { type: 'PAINT_START', row: 0, col: 2 })).toBe(
+      before
+    );
+  });
+
+  it('painting under a PLACEMENT is allowed (a plant over a trellis)', () => {
+    // hydrated() has a placement at (1,1).
+    const s = plannerReducer(armed(), { type: 'PAINT_START', row: 1, col: 1 });
+    expect(s.grid![1][1].infrastructure).toBe('wall');
+    expect(s.placements).toHaveLength(1); // never evicted by infra paint
+  });
+
+  it('PAINT_END disarms the drag and its polarity', () => {
+    let s = plannerReducer(armed(), { type: 'PAINT_START', row: 0, col: 0 });
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    expect(s.isPainting).toBe(false);
+    expect(s.infraPaintValue).toBeNull();
+  });
+
+  it('UNDO restores the pre-paint infrastructure AND the save context', () => {
+    let s = plannerReducer(armed(), { type: 'PAINT_START', row: 0, col: 0 });
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    s = plannerReducer(s, { type: 'UNDO' });
+    expect(s.grid![0][0]).not.toHaveProperty('infrastructure');
+    // hydrated() was clean — undoing the only edit lands clean (R6 contract
+    // carried over to infra paint with zero snapshot changes).
+    expect(s.isDirty).toBe(false);
+    expect(s.lastSaved).not.toBeNull();
+  });
+
+  it('mid-save infra edits keep the dirty flag (MARK_SAVED referential check)', () => {
+    const base = armed();
+    const submitted = {
+      grid: base.grid,
+      layoutWidth: base.layoutWidth,
+      layoutHeight: base.layoutHeight,
+      cellSize: base.cellSize,
+      placements: base.placements,
+    };
+    // An infra paint lands while the save request is in flight…
+    const edited = plannerReducer(base, { type: 'PAINT_START', row: 0, col: 0 });
+    // …so the submitted revision is no longer current: still dirty.
+    const saved = plannerReducer(edited, { type: 'MARK_SAVED', submitted });
+    expect(saved.isDirty).toBe(true);
+  });
+
+  it('selection mode ignores PAINT_* (no mode armed — nothing happens)', () => {
+    const s = hydrated();
+    expect(plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 })).toBe(s);
+  });
+});
