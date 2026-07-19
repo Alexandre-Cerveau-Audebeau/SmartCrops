@@ -269,6 +269,16 @@ describe('GardenGrid infrastructure regions (SMA-15 5.4)', () => {
     expect(block).toHaveTextContent('T');
   });
 
+  it('a plant-on-infrastructure cell announces BOTH to assistive tech (R5, CR accept)', () => {
+    renderPlants(
+      [[{ active: true, infrastructure: 'trellis' }]],
+      [{ plantId: 'p1', startRow: 0, startCol: 0, spanRows: 1, spanCols: 1, plantName: 'Tomato' }]
+    );
+    expect(screen.getByRole('gridcell')).toHaveAccessibleName(
+      'Tomato on Trellis — row 1, column A'
+    );
+  });
+
   it('a plant on a rounded water point shows the rounded region beneath the block', () => {
     const { container } = renderPlants(
       [[{ active: true, infrastructure: 'water' }]],

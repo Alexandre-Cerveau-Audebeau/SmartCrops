@@ -260,6 +260,10 @@ export function plannerReducer(
         ...state,
         ...disarmedPainting,
         past: [], // new garden context — history cleared (5.3-D R2)
+        // R5 (CR accept): another garden's hydration opens in SELECTION mode
+        // — a still-armed type must not turn garden B into a paint surface.
+        // The armed type itself stays remembered, like every mode exit.
+        infraMode: false,
         grid,
         layoutWidth: action.width,
         layoutHeight: action.height,

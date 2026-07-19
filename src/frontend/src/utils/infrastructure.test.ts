@@ -7,8 +7,19 @@ import {
   INFRASTRUCTURE_TYPES,
   infrastructureBlockers,
   isInfrastructureType,
+  type InfraMeta,
   type InfrastructureType,
 } from './infrastructure';
+
+// Type-level pin (R5, CR accept): the InfraMeta union REQUIRES a
+// heightCategory on blocking types and forbids it on non-blocking ones —
+// these never run, they only have to (not) compile.
+// @ts-expect-error — blocksLight: true without heightCategory must not compile
+const invalidBlocking: InfraMeta = { icon: 'x', blocksLight: true };
+// @ts-expect-error — a non-blocking type cannot carry a heightCategory
+const invalidNonBlocking: InfraMeta = { icon: 'x', blocksLight: false, heightCategory: 'mid' };
+void invalidBlocking;
+void invalidNonBlocking;
 
 // SMA-15 (5.4) — per-cell infrastructure grouped into rectangular regions:
 // the §6 render blocks AND the exposure Blockers come from the same helper,

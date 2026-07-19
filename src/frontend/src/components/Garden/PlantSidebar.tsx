@@ -139,6 +139,8 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
                 <ListItemButton
                   key={type}
                   selected={selected}
+                  // R5 (CR accept): the armed toggle state reaches AT.
+                  aria-pressed={selected}
                   onClick={() => onInfraSelect?.(selected ? null : type)}
                   // The PLANTS row pattern: 10×14 padding, 3px prim marker.
                   sx={{

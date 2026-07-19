@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n/i18n';
 import type { Plant } from '../../types/Plant';
@@ -25,6 +25,7 @@ function renderSidebar(
     searchQuery?: string;
     plants?: Plant[];
     catalogReady?: boolean;
+    selectedInfraType?: 'wall' | 'trellis' | null;
   } = {}
 ) {
   return render(
@@ -34,6 +35,8 @@ function renderSidebar(
       onSearchChange={vi.fn()}
       selectedPlantId={null}
       onPlantSelect={vi.fn()}
+      selectedInfraType={overrides.selectedInfraType ?? null}
+      onInfraSelect={vi.fn()}
       language="fr"
       shapeEditMode={false}
       onShapeEditToggle={vi.fn()}
@@ -78,5 +81,18 @@ describe('PlantSidebar (SMA-194)', () => {
     renderSidebar({ plants: [], catalogReady: true });
     expect(screen.getByText('No plants found')).toBeInTheDocument();
     expect(screen.queryByText('Loading plants…')).toBeNull();
+  });
+
+  it('exposes the armed infrastructure toggle state via aria-pressed (SMA-15 R5, CR accept)', () => {
+    renderSidebar({ selectedInfraType: 'wall' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Infrastructure' }));
+    const wallRow = screen
+      .getAllByRole('button')
+      .find((el) => within(el).queryByText('Wall'))!;
+    const trellisRow = screen
+      .getAllByRole('button')
+      .find((el) => within(el).queryByText('Trellis'))!;
+    expect(wallRow).toHaveAttribute('aria-pressed', 'true');
+    expect(trellisRow).toHaveAttribute('aria-pressed', 'false');
   });
 });

@@ -442,7 +442,7 @@
         "morning": "Soleil du matin",
         "afternoon": "Soleil d'après-midi",
         "shade": "Ombre",
-        "castShadow": "Ombre portée (mur, treillis)"
+        "castShadow": "Ombre portée (mur, clôture, treillis)"
       },
       "override": {
         "title": "Exposition de la case",
@@ -520,6 +520,7 @@
       "inactiveCell": "Cellule inactive à la ligne {{row}}, colonne {{col}}",
       "exposureCell": "{{category}} — cellule vide à la ligne {{row}}, colonne {{col}}",
       "infraCell": "{{type}} — ligne {{row}}, colonne {{col}}",
+      "plantedInfraCell": "{{plant}} sur {{type}} — ligne {{row}}, colonne {{col}}",
       "paintCell": "Peindre une infrastructure"
     },
     "help": {

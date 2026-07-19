@@ -1047,6 +1047,24 @@ describe('plannerReducer infrastructure paint (SMA-15 5.4)', () => {
     expect(s.infraType).toBe('wall'); // remembered, not painted with
   });
 
+  it('HYDRATE_FROM_LAYOUT opens the next garden in SELECTION mode (R5, CR accept)', () => {
+    // Paint in garden A with an armed type, then hydrate garden B: B must
+    // not open as a paint surface with A's type still driving the cells.
+    let s = plannerReducer(armed(), { type: 'PAINT_START', row: 0, col: 0 });
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    expect(s.infraMode).toBe(true);
+    s = plannerReducer(s, {
+      type: 'HYDRATE_FROM_LAYOUT',
+      width: 2,
+      height: 2,
+      cellSize: '1m',
+      cellsJson: null,
+      placements: [],
+    });
+    expect(s.infraMode).toBe(false);
+    expect(s.infraType).toBe('wall'); // remembered for re-entry, mode off
+  });
+
   it('SETUP_CONFIRMED starts the fresh grid in SELECTION mode (infra mode reset too)', () => {
     // Arm on a draft, discard it, re-setup: the new grid must not open as a
     // paint surface with the stale type still armed (workflow finding).

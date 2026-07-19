@@ -442,7 +442,7 @@
         "morning": "Morning sun",
         "afternoon": "Afternoon sun",
         "shade": "Shade",
-        "castShadow": "Cast shadow (wall, trellis)"
+        "castShadow": "Cast shadow (wall, fence, trellis)"
       },
       "override": {
         "title": "Cell exposure",
@@ -520,6 +520,7 @@
       "inactiveCell": "Inactive cell at row {{row}}, column {{col}}",
       "exposureCell": "{{category}} — empty cell at row {{row}}, column {{col}}",
       "infraCell": "{{type}} — row {{row}}, column {{col}}",
+      "plantedInfraCell": "{{plant}} on {{type}} — row {{row}}, column {{col}}",
       "paintCell": "Paint infrastructure"
     },
     "help": {

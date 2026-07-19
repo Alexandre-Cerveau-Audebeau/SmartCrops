@@ -94,12 +94,12 @@ const axisLabelSx = {
   fontSize: { xs: 8.5, sm: 10.5 },
   fontWeight: 700,
 } as const;
-// §4: inter-cell gap 3 px desktop / 2 px mobile — shared by the cell grid and
-// both axis rails so the labels track the cell tracks at any zoom.
-const CELL_GAP = { xs: '2px', sm: '3px' } as const;
-// The same gaps as numbers — the region overlay computes absolute geometry
-// from them (cell tracks = cellSizePx + gap), per breakpoint like CELL_GAP.
+// §4: inter-cell gap 3 px desktop / 2 px mobile — ONE numeric source (R5,
+// CR accept): the overlays compute absolute geometry from these numbers and
+// the flex grid + axis rails consume the DERIVED sx strings below, so the
+// two can never drift.
 const GAP_PX = { xs: 2, sm: 3 } as const;
+const CELL_GAP = { xs: `${GAP_PX.xs}px`, sm: `${GAP_PX.sm}px` } as const;
 
 /**
  * One §6 infrastructure block (SMA-15 5.4): a region of adjacent same-type
@@ -516,21 +516,30 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
               } : undefined}
               aria-label={
                 cell.active
-                  ? placement?.plantName
-                    ? t('planner.cell.plantedCell', { plant: placement.plantName, row: r + 1, col: columnLabel(c) })
-                    : cell.infrastructure
-                      ? t('planner.cell.infraCell', {
-                          type: t(`planner.infra.types.${cell.infrastructure}`),
-                          row: r + 1,
-                          col: columnLabel(c),
-                        })
-                      : tint
-                        ? t('planner.cell.exposureCell', {
-                            category: t(`planner.exposure.categories.${tint}`),
+                  ? placement?.plantName && cell.infrastructure
+                    // R5 (CR accept): a plant OVER an infrastructure
+                    // announces BOTH.
+                    ? t('planner.cell.plantedInfraCell', {
+                        plant: placement.plantName,
+                        type: t(`planner.infra.types.${cell.infrastructure}`),
+                        row: r + 1,
+                        col: columnLabel(c),
+                      })
+                    : placement?.plantName
+                      ? t('planner.cell.plantedCell', { plant: placement.plantName, row: r + 1, col: columnLabel(c) })
+                      : cell.infrastructure
+                        ? t('planner.cell.infraCell', {
+                            type: t(`planner.infra.types.${cell.infrastructure}`),
                             row: r + 1,
                             col: columnLabel(c),
                           })
-                        : t('planner.cell.emptyCell', { row: r + 1, col: columnLabel(c) })
+                        : tint
+                          ? t('planner.cell.exposureCell', {
+                              category: t(`planner.exposure.categories.${tint}`),
+                              row: r + 1,
+                              col: columnLabel(c),
+                            })
+                          : t('planner.cell.emptyCell', { row: r + 1, col: columnLabel(c) })
                   : t('planner.cell.inactiveCell', { row: r + 1, col: columnLabel(c) })
               }
               sx={{
@@ -540,6 +549,10 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
                   outline: '2px solid',
                   outlineColor: 'primary.main',
                   outlineOffset: -2,
+                  // R5 (CR accept): same elevation as the paint branch — the
+                  // inset ring must stay visible above an opaque §6 region.
+                  position: 'relative' as const,
+                  zIndex: 3,
                 } : undefined,
               }}
             />

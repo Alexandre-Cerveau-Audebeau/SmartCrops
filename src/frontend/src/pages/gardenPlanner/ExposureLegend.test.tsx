@@ -27,9 +27,9 @@ describe('ExposureLegend cast-shadow swatch (SMA-15 5.4)', () => {
     expect(screen.queryByTestId('legend-cast-shadow')).not.toBeInTheDocument();
   });
 
-  it('adds the §13 "Cast shadow (wall, trellis)" swatch when one exists', () => {
+  it('adds the "Cast shadow (wall, fence, trellis)" swatch when one exists (R5: every blocking type listed)', () => {
     renderLegend(true);
     const swatch = screen.getByTestId('legend-cast-shadow');
-    expect(swatch).toHaveTextContent('Cast shadow (wall, trellis)');
+    expect(swatch).toHaveTextContent('Cast shadow (wall, fence, trellis)');
   });
 });

@@ -32,6 +32,16 @@ export function isInfrastructureType(
 }
 
 /**
+ * One infrastructure's metadata — a union DISCRIMINATED on blocksLight (R5,
+ * CR accept): a blocking type REQUIRES its heightCategory at compile time
+ * (no more non-null assertion downstream), a non-blocking type cannot carry
+ * one.
+ */
+export type InfraMeta =
+  | { icon: string; blocksLight: true; heightCategory: HeightCategory }
+  | { icon: string; blocksLight: false; heightCategory?: never };
+
+/**
  * Per-type engine + sidebar facts. Blocker mapping is the SMA-15 dictation:
  * wall → blocks, 'tall'; fence → blocks, 'mid' (the engine table's own
  * anchor: "mid (~1-2m wall/fence)"); trellis → blocks, 'tall' (the §6
@@ -39,10 +49,7 @@ export function isInfrastructureType(
  * "Pas d'ombre" badge, never a blocker. Icons are the §6 Material Symbols
  * (fence: PROPOSED — no §6 row yet, ratification at harvest).
  */
-export const INFRA_META: Record<
-  InfrastructureType,
-  { icon: string; blocksLight: boolean; heightCategory?: HeightCategory }
-> = {
+export const INFRA_META: Record<InfrastructureType, InfraMeta> = {
   wall: { icon: 'foundation', blocksLight: true, heightCategory: 'tall' },
   fence: { icon: 'fence', blocksLight: true, heightCategory: 'mid' },
   trellis: { icon: 'grid_on', blocksLight: true, heightCategory: 'tall' },
@@ -136,14 +143,20 @@ export function groupInfrastructureRegions(
  * stays minimal and the "casts nothing" contract is pinned here by tests.
  */
 export function infrastructureBlockers(grid: InfraCell[][]): Blocker[] {
-  return groupInfrastructureRegions(grid)
-    .filter((region) => INFRA_META[region.type].blocksLight)
-    .map((region) => ({
-      row: region.startRow,
-      col: region.startCol,
-      spanRows: region.spanRows,
-      spanCols: region.spanCols,
-      heightCategory: INFRA_META[region.type].heightCategory!,
-      blocksLight: true,
-    }));
+  return groupInfrastructureRegions(grid).flatMap((region) => {
+    const meta = INFRA_META[region.type];
+    // The union narrows here (R5): inside this branch heightCategory is
+    // REQUIRED — no assertion needed.
+    if (!meta.blocksLight) return [];
+    return [
+      {
+        row: region.startRow,
+        col: region.startCol,
+        spanRows: region.spanRows,
+        spanCols: region.spanCols,
+        heightCategory: meta.heightCategory,
+        blocksLight: true,
+      },
+    ];
+  });
 }
