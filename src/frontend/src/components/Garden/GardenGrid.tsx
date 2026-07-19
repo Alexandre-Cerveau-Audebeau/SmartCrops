@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import { useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import type { CellData } from '../../types/GardenLayout';
 import type { ExposureCategory } from '../../utils/exposure';
 import {
@@ -384,10 +384,14 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
           const letter = placement?.plantName
             ? placement.plantName.charAt(0).toUpperCase()
             : null;
-          // The composite token: ~2/3 of the cell, plantColor fill, ring +
-          // shadow for separation (both are existing values — the card token
-          // as the ring, the shared switch-thumb shadow). Rises above the
-          // region overlay on its own (the cell itself stays un-raised).
+          // The composite token: ~2/3 of the cell, TRANSLUCENT plantColor
+          // fill (R3 — the infra pattern must show THROUGH the disc; only
+          // the background is alpha'd, never the whole Box, so ring and
+          // letter stay fully opaque). Ring + shadow are existing values
+          // (the card token, the shared switch-thumb shadow); the letter
+          // keeps a light halo so it reads over both the translucent fill
+          // and the pattern beneath. Rises above the region overlay on its
+          // own (the cell itself stays un-raised).
           const cellContent = composite ? (
             <Box
               component="span"
@@ -396,7 +400,7 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
                 width: '66%',
                 height: '66%',
                 borderRadius: '50%',
-                bgcolor: plantColor!,
+                bgcolor: alpha(plantColor!, 0.6),
                 border: `2px solid ${tk.card}`,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
                 display: 'flex',
@@ -405,6 +409,7 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
                 fontSize: 12,
                 fontWeight: 700,
                 color: 'rgba(0,0,0,0.6)',
+                textShadow: '0 0 3px rgba(255,255,255,0.85)',
                 position: 'relative' as const,
                 zIndex: 2,
                 pointerEvents: 'none',

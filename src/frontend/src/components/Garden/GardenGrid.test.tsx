@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider, alpha, createTheme } from '@mui/material/styles';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n/i18n';
 import type { CellData } from '../../types/GardenLayout';
@@ -236,12 +236,16 @@ describe('GardenGrid infrastructure regions (SMA-15 5.4)', () => {
     // The trellis region still renders (one block over both cells).
     expect(container.querySelectorAll('[data-infra-region="trellis"]')).toHaveLength(1);
     // The plant is a TOKEN, not an opaque cell: the cell keeps the base fill
-    // (day cellOn) and the token carries the plant color + letter.
+    // (day cellOn) and the token carries a TRANSLUCENT plant fill (R3 — the
+    // pattern must show through) + the fully-opaque letter.
     const cell = screen.getAllByRole('gridcell')[0]!;
     expect(cell).toHaveStyle({ backgroundColor: '#F1F7EE' });
     const token = container.querySelector('[data-plant-token]');
     expect(token).not.toBeNull();
-    expect(token).toHaveStyle({ backgroundColor: getPlantColor('p1') });
+    expect(token).toHaveStyle({
+      backgroundColor: alpha(getPlantColor('p1'), 0.6),
+    });
+    expect(token).not.toHaveStyle({ backgroundColor: getPlantColor('p1') });
     expect(token).toHaveTextContent('T');
   });
 
