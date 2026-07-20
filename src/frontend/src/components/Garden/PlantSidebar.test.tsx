@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n/i18n';
 import type { Plant } from '../../types/Plant';
+import type { InfrastructureType } from '../../utils/infrastructure';
 import PlantSidebar from './PlantSidebar';
 
 // SMA-194 locks: the picker's primary label is the SAME localized common name
@@ -20,31 +21,38 @@ const fern = {
   commonName: null, // enrichment gap -> scientific fallback
 } as Plant;
 
-function renderSidebar(
-  overrides: {
-    searchQuery?: string;
-    plants?: Plant[];
-    catalogReady?: boolean;
-    selectedInfraType?: 'wall' | 'trellis' | null;
-  } = {}
-) {
-  return render(
-    <PlantSidebar
-      plants={overrides.plants ?? [ivy, fern]}
-      searchQuery={overrides.searchQuery ?? ''}
-      onSearchChange={vi.fn()}
-      selectedPlantId={null}
-      onPlantSelect={vi.fn()}
-      selectedInfraType={overrides.selectedInfraType ?? null}
-      onInfraSelect={vi.fn()}
-      language="fr"
-      shapeEditMode={false}
-      onShapeEditToggle={vi.fn()}
-      catalogFailed={false}
-      onCatalogRetry={vi.fn()}
-      catalogReady={overrides.catalogReady ?? true}
-    />
-  );
+type SidebarOverrides = {
+  searchQuery?: string;
+  plants?: Plant[];
+  catalogReady?: boolean;
+  selectedInfraType?: InfrastructureType | null;
+  // Must mirror the prop's FULL union: a narrower parameter type is not
+  // assignable (contravariance) and only tsc catches it — vitest strips types.
+  onInfraSelect?: (type: InfrastructureType | null) => void;
+};
+
+// Built as an element (not rendered) so a test can re-render the SAME instance
+// with a new armed type — the callback's toggle branch needs that round-trip.
+const sidebar = (overrides: SidebarOverrides = {}) => (
+  <PlantSidebar
+    plants={overrides.plants ?? [ivy, fern]}
+    searchQuery={overrides.searchQuery ?? ''}
+    onSearchChange={vi.fn()}
+    selectedPlantId={null}
+    onPlantSelect={vi.fn()}
+    selectedInfraType={overrides.selectedInfraType ?? null}
+    onInfraSelect={overrides.onInfraSelect ?? vi.fn()}
+    language="fr"
+    shapeEditMode={false}
+    onShapeEditToggle={vi.fn()}
+    catalogFailed={false}
+    onCatalogRetry={vi.fn()}
+    catalogReady={overrides.catalogReady ?? true}
+  />
+);
+
+function renderSidebar(overrides: SidebarOverrides = {}) {
+  return render(sidebar(overrides));
 }
 
 describe('PlantSidebar (SMA-194)', () => {
@@ -94,5 +102,24 @@ describe('PlantSidebar (SMA-194)', () => {
       .find((el) => within(el).queryByText('Trellis'))!;
     expect(wallRow).toHaveAttribute('aria-pressed', 'true');
     expect(trellisRow).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('arms a type on click and disarms it with null on re-click (SMA-303)', () => {
+    // The prop state alone proves nothing: without this, removing the row's
+    // onClick — or passing the wrong value — would still pass the suite.
+    const onInfraSelect = vi.fn();
+    const { rerender } = render(sidebar({ onInfraSelect }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Infrastructure' }));
+    const trellisRow = () =>
+      screen.getAllByRole('button').find((el) => within(el).queryByText('Trellis'))!;
+
+    fireEvent.click(trellisRow());
+    expect(onInfraSelect).toHaveBeenCalledWith('trellis');
+
+    // The armed type comes back down as a prop — re-clicking it disarms.
+    rerender(sidebar({ onInfraSelect, selectedInfraType: 'trellis' }));
+    fireEvent.click(trellisRow());
+    expect(onInfraSelect).toHaveBeenLastCalledWith(null);
+    expect(onInfraSelect).toHaveBeenCalledTimes(2);
   });
 });

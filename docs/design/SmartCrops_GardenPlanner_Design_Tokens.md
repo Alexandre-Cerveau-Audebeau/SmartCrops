@@ -137,12 +137,11 @@ fs 12 (9 mobile) w800 ls .02em.
 | **Chemin** (`route`) | bg `#EDE4D3` · bd `#DCCFB8` · pointillés `radial-gradient(circle at 4px 4px, rgba(120,100,70,0.30) 1.4px, transparent 2px)` size 9×9 · icône `#8A7351` · label `#6E5B40` | bg `#2E3A50` · bd `#3C4A63` · points `rgba(214,222,236,0.28)` · icône `#9FACC2` · label `#B4C0D4` |
 | **Point d'eau** (`water_drop`, rond) | bg `#CCE7FA` · bd `#9FCDEE` · icône/label `#1565C0` | bg `rgba(100,181,246,0.22)` · bd `rgba(100,181,246,0.5)` · `#90CAF9` |
 | **Pot** (`potted_plant`, rond) | bg `#EFD7C3` · bd `#DDB894` · icône/label `#A0522D` | bg `rgba(200,120,70,0.26)` · bd `rgba(220,140,90,0.5)` · `#E9A06B` |
-| **Clôture** (`fence`) — **PROPOSED 5.4 (SMA-15)** | bg `#8A919C` · bd `1.5px dashed #767E8A` · icône/label `#fff` | bg `#3A4556` · bd `1.5px dashed #4A5568` · icône `#B9C4D6` · label `#D6DEEC` |
+| **Clôture** (`fence`) | bg `#8A919C` · bd `1.5px dashed #767E8A` · icône/label `#fff` | bg `#3A4556` · bd `1.5px dashed #4A5568` · icône `#B9C4D6` · label `#D6DEEC` |
 
-> **PROPOSED (SMA-15, ratification opérateur)** : la maquette ne définit pas de ligne
-> Clôture — la ligne ci-dessus est **composée uniquement de valeurs §6 existantes**
-> (palette du Mur + le traitement `1.5px dashed` du Treillis, sans motif), icône
-> Material Symbols `fence`. Aucune nouvelle valeur hex. À ratifier ou remplacer au harvest.
+> Ratifiée (SMA-303, 20/07) : ligne composée uniquement de valeurs §6 existantes
+> (palette du Mur + traitement `1.5px dashed` du Treillis, sans motif), icône
+> Material Symbols `fence` — aucune nouvelle valeur hex.
 
 Badges sidebar INFRAS. : « Bloque la lumière » (style danger doux) vs « Pas d'ombre » (neutre).
 
@@ -238,8 +237,8 @@ En mode DnD s'ajoutent à droite : « Cible valide » (dashed `--prim`) · « Co
 - Moments : **Matin · Midi · Soir** / Morning · Noon · Evening — Saisons : **Été · Hiver** / Summer · Winter.
 - Titre légende : « Exposition — été · midi » / « Exposure — summer · noon ».
 - Catégories : Plein soleil · Soleil du matin · Soleil d'après-midi · Ombre ·
-  Ombre portée (mur, treillis) / Full sun · Morning sun · Afternoon sun · Shade ·
-  Cast shadow (wall, trellis).
+  Ombre portée (mur, clôture, treillis) / Full sun · Morning sun · Afternoon sun · Shade ·
+  Cast shadow (wall, fence, trellis).
 - Panneau : « Placement sélectionné » ; « Cases F3–G4 · empreinte 2×2 (1,0 × 1,0 m) » ;
   « Plein soleil — matin, midi et soir » ; « Empreinte » ; « Issue de l'espacement Perenual
   (90–120 cm) » / « Espacement inconnu — réglage manuel » ; Déplacer · Retirer.
