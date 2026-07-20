@@ -47,7 +47,8 @@ export type InfraMeta =
  * anchor: "mid (~1-2m wall/fence)"); trellis → blocks, 'tall' (the §6
  * "garni" trellis blocks like a wall per its badge); path/water/pot → the §6
  * "Pas d'ombre" badge, never a blocker. Icons are the §6 Material Symbols
- * (fence: PROPOSED — no §6 row yet, ratification at harvest).
+ * (fence: ratified — SMA-303, 20 Jul 2026; §6 row composed of existing §6
+ * values, no new hex).
  */
 export const INFRA_META: Record<InfrastructureType, InfraMeta> = {
   wall: { icon: 'foundation', blocksLight: true, heightCategory: 'tall' },

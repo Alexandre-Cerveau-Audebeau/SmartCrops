@@ -97,12 +97,12 @@ export interface PlannerTokens {
   dangBg: string;
   dangBd: string;
   dangTx: string;
-  // Infrastructures (§6): per-type region style. The fence row is PROPOSED
-  // (5.4): §6 has no Clôture row — it is COMPOSED of existing §6 values only
-  // (Mur palette + the Treillis dashed border treatment), submitted for
-  // orchestrator ratification at harvest; the doc carries the same PROPOSED
-  // row in this commit. Do NOT invent new hex here — if a §6 value is
-  // missing, STOP AND REPORT (file-header rule).
+  // Infrastructures (§6): per-type region style. The fence row is ratified
+  // (SMA-303, 20 Jul 2026): §6 now carries the Clôture row — COMPOSED of
+  // existing §6 values only (Mur palette + the Treillis dashed border
+  // treatment); the tokens doc records the same ratification. Do NOT invent
+  // new hex here — if a §6 value is missing, STOP AND REPORT (file-header
+  // rule).
   infra: Record<InfrastructureType, InfraStyle>;
 }
 
@@ -171,7 +171,7 @@ const LIGHT: PlannerTokens = {
       icon: '#fff',
       label: '#fff',
     },
-    // PROPOSED (5.4): Mur palette + Treillis dashed treatment — see the
+    // Ratified (SMA-303): Mur palette + Treillis dashed treatment — see the
     // interface note above.
     fence: {
       bg: '#8A919C',
@@ -260,7 +260,7 @@ const DARK: PlannerTokens = {
   dangBg: 'rgba(229,90,90,0.13)',
   dangBd: 'rgba(229,90,90,0.45)',
   dangTx: '#F08A8A',
-  // §6 night column, verbatim (fence PROPOSED — night Mur palette + dashed).
+  // §6 night column, verbatim (fence ratified — night Mur palette + dashed).
   infra: {
     wall: {
       bg: '#3A4556',
