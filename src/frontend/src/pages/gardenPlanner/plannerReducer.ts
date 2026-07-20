@@ -218,6 +218,18 @@ const disarmedPainting = {
   infraPaintValue: null,
 } as const;
 
+/** Entering an editing context (fresh setup, another garden's hydration)
+ * always lands in SELECTION mode (SMA-303): shape-edit must not leak across
+ * garden switches, and a still-armed infra type must not turn the new grid
+ * into a paint surface — the armed type itself stays remembered, like every
+ * mode exit. Single shared source for these resets so the entry points can
+ * never diverge; a future "Place" mode (5.5) exits here too. */
+const enterSelectionMode = {
+  ...disarmedPainting,
+  shapeEditMode: false,
+  infraMode: false,
+} as const;
+
 /**
  * Push the CURRENT draft content onto the undo stack (deep-copied — the live
  * grid/placements keep mutating immutably after this), dropping the oldest
@@ -258,12 +270,8 @@ export function plannerReducer(
       const grid = parseCellsJson(action.cellsJson, action.width, action.height);
       return {
         ...state,
-        ...disarmedPainting,
+        ...enterSelectionMode,
         past: [], // new garden context — history cleared (5.3-D R2)
-        // R5 (CR accept): another garden's hydration opens in SELECTION mode
-        // — a still-armed type must not turn garden B into a paint surface.
-        // The armed type itself stays remembered, like every mode exit.
-        infraMode: false,
         grid,
         layoutWidth: action.width,
         layoutHeight: action.height,
@@ -290,7 +298,7 @@ export function plannerReducer(
       // and shape-edit mode is left, so the fresh grid starts in a clean state.
       return {
         ...state,
-        ...disarmedPainting,
+        ...enterSelectionMode,
         // Undoable content change (5.3-D R2) — but NEVER push the pre-setup
         // null-grid snapshot (R3, CR accept): undoing the very FIRST setup
         // would restore grid:null with lastSaved:null and strand the user on
@@ -302,11 +310,6 @@ export function plannerReducer(
         cellSize: action.cellSize,
         placements: [],
         lastSaved: null,
-        shapeEditMode: false,
-        // The fresh grid starts in SELECTION mode (5.4): infrastructure mode
-        // escapes neither — the armed type stays remembered, like every
-        // other mode exit.
-        infraMode: false,
         isDirty: true,
       };
 

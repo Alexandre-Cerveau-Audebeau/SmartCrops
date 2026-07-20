@@ -1065,6 +1065,26 @@ describe('plannerReducer infrastructure paint (SMA-15 5.4)', () => {
     expect(s.infraType).toBe('wall'); // remembered for re-entry, mode off
   });
 
+  it('HYDRATE_FROM_LAYOUT leaves shape-edit mode too (SMA-303)', () => {
+    // Shape-edit in garden A, then hydrate garden B: the new garden must
+    // arrive in SELECTION mode, not in A's shape-edit session.
+    let s = plannerReducer(armed(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    expect(s.shapeEditMode).toBe(true);
+    s = plannerReducer(s, {
+      type: 'HYDRATE_FROM_LAYOUT',
+      width: 2,
+      height: 2,
+      cellSize: '1m',
+      cellsJson: null,
+      placements: [],
+    });
+    expect(s.shapeEditMode).toBe(false);
+    expect(s.infraType).toBe('wall'); // remembered, like every mode exit
+  });
+
   it('SETUP_CONFIRMED starts the fresh grid in SELECTION mode (infra mode reset too)', () => {
     // Arm on a draft, discard it, re-setup: the new grid must not open as a
     // paint surface with the stale type still armed (workflow finding).
