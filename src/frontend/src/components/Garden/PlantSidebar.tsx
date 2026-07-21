@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -16,7 +16,7 @@ import Typography from '@mui/material/Typography';
 import { useTranslation } from 'react-i18next';
 import { STICKY_OFFSET } from '../../constants/layout';
 import { spacingToFootprintCells } from '../../pages/gardenPlanner/placementGeometry';
-import { iosSwitchSx, type PlannerTokens } from '../../theme/plannerTokens';
+import { footprintBadgeSx, iosSwitchSx } from '../../theme/plannerTokens';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Plant } from '../../types/Plant';
 import { getPlantDisplayName } from '../../utils/getPlantDisplayName';
@@ -36,6 +36,11 @@ interface Props {
   onPlantSelect: (plantId: string | null) => void;
   /** Grid cell size ('25cm' | '50cm' | '1m') — sizes the footprint badges (SMA-193). */
   cellSize?: string;
+  /**
+   * DnD (lot 2): raw pointerdown on a plant row — the page's drag engine
+   * arms a threshold-gated sidebar drag; plain clicks keep the toggle.
+   */
+  onPlantPointerDown?: (plantId: string, e: React.PointerEvent) => void;
   // SMA-15 (5.4): the armed infrastructure type — selecting a row arms it
   // for painting (and enters the Infrastructures mode); re-clicking disarms.
   selectedInfraType?: InfrastructureType | null;
@@ -55,23 +60,7 @@ interface Props {
 
 type TabValue = 'plants' | 'soils' | 'infrastructure';
 
-/** Footprint badge chip (SMA-193): solid border when the spacing is known,
- * dashed for the mockup's unknown "1×1?" (Achillea) — shared so the two
- * badge variants can never drift apart visually. */
-const footprintBadgeSx = (tk: PlannerTokens, known: boolean) => ({
-  fontSize: 10.5,
-  fontWeight: 700,
-  lineHeight: 1.4,
-  borderRadius: '999px',
-  px: '8px',
-  py: '1px',
-  flexShrink: 0,
-  bgcolor: tk.segBg,
-  border: `1px ${known ? 'solid' : 'dashed'} ${tk.divider}`,
-  color: tk.muted,
-});
-
-export default function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', selectedInfraType = null, onInfraSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
+function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
   const [activeTab, setActiveTab] = useState<TabValue>('plants');
@@ -317,10 +306,15 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
                       // Re-clicking the armed plant disarms it (SMA-193) —
                       // same toggle grammar as the infrastructure rows.
                       onClick={() => onPlantSelect(selected ? null : plant.id)}
+                      // DnD (lot 2): the drag engine sees the pointerdown
+                      // first; a plain click still lands on onClick above.
+                      onPointerDown={onPlantPointerDown ? (e: React.PointerEvent) => onPlantPointerDown(plant.id, e) : undefined}
                       // R4 (mockup metrics): row padding 10×14.
                       sx={{
                         px: '14px',
                         py: '10px',
+                        // Extension (lot 2 R1): a touch drag must feed the pointer engine, not scroll the list.
+                        touchAction: 'none',
                         // R5 (CR accept): the selected marker uses the planner
                         // token, not the generic theme primary.
                         borderLeft: selected
@@ -392,3 +386,7 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
     </Box>
   );
 }
+
+// Memoized export (perf round, lot 2 R2): every prop is stable during a
+// drag, so the 500-plant list contributes zero renders to a drag frame.
+export default memo(PlantSidebar);

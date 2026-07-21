@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import useMediaQuery from '@mui/material/useMediaQuery';
@@ -10,7 +10,7 @@ import {
   INFRA_META,
   type InfraRegion,
 } from '../../utils/infrastructure';
-import { getPlannerTokens, type PlannerTokens } from '../../theme/plannerTokens';
+import { GAP_PX, getPlannerTokens, type PlannerTokens } from '../../theme/plannerTokens';
 import { getPlantColor } from '../../utils/plantColor';
 import { Sym } from '../Sym';
 
@@ -52,6 +52,26 @@ interface Props {
   onCellDragEnter?: (row: number, col: number) => void;
   onCellDragEnd?: () => void;
   cellSizePx?: number;
+  /**
+   * DnD (lot 2): raw pointerdown on a NON-paint cell — the page's drag
+   * engine decides whether it becomes a move-drag (placement under the
+   * cell, Place mode) or stays a click.
+   */
+  onCellPointerDown?: (row: number, col: number, e: React.PointerEvent) => void;
+  /**
+   * DnD (lot 2): the grid-snapped candidate rect under an active drag —
+   * covered cells render the §7 target treatment (valid: dashed prim;
+   * invalid: red hatch + dashed danger).
+   */
+  dragTarget?: {
+    startRow: number;
+    startCol: number;
+    spanRows: number;
+    spanCols: number;
+    valid: boolean;
+  } | null;
+  /** DnD (lot 2): exposes the role="grid" element for pointer→cell math. */
+  gridElRef?: (el: HTMLDivElement | null) => void;
 }
 
 // Base cells re-skinned to the design tokens (SMA-209: cellOn/cellOff exist
@@ -98,7 +118,8 @@ const axisLabelSx = {
 // CR accept): the overlays compute absolute geometry from these numbers and
 // the flex grid + axis rails consume the DERIVED sx strings below, so the
 // two can never drift.
-const GAP_PX = { xs: 2, sm: 3 } as const;
+// §4 gap now lives in plannerTokens (lot 2 — react-refresh forbids
+// non-component exports here); the CELL_GAP css strings stay derived.
 const CELL_GAP = { xs: `${GAP_PX.xs}px`, sm: `${GAP_PX.sm}px` } as const;
 
 /**
@@ -256,7 +277,219 @@ function PlantBlock({
   );
 }
 
-export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, placements, exposure, castShadow, onCellClick, onCellDragStart, onCellDragEnter, onCellDragEnd, cellSizePx = 44 }: Props) {
+/**
+ * One grid cell, MEMOIZED (perf round, lot 2 R2): during a drag the page
+ * re-renders once per traversed cell, but every prop here is a stable
+ * primitive/reference EXCEPT `targetState` on the cells entering/leaving the
+ * candidate rect — so of the ~500 cells only that handful re-renders (the
+ * measured lag was all ~500 cells rebuilding their sx per traversed cell).
+ * The DOM/aria output is byte-identical to the pre-extraction inline cells.
+ */
+const GridCell = memo(function GridCell({
+  cell,
+  r,
+  c,
+  paintMode,
+  shapeEditMode,
+  hasDrag,
+  tint,
+  cast,
+  hasPlacement,
+  placementName,
+  targetState,
+  cellSizePx,
+  tk,
+  onCellClick,
+  onCellDragStart,
+  onCellDragEnter,
+  onCellDragEnd,
+  onCellPointerDown,
+}: {
+  cell: CellData;
+  r: number;
+  c: number;
+  paintMode: boolean;
+  shapeEditMode: boolean;
+  hasDrag: boolean;
+  tint: ExposureCategory | null;
+  cast: boolean;
+  hasPlacement: boolean;
+  placementName?: string;
+  targetState: 'valid' | 'invalid' | null;
+  cellSizePx: number;
+  tk: PlannerTokens;
+  onCellClick?: (row: number, col: number, anchorEl?: HTMLElement) => void;
+  onCellDragStart?: (row: number, col: number) => void;
+  onCellDragEnter?: (row: number, col: number) => void;
+  onCellDragEnd?: () => void;
+  onCellPointerDown?: (row: number, col: number, e: React.PointerEvent) => void;
+}) {
+  const { t } = useTranslation();
+  const baseBg = tint ? tk.expo[tint].fill : getCellBg(cell, tk);
+  const placementOnInactive = !cell.active && hasPlacement;
+  const opacity = placementOnInactive ? 0.4 : (cell.active ? 1 : 0.5);
+  // Cell borders mapped to tokens (R2): the anomaly marker (placement on an
+  // inactive cell) keeps the strong `muted` dashed; every other cell takes
+  // the generic token border — the plant is an OVERLAY since R4 and never
+  // restyles its cells.
+  const border = placementOnInactive
+    ? `1px dashed ${tk.muted}`
+    : `1px solid ${
+        tint
+          ? tk.expo[tint].border
+          : cell.active
+            ? tk.cellOnBd
+            : tk.cellOffBd
+      }`;
+  const commonSx = {
+    width: cellSizePx,
+    height: cellSizePx,
+    bgcolor: baseBg,
+    // "Ombre" AND "Ombre portée" carry the §3 hatch (§9) as the cell's
+    // background-image — the cast overlay is what the moment/season presets
+    // visibly move (5.4).
+    ...((tint === 'shade' || cast) && { backgroundImage: tk.hatch }),
+    border,
+    borderRadius: '4px', // §4: radius cellule 4px (border 1px)
+    transition: 'background-color 0.1s',
+    opacity,
+    // DnD target rect (lot 2, §7): valid = 2px dashed prim + light green
+    // fill (tk.cellOn — §7's "fond vert léger", no new hex); invalid = §3
+    // red hatch + 2px dashed danger.
+    ...(targetState === 'valid'
+      ? { bgcolor: tk.cellOn, border: `2px dashed ${tk.prim}` }
+      : targetState === 'invalid'
+        ? { backgroundImage: tk.redHatch, border: `2px dashed ${tk.dangTx}` }
+        : undefined),
+    '&:hover': {
+      bgcolor: paintMode
+        ? getCellHoverBg(cell, tk)
+        : cell.active && !tint
+          ? tk.cellOnBd
+          : baseBg,
+    },
+  };
+
+  if (paintMode) {
+    // The infra label ANNOUNCES the cell's current type (a paint tap on a
+    // matching cell clears it — the toggle polarity).
+    const paintLabel = shapeEditMode
+      ? t('planner.cell.toggleCell')
+      : cell.infrastructure
+        ? `${t(`planner.infra.types.${cell.infrastructure}`)} — ${t('planner.cell.paintCell')}`
+        : t('planner.cell.paintCell');
+    return (
+      <Box
+        component="button"
+        type="button"
+        // R6 (CR accept): shape-edit buttons stay GRID CELLS for assistive
+        // tech — the row's children are gridcells in both modes; button
+        // behavior and label are unchanged. The infra paint mode (5.4)
+        // reuses the same surface with its own label.
+        role="gridcell"
+        aria-colindex={c + 1}
+        data-exposure={tint ?? undefined}
+        data-cast-shadow={cast || undefined}
+        onPointerDown={hasDrag ? (e: React.PointerEvent) => { e.preventDefault(); onCellDragStart!(r, c); } : undefined}
+        onPointerEnter={hasDrag ? () => onCellDragEnter!(r, c) : undefined}
+        // Keyboard path (5.4): Enter/Space fire a detail-0 click on a real
+        // <button> — treated as a one-cell paint (start + end). Pointer
+        // clicks (detail > 0) are ignored: their pointerdown already
+        // painted, a second toggle would undo it.
+        onClick={hasDrag ? (e: React.MouseEvent) => {
+          if (e.detail === 0) {
+            onCellDragStart!(r, c);
+            onCellDragEnd!();
+          }
+        } : undefined}
+        aria-label={`${paintLabel} (${columnLabel(c)}${r + 1})`}
+        sx={{
+          ...commonSx,
+          cursor: 'pointer',
+          p: 0,
+          outline: 'none',
+          '&:focus-visible': {
+            outline: '2px solid',
+            outlineColor: 'primary.main',
+            outlineOffset: -2,
+            // Above the §6 region overlay — the inset ring must stay
+            // visible on cells an opaque block covers.
+            position: 'relative' as const,
+            zIndex: 3,
+          },
+        }}
+      />
+    );
+  }
+
+  const interactive = (cell.active || hasPlacement) && !!onCellClick;
+  return (
+    <Box
+      role="gridcell"
+      data-exposure={tint ?? undefined}
+      data-cast-shadow={cast || undefined}
+      // R3 (CR accept): screen-reader coordinates match the VISIBLE axes —
+      // one-based rows, letter columns, plus explicit indices.
+      aria-rowindex={r + 1}
+      aria-colindex={c + 1}
+      tabIndex={interactive ? 0 : -1}
+      // DnD (lot 2): raw pointerdown feeds the page's drag engine
+      // (move-drag arming); plain clicks keep their behavior below.
+      onPointerDown={onCellPointerDown ? (e: React.PointerEvent) => onCellPointerDown(r, c, e) : undefined}
+      onClick={interactive ? (e: React.MouseEvent<HTMLElement>) => onCellClick!(r, c, e.currentTarget) : undefined}
+      onKeyDown={interactive ? (e: React.KeyboardEvent<HTMLElement>) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onCellClick!(r, c, e.currentTarget);
+        }
+      } : undefined}
+      aria-label={
+        cell.active
+          ? placementName && cell.infrastructure
+            // R5 (CR accept): a plant OVER an infrastructure announces BOTH.
+            ? t('planner.cell.plantedInfraCell', {
+                plant: placementName,
+                type: t(`planner.infra.types.${cell.infrastructure}`),
+                row: r + 1,
+                col: columnLabel(c),
+              })
+            : placementName
+              ? t('planner.cell.plantedCell', { plant: placementName, row: r + 1, col: columnLabel(c) })
+              : cell.infrastructure
+                ? t('planner.cell.infraCell', {
+                    type: t(`planner.infra.types.${cell.infrastructure}`),
+                    row: r + 1,
+                    col: columnLabel(c),
+                  })
+                : tint
+                  ? t('planner.cell.exposureCell', {
+                      category: t(`planner.exposure.categories.${tint}`),
+                      row: r + 1,
+                      col: columnLabel(c),
+                    })
+                  : t('planner.cell.emptyCell', { row: r + 1, col: columnLabel(c) })
+          : t('planner.cell.inactiveCell', { row: r + 1, col: columnLabel(c) })
+      }
+      sx={{
+        ...commonSx,
+        ...(interactive && { cursor: 'pointer' }),
+        // Extension (lot 2 R1): a touch move-drag must feed the pointer engine, not scroll the page.
+        ...(hasPlacement && onCellPointerDown && { touchAction: 'none' }),
+        '&:focus-visible': interactive ? {
+          outline: '2px solid',
+          outlineColor: 'primary.main',
+          outlineOffset: -2,
+          // R5 (CR accept): same elevation as the paint branch — the inset
+          // ring must stay visible above an opaque §6 region.
+          position: 'relative' as const,
+          zIndex: 3,
+        } : undefined,
+      }}
+    />
+  );
+});
+
+function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, placements, exposure, castShadow, onCellClick, onCellDragStart, onCellDragEnter, onCellDragEnd, cellSizePx = 44, onCellPointerDown, dragTarget = null, gridElRef }: Props) {
   const { t } = useTranslation();
   const theme = useTheme();
   const tk = getPlannerTokens(theme.palette.mode === 'dark' ? 'dark' : 'light');
@@ -374,6 +607,7 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
     <Box sx={{ position: 'relative' }}>
     <Box
       role="grid"
+      ref={gridElRef}
       aria-label={t('planner.grid.label')}
       aria-rowcount={height}
       aria-colcount={width}
@@ -395,166 +629,46 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
         >
         {row.map((cell, c) => {
           const placement = placementMap.get(`${r}-${c}`);
-          // Exposure tint (5.3-D, revised R4): the category swatch REPLACES
-          // the cell's fill/border (§3). Since R4 the plant no longer paints
-          // the cell — the tint applies under placements too and shows at
-          // the block's inset edges; inactive cells stay cellOff.
+          // Exposure tint (5.3-D, revised R4) + cast shadow (5.4): derived
+          // here (stable primitives) and passed as scalar props so the
+          // memoized cell only re-renders when ITS inputs change.
           const tint =
             exposure && cell.active ? (exposure[r]?.[c] ?? null) : null;
-          // Cast shadow at the selected moment (5.4): the §9 "Ombre portée"
-          // hatch rides ON TOP of the aggregate tint (placement cells too —
-          // visible at the inset edges, R4).
           const cast = !!(exposure && castShadow?.[r]?.[c] && cell.active);
-          const baseBg = tint ? tk.expo[tint].fill : getCellBg(cell, tk);
-          const placementOnInactive = !cell.active && !!placement;
-          const opacity = placementOnInactive ? 0.4 : (cell.active ? 1 : 0.5);
-          // Cell borders mapped to tokens (R2): the anomaly marker
-          // (placement on an inactive cell) keeps the strong `muted` dashed;
-          // every other cell takes the generic token border — the plant is
-          // an OVERLAY since R4 and never restyles its cells.
-          const border = placementOnInactive
-            ? `1px dashed ${tk.muted}`
-            : `1px solid ${
-                tint
-                  ? tk.expo[tint].border
-                  : cell.active
-                    ? tk.cellOnBd
-                    : tk.cellOffBd
-              }`;
-          const commonSx = {
-            width: cellSizePx,
-            height: cellSizePx,
-            bgcolor: baseBg,
-            // "Ombre" AND "Ombre portée" carry the §3 hatch (§9) as the
-            // cell's background-image — the cast overlay is what the
-            // moment/season presets visibly move (5.4).
-            ...((tint === 'shade' || cast) && { backgroundImage: tk.hatch }),
-            border,
-            borderRadius: '4px', // §4: radius cellule 4px (border 1px)
-            transition: 'background-color 0.1s',
-            opacity,
-            '&:hover': {
-              bgcolor: paintMode
-                ? getCellHoverBg(cell, tk)
-                : cell.active && !tint
-                  ? tk.cellOnBd
-                  : baseBg,
-            },
-          };
-
-          if (paintMode) {
-            // The infra label ANNOUNCES the cell's current type (a paint tap
-            // on a matching cell clears it — the toggle polarity).
-            const paintLabel = shapeEditMode
-              ? t('planner.cell.toggleCell')
-              : cell.infrastructure
-                ? `${t(`planner.infra.types.${cell.infrastructure}`)} — ${t('planner.cell.paintCell')}`
-                : t('planner.cell.paintCell');
-            return (
-              <Box
-                key={`${r}-${c}`}
-                component="button"
-                type="button"
-                // R6 (CR accept): shape-edit buttons stay GRID CELLS for
-                // assistive tech — the row's children are gridcells in both
-                // modes; button behavior and label are unchanged. The infra
-                // paint mode (5.4) reuses the same surface with its own label.
-                role="gridcell"
-                aria-colindex={c + 1}
-                data-exposure={tint ?? undefined}
-                data-cast-shadow={cast || undefined}
-                onPointerDown={hasDrag ? (e: React.PointerEvent) => { e.preventDefault(); onCellDragStart!(r, c); } : undefined}
-                onPointerEnter={hasDrag ? () => onCellDragEnter!(r, c) : undefined}
-                // Keyboard path (5.4): Enter/Space fire a detail-0 click on a
-                // real <button> — treated as a one-cell paint (start + end).
-                // Pointer-driven clicks (detail > 0) are ignored: their
-                // pointerdown already painted, a second toggle would undo it.
-                onClick={hasDrag ? (e: React.MouseEvent) => {
-                  if (e.detail === 0) {
-                    onCellDragStart!(r, c);
-                    onCellDragEnd!();
-                  }
-                } : undefined}
-                aria-label={`${paintLabel} (${columnLabel(c)}${r + 1})`}
-                sx={{
-                  ...commonSx,
-                  cursor: 'pointer',
-                  p: 0,
-                  outline: 'none',
-                  '&:focus-visible': {
-                    outline: '2px solid',
-                    outlineColor: 'primary.main',
-                    outlineOffset: -2,
-                    // Above the §6 region overlay — the inset ring must stay
-                    // visible on cells an opaque block covers.
-                    position: 'relative' as const,
-                    zIndex: 3,
-                  },
-                }}
-              />
-            );
-          }
-
-          const interactive = (cell.active || !!placement) && !!onCellClick;
+          // DnD target rect (lot 2, §7) → per-cell scalar: only cells
+          // entering/leaving the rect see a prop change during a drag —
+          // the perf-round fix (R2): the other ~500 cells bail out in memo.
+          const targetState =
+            dragTarget &&
+            r >= dragTarget.startRow &&
+            r < dragTarget.startRow + dragTarget.spanRows &&
+            c >= dragTarget.startCol &&
+            c < dragTarget.startCol + dragTarget.spanCols
+              ? dragTarget.valid
+                ? ('valid' as const)
+                : ('invalid' as const)
+              : null;
           return (
-            <Box
+            <GridCell
               key={`${r}-${c}`}
-              role="gridcell"
-              data-exposure={tint ?? undefined}
-              data-cast-shadow={cast || undefined}
-              // R3 (CR accept): screen-reader coordinates match the VISIBLE
-              // axes — one-based rows, letter columns, plus explicit indices.
-              aria-rowindex={r + 1}
-              aria-colindex={c + 1}
-              tabIndex={interactive ? 0 : -1}
-              onClick={interactive ? (e: React.MouseEvent<HTMLElement>) => onCellClick!(r, c, e.currentTarget) : undefined}
-              onKeyDown={interactive ? (e: React.KeyboardEvent<HTMLElement>) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onCellClick!(r, c, e.currentTarget);
-                }
-              } : undefined}
-              aria-label={
-                cell.active
-                  ? placement?.plantName && cell.infrastructure
-                    // R5 (CR accept): a plant OVER an infrastructure
-                    // announces BOTH.
-                    ? t('planner.cell.plantedInfraCell', {
-                        plant: placement.plantName,
-                        type: t(`planner.infra.types.${cell.infrastructure}`),
-                        row: r + 1,
-                        col: columnLabel(c),
-                      })
-                    : placement?.plantName
-                      ? t('planner.cell.plantedCell', { plant: placement.plantName, row: r + 1, col: columnLabel(c) })
-                      : cell.infrastructure
-                        ? t('planner.cell.infraCell', {
-                            type: t(`planner.infra.types.${cell.infrastructure}`),
-                            row: r + 1,
-                            col: columnLabel(c),
-                          })
-                        : tint
-                          ? t('planner.cell.exposureCell', {
-                              category: t(`planner.exposure.categories.${tint}`),
-                              row: r + 1,
-                              col: columnLabel(c),
-                            })
-                          : t('planner.cell.emptyCell', { row: r + 1, col: columnLabel(c) })
-                  : t('planner.cell.inactiveCell', { row: r + 1, col: columnLabel(c) })
-              }
-              sx={{
-                ...commonSx,
-                ...(interactive && { cursor: 'pointer' }),
-                '&:focus-visible': interactive ? {
-                  outline: '2px solid',
-                  outlineColor: 'primary.main',
-                  outlineOffset: -2,
-                  // R5 (CR accept): same elevation as the paint branch — the
-                  // inset ring must stay visible above an opaque §6 region.
-                  position: 'relative' as const,
-                  zIndex: 3,
-                } : undefined,
-              }}
+              cell={cell}
+              r={r}
+              c={c}
+              paintMode={paintMode}
+              shapeEditMode={shapeEditMode}
+              hasDrag={!!hasDrag}
+              tint={tint}
+              cast={cast}
+              hasPlacement={!!placement}
+              placementName={placement?.plantName}
+              targetState={targetState}
+              cellSizePx={cellSizePx}
+              tk={tk}
+              onCellClick={onCellClick}
+              onCellDragStart={onCellDragStart}
+              onCellDragEnter={onCellDragEnter}
+              onCellDragEnd={onCellDragEnd}
+              onCellPointerDown={onCellPointerDown}
             />
           );
         })}
@@ -627,3 +741,7 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
     </Box>
   );
 }
+
+// Memoized export (perf round): during a drag only `dragTarget` changes —
+// the grid re-render is cheap once the cells bail out via GridCell's memo.
+export default memo(GardenGrid);

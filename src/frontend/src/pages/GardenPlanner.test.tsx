@@ -30,6 +30,14 @@ import { fetchPlants } from '../services/plantApi';
 
 const basil = { id: 'p1', scientificName: 'Basilicum fixture' } as Plant;
 const maize = { id: 'p2', scientificName: 'Zea mays' } as Plant;
+// Shared by the SMA-193 describes: 90 cm spacing @ 50cm/cell → ceil(90/50) = 2
+// → a 2×2 footprint.
+const courgette = {
+  id: 'p3',
+  scientificName: 'Cucurbita fixture',
+  xPlantSpacingValue: 90,
+  xPlantSpacingUnit: 'cm',
+} as Plant;
 
 const garden = {
   id: 'g1',
@@ -722,13 +730,6 @@ describe('GardenPlanner header save/cancel gating (F3, relocated in R2)', () => 
 // click, the collision toast on rejection, and the Escape mode-preservation
 // pins from the pre-commit review.
 describe('GardenPlanner Place mode + spacing footprints (SMA-193 5.5)', () => {
-  const courgette = {
-    id: 'p3',
-    scientificName: 'Cucurbita fixture',
-    xPlantSpacingValue: 90,
-    xPlantSpacingUnit: 'cm',
-  } as Plant;
-
   // 4×4 empty layout at 50cm/cell: 90 cm spacing → ceil(90/50) = 2 → 2×2.
   const emptyLayout: GardenLayoutData = {
     ...layout,
@@ -835,13 +836,6 @@ describe('GardenPlanner Place mode + spacing footprints (SMA-193 5.5)', () => {
 // SMA-193 R2 — the REPLACE path recomputes the footprint (GitHub Major +
 // Extension convergence): a refused replace toasts and dispatches nothing.
 describe('GardenPlanner replace recompute (SMA-193 R2)', () => {
-  const courgette = {
-    id: 'p3',
-    scientificName: 'Cucurbita fixture',
-    xPlantSpacingValue: 90,
-    xPlantSpacingUnit: 'cm',
-  } as Plant;
-
   it('replacing a 1×1 with a 2×2 that would collide shows the toast and keeps the original', async () => {
     vi.mocked(fetchGarden).mockResolvedValue(garden);
     vi.mocked(fetchLayout).mockResolvedValue({
@@ -928,3 +922,293 @@ describe('GardenPlanner replace recompute (SMA-193 R2)', () => {
     expect(plantArea(grid).queryAllByText('B')).toHaveLength(0);
   });
 });
+
+// SMA-193 lot 2 — pointer drag-and-drop: 6px threshold, ghost + hint,
+// grid-snapped targets, ADD/MOVE outcomes, Escape/pointercancel teardown.
+// Coordinates: desktop cell 58px + 3px gap → 61px track, grid rect at (0,0)
+// in jsdom, so cell (r,c) is hit at (c*61+5, r*61+5).
+describe('GardenPlanner pointer DnD (SMA-193 lot 2)', () => {
+  const at = (row: number, col: number) => ({
+    clientX: col * 61 + 5,
+    clientY: row * 61 + 5,
+  });
+  const ghost = () => document.querySelector('[data-dnd-ghost]');
+
+  async function renderDnd(
+    opts: {
+      placements?: GardenLayoutData['placements'];
+    } = {}
+  ) {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      width: 4,
+      height: 4,
+      placements: opts.placements ?? [],
+    });
+    vi.mocked(fetchPlants).mockResolvedValue([courgette, basil]);
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    const row = await waitFor(() => {
+      const el = screen
+        .getAllByRole('button')
+        .find((b) => within(b).queryAllByText('Cucurbita fixture').length > 0);
+      expect(el).toBeTruthy();
+      return el!;
+    });
+    return { grid, row };
+  }
+
+  it('below the 6px threshold the gesture stays a click (arm toggle, no ghost)', async () => {
+    const { row } = await renderDnd();
+    fireEvent.pointerDown(row, { clientX: 5, clientY: 5, pointerId: 1, isPrimary: true });
+    fireEvent.pointerMove(document, { clientX: 8, clientY: 5, pointerId: 1, isPrimary: true });
+    expect(ghost()).toBeNull();
+    fireEvent.pointerUp(document, { clientX: 8, clientY: 5, pointerId: 1, isPrimary: true });
+    // The click still fires and arms (lot-1 toggle preserved).
+    fireEvent.click(row);
+    expect(screen.getByRole('button', { name: 'Place' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Place' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  it('crossing the threshold starts the drag: arms the plant, shows ghost + hint', async () => {
+    const { row } = await renderDnd();
+    fireEvent.pointerDown(row, { clientX: 5, clientY: 5, pointerId: 1, isPrimary: true });
+    fireEvent.pointerMove(document, { clientX: 30, clientY: 5, pointerId: 1, isPrimary: true });
+    const g = ghost();
+    expect(g).not.toBeNull();
+    expect(g).toHaveAttribute('aria-hidden', 'true');
+    expect(g).toHaveTextContent('2×2'); // the N×N chip
+    expect(
+      screen.getByText('Release to place · Esc to cancel')
+    ).toBeInTheDocument();
+    // Threshold-crossing armed the plant (Place button live).
+    expect(screen.getByRole('button', { name: 'Place' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    fireEvent.pointerUp(document, { clientX: 30, clientY: 5, pointerId: 1, isPrimary: true });
+  });
+
+  it('a sidebar drag dropped on a free cell places the spacing-derived 2x2', async () => {
+    const { grid, row } = await renderDnd();
+    fireEvent.pointerDown(row, { clientX: 5, clientY: 5, pointerId: 1, isPrimary: true });
+    fireEvent.pointerMove(document, { ...at(1, 1), pointerId: 1, isPrimary: true });
+    fireEvent.pointerUp(document, { ...at(1, 1), pointerId: 1, isPrimary: true });
+    // The browser fires a click right after pointerup — simulate it NOW,
+    // inside the one-tick swallow window: it must not toggle-disarm.
+    fireEvent.click(row);
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('gridcell', { name: /Cucurbita fixture at/ })
+      ).toHaveLength(4)
+    );
+    expect(
+      screen.getByRole('gridcell', {
+        name: 'Cucurbita fixture at row 2, column B',
+      })
+    ).toBeInTheDocument();
+    expect(plantArea(grid).getAllByText('C')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Place' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  it('a sidebar drag dropped on an occupied footprint toasts and dispatches nothing', async () => {
+    const { grid, row } = await renderDnd({
+      placements: [
+        {
+          id: 'pl-b',
+          plantId: 'p1',
+          plantScientificName: null,
+          startRow: 0,
+          startCol: 0,
+          spanRows: 1,
+          spanCols: 1,
+          notes: null,
+        },
+      ],
+    });
+    fireEvent.pointerDown(row, { clientX: 200, clientY: 300, pointerId: 1, isPrimary: true });
+    fireEvent.pointerMove(document, { ...at(0, 0), pointerId: 1, isPrimary: true });
+    fireEvent.pointerUp(document, { ...at(0, 0), pointerId: 1, isPrimary: true });
+    await screen.findByText('Collision — overlaps Basilicum fixture (A1)');
+    expect(plantArea(grid).queryAllByText('C')).toHaveLength(0);
+    expect(
+      screen.getAllByRole('gridcell', { name: /Basilicum fixture at/ })
+    ).toHaveLength(1);
+  });
+
+  it('dragging an existing placement moves it (MOVE keeps the footprint)', async () => {
+    const { row } = await renderDnd({
+      placements: [
+        {
+          id: 'pl-c',
+          plantId: 'p3',
+          plantScientificName: null,
+          startRow: 1,
+          startCol: 1,
+          spanRows: 2,
+          spanCols: 2,
+          notes: null,
+        },
+      ],
+    });
+    // Enter Place mode (move-drags are Place-mode-only).
+    fireEvent.click(row);
+    const cells = screen.getAllByRole('gridcell');
+    fireEvent.pointerDown(cells[5]!, { ...at(1, 1), pointerId: 2, isPrimary: true });
+    fireEvent.pointerMove(document, { ...at(2, 2), pointerId: 2, isPrimary: true });
+    expect(ghost()).not.toBeNull();
+    fireEvent.pointerUp(document, { ...at(2, 2), pointerId: 2, isPrimary: true });
+    await waitFor(() =>
+      expect(
+        screen.getByRole('gridcell', {
+          name: 'Cucurbita fixture at row 3, column C',
+        })
+      ).toBeInTheDocument()
+    );
+    expect(
+      screen.getAllByRole('gridcell', { name: /Cucurbita fixture at/ })
+    ).toHaveLength(4);
+  });
+
+  it('a move keeps the placement identity when ANOTHER plant is armed (no mixup)', async () => {
+    await renderDnd({
+      placements: [
+        {
+          id: 'pl-c',
+          plantId: 'p3',
+          plantScientificName: null,
+          startRow: 1,
+          startCol: 1,
+          spanRows: 2,
+          spanCols: 2,
+          notes: null,
+        },
+      ],
+    });
+    // Arm BASIL — not the courgette under the pointer. The move-drag must
+    // carry the PLACEMENT's plant, never the armed one (CR identity draft).
+    const basilRow = await waitFor(() => {
+      const el = screen
+        .getAllByRole('button')
+        .find((b) => within(b).queryAllByText('Basilicum fixture').length > 0);
+      expect(el).toBeTruthy();
+      return el!;
+    });
+    fireEvent.click(basilRow); // Place mode on, basil armed (1×1)
+    const cells = screen.getAllByRole('gridcell');
+    fireEvent.pointerDown(cells[5]!, { ...at(1, 1), pointerId: 2, isPrimary: true });
+    fireEvent.pointerMove(document, { ...at(2, 2), pointerId: 2, isPrimary: true });
+    const g = ghost();
+    expect(g).not.toBeNull();
+    // Ghost identity: Cucurbita's initial + ITS 2×2 chip (armed basil is 1×1).
+    expect(g).toHaveTextContent('C');
+    expect(g).toHaveTextContent('2×2');
+    fireEvent.pointerUp(document, { ...at(2, 2), pointerId: 2, isPrimary: true });
+    await waitFor(() =>
+      expect(
+        screen.getByRole('gridcell', {
+          name: 'Cucurbita fixture at row 3, column C',
+        })
+      ).toBeInTheDocument()
+    );
+    expect(
+      screen.getAllByRole('gridcell', { name: /Cucurbita fixture at/ })
+    ).toHaveLength(4);
+    // Basil was never placed — it stays armed in the sidebar only.
+    expect(
+      screen.queryAllByRole('gridcell', { name: /Basilicum fixture at/ })
+    ).toHaveLength(0);
+  });
+
+  it('a refused move toasts and leaves the placement in place', async () => {
+    const { row } = await renderDnd({
+      placements: [
+        {
+          id: 'pl-c',
+          plantId: 'p3',
+          plantScientificName: null,
+          startRow: 1,
+          startCol: 1,
+          spanRows: 2,
+          spanCols: 2,
+          notes: null,
+        },
+        {
+          id: 'pl-b',
+          plantId: 'p1',
+          plantScientificName: null,
+          startRow: 0,
+          startCol: 0,
+          spanRows: 1,
+          spanCols: 1,
+          notes: null,
+        },
+      ],
+    });
+    fireEvent.click(row); // Place mode on
+    const cells = screen.getAllByRole('gridcell');
+    fireEvent.pointerDown(cells[10]!, { ...at(2, 2), pointerId: 2, isPrimary: true });
+    // Anchor (0,0): the 2x2 candidate covers basil at (0,0) → refused.
+    fireEvent.pointerMove(document, { ...at(0, 0), pointerId: 2, isPrimary: true });
+    fireEvent.pointerUp(document, { ...at(0, 0), pointerId: 2, isPrimary: true });
+    await screen.findByText('Collision — overlaps Basilicum fixture (A1)');
+    expect(
+      screen.getByRole('gridcell', {
+        name: 'Cucurbita fixture at row 2, column B',
+      })
+    ).toBeInTheDocument();
+  });
+
+  it('Escape mid-drag cancels the drag ONLY — mode stays, plant stays armed', async () => {
+    const { row } = await renderDnd();
+    fireEvent.pointerDown(row, { clientX: 5, clientY: 5, pointerId: 1, isPrimary: true });
+    fireEvent.pointerMove(document, { ...at(1, 1), pointerId: 1, isPrimary: true });
+    expect(ghost()).not.toBeNull();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(ghost()).toBeNull();
+    // Place mode survives (the lot-1 Escape-to-selection did NOT fire).
+    expect(screen.getByRole('button', { name: 'Place' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    // No placement was made.
+    expect(
+      screen.queryAllByRole('gridcell', { name: /Cucurbita fixture at/ })
+    ).toHaveLength(0);
+  });
+
+  it('pointercancel cancels like Escape', async () => {
+    const { row } = await renderDnd();
+    fireEvent.pointerDown(row, { clientX: 5, clientY: 5, pointerId: 1, isPrimary: true });
+    fireEvent.pointerMove(document, { ...at(1, 1), pointerId: 1, isPrimary: true });
+    expect(ghost()).not.toBeNull();
+    fireEvent.pointerCancel(document, { pointerId: 1, isPrimary: true });
+    expect(ghost()).toBeNull();
+    expect(
+      screen.queryAllByRole('gridcell', { name: /Cucurbita fixture at/ })
+    ).toHaveLength(0);
+  });
+
+  it('legend shows the DnD entries in Place mode only (with the layer on)', async () => {
+    const { row } = await renderDnd();
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    // Selection mode: no DnD swatches.
+    expect(screen.queryByTestId('legend-dnd-valid')).toBeNull();
+    // Arm → Place mode: both swatches with their §9 labels.
+    fireEvent.click(row);
+    expect(screen.getByTestId('legend-dnd-valid')).toHaveTextContent(
+      'Valid target'
+    );
+    expect(screen.getByTestId('legend-dnd-collision')).toHaveTextContent(
+      'Collision'
+    );
+  });
+});
+

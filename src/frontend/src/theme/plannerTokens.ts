@@ -93,6 +93,12 @@ export interface PlannerTokens {
   // Exposure layer (§3): per-category fill/border + the "Ombre" hatch
   expo: Record<ExposureCategory, ExposureSwatch>;
   hatch: string;
+  // DnD (lot 2): §3 red collision hatch, §7 ghost bg/text, §1/§2 hint pill.
+  redHatch: string;
+  ghostBg: string;
+  ghostTx: string;
+  hintBg: string;
+  hintTx: string;
   // Danger chip (§1/§2 --dang-* — the INFRAS. "Bloque la lumière" badge)
   dangBg: string;
   dangBd: string;
@@ -157,6 +163,13 @@ const LIGHT: PlannerTokens = {
   },
   hatch:
     'repeating-linear-gradient(45deg, rgba(71,94,120,0.18) 0px, rgba(71,94,120,0.18) 3px, transparent 3px, transparent 8px)',
+  // §3 --red-hatch-day, §7 ghost day, §1 --hint-* — all doc-verbatim.
+  redHatch:
+    'repeating-linear-gradient(45deg, rgba(198,40,40,0.30) 0px, rgba(198,40,40,0.30) 4px, rgba(198,40,40,0.08) 4px, rgba(198,40,40,0.08) 9px)',
+  ghostBg: 'rgba(191,227,203,0.92)',
+  ghostTx: '#14532D',
+  hintBg: 'rgba(34,48,42,0.88)',
+  hintTx: '#fff',
   dangBg: '#FDEDED',
   dangBd: '#F2B8B5',
   dangTx: '#B3261E',
@@ -257,6 +270,13 @@ const DARK: PlannerTokens = {
   },
   hatch:
     'repeating-linear-gradient(45deg, rgba(142,170,206,0.30) 0px, rgba(142,170,206,0.30) 3px, transparent 3px, transparent 8px)',
+  // §3 --red-hatch-night, §7 ghost night, §2 --hint-* — all doc-verbatim.
+  redHatch:
+    'repeating-linear-gradient(45deg, rgba(229,90,90,0.40) 0px, rgba(229,90,90,0.40) 4px, rgba(229,90,90,0.10) 4px, rgba(229,90,90,0.10) 9px)',
+  ghostBg: 'rgba(76,180,124,0.45)',
+  ghostTx: '#EAFBF2',
+  hintBg: 'rgba(242,246,250,0.92)',
+  hintTx: '#16294A',
   dangBg: 'rgba(229,90,90,0.13)',
   dangBd: 'rgba(229,90,90,0.45)',
   dangTx: '#F08A8A',
@@ -317,6 +337,28 @@ export function getPlannerTokens(mode: PlannerThemeMode): PlannerTokens {
  * active `--prim`, inactive `--track`) — lifted VERBATIM from the Exposition
  * toggle (R5) so every planner switch shares the exact same look.
  */
+/** §4 grid metrics: the inter-cell gap in px per breakpoint — the single
+ * numeric source the grid, the overlays and the DnD pointer→cell math share
+ * (lot 2: moved here from GardenGrid — component files must only export
+ * components, react-refresh). */
+export const GAP_PX = { xs: 2, sm: 3 } as const;
+
+/** Footprint badge chip (SMA-193): solid border when the spacing is known,
+ * dashed for the mockup's unknown "1×1?" (Achillea). Shared by the sidebar
+ * rows and the DnD ghost's N×N chip (lot 2) so the variants never drift. */
+export const footprintBadgeSx = (tk: PlannerTokens, known: boolean) => ({
+  fontSize: 10.5,
+  fontWeight: 700,
+  lineHeight: 1.4,
+  borderRadius: '999px',
+  px: '8px',
+  py: '1px',
+  flexShrink: 0,
+  bgcolor: tk.segBg,
+  border: `1px ${known ? 'solid' : 'dashed'} ${tk.divider}`,
+  color: tk.muted,
+});
+
 export const iosSwitchSx = (tk: PlannerTokens) =>
   ({
     width: 34,

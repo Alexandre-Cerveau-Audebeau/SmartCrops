@@ -456,7 +456,10 @@
     },
     "dnd": {
       "collisionToast": "Collision — overlaps {{plant}} ({{cell}})",
-      "footprintBlocked": "The {{cells}}×{{cells}} footprint doesn't fit here"
+      "footprintBlocked": "The {{cells}}×{{cells}} footprint doesn't fit here",
+      "dropHint": "Release to place · Esc to cancel",
+      "legendValid": "Valid target",
+      "legendCollision": "Collision"
     },
     "place": {
       "footprintUnknown": "Unknown spacing — manual setting"

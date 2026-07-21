@@ -188,6 +188,12 @@ export type PlannerAction =
       spanRows: number;
       spanCols: number;
     }
+  | {
+      type: 'MOVE_PLACEMENT';
+      placementId: string;
+      startRow: number;
+      startCol: number;
+    }
   | { type: 'REMOVE_PLACEMENT'; placementId: string }
   | { type: 'SET_SHAPE_EDIT_MODE'; enabled: boolean }
   | { type: 'SET_INFRA_TYPE'; infraType: InfrastructureType | null }
@@ -706,6 +712,43 @@ export function plannerReducer(
           p.id === action.placementId
             ? { ...p, plantId: action.plantId, ...candidate }
             : p
+        ),
+        isDirty: true,
+      };
+    }
+
+    case 'MOVE_PLACEMENT': {
+      // Lot 2 (DnD): moving keeps the placement's existing footprint — the
+      // action carries only the new anchor; the candidate revalidates via
+      // footprintFits with the target itself excluded (its old cells are
+      // legal landing ground). Failure is a silent no-op, mirroring
+      // ADD/REPLACE (the toast is the UI's job).
+      const target = state.placements.find((p) => p.id === action.placementId);
+      if (!target || !state.grid) return state;
+      // CR (lot 2 R1): a drop on the placement's own anchor is a pure no-op —
+      // the SAME state object comes back, so no undo entry and no dirty flag.
+      if (
+        action.startRow === target.startRow &&
+        action.startCol === target.startCol
+      ) {
+        return state;
+      }
+      const candidate = {
+        startRow: action.startRow,
+        startCol: action.startCol,
+        spanRows: target.spanRows,
+        spanCols: target.spanCols,
+      };
+      if (
+        !footprintFits(state.grid, state.placements, candidate, target.id).ok
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        past: pushHistory(state),
+        placements: state.placements.map((p) =>
+          p.id === action.placementId ? { ...p, ...candidate } : p
         ),
         isDirty: true,
       };
