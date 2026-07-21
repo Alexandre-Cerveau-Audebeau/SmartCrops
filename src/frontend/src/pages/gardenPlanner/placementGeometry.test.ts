@@ -108,6 +108,27 @@ describe('footprintFits', () => {
       ok: true,
     });
   });
+
+  it('enforces the positive-span invariant itself (R4): zero/negative spans are out-of-bounds', () => {
+    // A 0-span rectangle would pass the bounds arithmetic, skip the cell
+    // loop, and never overlap — the guard rejects it before any of that.
+    expect(footprintFits(grid(4, 4), [], rect(1, 1, 0, 1))).toEqual({
+      ok: false,
+      reason: 'out-of-bounds',
+    });
+    expect(footprintFits(grid(4, 4), [], rect(1, 1, 1, 0))).toEqual({
+      ok: false,
+      reason: 'out-of-bounds',
+    });
+    expect(footprintFits(grid(4, 4), [], rect(1, 1, -1, -1))).toEqual({
+      ok: false,
+      reason: 'out-of-bounds',
+    });
+    // Regression pin: the minimal valid candidate is untouched by the guard.
+    expect(footprintFits(grid(4, 4), [], rect(1, 1, 1, 1))).toEqual({
+      ok: true,
+    });
+  });
 });
 
 describe('spacingToFootprintCells — the mockup anchors', () => {
@@ -175,6 +196,14 @@ describe('spacingToFootprintCells — the mockup anchors', () => {
     // 100 inches = 254 cm exactly → 254/25 = 10.16 → 11; 254/50 = 5.08 → 6.
     expect(spacingToFootprintCells(100, 'inches', '25cm').cells).toBe(11);
     expect(spacingToFootprintCells(100, 'inches', '50cm').cells).toBe(6);
+  });
+
+  it('a ratio genuinely above an integer still ceils UP — the epsilon cannot swallow real overages (R4)', () => {
+    // Boundary companion of the exact-multiple pins above: 100 cm at
+    // 50 cm/cell is exactly 2, so 100.1 cm must take 3 cells. (The dictated
+    // 45 cm/cell variant is not expressible — '45cm' is not a wire value.)
+    expect(spacingToFootprintCells(100.1, 'cm', '50cm').cells).toBe(3);
+    expect(spacingToFootprintCells(25.1, 'cm', '25cm').cells).toBe(2);
   });
 
   it('inches-derived non-terminating ratios stay stable under the epsilon (R3)', () => {

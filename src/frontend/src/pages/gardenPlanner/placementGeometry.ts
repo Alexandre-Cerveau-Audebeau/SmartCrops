@@ -36,8 +36,11 @@ export type FootprintFitResult =
   | { ok: false; reason: 'overlap'; overlapWith: string };
 
 /**
- * Whether a candidate footprint can be placed: fully inside the grid, every
- * covered cell ACTIVE, and no other placement overlapped. Infrastructure
+ * Whether a candidate footprint can be placed: positive spans, fully inside
+ * the grid, every covered cell ACTIVE, and no other placement overlapped.
+ * The guard enforces the ≥1 span invariant ITSELF (R4) instead of trusting
+ * callers — a zero-span rectangle would otherwise pass the bounds check,
+ * skip the cell loop entirely, and never overlap anything. Infrastructure
  * under a plant is deliberately allowed (5.4 renders the composite).
  * `ignorePlacementId` excludes the placement being moved/resized from the
  * overlap scan so it never collides with itself.
@@ -51,6 +54,8 @@ export function footprintFits(
   const rows = grid.length;
   const cols = grid[0]?.length ?? 0;
   if (
+    candidate.spanRows < 1 ||
+    candidate.spanCols < 1 ||
     candidate.startRow < 0 ||
     candidate.startCol < 0 ||
     candidate.startRow + candidate.spanRows > rows ||
