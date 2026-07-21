@@ -13,8 +13,8 @@ import { slotHours } from './lightSchedule';
  * 2 seasons; sun directions absolute per hemisphere; shadow lengths from a
  * discrete (height × season × latitudeBand) table; per-cell aggregation into
  * 4 categories; manual per-cell override wins; indoor lightSchedule is a
- * uniform override. Constants the model left open are implemented as
- * PROPOSED (marked below) and pinned by tests for orchestrator ratification.
+ * uniform override. Constants the model left open are implemented below and
+ * pinned by tests — ratified (SMA-17 harvest #176; v32 §0.3.25).
  */
 
 export type ExposureCategory = 'full' | 'morning' | 'afternoon' | 'shade';
@@ -105,7 +105,7 @@ function shadowDelta(sun: Orientation, orientation: Orientation): [number, numbe
   }
 }
 
-// ── Shadow-length table (PROPOSED — orchestrator ratifies at harvest) ────────
+// ── Shadow-length table (ratified — SMA-17 harvest #176; v32 §0.3.25) ────────
 // Discrete lengths in CELLS at latitudeBand 'mid':
 //   low (≤0.5m):            0 summer / 1 winter
 //   mid (~1-2m wall/fence): 1 summer / 2 winter
@@ -134,8 +134,9 @@ export function shadowLength(
  * Aggregate the three per-moment lit states into a category.
  * Mockup-grounded contract: all three lit → full; morning+noon → morning;
  * noon+evening → afternoon; noon blocked → shade (regardless of the sides).
- * PROPOSED for the non-mockup combo: noon-only → full (best remaining light).
- * All 8 combinations are pinned by tests.
+ * Ratified (SMA-17 harvest #176; v32 §0.3.25) for the non-mockup combo:
+ * noon-only → full (best remaining light). All 8 combinations are pinned by
+ * tests.
  */
 export function aggregateExposure(lit: {
   morning: boolean;
@@ -146,12 +147,12 @@ export function aggregateExposure(lit: {
   if (lit.morning && lit.evening) return 'full';
   if (lit.morning) return 'morning';
   if (lit.evening) return 'afternoon';
-  return 'full'; // PROPOSED: noon-only
+  return 'full'; // ratified: noon-only
 }
 
-// ── Indoor short-circuit (PROPOSED thresholds) ───────────────────────────────
+// ── Indoor short-circuit (ratified thresholds — SMA-17 harvest #176) ─────────
 // Indoor gardens (gardenType='indoor'): the lightSchedule replaces the sun
-// entirely and applies UNIFORMLY to the grid. PROPOSED mapping of total lit
+// entirely and applies UNIFORMLY to the grid. Ratified mapping of total lit
 // hours/day: ≥8h → full; 4–8h → morning (partial); <4h → shade. 'afternoon'
 // is unused for indoor. Malformed/null slots contribute 0 (same structural
 // guard as the dialog's hydration filter, R6).
@@ -245,7 +246,7 @@ export function computeExposureGrid(params: ExposureParams): ExposureGridResult 
     const moment = params.moment;
     const cells: (CellMomentState | null)[][] = [];
     if (isIndoor) {
-      // PROPOSED: artificial light has no sun path — uniformly 'lit' unless
+      // Ratified: artificial light has no sun path — uniformly 'lit' unless
       // the schedule aggregates to shade (consistent with the uniform
       // category), then uniformly 'shadowed'.
       const state: CellMomentState =

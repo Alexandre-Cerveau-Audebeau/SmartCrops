@@ -74,6 +74,17 @@ public record PlantListItemResponse
     public int? MinTempC { get; init; }
     public int? MaxTempC { get; init; }
 
+    /// <summary>
+    /// Perenual Supreme xData — planting spacing value (SMA-193): drives the
+    /// planner's spacing-derived footprint sizing. A factual scalar (like the
+    /// dimensions above), not licensed source text. <c>null</c> when the plant
+    /// has no Perenual enrichment or Perenual carries no spacing.
+    /// </summary>
+    public int? XPlantSpacingValue { get; init; }
+
+    /// <summary>Perenual Supreme xData — planting spacing unit (e.g. "inches", "cm"); pairs with <see cref="XPlantSpacingValue"/>.</summary>
+    public string? XPlantSpacingUnit { get; init; }
+
     public bool? IsEdible { get; init; }
     public bool? IsVegetable { get; init; }
     public bool? IsMedicinal { get; init; }
@@ -164,6 +175,9 @@ public static class PlantListItemMapper
             LightLevel = plant.LightLevel,
             MinTempC = plant.MinTempC,
             MaxTempC = plant.MaxTempC,
+
+            XPlantSpacingValue = plant.PerenualData?.XPlantSpacingValue,
+            XPlantSpacingUnit = plant.PerenualData?.XPlantSpacingUnit,
 
             IsEdible = plant.IsEdible,
             IsVegetable = plant.IsVegetable,

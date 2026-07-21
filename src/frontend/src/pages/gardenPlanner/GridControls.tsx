@@ -140,6 +140,9 @@ interface GridControlsProps {
   /** Infrastructure paint mode + whether a type is armed (SMA-15 5.4). */
   infraMode?: boolean;
   infraArmed?: boolean;
+  /** Place mode + whether a plant is armed (SMA-193 5.5). */
+  placeMode?: boolean;
+  placeArmed?: boolean;
   zoom: number;
   canUndo: boolean;
   exposureVisible: boolean;
@@ -155,6 +158,7 @@ interface GridControlsProps {
   onSetExposureSeason: (season: Season) => void;
   onSelectionMode?: () => void;
   onInfraMode?: () => void;
+  onPlaceMode?: () => void;
 }
 
 /**
@@ -169,6 +173,8 @@ export const GridControls = memo(function GridControls({
   shapeEditMode,
   infraMode = false,
   infraArmed = false,
+  placeMode = false,
+  placeArmed = false,
   zoom,
   canUndo,
   exposureVisible,
@@ -184,6 +190,7 @@ export const GridControls = memo(function GridControls({
   onSetExposureSeason,
   onSelectionMode,
   onInfraMode,
+  onPlaceMode,
 }: GridControlsProps) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
@@ -212,10 +219,10 @@ export const GridControls = memo(function GridControls({
       }}
     >
       {/* Row 1 — editing actions. The LEFT slot hosts the mode buttons
-          (§10): Sélection + Infrastructures shipped with 5.4 (SMA-15);
-          Placer (DnD) lands with 5.5. Modes are mutually exclusive with
-          shape-edit (the sidebar toggle) — neither button reads active
-          while shape-edit is on. */}
+          (§10): Sélection + Infrastructures shipped with 5.4 (SMA-15),
+          Placer with 5.5 (SMA-193) — mockup order Sélection/Placer/Infras.
+          Modes are mutually exclusive with shape-edit (the sidebar toggle)
+          — no button reads active while shape-edit is on. */}
       <Box
         sx={{
           display: 'flex',
@@ -228,10 +235,21 @@ export const GridControls = memo(function GridControls({
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <ModeButton
               label={t('planner.modes.selection')}
-              active={!shapeEditMode && !infraMode}
+              active={!shapeEditMode && !infraMode && !placeMode}
               onClick={onSelectionMode}
               tk={tk}
             />
+            {/* Entering Placer REQUIRES an armed plant from the sidebar
+                PLANTES tab (the reducer guards it too — SMA-193). */}
+            {onPlaceMode && (
+              <ModeButton
+                label={t('planner.modes.place')}
+                active={placeMode}
+                disabled={!placeMode && !placeArmed}
+                onClick={onPlaceMode}
+                tk={tk}
+              />
+            )}
             {/* Entering Infrastructures REQUIRES an armed type from the
                 sidebar INFRAS. tab (the reducer guards it too). */}
             <ModeButton

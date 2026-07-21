@@ -11,10 +11,12 @@ import Switch from '@mui/material/Switch';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTranslation } from 'react-i18next';
 import { STICKY_OFFSET } from '../../constants/layout';
-import { iosSwitchSx } from '../../theme/plannerTokens';
+import { spacingToFootprintCells } from '../../pages/gardenPlanner/placementGeometry';
+import { iosSwitchSx, type PlannerTokens } from '../../theme/plannerTokens';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Plant } from '../../types/Plant';
 import { getPlantDisplayName } from '../../utils/getPlantDisplayName';
@@ -32,6 +34,8 @@ interface Props {
   onSearchChange: (query: string) => void;
   selectedPlantId: string | null;
   onPlantSelect: (plantId: string | null) => void;
+  /** Grid cell size ('25cm' | '50cm' | '1m') — sizes the footprint badges (SMA-193). */
+  cellSize?: string;
   // SMA-15 (5.4): the armed infrastructure type — selecting a row arms it
   // for painting (and enters the Infrastructures mode); re-clicking disarms.
   selectedInfraType?: InfrastructureType | null;
@@ -51,7 +55,23 @@ interface Props {
 
 type TabValue = 'plants' | 'soils' | 'infrastructure';
 
-export default function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, selectedInfraType = null, onInfraSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
+/** Footprint badge chip (SMA-193): solid border when the spacing is known,
+ * dashed for the mockup's unknown "1×1?" (Achillea) — shared so the two
+ * badge variants can never drift apart visually. */
+const footprintBadgeSx = (tk: PlannerTokens, known: boolean) => ({
+  fontSize: 10.5,
+  fontWeight: 700,
+  lineHeight: 1.4,
+  borderRadius: '999px',
+  px: '8px',
+  py: '1px',
+  flexShrink: 0,
+  bgcolor: tk.segBg,
+  border: `1px ${known ? 'solid' : 'dashed'} ${tk.divider}`,
+  color: tk.muted,
+});
+
+export default function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', selectedInfraType = null, onInfraSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
   const [activeTab, setActiveTab] = useState<TabValue>('plants');
@@ -278,11 +298,25 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
                   const name = getPlantDisplayName(plant, language);
                   const color = getPlantColor(plant.id);
                   const selected = plant.id === selectedPlantId;
+                  // SMA-193: footprint badge from the list DTO's Perenual
+                  // spacing — the SAME rule that sizes the actual placement,
+                  // so the badge can never lie. Unknown → the mockup's
+                  // dashed "1×1?" (Achillea).
+                  const fp = spacingToFootprintCells(
+                    plant.xPlantSpacingValue ?? null,
+                    plant.xPlantSpacingUnit ?? null,
+                    cellSize
+                  );
                   return (
                     <ListItemButton
                       key={plant.id}
                       selected={selected}
-                      onClick={() => onPlantSelect(plant.id)}
+                      // R2 (CR committable): the armed toggle state reaches
+                      // AT — same as the infrastructure rows' aria-pressed.
+                      aria-pressed={selected}
+                      // Re-clicking the armed plant disarms it (SMA-193) —
+                      // same toggle grammar as the infrastructure rows.
+                      onClick={() => onPlantSelect(selected ? null : plant.id)}
                       // R4 (mockup metrics): row padding 10×14.
                       sx={{
                         px: '14px',
@@ -299,12 +333,53 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
                         <Avatar sx={{ width: 34, height: 34, fontSize: 14.5, fontWeight: 800, bgcolor: color }}>{name.charAt(0).toUpperCase()}</Avatar>
                       </ListItemAvatar>
                       <ListItemText
-                        primary={name}
-                        secondary={plant.scientificName}
-                        // R4: name 13.5 w700 tTitle · sci 11.5 italic tSci —
-                        // the sidebar leg of the day-contrast pass.
-                        primaryTypographyProps={{ noWrap: true, sx: { fontSize: 13.5, fontWeight: 700, color: tk.tTitle } }}
-                        secondaryTypographyProps={{ noWrap: true, sx: { fontSize: 11.5, fontStyle: 'italic', color: tk.tSci } }}
+                        disableTypography
+                        primary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {/* R4: name 13.5 w700 tTitle · sci 11.5 italic
+                                tSci — the sidebar leg of the day-contrast
+                                pass (disableTypography keeps both intact
+                                around the badge). */}
+                            <Typography component="span" noWrap sx={{ fontSize: 13.5, fontWeight: 700, color: tk.tTitle, minWidth: 0 }}>
+                              {name}
+                            </Typography>
+                            {fp.known ? (
+                              <Box
+                                component="span"
+                                aria-label={t('planner.sidebar.footprint', { cells: fp.cells })}
+                                sx={footprintBadgeSx(tk, true)}
+                              >
+                                {`${fp.cells}×${fp.cells}`}
+                              </Box>
+                            ) : (
+                              // R2 (Extension finding): the dashed "1×1?" is
+                              // opaque on its own — the tooltip carries the
+                              // États-component explanation and the aria
+                              // combines footprint + meaning so AT never
+                              // reads "one times one question mark".
+                              // describeChild (R3, CR committable): the open
+                              // tooltip becomes the badge's DESCRIPTION — the
+                              // aria-label NAME survives it.
+                              <Tooltip
+                                title={t('planner.place.footprintUnknown')}
+                                describeChild
+                              >
+                                <Box
+                                  component="span"
+                                  aria-label={`1×1 — ${t('planner.place.footprintUnknown')}`}
+                                  sx={footprintBadgeSx(tk, false)}
+                                >
+                                  1×1?
+                                </Box>
+                              </Tooltip>
+                            )}
+                          </Box>
+                        }
+                        secondary={
+                          <Typography component="span" noWrap sx={{ display: 'block', fontSize: 11.5, fontStyle: 'italic', color: tk.tSci }}>
+                            {plant.scientificName}
+                          </Typography>
+                        }
                       />
                     </ListItemButton>
                   );

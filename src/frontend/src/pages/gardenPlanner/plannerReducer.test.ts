@@ -263,6 +263,8 @@ describe('plannerReducer', () => {
       plantId: 'p9',
       row: 0,
       col: 2,
+      spanRows: 1,
+      spanCols: 1,
     });
     s = plannerReducer(s, { type: 'REMOVE_ROW_TOP' });
     expect(s.grid).toHaveLength(2);
@@ -287,6 +289,8 @@ describe('plannerReducer', () => {
       plantId: 'p9',
       row: 2,
       col: 0,
+      spanRows: 1,
+      spanCols: 1,
     });
     s = plannerReducer(s, { type: 'REMOVE_COL_LEFT' });
     expect(s.placements).toHaveLength(1);
@@ -301,6 +305,8 @@ describe('plannerReducer', () => {
       plantId: 'p9',
       row: 0,
       col: 2,
+      spanRows: 1,
+      spanCols: 1,
     });
     s = plannerReducer(s, { type: 'REMOVE_COL_RIGHT' });
     expect(s.grid![0]).toHaveLength(2);
@@ -315,6 +321,8 @@ describe('plannerReducer', () => {
       plantId: 'basil',
       row: 2,
       col: 0,
+      spanRows: 1,
+      spanCols: 1,
     });
     expect(s.placements).toHaveLength(2);
     expect(s.placements[1]).toEqual({
@@ -329,16 +337,105 @@ describe('plannerReducer', () => {
     expect(s.isDirty).toBe(true);
   });
 
-  it('REPLACE_PLACEMENT swaps the plant, keeping id and geometry', () => {
+  it('REPLACE_PLACEMENT swaps the plant, keeping id and anchor (same-size)', () => {
     const s = plannerReducer(hydrated(), {
       type: 'REPLACE_PLACEMENT',
       placementId: 'srv-1',
       plantId: 'tomato',
+      spanRows: 1,
+      spanCols: 1,
     });
     expect(s.placements[0].plantId).toBe('tomato');
     expect(s.placements[0].id).toBe('srv-1');
     expect(s.placements[0].startRow).toBe(1);
     expect(s.isDirty).toBe(true);
+  });
+
+  it('REPLACE_PLACEMENT expands the footprint when the new spans fit (R2)', () => {
+    // srv-1 sits 1×1 at (1,1) in a 3×3 all-active grid: 2×2 at the same
+    // anchor fits (rows 1-2 × cols 1-2) — the spans are REPLACED.
+    const s = plannerReducer(hydrated(), {
+      type: 'REPLACE_PLACEMENT',
+      placementId: 'srv-1',
+      plantId: 'courgette',
+      spanRows: 2,
+      spanCols: 2,
+    });
+    expect(s.placements[0]).toMatchObject({
+      id: 'srv-1',
+      plantId: 'courgette',
+      startRow: 1,
+      startCol: 1,
+      spanRows: 2,
+      spanCols: 2,
+    });
+    expect(s.isDirty).toBe(true);
+  });
+
+  it('REPLACE_PLACEMENT shrinks the footprint back (2×2 → 1×1)', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'REPLACE_PLACEMENT',
+      placementId: 'srv-1',
+      plantId: 'courgette',
+      spanRows: 2,
+      spanCols: 2,
+    });
+    s = plannerReducer(s, {
+      type: 'REPLACE_PLACEMENT',
+      placementId: 'srv-1',
+      plantId: 'basil',
+      spanRows: 1,
+      spanCols: 1,
+    });
+    expect(s.placements[0]).toMatchObject({
+      plantId: 'basil',
+      spanRows: 1,
+      spanCols: 1,
+    });
+  });
+
+  it('REPLACE_PLACEMENT refuses spans that no longer fit (guarded no-op)', () => {
+    // A second placement at (2,2) sits inside the would-be 2×2 expansion of
+    // srv-1 (rows 1-2 × cols 1-2) → overlap. The refusal must leave state
+    // UNCHANGED (same silent-no-op contract as ADD).
+    const base = plannerReducer(hydrated(), {
+      type: 'ADD_PLACEMENT',
+      id: 'new-1',
+      plantId: 'p9',
+      row: 2,
+      col: 2,
+      spanRows: 1,
+      spanCols: 1,
+    });
+    const blocked = plannerReducer(base, {
+      type: 'REPLACE_PLACEMENT',
+      placementId: 'srv-1',
+      plantId: 'courgette',
+      spanRows: 2,
+      spanCols: 2,
+    });
+    expect(blocked).toBe(base);
+    expect(blocked.placements[0].spanRows).toBe(1);
+  });
+
+  it('REPLACE_PLACEMENT ignores the target itself in the overlap scan', () => {
+    // Same-size replace of a 2×2 must not collide with its own footprint.
+    let s = plannerReducer(hydrated(), {
+      type: 'REPLACE_PLACEMENT',
+      placementId: 'srv-1',
+      plantId: 'courgette',
+      spanRows: 2,
+      spanCols: 2,
+    });
+    s = plannerReducer(s, {
+      type: 'REPLACE_PLACEMENT',
+      placementId: 'srv-1',
+      plantId: 'tomato',
+      spanRows: 2,
+      spanCols: 2,
+    });
+    expect(s.placements[0].plantId).toBe('tomato');
+    expect(s.placements[0].spanRows).toBe(2);
   });
 
   it('REMOVE_PLACEMENT filters by id', () => {
@@ -406,6 +503,8 @@ describe('plannerReducer', () => {
       plantId: 'p9',
       row: 2,
       col: 2,
+      spanRows: 1,
+      spanCols: 1,
     });
     const s = plannerReducer(edited, { type: 'MARK_SAVED', submitted });
     // The newer revision is NOT persisted — dirty stays on.
@@ -489,19 +588,16 @@ describe('plannerReducer', () => {
     expect(s.placements).toHaveLength(0);
     expect(s.removedCount).toBe(1);
 
-    // Active-polarity drag over the same cell drops nothing.
+    // Active-polarity drag over the same cell drops nothing. Arrangement
+    // adapted for the 5.5 ADD_PLACEMENT guard (no placement can be CREATED on
+    // an inactive grid anymore): deactivate an EMPTY cell first, then sweep an
+    // active-polarity drag from it across the hydrated placement's cell.
     let a = plannerReducer(hydrated(), {
       type: 'SET_SHAPE_EDIT_MODE',
       enabled: true,
     });
-    a = plannerReducer(a, { type: 'SET_ALL_CELLS', active: false }); // (also clears placements)
-    a = plannerReducer(a, {
-      type: 'ADD_PLACEMENT',
-      id: 'new-1',
-      plantId: 'p9',
-      row: 1,
-      col: 1,
-    });
+    a = plannerReducer(a, { type: 'PAINT_START', row: 0, col: 0 }); // empty cell -> inactive
+    a = plannerReducer(a, { type: 'PAINT_END' });
     const seqBefore = a.removedSeq;
     a = plannerReducer(a, { type: 'PAINT_START', row: 0, col: 0 }); // inactive -> active polarity
     a = plannerReducer(a, { type: 'PAINT_ENTER', row: 1, col: 1 });
@@ -677,6 +773,8 @@ describe('plannerReducer undo history (SMA-17 5.3-D R2)', () => {
       plantId: 'p9',
       row: 0,
       col: 0,
+      spanRows: 1,
+      spanCols: 1,
     });
     expect(s.past).toHaveLength(1);
     s = plannerReducer(s, {
@@ -1198,5 +1296,216 @@ describe('plannerReducer infrastructure paint (SMA-15 5.4)', () => {
   it('selection mode ignores PAINT_* (no mode armed — nothing happens)', () => {
     const s = hydrated();
     expect(plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 })).toBe(s);
+  });
+});
+
+// SMA-193 (5.5 lot 1) — Place mode: exact infra-grammar mirror (armed plant
+// remembered on every exit), plus the footprint guard on ADD_PLACEMENT.
+describe('plannerReducer Place mode (SMA-193 5.5)', () => {
+  /** Hydrated state with a plant armed (enters Place mode). */
+  const placing = (): PlannerState =>
+    plannerReducer(hydrated(), { type: 'SET_PLACE_PLANT', plantId: 'basil' });
+
+  it('SET_PLACE_PLANT arms the plant, enters the mode and leaves the others', () => {
+    // Arrange BOTH other modes as genuinely-true starting states (review
+    // pin): infra armed first, then shape-edit on top of it — arming the
+    // plant must flip each of them off in one dispatch.
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_INFRA_TYPE',
+      infraType: 'wall',
+    });
+    s = plannerReducer(s, { type: 'SET_SHAPE_EDIT_MODE', enabled: true });
+    expect(s.shapeEditMode).toBe(true);
+    s = plannerReducer(s, { type: 'SET_PLACE_PLANT', plantId: 'basil' });
+    expect(s.placePlantId).toBe('basil');
+    expect(s.placeMode).toBe(true);
+    expect(s.infraMode).toBe(false);
+    expect(s.shapeEditMode).toBe(false);
+    expect(s.infraType).toBe('wall'); // remembered, like every mode exit
+  });
+
+  it('SET_PLACE_PLANT(null) exits to selection and clears the plant', () => {
+    const s = plannerReducer(placing(), {
+      type: 'SET_PLACE_PLANT',
+      plantId: null,
+    });
+    expect(s.placeMode).toBe(false);
+    expect(s.placePlantId).toBeNull();
+  });
+
+  it('disarming the plant from ANOTHER mode exits only place (mode preserved)', () => {
+    // The null-disarm can fire while another mode is active (armed values
+    // are remembered): it must not eject the user from that mode (5.5
+    // review — the Escape/Cancel equivalence root cause).
+    let s = plannerReducer(placing(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    s = plannerReducer(s, { type: 'SET_PLACE_PLANT', plantId: null });
+    expect(s.shapeEditMode).toBe(true); // preserved
+    expect(s.placePlantId).toBeNull();
+    expect(s.placeMode).toBe(false);
+  });
+
+  it('ENTER_SELECTION_MODE exits every mode, remembers armed values, disarms painting (R3)', () => {
+    // From shape-edit with an in-flight paint drag…
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 });
+    expect(s.isPainting).toBe(true);
+    s = plannerReducer(s, { type: 'ENTER_SELECTION_MODE' });
+    expect(s.shapeEditMode).toBe(false);
+    expect(s.isPainting).toBe(false);
+    expect(s.paintAction).toBeNull();
+
+    // …from infrastructure mode with an in-flight INFRA paint drag (the F6
+    // triple's third key, infraPaintValue, must disarm too — verify pin)…
+    s = plannerReducer(s, { type: 'SET_INFRA_TYPE', infraType: 'wall' });
+    s = plannerReducer(s, { type: 'PAINT_START', row: 2, col: 2 });
+    expect(s.infraPaintValue).toBe('wall');
+    s = plannerReducer(s, { type: 'ENTER_SELECTION_MODE' });
+    expect(s.infraMode).toBe(false);
+    expect(s.infraType).toBe('wall'); // remembered
+    expect(s.infraPaintValue).toBeNull(); // disarmed with the drag
+
+    // …and from place mode (plant remembered) — the Escape grammar.
+    s = plannerReducer(s, { type: 'SET_PLACE_PLANT', plantId: 'basil' });
+    s = plannerReducer(s, { type: 'ENTER_SELECTION_MODE' });
+    expect(s.placeMode).toBe(false);
+    expect(s.placePlantId).toBe('basil'); // remembered — NOT a disarm
+    expect(s.infraType).toBe('wall'); // both armed values survive the gate
+  });
+
+  it('disarming the remembered infra type from place mode preserves place mode', () => {
+    // Same own-mode-exit rule on the infra side (base behavior restored).
+    let s = plannerReducer(placing(), {
+      type: 'SET_INFRA_TYPE',
+      infraType: 'wall',
+    });
+    s = plannerReducer(s, { type: 'SET_PLACE_MODE', enabled: false });
+    s = plannerReducer(s, { type: 'SET_PLACE_MODE', enabled: true });
+    expect(s.placeMode).toBe(true);
+    s = plannerReducer(s, { type: 'SET_INFRA_TYPE', infraType: null });
+    expect(s.placeMode).toBe(true); // preserved
+    expect(s.infraType).toBeNull();
+    expect(s.infraMode).toBe(false);
+  });
+
+  it('SET_PLACE_MODE cannot enter without an armed plant (guarded no-op)', () => {
+    const s = hydrated();
+    expect(plannerReducer(s, { type: 'SET_PLACE_MODE', enabled: true })).toBe(s);
+  });
+
+  it('SET_PLACE_MODE off keeps the plant armed for a later re-entry', () => {
+    let s = plannerReducer(placing(), { type: 'SET_PLACE_MODE', enabled: false });
+    expect(s.placeMode).toBe(false);
+    expect(s.placePlantId).toBe('basil');
+    s = plannerReducer(s, { type: 'SET_PLACE_MODE', enabled: true });
+    expect(s.placeMode).toBe(true);
+  });
+
+  it('arming an infra type leaves Place mode (mutual exclusion), plant remembered', () => {
+    const s = plannerReducer(placing(), {
+      type: 'SET_INFRA_TYPE',
+      infraType: 'trellis',
+    });
+    expect(s.placeMode).toBe(false);
+    expect(s.infraMode).toBe(true);
+    expect(s.placePlantId).toBe('basil'); // remembered
+  });
+
+  it('SET_SHAPE_EDIT_MODE on leaves Place mode too', () => {
+    const s = plannerReducer(placing(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    expect(s.placeMode).toBe(false);
+    expect(s.shapeEditMode).toBe(true);
+    expect(s.placePlantId).toBe('basil');
+  });
+
+  it('HYDRATE_FROM_LAYOUT opens the next garden in SELECTION mode (Place variant)', () => {
+    const s = plannerReducer(placing(), {
+      type: 'HYDRATE_FROM_LAYOUT',
+      width: 2,
+      height: 2,
+      cellSize: '1m',
+      cellsJson: null,
+      placements: [],
+    });
+    expect(s.placeMode).toBe(false);
+    expect(s.placePlantId).toBe('basil'); // remembered, like every mode exit
+  });
+
+  it('ADD_PLACEMENT stores the provided footprint verbatim', () => {
+    const s = plannerReducer(hydrated(), {
+      type: 'ADD_PLACEMENT',
+      id: 'new-1',
+      plantId: 'basil',
+      row: 2,
+      col: 0,
+      spanRows: 1,
+      spanCols: 2,
+    });
+    expect(s.placements).toHaveLength(2);
+    expect(s.placements[1]).toMatchObject({
+      startRow: 2,
+      startCol: 0,
+      spanRows: 1,
+      spanCols: 2,
+    });
+    expect(s.isDirty).toBe(true);
+  });
+
+  it('ADD_PLACEMENT with an out-of-bounds footprint is a guarded no-op', () => {
+    const s = hydrated();
+    expect(
+      plannerReducer(s, {
+        type: 'ADD_PLACEMENT',
+        id: 'new-1',
+        plantId: 'basil',
+        row: 2,
+        col: 2,
+        spanRows: 2,
+        spanCols: 2,
+      })
+    ).toBe(s);
+  });
+
+  it('ADD_PLACEMENT covering an inactive cell is a guarded no-op', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 }); // (0,0) inactive
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    s = plannerReducer(s, { type: 'SET_SHAPE_EDIT_MODE', enabled: false });
+    const blocked = plannerReducer(s, {
+      type: 'ADD_PLACEMENT',
+      id: 'new-1',
+      plantId: 'basil',
+      row: 0,
+      col: 0,
+      spanRows: 1,
+      spanCols: 1,
+    });
+    expect(blocked).toBe(s);
+  });
+
+  it('ADD_PLACEMENT overlapping an existing placement is a guarded no-op', () => {
+    const s = hydrated(); // srv-1 sits at (1,1)
+    expect(
+      plannerReducer(s, {
+        type: 'ADD_PLACEMENT',
+        id: 'new-1',
+        plantId: 'basil',
+        row: 0,
+        col: 0,
+        spanRows: 2,
+        spanCols: 2,
+      })
+    ).toBe(s);
   });
 });

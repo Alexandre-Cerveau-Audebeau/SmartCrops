@@ -192,6 +192,11 @@ export interface Plant {
   minTempC: number | null;
   maxTempC: number | null;
 
+  /** Perenual Supreme xData spacing (list DTO, SMA-193): drives the planner's spacing-derived footprints; optional — the detail path reads {@link perenualData} instead. */
+  xPlantSpacingValue?: number | null;
+  /** Source unit for {@link xPlantSpacingValue} (observed "inches"; "cm" handled); optional like the value. */
+  xPlantSpacingUnit?: string | null;
+
   isEdible: boolean | null;
   isVegetable: boolean | null;
   isMedicinal: boolean | null;

@@ -451,7 +451,15 @@
     },
     "modes": {
       "selection": "Selection",
+      "place": "Place",
       "infrastructure": "Infrastructures"
+    },
+    "dnd": {
+      "collisionToast": "Collision — overlaps {{plant}} ({{cell}})",
+      "footprintBlocked": "The {{cells}}×{{cells}} footprint doesn't fit here"
+    },
+    "place": {
+      "footprintUnknown": "Unknown spacing — manual setting"
     },
     "infra": {
       "hint": "Place infrastructures on the grid. Blocking elements cast a shadow in the Exposure layer.",
@@ -535,7 +543,8 @@
       "search": "Search plants...",
       "noResults": "No plants found",
       "title": "Plant library",
-      "deselect": "Deselect plant"
+      "deselect": "Deselect plant",
+      "footprint": "{{cells}}×{{cells}} footprint"
     },
     "placement": {
       "position": "Position: row {{row}}, col {{col}}",

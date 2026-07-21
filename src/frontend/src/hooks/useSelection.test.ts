@@ -18,19 +18,18 @@ const placement = (
 });
 
 describe('useSelection', () => {
-  it('selects a placement by id and clears both selections', () => {
+  it('selects a placement by id and clears it', () => {
+    // The armed-plant half moved to the reducer in 5.5 (SMA-193) — its
+    // arming/disarming coverage lives in plannerReducer.test.ts now.
     const placements = [placement('a'), placement('b')];
     const { result } = renderHook(() => useSelection(placements));
 
     act(() => {
-      result.current.selectPlant('basil');
       result.current.selectPlacement('b');
     });
-    expect(result.current.selectedPlantId).toBe('basil');
     expect(result.current.selectedPlacement?.id).toBe('b');
 
     act(() => result.current.clearSelection());
-    expect(result.current.selectedPlantId).toBeNull();
     expect(result.current.selectedPlacementId).toBeNull();
     expect(result.current.selectedPlacement).toBeNull();
   });

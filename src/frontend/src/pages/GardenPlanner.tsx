@@ -59,15 +59,17 @@ import { GridControls } from './gardenPlanner/GridControls';
 import { PlacementDetailPanel } from './gardenPlanner/PlacementDetailPanel';
 import { PlantsInGardenSection } from './gardenPlanner/PlantsInGardenSection';
 import {
+  cellRef,
+  cellSizeToMeters,
+  footprintFits,
+  spacingToFootprintCells,
+  type FootprintFitResult,
+} from './gardenPlanner/placementGeometry';
+import {
   initialPlannerState,
   plannerReducer,
 } from './gardenPlanner/plannerReducer';
 
-function cellSizeToMeters(cellSize: string): number {
-  if (cellSize === '1m') return 1;
-  if (cellSize === '50cm') return 0.5;
-  return 0.25;
-}
 
 // Referentially stable empty catalog for the not-ready renders — a fresh []
 // per render would defeat every downstream memo/effect dep on `allPlants`.
@@ -141,17 +143,13 @@ export default function GardenPlanner() {
     exposureSeason,
     infraMode,
     infraType,
+    placeMode,
+    placePlantId,
   } = state;
   const hasLastSaved = state.lastSaved !== null;
 
-  const {
-    selectedPlantId,
-    selectPlant,
-    selectedPlacementId,
-    selectPlacement,
-    selectedPlacement,
-    clearSelection,
-  } = useSelection(placements);
+  const { selectedPlacementId, selectPlacement, selectedPlacement, clearSelection } =
+    useSelection(placements);
 
   const [garden, setGarden] = useState<Garden | null>(null);
   const [saving, setSaving] = useState(false);
@@ -496,30 +494,30 @@ export default function GardenPlanner() {
     (enabled: boolean) => dispatch({ type: 'SET_SHAPE_EDIT_MODE', enabled }),
     []
   );
-  // SMA-15 (5.4) — mode plumbing. Arming an infrastructure type enters the
-  // Infrastructures mode (reducer) and disarms any armed plant; selecting a
-  // plant symmetrically disarms the infrastructure. The toolbar's Sélection
-  // button exits both non-default modes.
+  // SMA-15 (5.4) / SMA-193 (5.5) — mode plumbing. Arming an infrastructure
+  // type or a plant enters its mode; the reducer's enterSelectionMode spread
+  // makes the modes mutually exclusive while both armed values stay
+  // remembered. The toolbar's Sélection button exits every non-default mode.
   const handleInfraSelect = useCallback(
-    (type: InfrastructureType | null) => {
-      dispatch({ type: 'SET_INFRA_TYPE', infraType: type });
-      if (type) selectPlant(null);
-    },
-    [selectPlant]
+    (type: InfrastructureType | null) =>
+      dispatch({ type: 'SET_INFRA_TYPE', infraType: type }),
+    []
   );
   const handlePlantSelect = useCallback(
-    (plantId: string | null) => {
-      selectPlant(plantId);
-      if (plantId) dispatch({ type: 'SET_INFRA_TYPE', infraType: null });
-    },
-    [selectPlant]
+    (plantId: string | null) => dispatch({ type: 'SET_PLACE_PLANT', plantId }),
+    []
   );
-  const handleSelectionMode = useCallback(() => {
-    dispatch({ type: 'SET_INFRA_MODE', enabled: false });
-    dispatch({ type: 'SET_SHAPE_EDIT_MODE', enabled: false });
-  }, []);
+  const handleSelectionMode = useCallback(
+    // R3: one action through the single reset gate (armed values remembered).
+    () => dispatch({ type: 'ENTER_SELECTION_MODE' }),
+    []
+  );
   const handleInfraMode = useCallback(
     () => dispatch({ type: 'SET_INFRA_MODE', enabled: true }),
+    []
+  );
+  const handlePlaceMode = useCallback(
+    () => dispatch({ type: 'SET_PLACE_MODE', enabled: true }),
     []
   );
   const handleToggleExposure = useCallback(
@@ -580,7 +578,7 @@ export default function GardenPlanner() {
       // Block clicks on inactive cells only when there's no placement to interact with
       if (!grid[row][col].active && !existing) return;
 
-      if (selectedPlantId) {
+      if (placeMode && placePlantId) {
         // Placement is INERT while the active-language catalog is unavailable
         // (pending or failed): the armed selection raw id could otherwise act
         // invisibly — the sidebar shows no rows, so the user cannot see what
@@ -588,26 +586,88 @@ export default function GardenPlanner() {
         // intentionally KEPT and re-materializes visibly once the catalog
         // recovers.
         if (!catalogReady) return;
+        // Footprint from the armed plant's Perenual spacing (SMA-193): the
+        // same spacing→cells rule the sidebar badge shows, checked by the
+        // same predicate the reducer guards with — a rejected placement can
+        // therefore never half-happen; the toast is this layer's only job.
+        const armedPlant = allPlants.find((p) => p.id === placePlantId);
+        const { cells } = spacingToFootprintCells(
+          armedPlant?.xPlantSpacingValue ?? null,
+          armedPlant?.xPlantSpacingUnit ?? null,
+          cellSize
+        );
+        const toastRejection = (fit: FootprintFitResult) => {
+          if (fit.ok) return;
+          if (fit.reason === 'overlap') {
+            const hit = placements.find((p) => p.id === fit.overlapWith);
+            const hitPlant = hit
+              ? allPlants.find((p) => p.id === hit.plantId)
+              : undefined;
+            setMessage({
+              type: 'error',
+              text: t('planner.dnd.collisionToast', {
+                plant: hitPlant
+                  ? getPlantDisplayName(hitPlant, language)
+                  : t('planner.unknownPlant'),
+                cell: hit ? cellRef(hit.startRow, hit.startCol) : '',
+              }),
+            });
+          } else {
+            setMessage({
+              type: 'error',
+              text: t('planner.dnd.footprintBlocked', { cells }),
+            });
+          }
+        };
         if (existing) {
+          // R2 (GitHub Major + Extension convergence): replacing re-derives
+          // the footprint at the target's anchor and pre-checks it with the
+          // target excluded — the exact ADD mirror, incl. the toast.
+          const candidate = {
+            startRow: existing.startRow,
+            startCol: existing.startCol,
+            spanRows: cells,
+            spanCols: cells,
+          };
+          const fit = footprintFits(grid, placements, candidate, existing.id);
+          if (!fit.ok) {
+            toastRejection(fit);
+            return;
+          }
           dispatch({
             type: 'REPLACE_PLACEMENT',
             placementId: existing.id,
-            plantId: selectedPlantId,
+            plantId: placePlantId,
+            spanRows: cells,
+            spanCols: cells,
           });
-        } else {
-          dispatch({
-            type: 'ADD_PLACEMENT',
-            id: `new-${++placementSeq.current}`,
-            plantId: selectedPlantId,
-            row,
-            col,
-          });
+          return;
         }
+        const candidate = {
+          startRow: row,
+          startCol: col,
+          spanRows: cells,
+          spanCols: cells,
+        };
+        const fit = footprintFits(grid, placements, candidate);
+        if (!fit.ok) {
+          toastRejection(fit);
+          return;
+        }
+        dispatch({
+          type: 'ADD_PLACEMENT',
+          id: `new-${++placementSeq.current}`,
+          plantId: placePlantId,
+          row,
+          col,
+          spanRows: cells,
+          spanCols: cells,
+        });
         return;
       }
 
-      // Exposure override picker (5.3-D): layer visible, selection mode (no
-      // armed plant — that branch returned above), ACTIVE cell WITHOUT a
+      // Exposure override picker (5.3-D): layer visible, selection mode (not
+      // placing — that branch returned above), ACTIVE cell WITHOUT a
       // placement. Cells WITH a placement keep the selection behavior below
       // (overriding under a placement is a documented v1 limitation).
       if (exposureVisible && !existing && anchorEl) {
@@ -618,7 +678,7 @@ export default function GardenPlanner() {
 
       selectPlacement(existing ? existing.id : null);
     },
-    [shapeEditMode, infraMode, grid, placements, selectedPlantId, catalogReady, exposureVisible, selectPlacement]
+    [shapeEditMode, infraMode, placeMode, placePlantId, grid, placements, allPlants, cellSize, catalogReady, exposureVisible, selectPlacement, language, t]
   );
 
   const handleRemoveSelectedPlacement = useCallback(() => {
@@ -629,11 +689,23 @@ export default function GardenPlanner() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') clearSelection();
+      if (e.key === 'Escape') {
+        // Escape clears the placement selection; in Place mode it EXITS to
+        // selection while the armed plant stays REMEMBERED (R3, both review
+        // surfaces converging — exact infra-grammar mirror: the toolbar
+        // Placer button stays enabled to re-enter). Still gated on placeMode
+        // so Escape in shape-edit/infra keeps that mode (and its in-flight
+        // drag) untouched. The sidebar re-click toggle remains the explicit
+        // DISARM (SET_PLACE_PLANT null) — a different intent.
+        clearSelection();
+        if (placeMode) {
+          dispatch({ type: 'ENTER_SELECTION_MODE' });
+        }
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [clearSelection]);
+  }, [clearSelection, placeMode]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -780,18 +852,23 @@ export default function GardenPlanner() {
     // server keeps those changes. Both Cancel buttons are also disabled on
     // `saving`; this guard covers any race between click and state flip.
     if (saving) return;
+    // Pre-5.5 equivalence: clearSelection used to disarm the armed plant too
+    // — gated on placeMode so cancelling from shape-edit/infra keeps that
+    // mode, exactly as before (5.5 review).
     if (!hasLastSaved) {
       // No save yet — discard the setup draft and re-show the setup dialog
       dispatch({ type: 'DISCARD_DRAFT' });
+      if (placeMode) dispatch({ type: 'SET_PLACE_PLANT', plantId: null });
       clearSelection();
       setShowSetup(true);
       setMessage({ type: 'info', text: t('planner.toolbar.changesDiscarded') });
       return;
     }
     dispatch({ type: 'RESTORE_LAST_SAVED' });
+    if (placeMode) dispatch({ type: 'SET_PLACE_PLANT', plantId: null });
     clearSelection();
     setMessage({ type: 'info', text: t('planner.toolbar.changesDiscarded') });
-  }, [saving, hasLastSaved, clearSelection, t]);
+  }, [saving, hasLastSaved, placeMode, clearSelection, t]);
 
   const m = cellSizeToMeters(cellSize);
   const activeCells = grid ? grid.flat().filter((c) => c.active).length : 0;
@@ -865,8 +942,8 @@ export default function GardenPlanner() {
 
   return (
     // Full-width page (R3 item F): the lg Container is replaced by a
-    // full-width wrapper with 24px lateral padding (PROPOSED — orchestrator
-    // ratifies at harvest).
+    // full-width wrapper with 24px lateral padding — settled #177 layout
+    // (24px laterals + the always-reserved 330px detail lane; v32 §0.3.26).
     <Box sx={{ px: '24px', py: 4 }}>
       {/* Config dialog — first setup (a garden with no layout yet) */}
       <GardenConfigDialog
@@ -1109,8 +1186,9 @@ export default function GardenPlanner() {
             plants={allPlants}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
-            selectedPlantId={selectedPlantId}
+            selectedPlantId={placePlantId}
             onPlantSelect={handlePlantSelect}
+            cellSize={cellSize}
             selectedInfraType={infraType}
             onInfraSelect={handleInfraSelect}
             language={language}
@@ -1128,6 +1206,8 @@ export default function GardenPlanner() {
               shapeEditMode={shapeEditMode}
               infraMode={infraMode}
               infraArmed={infraType !== null}
+              placeMode={placeMode}
+              placeArmed={placePlantId !== null}
               zoom={zoom}
               canUndo={state.past.length > 0}
               exposureVisible={exposureVisible}
@@ -1143,6 +1223,7 @@ export default function GardenPlanner() {
               onSetExposureSeason={handleSetExposureSeason}
               onSelectionMode={handleSelectionMode}
               onInfraMode={handleInfraMode}
+              onPlaceMode={handlePlaceMode}
             />
 
           {/* Grid CARD (§4: radius 12, border card-bd, shadow, padding 20/12) —

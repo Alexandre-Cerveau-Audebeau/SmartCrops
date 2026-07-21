@@ -78,6 +78,39 @@ public class PlantsControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task GetAll_ShipsPerenualSpacing_ThroughTheListInclude()
+    {
+        // SMA-193: the planner's footprint sizing reads XPlantSpacing* from
+        // the LIST payload. This pins the whole path — the ApplyListIncludes
+        // PerenualData include AND the mapper projection — so dropping the
+        // include can never silently ship null spacing again (5.5 review).
+        await SeedAsync(
+            new Plant
+            {
+                Id = Guid.NewGuid(),
+                ScientificName = "Spacing Carrier",
+                PlantTypeId = OrnamentalTypeId,
+                PerenualData = new PlantPerenualData
+                {
+                    PerenualId = 4242,
+                    XPlantSpacingValue = 90,
+                    XPlantSpacingUnit = "cm",
+                },
+            },
+            new Plant { Id = Guid.NewGuid(), ScientificName = "No Enrichment", PlantTypeId = OrnamentalTypeId });
+
+        var all = await Client.GetFromJsonAsync<List<PlantListItemResponse>>("/api/plants");
+
+        Assert.NotNull(all);
+        var carrier = Assert.Single(all!, p => p.ScientificName == "Spacing Carrier");
+        Assert.Equal(90, carrier.XPlantSpacingValue);
+        Assert.Equal("cm", carrier.XPlantSpacingUnit);
+        var bare = Assert.Single(all!, p => p.ScientificName == "No Enrichment");
+        Assert.Null(bare.XPlantSpacingValue);
+        Assert.Null(bare.XPlantSpacingUnit);
+    }
+
+    [Fact]
     public async Task GetAll_NeutralDto_DoesNotLeakPerenualSourceText()
     {
         // A plant carrying the denormalised Perenual source-text scalars in the DB.

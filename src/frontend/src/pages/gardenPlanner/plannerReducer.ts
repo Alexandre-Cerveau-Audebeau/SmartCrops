@@ -2,6 +2,7 @@ import type { CellData } from '../../types/GardenLayout';
 import { parseCellsJson } from '../../types/GardenLayout';
 import type { ExposureCategory, Moment, Season } from '../../utils/exposure';
 import type { InfrastructureType } from '../../utils/infrastructure';
+import { footprintFits } from './placementGeometry';
 
 /**
  * A placement with a CLIENT identity. The `id` is the server placement id
@@ -75,6 +76,15 @@ export interface PlannerState {
   infraType: InfrastructureType | null;
   infraPaintValue: InfrastructureType | null;
   /**
+   * Place mode (SMA-193 5.5) — the fourth mutually exclusive editing mode.
+   * Arming a plant from the sidebar ENTERS the mode (and leaves shape-edit +
+   * infrastructure); the mode cannot be entered without an armed plant.
+   * Exact grammar mirror of infraMode/infraType: the armed plant stays
+   * remembered on every mode exit so the toolbar button can re-enter.
+   */
+  placeMode: boolean;
+  placePlantId: string | null;
+  /**
    * Snapshot of the last saved layout. This is the planner's whole "undo":
    * Cancel restores it wholesale (there is no history stack — pre-5.1B the
    * snapshot lived in a ref and handleCancel deep-copied it back).
@@ -128,6 +138,8 @@ export const initialPlannerState: PlannerState = {
   infraMode: false,
   infraType: null,
   infraPaintValue: null,
+  placeMode: false,
+  placePlantId: null,
   lastSaved: null,
   removedCount: 0,
   removedSeq: 0,
@@ -160,12 +172,29 @@ export type PlannerAction =
   | { type: 'REMOVE_ROW_BOTTOM' }
   | { type: 'REMOVE_COL_LEFT' }
   | { type: 'REMOVE_COL_RIGHT' }
-  | { type: 'ADD_PLACEMENT'; id: string; plantId: string; row: number; col: number }
-  | { type: 'REPLACE_PLACEMENT'; placementId: string; plantId: string }
+  | {
+      type: 'ADD_PLACEMENT';
+      id: string;
+      plantId: string;
+      row: number;
+      col: number;
+      spanRows: number;
+      spanCols: number;
+    }
+  | {
+      type: 'REPLACE_PLACEMENT';
+      placementId: string;
+      plantId: string;
+      spanRows: number;
+      spanCols: number;
+    }
   | { type: 'REMOVE_PLACEMENT'; placementId: string }
   | { type: 'SET_SHAPE_EDIT_MODE'; enabled: boolean }
   | { type: 'SET_INFRA_TYPE'; infraType: InfrastructureType | null }
   | { type: 'SET_INFRA_MODE'; enabled: boolean }
+  | { type: 'SET_PLACE_PLANT'; plantId: string | null }
+  | { type: 'SET_PLACE_MODE'; enabled: boolean }
+  | { type: 'ENTER_SELECTION_MODE' }
   | { type: 'ZOOM_IN' }
   | { type: 'ZOOM_OUT' }
   | { type: 'MARK_SAVED'; submitted: LayoutSnapshot }
@@ -220,14 +249,20 @@ const disarmedPainting = {
 
 /** Entering an editing context (fresh setup, another garden's hydration)
  * always lands in SELECTION mode (SMA-303): shape-edit must not leak across
- * garden switches, and a still-armed infra type must not turn the new grid
- * into a paint surface — the armed type itself stays remembered, like every
- * mode exit. Single shared source for these resets so the entry points can
- * never diverge; a future "Place" mode (5.5) exits here too. */
+ * garden switches, and a still-armed infra type or plant must not turn the
+ * new grid into a paint/place surface — the armed type AND the armed plant
+ * stay remembered, like every mode exit. Single shared source for these
+ * resets so the entry points can never diverge. Every SET_*_MODE case spreads
+ * this FIRST and then flips its own flag on (5.5): mutual exclusion between
+ * the four modes is structural, not per-case bookkeeping. The dedicated
+ * ENTER_SELECTION_MODE action (R3) is this constant made visible: the
+ * toolbar's Sélection button and Escape-in-Place both dispatch it, so
+ * "return to selection" is one action, not a per-mode dispatch fan. */
 const enterSelectionMode = {
   ...disarmedPainting,
   shapeEditMode: false,
   infraMode: false,
+  placeMode: false,
 } as const;
 
 /**
@@ -613,7 +648,21 @@ export function plannerReducer(
       };
     }
 
-    case 'ADD_PLACEMENT':
+    case 'ADD_PLACEMENT': {
+      // SMA-193 (5.5): the footprint arrives with the action (spacing→cells
+      // rule computed by the UI) and is GUARDED here — out-of-bounds, an
+      // inactive covered cell, or an overlap with another placement is a
+      // silent reducer no-op; the collision toast is the UI's job.
+      if (!state.grid) return state;
+      const candidate = {
+        startRow: action.row,
+        startCol: action.col,
+        spanRows: action.spanRows,
+        spanCols: action.spanCols,
+      };
+      if (!footprintFits(state.grid, state.placements, candidate).ok) {
+        return state;
+      }
       return {
         ...state,
         past: pushHistory(state),
@@ -622,25 +671,45 @@ export function plannerReducer(
           {
             id: action.id,
             plantId: action.plantId,
-            startRow: action.row,
-            startCol: action.col,
-            spanRows: 1,
-            spanCols: 1,
+            ...candidate,
             notes: null,
           },
         ],
         isDirty: true,
       };
+    }
 
-    case 'REPLACE_PLACEMENT':
+    case 'REPLACE_PLACEMENT': {
+      // R2 (GitHub Major, converging Extension finding): swapping the plant
+      // re-derives the footprint — the candidate keeps the target's anchor
+      // with the NEW spacing-derived spans and revalidates via footprintFits
+      // with the target itself excluded, so a replacement can neither keep a
+      // stale shape nor bypass the collision/inactive/bounds guards. Failure
+      // is a silent no-op, mirroring ADD_PLACEMENT (the toast is UI's job).
+      const target = state.placements.find((p) => p.id === action.placementId);
+      if (!target || !state.grid) return state;
+      const candidate = {
+        startRow: target.startRow,
+        startCol: target.startCol,
+        spanRows: action.spanRows,
+        spanCols: action.spanCols,
+      };
+      if (
+        !footprintFits(state.grid, state.placements, candidate, target.id).ok
+      ) {
+        return state;
+      }
       return {
         ...state,
         past: pushHistory(state),
         placements: state.placements.map((p) =>
-          p.id === action.placementId ? { ...p, plantId: action.plantId } : p
+          p.id === action.placementId
+            ? { ...p, plantId: action.plantId, ...candidate }
+            : p
         ),
         isDirty: true,
       };
+    }
 
     case 'REMOVE_PLACEMENT':
       return {
@@ -652,25 +721,27 @@ export function plannerReducer(
 
     case 'SET_SHAPE_EDIT_MODE':
       // Disabling shape-edit disarms any in-flight paint drag (F6). Enabling
-      // it LEAVES infrastructure mode (5.4 mutual exclusion) — the armed type
-      // stays remembered so the toolbar button can re-enter.
+      // it LEAVES the other modes (mutual exclusion via enterSelectionMode) —
+      // armed type/plant stay remembered so their buttons can re-enter.
       return action.enabled
-        ? { ...state, shapeEditMode: true, infraMode: false, ...disarmedPainting }
-        : { ...state, shapeEditMode: false, ...disarmedPainting };
+        ? { ...state, ...enterSelectionMode, shapeEditMode: true }
+        : { ...state, ...enterSelectionMode };
 
     // ── Infrastructure mode (SMA-15 5.4) ─────────────────────────────────────
     case 'SET_INFRA_TYPE':
-      // Arming a type ENTERS infrastructure mode (and leaves shape-edit);
-      // disarming (null) falls back to selection mode. Both disarm any
+      // Arming a type ENTERS infrastructure mode (and leaves the others,
+      // enterSelectionMode). Disarming (null) exits ONLY infra mode: unlike
+      // mode entries, a null-disarm can fire while ANOTHER mode is active
+      // (armed values are remembered across mode exits), so it must not
+      // eject the user from shape-edit/place (5.5 review). Both disarm any
       // in-flight drag (F6 contract).
       return action.infraType === null
-        ? { ...state, infraType: null, infraMode: false, ...disarmedPainting }
+        ? { ...state, ...disarmedPainting, infraType: null, infraMode: false }
         : {
             ...state,
+            ...enterSelectionMode,
             infraType: action.infraType,
             infraMode: true,
-            shapeEditMode: false,
-            ...disarmedPainting,
           };
 
     case 'SET_INFRA_MODE':
@@ -679,14 +750,41 @@ export function plannerReducer(
       // keeps the type armed for a later re-entry.
       if (action.enabled) {
         if (!state.infraType) return state;
-        return {
-          ...state,
-          infraMode: true,
-          shapeEditMode: false,
-          ...disarmedPainting,
-        };
+        return { ...state, ...enterSelectionMode, infraMode: true };
       }
-      return { ...state, infraMode: false, ...disarmedPainting };
+      return { ...state, ...enterSelectionMode };
+
+    // ── Place mode (SMA-193 5.5) — exact infra-grammar mirror ────────────────
+    case 'SET_PLACE_PLANT':
+      // Arming a plant ENTERS place mode (and leaves the others); disarming
+      // (null) clears the plant and exits ONLY place mode — same own-mode
+      // exit rule as SET_INFRA_TYPE's null branch (it can fire while another
+      // mode is active).
+      return action.plantId === null
+        ? { ...state, ...disarmedPainting, placePlantId: null, placeMode: false }
+        : {
+            ...state,
+            ...enterSelectionMode,
+            placePlantId: action.plantId,
+            placeMode: true,
+          };
+
+    case 'SET_PLACE_MODE':
+      // Entering REQUIRES an armed plant (the sidebar arms it) — a guarded
+      // no-op otherwise. Leaving keeps the plant armed for a later re-entry.
+      if (action.enabled) {
+        if (!state.placePlantId) return state;
+        return { ...state, ...enterSelectionMode, placeMode: true };
+      }
+      return { ...state, ...enterSelectionMode };
+
+    case 'ENTER_SELECTION_MODE':
+      // R3 (both surfaces converging): the single visible return-to-selection
+      // gate — every mode exits, painting disarms, and BOTH armed values
+      // (infraType, placePlantId) stay remembered so their toolbar buttons
+      // can re-enter. Escape-in-Place and the toolbar's Sélection button
+      // route through here; explicit DISARMS stay on the SET_*(null) actions.
+      return { ...state, ...enterSelectionMode };
 
     case 'ZOOM_IN':
       return { ...state, zoom: Math.min(ZOOM_MAX, state.zoom + 0.2) };

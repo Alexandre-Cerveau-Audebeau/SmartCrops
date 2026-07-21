@@ -11,9 +11,9 @@ import {
 import type { LightSlot } from '../types/Garden';
 
 // SMA-17 5.3-C — the exposure engine contract. Constants the engraved model
-// left open are implemented as PROPOSED and pinned here for orchestrator
-// ratification: the shadow-length table, the 4 non-mockup aggregation combos,
-// and the indoor lightSchedule thresholds.
+// left open are implemented and pinned here as ratified (SMA-17 harvest
+// #176; v32 §0.3.25): the shadow-length table, the 4 non-mockup aggregation
+// combos, and the indoor lightSchedule thresholds.
 
 type LightSlotInput = LightSlot;
 
@@ -110,7 +110,7 @@ describe('orientation → grid-side mapping (bottom edge faces the orientation)'
   );
 });
 
-describe('shadowLength — full (height × season × latitudeBand) table (PROPOSED)', () => {
+describe('shadowLength — full (height × season × latitudeBand) table (ratified)', () => {
   it.each([
     // height, season, band, length
     ['low', 'summer', 'mid', 0],
@@ -166,15 +166,15 @@ describe('shadowLength — full (height × season × latitudeBand) table (PROPOS
 
 describe('aggregateExposure — all 8 moment combinations', () => {
   it.each([
-    // morning, noon, evening → category (4 mockup-grounded + 4 PROPOSED)
+    // morning, noon, evening → category (4 mockup-grounded + 4 ratified)
     [true, true, true, 'full'], // mockup: lit all three
     [true, true, false, 'morning'], // mockup: morning+noon
     [false, true, true, 'afternoon'], // mockup: noon+evening
     [true, false, true, 'shade'], // mockup rule: noon blocked → shade
-    [false, true, false, 'full'], // PROPOSED: noon-only → full (best remaining light)
-    [true, false, false, 'shade'], // PROPOSED (noon-blocked rule)
-    [false, false, true, 'shade'], // PROPOSED (noon-blocked rule)
-    [false, false, false, 'shade'], // PROPOSED (noon-blocked rule)
+    [false, true, false, 'full'], // ratified: noon-only → full (best remaining light)
+    [true, false, false, 'shade'], // ratified (noon-blocked rule)
+    [false, false, true, 'shade'], // ratified (noon-blocked rule)
+    [false, false, false, 'shade'], // ratified (noon-blocked rule)
   ] as const)('morning=%s noon=%s evening=%s → %s', (morning, noon, evening, expected) => {
     expect(aggregateExposure({ morning, noon, evening })).toBe(expected);
   });
@@ -212,7 +212,7 @@ describe('manual per-cell overrides', () => {
   });
 });
 
-describe('indoor lightSchedule short-circuit (PROPOSED thresholds)', () => {
+describe('indoor lightSchedule short-circuit (ratified thresholds)', () => {
   const indoor = (
     lightSchedule: LightSlotInput[] | null,
     over: Partial<ExposureParams> = {}
@@ -268,7 +268,7 @@ describe('indoor lightSchedule short-circuit (PROPOSED thresholds)', () => {
     expect(categoryAt(result, 1, 1)).toBe('full');
   });
 
-  it('moment mode indoors: uniformly lit unless the schedule aggregates to shade (PROPOSED)', () => {
+  it('moment mode indoors: uniformly lit unless the schedule aggregates to shade (ratified)', () => {
     const lit = indoor([{ start: '06:00', end: '14:00' }], { moment: 'noon' });
     if (lit.mode === 'moment') {
       expect(lit.cells[0][0]).toBe('lit');
