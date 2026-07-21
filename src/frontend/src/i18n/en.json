@@ -458,6 +458,9 @@
       "collisionToast": "Collision — overlaps {{plant}} ({{cell}})",
       "footprintBlocked": "The {{cells}}×{{cells}} footprint doesn't fit here"
     },
+    "place": {
+      "footprintUnknown": "Unknown spacing — manual setting"
+    },
     "infra": {
       "hint": "Place infrastructures on the grid. Blocking elements cast a shadow in the Exposure layer.",
       "types": {
@@ -541,8 +544,7 @@
       "noResults": "No plants found",
       "title": "Plant library",
       "deselect": "Deselect plant",
-      "footprint": "{{cells}}×{{cells}} footprint",
-      "footprintUnknown": "Footprint unknown — 1×1 default"
+      "footprint": "{{cells}}×{{cells}} footprint"
     },
     "placement": {
       "position": "Position: row {{row}}, col {{col}}",

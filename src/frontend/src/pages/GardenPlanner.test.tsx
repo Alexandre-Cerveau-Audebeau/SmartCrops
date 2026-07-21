@@ -811,3 +811,100 @@ describe('GardenPlanner Place mode + spacing footprints (SMA-193 5.5)', () => {
     ).toBeInTheDocument();
   });
 });
+
+// SMA-193 R2 — the REPLACE path recomputes the footprint (GitHub Major +
+// Extension convergence): a refused replace toasts and dispatches nothing.
+describe('GardenPlanner replace recompute (SMA-193 R2)', () => {
+  const courgette = {
+    id: 'p3',
+    scientificName: 'Cucurbita fixture',
+    xPlantSpacingValue: 90,
+    xPlantSpacingUnit: 'cm',
+  } as Plant;
+
+  it('replacing a 1×1 with a 2×2 that would collide shows the toast and keeps the original', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      width: 4,
+      height: 4,
+      placements: [],
+    });
+    vi.mocked(fetchPlants).mockResolvedValue([courgette, basil]);
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    const rowOf = async (text: string) =>
+      await waitFor(() => {
+        const el = screen
+          .getAllByRole('button')
+          .find((b) => within(b).queryAllByText(text).length > 0);
+        expect(el).toBeTruthy();
+        return el!;
+      });
+
+    // Courgette 2×2 at (1,1), then basil 1×1 at (0,0).
+    fireEvent.click(await rowOf('Cucurbita fixture'));
+    fireEvent.click(screen.getAllByRole('gridcell')[5]!);
+    await waitFor(() =>
+      expect(plantArea(grid).getAllByText('C')).toHaveLength(1)
+    );
+    fireEvent.click(await rowOf('Basilicum fixture'));
+    fireEvent.click(screen.getAllByRole('gridcell')[0]!);
+    await waitFor(() =>
+      expect(plantArea(grid).getAllByText('B')).toHaveLength(1)
+    );
+
+    // Re-arm courgette and click basil's cell: the 2×2 candidate at (0,0)
+    // covers (1,1) → refused, toast, basil untouched.
+    fireEvent.click(await rowOf('Cucurbita fixture'));
+    fireEvent.click(screen.getAllByRole('gridcell')[0]!);
+    await screen.findByText('Collision — overlaps Cucurbita fixture (B2)');
+    expect(plantArea(grid).getAllByText('B')).toHaveLength(1);
+    expect(plantArea(grid).getAllByText('C')).toHaveLength(1);
+    expect(
+      screen.getAllByRole('gridcell', { name: /Basilicum fixture at/ })
+    ).toHaveLength(1);
+  });
+
+  it('replacing a 1×1 with a fitting 2×2 swaps the plant AND the footprint', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      width: 4,
+      height: 4,
+      placements: [
+        {
+          id: 'pl1',
+          plantId: 'p1',
+          plantScientificName: null,
+          startRow: 1,
+          startCol: 1,
+          spanRows: 1,
+          spanCols: 1,
+          notes: null,
+        },
+      ],
+    });
+    vi.mocked(fetchPlants).mockResolvedValue([courgette, basil]);
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    const row = await waitFor(() => {
+      const el = screen
+        .getAllByRole('button')
+        .find((b) => within(b).queryAllByText('Cucurbita fixture').length > 0);
+      expect(el).toBeTruthy();
+      return el!;
+    });
+
+    // Arm courgette, click the existing basil 1×1 at (1,1): the 2×2 fits
+    // (rows 1-2 × cols 1-2, nothing else on the grid) → geometry follows.
+    fireEvent.click(row);
+    fireEvent.click(screen.getAllByRole('gridcell')[5]!);
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('gridcell', { name: /Cucurbita fixture at/ })
+      ).toHaveLength(4)
+    );
+    expect(plantArea(grid).queryAllByText('B')).toHaveLength(0);
+  });
+});

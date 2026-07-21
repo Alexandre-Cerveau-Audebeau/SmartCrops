@@ -139,9 +139,40 @@ describe('PlantSidebar (SMA-194)', () => {
     expect(screen.getByText('2×2')).toBeInTheDocument();
     expect(screen.getByLabelText('2×2 footprint')).toBeInTheDocument();
     expect(screen.getByText('1×1?')).toBeInTheDocument();
-    expect(
-      screen.getByLabelText('Footprint unknown — 1×1 default')
-    ).toBeInTheDocument();
+  });
+
+  it('unknown-footprint badge explains itself: tooltip + combined aria; known badges do not (R2)', async () => {
+    renderSidebar({
+      plants: [
+        { ...ivy, xPlantSpacingValue: 90, xPlantSpacingUnit: 'cm' } as Plant,
+        fern, // no spacing → unknown badge
+      ],
+      cellSize: '50cm',
+    });
+    // AT hears footprint + meaning, never "one times one question mark".
+    const unknownBadge = screen.getByLabelText(
+      '1×1 — Unknown spacing — manual setting'
+    );
+    expect(unknownBadge).toHaveTextContent('1×1?');
+    // Hovering surfaces the États-component explanation as a tooltip.
+    fireEvent.mouseOver(unknownBadge);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Unknown spacing — manual setting'
+    );
+    // The known badge keeps its plain footprint label — no tooltip wiring.
+    expect(screen.getByLabelText('2×2 footprint')).not.toHaveAttribute(
+      'aria-describedby'
+    );
+  });
+
+  it('plant rows expose the armed state via aria-pressed (R2, CR committable)', () => {
+    renderSidebar({ selectedPlantId: 'p1' });
+    const rowOf = (text: string) =>
+      screen
+        .getAllByRole('button')
+        .find((el) => within(el).queryAllByText(text).length > 0)!;
+    expect(rowOf('Lierre')).toHaveAttribute('aria-pressed', 'true');
+    expect(rowOf('Athyrium vidalii')).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('arms a type on click and disarms it with null on re-click (SMA-303)', () => {

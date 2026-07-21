@@ -63,6 +63,7 @@ import {
   cellSizeToMeters,
   footprintFits,
   spacingToFootprintCells,
+  type FootprintFitResult,
 } from './gardenPlanner/placementGeometry';
 import {
   initialPlannerState,
@@ -585,14 +586,6 @@ export default function GardenPlanner() {
         // intentionally KEPT and re-materializes visibly once the catalog
         // recovers.
         if (!catalogReady) return;
-        if (existing) {
-          dispatch({
-            type: 'REPLACE_PLACEMENT',
-            placementId: existing.id,
-            plantId: placePlantId,
-          });
-          return;
-        }
         // Footprint from the armed plant's Perenual spacing (SMA-193): the
         // same spacing→cells rule the sidebar badge shows, checked by the
         // same predicate the reducer guards with — a rejected placement can
@@ -603,14 +596,8 @@ export default function GardenPlanner() {
           armedPlant?.xPlantSpacingUnit ?? null,
           cellSize
         );
-        const candidate = {
-          startRow: row,
-          startCol: col,
-          spanRows: cells,
-          spanCols: cells,
-        };
-        const fit = footprintFits(grid, placements, candidate);
-        if (!fit.ok) {
+        const toastRejection = (fit: FootprintFitResult) => {
+          if (fit.ok) return;
           if (fit.reason === 'overlap') {
             const hit = placements.find((p) => p.id === fit.overlapWith);
             const hitPlant = hit
@@ -631,6 +618,40 @@ export default function GardenPlanner() {
               text: t('planner.dnd.footprintBlocked', { cells }),
             });
           }
+        };
+        if (existing) {
+          // R2 (GitHub Major + Extension convergence): replacing re-derives
+          // the footprint at the target's anchor and pre-checks it with the
+          // target excluded — the exact ADD mirror, incl. the toast.
+          const candidate = {
+            startRow: existing.startRow,
+            startCol: existing.startCol,
+            spanRows: cells,
+            spanCols: cells,
+          };
+          const fit = footprintFits(grid, placements, candidate, existing.id);
+          if (!fit.ok) {
+            toastRejection(fit);
+            return;
+          }
+          dispatch({
+            type: 'REPLACE_PLACEMENT',
+            placementId: existing.id,
+            plantId: placePlantId,
+            spanRows: cells,
+            spanCols: cells,
+          });
+          return;
+        }
+        const candidate = {
+          startRow: row,
+          startCol: col,
+          spanRows: cells,
+          spanCols: cells,
+        };
+        const fit = footprintFits(grid, placements, candidate);
+        if (!fit.ok) {
+          toastRejection(fit);
           return;
         }
         dispatch({

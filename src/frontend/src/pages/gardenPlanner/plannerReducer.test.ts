@@ -337,16 +337,105 @@ describe('plannerReducer', () => {
     expect(s.isDirty).toBe(true);
   });
 
-  it('REPLACE_PLACEMENT swaps the plant, keeping id and geometry', () => {
+  it('REPLACE_PLACEMENT swaps the plant, keeping id and anchor (same-size)', () => {
     const s = plannerReducer(hydrated(), {
       type: 'REPLACE_PLACEMENT',
       placementId: 'srv-1',
       plantId: 'tomato',
+      spanRows: 1,
+      spanCols: 1,
     });
     expect(s.placements[0].plantId).toBe('tomato');
     expect(s.placements[0].id).toBe('srv-1');
     expect(s.placements[0].startRow).toBe(1);
     expect(s.isDirty).toBe(true);
+  });
+
+  it('REPLACE_PLACEMENT expands the footprint when the new spans fit (R2)', () => {
+    // srv-1 sits 1×1 at (1,1) in a 3×3 all-active grid: 2×2 at the same
+    // anchor fits (rows 1-2 × cols 1-2) — the spans are REPLACED.
+    const s = plannerReducer(hydrated(), {
+      type: 'REPLACE_PLACEMENT',
+      placementId: 'srv-1',
+      plantId: 'courgette',
+      spanRows: 2,
+      spanCols: 2,
+    });
+    expect(s.placements[0]).toMatchObject({
+      id: 'srv-1',
+      plantId: 'courgette',
+      startRow: 1,
+      startCol: 1,
+      spanRows: 2,
+      spanCols: 2,
+    });
+    expect(s.isDirty).toBe(true);
+  });
+
+  it('REPLACE_PLACEMENT shrinks the footprint back (2×2 → 1×1)', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'REPLACE_PLACEMENT',
+      placementId: 'srv-1',
+      plantId: 'courgette',
+      spanRows: 2,
+      spanCols: 2,
+    });
+    s = plannerReducer(s, {
+      type: 'REPLACE_PLACEMENT',
+      placementId: 'srv-1',
+      plantId: 'basil',
+      spanRows: 1,
+      spanCols: 1,
+    });
+    expect(s.placements[0]).toMatchObject({
+      plantId: 'basil',
+      spanRows: 1,
+      spanCols: 1,
+    });
+  });
+
+  it('REPLACE_PLACEMENT refuses spans that no longer fit (guarded no-op)', () => {
+    // A second placement at (2,2) sits inside the would-be 2×2 expansion of
+    // srv-1 (rows 1-2 × cols 1-2) → overlap. The refusal must leave state
+    // UNCHANGED (same silent-no-op contract as ADD).
+    const base = plannerReducer(hydrated(), {
+      type: 'ADD_PLACEMENT',
+      id: 'new-1',
+      plantId: 'p9',
+      row: 2,
+      col: 2,
+      spanRows: 1,
+      spanCols: 1,
+    });
+    const blocked = plannerReducer(base, {
+      type: 'REPLACE_PLACEMENT',
+      placementId: 'srv-1',
+      plantId: 'courgette',
+      spanRows: 2,
+      spanCols: 2,
+    });
+    expect(blocked).toBe(base);
+    expect(blocked.placements[0].spanRows).toBe(1);
+  });
+
+  it('REPLACE_PLACEMENT ignores the target itself in the overlap scan', () => {
+    // Same-size replace of a 2×2 must not collide with its own footprint.
+    let s = plannerReducer(hydrated(), {
+      type: 'REPLACE_PLACEMENT',
+      placementId: 'srv-1',
+      plantId: 'courgette',
+      spanRows: 2,
+      spanCols: 2,
+    });
+    s = plannerReducer(s, {
+      type: 'REPLACE_PLACEMENT',
+      placementId: 'srv-1',
+      plantId: 'tomato',
+      spanRows: 2,
+      spanCols: 2,
+    });
+    expect(s.placements[0].plantId).toBe('tomato');
+    expect(s.placements[0].spanRows).toBe(2);
   });
 
   it('REMOVE_PLACEMENT filters by id', () => {

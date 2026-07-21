@@ -181,7 +181,13 @@ export type PlannerAction =
       spanRows: number;
       spanCols: number;
     }
-  | { type: 'REPLACE_PLACEMENT'; placementId: string; plantId: string }
+  | {
+      type: 'REPLACE_PLACEMENT';
+      placementId: string;
+      plantId: string;
+      spanRows: number;
+      spanCols: number;
+    }
   | { type: 'REMOVE_PLACEMENT'; placementId: string }
   | { type: 'SET_SHAPE_EDIT_MODE'; enabled: boolean }
   | { type: 'SET_INFRA_TYPE'; infraType: InfrastructureType | null }
@@ -669,15 +675,37 @@ export function plannerReducer(
       };
     }
 
-    case 'REPLACE_PLACEMENT':
+    case 'REPLACE_PLACEMENT': {
+      // R2 (GitHub Major, converging Extension finding): swapping the plant
+      // re-derives the footprint — the candidate keeps the target's anchor
+      // with the NEW spacing-derived spans and revalidates via footprintFits
+      // with the target itself excluded, so a replacement can neither keep a
+      // stale shape nor bypass the collision/inactive/bounds guards. Failure
+      // is a silent no-op, mirroring ADD_PLACEMENT (the toast is UI's job).
+      const target = state.placements.find((p) => p.id === action.placementId);
+      if (!target || !state.grid) return state;
+      const candidate = {
+        startRow: target.startRow,
+        startCol: target.startCol,
+        spanRows: action.spanRows,
+        spanCols: action.spanCols,
+      };
+      if (
+        !footprintFits(state.grid, state.placements, candidate, target.id).ok
+      ) {
+        return state;
+      }
       return {
         ...state,
         past: pushHistory(state),
         placements: state.placements.map((p) =>
-          p.id === action.placementId ? { ...p, plantId: action.plantId } : p
+          p.id === action.placementId
+            ? { ...p, plantId: action.plantId, ...candidate }
+            : p
         ),
         isDirty: true,
       };
+    }
 
     case 'REMOVE_PLACEMENT':
       return {

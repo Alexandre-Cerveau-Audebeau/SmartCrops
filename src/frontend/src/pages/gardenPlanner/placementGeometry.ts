@@ -27,6 +27,9 @@ export function rectsOverlap(a: FootprintRect, b: FootprintRect): boolean {
   );
 }
 
+/** Discriminated verdict of {@link footprintFits}: `ok: true`, or the first
+ * failing rule — `out-of-bounds` (crosses the grid edge), `inactive` (covers
+ * a deactivated cell), or `overlap` with the offending placement's id. */
 export type FootprintFitResult =
   | { ok: true }
   | { ok: false; reason: 'out-of-bounds' | 'inactive' }

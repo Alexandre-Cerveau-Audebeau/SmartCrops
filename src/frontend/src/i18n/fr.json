@@ -458,6 +458,9 @@
       "collisionToast": "Collision — chevauche {{plant}} ({{cell}})",
       "footprintBlocked": "L'empreinte {{cells}}×{{cells}} ne rentre pas ici"
     },
+    "place": {
+      "footprintUnknown": "Espacement inconnu — réglage manuel"
+    },
     "infra": {
       "hint": "Posez des infrastructures sur la grille. Les éléments bloquants portent une ombre dans le calque Exposition.",
       "types": {
@@ -541,8 +544,7 @@
       "noResults": "Aucune plante trouvée",
       "title": "Bibliothèque de plantes",
       "deselect": "Désélectionner la plante",
-      "footprint": "Empreinte {{cells}}×{{cells}}",
-      "footprintUnknown": "Empreinte inconnue — 1×1 par défaut"
+      "footprint": "Empreinte {{cells}}×{{cells}}"
     },
     "placement": {
       "position": "Position : ligne {{row}}, colonne {{col}}",

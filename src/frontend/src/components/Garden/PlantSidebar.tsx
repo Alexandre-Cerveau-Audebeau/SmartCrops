@@ -11,11 +11,12 @@ import Switch from '@mui/material/Switch';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTranslation } from 'react-i18next';
 import { STICKY_OFFSET } from '../../constants/layout';
 import { spacingToFootprintCells } from '../../pages/gardenPlanner/placementGeometry';
-import { iosSwitchSx } from '../../theme/plannerTokens';
+import { iosSwitchSx, type PlannerTokens } from '../../theme/plannerTokens';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Plant } from '../../types/Plant';
 import { getPlantDisplayName } from '../../utils/getPlantDisplayName';
@@ -53,6 +54,22 @@ interface Props {
 }
 
 type TabValue = 'plants' | 'soils' | 'infrastructure';
+
+/** Footprint badge chip (SMA-193): solid border when the spacing is known,
+ * dashed for the mockup's unknown "1×1?" (Achillea) — shared so the two
+ * badge variants can never drift apart visually. */
+const footprintBadgeSx = (tk: PlannerTokens, known: boolean) => ({
+  fontSize: 10.5,
+  fontWeight: 700,
+  lineHeight: 1.4,
+  borderRadius: '999px',
+  px: '8px',
+  py: '1px',
+  flexShrink: 0,
+  bgcolor: tk.segBg,
+  border: `1px ${known ? 'solid' : 'dashed'} ${tk.divider}`,
+  color: tk.muted,
+});
 
 export default function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', selectedInfraType = null, onInfraSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
   const { t } = useTranslation();
@@ -294,6 +311,9 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
                     <ListItemButton
                       key={plant.id}
                       selected={selected}
+                      // R2 (CR committable): the armed toggle state reaches
+                      // AT — same as the infrastructure rows' aria-pressed.
+                      aria-pressed={selected}
                       // Re-clicking the armed plant disarms it (SMA-193) —
                       // same toggle grammar as the infrastructure rows.
                       onClick={() => onPlantSelect(selected ? null : plant.id)}
@@ -323,28 +343,30 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
                             <Typography component="span" noWrap sx={{ fontSize: 13.5, fontWeight: 700, color: tk.tTitle, minWidth: 0 }}>
                               {name}
                             </Typography>
-                            <Box
-                              component="span"
-                              aria-label={
-                                fp.known
-                                  ? t('planner.sidebar.footprint', { cells: fp.cells })
-                                  : t('planner.sidebar.footprintUnknown')
-                              }
-                              sx={{
-                                fontSize: 10.5,
-                                fontWeight: 700,
-                                lineHeight: 1.4,
-                                borderRadius: '999px',
-                                px: '8px',
-                                py: '1px',
-                                flexShrink: 0,
-                                bgcolor: tk.segBg,
-                                border: `1px ${fp.known ? 'solid' : 'dashed'} ${tk.divider}`,
-                                color: tk.muted,
-                              }}
-                            >
-                              {fp.known ? `${fp.cells}×${fp.cells}` : '1×1?'}
-                            </Box>
+                            {fp.known ? (
+                              <Box
+                                component="span"
+                                aria-label={t('planner.sidebar.footprint', { cells: fp.cells })}
+                                sx={footprintBadgeSx(tk, true)}
+                              >
+                                {`${fp.cells}×${fp.cells}`}
+                              </Box>
+                            ) : (
+                              // R2 (Extension finding): the dashed "1×1?" is
+                              // opaque on its own — the tooltip carries the
+                              // États-component explanation and the aria
+                              // combines footprint + meaning so AT never
+                              // reads "one times one question mark".
+                              <Tooltip title={t('planner.place.footprintUnknown')}>
+                                <Box
+                                  component="span"
+                                  aria-label={`1×1 — ${t('planner.place.footprintUnknown')}`}
+                                  sx={footprintBadgeSx(tk, false)}
+                                >
+                                  1×1?
+                                </Box>
+                              </Tooltip>
+                            )}
                           </Box>
                         }
                         secondary={
