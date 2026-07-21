@@ -165,6 +165,25 @@ describe('spacingToFootprintCells — the mockup anchors', () => {
     expect(spacingToFootprintCells(90, 'cm', '25cm').cells).toBe(4);
     expect(spacingToFootprintCells(90, 'cm', '1m').cells).toBe(1);
   });
+
+  it('exactly-divisible ratios never round up to an extra cell (R3 epsilon)', () => {
+    // Every exact multiple across the three legal cell sizes stays exact —
+    // the epsilon absorbs any conversion dust without shifting real ratios.
+    expect(spacingToFootprintCells(50, 'cm', '25cm').cells).toBe(2);
+    expect(spacingToFootprintCells(100, 'cm', '25cm').cells).toBe(4);
+    expect(spacingToFootprintCells(200, 'cm', '1m').cells).toBe(2);
+    // 100 inches = 254 cm exactly → 254/25 = 10.16 → 11; 254/50 = 5.08 → 6.
+    expect(spacingToFootprintCells(100, 'inches', '25cm').cells).toBe(11);
+    expect(spacingToFootprintCells(100, 'inches', '50cm').cells).toBe(6);
+  });
+
+  it('inches-derived non-terminating ratios stay stable under the epsilon (R3)', () => {
+    // 18 in = 45.72 cm → /50 = 0.9144 → 1 (the lot-1 pin, unchanged).
+    expect(spacingToFootprintCells(18, 'inches', '50cm').cells).toBe(1);
+    // 33 in = 83.82 cm → /25 = 3.3528 → 4 — a mid-ratio value the epsilon
+    // must not drag down to 3.
+    expect(spacingToFootprintCells(33, 'inches', '25cm').cells).toBe(4);
+  });
 });
 
 describe('cellSizeToMeters (moved from GardenPlanner.tsx — same mapping)', () => {

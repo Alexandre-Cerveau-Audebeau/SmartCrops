@@ -788,13 +788,33 @@ describe('GardenPlanner Place mode + spacing footprints (SMA-193 5.5)', () => {
     ).toHaveLength(4);
   });
 
-  it('Escape disarms in Place mode; in shape-edit it preserves the mode (review pin)', async () => {
+  it('Escape exits Place mode but REMEMBERS the plant; in shape-edit it preserves the mode (R3)', async () => {
     await renderArmed();
-    // Armed → the Placer button is enabled; Escape disarms → disabled again.
+    // Armed → the Placer button is enabled. Escape exits to selection with
+    // the plant REMEMBERED (R3 grammar): the button STAYS enabled and
+    // re-entering works without re-arming from the sidebar.
     expect(screen.getByRole('button', { name: 'Place' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Place' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
     fireEvent.keyDown(window, { key: 'Escape' });
+    // The EXIT half (verify-pass pin): aria-pressed flips — this fails if the
+    // Escape branch is deleted, unlike the enabled check (true both ways).
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Place' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Place' })).toHaveAttribute(
+        'aria-pressed',
+        'false'
+      )
+    );
+    expect(screen.getByRole('button', { name: 'Place' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Place' }));
+    // Re-entered place mode: a cell click places again (2×2 from spacing).
+    fireEvent.click(screen.getAllByRole('gridcell')[5]!);
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('gridcell', { name: /Cucurbita fixture at/ })
+      ).toHaveLength(4)
     );
 
     // Shape-edit ON, then Escape: the mode must SURVIVE (pre-5.5 behavior —

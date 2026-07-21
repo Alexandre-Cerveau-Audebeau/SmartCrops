@@ -95,7 +95,9 @@ export function spacingToFootprintCells(
   const cm = spacingToCm(spacingValue, unit);
   if (cm === null) return { cells: 1, known: false };
   const cellCm = cellSizeToMeters(cellSize) * 100;
-  return { cells: Math.max(1, Math.ceil(cm / cellCm)), known: true };
+  // Epsilon before ceil (R3): absorbs float dust from unit conversion so an
+  // exactly-divisible spacing can never round UP to an extra cell.
+  return { cells: Math.max(1, Math.ceil(cm / cellCm - 1e-9)), known: true };
 }
 
 /** Column index → spreadsheet letter (0 → A, 25 → Z, 26 → AA). */

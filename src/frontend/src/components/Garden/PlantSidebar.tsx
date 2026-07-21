@@ -357,7 +357,13 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
                               // États-component explanation and the aria
                               // combines footprint + meaning so AT never
                               // reads "one times one question mark".
-                              <Tooltip title={t('planner.place.footprintUnknown')}>
+                              // describeChild (R3, CR committable): the open
+                              // tooltip becomes the badge's DESCRIPTION — the
+                              // aria-label NAME survives it.
+                              <Tooltip
+                                title={t('planner.place.footprintUnknown')}
+                                describeChild
+                              >
                                 <Box
                                   component="span"
                                   aria-label={`1×1 — ${t('planner.place.footprintUnknown')}`}

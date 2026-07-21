@@ -159,6 +159,14 @@ describe('PlantSidebar (SMA-194)', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
       'Unknown spacing — manual setting'
     );
+    // describeChild (R3): the OPEN tooltip attaches as the badge's
+    // DESCRIPTION — the accessible NAME (footprint + meaning) survives.
+    expect(unknownBadge).toHaveAccessibleName(
+      '1×1 — Unknown spacing — manual setting'
+    );
+    expect(unknownBadge).toHaveAccessibleDescription(
+      'Unknown spacing — manual setting'
+    );
     // The known badge keeps its plain footprint label — no tooltip wiring.
     expect(screen.getByLabelText('2×2 footprint')).not.toHaveAttribute(
       'aria-describedby'

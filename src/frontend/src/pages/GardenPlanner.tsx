@@ -507,11 +507,11 @@ export default function GardenPlanner() {
     (plantId: string | null) => dispatch({ type: 'SET_PLACE_PLANT', plantId }),
     []
   );
-  const handleSelectionMode = useCallback(() => {
-    dispatch({ type: 'SET_PLACE_MODE', enabled: false });
-    dispatch({ type: 'SET_INFRA_MODE', enabled: false });
-    dispatch({ type: 'SET_SHAPE_EDIT_MODE', enabled: false });
-  }, []);
+  const handleSelectionMode = useCallback(
+    // R3: one action through the single reset gate (armed values remembered).
+    () => dispatch({ type: 'ENTER_SELECTION_MODE' }),
+    []
+  );
   const handleInfraMode = useCallback(
     () => dispatch({ type: 'SET_INFRA_MODE', enabled: true }),
     []
@@ -690,14 +690,16 @@ export default function GardenPlanner() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // Pre-5.5 equivalence: Escape cleared the placement selection AND the
-        // armed plant. The plant now lives in the reducer, so disarm it when
-        // PLACING — gated on placeMode so Escape in shape-edit/infra keeps
-        // that mode (and its in-flight drag) untouched, exactly as before
-        // (5.5 review); remembered armed values survive like on every exit.
+        // Escape clears the placement selection; in Place mode it EXITS to
+        // selection while the armed plant stays REMEMBERED (R3, both review
+        // surfaces converging — exact infra-grammar mirror: the toolbar
+        // Placer button stays enabled to re-enter). Still gated on placeMode
+        // so Escape in shape-edit/infra keeps that mode (and its in-flight
+        // drag) untouched. The sidebar re-click toggle remains the explicit
+        // DISARM (SET_PLACE_PLANT null) — a different intent.
         clearSelection();
         if (placeMode) {
-          dispatch({ type: 'SET_PLACE_PLANT', plantId: null });
+          dispatch({ type: 'ENTER_SELECTION_MODE' });
         }
       }
     };

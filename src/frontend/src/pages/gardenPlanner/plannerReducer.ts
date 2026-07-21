@@ -194,6 +194,7 @@ export type PlannerAction =
   | { type: 'SET_INFRA_MODE'; enabled: boolean }
   | { type: 'SET_PLACE_PLANT'; plantId: string | null }
   | { type: 'SET_PLACE_MODE'; enabled: boolean }
+  | { type: 'ENTER_SELECTION_MODE' }
   | { type: 'ZOOM_IN' }
   | { type: 'ZOOM_OUT' }
   | { type: 'MARK_SAVED'; submitted: LayoutSnapshot }
@@ -253,7 +254,10 @@ const disarmedPainting = {
  * stay remembered, like every mode exit. Single shared source for these
  * resets so the entry points can never diverge. Every SET_*_MODE case spreads
  * this FIRST and then flips its own flag on (5.5): mutual exclusion between
- * the four modes is structural, not per-case bookkeeping. */
+ * the four modes is structural, not per-case bookkeeping. The dedicated
+ * ENTER_SELECTION_MODE action (R3) is this constant made visible: the
+ * toolbar's Sélection button and Escape-in-Place both dispatch it, so
+ * "return to selection" is one action, not a per-mode dispatch fan. */
 const enterSelectionMode = {
   ...disarmedPainting,
   shapeEditMode: false,
@@ -772,6 +776,14 @@ export function plannerReducer(
         if (!state.placePlantId) return state;
         return { ...state, ...enterSelectionMode, placeMode: true };
       }
+      return { ...state, ...enterSelectionMode };
+
+    case 'ENTER_SELECTION_MODE':
+      // R3 (both surfaces converging): the single visible return-to-selection
+      // gate — every mode exits, painting disarms, and BOTH armed values
+      // (infraType, placePlantId) stay remembered so their toolbar buttons
+      // can re-enter. Escape-in-Place and the toolbar's Sélection button
+      // route through here; explicit DISARMS stay on the SET_*(null) actions.
       return { ...state, ...enterSelectionMode };
 
     case 'ZOOM_IN':

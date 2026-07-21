@@ -1347,6 +1347,37 @@ describe('plannerReducer Place mode (SMA-193 5.5)', () => {
     expect(s.placeMode).toBe(false);
   });
 
+  it('ENTER_SELECTION_MODE exits every mode, remembers armed values, disarms painting (R3)', () => {
+    // From shape-edit with an in-flight paint drag…
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 });
+    expect(s.isPainting).toBe(true);
+    s = plannerReducer(s, { type: 'ENTER_SELECTION_MODE' });
+    expect(s.shapeEditMode).toBe(false);
+    expect(s.isPainting).toBe(false);
+    expect(s.paintAction).toBeNull();
+
+    // …from infrastructure mode with an in-flight INFRA paint drag (the F6
+    // triple's third key, infraPaintValue, must disarm too — verify pin)…
+    s = plannerReducer(s, { type: 'SET_INFRA_TYPE', infraType: 'wall' });
+    s = plannerReducer(s, { type: 'PAINT_START', row: 2, col: 2 });
+    expect(s.infraPaintValue).toBe('wall');
+    s = plannerReducer(s, { type: 'ENTER_SELECTION_MODE' });
+    expect(s.infraMode).toBe(false);
+    expect(s.infraType).toBe('wall'); // remembered
+    expect(s.infraPaintValue).toBeNull(); // disarmed with the drag
+
+    // …and from place mode (plant remembered) — the Escape grammar.
+    s = plannerReducer(s, { type: 'SET_PLACE_PLANT', plantId: 'basil' });
+    s = plannerReducer(s, { type: 'ENTER_SELECTION_MODE' });
+    expect(s.placeMode).toBe(false);
+    expect(s.placePlantId).toBe('basil'); // remembered — NOT a disarm
+    expect(s.infraType).toBe('wall'); // both armed values survive the gate
+  });
+
   it('disarming the remembered infra type from place mode preserves place mode', () => {
     // Same own-mode-exit rule on the infra side (base behavior restored).
     let s = plannerReducer(placing(), {
