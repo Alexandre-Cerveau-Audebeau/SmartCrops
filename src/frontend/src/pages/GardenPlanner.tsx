@@ -559,6 +559,9 @@ export default function GardenPlanner() {
   const ghostElRef = useRef<HTMLDivElement | null>(null);
   const dndGridElRef = useRef<HTMLDivElement | null>(null);
   const dragEndedRecentlyRef = useRef(false);
+  const clickSwallowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const teardownDragListenersRef = useRef<(() => void) | null>(null);
 
   // Shared rejection toast (R2's local helper hoisted for the drag engine —
@@ -630,6 +633,7 @@ export default function GardenPlanner() {
     return { row, col };
   };
 
+  /** Park the ghost under the cursor via direct style mutation — no re-render. */
   const positionGhost = (x: number, y: number) => {
     if (ghostElRef.current) {
       // §7 tilt + the mockup's cursor offset (~+26/+20): the ghost trails
@@ -638,6 +642,13 @@ export default function GardenPlanner() {
     }
   };
 
+  /**
+   * Tear the drag down (capture, document listeners, refs, React state) and,
+   * on commit, revalidate the snapped target against the LATEST grid before
+   * dispatching the outcome — ADD_PLACEMENT for a sidebar drag,
+   * MOVE_PLACEMENT for a move. A cancel (Escape/pointercancel) commits
+   * nothing.
+   */
   const endDrag = useCallback((commit: boolean) => {
     const drag = dragRef.current;
     const pending = pendingDragRef.current;
@@ -657,7 +668,7 @@ export default function GardenPlanner() {
     // Swallow the click the browser fires right after pointerup — a
     // completed drag must not toggle-disarm the row or act as a cell click.
     dragEndedRecentlyRef.current = true;
-    setTimeout(() => {
+    clickSwallowTimerRef.current = setTimeout(() => {
       dragEndedRecentlyRef.current = false;
     }, 0);
     if (!commit || !drag.target) return;
@@ -700,6 +711,12 @@ export default function GardenPlanner() {
     }
   }, []);
 
+  /**
+   * Document-level pointermove: arms the drag once the 6px threshold is
+   * crossed, then follows the cursor — the ghost moves via direct style
+   * mutation on EVERY event, React state changes only when the snapped CELL
+   * changes (cell-granular re-renders, the perf-round contract).
+   */
   const onDragPointerMove = useCallback((e: PointerEvent) => {
     lastPointerRef.current = { x: e.clientX, y: e.clientY };
     const pending = pendingDragRef.current;
@@ -772,6 +789,7 @@ export default function GardenPlanner() {
   const onDragPointerUp = useCallback(() => endDrag(true), [endDrag]);
   const onDragPointerCancel = useCallback(() => endDrag(false), [endDrag]);
 
+  /** Register a threshold-gated pending drag and its document listeners. */
   const beginPendingDrag = useCallback(
     (pending: PendingDrag) => {
       pendingDragRef.current = pending;
@@ -788,8 +806,17 @@ export default function GardenPlanner() {
     [onDragPointerMove, onDragPointerUp, onDragPointerCancel]
   );
 
-  // Strict teardown: listeners never outlive the page.
-  useEffect(() => () => teardownDragListenersRef.current?.(), []);
+  // Strict teardown: neither the document listeners nor the click-swallow
+  // timer outlive the page (Extension R1).
+  useEffect(
+    () => () => {
+      teardownDragListenersRef.current?.();
+      if (clickSwallowTimerRef.current !== null) {
+        clearTimeout(clickSwallowTimerRef.current);
+      }
+    },
+    []
+  );
 
   // The ghost mounts one commit AFTER the threshold crossing — position it
   // from the last known pointer as soon as it exists (and on target flips,
@@ -800,6 +827,10 @@ export default function GardenPlanner() {
     }
   }, [dragState]);
 
+  /**
+   * Sidebar drag source: a primary-pointer down on a plant row opens a
+   * pending sidebar drag carrying the plant's spacing-derived footprint.
+   */
   const handlePlantPointerDown = useCallback(
     (plantId: string, e: React.PointerEvent) => {
       // Secondary pointers never drag; undefined (jsdom) counts as primary.
@@ -826,6 +857,12 @@ export default function GardenPlanner() {
     [beginPendingDrag]
   );
 
+  /**
+   * Grid drag source (Place mode only): a primary-pointer down on a cell
+   * covered by a placement opens a pending move-drag of THAT placement —
+   * its identity and footprint come from the placement, never the armed
+   * plant.
+   */
   const handleCellPointerDown = useCallback(
     (row: number, col: number, e: React.PointerEvent) => {
       // Secondary pointers never drag; undefined (jsdom) counts as primary.
@@ -1794,7 +1831,9 @@ export default function GardenPlanner() {
                   onCellDragStart={handleCellDragStart}
                   onCellDragEnter={handleCellDragEnter}
                   onCellDragEnd={handleCellDragEnd}
-                  onCellPointerDown={handleCellPointerDown}
+                  // Move-drags exist in Place mode only — outside it the cells
+                  // get no pointerdown wiring (and no touch-action clamp).
+                  onCellPointerDown={placeMode ? handleCellPointerDown : undefined}
                   dragTarget={
                     dragState?.target
                       ? {

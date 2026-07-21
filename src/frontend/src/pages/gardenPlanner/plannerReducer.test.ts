@@ -1537,6 +1537,19 @@ describe('plannerReducer MOVE_PLACEMENT (SMA-193 lot 2)', () => {
     expect(s.isDirty).toBe(true);
   });
 
+  it('a drop on its own anchor is idempotent — same state, no undo entry, isDirty untouched', () => {
+    const s = hydrated(); // srv-1 anchored at (1,1), clean state
+    const dropped = plannerReducer(s, {
+      type: 'MOVE_PLACEMENT',
+      placementId: 'srv-1',
+      startRow: 1,
+      startCol: 1,
+    });
+    expect(dropped).toBe(s);
+    expect(dropped.past).toBe(s.past);
+    expect(dropped.isDirty).toBe(false);
+  });
+
   it('a move onto its own old cells succeeds (self-overlap via ignoreId)', () => {
     let s = plannerReducer(hydrated(), {
       type: 'REPLACE_PLACEMENT',

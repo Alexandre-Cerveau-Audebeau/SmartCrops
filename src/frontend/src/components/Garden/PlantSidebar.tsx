@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -60,7 +60,7 @@ interface Props {
 
 type TabValue = 'plants' | 'soils' | 'infrastructure';
 
-export default function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
+function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
   const [activeTab, setActiveTab] = useState<TabValue>('plants');
@@ -313,6 +313,8 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
                       sx={{
                         px: '14px',
                         py: '10px',
+                        // Extension (lot 2 R1): a touch drag must feed the pointer engine, not scroll the list.
+                        touchAction: 'none',
                         // R5 (CR accept): the selected marker uses the planner
                         // token, not the generic theme primary.
                         borderLeft: selected
@@ -384,3 +386,7 @@ export default function PlantSidebar({ plants, searchQuery, onSearchChange, sele
     </Box>
   );
 }
+
+// Memoized export (perf round, lot 2 R2): every prop is stable during a
+// drag, so the 500-plant list contributes zero renders to a drag frame.
+export default memo(PlantSidebar);

@@ -30,6 +30,14 @@ import { fetchPlants } from '../services/plantApi';
 
 const basil = { id: 'p1', scientificName: 'Basilicum fixture' } as Plant;
 const maize = { id: 'p2', scientificName: 'Zea mays' } as Plant;
+// Shared by the SMA-193 describes: 90 cm spacing @ 50cm/cell → ceil(90/50) = 2
+// → a 2×2 footprint.
+const courgette = {
+  id: 'p3',
+  scientificName: 'Cucurbita fixture',
+  xPlantSpacingValue: 90,
+  xPlantSpacingUnit: 'cm',
+} as Plant;
 
 const garden = {
   id: 'g1',
@@ -722,13 +730,6 @@ describe('GardenPlanner header save/cancel gating (F3, relocated in R2)', () => 
 // click, the collision toast on rejection, and the Escape mode-preservation
 // pins from the pre-commit review.
 describe('GardenPlanner Place mode + spacing footprints (SMA-193 5.5)', () => {
-  const courgette = {
-    id: 'p3',
-    scientificName: 'Cucurbita fixture',
-    xPlantSpacingValue: 90,
-    xPlantSpacingUnit: 'cm',
-  } as Plant;
-
   // 4×4 empty layout at 50cm/cell: 90 cm spacing → ceil(90/50) = 2 → 2×2.
   const emptyLayout: GardenLayoutData = {
     ...layout,
@@ -835,13 +836,6 @@ describe('GardenPlanner Place mode + spacing footprints (SMA-193 5.5)', () => {
 // SMA-193 R2 — the REPLACE path recomputes the footprint (GitHub Major +
 // Extension convergence): a refused replace toasts and dispatches nothing.
 describe('GardenPlanner replace recompute (SMA-193 R2)', () => {
-  const courgette = {
-    id: 'p3',
-    scientificName: 'Cucurbita fixture',
-    xPlantSpacingValue: 90,
-    xPlantSpacingUnit: 'cm',
-  } as Plant;
-
   it('replacing a 1×1 with a 2×2 that would collide shows the toast and keeps the original', async () => {
     vi.mocked(fetchGarden).mockResolvedValue(garden);
     vi.mocked(fetchLayout).mockResolvedValue({
@@ -934,13 +928,6 @@ describe('GardenPlanner replace recompute (SMA-193 R2)', () => {
 // Coordinates: desktop cell 58px + 3px gap → 61px track, grid rect at (0,0)
 // in jsdom, so cell (r,c) is hit at (c*61+5, r*61+5).
 describe('GardenPlanner pointer DnD (SMA-193 lot 2)', () => {
-  const courgette = {
-    id: 'p3',
-    scientificName: 'Cucurbita fixture',
-    xPlantSpacingValue: 90,
-    xPlantSpacingUnit: 'cm',
-  } as Plant;
-
   const at = (row: number, col: number) => ({
     clientX: col * 61 + 5,
     clientY: row * 61 + 5,
@@ -1088,6 +1075,56 @@ describe('GardenPlanner pointer DnD (SMA-193 lot 2)', () => {
     expect(
       screen.getAllByRole('gridcell', { name: /Cucurbita fixture at/ })
     ).toHaveLength(4);
+  });
+
+  it('a move keeps the placement identity when ANOTHER plant is armed (no mixup)', async () => {
+    await renderDnd({
+      placements: [
+        {
+          id: 'pl-c',
+          plantId: 'p3',
+          plantScientificName: null,
+          startRow: 1,
+          startCol: 1,
+          spanRows: 2,
+          spanCols: 2,
+          notes: null,
+        },
+      ],
+    });
+    // Arm BASIL — not the courgette under the pointer. The move-drag must
+    // carry the PLACEMENT's plant, never the armed one (CR identity draft).
+    const basilRow = await waitFor(() => {
+      const el = screen
+        .getAllByRole('button')
+        .find((b) => within(b).queryAllByText('Basilicum fixture').length > 0);
+      expect(el).toBeTruthy();
+      return el!;
+    });
+    fireEvent.click(basilRow); // Place mode on, basil armed (1×1)
+    const cells = screen.getAllByRole('gridcell');
+    fireEvent.pointerDown(cells[5]!, { ...at(1, 1), pointerId: 2, isPrimary: true });
+    fireEvent.pointerMove(document, { ...at(2, 2), pointerId: 2, isPrimary: true });
+    const g = ghost();
+    expect(g).not.toBeNull();
+    // Ghost identity: Cucurbita's initial + ITS 2×2 chip (armed basil is 1×1).
+    expect(g).toHaveTextContent('C');
+    expect(g).toHaveTextContent('2×2');
+    fireEvent.pointerUp(document, { ...at(2, 2), pointerId: 2, isPrimary: true });
+    await waitFor(() =>
+      expect(
+        screen.getByRole('gridcell', {
+          name: 'Cucurbita fixture at row 3, column C',
+        })
+      ).toBeInTheDocument()
+    );
+    expect(
+      screen.getAllByRole('gridcell', { name: /Cucurbita fixture at/ })
+    ).toHaveLength(4);
+    // Basil was never placed — it stays armed in the sidebar only.
+    expect(
+      screen.queryAllByRole('gridcell', { name: /Basilicum fixture at/ })
+    ).toHaveLength(0);
   });
 
   it('a refused move toasts and leaves the placement in place', async () => {

@@ -725,6 +725,14 @@ export function plannerReducer(
       // ADD/REPLACE (the toast is the UI's job).
       const target = state.placements.find((p) => p.id === action.placementId);
       if (!target || !state.grid) return state;
+      // CR (lot 2 R1): a drop on the placement's own anchor is a pure no-op —
+      // the SAME state object comes back, so no undo entry and no dirty flag.
+      if (
+        action.startRow === target.startRow &&
+        action.startCol === target.startCol
+      ) {
+        return state;
+      }
       const candidate = {
         startRow: action.startRow,
         startCol: action.startCol,
