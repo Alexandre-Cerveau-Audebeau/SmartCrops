@@ -1509,3 +1509,111 @@ describe('plannerReducer Place mode (SMA-193 5.5)', () => {
     ).toBe(s);
   });
 });
+
+// Lot 2 (DnD) — MOVE_PLACEMENT: anchor moves, footprint stays, the guard
+// excludes the moved placement itself so its old cells are legal ground.
+describe('plannerReducer MOVE_PLACEMENT (SMA-193 lot 2)', () => {
+  it('moves the anchor and keeps the spans', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'REPLACE_PLACEMENT',
+      placementId: 'srv-1',
+      plantId: 'courgette',
+      spanRows: 2,
+      spanCols: 2,
+    });
+    s = plannerReducer(s, {
+      type: 'MOVE_PLACEMENT',
+      placementId: 'srv-1',
+      startRow: 0,
+      startCol: 0,
+    });
+    expect(s.placements[0]).toMatchObject({
+      id: 'srv-1',
+      startRow: 0,
+      startCol: 0,
+      spanRows: 2,
+      spanCols: 2,
+    });
+    expect(s.isDirty).toBe(true);
+  });
+
+  it('a move onto its own old cells succeeds (self-overlap via ignoreId)', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'REPLACE_PLACEMENT',
+      placementId: 'srv-1',
+      plantId: 'courgette',
+      spanRows: 2,
+      spanCols: 2,
+    });
+    // (1,1)→(0,0): the 2×2 candidate still covers (1,1) — its own cell.
+    s = plannerReducer(s, {
+      type: 'MOVE_PLACEMENT',
+      placementId: 'srv-1',
+      startRow: 0,
+      startCol: 0,
+    });
+    expect(s.placements[0].startRow).toBe(0);
+  });
+
+  it('refusal on overlap returns the SAME state object', () => {
+    const base = plannerReducer(hydrated(), {
+      type: 'ADD_PLACEMENT',
+      id: 'new-1',
+      plantId: 'p9',
+      row: 0,
+      col: 0,
+      spanRows: 1,
+      spanCols: 1,
+    });
+    const blocked = plannerReducer(base, {
+      type: 'MOVE_PLACEMENT',
+      placementId: 'new-1',
+      startRow: 1,
+      startCol: 1, // srv-1 sits there
+    });
+    expect(blocked).toBe(base);
+  });
+
+  it('refusal out-of-bounds and onto an inactive cell return the SAME state object', () => {
+    const s = hydrated();
+    expect(
+      plannerReducer(s, {
+        type: 'MOVE_PLACEMENT',
+        placementId: 'srv-1',
+        startRow: 3,
+        startCol: 0, // 3×3 grid — row 3 is out of bounds
+      })
+    ).toBe(s);
+
+    let inactive = plannerReducer(s, {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    inactive = plannerReducer(inactive, { type: 'PAINT_START', row: 0, col: 0 });
+    inactive = plannerReducer(inactive, { type: 'PAINT_END' });
+    inactive = plannerReducer(inactive, {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: false,
+    });
+    expect(
+      plannerReducer(inactive, {
+        type: 'MOVE_PLACEMENT',
+        placementId: 'srv-1',
+        startRow: 0,
+        startCol: 0, // (0,0) painted inactive above
+      })
+    ).toBe(inactive);
+  });
+
+  it('unknown placement id is a guarded no-op', () => {
+    const s = hydrated();
+    expect(
+      plannerReducer(s, {
+        type: 'MOVE_PLACEMENT',
+        placementId: 'ghost',
+        startRow: 0,
+        startCol: 0,
+      })
+    ).toBe(s);
+  });
+});

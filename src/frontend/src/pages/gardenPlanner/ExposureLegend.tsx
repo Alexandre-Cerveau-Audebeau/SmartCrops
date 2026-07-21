@@ -13,6 +13,9 @@ interface ExposureLegendProps {
   /** SMA-15 (5.4): true when a blocking infrastructure exists — shows the
    * 5th "Ombre portée (mur, treillis)" swatch (§9/§13). */
   hasCastShadow?: boolean;
+  /** Lot 2 (§9): true in Place mode — appends the two DnD swatches on the
+   * right ("Cible valide" dashed prim · "Collision" dashed danger). */
+  showDndTargets?: boolean;
 }
 
 /**
@@ -30,6 +33,7 @@ export const ExposureLegend = memo(function ExposureLegend({
   season,
   moment,
   hasCastShadow = false,
+  showDndTargets = false,
 }: ExposureLegendProps) {
   const { t, i18n } = useTranslation();
   const tk = usePlannerTokens();
@@ -118,6 +122,59 @@ export const ExposureLegend = memo(function ExposureLegend({
             {t('planner.exposure.categories.castShadow')}
           </Typography>
         </Box>
+      )}
+      {/* Lot 2 (§9): "En mode DnD s'ajoutent à droite : « Cible valide »
+          (dashed --prim) · « Collision » (dashed --dang-tx)". The valid
+          swatch reuses tk.cellOn for §7's "fond vert léger" (no new hex). */}
+      {showDndTargets && (
+        <>
+          <Box
+            data-testid="legend-dnd-valid"
+            sx={{ display: 'flex', alignItems: 'center', gap: '7px' }}
+          >
+            <Box
+              sx={{
+                width: { xs: 13, sm: 16 },
+                height: { xs: 13, sm: 16 },
+                borderRadius: '5px',
+                bgcolor: tk.cellOn,
+                border: `2px dashed ${tk.prim}`,
+              }}
+            />
+            <Typography
+              sx={{
+                fontSize: { xs: 10.5, sm: 12.5 },
+                fontWeight: 600,
+                color: tk.tMeta,
+              }}
+            >
+              {t('planner.dnd.legendValid')}
+            </Typography>
+          </Box>
+          <Box
+            data-testid="legend-dnd-collision"
+            sx={{ display: 'flex', alignItems: 'center', gap: '7px' }}
+          >
+            <Box
+              sx={{
+                width: { xs: 13, sm: 16 },
+                height: { xs: 13, sm: 16 },
+                borderRadius: '5px',
+                backgroundImage: tk.redHatch,
+                border: `2px dashed ${tk.dangTx}`,
+              }}
+            />
+            <Typography
+              sx={{
+                fontSize: { xs: 10.5, sm: 12.5 },
+                fontWeight: 600,
+                color: tk.tMeta,
+              }}
+            >
+              {t('planner.dnd.legendCollision')}
+            </Typography>
+          </Box>
+        </>
       )}
     </Box>
   );

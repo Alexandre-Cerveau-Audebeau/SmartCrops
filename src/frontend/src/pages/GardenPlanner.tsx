@@ -37,6 +37,7 @@ import { useSelection } from '../hooks/useSelection';
 import { updateGarden } from '../services/gardenApi';
 import { saveLayout } from '../services/gardenLayoutApi';
 import { fetchPlants } from '../services/plantApi';
+import { footprintBadgeSx, GAP_PX } from '../theme/plannerTokens';
 import { usePlannerTokens } from '../theme/usePlannerTokens';
 import type { Garden, GardenConfig } from '../types/Garden';
 import type { Plant } from '../types/Plant';
@@ -225,6 +226,9 @@ export default function GardenPlanner() {
   // AND the §4 base cell size: 58 px desktop / 30 px mobile at zoom 100% (R3).
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const cellSizePx = Math.round((isMobile ? 30 : 58) * zoom);
+  // DnD (lot 2): the §4 gap at the same breakpoint — the pointer→cell math
+  // inverts the exact track formula the overlays use.
+  const dndGapPx = isMobile ? GAP_PX.xs : GAP_PX.sm;
 
   // Real blockers (SMA-15 5.4): blocking infrastructure regions derived from
   // the per-cell storage — the [] placeholder era ends here.
@@ -503,10 +507,12 @@ export default function GardenPlanner() {
       dispatch({ type: 'SET_INFRA_TYPE', infraType: type }),
     []
   );
-  const handlePlantSelect = useCallback(
-    (plantId: string | null) => dispatch({ type: 'SET_PLACE_PLANT', plantId }),
-    []
-  );
+  const handlePlantSelect = useCallback((plantId: string | null) => {
+    // Lot 2: the click fired right after a sidebar drag's pointerup must
+    // not toggle-disarm the row it started from.
+    if (dragEndedRecentlyRef.current) return;
+    dispatch({ type: 'SET_PLACE_PLANT', plantId });
+  }, []);
   const handleSelectionMode = useCallback(
     // R3: one action through the single reset gate (armed values remembered).
     () => dispatch({ type: 'ENTER_SELECTION_MODE' }),
@@ -519,6 +525,335 @@ export default function GardenPlanner() {
   const handlePlaceMode = useCallback(
     () => dispatch({ type: 'SET_PLACE_MODE', enabled: true }),
     []
+  );
+
+  // ── DnD drag engine (SMA-193 lot 2) ─────────────────────────────────────
+  // Drag state is PAGE-LOCAL and ephemeral: React state changes only on
+  // start/stop and CELL-granular target changes; the ghost follows the
+  // cursor via direct style mutation — no per-frame dispatch or re-render.
+  // The reducer receives only the OUTCOME (ADD/MOVE).
+  type DragState = {
+    kind: 'sidebar' | 'move';
+    plantId: string;
+    placementId: string | null;
+    spanRows: number;
+    spanCols: number;
+    target: { startRow: number; startCol: number } | null;
+    valid: boolean;
+  };
+  type PendingDrag = {
+    kind: 'sidebar' | 'move';
+    plantId: string;
+    placementId: string | null;
+    spanRows: number;
+    spanCols: number;
+    originX: number;
+    originY: number;
+    pointerId: number;
+    sourceEl: HTMLElement;
+  };
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const pendingDragRef = useRef<PendingDrag | null>(null);
+  const lastPointerRef = useRef({ x: 0, y: 0 });
+  const ghostElRef = useRef<HTMLDivElement | null>(null);
+  const dndGridElRef = useRef<HTMLDivElement | null>(null);
+  const dragEndedRecentlyRef = useRef(false);
+  const teardownDragListenersRef = useRef<(() => void) | null>(null);
+
+  // Shared rejection toast (R2's local helper hoisted for the drag engine —
+  // ADD, REPLACE and DnD drops all speak through the same copy).
+  const toastFitRejection = useCallback(
+    (fit: FootprintFitResult, cells: number) => {
+      if (fit.ok) return;
+      if (fit.reason === 'overlap') {
+        const hit = placements.find((p) => p.id === fit.overlapWith);
+        const hitPlant = hit
+          ? allPlants.find((p) => p.id === hit.plantId)
+          : undefined;
+        setMessage({
+          type: 'error',
+          text: t('planner.dnd.collisionToast', {
+            plant: hitPlant
+              ? getPlantDisplayName(hitPlant, language)
+              : t('planner.unknownPlant'),
+            cell: hit ? cellRef(hit.startRow, hit.startCol) : '',
+          }),
+        });
+      } else {
+        setMessage({
+          type: 'error',
+          text: t('planner.dnd.footprintBlocked', { cells }),
+        });
+      }
+    },
+    [placements, allPlants, language, t]
+  );
+
+  // Latest-ref (the page's handleSave pattern): the imperative document
+  // listeners read through this instead of re-registering every render.
+  const dndLatestRef = useRef({
+    grid,
+    placements,
+    placeMode,
+    placePlantId,
+    allPlants,
+    cellSize,
+    cellSizePx,
+    gapPx: dndGapPx,
+    toastFitRejection,
+  });
+  dndLatestRef.current = {
+    grid,
+    placements,
+    placeMode,
+    placePlantId,
+    allPlants,
+    cellSize,
+    cellSizePx,
+    gapPx: dndGapPx,
+    toastFitRejection,
+  };
+
+  /** Invert the overlay track formula: viewport coords → cell, or null off-grid. */
+  const pointerToCell = (clientX: number, clientY: number) => {
+    const el = dndGridElRef.current;
+    const { grid: g, cellSizePx: cellPx, gapPx } = dndLatestRef.current;
+    if (!el || !g) return null;
+    const rect = el.getBoundingClientRect();
+    const track = cellPx + gapPx;
+    const col = Math.floor((clientX - rect.left) / track);
+    const row = Math.floor((clientY - rect.top) / track);
+    if (row < 0 || col < 0 || row >= g.length || col >= (g[0]?.length ?? 0)) {
+      return null;
+    }
+    return { row, col };
+  };
+
+  const positionGhost = (x: number, y: number) => {
+    if (ghostElRef.current) {
+      // §7 tilt + the mockup's cursor offset (~+26/+20): the ghost trails
+      // the pointer without covering the target cell under it.
+      ghostElRef.current.style.transform = `translate(${x + 26}px, ${y + 20}px) rotate(-2.5deg)`;
+    }
+  };
+
+  const endDrag = useCallback((commit: boolean) => {
+    const drag = dragRef.current;
+    const pending = pendingDragRef.current;
+    if (pending) {
+      try {
+        pending.sourceEl.releasePointerCapture?.(pending.pointerId);
+      } catch {
+        // jsdom / capture already released — teardown continues either way.
+      }
+    }
+    teardownDragListenersRef.current?.();
+    teardownDragListenersRef.current = null;
+    pendingDragRef.current = null;
+    dragRef.current = null;
+    setDragState(null);
+    if (!drag) return;
+    // Swallow the click the browser fires right after pointerup — a
+    // completed drag must not toggle-disarm the row or act as a cell click.
+    dragEndedRecentlyRef.current = true;
+    setTimeout(() => {
+      dragEndedRecentlyRef.current = false;
+    }, 0);
+    if (!commit || !drag.target) return;
+    const { grid: g, placements: ps, toastFitRejection: toastFit } =
+      dndLatestRef.current;
+    if (!g) return;
+    const candidate = {
+      startRow: drag.target.startRow,
+      startCol: drag.target.startCol,
+      spanRows: drag.spanRows,
+      spanCols: drag.spanCols,
+    };
+    const fit = footprintFits(
+      g,
+      ps,
+      candidate,
+      drag.kind === 'move' ? (drag.placementId ?? undefined) : undefined
+    );
+    if (!fit.ok) {
+      toastFit(fit, drag.spanRows);
+      return;
+    }
+    if (drag.kind === 'sidebar') {
+      dispatch({
+        type: 'ADD_PLACEMENT',
+        id: `new-${++placementSeq.current}`,
+        plantId: drag.plantId,
+        row: candidate.startRow,
+        col: candidate.startCol,
+        spanRows: drag.spanRows,
+        spanCols: drag.spanCols,
+      });
+    } else if (drag.placementId) {
+      dispatch({
+        type: 'MOVE_PLACEMENT',
+        placementId: drag.placementId,
+        startRow: candidate.startRow,
+        startCol: candidate.startCol,
+      });
+    }
+  }, []);
+
+  const onDragPointerMove = useCallback((e: PointerEvent) => {
+    lastPointerRef.current = { x: e.clientX, y: e.clientY };
+    const pending = pendingDragRef.current;
+    if (pending && !dragRef.current) {
+      const dist = Math.hypot(
+        e.clientX - pending.originX,
+        e.clientY - pending.originY
+      );
+      if (dist <= 6) return; // 6px threshold — below it the gesture is a click
+      // Threshold crossed: the gesture becomes a drag. A sidebar drag on an
+      // unarmed plant arms it now (and thereby enters Place mode).
+      if (
+        pending.kind === 'sidebar' &&
+        dndLatestRef.current.placePlantId !== pending.plantId
+      ) {
+        dispatch({ type: 'SET_PLACE_PLANT', plantId: pending.plantId });
+      }
+      try {
+        pending.sourceEl.setPointerCapture?.(pending.pointerId);
+      } catch {
+        // jsdom has no pointer capture — document listeners carry the drag.
+      }
+      const started: DragState = {
+        kind: pending.kind,
+        plantId: pending.plantId,
+        placementId: pending.placementId,
+        spanRows: pending.spanRows,
+        spanCols: pending.spanCols,
+        target: null,
+        valid: false,
+      };
+      dragRef.current = started;
+      setDragState(started);
+    }
+    const drag = dragRef.current;
+    if (!drag) return;
+    positionGhost(e.clientX, e.clientY);
+    const cell = pointerToCell(e.clientX, e.clientY);
+    const prev = drag.target;
+    if (!cell && !prev) return;
+    if (cell && prev && cell.row === prev.startRow && cell.col === prev.startCol) {
+      return; // same cell — nothing to recompute (cell-granular state)
+    }
+    const { grid: g, placements: ps } = dndLatestRef.current;
+    let next: DragState;
+    if (!cell || !g) {
+      next = { ...drag, target: null, valid: false };
+    } else {
+      const fit = footprintFits(
+        g,
+        ps,
+        {
+          startRow: cell.row,
+          startCol: cell.col,
+          spanRows: drag.spanRows,
+          spanCols: drag.spanCols,
+        },
+        drag.kind === 'move' ? (drag.placementId ?? undefined) : undefined
+      );
+      next = {
+        ...drag,
+        target: { startRow: cell.row, startCol: cell.col },
+        valid: fit.ok,
+      };
+    }
+    dragRef.current = next;
+    setDragState(next);
+  }, []);
+
+  const onDragPointerUp = useCallback(() => endDrag(true), [endDrag]);
+  const onDragPointerCancel = useCallback(() => endDrag(false), [endDrag]);
+
+  const beginPendingDrag = useCallback(
+    (pending: PendingDrag) => {
+      pendingDragRef.current = pending;
+      lastPointerRef.current = { x: pending.originX, y: pending.originY };
+      document.addEventListener('pointermove', onDragPointerMove);
+      document.addEventListener('pointerup', onDragPointerUp);
+      document.addEventListener('pointercancel', onDragPointerCancel);
+      teardownDragListenersRef.current = () => {
+        document.removeEventListener('pointermove', onDragPointerMove);
+        document.removeEventListener('pointerup', onDragPointerUp);
+        document.removeEventListener('pointercancel', onDragPointerCancel);
+      };
+    },
+    [onDragPointerMove, onDragPointerUp, onDragPointerCancel]
+  );
+
+  // Strict teardown: listeners never outlive the page.
+  useEffect(() => () => teardownDragListenersRef.current?.(), []);
+
+  // The ghost mounts one commit AFTER the threshold crossing — position it
+  // from the last known pointer as soon as it exists (and on target flips,
+  // where re-applying the same coords is a no-op).
+  useLayoutEffect(() => {
+    if (dragState) {
+      positionGhost(lastPointerRef.current.x, lastPointerRef.current.y);
+    }
+  }, [dragState]);
+
+  const handlePlantPointerDown = useCallback(
+    (plantId: string, e: React.PointerEvent) => {
+      // Secondary pointers never drag; undefined (jsdom) counts as primary.
+      if (e.isPrimary === false) return;
+      const { allPlants: plantsNow, cellSize: cs } = dndLatestRef.current;
+      const plant = plantsNow.find((p) => p.id === plantId);
+      const { cells } = spacingToFootprintCells(
+        plant?.xPlantSpacingValue ?? null,
+        plant?.xPlantSpacingUnit ?? null,
+        cs
+      );
+      beginPendingDrag({
+        kind: 'sidebar',
+        plantId,
+        placementId: null,
+        spanRows: cells,
+        spanCols: cells,
+        originX: e.clientX,
+        originY: e.clientY,
+        pointerId: e.pointerId,
+        sourceEl: e.currentTarget as HTMLElement,
+      });
+    },
+    [beginPendingDrag]
+  );
+
+  const handleCellPointerDown = useCallback(
+    (row: number, col: number, e: React.PointerEvent) => {
+      // Secondary pointers never drag; undefined (jsdom) counts as primary.
+      if (e.isPrimary === false) return;
+      // Move-drags exist in Place mode only — Selection stays inspection.
+      const { placeMode: pm, placements: ps } = dndLatestRef.current;
+      if (!pm) return;
+      const under = ps.find(
+        (p) =>
+          row >= p.startRow &&
+          row < p.startRow + p.spanRows &&
+          col >= p.startCol &&
+          col < p.startCol + p.spanCols
+      );
+      if (!under) return;
+      beginPendingDrag({
+        kind: 'move',
+        plantId: under.plantId,
+        placementId: under.id,
+        spanRows: under.spanRows,
+        spanCols: under.spanCols,
+        originX: e.clientX,
+        originY: e.clientY,
+        pointerId: e.pointerId,
+        sourceEl: e.currentTarget as HTMLElement,
+      });
+    },
+    [beginPendingDrag]
   );
   const handleToggleExposure = useCallback(
     () => dispatch({ type: 'TOGGLE_EXPOSURE' }),
@@ -563,6 +898,9 @@ export default function GardenPlanner() {
 
   const handleCellClick = useCallback(
     (row: number, col: number, anchorEl?: HTMLElement) => {
+      // Lot 2: the click the browser fires right after a drag's pointerup
+      // is NOT a click intent — swallow it once.
+      if (dragEndedRecentlyRef.current) return;
       // Both paint modes swallow clicks (5.4): infra cells use the drag
       // surface, like shape-edit.
       if (shapeEditMode || infraMode || !grid) return;
@@ -596,29 +934,10 @@ export default function GardenPlanner() {
           armedPlant?.xPlantSpacingUnit ?? null,
           cellSize
         );
-        const toastRejection = (fit: FootprintFitResult) => {
-          if (fit.ok) return;
-          if (fit.reason === 'overlap') {
-            const hit = placements.find((p) => p.id === fit.overlapWith);
-            const hitPlant = hit
-              ? allPlants.find((p) => p.id === hit.plantId)
-              : undefined;
-            setMessage({
-              type: 'error',
-              text: t('planner.dnd.collisionToast', {
-                plant: hitPlant
-                  ? getPlantDisplayName(hitPlant, language)
-                  : t('planner.unknownPlant'),
-                cell: hit ? cellRef(hit.startRow, hit.startCol) : '',
-              }),
-            });
-          } else {
-            setMessage({
-              type: 'error',
-              text: t('planner.dnd.footprintBlocked', { cells }),
-            });
-          }
-        };
+        // Lot 2: the rejection copy lives in the shared hoisted helper —
+        // clicks and drag-drops speak identically.
+        const toastRejection = (fit: FootprintFitResult) =>
+          toastFitRejection(fit, cells);
         if (existing) {
           // R2 (GitHub Major + Extension convergence): replacing re-derives
           // the footprint at the target's anchor and pre-checks it with the
@@ -678,7 +997,7 @@ export default function GardenPlanner() {
 
       selectPlacement(existing ? existing.id : null);
     },
-    [shapeEditMode, infraMode, placeMode, placePlantId, grid, placements, allPlants, cellSize, catalogReady, exposureVisible, selectPlacement, language, t]
+    [shapeEditMode, infraMode, placeMode, placePlantId, grid, placements, allPlants, cellSize, catalogReady, exposureVisible, selectPlacement, toastFitRejection]
   );
 
   const handleRemoveSelectedPlacement = useCallback(() => {
@@ -690,6 +1009,13 @@ export default function GardenPlanner() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // Lot 2 precedence: Escape DURING an active drag cancels the drag
+        // ONLY — mode stays, plant stays armed. The selection-exit grammar
+        // below applies when no drag is active.
+        if (dragRef.current) {
+          endDrag(false);
+          return;
+        }
         // Escape clears the placement selection; in Place mode it EXITS to
         // selection while the armed plant stays REMEMBERED (R3, both review
         // surfaces converging — exact infra-grammar mirror: the toolbar
@@ -705,7 +1031,7 @@ export default function GardenPlanner() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [clearSelection, placeMode]);
+  }, [clearSelection, placeMode, endDrag]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -1188,6 +1514,7 @@ export default function GardenPlanner() {
             onSearchChange={setSearchQuery}
             selectedPlantId={placePlantId}
             onPlantSelect={handlePlantSelect}
+            onPlantPointerDown={handlePlantPointerDown}
             cellSize={cellSize}
             selectedInfraType={infraType}
             onInfraSelect={handleInfraSelect}
@@ -1467,6 +1794,21 @@ export default function GardenPlanner() {
                   onCellDragStart={handleCellDragStart}
                   onCellDragEnter={handleCellDragEnter}
                   onCellDragEnd={handleCellDragEnd}
+                  onCellPointerDown={handleCellPointerDown}
+                  dragTarget={
+                    dragState?.target
+                      ? {
+                          startRow: dragState.target.startRow,
+                          startCol: dragState.target.startCol,
+                          spanRows: dragState.spanRows,
+                          spanCols: dragState.spanCols,
+                          valid: dragState.valid,
+                        }
+                      : null
+                  }
+                  gridElRef={(el) => {
+                    dndGridElRef.current = el;
+                  }}
                   cellSizePx={cellSizePx}
                 />
                 {shapeEditMode && (
@@ -1576,6 +1918,7 @@ export default function GardenPlanner() {
                 season={exposureSeason}
                 moment={exposureMoment}
                 hasCastShadow={castsShadow}
+                showDndTargets={placeMode}
               />
             )}
           </Box>
@@ -1653,6 +1996,81 @@ export default function GardenPlanner() {
           ? t('planner.toolbar.unsavedChanges')
           : t('planner.toolbar.saved')}
       </Typography>
+
+      {/* DnD ghost (lot 2, §7): decorative cursor-follower — position is
+          mutated directly on pointermove (no re-render); parked off-screen
+          until the first move lands. */}
+      {dragState && (
+        <Box
+          ref={ghostElRef}
+          aria-hidden
+          data-dnd-ghost
+          sx={{
+            position: 'fixed',
+            left: 0,
+            top: 0,
+            zIndex: 2000,
+            pointerEvents: 'none',
+            width: `${dragState.spanCols * (cellSizePx + dndGapPx) - dndGapPx}px`,
+            height: `${dragState.spanRows * (cellSizePx + dndGapPx) - dndGapPx}px`,
+            bgcolor: tk.ghostBg,
+            color: tk.ghostTx,
+            border: `2px solid ${tk.prim}`,
+            borderRadius: '9px', // §7
+            boxShadow: '0 14px 30px rgba(10,40,20,0.35)', // §7
+            opacity: 0.93, // §7
+            transform: 'translate(-1000px, -1000px) rotate(-2.5deg)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '4px',
+            fontWeight: 800,
+            fontSize: { xs: 12, sm: 16 },
+          }}
+        >
+          {(() => {
+            const ghostPlant = allPlants.find(
+              (p) => p.id === dragState.plantId
+            );
+            return ghostPlant
+              ? getPlantDisplayName(ghostPlant, language)
+                  .charAt(0)
+                  .toUpperCase()
+              : '';
+          })()}
+          {/* The N×N chip mirrors the sidebar footprint badge — the
+              project's one footprint-chip styling (no placement pill
+              exists; declared adaptation). */}
+          <Box component="span" sx={{ ...footprintBadgeSx(tk, true), bgcolor: tk.card }}>
+            {`${dragState.spanRows}×${dragState.spanCols}`}
+          </Box>
+        </Box>
+      )}
+
+      {/* §7 hint pill — visible for the whole drag. */}
+      {dragState && (
+        <Box
+          data-dnd-hint
+          sx={{
+            position: 'fixed',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 2000,
+            pointerEvents: 'none',
+            bgcolor: tk.hintBg,
+            color: tk.hintTx,
+            borderRadius: '999px',
+            px: '14px',
+            py: '7px',
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          {t('planner.dnd.dropHint')}
+        </Box>
+      )}
     </Box>
   );
 }

@@ -456,7 +456,10 @@
     },
     "dnd": {
       "collisionToast": "Collision — chevauche {{plant}} ({{cell}})",
-      "footprintBlocked": "L'empreinte {{cells}}×{{cells}} ne rentre pas ici"
+      "footprintBlocked": "L'empreinte {{cells}}×{{cells}} ne rentre pas ici",
+      "dropHint": "Relâchez pour poser · Échap pour annuler",
+      "legendValid": "Cible valide",
+      "legendCollision": "Collision"
     },
     "place": {
       "footprintUnknown": "Espacement inconnu — réglage manuel"

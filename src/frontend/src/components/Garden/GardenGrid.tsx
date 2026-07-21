@@ -10,7 +10,7 @@ import {
   INFRA_META,
   type InfraRegion,
 } from '../../utils/infrastructure';
-import { getPlannerTokens, type PlannerTokens } from '../../theme/plannerTokens';
+import { GAP_PX, getPlannerTokens, type PlannerTokens } from '../../theme/plannerTokens';
 import { getPlantColor } from '../../utils/plantColor';
 import { Sym } from '../Sym';
 
@@ -52,6 +52,26 @@ interface Props {
   onCellDragEnter?: (row: number, col: number) => void;
   onCellDragEnd?: () => void;
   cellSizePx?: number;
+  /**
+   * DnD (lot 2): raw pointerdown on a NON-paint cell — the page's drag
+   * engine decides whether it becomes a move-drag (placement under the
+   * cell, Place mode) or stays a click.
+   */
+  onCellPointerDown?: (row: number, col: number, e: React.PointerEvent) => void;
+  /**
+   * DnD (lot 2): the grid-snapped candidate rect under an active drag —
+   * covered cells render the §7 target treatment (valid: dashed prim;
+   * invalid: red hatch + dashed danger).
+   */
+  dragTarget?: {
+    startRow: number;
+    startCol: number;
+    spanRows: number;
+    spanCols: number;
+    valid: boolean;
+  } | null;
+  /** DnD (lot 2): exposes the role="grid" element for pointer→cell math. */
+  gridElRef?: (el: HTMLDivElement | null) => void;
 }
 
 // Base cells re-skinned to the design tokens (SMA-209: cellOn/cellOff exist
@@ -98,7 +118,8 @@ const axisLabelSx = {
 // CR accept): the overlays compute absolute geometry from these numbers and
 // the flex grid + axis rails consume the DERIVED sx strings below, so the
 // two can never drift.
-const GAP_PX = { xs: 2, sm: 3 } as const;
+// §4 gap now lives in plannerTokens (lot 2 — react-refresh forbids
+// non-component exports here); the CELL_GAP css strings stay derived.
 const CELL_GAP = { xs: `${GAP_PX.xs}px`, sm: `${GAP_PX.sm}px` } as const;
 
 /**
@@ -256,7 +277,7 @@ function PlantBlock({
   );
 }
 
-export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, placements, exposure, castShadow, onCellClick, onCellDragStart, onCellDragEnter, onCellDragEnd, cellSizePx = 44 }: Props) {
+export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, placements, exposure, castShadow, onCellClick, onCellDragStart, onCellDragEnter, onCellDragEnd, cellSizePx = 44, onCellPointerDown, dragTarget = null, gridElRef }: Props) {
   const { t } = useTranslation();
   const theme = useTheme();
   const tk = getPlannerTokens(theme.palette.mode === 'dark' ? 'dark' : 'light');
@@ -374,6 +395,7 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
     <Box sx={{ position: 'relative' }}>
     <Box
       role="grid"
+      ref={gridElRef}
       aria-label={t('planner.grid.label')}
       aria-rowcount={height}
       aria-colcount={width}
@@ -421,6 +443,16 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
                     ? tk.cellOnBd
                     : tk.cellOffBd
               }`;
+          // DnD target rect (lot 2, §7): the grid-snapped candidate paints
+          // its covered cells — valid: 2px dashed prim + light green fill
+          // (tk.cellOn, the nearest existing token for §7's "fond vert
+          // léger" — no new hex); invalid: §3 red hatch + 2px dashed danger.
+          const inTarget =
+            dragTarget &&
+            r >= dragTarget.startRow &&
+            r < dragTarget.startRow + dragTarget.spanRows &&
+            c >= dragTarget.startCol &&
+            c < dragTarget.startCol + dragTarget.spanCols;
           const commonSx = {
             width: cellSizePx,
             height: cellSizePx,
@@ -433,6 +465,17 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
             borderRadius: '4px', // §4: radius cellule 4px (border 1px)
             transition: 'background-color 0.1s',
             opacity,
+            ...(inTarget && dragTarget
+              ? dragTarget.valid
+                ? {
+                    bgcolor: tk.cellOn,
+                    border: `2px dashed ${tk.prim}`,
+                  }
+                : {
+                    backgroundImage: tk.redHatch,
+                    border: `2px dashed ${tk.dangTx}`,
+                  }
+              : undefined),
             '&:hover': {
               bgcolor: paintMode
                 ? getCellHoverBg(cell, tk)
@@ -507,6 +550,9 @@ export default function GardenGrid({ grid, shapeEditMode, infraPaintMode = false
               aria-rowindex={r + 1}
               aria-colindex={c + 1}
               tabIndex={interactive ? 0 : -1}
+              // DnD (lot 2): raw pointerdown feeds the page's drag engine
+              // (move-drag arming); plain clicks keep their behavior below.
+              onPointerDown={onCellPointerDown ? (e: React.PointerEvent) => onCellPointerDown(r, c, e) : undefined}
               onClick={interactive ? (e: React.MouseEvent<HTMLElement>) => onCellClick!(r, c, e.currentTarget) : undefined}
               onKeyDown={interactive ? (e: React.KeyboardEvent<HTMLElement>) => {
                 if (e.key === 'Enter' || e.key === ' ') {
