@@ -717,3 +717,97 @@ describe('GardenPlanner header save/cancel gating (F3, relocated in R2)', () => 
     expect(saveLayout).toHaveBeenCalledTimes(1);
   });
 });
+
+// SMA-193 (5.5 lot 1) — Place mode: spacing-driven footprints from a cell
+// click, the collision toast on rejection, and the Escape mode-preservation
+// pins from the pre-commit review.
+describe('GardenPlanner Place mode + spacing footprints (SMA-193 5.5)', () => {
+  const courgette = {
+    id: 'p3',
+    scientificName: 'Cucurbita fixture',
+    xPlantSpacingValue: 90,
+    xPlantSpacingUnit: 'cm',
+  } as Plant;
+
+  // 4×4 empty layout at 50cm/cell: 90 cm spacing → ceil(90/50) = 2 → 2×2.
+  const emptyLayout: GardenLayoutData = {
+    ...layout,
+    width: 4,
+    height: 4,
+    placements: [],
+  };
+
+  async function renderArmed() {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(emptyLayout);
+    vi.mocked(fetchPlants).mockResolvedValue([courgette]);
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    const row = await waitFor(() => {
+      const el = screen
+        .getAllByRole('button')
+        .find((b) => within(b).queryAllByText('Cucurbita fixture').length > 0);
+      expect(el).toBeTruthy();
+      return el!;
+    });
+    fireEvent.click(row); // arms the plant → enters Place mode
+    return grid;
+  }
+
+  it('a click places the spacing-derived 2×2 footprint (mockup anchor 90cm @ 50cm/cell)', async () => {
+    const grid = await renderArmed();
+    const cells = screen.getAllByRole('gridcell');
+    expect(cells.length).toBe(16);
+    fireEvent.click(cells[5]!); // (1,1) — the 2×2 fits rows 1-2 × cols 1-2
+
+    // One block letter, FOUR covered cells carrying the planted aria.
+    await waitFor(() =>
+      expect(plantArea(grid).getAllByText('C')).toHaveLength(1)
+    );
+    expect(
+      screen.getAllByRole('gridcell', { name: /Cucurbita fixture at/ })
+    ).toHaveLength(4);
+  });
+
+  it('a rejected overlap shows the collision toast and dispatches nothing', async () => {
+    const grid = await renderArmed();
+    const cells = screen.getAllByRole('gridcell');
+    fireEvent.click(cells[5]!); // 2×2 at rows 1-2 × cols 1-2
+    await waitFor(() =>
+      expect(plantArea(grid).getAllByText('C')).toHaveLength(1)
+    );
+
+    // Anchor (0,0) is OUTSIDE the existing footprint (so not a REPLACE) but
+    // its 2×2 candidate covers (1,1) → collision. cellRef(1,1) = B2.
+    fireEvent.click(screen.getAllByRole('gridcell')[0]!);
+    await screen.findByText('Collision — overlaps Cucurbita fixture (B2)');
+    // No second block, no new planted cells.
+    expect(plantArea(grid).getAllByText('C')).toHaveLength(1);
+    expect(
+      screen.getAllByRole('gridcell', { name: /Cucurbita fixture at/ })
+    ).toHaveLength(4);
+  });
+
+  it('Escape disarms in Place mode; in shape-edit it preserves the mode (review pin)', async () => {
+    await renderArmed();
+    // Armed → the Placer button is enabled; Escape disarms → disabled again.
+    expect(screen.getByRole('button', { name: 'Place' })).toBeEnabled();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Place' })).toBeDisabled()
+    );
+
+    // Shape-edit ON, then Escape: the mode must SURVIVE (pre-5.5 behavior —
+    // the review's Escape/Cancel equivalence regression).
+    // The FormControlLabel wraps the switch — clicking the label text flips
+    // it (the input carries no accessible name of its own).
+    fireEvent.click(screen.getByText('Edit shape'));
+    expect(
+      screen.getByRole('button', { name: 'Select all' })
+    ).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(
+      screen.getByRole('button', { name: 'Select all' })
+    ).toBeInTheDocument();
+  });
+});

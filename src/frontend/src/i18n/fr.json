@@ -451,7 +451,12 @@
     },
     "modes": {
       "selection": "Sélection",
+      "place": "Placer",
       "infrastructure": "Infrastructures"
+    },
+    "dnd": {
+      "collisionToast": "Collision — chevauche {{plant}} ({{cell}})",
+      "footprintBlocked": "L'empreinte {{cells}}×{{cells}} ne rentre pas ici"
     },
     "infra": {
       "hint": "Posez des infrastructures sur la grille. Les éléments bloquants portent une ombre dans le calque Exposition.",
@@ -535,7 +540,9 @@
       "search": "Rechercher des plantes...",
       "noResults": "Aucune plante trouvée",
       "title": "Bibliothèque de plantes",
-      "deselect": "Désélectionner la plante"
+      "deselect": "Désélectionner la plante",
+      "footprint": "Empreinte {{cells}}×{{cells}}",
+      "footprintUnknown": "Empreinte inconnue — 1×1 par défaut"
     },
     "placement": {
       "position": "Position : ligne {{row}}, colonne {{col}}",

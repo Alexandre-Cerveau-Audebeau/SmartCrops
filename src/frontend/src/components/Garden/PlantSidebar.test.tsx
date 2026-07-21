@@ -25,6 +25,9 @@ type SidebarOverrides = {
   searchQuery?: string;
   plants?: Plant[];
   catalogReady?: boolean;
+  selectedPlantId?: string | null;
+  onPlantSelect?: (plantId: string | null) => void;
+  cellSize?: string;
   selectedInfraType?: InfrastructureType | null;
   // Must mirror the prop's FULL union: a narrower parameter type is not
   // assignable (contravariance) and only tsc catches it — vitest strips types.
@@ -38,8 +41,9 @@ const sidebar = (overrides: SidebarOverrides = {}) => (
     plants={overrides.plants ?? [ivy, fern]}
     searchQuery={overrides.searchQuery ?? ''}
     onSearchChange={vi.fn()}
-    selectedPlantId={null}
-    onPlantSelect={vi.fn()}
+    selectedPlantId={overrides.selectedPlantId ?? null}
+    onPlantSelect={overrides.onPlantSelect ?? vi.fn()}
+    cellSize={overrides.cellSize}
     selectedInfraType={overrides.selectedInfraType ?? null}
     onInfraSelect={overrides.onInfraSelect ?? vi.fn()}
     language="fr"
@@ -102,6 +106,42 @@ describe('PlantSidebar (SMA-194)', () => {
       .find((el) => within(el).queryByText('Trellis'))!;
     expect(wallRow).toHaveAttribute('aria-pressed', 'true');
     expect(trellisRow).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('plant rows: click arms, re-click disarms with null (SMA-193)', () => {
+    // Exact plant-side analog of the infra toggle below — without the spy the
+    // suite would still pass with the row onClick deleted (e7e2feb8 lesson).
+    const onPlantSelect = vi.fn();
+    const { rerender } = render(sidebar({ onPlantSelect }));
+    const ivyRow = () =>
+      screen
+        .getAllByRole('button')
+        .find((el) => within(el).queryByText('Lierre'))!;
+
+    fireEvent.click(ivyRow());
+    expect(onPlantSelect).toHaveBeenCalledWith('p1');
+
+    rerender(sidebar({ onPlantSelect, selectedPlantId: 'p1' }));
+    fireEvent.click(ivyRow());
+    expect(onPlantSelect).toHaveBeenLastCalledWith(null);
+    expect(onPlantSelect).toHaveBeenCalledTimes(2);
+  });
+
+  it('footprint badges: spacing-known rows show N×N, unknown rows show the dashed 1×1? (SMA-193)', () => {
+    renderSidebar({
+      plants: [
+        { ...ivy, xPlantSpacingValue: 90, xPlantSpacingUnit: 'cm' } as Plant,
+        fern, // no spacing → unknown badge
+      ],
+      cellSize: '50cm',
+    });
+    // 90 cm at 50 cm/cell → 2×2 (the mockup anchor).
+    expect(screen.getByText('2×2')).toBeInTheDocument();
+    expect(screen.getByLabelText('2×2 footprint')).toBeInTheDocument();
+    expect(screen.getByText('1×1?')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Footprint unknown — 1×1 default')
+    ).toBeInTheDocument();
   });
 
   it('arms a type on click and disarms it with null on re-click (SMA-303)', () => {

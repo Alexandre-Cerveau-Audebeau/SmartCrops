@@ -63,6 +63,34 @@ public class PlantListItemMapperTests
     }
 
     [Fact]
+    public void ToListItem_SurfacesPerenualSpacing_WhenPresent()
+    {
+        // SMA-193: the planner's footprint sizing reads the spacing scalars
+        // straight from the list payload — no detail round-trip.
+        var plant = PlantWith();
+        plant.PerenualData = new PlantPerenualData
+        {
+            PerenualId = 1,
+            XPlantSpacingValue = 18,
+            XPlantSpacingUnit = "inches",
+        };
+
+        var dto = PlantListItemMapper.ToListItem(plant);
+
+        Assert.Equal(18, dto.XPlantSpacingValue);
+        Assert.Equal("inches", dto.XPlantSpacingUnit);
+    }
+
+    [Fact]
+    public void ToListItem_NoPerenualData_YieldsNullSpacing()
+    {
+        var dto = PlantListItemMapper.ToListItem(PlantWith());
+
+        Assert.Null(dto.XPlantSpacingValue);
+        Assert.Null(dto.XPlantSpacingUnit);
+    }
+
+    [Fact]
     public void ToListItem_PicksCoverTypeByPriority_HabitOverLeaf()
     {
         var plant = PlantWith(

@@ -14,16 +14,26 @@ function renderControls(
     exposureVisible?: boolean;
     exposureMoment?: Moment;
     exposureSeason?: Season;
+    placeMode?: boolean;
+    placeArmed?: boolean;
     onUndo?: () => void;
     onToggleExposure?: () => void;
     onSetExposureMoment?: (moment: Moment) => void;
     onSetExposureSeason?: (season: Season) => void;
+    onSelectionMode?: () => void;
+    onInfraMode?: () => void;
+    onPlaceMode?: () => void;
   } = {}
 ) {
   return render(
     <GridControls
       hasGrid
       shapeEditMode={false}
+      placeMode={overrides.placeMode}
+      placeArmed={overrides.placeArmed}
+      onSelectionMode={overrides.onSelectionMode}
+      onInfraMode={overrides.onInfraMode}
+      onPlaceMode={overrides.onPlaceMode}
       zoom={1}
       canUndo={overrides.canUndo ?? false}
       exposureVisible={overrides.exposureVisible ?? false}
@@ -114,5 +124,35 @@ describe('GridControls exposure row (SMA-17 5.3-D)', () => {
       'aria-pressed',
       'true'
     );
+  });
+});
+
+// SMA-193 (5.5 lot 1) — the Placer mode button: gated on an armed plant,
+// mirrors the Infrastructures button's grammar.
+describe('GridControls Placer button (SMA-193 5.5)', () => {
+  const modeHandlers = () => ({
+    onSelectionMode: vi.fn(),
+    onInfraMode: vi.fn(),
+    onPlaceMode: vi.fn(),
+  });
+
+  it('is disabled without an armed plant', () => {
+    renderControls({ ...modeHandlers(), placeArmed: false });
+    expect(screen.getByRole('button', { name: 'Place' })).toBeDisabled();
+  });
+
+  it('is enabled with an armed plant and fires onPlaceMode', () => {
+    const handlers = modeHandlers();
+    renderControls({ ...handlers, placeArmed: true });
+    const place = screen.getByRole('button', { name: 'Place' });
+    expect(place).toBeEnabled();
+    fireEvent.click(place);
+    expect(handlers.onPlaceMode).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays clickable while ACTIVE even though the armed plant was cleared elsewhere', () => {
+    // active || armed drives enabled — mirrors the infra button.
+    renderControls({ ...modeHandlers(), placeMode: true, placeArmed: false });
+    expect(screen.getByRole('button', { name: 'Place' })).toBeEnabled();
   });
 });

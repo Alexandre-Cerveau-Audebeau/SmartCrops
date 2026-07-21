@@ -44,6 +44,9 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
     ///   <item><b>SMA-118</b>: STABLE-source images only (Trefle/PlantNet) — Perenual
     ///   <c>Main</c> images are time-limited signed S3 URLs that expire (~24h) and now
     ///   403, so the mapper must never surface them.</item>
+    ///   <item><b>SMA-193</b>: the 1-1 <c>PerenualData</c> row, so the list DTO can
+    ///   ship the factual spacing scalars that drive the planner's footprint sizing
+    ///   (the mapper reads nothing else from it — free text stays detail-only).</item>
     /// </list>
     /// <c>AsSplitQuery</c> avoids cartesian-multiplying the parent rows across the two
     /// collection includes; <c>AsNoTracking</c> since these are read-only projections.
@@ -51,6 +54,7 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
     private static IQueryable<Plant> ApplyListIncludes(IQueryable<Plant> query, string language)
         => query
             .Include(p => p.PlantType)
+            .Include(p => p.PerenualData)
             .Include(p => p.Translations.Where(t => t.Language == language || t.Language == "en"))
             .Include(p => p.Images.Where(i =>
                 i.Source == PlantSourceType.Trefle || i.Source == PlantSourceType.PlantNet))

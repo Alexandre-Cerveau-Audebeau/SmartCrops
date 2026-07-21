@@ -308,8 +308,9 @@ export function hasSpacing(value: number | null, unit: string | null): boolean {
   return value !== null && !!unit?.trim();
 }
 
-/** Parse the Perenual source spacing unit to centimetres; null if unrecognized. */
-function spacingToCm(value: number, sourceUnit: string): number | null {
+/** Parse the Perenual source spacing unit to centimetres; null if unrecognized.
+ * Exported for the planner's footprint sizing (SMA-193). */
+export function spacingToCm(value: number, sourceUnit: string): number | null {
   const u = sourceUnit.trim().toLowerCase();
   if (u.startsWith('inch') || u === 'in') return inchesToCm(value);
   if (u.startsWith('cm') || u.startsWith('centim')) return value;
