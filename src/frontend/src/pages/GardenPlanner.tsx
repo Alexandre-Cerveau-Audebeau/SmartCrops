@@ -1257,7 +1257,19 @@ export default function GardenPlanner() {
   const armedPlantIndicator = useMemo(() => {
     if (!placePlantId) return null;
     const armed = allPlants.find((p) => p.id === placePlantId);
-    if (!armed) return null;
+    if (!armed) {
+      // SMA-288 three-state grammar (CR R1, ruling 22 Jul): while the
+      // catalog is PENDING the indicator stays hidden (a blank-name toolbar
+      // chip would be odd); a READY catalog that lacks the armed id keeps
+      // the armed state visible via the unknown-plant placeholder.
+      return catalogReady
+        ? {
+            name: t('planner.unknownPlant'),
+            footprint: '1×1?',
+            footprintKnown: false,
+          }
+        : null;
+    }
     const fp = spacingToFootprintCells(
       armed.xPlantSpacingValue ?? null,
       armed.xPlantSpacingUnit ?? null,
@@ -1268,7 +1280,7 @@ export default function GardenPlanner() {
       footprint: fp.known ? `${fp.cells}×${fp.cells}` : '1×1?',
       footprintKnown: fp.known,
     };
-  }, [placePlantId, allPlants, cellSize, language]);
+  }, [placePlantId, allPlants, cellSize, language, catalogReady, t]);
 
   const handleSave = useCallback(async () => {
     const {

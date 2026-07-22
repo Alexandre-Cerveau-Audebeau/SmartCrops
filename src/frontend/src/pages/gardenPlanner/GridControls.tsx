@@ -161,6 +161,116 @@ function ModeButton({
   );
 }
 
+/**
+ * SMA-18 (R2; extracted R3 per the file's PresetSegmented/ModeButton
+ * precedent): armed-plant indicator — right of the mode group, before
+ * undo/zoom, visible on EVERY sidebar tab. Same tinted-prim chip pair as
+ * the sidebar (§1/§2 cntChipBg + prim). The danger X (owner accept, R2) is
+ * a SIBLING of the role="status" block so status announcements never
+ * include the button.
+ */
+function ArmedPlantIndicator({
+  armedPlant,
+  onDisarm,
+  tk,
+  t,
+}: {
+  armedPlant: { name: string; footprint: string; footprintKnown: boolean };
+  onDisarm?: () => void;
+  tk: PlannerTokens;
+  t: ReturnType<typeof useTranslation>['t'];
+}) {
+  return (
+    <Box
+      data-testid="armed-plant-indicator"
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '7px',
+        height: 32,
+        px: '10px',
+        minWidth: 0,
+        borderRadius: '8px',
+        bgcolor: tk.cntChipBg,
+        border: `2px solid ${tk.prim}`,
+      }}
+    >
+      <Box
+        role="status"
+        aria-label={t('planner.place.armedIndicator', {
+          plant: armedPlant.name,
+          footprint: armedPlant.footprint,
+        })}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '7px',
+          minWidth: 0,
+        }}
+      >
+        {/* Same glyph as the Placer button — the coherent cue. */}
+        <Box
+          component="span"
+          aria-hidden
+          sx={{
+            display: 'inline-flex',
+            fontSize: 17,
+            lineHeight: 0,
+            color: tk.prim,
+          }}
+        >
+          <ModeIconPlace />
+        </Box>
+        {/* R2 (owner accept): the meaning is VISIBLE, not aria-only. */}
+        <Typography
+          component="span"
+          noWrap
+          sx={{
+            flexShrink: 0,
+            fontSize: 11.5,
+            fontWeight: 600,
+            color: tk.tMeta,
+          }}
+        >
+          {t('planner.place.armedIndicatorPrefix')}
+        </Typography>
+        <Typography
+          component="span"
+          noWrap
+          sx={{
+            // 220 → 180 (R2): the prefix + X joined the chip — the
+            // name yields the width so undo/zoom never move.
+            maxWidth: 180,
+            fontSize: 13,
+            fontWeight: 700,
+            color: tk.tTitle,
+          }}
+        >
+          {armedPlant.name}
+        </Typography>
+        <Box
+          component="span"
+          sx={footprintBadgeSx(tk, armedPlant.footprintKnown)}
+        >
+          {armedPlant.footprint}
+        </Box>
+      </Box>
+      {onDisarm && (
+        <IconButton
+          size="small"
+          aria-label={t('planner.place.disarmLabel', {
+            plant: armedPlant.name,
+          })}
+          onClick={onDisarm}
+          sx={{ p: '2px', color: tk.dangTx }}
+        >
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      )}
+    </Box>
+  );
+}
+
 interface GridControlsProps {
   hasGrid: boolean;
   shapeEditMode: boolean;
@@ -316,99 +426,13 @@ export const GridControls = memo(function GridControls({
           </>
         )}
 
-        {/* SMA-18 (R2): armed-plant indicator — right of the mode group,
-            before undo/zoom, visible on EVERY sidebar tab. Same tinted-prim
-            chip pair as the sidebar (§1/§2 cntChipBg + prim). The danger X
-            (owner accept, R2) is a SIBLING of the role="status" block so
-            status announcements never include the button. */}
         {armedPlant && (
-          <Box
-            data-testid="armed-plant-indicator"
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '7px',
-              height: 32,
-              px: '10px',
-              minWidth: 0,
-              borderRadius: '8px',
-              bgcolor: tk.cntChipBg,
-              border: `2px solid ${tk.prim}`,
-            }}
-          >
-            <Box
-              role="status"
-              aria-label={t('planner.place.armedIndicator', {
-                plant: armedPlant.name,
-                footprint: armedPlant.footprint,
-              })}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '7px',
-                minWidth: 0,
-              }}
-            >
-              {/* Same glyph as the Placer button — the coherent cue. */}
-              <Box
-                component="span"
-                aria-hidden
-                sx={{
-                  display: 'inline-flex',
-                  fontSize: 17,
-                  lineHeight: 0,
-                  color: tk.prim,
-                }}
-              >
-                <ModeIconPlace />
-              </Box>
-              {/* R2 (owner accept): the meaning is VISIBLE, not aria-only. */}
-              <Typography
-                component="span"
-                noWrap
-                sx={{
-                  flexShrink: 0,
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  color: tk.tMeta,
-                }}
-              >
-                {t('planner.place.armedIndicatorPrefix')}
-              </Typography>
-              <Typography
-                component="span"
-                noWrap
-                sx={{
-                  // 220 → 180 (R2): the prefix + X joined the chip — the
-                  // name yields the width so undo/zoom never move.
-                  maxWidth: 180,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: tk.tTitle,
-                }}
-              >
-                {armedPlant.name}
-              </Typography>
-              <Box
-                component="span"
-                sx={footprintBadgeSx(tk, armedPlant.footprintKnown)}
-              >
-                {armedPlant.footprint}
-              </Box>
-            </Box>
-            {onDisarm && (
-              <IconButton
-                size="small"
-                aria-label={t('planner.place.disarmLabel', {
-                  plant: armedPlant.name,
-                })}
-                onClick={onDisarm}
-                sx={{ p: '2px', color: tk.dangTx }}
-              >
-                <CloseIcon fontSize="small" />
-              </IconButton>
-            )}
-          </Box>
+          <ArmedPlantIndicator
+            armedPlant={armedPlant}
+            onDisarm={onDisarm}
+            tk={tk}
+            t={t}
+          />
         )}
 
         {/* R4 (mockup arrangement): undo sits INSIDE the right cluster,

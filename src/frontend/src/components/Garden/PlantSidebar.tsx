@@ -94,6 +94,100 @@ function FootprintBadge({ fp }: { fp: { cells: number; known: boolean } }) {
   );
 }
 
+/**
+ * SMA-18 armed identity chip (owner ruling 22 Jul; extracted R3 per the CR
+ * shape): the bare deselect text button became this chip — familiar row
+ * anatomy (avatar, name, badge) but a deliberately DISTINCT treatment
+ * (tinted cntChipBg + 2px solid prim vs the rows' borderLeft marker) so it
+ * can never be confused with a list row. SMA-288 grammar preserved: while
+ * the catalog is pending the name slot stays empty (never the unknown
+ * fallback); the danger X keeps the explicit disarm available in every
+ * catalog state.
+ */
+function ArmedPlantChip({
+  armedId,
+  armed,
+  catalogReady,
+  language,
+  cellSize,
+  onDisarm,
+}: {
+  /** The armed id — colors the avatar even while the plant is unresolved. */
+  armedId: string;
+  armed: Plant | undefined;
+  catalogReady: boolean;
+  language: string;
+  cellSize: string;
+  onDisarm: () => void;
+}) {
+  const { t } = useTranslation();
+  const tk = usePlannerTokens();
+  const armedName = armed
+    ? getPlantDisplayName(armed, language)
+    : catalogReady
+      ? t('planner.unknownPlant')
+      : '';
+  return (
+    <Box
+      data-testid="armed-plant-chip"
+      sx={{
+        mt: 1,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        p: '6px 8px',
+        borderRadius: '9px',
+        bgcolor: tk.cntChipBg,
+        border: `2px solid ${tk.prim}`,
+      }}
+    >
+      <Avatar
+        sx={{
+          width: 28,
+          height: 28,
+          fontSize: 12.5,
+          fontWeight: 800,
+          bgcolor: getPlantColor(armedId),
+        }}
+      >
+        {armedName.charAt(0).toUpperCase()}
+      </Avatar>
+      <Typography
+        component="span"
+        noWrap
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          fontSize: 13.5,
+          fontWeight: 700,
+          color: tk.tTitle,
+        }}
+      >
+        {armedName}
+      </Typography>
+      {armed && (
+        <FootprintBadge
+          fp={spacingToFootprintCells(
+            armed.xPlantSpacingValue ?? null,
+            armed.xPlantSpacingUnit ?? null,
+            cellSize
+          )}
+        />
+      )}
+      <IconButton
+        size="small"
+        aria-label={t('planner.place.disarmLabel', {
+          plant: armedName,
+        })}
+        onClick={onDisarm}
+        sx={{ p: '2px', color: tk.dangTx }}
+      >
+        <CloseIcon fontSize="small" />
+      </IconButton>
+    </Box>
+  );
+}
+
 function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
@@ -292,81 +386,16 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
                 },
               }}
             />
-            {selectedPlantId && (() => {
-              // SMA-18 (owner ruling 22 Jul): the bare deselect text button
-              // becomes an IDENTITY CHIP — familiar row anatomy (avatar,
-              // name, badge) but a deliberately DISTINCT treatment (tinted
-              // cntChipBg + 2px solid prim vs the rows' borderLeft marker)
-              // so it can never be confused with a list row. SMA-288 grammar
-              // preserved: while the catalog is pending the name slot stays
-              // empty (never the unknown fallback); the danger X keeps the
-              // explicit disarm available in every catalog state.
-              const armed = plants.find((p) => p.id === selectedPlantId);
-              const armedName = armed
-                ? getPlantDisplayName(armed, language)
-                : catalogReady
-                  ? t('planner.unknownPlant')
-                  : '';
-              return (
-                <Box
-                  data-testid="armed-plant-chip"
-                  sx={{
-                    mt: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    p: '6px 8px',
-                    borderRadius: '9px',
-                    bgcolor: tk.cntChipBg,
-                    border: `2px solid ${tk.prim}`,
-                  }}
-                >
-                  <Avatar
-                    sx={{
-                      width: 28,
-                      height: 28,
-                      fontSize: 12.5,
-                      fontWeight: 800,
-                      bgcolor: getPlantColor(selectedPlantId),
-                    }}
-                  >
-                    {armedName.charAt(0).toUpperCase()}
-                  </Avatar>
-                  <Typography
-                    component="span"
-                    noWrap
-                    sx={{
-                      flex: 1,
-                      minWidth: 0,
-                      fontSize: 13.5,
-                      fontWeight: 700,
-                      color: tk.tTitle,
-                    }}
-                  >
-                    {armedName}
-                  </Typography>
-                  {armed && (
-                    <FootprintBadge
-                      fp={spacingToFootprintCells(
-                        armed.xPlantSpacingValue ?? null,
-                        armed.xPlantSpacingUnit ?? null,
-                        cellSize
-                      )}
-                    />
-                  )}
-                  <IconButton
-                    size="small"
-                    aria-label={t('planner.place.disarmLabel', {
-                      plant: armedName,
-                    })}
-                    onClick={() => onPlantSelect(null)}
-                    sx={{ p: '2px', color: tk.dangTx }}
-                  >
-                    <CloseIcon fontSize="small" />
-                  </IconButton>
-                </Box>
-              );
-            })()}
+            {selectedPlantId && (
+              <ArmedPlantChip
+                armedId={selectedPlantId}
+                armed={plants.find((p) => p.id === selectedPlantId)}
+                catalogReady={catalogReady}
+                language={language}
+                cellSize={cellSize}
+                onDisarm={() => onPlantSelect(null)}
+              />
+            )}
           </Box>
           <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {!catalogReady ? (

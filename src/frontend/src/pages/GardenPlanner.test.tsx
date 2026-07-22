@@ -1466,6 +1466,54 @@ describe('GardenPlanner armed-plant visibility (SMA-18)', () => {
     expect(screen.queryByTestId('armed-plant-chip')).toBeNull();
   });
 
+  it('indicator grammar (SMA-288, R3): hidden while pending, Unknown on a ready catalog missing the armed id', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      width: 4,
+      height: 4,
+      placements: [],
+    });
+    // Per-call controllable promises (the 5.2 R3 mechanism): calls[0] = EN
+    // catalog, calls[1] = FR after the locale switch.
+    const resolvers: Array<(plants: Plant[]) => void> = [];
+    vi.mocked(fetchPlants).mockImplementation(
+      () =>
+        new Promise<Plant[]>((resolve) => {
+          resolvers.push(resolve);
+        })
+    );
+    renderPlanner();
+    await screen.findByRole('grid');
+    resolvers[0]!([courgette, basil]);
+    const row = await waitFor(() => {
+      const el = screen
+        .getAllByRole('button')
+        .find((b) => within(b).queryAllByText('Cucurbita fixture').length > 0);
+      expect(el).toBeTruthy();
+      return el!;
+    });
+    fireEvent.click(row); // arm the courgette
+    expect(screen.getByTestId('armed-plant-indicator')).toBeInTheDocument();
+
+    // Locale switch → catalog PENDING: the indicator hides (null branch) —
+    // a blank-name toolbar chip would be odd (settled ruling).
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    expect(screen.queryByTestId('armed-plant-indicator')).toBeNull();
+
+    // FR catalog resolves WITHOUT the armed id → READY-but-missing: the
+    // armed state stays visible via the unknown-plant placeholder.
+    await waitFor(() => expect(resolvers.length).toBe(2));
+    resolvers[1]!([basil]);
+    const indicator = await screen.findByTestId('armed-plant-indicator');
+    expect(within(indicator).getByText('Inconnue')).toBeInTheDocument();
+    expect(within(indicator).getByText('1×1?')).toBeInTheDocument();
+    // The sidebar chip grammar is UNTOUCHED: chip mounted, unknown fallback
+    // on the ready catalog (SMA-288).
+    const chip = screen.getByTestId('armed-plant-chip');
+    expect(within(chip).getByText('Inconnue')).toBeInTheDocument();
+  });
+
   it('the indicator carries the VISIBLE "Selected plant" prefix (R2)', async () => {
     const { row } = await renderArmedVisibility();
     fireEvent.click(row);
