@@ -857,10 +857,13 @@ export function plannerReducer(
           };
 
     case 'SET_PLACE_MODE':
-      // Entering REQUIRES an armed plant (the sidebar arms it) — a guarded
-      // no-op otherwise. Leaving keeps the plant armed for a later re-entry.
+      // Lot 3 R2 (product ruling 2026-07-22): entering NO LONGER requires an
+      // armed plant — a DELIBERATE divergence from the infra mirror. Place
+      // has TWO functions: placing (needs an armed plant) and moving
+      // existing placements (needs none — move-drags check only placeMode
+      // since lot 2). An unarmed entry is the move-only mode. Leaving keeps
+      // the plant armed for a later re-entry.
       if (action.enabled) {
-        if (!state.placePlantId) return state;
         return { ...state, ...enterSelectionMode, placeMode: true };
       }
       return { ...state, ...enterSelectionMode };

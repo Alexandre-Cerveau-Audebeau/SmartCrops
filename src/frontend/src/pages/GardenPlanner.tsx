@@ -960,6 +960,15 @@ export default function GardenPlanner() {
       // Block clicks on inactive cells only when there's no placement to interact with
       if (!grid[row][col].active && !existing) return;
 
+      if (placeMode && !placePlantId) {
+        // Lot 3 R2 (product ruling 2026-07-22): armless Place mode is
+        // MOVE-ONLY — a cell click never places (no dispatch, no toast).
+        // Selection still works so the detail panel stays reachable, and the
+        // early return keeps the 5.3-D override popover selection-only.
+        selectPlacement(existing ? existing.id : null);
+        return;
+      }
+
       if (placeMode && placePlantId) {
         // Placement is INERT while the active-language catalog is unavailable
         // (pending or failed): the armed selection raw id could otherwise act
@@ -1642,7 +1651,6 @@ export default function GardenPlanner() {
               infraMode={infraMode}
               infraArmed={infraType !== null}
               placeMode={placeMode}
-              placeArmed={placePlantId !== null}
               zoom={zoom}
               canUndo={state.past.length > 0}
               exposureVisible={exposureVisible}

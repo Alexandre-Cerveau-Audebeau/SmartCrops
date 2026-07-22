@@ -1393,9 +1393,18 @@ describe('plannerReducer Place mode (SMA-193 5.5)', () => {
     expect(s.infraMode).toBe(false);
   });
 
-  it('SET_PLACE_MODE cannot enter without an armed plant (guarded no-op)', () => {
-    const s = hydrated();
-    expect(plannerReducer(s, { type: 'SET_PLACE_MODE', enabled: true })).toBe(s);
+  it('SET_PLACE_MODE enters WITHOUT an armed plant — move-only mode (product ruling 22 Jul)', () => {
+    // Lot 3 R2: the lot-1 guard is gone — the armless entry is legitimate
+    // (moving needs no armed plant). Other modes still exit through the gate.
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    s = plannerReducer(s, { type: 'SET_PLACE_MODE', enabled: true });
+    expect(s.placeMode).toBe(true);
+    expect(s.placePlantId).toBeNull(); // armless — nothing got armed
+    expect(s.shapeEditMode).toBe(false);
+    expect(s.infraMode).toBe(false);
   });
 
   it('SET_PLACE_MODE off keeps the plant armed for a later re-entry', () => {

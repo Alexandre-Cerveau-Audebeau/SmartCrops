@@ -1210,6 +1210,79 @@ describe('GardenPlanner pointer DnD (SMA-193 lot 2)', () => {
       'Collision'
     );
   });
+
+  // Lot 3 R2 (product ruling 22 Jul): Place mode opens WITHOUT an armed
+  // plant — the armless entry is move-only.
+  it('the Placer button opens the mode with nothing armed', async () => {
+    await renderDnd();
+    const place = screen.getByRole('button', { name: 'Place' });
+    expect(place).toBeEnabled();
+    fireEvent.click(place);
+    expect(place).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('moves an existing placement in armless Place mode (no arming, no Move button)', async () => {
+    await renderDnd({
+      placements: [
+        {
+          id: 'pl-c',
+          plantId: 'p3',
+          plantScientificName: null,
+          startRow: 1,
+          startCol: 1,
+          spanRows: 2,
+          spanCols: 2,
+          notes: null,
+        },
+      ],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Place' })); // armless entry
+    const cells = screen.getAllByRole('gridcell');
+    fireEvent.pointerDown(cells[5]!, { ...at(1, 1), pointerId: 3, isPrimary: true });
+    fireEvent.pointerMove(document, { ...at(2, 2), pointerId: 3, isPrimary: true });
+    expect(ghost()).not.toBeNull();
+    fireEvent.pointerUp(document, { ...at(2, 2), pointerId: 3, isPrimary: true });
+    await waitFor(() =>
+      expect(
+        screen.getByRole('gridcell', {
+          name: 'Cucurbita fixture at row 3, column C',
+        })
+      ).toBeInTheDocument()
+    );
+    expect(
+      screen.getAllByRole('gridcell', { name: /Cucurbita fixture at/ })
+    ).toHaveLength(4);
+  });
+
+  it('clicking an empty cell in armless Place mode places nothing and shows no toast', async () => {
+    const { grid } = await renderDnd();
+    fireEvent.click(screen.getByRole('button', { name: 'Place' }));
+    fireEvent.click(screen.getAllByRole('gridcell')[0]!);
+    expect(plantArea(grid).queryAllByText('C')).toHaveLength(0);
+    expect(
+      screen.queryAllByRole('gridcell', { name: /Cucurbita fixture at/ })
+    ).toHaveLength(0);
+    expect(screen.queryByText(/Collision — overlaps/)).toBeNull();
+    expect(screen.queryByText(/footprint doesn't fit/)).toBeNull();
+  });
+
+  it('a sidebar drag from armless Place mode still arms and places (lot-2 grammar)', async () => {
+    const { row } = await renderDnd();
+    fireEvent.click(screen.getByRole('button', { name: 'Place' })); // armless entry
+    fireEvent.pointerDown(row, { clientX: 5, clientY: 5, pointerId: 1, isPrimary: true });
+    fireEvent.pointerMove(document, { ...at(1, 1), pointerId: 1, isPrimary: true });
+    fireEvent.pointerUp(document, { ...at(1, 1), pointerId: 1, isPrimary: true });
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('gridcell', { name: /Cucurbita fixture at/ })
+      ).toHaveLength(4)
+    );
+    // The drag armed the plant (lot-2 threshold-crossing grammar).
+    expect(screen.getByRole('button', { name: 'Place' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
 });
 
 // SMA-193 lot 3 — footprint panel: the pose-time clamp keeps oversized

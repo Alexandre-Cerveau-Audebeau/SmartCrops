@@ -140,9 +140,8 @@ interface GridControlsProps {
   /** Infrastructure paint mode + whether a type is armed (SMA-15 5.4). */
   infraMode?: boolean;
   infraArmed?: boolean;
-  /** Place mode + whether a plant is armed (SMA-193 5.5). */
+  /** Place mode (SMA-193 5.5) — no armed gate since lot 3 R2 (move-only entry). */
   placeMode?: boolean;
-  placeArmed?: boolean;
   zoom: number;
   canUndo: boolean;
   exposureVisible: boolean;
@@ -174,7 +173,6 @@ export const GridControls = memo(function GridControls({
   infraMode = false,
   infraArmed = false,
   placeMode = false,
-  placeArmed = false,
   zoom,
   canUndo,
   exposureVisible,
@@ -239,13 +237,13 @@ export const GridControls = memo(function GridControls({
               onClick={onSelectionMode}
               tk={tk}
             />
-            {/* Entering Placer REQUIRES an armed plant from the sidebar
-                PLANTES tab (the reducer guards it too — SMA-193). */}
+            {/* Lot 3 R2 (product ruling 22 Jul): Placer opens WITHOUT an armed
+                plant — armless entry is the move-only mode (deliberate
+                divergence from the Infrastructures gate below). */}
             {onPlaceMode && (
               <ModeButton
                 label={t('planner.modes.place')}
                 active={placeMode}
-                disabled={!placeMode && !placeArmed}
                 onClick={onPlaceMode}
                 tk={tk}
               />
