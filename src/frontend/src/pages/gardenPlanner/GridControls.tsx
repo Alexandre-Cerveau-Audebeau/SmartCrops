@@ -13,6 +13,9 @@ import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import { iosSwitchSx, type PlannerTokens } from '../../theme/plannerTokens';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Moment, Season } from '../../utils/exposure';
+import { ModeIconInfra } from './icons/ModeIconInfra';
+import { ModeIconPlace } from './icons/ModeIconPlace';
+import { ModeIconSelect } from './icons/ModeIconSelect';
 import { ZOOM_MAX, ZOOM_MIN } from './plannerReducer';
 
 const MOMENTS: Moment[] = ['morning', 'noon', 'evening'];
@@ -97,12 +100,15 @@ function ModeButton({
   label,
   active,
   disabled,
+  icon,
   onClick,
   tk,
 }: {
   label: string;
   active: boolean;
   disabled?: boolean;
+  /** SMA-18: the mockup mode glyph (Etats L1014) — decorative, before the label. */
+  icon?: React.ReactNode;
   onClick: () => void;
   tk: PlannerTokens;
 }) {
@@ -114,6 +120,11 @@ function ModeButton({
       disabled={disabled}
       onClick={onClick}
       sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        // Mockup template (Etats): 18px icon, 7px gap inside the h38/r8 chip.
+        gap: '7px',
         height: { xs: 34, sm: 38 },
         px: { xs: '10px', sm: '14px' },
         fontSize: { xs: 12, sm: 13.5 },
@@ -129,6 +140,17 @@ function ModeButton({
         transition: 'background-color .15s, color .15s',
       }}
     >
+      {icon && (
+        // 18px em-box; the svg inherits it (1em) and paints currentColor,
+        // so the icon follows the existing active/inactive colors.
+        <Box
+          component="span"
+          aria-hidden
+          sx={{ display: 'inline-flex', fontSize: 18, lineHeight: 0 }}
+        >
+          {icon}
+        </Box>
+      )}
       {label}
     </Box>
   );
@@ -234,6 +256,7 @@ export const GridControls = memo(function GridControls({
             <ModeButton
               label={t('planner.modes.selection')}
               active={!shapeEditMode && !infraMode && !placeMode}
+              icon={<ModeIconSelect />}
               onClick={onSelectionMode}
               tk={tk}
             />
@@ -244,6 +267,7 @@ export const GridControls = memo(function GridControls({
               <ModeButton
                 label={t('planner.modes.place')}
                 active={placeMode}
+                icon={<ModeIconPlace />}
                 onClick={onPlaceMode}
                 tk={tk}
               />
@@ -254,6 +278,7 @@ export const GridControls = memo(function GridControls({
               label={t('planner.modes.infrastructure')}
               active={infraMode}
               disabled={!infraMode && !infraArmed}
+              icon={<ModeIconInfra />}
               onClick={onInfraMode}
               tk={tk}
             />
