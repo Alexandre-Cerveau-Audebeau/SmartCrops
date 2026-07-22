@@ -1242,6 +1242,14 @@ export default function GardenPlanner() {
     };
   });
 
+  // SMA-18 R2: the indicator's X — the same explicit disarm the sidebar
+  // chip dispatches through handlePlantSelect(null), minus that handler's
+  // post-drag click-swallow guard (no drags start from the toolbar).
+  const handleDisarmPlant = useCallback(
+    () => dispatch({ type: 'SET_PLACE_PLANT', plantId: null }),
+    []
+  );
+
   // SMA-18: minimal display shape for the toolbar's armed-plant indicator —
   // derived from the armed id + catalog with the SAME spacing→cells rule as
   // the sidebar badge (the indicator can never disagree with it). Null while
@@ -1674,6 +1682,7 @@ export default function GardenPlanner() {
               infraArmed={infraType !== null}
               placeMode={placeMode}
               armedPlant={armedPlantIndicator}
+              onDisarm={handleDisarmPlant}
               zoom={zoom}
               canUndo={state.past.length > 0}
               exposureVisible={exposureVisible}

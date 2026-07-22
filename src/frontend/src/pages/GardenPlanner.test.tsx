@@ -1434,15 +1434,44 @@ describe('GardenPlanner armed-plant visibility (SMA-18)', () => {
     expect(screen.queryByText('Deselect plant')).toBeNull();
   });
 
-  it('the X disarms: chip AND toolbar indicator disappear', async () => {
+  it('the chip X disarms: chip AND toolbar indicator disappear', async () => {
     const { row } = await renderArmedVisibility();
     fireEvent.click(row);
     expect(screen.getByTestId('armed-plant-indicator')).toBeInTheDocument();
+    // R2: the X exists in BOTH surfaces (same aria) — this test drives the
+    // sidebar chip's; the indicator's own X has its twin test below.
     fireEvent.click(
-      screen.getByRole('button', { name: 'Disarm Cucurbita fixture' })
+      within(screen.getByTestId('armed-plant-chip')).getByRole('button', {
+        name: 'Disarm Cucurbita fixture',
+      })
     );
     expect(screen.queryByTestId('armed-plant-chip')).toBeNull();
     expect(screen.queryByTestId('armed-plant-indicator')).toBeNull();
+  });
+
+  it('the indicator X disarms too, and lives OUTSIDE the status block (R2)', async () => {
+    const { row } = await renderArmedVisibility();
+    fireEvent.click(row);
+    const indicator = screen.getByTestId('armed-plant-indicator');
+    // A11y: status announcements stay clean — no button inside the
+    // role="status" element; the X is its sibling.
+    const status = within(indicator).getByRole('status');
+    expect(within(status).queryByRole('button')).toBeNull();
+    fireEvent.click(
+      within(indicator).getByRole('button', {
+        name: 'Disarm Cucurbita fixture',
+      })
+    );
+    expect(screen.queryByTestId('armed-plant-indicator')).toBeNull();
+    expect(screen.queryByTestId('armed-plant-chip')).toBeNull();
+  });
+
+  it('the indicator carries the VISIBLE "Selected plant" prefix (R2)', async () => {
+    const { row } = await renderArmedVisibility();
+    fireEvent.click(row);
+    const indicator = screen.getByTestId('armed-plant-indicator');
+    expect(within(indicator).getByText('Selected plant')).toBeInTheDocument();
+    expect(within(indicator).getByText('Cucurbita fixture')).toBeInTheDocument();
   });
 
   it('REPORTED BUG: the toolbar indicator survives switching the sidebar to Infrastructure', async () => {
@@ -1454,6 +1483,9 @@ describe('GardenPlanner armed-plant visibility (SMA-18)', () => {
     const indicator = screen.getByTestId('armed-plant-indicator');
     expect(within(indicator).getByText('Cucurbita fixture')).toBeInTheDocument();
     expect(within(indicator).getByText('2×2')).toBeInTheDocument();
+    // R2: the visible prefix survives the tab switch too — the meaning is
+    // on screen, not aria-only.
+    expect(within(indicator).getByText('Selected plant')).toBeInTheDocument();
     expect(
       screen.getByRole('status', {
         name: 'Selected plant: Cucurbita fixture (2×2)',

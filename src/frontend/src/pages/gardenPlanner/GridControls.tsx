@@ -6,6 +6,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
+import CloseIcon from '@mui/icons-material/Close';
 import UndoIcon from '@mui/icons-material/Undo';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
@@ -179,6 +180,9 @@ interface GridControlsProps {
     footprint: string;
     footprintKnown: boolean;
   } | null;
+  /** SMA-18 R2: explicit disarm from the indicator's X — same dispatch as
+   * the sidebar chip's X (SET_PLACE_PLANT null on the page side). */
+  onDisarm?: () => void;
   zoom: number;
   canUndo: boolean;
   exposureVisible: boolean;
@@ -211,6 +215,7 @@ export const GridControls = memo(function GridControls({
   infraArmed = false,
   placeMode = false,
   armedPlant = null,
+  onDisarm,
   zoom,
   canUndo,
   exposureVisible,
@@ -311,18 +316,14 @@ export const GridControls = memo(function GridControls({
           </>
         )}
 
-        {/* SMA-18: display-only armed-plant indicator — right of the mode
-            group, before undo/zoom. Visible on EVERY sidebar tab; the disarm
-            lives in the sidebar chip and Escape (no interaction here). Same
-            tinted-prim chip pair as the sidebar (§1/§2 cntChipBg + prim). */}
+        {/* SMA-18 (R2): armed-plant indicator — right of the mode group,
+            before undo/zoom, visible on EVERY sidebar tab. Same tinted-prim
+            chip pair as the sidebar (§1/§2 cntChipBg + prim). The danger X
+            (owner accept, R2) is a SIBLING of the role="status" block so
+            status announcements never include the button. */}
         {armedPlant && (
           <Box
             data-testid="armed-plant-indicator"
-            role="status"
-            aria-label={t('planner.place.armedIndicator', {
-              plant: armedPlant.name,
-              footprint: armedPlant.footprint,
-            })}
             sx={{
               display: 'flex',
               alignItems: 'center',
@@ -335,37 +336,78 @@ export const GridControls = memo(function GridControls({
               border: `2px solid ${tk.prim}`,
             }}
           >
-            {/* Same glyph as the Placer button — the coherent cue. */}
             <Box
-              component="span"
-              aria-hidden
+              role="status"
+              aria-label={t('planner.place.armedIndicator', {
+                plant: armedPlant.name,
+                footprint: armedPlant.footprint,
+              })}
               sx={{
-                display: 'inline-flex',
-                fontSize: 17,
-                lineHeight: 0,
-                color: tk.prim,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '7px',
+                minWidth: 0,
               }}
             >
-              <ModeIconPlace />
+              {/* Same glyph as the Placer button — the coherent cue. */}
+              <Box
+                component="span"
+                aria-hidden
+                sx={{
+                  display: 'inline-flex',
+                  fontSize: 17,
+                  lineHeight: 0,
+                  color: tk.prim,
+                }}
+              >
+                <ModeIconPlace />
+              </Box>
+              {/* R2 (owner accept): the meaning is VISIBLE, not aria-only. */}
+              <Typography
+                component="span"
+                noWrap
+                sx={{
+                  flexShrink: 0,
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  color: tk.tMeta,
+                }}
+              >
+                {t('planner.place.armedIndicatorPrefix')}
+              </Typography>
+              <Typography
+                component="span"
+                noWrap
+                sx={{
+                  // 220 → 180 (R2): the prefix + X joined the chip — the
+                  // name yields the width so undo/zoom never move.
+                  maxWidth: 180,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: tk.tTitle,
+                }}
+              >
+                {armedPlant.name}
+              </Typography>
+              <Box
+                component="span"
+                sx={footprintBadgeSx(tk, armedPlant.footprintKnown)}
+              >
+                {armedPlant.footprint}
+              </Box>
             </Box>
-            <Typography
-              component="span"
-              noWrap
-              sx={{
-                maxWidth: 220,
-                fontSize: 13,
-                fontWeight: 700,
-                color: tk.tTitle,
-              }}
-            >
-              {armedPlant.name}
-            </Typography>
-            <Box
-              component="span"
-              sx={footprintBadgeSx(tk, armedPlant.footprintKnown)}
-            >
-              {armedPlant.footprint}
-            </Box>
+            {onDisarm && (
+              <IconButton
+                size="small"
+                aria-label={t('planner.place.disarmLabel', {
+                  plant: armedPlant.name,
+                })}
+                onClick={onDisarm}
+                sx={{ p: '2px', color: tk.dangTx }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            )}
           </Box>
         )}
 
