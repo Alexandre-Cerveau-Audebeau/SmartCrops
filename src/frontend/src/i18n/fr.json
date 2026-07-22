@@ -456,13 +456,23 @@
     },
     "dnd": {
       "collisionToast": "Collision — chevauche {{plant}} ({{cell}})",
-      "footprintBlocked": "L'empreinte {{cells}}×{{cells}} ne rentre pas ici",
+      "footprintBlocked": "L'empreinte {{r}}×{{c}} ne rentre pas ici",
       "dropHint": "Relâchez pour poser · Échap pour annuler",
       "legendValid": "Cible valide",
       "legendCollision": "Collision"
     },
     "place": {
-      "footprintUnknown": "Espacement inconnu — réglage manuel"
+      "footprintUnknown": "Espacement inconnu — réglage manuel",
+      "footprintSource": "Issue de l'espacement Perenual ({{value}} {{unit}})",
+      "footprintLine": "Cases {{from}}–{{to}} — empreinte {{r}}×{{c}} ({{w}} × {{h}} m)",
+      "footprintOverlapWarn": "Chevauche {{plant}} ({{cell}}). Ajustez l'empreinte ou déplacez la plante.",
+      "footprintBlockedWarn": "L'empreinte ne tient pas ici.",
+      "cellsUnit": "cases",
+      "increaseRows": "Augmenter les lignes",
+      "decreaseRows": "Réduire les lignes",
+      "increaseCols": "Augmenter les colonnes",
+      "decreaseCols": "Réduire les colonnes",
+      "move": "Déplacer"
     },
     "infra": {
       "hint": "Posez des infrastructures sur la grille. Les éléments bloquants portent une ombre dans le calque Exposition.",

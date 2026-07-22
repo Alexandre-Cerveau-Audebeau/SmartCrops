@@ -105,6 +105,25 @@ export function spacingToFootprintCells(
   return { cells: Math.max(1, Math.ceil(cm / cellCm - 1e-9)), known: true };
 }
 
+/**
+ * Clamp a (suggested) square footprint to the grid dimensions (lot 3): an
+ * oversized suggestion must stay PLACEABLE — the user shrinks it afterwards
+ * via the panel (product ruling 2026-07-21: the suggestion never blocks the
+ * pose). Only POSE CANDIDATES clamp; the sidebar badge keeps showing the
+ * TRUE suggestion.
+ */
+export function clampFootprintToGrid(
+  cells: number,
+  grid: CellData[][]
+): { spanRows: number; spanCols: number } {
+  const rows = grid.length;
+  const cols = grid[0]?.length ?? 0;
+  return {
+    spanRows: Math.max(1, Math.min(cells, rows)),
+    spanCols: Math.max(1, Math.min(cells, cols)),
+  };
+}
+
 /** Column index → spreadsheet letter (0 → A, 25 → Z, 26 → AA). */
 export function colToLetter(col: number): string {
   let letters = '';

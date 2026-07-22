@@ -78,9 +78,11 @@ export interface PlannerState {
   /**
    * Place mode (SMA-193 5.5) — the fourth mutually exclusive editing mode.
    * Arming a plant from the sidebar ENTERS the mode (and leaves shape-edit +
-   * infrastructure); the mode cannot be entered without an armed plant.
-   * Exact grammar mirror of infraMode/infraType: the armed plant stays
-   * remembered on every mode exit so the toolbar button can re-enter.
+   * infrastructure). Since lot 3 R2 (product ruling 22 Jul) the mode may
+   * ALSO be entered WITHOUT an armed plant — the move-only entry, a
+   * deliberate divergence from the infra mirror; an armed plant remains
+   * required for placing NEW plants. The armed plant stays remembered on
+   * every mode exit so the toolbar button can re-enter.
    */
   placeMode: boolean;
   placePlantId: string | null;
@@ -193,6 +195,12 @@ export type PlannerAction =
       placementId: string;
       startRow: number;
       startCol: number;
+    }
+  | {
+      type: 'SET_PLACEMENT_FOOTPRINT';
+      placementId: string;
+      spanRows: number;
+      spanCols: number;
     }
   | { type: 'REMOVE_PLACEMENT'; placementId: string }
   | { type: 'SET_SHAPE_EDIT_MODE'; enabled: boolean }
@@ -754,6 +762,56 @@ export function plannerReducer(
       };
     }
 
+    case 'SET_PLACEMENT_FOOTPRINT': {
+      // Lot 3: the suggested footprint is a SUGGESTION — the user owns the
+      // size (product ruling 2026-07-21; a 4×4 m tree can live in a pot on
+      // one cell). Same grammar as MOVE: revalidate at the placement's own
+      // anchor with itself excluded; failure is a silent no-op (the panel
+      // warn is the UI's job). footprintFits enforces the ≥1 span invariant
+      // itself (lot 1 R4).
+      const target = state.placements.find((p) => p.id === action.placementId);
+      if (!target || !state.grid) return state;
+      // CR R2 (Major, data integrity): this action is a PUBLIC reducer
+      // boundary — reject non-integer or non-positive spans outright.
+      // footprintFits' comparisons all evaluate false on NaN, which would
+      // otherwise let a corrupted footprint persist into the layout.
+      if (
+        !Number.isInteger(action.spanRows) ||
+        !Number.isInteger(action.spanCols) ||
+        action.spanRows < 1 ||
+        action.spanCols < 1
+      ) {
+        return state;
+      }
+      // Idempotence (the MOVE/PAINT_ENTER invariant): unchanged spans return
+      // the SAME state object — no undo entry, no dirty flag.
+      if (
+        action.spanRows === target.spanRows &&
+        action.spanCols === target.spanCols
+      ) {
+        return state;
+      }
+      const candidate = {
+        startRow: target.startRow,
+        startCol: target.startCol,
+        spanRows: action.spanRows,
+        spanCols: action.spanCols,
+      };
+      if (
+        !footprintFits(state.grid, state.placements, candidate, target.id).ok
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        past: pushHistory(state),
+        placements: state.placements.map((p) =>
+          p.id === action.placementId ? { ...p, ...candidate } : p
+        ),
+        isDirty: true,
+      };
+    }
+
     case 'REMOVE_PLACEMENT':
       return {
         ...state,
@@ -813,10 +871,13 @@ export function plannerReducer(
           };
 
     case 'SET_PLACE_MODE':
-      // Entering REQUIRES an armed plant (the sidebar arms it) — a guarded
-      // no-op otherwise. Leaving keeps the plant armed for a later re-entry.
+      // Lot 3 R2 (product ruling 2026-07-22): entering NO LONGER requires an
+      // armed plant — a DELIBERATE divergence from the infra mirror. Place
+      // has TWO functions: placing (needs an armed plant) and moving
+      // existing placements (needs none — move-drags check only placeMode
+      // since lot 2). An unarmed entry is the move-only mode. Leaving keeps
+      // the plant armed for a later re-entry.
       if (action.enabled) {
-        if (!state.placePlantId) return state;
         return { ...state, ...enterSelectionMode, placeMode: true };
       }
       return { ...state, ...enterSelectionMode };

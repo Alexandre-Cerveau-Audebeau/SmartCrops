@@ -15,7 +15,6 @@ function renderControls(
     exposureMoment?: Moment;
     exposureSeason?: Season;
     placeMode?: boolean;
-    placeArmed?: boolean;
     onUndo?: () => void;
     onToggleExposure?: () => void;
     onSetExposureMoment?: (moment: Moment) => void;
@@ -30,7 +29,6 @@ function renderControls(
       hasGrid
       shapeEditMode={false}
       placeMode={overrides.placeMode}
-      placeArmed={overrides.placeArmed}
       onSelectionMode={overrides.onSelectionMode}
       onInfraMode={overrides.onInfraMode}
       onPlaceMode={overrides.onPlaceMode}
@@ -127,8 +125,9 @@ describe('GridControls exposure row (SMA-17 5.3-D)', () => {
   });
 });
 
-// SMA-193 (5.5 lot 1) — the Placer mode button: gated on an armed plant,
-// mirrors the Infrastructures button's grammar.
+// SMA-193 (5.5 lot 3 R2) — the Placer mode button opens WITHOUT an armed
+// plant (product ruling 22 Jul: armless entry = move-only mode; deliberate
+// divergence from the Infrastructures button's armed gate).
 describe('GridControls Placer button (SMA-193 5.5)', () => {
   const modeHandlers = () => ({
     onSelectionMode: vi.fn(),
@@ -136,23 +135,17 @@ describe('GridControls Placer button (SMA-193 5.5)', () => {
     onPlaceMode: vi.fn(),
   });
 
-  it('is disabled without an armed plant', () => {
-    renderControls({ ...modeHandlers(), placeArmed: false });
-    expect(screen.getByRole('button', { name: 'Place' })).toBeDisabled();
-  });
-
-  it('is enabled with an armed plant and fires onPlaceMode', () => {
+  it('is enabled without an armed plant and fires onPlaceMode (move-only entry)', () => {
     const handlers = modeHandlers();
-    renderControls({ ...handlers, placeArmed: true });
+    renderControls({ ...handlers });
     const place = screen.getByRole('button', { name: 'Place' });
     expect(place).toBeEnabled();
     fireEvent.click(place);
     expect(handlers.onPlaceMode).toHaveBeenCalledTimes(1);
   });
 
-  it('stays clickable while ACTIVE even though the armed plant was cleared elsewhere', () => {
-    // active || armed drives enabled — mirrors the infra button.
-    renderControls({ ...modeHandlers(), placeMode: true, placeArmed: false });
+  it('stays clickable while ACTIVE', () => {
+    renderControls({ ...modeHandlers(), placeMode: true });
     expect(screen.getByRole('button', { name: 'Place' })).toBeEnabled();
   });
 });

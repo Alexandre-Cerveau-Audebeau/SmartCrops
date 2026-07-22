@@ -3,6 +3,7 @@ import type { CellData } from '../../types/GardenLayout';
 import {
   cellRef,
   cellSizeToMeters,
+  clampFootprintToGrid,
   colToLetter,
   footprintFits,
   rectsOverlap,
@@ -222,6 +223,37 @@ describe('cellSizeToMeters (moved from GardenPlanner.tsx — same mapping)', () 
     ['25cm', 0.25],
   ] as const)('%s → %s', (size, meters) => {
     expect(cellSizeToMeters(size)).toBe(meters);
+  });
+});
+
+// Lot 3 — the pose-time clamp: an oversized suggestion never blocks the pose.
+describe('clampFootprintToGrid (SMA-193 lot 3)', () => {
+  it('an 8×8 suggestion on a 10×8 grid keeps 8×8', () => {
+    expect(clampFootprintToGrid(8, grid(10, 8))).toEqual({
+      spanRows: 8,
+      spanCols: 8,
+    });
+  });
+
+  it('an 8×8 suggestion on a 6×6 grid clamps to 6×6', () => {
+    expect(clampFootprintToGrid(8, grid(6, 6))).toEqual({
+      spanRows: 6,
+      spanCols: 6,
+    });
+  });
+
+  it('clamps each axis independently on a rectangular grid', () => {
+    expect(clampFootprintToGrid(8, grid(4, 12))).toEqual({
+      spanRows: 4,
+      spanCols: 8,
+    });
+  });
+
+  it('a fitting 2×2 suggestion is untouched', () => {
+    expect(clampFootprintToGrid(2, grid(6, 6))).toEqual({
+      spanRows: 2,
+      spanCols: 2,
+    });
   });
 });
 
