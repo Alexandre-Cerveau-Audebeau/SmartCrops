@@ -62,6 +62,7 @@ import { PlantsInGardenSection } from './gardenPlanner/PlantsInGardenSection';
 import {
   cellRef,
   cellSizeToMeters,
+  clampFootprintToGrid,
   footprintFits,
   spacingToFootprintCells,
   type FootprintFitResult,
@@ -835,19 +836,25 @@ export default function GardenPlanner() {
     (plantId: string, e: React.PointerEvent) => {
       // Secondary pointers never drag; undefined (jsdom) counts as primary.
       if (e.isPrimary === false) return;
-      const { allPlants: plantsNow, cellSize: cs } = dndLatestRef.current;
+      const { allPlants: plantsNow, cellSize: cs, grid: g } =
+        dndLatestRef.current;
       const plant = plantsNow.find((p) => p.id === plantId);
       const { cells } = spacingToFootprintCells(
         plant?.xPlantSpacingValue ?? null,
         plant?.xPlantSpacingUnit ?? null,
         cs
       );
+      // Lot 3: the ghost IS a pose candidate — oversized suggestions clamp
+      // to the grid here too (the sidebar badge keeps the true suggestion).
+      const spans = g
+        ? clampFootprintToGrid(cells, g)
+        : { spanRows: cells, spanCols: cells };
       beginPendingDrag({
         kind: 'sidebar',
         plantId,
         placementId: null,
-        spanRows: cells,
-        spanCols: cells,
+        spanRows: spans.spanRows,
+        spanCols: spans.spanCols,
         originX: e.clientX,
         originY: e.clientY,
         pointerId: e.pointerId,
@@ -971,10 +978,13 @@ export default function GardenPlanner() {
           armedPlant?.xPlantSpacingUnit ?? null,
           cellSize
         );
+        // Lot 3: an oversized suggestion clamps to the grid at POSE time —
+        // the tree stays placeable, the panel shrinks it afterwards.
+        const spans = clampFootprintToGrid(cells, grid);
         // Lot 2: the rejection copy lives in the shared hoisted helper —
         // clicks and drag-drops speak identically.
         const toastRejection = (fit: FootprintFitResult) =>
-          toastFitRejection(fit, cells);
+          toastFitRejection(fit, spans.spanRows);
         if (existing) {
           // R2 (GitHub Major + Extension convergence): replacing re-derives
           // the footprint at the target's anchor and pre-checks it with the
@@ -982,8 +992,8 @@ export default function GardenPlanner() {
           const candidate = {
             startRow: existing.startRow,
             startCol: existing.startCol,
-            spanRows: cells,
-            spanCols: cells,
+            spanRows: spans.spanRows,
+            spanCols: spans.spanCols,
           };
           const fit = footprintFits(grid, placements, candidate, existing.id);
           if (!fit.ok) {
@@ -994,16 +1004,16 @@ export default function GardenPlanner() {
             type: 'REPLACE_PLACEMENT',
             placementId: existing.id,
             plantId: placePlantId,
-            spanRows: cells,
-            spanCols: cells,
+            spanRows: spans.spanRows,
+            spanCols: spans.spanCols,
           });
           return;
         }
         const candidate = {
           startRow: row,
           startCol: col,
-          spanRows: cells,
-          spanCols: cells,
+          spanRows: spans.spanRows,
+          spanCols: spans.spanCols,
         };
         const fit = footprintFits(grid, placements, candidate);
         if (!fit.ok) {
@@ -1016,8 +1026,8 @@ export default function GardenPlanner() {
           plantId: placePlantId,
           row,
           col,
-          spanRows: cells,
-          spanCols: cells,
+          spanRows: spans.spanRows,
+          spanCols: spans.spanCols,
         });
         return;
       }
@@ -1042,6 +1052,67 @@ export default function GardenPlanner() {
     dispatch({ type: 'REMOVE_PLACEMENT', placementId: selectedPlacementId });
     selectPlacement(null);
   }, [selectedPlacementId, selectPlacement]);
+
+  // ── Footprint panel wiring (SMA-193 lot 3) ──────────────────────────────
+  // The panel's fit checks and the reducer guard share footprintFits at the
+  // placement's own anchor (itself excluded) — the warn and the dispatch can
+  // never disagree.
+  const handleCheckSelectedFit = useCallback(
+    (spanRows: number, spanCols: number): FootprintFitResult => {
+      if (!selectedPlacement || !grid) {
+        return { ok: false, reason: 'out-of-bounds' };
+      }
+      return footprintFits(
+        grid,
+        placements,
+        {
+          startRow: selectedPlacement.startRow,
+          startCol: selectedPlacement.startCol,
+          spanRows,
+          spanCols,
+        },
+        selectedPlacement.id
+      );
+    },
+    [selectedPlacement, grid, placements]
+  );
+
+  // Warn-copy fields for an overlap verdict (same naming as the toast).
+  const handleDescribeOverlap = useCallback(
+    (placementId: string) => {
+      const hit = placements.find((p) => p.id === placementId);
+      const hitPlant = hit
+        ? allPlants.find((p) => p.id === hit.plantId)
+        : undefined;
+      return {
+        plant: hitPlant
+          ? getPlantDisplayName(hitPlant, language)
+          : t('planner.unknownPlant'),
+        cell: hit ? cellRef(hit.startRow, hit.startCol) : '',
+      };
+    },
+    [placements, allPlants, language, t]
+  );
+
+  const handleSetSelectedFootprint = useCallback(
+    (spanRows: number, spanCols: number) => {
+      if (!selectedPlacementId) return;
+      dispatch({
+        type: 'SET_PLACEMENT_FOOTPRINT',
+        placementId: selectedPlacementId,
+        spanRows,
+        spanCols,
+      });
+    },
+    [selectedPlacementId]
+  );
+
+  // Move (mockup Etats): arm the placement's OWN plant — enters Place mode;
+  // the lot-2 move-drag takes over from there.
+  const handleMoveSelectedPlacement = useCallback(() => {
+    if (!selectedPlacement) return;
+    dispatch({ type: 'SET_PLACE_PLANT', plantId: selectedPlacement.plantId });
+  }, [selectedPlacement]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -1985,6 +2056,13 @@ export default function GardenPlanner() {
                 soil={selectedCellSoil}
                 language={language}
                 catalogReady={catalogReady}
+                cellSize={cellSize}
+                gridRows={grid?.length ?? 0}
+                gridCols={grid?.[0]?.length ?? 0}
+                checkFit={handleCheckSelectedFit}
+                describeOverlap={handleDescribeOverlap}
+                onSetFootprint={handleSetSelectedFootprint}
+                onMove={handleMoveSelectedPlacement}
                 onRemove={handleRemoveSelectedPlacement}
               />
             )}

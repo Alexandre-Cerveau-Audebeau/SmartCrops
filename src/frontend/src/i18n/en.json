@@ -462,7 +462,17 @@
       "legendCollision": "Collision"
     },
     "place": {
-      "footprintUnknown": "Unknown spacing — manual setting"
+      "footprintUnknown": "Unknown spacing — manual setting",
+      "footprintSource": "From Perenual spacing ({{value}} {{unit}})",
+      "footprintLine": "Cells {{from}}–{{to}} — footprint {{r}}×{{c}} ({{w}} × {{h}} m)",
+      "footprintOverlapWarn": "Overlaps {{plant}} ({{cell}}). Adjust the footprint or move the plant.",
+      "footprintBlockedWarn": "The footprint doesn't fit here.",
+      "cellsUnit": "cells",
+      "increaseRows": "Increase rows",
+      "decreaseRows": "Decrease rows",
+      "increaseCols": "Increase columns",
+      "decreaseCols": "Decrease columns",
+      "move": "Move"
     },
     "infra": {
       "hint": "Place infrastructures on the grid. Blocking elements cast a shadow in the Exposure layer.",

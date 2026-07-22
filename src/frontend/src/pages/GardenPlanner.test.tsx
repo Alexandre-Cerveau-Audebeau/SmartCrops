@@ -1212,3 +1212,99 @@ describe('GardenPlanner pointer DnD (SMA-193 lot 2)', () => {
   });
 });
 
+// SMA-193 lot 3 — footprint panel: the pose-time clamp keeps oversized
+// suggestions placeable; the panel steppers then hand the size to the user.
+describe('GardenPlanner footprint panel (SMA-193 lot 3)', () => {
+  // 300 cm @ 50cm/cell → a 6×6 suggestion, larger than the 4×4 test grid.
+  const tree = {
+    id: 'p4',
+    scientificName: 'Arbor fixture',
+    xPlantSpacingValue: 300,
+    xPlantSpacingUnit: 'cm',
+  } as Plant;
+
+  it('an oversized suggestion poses CLAMPED, then shrinks to 1×1 via the panel', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      width: 4,
+      height: 4,
+      placements: [],
+    });
+    vi.mocked(fetchPlants).mockResolvedValue([tree]);
+    renderPlanner();
+    await screen.findByRole('grid');
+    const row = await waitFor(() => {
+      const el = screen
+        .getAllByRole('button')
+        .find((b) => within(b).queryAllByText('Arbor fixture').length > 0);
+      expect(el).toBeTruthy();
+      return el!;
+    });
+    // The sidebar badge keeps the TRUE suggestion.
+    expect(within(row).getByText('6×6')).toBeInTheDocument();
+    fireEvent.click(row); // arm → Place mode
+    fireEvent.click(screen.getAllByRole('gridcell')[0]!); // pose at (0,0)
+    // Clamped to the whole 4×4 grid — the tree IS placeable.
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('gridcell', { name: /Arbor fixture at/ })
+      ).toHaveLength(16)
+    );
+    // Disarm → Selection; select the placement → the panel opens.
+    fireEvent.click(row);
+    fireEvent.click(screen.getAllByRole('gridcell')[0]!);
+    const decRows = await screen.findByRole('button', {
+      name: 'Decrease rows',
+    });
+    fireEvent.click(decRows);
+    fireEvent.click(decRows);
+    fireEvent.click(decRows); // 4 → 1
+    const decCols = screen.getByRole('button', { name: 'Decrease columns' });
+    fireEvent.click(decCols);
+    fireEvent.click(decCols);
+    fireEvent.click(decCols); // 4 → 1
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('gridcell', { name: /Arbor fixture at/ })
+      ).toHaveLength(1)
+    );
+  });
+
+  it('Move arms the placement plant and enters Place mode', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      width: 4,
+      height: 4,
+      placements: [
+        {
+          id: 'pl-c',
+          plantId: 'p3',
+          plantScientificName: null,
+          startRow: 1,
+          startCol: 1,
+          spanRows: 2,
+          spanCols: 2,
+          notes: null,
+        },
+      ],
+    });
+    vi.mocked(fetchPlants).mockResolvedValue([courgette]);
+    renderPlanner();
+    await screen.findByRole('grid');
+    // Selection mode (hydration default): click a covered cell → panel.
+    fireEvent.click(
+      await screen.findByRole('gridcell', {
+        name: 'Cucurbita fixture at row 2, column B',
+      })
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Move' }));
+    // The placement's own plant is armed — Place mode is live.
+    expect(screen.getByRole('button', { name: 'Place' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+});
+

@@ -194,6 +194,12 @@ export type PlannerAction =
       startRow: number;
       startCol: number;
     }
+  | {
+      type: 'SET_PLACEMENT_FOOTPRINT';
+      placementId: string;
+      spanRows: number;
+      spanCols: number;
+    }
   | { type: 'REMOVE_PLACEMENT'; placementId: string }
   | { type: 'SET_SHAPE_EDIT_MODE'; enabled: boolean }
   | { type: 'SET_INFRA_TYPE'; infraType: InfrastructureType | null }
@@ -738,6 +744,44 @@ export function plannerReducer(
         startCol: action.startCol,
         spanRows: target.spanRows,
         spanCols: target.spanCols,
+      };
+      if (
+        !footprintFits(state.grid, state.placements, candidate, target.id).ok
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        past: pushHistory(state),
+        placements: state.placements.map((p) =>
+          p.id === action.placementId ? { ...p, ...candidate } : p
+        ),
+        isDirty: true,
+      };
+    }
+
+    case 'SET_PLACEMENT_FOOTPRINT': {
+      // Lot 3: the suggested footprint is a SUGGESTION — the user owns the
+      // size (product ruling 2026-07-21; a 4×4 m tree can live in a pot on
+      // one cell). Same grammar as MOVE: revalidate at the placement's own
+      // anchor with itself excluded; failure is a silent no-op (the panel
+      // warn is the UI's job). footprintFits enforces the ≥1 span invariant
+      // itself (lot 1 R4).
+      const target = state.placements.find((p) => p.id === action.placementId);
+      if (!target || !state.grid) return state;
+      // Idempotence (the MOVE/PAINT_ENTER invariant): unchanged spans return
+      // the SAME state object — no undo entry, no dirty flag.
+      if (
+        action.spanRows === target.spanRows &&
+        action.spanCols === target.spanCols
+      ) {
+        return state;
+      }
+      const candidate = {
+        startRow: target.startRow,
+        startCol: target.startCol,
+        spanRows: action.spanRows,
+        spanCols: action.spanCols,
       };
       if (
         !footprintFits(state.grid, state.placements, candidate, target.id).ok

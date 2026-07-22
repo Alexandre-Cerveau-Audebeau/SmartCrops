@@ -1630,3 +1630,100 @@ describe('plannerReducer MOVE_PLACEMENT (SMA-193 lot 2)', () => {
     ).toBe(s);
   });
 });
+
+// Lot 3 (footprint panel) — SET_PLACEMENT_FOOTPRINT: the user owns the size;
+// the guard revalidates at the placement's own anchor (itself excluded) and
+// unchanged spans are idempotent (the MOVE invariant).
+describe('plannerReducer SET_PLACEMENT_FOOTPRINT (SMA-193 lot 3)', () => {
+  it('grows 1×1 → 2×2 and stores the spans', () => {
+    const s = plannerReducer(hydrated(), {
+      type: 'SET_PLACEMENT_FOOTPRINT',
+      placementId: 'srv-1',
+      spanRows: 2,
+      spanCols: 2,
+    });
+    expect(s.placements[0]).toMatchObject({
+      id: 'srv-1',
+      startRow: 1,
+      startCol: 1,
+      spanRows: 2,
+      spanCols: 2,
+    });
+    expect(s.isDirty).toBe(true);
+    expect(s.past.length).toBe(1);
+  });
+
+  it('shrinks 2×2 → 1×1', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_PLACEMENT_FOOTPRINT',
+      placementId: 'srv-1',
+      spanRows: 2,
+      spanCols: 2,
+    });
+    s = plannerReducer(s, {
+      type: 'SET_PLACEMENT_FOOTPRINT',
+      placementId: 'srv-1',
+      spanRows: 1,
+      spanCols: 1,
+    });
+    expect(s.placements[0]).toMatchObject({ spanRows: 1, spanCols: 1 });
+  });
+
+  it('a misfit (overlap) returns the SAME state object', () => {
+    // A second 1×1 at (0,0): growing srv-1 upward-left cannot happen (anchor
+    // fixed), so overlap via a placement at (1,2) instead.
+    const base = plannerReducer(hydrated(), {
+      type: 'ADD_PLACEMENT',
+      id: 'new-1',
+      plantId: 'basil',
+      row: 1,
+      col: 2,
+      spanRows: 1,
+      spanCols: 1,
+    });
+    const blocked = plannerReducer(base, {
+      type: 'SET_PLACEMENT_FOOTPRINT',
+      placementId: 'srv-1',
+      spanRows: 1,
+      spanCols: 2, // (1,1)-(1,2) covers new-1
+    });
+    expect(blocked).toBe(base);
+  });
+
+  it('a misfit (out-of-bounds) returns the SAME state object', () => {
+    const s = hydrated(); // 3×3 grid, srv-1 at (1,1)
+    expect(
+      plannerReducer(s, {
+        type: 'SET_PLACEMENT_FOOTPRINT',
+        placementId: 'srv-1',
+        spanRows: 3, // rows 1-3 on a 3-row grid → OOB
+        spanCols: 1,
+      })
+    ).toBe(s);
+  });
+
+  it('unchanged spans return the SAME state object (idempotent)', () => {
+    const s = hydrated();
+    const same = plannerReducer(s, {
+      type: 'SET_PLACEMENT_FOOTPRINT',
+      placementId: 'srv-1',
+      spanRows: 1,
+      spanCols: 1,
+    });
+    expect(same).toBe(s);
+    expect(same.past).toBe(s.past);
+    expect(same.isDirty).toBe(false);
+  });
+
+  it('unknown placement id is a guarded no-op', () => {
+    const s = hydrated();
+    expect(
+      plannerReducer(s, {
+        type: 'SET_PLACEMENT_FOOTPRINT',
+        placementId: 'ghost',
+        spanRows: 2,
+        spanCols: 2,
+      })
+    ).toBe(s);
+  });
+});
