@@ -568,7 +568,9 @@ export default function GardenPlanner() {
   // Shared rejection toast (R2's local helper hoisted for the drag engine —
   // ADD, REPLACE and DnD drops all speak through the same copy).
   const toastFitRejection = useCallback(
-    (fit: FootprintFitResult, cells: number) => {
+    // CR R3: both dimensions — the pose-time clamp is per-axis, so the
+    // rejected candidate can be RECTANGULAR (never assume R = C).
+    (fit: FootprintFitResult, spanRows: number, spanCols: number) => {
       if (fit.ok) return;
       if (fit.reason === 'overlap') {
         const hit = placements.find((p) => p.id === fit.overlapWith);
@@ -587,7 +589,7 @@ export default function GardenPlanner() {
       } else {
         setMessage({
           type: 'error',
-          text: t('planner.dnd.footprintBlocked', { cells }),
+          text: t('planner.dnd.footprintBlocked', { r: spanRows, c: spanCols }),
         });
       }
     },
@@ -689,7 +691,7 @@ export default function GardenPlanner() {
       drag.kind === 'move' ? (drag.placementId ?? undefined) : undefined
     );
     if (!fit.ok) {
-      toastFit(fit, drag.spanRows);
+      toastFit(fit, drag.spanRows, drag.spanCols);
       return;
     }
     if (drag.kind === 'sidebar') {
@@ -993,7 +995,7 @@ export default function GardenPlanner() {
         // Lot 2: the rejection copy lives in the shared hoisted helper —
         // clicks and drag-drops speak identically.
         const toastRejection = (fit: FootprintFitResult) =>
-          toastFitRejection(fit, spans.spanRows);
+          toastFitRejection(fit, spans.spanRows, spans.spanCols);
         if (existing) {
           // R2 (GitHub Major + Extension convergence): replacing re-derives
           // the footprint at the target's anchor and pre-checks it with the

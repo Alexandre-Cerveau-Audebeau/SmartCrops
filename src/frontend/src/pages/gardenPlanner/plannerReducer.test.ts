@@ -1724,6 +1724,31 @@ describe('plannerReducer SET_PLACEMENT_FOOTPRINT (SMA-193 lot 3)', () => {
     expect(same.isDirty).toBe(false);
   });
 
+  it('rejects non-integer and non-positive spans at the boundary (CR R2 Major)', () => {
+    // NaN skips every footprintFits comparison — without this guard a
+    // corrupted footprint would persist into the layout.
+    const s = hydrated();
+    for (const [spanRows, spanCols] of [
+      [Number.NaN, 2],
+      [1.5, 2],
+      [0, 2],
+      [-1, 2],
+      [2, Number.NaN],
+      [2, 1.5],
+      [2, 0],
+      [2, -1],
+    ] as const) {
+      expect(
+        plannerReducer(s, {
+          type: 'SET_PLACEMENT_FOOTPRINT',
+          placementId: 'srv-1',
+          spanRows,
+          spanCols,
+        })
+      ).toBe(s);
+    }
+  });
+
   it('unknown placement id is a guarded no-op', () => {
     const s = hydrated();
     expect(

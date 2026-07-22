@@ -78,9 +78,11 @@ export interface PlannerState {
   /**
    * Place mode (SMA-193 5.5) — the fourth mutually exclusive editing mode.
    * Arming a plant from the sidebar ENTERS the mode (and leaves shape-edit +
-   * infrastructure); the mode cannot be entered without an armed plant.
-   * Exact grammar mirror of infraMode/infraType: the armed plant stays
-   * remembered on every mode exit so the toolbar button can re-enter.
+   * infrastructure). Since lot 3 R2 (product ruling 22 Jul) the mode may
+   * ALSO be entered WITHOUT an armed plant — the move-only entry, a
+   * deliberate divergence from the infra mirror; an armed plant remains
+   * required for placing NEW plants. The armed plant stays remembered on
+   * every mode exit so the toolbar button can re-enter.
    */
   placeMode: boolean;
   placePlantId: string | null;
@@ -769,6 +771,18 @@ export function plannerReducer(
       // itself (lot 1 R4).
       const target = state.placements.find((p) => p.id === action.placementId);
       if (!target || !state.grid) return state;
+      // CR R2 (Major, data integrity): this action is a PUBLIC reducer
+      // boundary — reject non-integer or non-positive spans outright.
+      // footprintFits' comparisons all evaluate false on NaN, which would
+      // otherwise let a corrupted footprint persist into the layout.
+      if (
+        !Number.isInteger(action.spanRows) ||
+        !Number.isInteger(action.spanCols) ||
+        action.spanRows < 1 ||
+        action.spanCols < 1
+      ) {
+        return state;
+      }
       // Idempotence (the MOVE/PAINT_ENTER invariant): unchanged spans return
       // the SAME state object — no undo entry, no dirty flag.
       if (

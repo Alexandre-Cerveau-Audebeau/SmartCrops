@@ -1272,12 +1272,17 @@ describe('GardenPlanner pointer DnD (SMA-193 lot 2)', () => {
     fireEvent.pointerDown(row, { clientX: 5, clientY: 5, pointerId: 1, isPrimary: true });
     fireEvent.pointerMove(document, { ...at(1, 1), pointerId: 1, isPrimary: true });
     fireEvent.pointerUp(document, { ...at(1, 1), pointerId: 1, isPrimary: true });
+    // CR R3: the browser fires a native click on the row right after
+    // pointerup — inside the one-tick swallow window it must NOT
+    // toggle-disarm the plant the drag just armed.
+    fireEvent.click(row);
     await waitFor(() =>
       expect(
         screen.getAllByRole('gridcell', { name: /Cucurbita fixture at/ })
       ).toHaveLength(4)
     );
-    // The drag armed the plant (lot-2 threshold-crossing grammar).
+    // The drag armed the plant (lot-2 threshold-crossing grammar) and the
+    // swallowed click left it armed.
     expect(screen.getByRole('button', { name: 'Place' })).toHaveAttribute(
       'aria-pressed',
       'true'
@@ -1378,6 +1383,14 @@ describe('GardenPlanner footprint panel (SMA-193 lot 3)', () => {
       'aria-pressed',
       'true'
     );
+    // CR R3 hardening: aria-pressed alone no longer proves the arming since
+    // the armless entry (lot 3 R2) — the SIDEBAR ROW must show the
+    // placement's plant as armed.
+    const sidebarRow = screen
+      .getAllByRole('button')
+      .find((b) => within(b).queryAllByText('Cucurbita fixture').length > 0);
+    expect(sidebarRow).toBeTruthy();
+    expect(sidebarRow).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
