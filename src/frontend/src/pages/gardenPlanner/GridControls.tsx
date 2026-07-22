@@ -6,13 +6,21 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
+import CloseIcon from '@mui/icons-material/Close';
 import UndoIcon from '@mui/icons-material/Undo';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
-import { iosSwitchSx, type PlannerTokens } from '../../theme/plannerTokens';
+import {
+  footprintBadgeSx,
+  iosSwitchSx,
+  type PlannerTokens,
+} from '../../theme/plannerTokens';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Moment, Season } from '../../utils/exposure';
+import { ModeIconInfra } from './icons/ModeIconInfra';
+import { ModeIconPlace } from './icons/ModeIconPlace';
+import { ModeIconSelect } from './icons/ModeIconSelect';
 import { ZOOM_MAX, ZOOM_MIN } from './plannerReducer';
 
 const MOMENTS: Moment[] = ['morning', 'noon', 'evening'];
@@ -97,12 +105,15 @@ function ModeButton({
   label,
   active,
   disabled,
+  icon,
   onClick,
   tk,
 }: {
   label: string;
   active: boolean;
   disabled?: boolean;
+  /** SMA-18: the mockup mode glyph (Etats L1014) — decorative, before the label. */
+  icon?: React.ReactNode;
   onClick: () => void;
   tk: PlannerTokens;
 }) {
@@ -114,6 +125,11 @@ function ModeButton({
       disabled={disabled}
       onClick={onClick}
       sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        // Mockup template (Etats): 18px icon, 7px gap inside the h38/r8 chip.
+        gap: '7px',
         height: { xs: 34, sm: 38 },
         px: { xs: '10px', sm: '14px' },
         fontSize: { xs: 12, sm: 13.5 },
@@ -129,7 +145,128 @@ function ModeButton({
         transition: 'background-color .15s, color .15s',
       }}
     >
+      {icon && (
+        // 18px em-box; the svg inherits it (1em) and paints currentColor,
+        // so the icon follows the existing active/inactive colors.
+        <Box
+          component="span"
+          aria-hidden
+          sx={{ display: 'inline-flex', fontSize: 18, lineHeight: 0 }}
+        >
+          {icon}
+        </Box>
+      )}
       {label}
+    </Box>
+  );
+}
+
+/**
+ * SMA-18 (R2; extracted R3 per the file's PresetSegmented/ModeButton
+ * precedent): armed-plant indicator — right of the mode group, before
+ * undo/zoom, visible on EVERY sidebar tab. Same tinted-prim chip pair as
+ * the sidebar (§1/§2 cntChipBg + prim). The danger X (owner accept, R2) is
+ * a SIBLING of the role="status" block so status announcements never
+ * include the button.
+ */
+function ArmedPlantIndicator({
+  armedPlant,
+  onDisarm,
+  tk,
+  t,
+}: {
+  armedPlant: { name: string; footprint: string; footprintKnown: boolean };
+  onDisarm?: () => void;
+  tk: PlannerTokens;
+  t: ReturnType<typeof useTranslation>['t'];
+}) {
+  return (
+    <Box
+      data-testid="armed-plant-indicator"
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '7px',
+        height: 32,
+        px: '10px',
+        minWidth: 0,
+        borderRadius: '8px',
+        bgcolor: tk.cntChipBg,
+        border: `2px solid ${tk.prim}`,
+      }}
+    >
+      <Box
+        role="status"
+        aria-label={t('planner.place.armedIndicator', {
+          plant: armedPlant.name,
+          footprint: armedPlant.footprint,
+        })}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '7px',
+          minWidth: 0,
+        }}
+      >
+        {/* Same glyph as the Placer button — the coherent cue. */}
+        <Box
+          component="span"
+          aria-hidden
+          sx={{
+            display: 'inline-flex',
+            fontSize: 17,
+            lineHeight: 0,
+            color: tk.prim,
+          }}
+        >
+          <ModeIconPlace />
+        </Box>
+        {/* R2 (owner accept): the meaning is VISIBLE, not aria-only. */}
+        <Typography
+          component="span"
+          noWrap
+          sx={{
+            flexShrink: 0,
+            fontSize: 11.5,
+            fontWeight: 600,
+            color: tk.tMeta,
+          }}
+        >
+          {t('planner.place.armedIndicatorPrefix')}
+        </Typography>
+        <Typography
+          component="span"
+          noWrap
+          sx={{
+            // 220 → 180 (R2): the prefix + X joined the chip — the
+            // name yields the width so undo/zoom never move.
+            maxWidth: 180,
+            fontSize: 13,
+            fontWeight: 700,
+            color: tk.tTitle,
+          }}
+        >
+          {armedPlant.name}
+        </Typography>
+        <Box
+          component="span"
+          sx={footprintBadgeSx(tk, armedPlant.footprintKnown)}
+        >
+          {armedPlant.footprint}
+        </Box>
+      </Box>
+      {onDisarm && (
+        <IconButton
+          size="small"
+          aria-label={t('planner.place.disarmLabel', {
+            plant: armedPlant.name,
+          })}
+          onClick={onDisarm}
+          sx={{ p: '2px', color: tk.dangTx }}
+        >
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      )}
     </Box>
   );
 }
@@ -142,6 +279,20 @@ interface GridControlsProps {
   infraArmed?: boolean;
   /** Place mode (SMA-193 5.5) — no armed gate since lot 3 R2 (move-only entry). */
   placeMode?: boolean;
+  /**
+   * SMA-18: the armed plant, minimal display shape — the toolbar indicator
+   * renders it whatever sidebar tab is active (the reported bug: arming then
+   * switching tabs hid the armed state; duplication with the sidebar chip is
+   * the product ruling, 22 Jul). Null/undefined = nothing armed.
+   */
+  armedPlant?: {
+    name: string;
+    footprint: string;
+    footprintKnown: boolean;
+  } | null;
+  /** SMA-18 R2: explicit disarm from the indicator's X — same dispatch as
+   * the sidebar chip's X (SET_PLACE_PLANT null on the page side). */
+  onDisarm?: () => void;
   zoom: number;
   canUndo: boolean;
   exposureVisible: boolean;
@@ -173,6 +324,8 @@ export const GridControls = memo(function GridControls({
   infraMode = false,
   infraArmed = false,
   placeMode = false,
+  armedPlant = null,
+  onDisarm,
   zoom,
   canUndo,
   exposureVisible,
@@ -234,6 +387,7 @@ export const GridControls = memo(function GridControls({
             <ModeButton
               label={t('planner.modes.selection')}
               active={!shapeEditMode && !infraMode && !placeMode}
+              icon={<ModeIconSelect />}
               onClick={onSelectionMode}
               tk={tk}
             />
@@ -244,6 +398,7 @@ export const GridControls = memo(function GridControls({
               <ModeButton
                 label={t('planner.modes.place')}
                 active={placeMode}
+                icon={<ModeIconPlace />}
                 onClick={onPlaceMode}
                 tk={tk}
               />
@@ -254,6 +409,7 @@ export const GridControls = memo(function GridControls({
               label={t('planner.modes.infrastructure')}
               active={infraMode}
               disabled={!infraMode && !infraArmed}
+              icon={<ModeIconInfra />}
               onClick={onInfraMode}
               tk={tk}
             />
@@ -268,6 +424,15 @@ export const GridControls = memo(function GridControls({
               {t('planner.shape.deselectAll')}
             </Button>
           </>
+        )}
+
+        {armedPlant && (
+          <ArmedPlantIndicator
+            armedPlant={armedPlant}
+            onDisarm={onDisarm}
+            tk={tk}
+            t={t}
+          />
         )}
 
         {/* R4 (mockup arrangement): undo sits INSIDE the right cluster,

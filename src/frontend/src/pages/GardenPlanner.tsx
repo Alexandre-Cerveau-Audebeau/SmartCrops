@@ -1242,6 +1242,46 @@ export default function GardenPlanner() {
     };
   });
 
+  // SMA-18 R2: the indicator's X — the same explicit disarm the sidebar
+  // chip dispatches through handlePlantSelect(null), minus that handler's
+  // post-drag click-swallow guard (no drags start from the toolbar).
+  const handleDisarmPlant = useCallback(
+    () => dispatch({ type: 'SET_PLACE_PLANT', plantId: null }),
+    []
+  );
+
+  // SMA-18: minimal display shape for the toolbar's armed-plant indicator —
+  // derived from the armed id + catalog with the SAME spacing→cells rule as
+  // the sidebar badge (the indicator can never disagree with it). Null while
+  // nothing is armed or the plant is unresolvable (pending catalog).
+  const armedPlantIndicator = useMemo(() => {
+    if (!placePlantId) return null;
+    const armed = allPlants.find((p) => p.id === placePlantId);
+    if (!armed) {
+      // SMA-288 three-state grammar (CR R1, ruling 22 Jul): while the
+      // catalog is PENDING the indicator stays hidden (a blank-name toolbar
+      // chip would be odd); a READY catalog that lacks the armed id keeps
+      // the armed state visible via the unknown-plant placeholder.
+      return catalogReady
+        ? {
+            name: t('planner.unknownPlant'),
+            footprint: '1×1?',
+            footprintKnown: false,
+          }
+        : null;
+    }
+    const fp = spacingToFootprintCells(
+      armed.xPlantSpacingValue ?? null,
+      armed.xPlantSpacingUnit ?? null,
+      cellSize
+    );
+    return {
+      name: getPlantDisplayName(armed, language),
+      footprint: fp.known ? `${fp.cells}×${fp.cells}` : '1×1?',
+      footprintKnown: fp.known,
+    };
+  }, [placePlantId, allPlants, cellSize, language, catalogReady, t]);
+
   const handleSave = useCallback(async () => {
     const {
       id: gardenId,
@@ -1653,6 +1693,8 @@ export default function GardenPlanner() {
               infraMode={infraMode}
               infraArmed={infraType !== null}
               placeMode={placeMode}
+              armedPlant={armedPlantIndicator}
+              onDisarm={handleDisarmPlant}
               zoom={zoom}
               canUndo={state.past.length > 0}
               exposureVisible={exposureVisible}

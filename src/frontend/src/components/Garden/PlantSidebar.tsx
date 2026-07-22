@@ -3,6 +3,7 @@ import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemAvatar from '@mui/material/ListItemAvatar';
@@ -13,6 +14,7 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import CloseIcon from '@mui/icons-material/Close';
 import { useTranslation } from 'react-i18next';
 import { STICKY_OFFSET } from '../../constants/layout';
 import { spacingToFootprintCells } from '../../pages/gardenPlanner/placementGeometry';
@@ -59,6 +61,140 @@ interface Props {
 }
 
 type TabValue = 'plants' | 'soils' | 'infrastructure';
+
+/**
+ * Footprint badge (SMA-193 R2/R3), shared since SMA-18 by the list rows AND
+ * the armed identity chip — ONE rendering so the chip can never drift from
+ * the rows. Known → "N×N" with the plain footprint aria; unknown → the
+ * dashed "1×1?" whose tooltip carries the États-component explanation and
+ * whose aria combines footprint + meaning (describeChild keeps the NAME
+ * while the open tooltip becomes the DESCRIPTION).
+ */
+function FootprintBadge({ fp }: { fp: { cells: number; known: boolean } }) {
+  const { t } = useTranslation();
+  const tk = usePlannerTokens();
+  return fp.known ? (
+    <Box
+      component="span"
+      aria-label={t('planner.sidebar.footprint', { cells: fp.cells })}
+      sx={footprintBadgeSx(tk, true)}
+    >
+      {`${fp.cells}×${fp.cells}`}
+    </Box>
+  ) : (
+    <Tooltip title={t('planner.place.footprintUnknown')} describeChild>
+      <Box
+        component="span"
+        aria-label={`1×1 — ${t('planner.place.footprintUnknown')}`}
+        sx={footprintBadgeSx(tk, false)}
+      >
+        1×1?
+      </Box>
+    </Tooltip>
+  );
+}
+
+/**
+ * SMA-18 armed identity chip (owner ruling 22 Jul; extracted R3 per the CR
+ * shape): the bare deselect text button became this chip — familiar row
+ * anatomy (avatar, name, badge) but a deliberately DISTINCT treatment
+ * (tinted cntChipBg + 2px solid prim vs the rows' borderLeft marker) so it
+ * can never be confused with a list row. SMA-288 grammar preserved: while
+ * the catalog is pending the name slot stays empty (never the unknown
+ * fallback); the danger X keeps the explicit disarm available in every
+ * catalog state.
+ */
+function ArmedPlantChip({
+  armedId,
+  armed,
+  catalogReady,
+  language,
+  cellSize,
+  onDisarm,
+}: {
+  /** The armed id — colors the avatar even while the plant is unresolved. */
+  armedId: string;
+  armed: Plant | undefined;
+  catalogReady: boolean;
+  language: string;
+  cellSize: string;
+  onDisarm: () => void;
+}) {
+  const { t } = useTranslation();
+  const tk = usePlannerTokens();
+  const armedName = armed
+    ? getPlantDisplayName(armed, language)
+    : catalogReady
+      ? t('planner.unknownPlant')
+      : '';
+  return (
+    <Box
+      data-testid="armed-plant-chip"
+      sx={{
+        mt: 1,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        p: '6px 8px',
+        borderRadius: '9px',
+        bgcolor: tk.cntChipBg,
+        border: `2px solid ${tk.prim}`,
+      }}
+    >
+      <Avatar
+        sx={{
+          width: 28,
+          height: 28,
+          fontSize: 12.5,
+          fontWeight: 800,
+          bgcolor: getPlantColor(armedId),
+        }}
+      >
+        {armedName.charAt(0).toUpperCase()}
+      </Avatar>
+      <Typography
+        component="span"
+        noWrap
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          fontSize: 13.5,
+          fontWeight: 700,
+          color: tk.tTitle,
+        }}
+      >
+        {armedName}
+      </Typography>
+      {/* CR R3 (5f2ffa16): the badge mirrors the toolbar indicator in the
+          ready-but-missing state — the 1×1? fallback keeps chip and
+          indicator in lockstep across all four armed states. Pending still
+          renders NO badge (the blank-name grammar). */}
+      {(armed || catalogReady) && (
+        <FootprintBadge
+          fp={
+            armed
+              ? spacingToFootprintCells(
+                  armed.xPlantSpacingValue ?? null,
+                  armed.xPlantSpacingUnit ?? null,
+                  cellSize
+                )
+              : { cells: 1, known: false }
+          }
+        />
+      )}
+      <IconButton
+        size="small"
+        aria-label={t('planner.place.disarmLabel', {
+          plant: armedName,
+        })}
+        onClick={onDisarm}
+        sx={{ p: '2px', color: tk.dangTx }}
+      >
+        <CloseIcon fontSize="small" />
+      </IconButton>
+    </Box>
+  );
+}
 
 function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
   const { t } = useTranslation();
@@ -259,14 +395,14 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
               }}
             />
             {selectedPlantId && (
-              <Button
-                size="small"
-                variant="text"
-                onClick={() => onPlantSelect(null)}
-                sx={{ mt: 1 }}
-              >
-                {t('planner.sidebar.deselect')}
-              </Button>
+              <ArmedPlantChip
+                armedId={selectedPlantId}
+                armed={plants.find((p) => p.id === selectedPlantId)}
+                catalogReady={catalogReady}
+                language={language}
+                cellSize={cellSize}
+                onDisarm={() => onPlantSelect(null)}
+              />
             )}
           </Box>
           <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
@@ -337,36 +473,9 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
                             <Typography component="span" noWrap sx={{ fontSize: 13.5, fontWeight: 700, color: tk.tTitle, minWidth: 0 }}>
                               {name}
                             </Typography>
-                            {fp.known ? (
-                              <Box
-                                component="span"
-                                aria-label={t('planner.sidebar.footprint', { cells: fp.cells })}
-                                sx={footprintBadgeSx(tk, true)}
-                              >
-                                {`${fp.cells}×${fp.cells}`}
-                              </Box>
-                            ) : (
-                              // R2 (Extension finding): the dashed "1×1?" is
-                              // opaque on its own — the tooltip carries the
-                              // États-component explanation and the aria
-                              // combines footprint + meaning so AT never
-                              // reads "one times one question mark".
-                              // describeChild (R3, CR committable): the open
-                              // tooltip becomes the badge's DESCRIPTION — the
-                              // aria-label NAME survives it.
-                              <Tooltip
-                                title={t('planner.place.footprintUnknown')}
-                                describeChild
-                              >
-                                <Box
-                                  component="span"
-                                  aria-label={`1×1 — ${t('planner.place.footprintUnknown')}`}
-                                  sx={footprintBadgeSx(tk, false)}
-                                >
-                                  1×1?
-                                </Box>
-                              </Tooltip>
-                            )}
+                            {/* Shared badge (SMA-18): same component as the
+                                armed chip — R2/R3 aria semantics inside. */}
+                            <FootprintBadge fp={fp} />
                           </Box>
                         }
                         secondary={

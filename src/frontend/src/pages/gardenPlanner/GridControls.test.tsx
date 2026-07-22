@@ -149,3 +149,22 @@ describe('GridControls Placer button (SMA-193 5.5)', () => {
     expect(screen.getByRole('button', { name: 'Place' })).toBeEnabled();
   });
 });
+
+// SMA-18 — the mockup mode-button icons (Etats L1014: arrow_selector_tool /
+// potted_plant / fence). The glyphs are DECORATIVE: each button carries an
+// aria-hidden svg and its accessible name must stay strictly the label.
+describe('GridControls mode-button icons (SMA-18)', () => {
+  it('each mode button contains its aria-hidden svg icon under an unchanged name', () => {
+    renderControls({
+      onSelectionMode: vi.fn(),
+      onInfraMode: vi.fn(),
+      onPlaceMode: vi.fn(),
+    });
+    for (const name of ['Selection', 'Place', 'Infrastructures']) {
+      const button = screen.getByRole('button', { name });
+      // The name query above IS the a11y-tree pin: an icon leaking into the
+      // accessible name would make getByRole fail. The svg itself is hidden.
+      expect(button.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    }
+  });
+});
