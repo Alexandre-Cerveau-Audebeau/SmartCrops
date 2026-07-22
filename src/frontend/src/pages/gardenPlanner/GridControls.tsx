@@ -10,7 +10,11 @@ import UndoIcon from '@mui/icons-material/Undo';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
-import { iosSwitchSx, type PlannerTokens } from '../../theme/plannerTokens';
+import {
+  footprintBadgeSx,
+  iosSwitchSx,
+  type PlannerTokens,
+} from '../../theme/plannerTokens';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Moment, Season } from '../../utils/exposure';
 import { ModeIconInfra } from './icons/ModeIconInfra';
@@ -164,6 +168,17 @@ interface GridControlsProps {
   infraArmed?: boolean;
   /** Place mode (SMA-193 5.5) — no armed gate since lot 3 R2 (move-only entry). */
   placeMode?: boolean;
+  /**
+   * SMA-18: the armed plant, minimal display shape — the toolbar indicator
+   * renders it whatever sidebar tab is active (the reported bug: arming then
+   * switching tabs hid the armed state; duplication with the sidebar chip is
+   * the product ruling, 22 Jul). Null/undefined = nothing armed.
+   */
+  armedPlant?: {
+    name: string;
+    footprint: string;
+    footprintKnown: boolean;
+  } | null;
   zoom: number;
   canUndo: boolean;
   exposureVisible: boolean;
@@ -195,6 +210,7 @@ export const GridControls = memo(function GridControls({
   infraMode = false,
   infraArmed = false,
   placeMode = false,
+  armedPlant = null,
   zoom,
   canUndo,
   exposureVisible,
@@ -293,6 +309,64 @@ export const GridControls = memo(function GridControls({
               {t('planner.shape.deselectAll')}
             </Button>
           </>
+        )}
+
+        {/* SMA-18: display-only armed-plant indicator — right of the mode
+            group, before undo/zoom. Visible on EVERY sidebar tab; the disarm
+            lives in the sidebar chip and Escape (no interaction here). Same
+            tinted-prim chip pair as the sidebar (§1/§2 cntChipBg + prim). */}
+        {armedPlant && (
+          <Box
+            data-testid="armed-plant-indicator"
+            role="status"
+            aria-label={t('planner.place.armedIndicator', {
+              plant: armedPlant.name,
+              footprint: armedPlant.footprint,
+            })}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '7px',
+              height: 32,
+              px: '10px',
+              minWidth: 0,
+              borderRadius: '8px',
+              bgcolor: tk.cntChipBg,
+              border: `2px solid ${tk.prim}`,
+            }}
+          >
+            {/* Same glyph as the Placer button — the coherent cue. */}
+            <Box
+              component="span"
+              aria-hidden
+              sx={{
+                display: 'inline-flex',
+                fontSize: 17,
+                lineHeight: 0,
+                color: tk.prim,
+              }}
+            >
+              <ModeIconPlace />
+            </Box>
+            <Typography
+              component="span"
+              noWrap
+              sx={{
+                maxWidth: 220,
+                fontSize: 13,
+                fontWeight: 700,
+                color: tk.tTitle,
+              }}
+            >
+              {armedPlant.name}
+            </Typography>
+            <Box
+              component="span"
+              sx={footprintBadgeSx(tk, armedPlant.footprintKnown)}
+            >
+              {armedPlant.footprint}
+            </Box>
+          </Box>
         )}
 
         {/* R4 (mockup arrangement): undo sits INSIDE the right cluster,

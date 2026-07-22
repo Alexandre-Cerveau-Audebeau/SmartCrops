@@ -472,7 +472,9 @@
       "decreaseRows": "Réduire les lignes",
       "increaseCols": "Augmenter les colonnes",
       "decreaseCols": "Réduire les colonnes",
-      "move": "Déplacer"
+      "move": "Déplacer",
+      "disarmLabel": "Désarmer {{plant}}",
+      "armedIndicator": "Plante sélectionnée : {{plant}} ({{footprint}})"
     },
     "infra": {
       "hint": "Posez des infrastructures sur la grille. Les éléments bloquants portent une ombre dans le calque Exposition.",

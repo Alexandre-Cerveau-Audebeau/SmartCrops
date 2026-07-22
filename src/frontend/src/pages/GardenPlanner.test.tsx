@@ -1394,3 +1394,83 @@ describe('GardenPlanner footprint panel (SMA-193 lot 3)', () => {
   });
 });
 
+
+// SMA-18 — armed-plant visibility: the sidebar identity chip replaces the
+// bare deselect button, and a display-only toolbar indicator keeps the armed
+// state visible on EVERY sidebar tab (the reported bug).
+describe('GardenPlanner armed-plant visibility (SMA-18)', () => {
+  async function renderArmedVisibility() {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      width: 4,
+      height: 4,
+      placements: [],
+    });
+    vi.mocked(fetchPlants).mockResolvedValue([courgette, basil]);
+    renderPlanner();
+    await screen.findByRole('grid');
+    const row = await waitFor(() => {
+      const el = screen
+        .getAllByRole('button')
+        .find((b) => within(b).queryAllByText('Cucurbita fixture').length > 0);
+      expect(el).toBeTruthy();
+      return el!;
+    });
+    return { row };
+  }
+
+  it('arming renders the identity chip (name, badge, X) and the old text button is GONE', async () => {
+    const { row } = await renderArmedVisibility();
+    expect(screen.queryByTestId('armed-plant-chip')).toBeNull();
+    fireEvent.click(row); // arm the courgette
+    const chip = screen.getByTestId('armed-plant-chip');
+    expect(within(chip).getByText('Cucurbita fixture')).toBeInTheDocument();
+    expect(within(chip).getByText('2×2')).toBeInTheDocument();
+    expect(
+      within(chip).getByRole('button', { name: 'Disarm Cucurbita fixture' })
+    ).toBeInTheDocument();
+    // The pre-SMA-18 bare text button no longer exists anywhere.
+    expect(screen.queryByText('Deselect plant')).toBeNull();
+  });
+
+  it('the X disarms: chip AND toolbar indicator disappear', async () => {
+    const { row } = await renderArmedVisibility();
+    fireEvent.click(row);
+    expect(screen.getByTestId('armed-plant-indicator')).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Disarm Cucurbita fixture' })
+    );
+    expect(screen.queryByTestId('armed-plant-chip')).toBeNull();
+    expect(screen.queryByTestId('armed-plant-indicator')).toBeNull();
+  });
+
+  it('REPORTED BUG: the toolbar indicator survives switching the sidebar to Infrastructure', async () => {
+    const { row } = await renderArmedVisibility();
+    fireEvent.click(row);
+    fireEvent.click(screen.getByRole('tab', { name: 'Infrastructure' }));
+    // The plants tab (and its chip) is gone, but the armed state stays
+    // visible in the toolbar — name + footprint + the status aria.
+    const indicator = screen.getByTestId('armed-plant-indicator');
+    expect(within(indicator).getByText('Cucurbita fixture')).toBeInTheDocument();
+    expect(within(indicator).getByText('2×2')).toBeInTheDocument();
+    expect(
+      screen.getByRole('status', {
+        name: 'Selected plant: Cucurbita fixture (2×2)',
+      })
+    ).toBeInTheDocument();
+  });
+
+  it('no indicator while nothing is armed; undo/zoom stay functional with it mounted', async () => {
+    const { row } = await renderArmedVisibility();
+    expect(screen.queryByTestId('armed-plant-indicator')).toBeNull();
+    fireEvent.click(row); // arm — the indicator mounts
+    expect(screen.getByTestId('armed-plant-indicator')).toBeInTheDocument();
+    // The right cluster is intact and functional next to the indicator.
+    expect(
+      screen.getByRole('button', { name: 'Undo last action' })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(screen.getByText('120%')).toBeInTheDocument(); // 100% + the 0.2 step
+  });
+});

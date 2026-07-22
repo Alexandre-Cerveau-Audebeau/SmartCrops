@@ -1242,6 +1242,26 @@ export default function GardenPlanner() {
     };
   });
 
+  // SMA-18: minimal display shape for the toolbar's armed-plant indicator —
+  // derived from the armed id + catalog with the SAME spacing→cells rule as
+  // the sidebar badge (the indicator can never disagree with it). Null while
+  // nothing is armed or the plant is unresolvable (pending catalog).
+  const armedPlantIndicator = useMemo(() => {
+    if (!placePlantId) return null;
+    const armed = allPlants.find((p) => p.id === placePlantId);
+    if (!armed) return null;
+    const fp = spacingToFootprintCells(
+      armed.xPlantSpacingValue ?? null,
+      armed.xPlantSpacingUnit ?? null,
+      cellSize
+    );
+    return {
+      name: getPlantDisplayName(armed, language),
+      footprint: fp.known ? `${fp.cells}×${fp.cells}` : '1×1?',
+      footprintKnown: fp.known,
+    };
+  }, [placePlantId, allPlants, cellSize, language]);
+
   const handleSave = useCallback(async () => {
     const {
       id: gardenId,
@@ -1653,6 +1673,7 @@ export default function GardenPlanner() {
               infraMode={infraMode}
               infraArmed={infraType !== null}
               placeMode={placeMode}
+              armedPlant={armedPlantIndicator}
               zoom={zoom}
               canUndo={state.past.length > 0}
               exposureVisible={exposureVisible}

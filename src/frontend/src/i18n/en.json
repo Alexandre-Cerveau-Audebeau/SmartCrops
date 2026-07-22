@@ -472,7 +472,9 @@
       "decreaseRows": "Decrease rows",
       "increaseCols": "Increase columns",
       "decreaseCols": "Decrease columns",
-      "move": "Move"
+      "move": "Move",
+      "disarmLabel": "Disarm {{plant}}",
+      "armedIndicator": "Selected plant: {{plant}} ({{footprint}})"
     },
     "infra": {
       "hint": "Place infrastructures on the grid. Blocking elements cast a shadow in the Exposure layer.",
