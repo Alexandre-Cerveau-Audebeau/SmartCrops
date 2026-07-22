@@ -165,13 +165,21 @@ function ArmedPlantChip({
       >
         {armedName}
       </Typography>
-      {armed && (
+      {/* CR R3 (5f2ffa16): the badge mirrors the toolbar indicator in the
+          ready-but-missing state — the 1×1? fallback keeps chip and
+          indicator in lockstep across all four armed states. Pending still
+          renders NO badge (the blank-name grammar). */}
+      {(armed || catalogReady) && (
         <FootprintBadge
-          fp={spacingToFootprintCells(
-            armed.xPlantSpacingValue ?? null,
-            armed.xPlantSpacingUnit ?? null,
-            cellSize
-          )}
+          fp={
+            armed
+              ? spacingToFootprintCells(
+                  armed.xPlantSpacingValue ?? null,
+                  armed.xPlantSpacingUnit ?? null,
+                  cellSize
+                )
+              : { cells: 1, known: false }
+          }
         />
       )}
       <IconButton

@@ -1512,6 +1512,9 @@ describe('GardenPlanner armed-plant visibility (SMA-18)', () => {
     // on the ready catalog (SMA-288).
     const chip = screen.getByTestId('armed-plant-chip');
     expect(within(chip).getByText('Inconnue')).toBeInTheDocument();
+    // R4 (CR R3 5f2ffa16): the chip's badge mirrors the indicator's
+    // placeholder in the ready-but-missing state — 1×1? on BOTH surfaces.
+    expect(within(chip).getByText('1×1?')).toBeInTheDocument();
   });
 
   it('the indicator carries the VISIBLE "Selected plant" prefix (R2)', async () => {
