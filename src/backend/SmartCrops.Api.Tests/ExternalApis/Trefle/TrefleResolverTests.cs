@@ -449,6 +449,7 @@ public class TrefleResolverTests
 
         Assert.NotNull(result.FlowerColorsJson);
         var parsed = JsonSerializer.Deserialize<string[]>(result.FlowerColorsJson!);
+        Assert.NotNull(parsed);
         Assert.Equal(["red", "pink"], parsed);
     }
 

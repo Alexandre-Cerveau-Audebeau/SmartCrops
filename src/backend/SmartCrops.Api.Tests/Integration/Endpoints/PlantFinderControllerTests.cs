@@ -183,7 +183,9 @@ public class PlantFinderControllerTests : IntegrationTestBase
         Assert.Equal("fr", received.Language);
         Assert.Equal(2, received.Page);
         Assert.Equal(10, received.PerPage);
+        Assert.NotNull(received.CareLevels);
         Assert.Equal(["Easy", "Medium"], received.CareLevels);
+        Assert.NotNull(received.PlantTypeIds);
         Assert.Equal([1, 3], received.PlantTypeIds);
         Assert.True(received.IsEdible);
         Assert.Equal(4, received.HardinessZoneMin);

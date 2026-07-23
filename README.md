@@ -59,7 +59,7 @@ The core of the application: an interactive grid where a garden is designed cell
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 18, TypeScript, Vite, Material UI v7, react-i18next |
+| Frontend | React 19, TypeScript, Vite, Material UI v7, react-i18next |
 | Backend | .NET 8, ASP.NET Core, Entity Framework Core 8 |
 | Database | PostgreSQL 16 |
 | Search | Typesense |
