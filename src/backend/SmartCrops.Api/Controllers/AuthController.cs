@@ -12,6 +12,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
+using SmartCrops.Core.Interfaces;
 
 namespace SmartCrops.Api.Controllers;
 
@@ -30,6 +31,9 @@ public record UpdateProfileRequest(
     [StringLength(50)] string? LastName,
     [StringLength(100)] string? City);
 public record ChangePasswordRequest([Required] string CurrentPassword, [Required, MinLength(6)] string NewPassword);
+/// <summary>Payload of <c>POST /api/auth/confirm-email</c> (SMA-31). Both values come
+/// straight from the confirmation link's query string, URL-decoded by the SPA.</summary>
+public record ConfirmEmailRequest([Required] string UserId, [Required] string Token);
 
 [ApiController]
 [Route("api/[controller]")]
@@ -39,6 +43,8 @@ public class AuthController(
     IConfiguration configuration,
     IAuthenticationSchemeProvider schemeProvider,
     IHostEnvironment hostEnvironment,
+    IEmailService emailService,
+    ILogger<AuthController> logger,
     IWebHostEnvironment env) : ControllerBase
 {
     private static readonly PasswordHasher<ApplicationUser> _dummyHasher = new();
@@ -46,7 +52,7 @@ public class AuthController(
     private static readonly ConcurrentDictionary<string, (string Token, DateTime Expiry, string Binding)> _authCodes = new();
 
     [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken ct)
     {
         var user = new ApplicationUser { UserName = request.Email, Email = request.Email };
         var result = await userManager.CreateAsync(user, request.Password);
@@ -54,9 +60,79 @@ public class AuthController(
         if (!result.Succeeded)
             return BadRequest(result.Errors);
 
+        await SendConfirmationEmailAsync(user, request.Email, ct);
+
         var tokenResponse = GenerateTokenResponse(user.Id, request.Email, user.SecurityStamp, await userManager.GetRolesAsync(user));
         SetAuthCookie(tokenResponse.Token);
         return StatusCode(201);
+    }
+
+    /// <summary>
+    /// SMA-31: mails the account-confirmation link. Registration is NOT gated on the
+    /// result — the account already exists and the caller is about to be signed in, so
+    /// an SMTP outage must never cost the user their account. Any delivery failure is
+    /// logged server-side and swallowed; the endpoint still returns 201. Re-sending a
+    /// link after a failed delivery is SMA-320's problem, not this method's.
+    /// </summary>
+    private async Task SendConfirmationEmailAsync(ApplicationUser user, string email, CancellationToken ct)
+    {
+        try
+        {
+            var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
+
+            // Both values MUST be percent-encoded: the Identity token is base64-ish and
+            // routinely contains '+' and '/', which would otherwise be decoded as a
+            // space / path separator and silently invalidate the link.
+            var link = $"{ResolveFrontendBaseUrl()}/confirm-email" +
+                $"?userId={Uri.EscapeDataString(user.Id)}" +
+                $"&token={Uri.EscapeDataString(token)}";
+
+            // Plain text only — IEmailService carries no HTML body and no templating,
+            // and the backend has no localization, so the copy is English (see SMA-31).
+            var textBody =
+                "Welcome to SmartCrops!\n\n" +
+                "Please confirm your email address by opening the link below:\n\n" +
+                $"{link}\n\n" +
+                "If you did not create a SmartCrops account, you can safely ignore this message.\n";
+
+            await emailService.SendAsync(
+                email,
+                "Confirm your SmartCrops email address",
+                textBody,
+                ct: ct);
+        }
+        catch (Exception ex)
+        {
+            // Deliberately catches everything, cancellation included: the account is
+            // already committed, so there is nothing to roll back and nothing the
+            // caller could usefully do with the error.
+            logger.LogError(ex, "Registration confirmation email delivery failed for '{Email}'", MaskEmail(email));
+        }
+    }
+
+    /// <summary>
+    /// SMA-31: confirms an email address from the link mailed at registration.
+    /// POST (not GET) because the SPA page owns the exchange, mirroring how the OAuth
+    /// callback POSTs its code back. Idempotent — a second click on the same link
+    /// returns 204 rather than an error. Deliberately opaque: an unknown user id and a
+    /// bad token return the identical 400, so the endpoint cannot be used to probe
+    /// which account ids exist.
+    /// </summary>
+    [HttpPost("confirm-email")]
+    public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailRequest request)
+    {
+        var user = await userManager.FindByIdAsync(request.UserId);
+        if (user is null)
+            return BadRequest(new { error = "Invalid or expired confirmation link." });
+
+        if (user.EmailConfirmed)
+            return NoContent();
+
+        var result = await userManager.ConfirmEmailAsync(user, request.Token);
+        if (!result.Succeeded)
+            return BadRequest(new { error = "Invalid or expired confirmation link." });
+
+        return NoContent();
     }
 
     [HttpPost("login")]
@@ -98,13 +174,7 @@ public class AuthController(
     {
         CleanupExpiredCodes();
 
-        var frontendUrl = configuration["Frontend:BaseUrl"];
-        if (string.IsNullOrWhiteSpace(frontendUrl))
-        {
-            if (!hostEnvironment.IsDevelopment())
-                throw new InvalidOperationException("Frontend:BaseUrl is not configured");
-            frontendUrl = "http://localhost:3000";
-        }
+        var frontendUrl = ResolveFrontendBaseUrl();
 
         try
         {
@@ -281,6 +351,43 @@ public class AuthController(
     private string? GetCurrentUserId() =>
         User.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+    /// <summary>
+    /// Public base URL of the SPA, used to build links the user clicks from an email
+    /// or an OAuth redirect. Misconfiguration is fatal outside Development so a
+    /// deployed instance can never mail a link pointing at localhost.
+    /// </summary>
+    private string ResolveFrontendBaseUrl()
+    {
+        var frontendUrl = configuration["Frontend:BaseUrl"];
+        if (string.IsNullOrWhiteSpace(frontendUrl))
+        {
+            if (!hostEnvironment.IsDevelopment())
+                throw new InvalidOperationException("Frontend:BaseUrl is not configured");
+            frontendUrl = "http://localhost:3000";
+        }
+
+        return frontendUrl;
+    }
+
+    /// <summary>
+    /// Masks an email for logging — keeps the first local-part character and the
+    /// full domain (e.g. <c>a***@example.com</c>) so log lines stay correlatable
+    /// without persisting the raw PII address. Falls back to <c>***</c> when the
+    /// local part is too short to partially reveal, or when there is no <c>@</c>.
+    /// Mirrors the helper in <c>AdminRoleSeeder</c>; the two live in different
+    /// assemblies and Core exposes no logging utility to share today.
+    /// </summary>
+    private static string MaskEmail(string email)
+    {
+        var at = email.IndexOf('@');
+        if (at <= 0)
+        {
+            return "***";
+        }
+        var local = at == 1 ? "***" : $"{email[0]}***";
+        return $"{local}{email[at..]}";
+    }
 
     private void SetAuthCookie(string token)
     {

@@ -11,6 +11,7 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import { UnitSystemProvider } from './contexts/UnitSystemContext';
 import About from './pages/About';
 import AuthCallback from './pages/AuthCallback';
+import ConfirmEmail from './pages/ConfirmEmail';
 import Contact from './pages/Contact';
 import GardenPlanner from './pages/GardenPlanner';
 import Home from './pages/Home';
@@ -43,6 +44,10 @@ export default function App() {
                     <Route path="/contact" element={<Contact />} />
                     <Route path="/shop" element={<Shop />} />
                     <Route path="/auth/callback" element={<AuthCallback />} />
+                    {/* Outside GuestRoute on purpose (SMA-31): registration leaves
+                        the visitor signed in, so a GuestRoute child would bounce
+                        the user who just clicked the link in their mail. */}
+                    <Route path="/confirm-email" element={<ConfirmEmail />} />
                     <Route element={<GuestRoute />}>
                       <Route path="/login" element={<Login />} />
                       <Route path="/register" element={<Register />} />

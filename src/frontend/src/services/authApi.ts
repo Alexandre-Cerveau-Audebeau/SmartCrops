@@ -30,6 +30,23 @@ export async function login(email: string, password: string): Promise<void> {
   }
 }
 
+/**
+ * Confirms an email address from the link mailed at registration (SMA-31).
+ * The endpoint is deliberately opaque — an unknown user id and a bad token both
+ * come back 400 — so the caller only ever learns "it worked" or "it didn't".
+ */
+export async function confirmEmail(userId: string, token: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/auth/confirm-email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ userId, token }),
+  });
+  if (!res.ok) {
+    throw new Error('Email confirmation failed');
+  }
+}
+
 export async function exchangeCode(code: string): Promise<void> {
   const res = await fetch(`${API_BASE}/auth/exchange-code`, {
     method: 'POST',
