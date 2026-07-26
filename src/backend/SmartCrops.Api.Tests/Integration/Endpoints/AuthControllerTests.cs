@@ -174,7 +174,8 @@ public class AuthControllerTests : IntegrationTestBase
     [Fact]
     public async Task ConfirmEmail_UnknownUserId_WithWellFormedToken_ReturnsSameResponseAsGarbageToken()
     {
-        await RegisterAsync(NewEmail());
+        var email = NewEmail();
+        await RegisterAsync(email);
         var (_, _, userId, token) = CapturedLink();
 
         var garbage = await ConfirmAsync(userId, "not-a-real-token");
@@ -188,6 +189,12 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.Equal(
             await garbage.Content.ReadAsStringAsync(),
             await unknownWithRealToken.Content.ReadAsStringAsync());
+
+        // R3 (converged 84e3259a / 0f0a359d): assert the invariant the comment above
+        // promises — neither probe run may have flipped the real account.
+        var registeredUser = await FindUserAsync(email);
+        Assert.NotNull(registeredUser);
+        Assert.False(registeredUser!.EmailConfirmed);
     }
 
     [Fact]

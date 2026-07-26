@@ -290,7 +290,18 @@ var frontendOptions = builder.Services.AddOptions<FrontendOptions>()
     .Bind(builder.Configuration.GetSection(FrontendOptions.SectionName));
 if (!builder.Environment.IsDevelopment())
 {
-    frontendOptions.ValidateDataAnnotations().ValidateOnStart();
+    frontendOptions
+        .ValidateDataAnnotations()
+        // [Required] alone lets "not-a-url" through, and [Url] is too weak to be
+        // worth adding (it admits ftp:// and non-absolute oddities). Emitted links
+        // concatenate "{BaseUrl}/confirm-email", so the value must be an absolute
+        // http(s) URI; a trailing slash is tolerated here and trimmed at the
+        // consumer (AuthController.ResolveFrontendBaseUrl).
+        .Validate(
+            o => Uri.TryCreate(o.BaseUrl, UriKind.Absolute, out var uri)
+                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps),
+            "Frontend:BaseUrl must be an absolute http(s) URL.")
+        .ValidateOnStart();
 }
 
 builder.Services.AddEndpointsApiExplorer();

@@ -392,7 +392,10 @@ public class AuthController(
             frontendUrl = "http://localhost:3000";
         }
 
-        return frontendUrl;
+        // Every consumer concatenates "{base}/path", so a config value ending in "/"
+        // would emit "//confirm-email"-style links (R3). Startup validation tolerates
+        // the slash; it is normalized here, at the single consumption point.
+        return frontendUrl.TrimEnd('/');
     }
 
     /// <summary>

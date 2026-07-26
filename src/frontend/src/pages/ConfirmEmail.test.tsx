@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
@@ -162,5 +162,59 @@ describe('ConfirmEmail (SMA-31)', () => {
       'abc',
       'second-token'
     );
+  });
+
+  it('a late completion cannot overwrite a truncated link’s error state', async () => {
+    // R3 regression (GitHub d3e31fc9): the first exchange is still in flight
+    // when the user navigates to a TRUNCATED link. Settling it afterwards must
+    // not flip the error screen to success.
+    let resolveFirst!: () => void;
+    vi.mocked(confirmEmail).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveFirst = resolve;
+      })
+    );
+
+    function GoTruncated() {
+      const navigate = useNavigate();
+      return (
+        <button onClick={() => navigate('/confirm-email?userId=abc')}>
+          go-truncated
+        </button>
+      );
+    }
+    render(
+      <MemoryRouter
+        initialEntries={['/confirm-email?userId=abc&token=first-token']}
+      >
+        <GoTruncated />
+        <Routes>
+          <Route path="/confirm-email" element={<ConfirmEmail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getByText('Confirming your email address...')
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'go-truncated' }));
+    expect(
+      await screen.findByText(
+        'This confirmation link is invalid or has expired.'
+      )
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      resolveFirst();
+    });
+
+    expect(
+      screen.getByText('This confirmation link is invalid or has expired.')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Your email address is confirmed. Thank you!')
+    ).not.toBeInTheDocument();
+    expect(vi.mocked(confirmEmail)).toHaveBeenCalledTimes(1);
   });
 });

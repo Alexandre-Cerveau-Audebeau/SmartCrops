@@ -17,11 +17,13 @@ type ConfirmState = 'processing' | 'success' | 'error';
  * redirecting, because the link is opened from an email client where a silent
  * bounce to /login would read as "nothing happened".
  *
- * The exchange guard is keyed on the { userId, token } pair, not a permanent
- * boolean: a NEW link opened in the same SPA session (the resend case) re-arms
- * the page and exchanges again, while completions from a superseded pair are
- * discarded. The result region is a polite live region so the processing →
- * success/error transition is announced to assistive tech.
+ * The exchange is tracked per { userId, token } pair (the resend case re-arms
+ * and exchanges again; an unchanged pair reuses the in-flight promise, so
+ * Strict Mode never double-POSTs), and each effect run subscribes with its own
+ * cleanup-cleared flag, so a late completion from a superseded link — including
+ * navigation to a truncated one — can never overwrite the current state. The
+ * result region is a polite live region so the processing → success/error
+ * transition is announced to assistive tech.
  *
  * Routed OUTSIDE GuestRoute: registration leaves the visitor signed in, so a
  * GuestRoute child would bounce the very user who just received the mail.
@@ -46,23 +48,36 @@ export default function ConfirmEmail() {
     setState(requestKey ? 'processing' : 'error');
   }
 
-  const exchanged = useRef<string | null>(null);
+  const inflight = useRef<{ key: string; promise: Promise<void> } | null>(null);
 
   useEffect(() => {
     if (!requestKey || !userId || !token) return;
-    if (exchanged.current === requestKey) return;
-    exchanged.current = requestKey;
 
-    // The ref comparison drops completions from a superseded pair: once a newer
-    // link has re-armed the guard, a late settle from the old exchange must not
-    // overwrite the newer pair's state.
-    confirmEmail(userId, token)
+    // One POST per key: an unchanged key (Strict Mode's double invoke, an
+    // unrelated re-render) reuses the in-flight promise instead of re-issuing.
+    let entry = inflight.current;
+    if (!entry || entry.key !== requestKey) {
+      entry = { key: requestKey, promise: confirmEmail(userId, token) };
+      inflight.current = entry;
+    }
+
+    // Effect-scoped subscription (R3): only the CURRENT effect's completion may
+    // touch state. A key-in-ref comparison is not enough — navigating to a
+    // truncated link bails out before ever writing the ref, so a late settle
+    // from the previous link would still pass that guard and overwrite the
+    // error screen. The cleanup flag closes that window.
+    let active = true;
+    entry.promise
       .then(() => {
-        if (exchanged.current === requestKey) setState('success');
+        if (active) setState('success');
       })
       .catch(() => {
-        if (exchanged.current === requestKey) setState('error');
+        if (active) setState('error');
       });
+
+    return () => {
+      active = false;
+    };
   }, [requestKey, userId, token]);
 
   return (
