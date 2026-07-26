@@ -295,12 +295,17 @@ if (!builder.Environment.IsDevelopment())
         // [Required] alone lets "not-a-url" through, and [Url] is too weak to be
         // worth adding (it admits ftp:// and non-absolute oddities). Emitted links
         // concatenate "{BaseUrl}/confirm-email", so the value must be an absolute
-        // http(s) URI; a trailing slash is tolerated here and trimmed at the
+        // http(s) URI carrying no query and no fragment — anything past
+        // authority+path would land INSIDE the appended segment and break the
+        // link ("https://app/?tenant=1" + "/confirm-email" is not a valid URL,
+        // R4). A trailing slash is the one tolerated oddity, trimmed at the
         // consumer (AuthController.ResolveFrontendBaseUrl).
         .Validate(
             o => Uri.TryCreate(o.BaseUrl, UriKind.Absolute, out var uri)
-                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps),
-            "Frontend:BaseUrl must be an absolute http(s) URL.")
+                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+                && string.IsNullOrEmpty(uri.Query)
+                && string.IsNullOrEmpty(uri.Fragment),
+            "Frontend:BaseUrl must be an absolute http(s) URL with no query string and no fragment.")
         .ValidateOnStart();
 }
 
