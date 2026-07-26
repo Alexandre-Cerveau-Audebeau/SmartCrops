@@ -320,7 +320,11 @@
     "createFailed": "La création du compte a échoué.",
     "linkFailed": "Impossible de lier le compte Google.",
     "invalidToken": "Jeton d'authentification invalide.",
-    "backToLogin": "Retour à la connexion"
+    "backToLogin": "Retour à la connexion",
+    "confirmEmailProcessing": "Confirmation de votre adresse e-mail...",
+    "confirmEmailSuccess": "Votre adresse e-mail est confirmée. Merci !",
+    "confirmEmailError": "Ce lien de confirmation est invalide ou a expiré.",
+    "confirmEmailContinue": "Parcourir la bibliothèque"
   },
   "notFound": {
     "title": "404",

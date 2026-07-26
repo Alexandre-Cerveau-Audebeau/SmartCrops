@@ -280,6 +280,35 @@ builder.Services.AddOptions<SmtpOptions>()
 
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 
+// ── Frontend base URL (SMA-31 R2) ────────────────────────────────────────
+// Confirmation links depend on it, and the send path wraps its resolution in a
+// catch-all — so a missing value outside Development must fail the boot (same
+// pattern as SmtpOptions above), not degrade into "delivery failed" log noise.
+// Development keeps the localhost fallback in AuthController.ResolveFrontendBaseUrl,
+// hence no ValidateOnStart there.
+var frontendOptions = builder.Services.AddOptions<FrontendOptions>()
+    .Bind(builder.Configuration.GetSection(FrontendOptions.SectionName));
+if (!builder.Environment.IsDevelopment())
+{
+    frontendOptions
+        .ValidateDataAnnotations()
+        // [Required] alone lets "not-a-url" through, and [Url] is too weak to be
+        // worth adding (it admits ftp:// and non-absolute oddities). Emitted links
+        // concatenate "{BaseUrl}/confirm-email", so the value must be an absolute
+        // http(s) URI carrying no query and no fragment — anything past
+        // authority+path would land INSIDE the appended segment and break the
+        // link ("https://app/?tenant=1" + "/confirm-email" is not a valid URL,
+        // R4). A trailing slash is the one tolerated oddity, trimmed at the
+        // consumer (AuthController.ResolveFrontendBaseUrl).
+        .Validate(
+            o => Uri.TryCreate(o.BaseUrl, UriKind.Absolute, out var uri)
+                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+                && string.IsNullOrEmpty(uri.Query)
+                && string.IsNullOrEmpty(uri.Fragment),
+            "Frontend:BaseUrl must be an absolute http(s) URL with no query string and no fragment.")
+        .ValidateOnStart();
+}
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

@@ -320,7 +320,11 @@
     "createFailed": "Account creation failed.",
     "linkFailed": "Failed to link Google account.",
     "invalidToken": "Invalid authentication token.",
-    "backToLogin": "Back to login"
+    "backToLogin": "Back to login",
+    "confirmEmailProcessing": "Confirming your email address...",
+    "confirmEmailSuccess": "Your email address is confirmed. Thank you!",
+    "confirmEmailError": "This confirmation link is invalid or has expired.",
+    "confirmEmailContinue": "Browse the Library"
   },
   "notFound": {
     "title": "404",
