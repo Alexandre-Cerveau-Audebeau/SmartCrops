@@ -280,6 +280,19 @@ builder.Services.AddOptions<SmtpOptions>()
 
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 
+// ── Frontend base URL (SMA-31 R2) ────────────────────────────────────────
+// Confirmation links depend on it, and the send path wraps its resolution in a
+// catch-all — so a missing value outside Development must fail the boot (same
+// pattern as SmtpOptions above), not degrade into "delivery failed" log noise.
+// Development keeps the localhost fallback in AuthController.ResolveFrontendBaseUrl,
+// hence no ValidateOnStart there.
+var frontendOptions = builder.Services.AddOptions<FrontendOptions>()
+    .Bind(builder.Configuration.GetSection(FrontendOptions.SectionName));
+if (!builder.Environment.IsDevelopment())
+{
+    frontendOptions.ValidateDataAnnotations().ValidateOnStart();
+}
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

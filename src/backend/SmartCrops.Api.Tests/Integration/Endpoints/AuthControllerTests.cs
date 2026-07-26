@@ -172,6 +172,25 @@ public class AuthControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task ConfirmEmail_UnknownUserId_WithWellFormedToken_ReturnsSameResponseAsGarbageToken()
+    {
+        await RegisterAsync(NewEmail());
+        var (_, _, userId, token) = CapturedLink();
+
+        var garbage = await ConfirmAsync(userId, "not-a-real-token");
+        var unknownWithRealToken = await ConfirmAsync(Guid.NewGuid().ToString(), token);
+
+        // R2 timing equalization: the miss path now RUNS a validation instead of
+        // short-circuiting. A well-formed token (decryptable, but embedding a
+        // different user's id) must come back indistinguishable from garbage —
+        // and must not have confirmed anyone as a side effect.
+        Assert.Equal(HttpStatusCode.BadRequest, unknownWithRealToken.StatusCode);
+        Assert.Equal(
+            await garbage.Content.ReadAsStringAsync(),
+            await unknownWithRealToken.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task ConfirmEmail_CalledTwice_Returns204BothTimes()
     {
         var email = NewEmail();

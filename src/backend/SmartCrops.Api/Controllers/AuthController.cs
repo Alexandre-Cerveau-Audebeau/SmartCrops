@@ -95,11 +95,18 @@ public class AuthController(
                 $"{link}\n\n" +
                 "If you did not create a SmartCrops account, you can safely ignore this message.\n";
 
+            // Registration latency must not inherit the relay's worst case: this 5 s
+            // cap is DELIBERATELY tighter than SmtpEmailService's own 10 s sequence
+            // budget (SMA-30, sized for the contact form) — not a duplicate of it. A
+            // timeout lands in the catch below like any other delivery failure.
+            using var sendCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            sendCts.CancelAfter(TimeSpan.FromSeconds(5));
+
             await emailService.SendAsync(
                 email,
                 "Confirm your SmartCrops email address",
                 textBody,
-                ct: ct);
+                ct: sendCts.Token);
         }
         catch (Exception ex)
         {
@@ -115,15 +122,29 @@ public class AuthController(
     /// POST (not GET) because the SPA page owns the exchange, mirroring how the OAuth
     /// callback POSTs its code back. Idempotent — a second click on the same link
     /// returns 204 rather than an error. Deliberately opaque: an unknown user id and a
-    /// bad token return the identical 400, so the endpoint cannot be used to probe
-    /// which account ids exist.
+    /// bad token return the identical 400, and the unknown-user branch validates a
+    /// token of equivalent shape before answering, so neither the body nor the
+    /// response time reveals which account ids exist (R2).
     /// </summary>
     [HttpPost("confirm-email")]
     public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailRequest request)
     {
         var user = await userManager.FindByIdAsync(request.UserId);
         if (user is null)
+        {
+            // Timing equalization: run the same confirmation path against a transient
+            // user before returning the identical 400. Identity reads Id/SecurityStamp
+            // off the instance during token validation and never hits the store, and
+            // the validation cannot succeed (a genuine token embeds the real user's id
+            // and stamp, both mismatching here), so the result is discarded safely.
+            var probe = new ApplicationUser
+            {
+                Id = request.UserId,
+                SecurityStamp = Guid.NewGuid().ToString("N"),
+            };
+            _ = await userManager.ConfirmEmailAsync(probe, request.Token);
             return BadRequest(new { error = "Invalid or expired confirmation link." });
+        }
 
         if (user.EmailConfirmed)
             return NoContent();
@@ -174,10 +195,14 @@ public class AuthController(
     {
         CleanupExpiredCodes();
 
-        var frontendUrl = ResolveFrontendBaseUrl();
-
         try
         {
+            // Resolved INSIDE the try (R2): a missing Frontend:BaseUrl outside
+            // Development still fails loud, but now flows through the finally — outside
+            // the try, the throw would skip the external-scheme sign-out and leak that
+            // cookie on a misconfigured deployment.
+            var frontendUrl = ResolveFrontendBaseUrl();
+
             var info = await signInManager.GetExternalLoginInfoAsync();
             if (info is null)
                 return Redirect($"{frontendUrl}/login?error=google-failed");
