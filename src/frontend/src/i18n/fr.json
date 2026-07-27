@@ -324,7 +324,20 @@
     "confirmEmailProcessing": "Confirmation de votre adresse e-mail...",
     "confirmEmailSuccess": "Votre adresse e-mail est confirmée. Merci !",
     "confirmEmailError": "Ce lien de confirmation est invalide ou a expiré.",
-    "confirmEmailContinue": "Parcourir la bibliothèque"
+    "confirmEmailContinue": "Parcourir la bibliothèque",
+    "forgotPasswordLink": "Mot de passe oublié ?",
+    "forgotPasswordTitle": "Réinitialiser votre mot de passe",
+    "forgotPasswordIntro": "Saisissez votre adresse e-mail et nous vous enverrons un lien de réinitialisation.",
+    "forgotPasswordSubmit": "Envoyer le lien",
+    "forgotPasswordConfirmation": "Si un compte existe pour cette adresse, un lien de réinitialisation a été envoyé. Consultez votre boîte de réception.",
+    "resetPasswordTitle": "Choisir un nouveau mot de passe",
+    "newPassword": "Nouveau mot de passe",
+    "confirmNewPassword": "Confirmer le nouveau mot de passe",
+    "passwordRules": "Au moins 6 caractères, dont un chiffre, une minuscule, une majuscule et un caractère spécial.",
+    "resetPasswordSubmit": "Réinitialiser le mot de passe",
+    "resetPasswordSuccess": "Votre mot de passe a été réinitialisé. Vous pouvez maintenant vous connecter.",
+    "resetPasswordError": "La réinitialisation a échoué. Le lien est peut-être invalide ou expiré.",
+    "resetPasswordInvalidLink": "Ce lien de réinitialisation est invalide ou incomplet."
   },
   "notFound": {
     "title": "404",

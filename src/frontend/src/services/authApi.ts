@@ -59,6 +59,56 @@ export async function confirmEmail(userId: string, token: string): Promise<void>
   }
 }
 
+/**
+ * Requests a password-reset email (SMA-323). The endpoint answers 202 whether or
+ * not the address exists — the caller learns nothing either way, and the UI is
+ * expected to mirror that silence. Bounded at 10 s via AbortSignal.timeout (the
+ * declarative form of confirmEmail's manual controller dance).
+ */
+export async function forgotPassword(email: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ email }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) {
+    throw new Error('Password reset request failed');
+  }
+}
+
+/**
+ * Consumes a reset link (SMA-323). On a refused password the backend answers with
+ * Identity's raw error array; the descriptions are joined and thrown so the page
+ * can show WHY. The 'RESET_FAILED' sentinel (no description available) and any
+ * non-plain-Error rejection (timeout DOMException) are the page's cue to fall
+ * back to its generic message.
+ */
+export async function resetPassword(
+  userId: string,
+  token: string,
+  newPassword: string
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ userId, token, newPassword }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const message = Array.isArray(body)
+      ? body
+          .map((e: { description?: string }) => e.description)
+          .filter(Boolean)
+          .join(', ')
+      : null;
+    throw new Error(message || 'RESET_FAILED');
+  }
+}
+
 export async function exchangeCode(code: string): Promise<void> {
   const res = await fetch(`${API_BASE}/auth/exchange-code`, {
     method: 'POST',

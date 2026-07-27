@@ -8,8 +8,11 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using SmartCrops.Api.Configuration;
 using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
@@ -34,6 +37,12 @@ public record ChangePasswordRequest([Required] string CurrentPassword, [Required
 /// <summary>Payload of <c>POST /api/auth/confirm-email</c> (SMA-31). Both values come
 /// straight from the confirmation link's query string, URL-decoded by the SPA.</summary>
 public record ConfirmEmailRequest([Required] string UserId, [Required] string Token);
+/// <summary>Payload of <c>POST /api/auth/forgot-password</c> (SMA-323).</summary>
+public record ForgotPasswordRequest([Required, EmailAddress] string Email);
+/// <summary>Payload of <c>POST /api/auth/reset-password</c> (SMA-323). UserId/Token come
+/// from the reset link's query string, URL-decoded by the SPA; the new password floor
+/// mirrors <see cref="ChangePasswordRequest"/>.</summary>
+public record ResetPasswordRequest([Required] string UserId, [Required] string Token, [Required, MinLength(6)] string NewPassword);
 
 [ApiController]
 [Route("api/[controller]")]
@@ -45,6 +54,7 @@ public class AuthController(
     IHostEnvironment hostEnvironment,
     IEmailService emailService,
     ILogger<AuthController> logger,
+    IOptions<FrontendOptions> frontendOptions,
     IWebHostEnvironment env) : ControllerBase
 {
     private static readonly PasswordHasher<ApplicationUser> _dummyHasher = new();
@@ -153,6 +163,104 @@ public class AuthController(
         if (!result.Succeeded)
             return BadRequest(new { error = "Invalid or expired confirmation link." });
 
+        return NoContent();
+    }
+
+    /// <summary>
+    /// SMA-323: mails a password-reset link. Always answers 202 with no body — whether
+    /// the address exists (and whether mail went out) is deliberately not disclosed.
+    /// EmailConfirmed is NOT checked: a user who never confirmed still owns the
+    /// account. Google-only accounts (no local password) get a link too — Identity
+    /// lets them set a first password, a legitimate recovery path.
+    /// </summary>
+    [HttpPost("forgot-password")]
+    [EnableRateLimiting("passwordReset")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken ct)
+    {
+        var user = await userManager.FindByEmailAsync(request.Email);
+
+        // The response is identical either way, but an existing account pays up to 5 s
+        // of inline SMTP while a miss returns instantly — a timing side-channel
+        // remains. Deliberately NOT papered over with an artificial delay: the
+        // structural fix is decoupled delivery (SMA-325), which makes both paths
+        // return immediately.
+        if (user is not null)
+        {
+            await SendPasswordResetEmailAsync(user, request.Email, ct);
+        }
+
+        return Accepted();
+    }
+
+    /// <summary>
+    /// SMA-323: mails the password-reset link. Mirrors
+    /// <see cref="SendConfirmationEmailAsync"/>: the caller is never failed by a
+    /// delivery problem (the endpoint's 202 discloses nothing), the send is capped at
+    /// 5 s (tighter than SmtpEmailService's 10 s SMA-30 budget — not a duplicate),
+    /// and any failure is logged with the masked address, then swallowed.
+    /// </summary>
+    private async Task SendPasswordResetEmailAsync(ApplicationUser user, string email, CancellationToken ct)
+    {
+        try
+        {
+            var token = await userManager.GeneratePasswordResetTokenAsync(user);
+
+            // Both values MUST be percent-encoded: the Identity token is base64-ish and
+            // routinely contains '+' and '/', which would otherwise be decoded as a
+            // space / path separator and silently invalidate the link.
+            var link = $"{ResolveFrontendBaseUrl()}/reset-password" +
+                $"?userId={Uri.EscapeDataString(user.Id)}" +
+                $"&token={Uri.EscapeDataString(token)}";
+
+            // Plain text only — IEmailService carries no HTML body and no templating,
+            // and the backend has no localization, so the copy is English (SMA-323).
+            var textBody =
+                "Hello,\n\n" +
+                "A password reset was requested for your SmartCrops account. Open the link below to choose a new password:\n\n" +
+                $"{link}\n\n" +
+                "If you did not request this, you can safely ignore this message — your password is unchanged.\n";
+
+            using var sendCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            sendCts.CancelAfter(TimeSpan.FromSeconds(5));
+
+            await emailService.SendAsync(
+                email,
+                "Reset your SmartCrops password",
+                textBody,
+                ct: sendCts.Token);
+        }
+        catch (Exception ex)
+        {
+            // Deliberately catches everything, cancellation included: the 202 is
+            // already owed and discloses nothing, so there is no error to surface.
+            logger.LogError(ex, "Password-reset email delivery failed for '{Email}'", MaskEmail(email));
+        }
+    }
+
+    /// <summary>
+    /// SMA-323: consumes the reset link mailed by <see cref="ForgotPassword"/>.
+    /// Deliberately NOT idempotent, unlike confirm-email: ResetPasswordAsync rotates
+    /// the security stamp, so a consumed token fails on replay — that is the point of
+    /// a reset token. An unknown user id returns the same body as an invalid token
+    /// (never reveal which ids exist); a refused password returns the raw
+    /// IdentityError[] like ChangePassword, so the client can show WHY.
+    /// </summary>
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+    {
+        var user = await userManager.FindByIdAsync(request.UserId);
+        if (user is null)
+            return BadRequest(new[] { new IdentityErrorDescriber().InvalidToken() });
+
+        var result = await userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
+        if (!result.Succeeded)
+            return BadRequest(result.Errors);
+
+        // No UpdateSecurityStampAsync here: ResetPasswordAsync already rotated the
+        // stamp internally (that is what kills the token and any live JWTs); calling
+        // it again would be redundant. The cookie delete mirrors ChangePassword —
+        // harmless if absent, correct if this browser still held a session.
+        Response.Cookies.Delete("smartcrops_token", new CookieOptions { Path = "/" });
         return NoContent();
     }
 
@@ -379,12 +487,16 @@ public class AuthController(
 
     /// <summary>
     /// Public base URL of the SPA, used to build links the user clicks from an email
-    /// or an OAuth redirect. Misconfiguration is fatal outside Development so a
-    /// deployed instance can never mail a link pointing at localhost.
+    /// or an OAuth redirect. Reads the bound <see cref="FrontendOptions"/> (SMA-324):
+    /// Program.cs validates that contract at startup outside Development, and going
+    /// through it keeps a single source of truth for the section name. Only the
+    /// Development fallback and the trailing-slash trim stay local. Misconfiguration
+    /// is fatal outside Development so a deployed instance can never mail a link
+    /// pointing at localhost.
     /// </summary>
     private string ResolveFrontendBaseUrl()
     {
-        var frontendUrl = configuration["Frontend:BaseUrl"];
+        var frontendUrl = frontendOptions.Value.BaseUrl;
         if (string.IsNullOrWhiteSpace(frontendUrl))
         {
             if (!hostEnvironment.IsDevelopment())

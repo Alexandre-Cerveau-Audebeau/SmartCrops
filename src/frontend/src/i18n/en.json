@@ -324,7 +324,20 @@
     "confirmEmailProcessing": "Confirming your email address...",
     "confirmEmailSuccess": "Your email address is confirmed. Thank you!",
     "confirmEmailError": "This confirmation link is invalid or has expired.",
-    "confirmEmailContinue": "Browse the Library"
+    "confirmEmailContinue": "Browse the Library",
+    "forgotPasswordLink": "Forgot your password?",
+    "forgotPasswordTitle": "Reset your password",
+    "forgotPasswordIntro": "Enter your email address and we will send you a reset link.",
+    "forgotPasswordSubmit": "Send reset link",
+    "forgotPasswordConfirmation": "If an account exists for this address, a reset link has been sent. Check your inbox.",
+    "resetPasswordTitle": "Choose a new password",
+    "newPassword": "New Password",
+    "confirmNewPassword": "Confirm New Password",
+    "passwordRules": "At least 6 characters, including a digit, a lowercase letter, an uppercase letter and a special character.",
+    "resetPasswordSubmit": "Reset password",
+    "resetPasswordSuccess": "Your password has been reset. You can now sign in.",
+    "resetPasswordError": "Password reset failed. The link may be invalid or expired.",
+    "resetPasswordInvalidLink": "This reset link is invalid or incomplete."
   },
   "notFound": {
     "title": "404",
