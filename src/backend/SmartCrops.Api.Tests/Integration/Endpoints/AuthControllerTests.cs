@@ -76,6 +76,9 @@ public class AuthControllerTests : IntegrationTestBase
     private async Task<HttpResponseMessage> ResetAsync(string userId, string token, string newPassword) =>
         await Client.PostAsJsonAsync("/api/auth/reset-password", new { userId, token, newPassword });
 
+    private async Task<HttpResponseMessage> ValidateAsync(string userId, string token) =>
+        await Client.PostAsJsonAsync("/api/auth/reset-password/validate", new { userId, token });
+
     /// <summary>
     /// Registers an account, drops its registration-confirmation email from the stub
     /// (so reset assertions see only reset traffic), requests a reset, and returns the
@@ -366,5 +369,69 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.Equal(
             await garbage.Content.ReadAsStringAsync(),
             await unknown.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ValidateResetToken_TokenFromMailedLink_Returns204()
+    {
+        var (_, userId, token) = await RegisterAndRequestResetAsync();
+
+        var response = await ValidateAsync(userId, token);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ValidateResetToken_GarbageToken_Returns400()
+    {
+        var (_, userId, _) = await RegisterAndRequestResetAsync();
+
+        var response = await ValidateAsync(userId, "not-a-real-token");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ValidateResetToken_UnknownUserId_ReturnsSameResponseAsGarbageToken()
+    {
+        var (_, userId, _) = await RegisterAndRequestResetAsync();
+
+        var garbage = await ValidateAsync(userId, "not-a-real-token");
+        var unknown = await ValidateAsync(Guid.NewGuid().ToString(), "not-a-real-token");
+
+        Assert.Equal(HttpStatusCode.BadRequest, garbage.StatusCode);
+        Assert.Equal(garbage.StatusCode, unknown.StatusCode);
+        Assert.Equal(
+            await garbage.Content.ReadAsStringAsync(),
+            await unknown.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ValidateResetToken_ThenResetWithSameToken_StillSucceeds()
+    {
+        var (email, userId, token) = await RegisterAndRequestResetAsync();
+
+        var validate = await ValidateAsync(userId, token);
+        var reset = await ResetAsync(userId, token, "N3w!Passw0rd");
+
+        // THE invariant of R1-bis: verification must NOT consume the token — the
+        // page pre-validates on load, then the user submits the SAME token.
+        Assert.Equal(HttpStatusCode.NoContent, validate.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
+        var login = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = "N3w!Passw0rd" });
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+    }
+
+    [Fact]
+    public async Task ValidateResetToken_ConsumedToken_Returns400()
+    {
+        var (_, userId, token) = await RegisterAndRequestResetAsync();
+        Assert.Equal(HttpStatusCode.NoContent, (await ResetAsync(userId, token, "N3w!Passw0rd")).StatusCode);
+
+        var response = await ValidateAsync(userId, token);
+
+        // The exact scenario that motivated R1-bis: reopening an already-consumed
+        // link must be told apart from a live one BEFORE any form renders.
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 }

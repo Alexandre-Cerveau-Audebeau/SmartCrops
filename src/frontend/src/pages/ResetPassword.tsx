@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Alert from '@mui/material/Alert';
@@ -11,16 +11,24 @@ import Container from '@mui/material/Container';
 import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { resetPassword } from '../services/authApi';
+import { resetPassword, validateResetToken } from '../services/authApi';
+
+type LinkState = 'validating' | 'form' | 'invalid';
 
 /**
  * SMA-323: the target of the reset link mailed by forgot-password. Modelled on
  * Login's form template. A truncated link (missing userId or token) renders the
- * invalid-link state without ever calling the API. On a refused password the
- * page surfaces the SERVER's IdentityError descriptions (authApi joins them) so
- * the user learns why, falling back to the generic message only when no
- * description is available (sentinel) or the rejection is not a server answer
- * (timeout DOMException). Success links onward to /login.
+ * invalid-link state without ever calling the API; a complete link is
+ * pre-validated on mount (R1-bis) so an already-dead link — consumed, expired,
+ * tampered — never shows the password fields at all. On a refused password the
+ * page surfaces the SERVER's IdentityError descriptions (authApi joins them),
+ * falling back to the generic message only when no description is available
+ * (sentinel) or the rejection is not a server answer (timeout DOMException).
+ * Success links onward to /login.
+ *
+ * The pre-validation is keyed on the { userId, token } pair with an
+ * effect-scoped subscription (the ConfirmEmail engine), so a stale verdict can
+ * never overwrite a newer link's state.
  *
  * Routed OUTSIDE GuestRoute, next to /confirm-email: it is reached from an
  * email link, and a still-signed-in visitor must not be bounced to "/".
@@ -36,6 +44,57 @@ export default function ResetPassword() {
 
   const userId = searchParams.get('userId');
   const token = searchParams.get('token');
+  const requestKey = userId && token ? `${userId}\n${token}` : null;
+
+  // A truncated link is decided at render time, and a CHANGED pair resets the
+  // machine during render (the adjust-during-render pattern) — the effect-body
+  // setState alternative trips react-hooks/set-state-in-effect.
+  const [renderedKey, setRenderedKey] = useState(requestKey);
+  const [linkState, setLinkState] = useState<LinkState>(
+    requestKey ? 'validating' : 'invalid'
+  );
+  if (renderedKey !== requestKey) {
+    setRenderedKey(requestKey);
+    setLinkState(requestKey ? 'validating' : 'invalid');
+    setSucceeded(false);
+    setError(null);
+  }
+
+  const inflight = useRef<{
+    key: string;
+    promise: Promise<'valid' | 'invalid'>;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!requestKey || !userId || !token) return;
+
+    // One validation per key: an unchanged key (Strict Mode's double invoke, an
+    // unrelated re-render) reuses the in-flight promise instead of re-issuing.
+    let entry = inflight.current;
+    if (!entry || entry.key !== requestKey) {
+      entry = { key: requestKey, promise: validateResetToken(userId, token) };
+      inflight.current = entry;
+    }
+
+    // Effect-scoped subscription: only the CURRENT effect's verdict may touch
+    // state, so a stale validation cannot overwrite a newer link's state.
+    let active = true;
+    entry.promise
+      .then((verdict) => {
+        if (active) setLinkState(verdict === 'valid' ? 'form' : 'invalid');
+      })
+      .catch(() => {
+        // Fall through to the form: a network blip or timeout is NOT a dead
+        // link, and concluding "invalid" here would strand a user whose link
+        // is perfectly good. Only a positive 400 hides the fields — the
+        // submit path remains the authority either way.
+        if (active) setLinkState('form');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [requestKey, userId, token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,7 +139,7 @@ export default function ResetPassword() {
             {t('auth.resetPasswordTitle')}
           </Typography>
 
-          {!userId || !token ? (
+          {linkState === 'invalid' ? (
             <>
               <Alert severity="error" sx={{ mb: 3 }}>
                 {t('auth.resetPasswordInvalidLink')}
@@ -102,6 +161,21 @@ export default function ResetPassword() {
                 </Link>
               </Typography>
             </>
+          ) : linkState === 'validating' ? (
+            <Box
+              role="status"
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                py: 4,
+              }}
+            >
+              <CircularProgress />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                {t('auth.resetPasswordValidating')}
+              </Typography>
+            </Box>
           ) : (
             <>
               {error && (

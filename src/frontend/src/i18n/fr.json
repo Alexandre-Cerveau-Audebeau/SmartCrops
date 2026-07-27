@@ -337,7 +337,8 @@
     "resetPasswordSubmit": "Réinitialiser le mot de passe",
     "resetPasswordSuccess": "Votre mot de passe a été réinitialisé. Vous pouvez maintenant vous connecter.",
     "resetPasswordError": "La réinitialisation a échoué. Le lien est peut-être invalide ou expiré.",
-    "resetPasswordInvalidLink": "Ce lien de réinitialisation est invalide ou incomplet."
+    "resetPasswordInvalidLink": "Ce lien de réinitialisation est invalide ou incomplet.",
+    "resetPasswordValidating": "Vérification de votre lien de réinitialisation..."
   },
   "notFound": {
     "title": "404",

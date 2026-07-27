@@ -43,6 +43,8 @@ public record ForgotPasswordRequest([Required, EmailAddress] string Email);
 /// from the reset link's query string, URL-decoded by the SPA; the new password floor
 /// mirrors <see cref="ChangePasswordRequest"/>.</summary>
 public record ResetPasswordRequest([Required] string UserId, [Required] string Token, [Required, MinLength(6)] string NewPassword);
+/// <summary>Payload of <c>POST /api/auth/reset-password/validate</c> (SMA-323 R1-bis).</summary>
+public record ValidateResetTokenRequest([Required] string UserId, [Required] string Token);
 
 [ApiController]
 [Route("api/[controller]")]
@@ -261,6 +263,39 @@ public class AuthController(
         // it again would be redundant. The cookie delete mirrors ChangePassword —
         // harmless if absent, correct if this browser still held a session.
         Response.Cookies.Delete("smartcrops_token", new CookieOptions { Path = "/" });
+        return NoContent();
+    }
+
+    /// <summary>
+    /// SMA-323 R1-bis: pre-validates a reset link so the SPA can hide the password
+    /// form when the link is already dead (consumed, expired, tampered) instead of
+    /// letting the user type a new password that the submit will refuse. Verification
+    /// does NOT consume the token — an Identity reset token dies when the security
+    /// stamp rotates on a successful reset, not from being verified — and exposing it
+    /// is safe: a 204/400 here tells the holder of the link nothing they would not
+    /// learn by submitting, and the real authority remains <see cref="ResetPassword"/>
+    /// itself. Shares the "passwordReset" budget with forgot-password: same user
+    /// journey, and the shared window stops anyone hammering this endpoint. The
+    /// unknown-user branch returns the same body as an invalid token.
+    /// </summary>
+    [HttpPost("reset-password/validate")]
+    [EnableRateLimiting("passwordReset")]
+    public async Task<IActionResult> ValidateResetToken([FromBody] ValidateResetTokenRequest request)
+    {
+        var user = await userManager.FindByIdAsync(request.UserId);
+        if (user is null)
+            return BadRequest(new[] { new IdentityErrorDescriber().InvalidToken() });
+
+        // Provider and purpose read off UserManager — the exact pair
+        // ResetPasswordAsync verifies with internally, never hard-coded strings.
+        var valid = await userManager.VerifyUserTokenAsync(
+            user,
+            userManager.Options.Tokens.PasswordResetTokenProvider,
+            UserManager<ApplicationUser>.ResetPasswordTokenPurpose,
+            request.Token);
+        if (!valid)
+            return BadRequest(new[] { new IdentityErrorDescriber().InvalidToken() });
+
         return NoContent();
     }
 

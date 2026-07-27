@@ -79,6 +79,30 @@ export async function forgotPassword(email: string): Promise<void> {
 }
 
 /**
+ * Pre-validates a reset link (SMA-323 R1-bis) so the page can hide the password
+ * form when the link is already dead. Returns 'valid' on 204 and 'invalid' on
+ * the 400 the backend answers for a dead link. Any OTHER outcome — network
+ * failure, timeout, unexpected status (429 included) — THROWS, and the caller
+ * must fall through to the form: only a positive "this token is refused" may
+ * hide it, because the submit path stays the authority.
+ */
+export async function validateResetToken(
+  userId: string,
+  token: string
+): Promise<'valid' | 'invalid'> {
+  const res = await fetch(`${API_BASE}/auth/reset-password/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ userId, token }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (res.status === 204) return 'valid';
+  if (res.status === 400) return 'invalid';
+  throw new Error(`Unexpected status ${res.status}`);
+}
+
+/**
  * Consumes a reset link (SMA-323). On a refused password the backend answers with
  * Identity's raw error array; the descriptions are joined and thrown so the page
  * can show WHY. The 'RESET_FAILED' sentinel (no description available) and any

@@ -337,7 +337,8 @@
     "resetPasswordSubmit": "Reset password",
     "resetPasswordSuccess": "Your password has been reset. You can now sign in.",
     "resetPasswordError": "Password reset failed. The link may be invalid or expired.",
-    "resetPasswordInvalidLink": "This reset link is invalid or incomplete."
+    "resetPasswordInvalidLink": "This reset link is invalid or incomplete.",
+    "resetPasswordValidating": "Checking your reset link..."
   },
   "notFound": {
     "title": "404",

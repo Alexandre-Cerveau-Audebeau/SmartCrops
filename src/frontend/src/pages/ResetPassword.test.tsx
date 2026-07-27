@@ -3,10 +3,11 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
 import ResetPassword from './ResetPassword';
-import { resetPassword } from '../services/authApi';
+import { resetPassword, validateResetToken } from '../services/authApi';
 
 vi.mock('../services/authApi', () => ({
   resetPassword: vi.fn(),
+  validateResetToken: vi.fn(),
 }));
 
 function renderAt(search: string) {
@@ -17,6 +18,11 @@ function renderAt(search: string) {
       </Routes>
     </MemoryRouter>
   );
+}
+
+// The form only appears once the on-mount validation settles (R1-bis).
+async function awaitForm() {
+  await screen.findByLabelText(/^New Password/);
 }
 
 function fillAndSubmit(newPassword: string, confirm: string) {
@@ -33,10 +39,13 @@ function fillAndSubmit(newPassword: string, confirm: string) {
 describe('ResetPassword (SMA-323)', () => {
   beforeEach(async () => {
     vi.mocked(resetPassword).mockReset();
+    vi.mocked(validateResetToken).mockReset();
+    // Default: a live link — individual tests override for dead/undecided links.
+    vi.mocked(validateResetToken).mockResolvedValue('valid');
     await i18next.changeLanguage('en');
   });
 
-  it('renders the invalid-link state without calling the API when the token is missing', () => {
+  it('renders the invalid-link state without calling any API when the token is missing', () => {
     renderAt('?userId=abc');
 
     expect(
@@ -47,11 +56,89 @@ describe('ResetPassword (SMA-323)', () => {
       '/login'
     );
     expect(screen.queryByLabelText(/^New Password/)).not.toBeInTheDocument();
+    expect(vi.mocked(validateResetToken)).not.toHaveBeenCalled();
     expect(vi.mocked(resetPassword)).not.toHaveBeenCalled();
   });
 
-  it('states the actual password rules under the password field', () => {
+  it('shows the validating state with no password fields while the check is in flight', () => {
+    vi.mocked(validateResetToken).mockReturnValue(new Promise(() => {}));
+
     renderAt('?userId=abc&token=xyz');
+
+    expect(
+      screen.getByText('Checking your reset link...')
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^New Password/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Reset password' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders the form when the link validates', async () => {
+    renderAt('?userId=abc&token=xyz');
+
+    await awaitForm();
+
+    expect(vi.mocked(validateResetToken)).toHaveBeenCalledWith('abc', 'xyz');
+    expect(screen.getByLabelText(/^Confirm New Password/)).toBeInTheDocument();
+  });
+
+  it('renders the invalid-link state with no fields when validation answers 400', async () => {
+    vi.mocked(validateResetToken).mockResolvedValue('invalid');
+
+    renderAt('?userId=abc&token=xyz');
+
+    expect(
+      await screen.findByText('This reset link is invalid or incomplete.')
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^New Password/)).not.toBeInTheDocument();
+    expect(vi.mocked(resetPassword)).not.toHaveBeenCalled();
+  });
+
+  it('falls through to the form when validation fails on network or timeout', async () => {
+    // A connectivity blip is NOT a dead link: only a positive 400 may hide the
+    // fields — the submit path stays the authority.
+    vi.mocked(validateResetToken).mockRejectedValue(new Error('Network down'));
+
+    renderAt('?userId=abc&token=xyz');
+
+    await awaitForm();
+
+    expect(
+      screen.queryByText('This reset link is invalid or incomplete.')
+    ).not.toBeInTheDocument();
+  });
+
+  it('handles a consumed link end to end: validating, then invalid, never a field', async () => {
+    let settle!: (verdict: 'valid' | 'invalid') => void;
+    vi.mocked(validateResetToken).mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve;
+      })
+    );
+
+    renderAt('?userId=abc&token=consumed-token');
+
+    expect(
+      screen.getByText('Checking your reset link...')
+    ).toBeInTheDocument();
+
+    settle('invalid');
+
+    expect(
+      await screen.findByText('This reset link is invalid or incomplete.')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to login' })).toHaveAttribute(
+      'href',
+      '/login'
+    );
+    expect(screen.queryByLabelText(/^New Password/)).not.toBeInTheDocument();
+    expect(vi.mocked(resetPassword)).not.toHaveBeenCalled();
+  });
+
+  it('states the actual password rules under the password field', async () => {
+    renderAt('?userId=abc&token=xyz');
+    await awaitForm();
 
     expect(
       screen.getByText(
@@ -60,8 +147,9 @@ describe('ResetPassword (SMA-323)', () => {
     ).toBeInTheDocument();
   });
 
-  it('rejects mismatched passwords client-side without calling the API', () => {
+  it('rejects mismatched passwords client-side without calling the API', async () => {
     renderAt('?userId=abc&token=xyz');
+    await awaitForm();
 
     fillAndSubmit('N3w!Passw0rd', 'Different!1');
 
@@ -69,9 +157,10 @@ describe('ResetPassword (SMA-323)', () => {
     expect(vi.mocked(resetPassword)).not.toHaveBeenCalled();
   });
 
-  it('disables the submit button while the request is in flight', () => {
+  it('disables the submit button while the request is in flight', async () => {
     vi.mocked(resetPassword).mockReturnValue(new Promise(() => {}));
     renderAt('?userId=abc&token=xyz');
+    await awaitForm();
 
     fillAndSubmit('N3w!Passw0rd', 'N3w!Passw0rd');
 
@@ -83,6 +172,7 @@ describe('ResetPassword (SMA-323)', () => {
   it('shows the success state with a link to login', async () => {
     vi.mocked(resetPassword).mockResolvedValue(undefined);
     renderAt('?userId=abc&token=xyz');
+    await awaitForm();
 
     fillAndSubmit('N3w!Passw0rd', 'N3w!Passw0rd');
 
@@ -111,6 +201,7 @@ describe('ResetPassword (SMA-323)', () => {
       )
     );
     renderAt('?userId=abc&token=xyz');
+    await awaitForm();
 
     fillAndSubmit('weakpassword', 'weakpassword');
 
@@ -124,6 +215,7 @@ describe('ResetPassword (SMA-323)', () => {
   it('falls back to the generic message when no description is available', async () => {
     vi.mocked(resetPassword).mockRejectedValue(new Error('RESET_FAILED'));
     renderAt('?userId=abc&token=xyz');
+    await awaitForm();
 
     fillAndSubmit('N3w!Passw0rd', 'N3w!Passw0rd');
 
