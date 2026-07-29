@@ -103,11 +103,27 @@ export async function validateResetToken(
 }
 
 /**
+ * Sentinel thrown by resetPassword when the server refused the reset without a
+ * single usable description. Exported (R2) so the page compares against the
+ * SAME value instead of a duplicated literal: a drifted sentinel would slip
+ * past the page's filter and be shown verbatim as if it were a server message.
+ */
+export const RESET_FAILED = 'RESET_FAILED';
+
+/**
+ * Sentinel thrown by resetPassword on HTTP 429 (R2): reset-password now sits
+ * behind the "passwordReset" rate-limit policy, and a throttled attempt must
+ * read as "try again later" — never as "your link is dead".
+ */
+export const RESET_RATE_LIMITED = 'RESET_RATE_LIMITED';
+
+/**
  * Consumes a reset link (SMA-323). On a refused password the backend answers with
  * Identity's raw error array; the descriptions are joined and thrown so the page
- * can show WHY. The 'RESET_FAILED' sentinel (no description available) and any
- * non-plain-Error rejection (timeout DOMException) are the page's cue to fall
- * back to its generic message.
+ * can show WHY. A 429 throws the RESET_RATE_LIMITED sentinel, recognized BEFORE
+ * any body parsing (R2). The RESET_FAILED sentinel (no description available)
+ * and any non-plain-Error rejection (timeout DOMException) are the page's cue
+ * to fall back to its generic message.
  */
 export async function resetPassword(
   userId: string,
@@ -122,6 +138,12 @@ export async function resetPassword(
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
+    // A throttled attempt is not a verdict on the link or the password —
+    // recognized before the IdentityError[] parsing so it can never be
+    // mistaken for (or shown as) a server description.
+    if (res.status === 429) {
+      throw new Error(RESET_RATE_LIMITED);
+    }
     const body = await res.json().catch(() => null);
     const message = Array.isArray(body)
       ? body
@@ -129,7 +151,7 @@ export async function resetPassword(
           .filter(Boolean)
           .join(', ')
       : null;
-    throw new Error(message || 'RESET_FAILED');
+    throw new Error(message || RESET_FAILED);
   }
 }
 

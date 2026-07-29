@@ -3,9 +3,17 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
 import ResetPassword from './ResetPassword';
-import { resetPassword, validateResetToken } from '../services/authApi';
+import {
+  RESET_FAILED,
+  RESET_RATE_LIMITED,
+  resetPassword,
+  validateResetToken,
+} from '../services/authApi';
 
-vi.mock('../services/authApi', () => ({
+// Only the functions are stubbed; the sentinel constants stay the REAL exported
+// values (R2), so these tests break if the module and the page ever drift.
+vi.mock('../services/authApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../services/authApi')>()),
   resetPassword: vi.fn(),
   validateResetToken: vi.fn(),
 }));
@@ -213,7 +221,7 @@ describe('ResetPassword (SMA-323)', () => {
   });
 
   it('falls back to the generic message when no description is available', async () => {
-    vi.mocked(resetPassword).mockRejectedValue(new Error('RESET_FAILED'));
+    vi.mocked(resetPassword).mockRejectedValue(new Error(RESET_FAILED));
     renderAt('?userId=abc&token=xyz');
     await awaitForm();
 
@@ -224,5 +232,54 @@ describe('ResetPassword (SMA-323)', () => {
         'Password reset failed. The link may be invalid or expired.'
       )
     ).toBeInTheDocument();
+  });
+
+  it('falls back to the generic message when the request times out (non-Error rejection)', async () => {
+    // FIX F (R2): the component special-cases non-plain-Error rejections in its
+    // classification comment — a DOMException named TimeoutError must land on
+    // the generic message, never be shown verbatim.
+    vi.mocked(resetPassword).mockRejectedValue(
+      new DOMException('The operation timed out', 'TimeoutError')
+    );
+    renderAt('?userId=abc&token=xyz');
+    await awaitForm();
+
+    fillAndSubmit('N3w!Passw0rd', 'N3w!Passw0rd');
+
+    expect(
+      await screen.findByText(
+        'Password reset failed. The link may be invalid or expired.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('The operation timed out')
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows the rate-limit message when the reset is throttled, not the invalid-link one', async () => {
+    // FIX B (R2): a 429 — reachable now that reset-password sits behind the
+    // passwordReset policy — must read as "try again later", never as a dead
+    // link and never as the generic failure.
+    vi.mocked(resetPassword).mockRejectedValue(new Error(RESET_RATE_LIMITED));
+    renderAt('?userId=abc&token=xyz');
+    await awaitForm();
+
+    fillAndSubmit('N3w!Passw0rd', 'N3w!Passw0rd');
+
+    expect(
+      await screen.findByText(
+        'Too many attempts. Please wait a moment and try again.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('This reset link is invalid or incomplete.')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'Password reset failed. The link may be invalid or expired.'
+      )
+    ).not.toBeInTheDocument();
+    // The form stays: a throttled user retries in place.
+    expect(screen.getByLabelText(/^New Password/)).toBeInTheDocument();
   });
 });

@@ -11,7 +11,12 @@ import Container from '@mui/material/Container';
 import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { resetPassword, validateResetToken } from '../services/authApi';
+import {
+  RESET_FAILED,
+  RESET_RATE_LIMITED,
+  resetPassword,
+  validateResetToken,
+} from '../services/authApi';
 
 type LinkState = 'validating' | 'form' | 'invalid';
 
@@ -24,6 +29,8 @@ type LinkState = 'validating' | 'form' | 'invalid';
  * page surfaces the SERVER's IdentityError descriptions (authApi joins them),
  * falling back to the generic message only when no description is available
  * (sentinel) or the rejection is not a server answer (timeout DOMException).
+ * A throttled submit — 429, reachable since reset-password joined the
+ * "passwordReset" policy (R2) — gets its own message: it is not a dead link.
  * Success links onward to /login.
  *
  * The pre-validation is keyed on the { userId, token } pair with an
@@ -111,13 +118,19 @@ export default function ResetPassword() {
       await resetPassword(userId, token, newPassword);
       setSucceeded(true);
     } catch (err) {
+      // A throttled attempt (R2) is classified before anything else: it is
+      // neither a dead link nor a server description to surface.
+      if (err instanceof Error && err.message === RESET_RATE_LIMITED) {
+        setError(t('auth.resetPasswordRateLimited'));
+        return;
+      }
       // Only a plain Error thrown by authApi carries server descriptions; the
       // no-description sentinel and DOMException rejections (name !== 'Error',
       // e.g. TimeoutError) fall back to the generic message.
       const serverMessage =
         err instanceof Error &&
         err.name === 'Error' &&
-        err.message !== 'RESET_FAILED'
+        err.message !== RESET_FAILED
           ? err.message
           : null;
       setError(serverMessage ?? t('auth.resetPasswordError'));

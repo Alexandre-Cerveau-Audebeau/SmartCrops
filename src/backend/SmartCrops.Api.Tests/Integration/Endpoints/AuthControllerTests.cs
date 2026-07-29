@@ -308,6 +308,14 @@ public class AuthControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task ForgotPassword_MissingFields_Returns400()
+    {
+        var response = await Client.PostAsJsonAsync("/api/auth/forgot-password", new { });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ResetPassword_TokenFromMailedLink_Returns204AndNewPasswordLogsIn()
     {
         var (email, userId, token) = await RegisterAndRequestResetAsync();
@@ -357,7 +365,7 @@ public class AuthControllerTests : IntegrationTestBase
     [Fact]
     public async Task ResetPassword_UnknownUserId_ReturnsSameResponseAsGarbageToken()
     {
-        var (_, userId, _) = await RegisterAndRequestResetAsync();
+        var (email, userId, _) = await RegisterAndRequestResetAsync();
 
         var garbage = await ResetAsync(userId, "not-a-real-token", "N3w!Passw0rd");
         var unknown = await ResetAsync(Guid.NewGuid().ToString(), "not-a-real-token", "N3w!Passw0rd");
@@ -369,6 +377,18 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.Equal(
             await garbage.Content.ReadAsStringAsync(),
             await unknown.Content.ReadAsStringAsync());
+        // The transient probe behind the unknown-id branch (R2) must be write-free:
+        // the real account still signs in with its original password.
+        var login = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResetPassword_MissingFields_Returns400()
+    {
+        var response = await Client.PostAsJsonAsync("/api/auth/reset-password", new { });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
@@ -394,7 +414,7 @@ public class AuthControllerTests : IntegrationTestBase
     [Fact]
     public async Task ValidateResetToken_UnknownUserId_ReturnsSameResponseAsGarbageToken()
     {
-        var (_, userId, _) = await RegisterAndRequestResetAsync();
+        var (_, userId, token) = await RegisterAndRequestResetAsync();
 
         var garbage = await ValidateAsync(userId, "not-a-real-token");
         var unknown = await ValidateAsync(Guid.NewGuid().ToString(), "not-a-real-token");
@@ -404,6 +424,9 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.Equal(
             await garbage.Content.ReadAsStringAsync(),
             await unknown.Content.ReadAsStringAsync());
+        // The transient probe behind the unknown-id branch (R2) must be
+        // side-effect-free: the genuine mailed token is still alive afterwards.
+        Assert.Equal(HttpStatusCode.NoContent, (await ValidateAsync(userId, token)).StatusCode);
     }
 
     [Fact]

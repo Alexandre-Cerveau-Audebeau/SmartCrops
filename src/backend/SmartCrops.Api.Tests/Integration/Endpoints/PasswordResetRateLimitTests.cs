@@ -18,6 +18,11 @@ namespace SmartCrops.Api.Tests.Integration.Endpoints;
 /// one resolves the Identity store on every request, hence the
 /// <c>WithConnectionString</c> against the shared Postgres container (the
 /// AuthFrontendUrlValidationTests delta applied to the rate-limit pattern).
+/// Covered per endpoint: forgot-password (the lot) and reset-password (R2 —
+/// the token-consuming mutation was the only door of the flow left open).
+/// xUnit instantiates the class per test, so each case gets a fresh factory
+/// and therefore a fresh window: the two endpoints never share a budget here
+/// even though they share the policy.
 /// </summary>
 [Collection("Integration")]
 [Trait("Category", "Integration")]
@@ -64,7 +69,7 @@ public class PasswordResetRateLimitTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Post_ThirdRequestInWindow_Returns429()
+    public async Task Post_ForgotPassword_ThirdRequestInWindow_Returns429()
     {
         // An unknown address still counts against the window — the limiter sits in
         // front of the account lookup, which is the point (it shields the lookup
@@ -77,6 +82,29 @@ public class PasswordResetRateLimitTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.Accepted, first.StatusCode);
         Assert.Equal(HttpStatusCode.Accepted, second.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, third.StatusCode);
+    }
+
+    [Fact]
+    public async Task Post_ResetPassword_ThirdRequestInWindow_Returns429()
+    {
+        // R2 mirror of the forgot-password case. A dead token still counts against
+        // the window: the limiter sits in front of everything, which is the point —
+        // reset-password is where Identity hashing burns CPU and where a guessed
+        // token would get cashed in, so unlimited attempts were the real hole.
+        var payload = new
+        {
+            userId = Guid.NewGuid().ToString(),
+            token = "not-a-real-token",
+            newPassword = "N3w!Passw0rd",
+        };
+
+        var first = await _client.PostAsJsonAsync("/api/auth/reset-password", payload);
+        var second = await _client.PostAsJsonAsync("/api/auth/reset-password", payload);
+        var third = await _client.PostAsJsonAsync("/api/auth/reset-password", payload);
+
+        Assert.Equal(HttpStatusCode.BadRequest, first.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, second.StatusCode);
         Assert.Equal(HttpStatusCode.TooManyRequests, third.StatusCode);
     }
 }

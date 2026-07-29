@@ -61,6 +61,11 @@ public class AuthController(
 {
     private static readonly PasswordHasher<ApplicationUser> _dummyHasher = new();
     private static readonly string _dummyHash = _dummyHasher.HashPassword(new ApplicationUser(), "DummyPassword123!");
+
+    // R2: the InvalidToken shape is answered from three sites (reset-password ×1,
+    // validate ×2); one shared describer keeps them from ever drifting apart —
+    // or from a custom IdentityErrorDescriber registered later.
+    private static readonly IdentityErrorDescriber _errorDescriber = new();
     private static readonly ConcurrentDictionary<string, (string Token, DateTime Expiry, string Binding)> _authCodes = new();
 
     [HttpPost("register")]
@@ -130,6 +135,23 @@ public class AuthController(
     }
 
     /// <summary>
+    /// R2 of SMA-323: builds the throwaway user that the unknown-id branches of
+    /// <see cref="ConfirmEmail"/>, <see cref="ResetPassword"/> and
+    /// <see cref="ValidateResetToken"/> probe with before answering. Identity reads
+    /// Id/SecurityStamp straight off the instance during token validation and never
+    /// hits the store, and a genuine token embeds the REAL user's id and stamp —
+    /// both mismatch here — so the probe can never succeed and every caller
+    /// discards its result. Its only job is temporal: the miss path pays the same
+    /// token-validation cost as a real account, so response time stops disclosing
+    /// which account ids exist.
+    /// </summary>
+    private static ApplicationUser CreateProbeUser(string userId) => new()
+    {
+        Id = userId,
+        SecurityStamp = Guid.NewGuid().ToString("N"),
+    };
+
+    /// <summary>
     /// SMA-31: confirms an email address from the link mailed at registration.
     /// POST (not GET) because the SPA page owns the exchange, mirroring how the OAuth
     /// callback POSTs its code back. Idempotent — a second click on the same link
@@ -145,16 +167,9 @@ public class AuthController(
         if (user is null)
         {
             // Timing equalization: run the same confirmation path against a transient
-            // user before returning the identical 400. Identity reads Id/SecurityStamp
-            // off the instance during token validation and never hits the store, and
-            // the validation cannot succeed (a genuine token embeds the real user's id
-            // and stamp, both mismatching here), so the result is discarded safely.
-            var probe = new ApplicationUser
-            {
-                Id = request.UserId,
-                SecurityStamp = Guid.NewGuid().ToString("N"),
-            };
-            _ = await userManager.ConfirmEmailAsync(probe, request.Token);
+            // user before returning the identical 400 — see CreateProbeUser for why
+            // the probe is safe, cannot succeed, and its result is discarded.
+            _ = await userManager.ConfirmEmailAsync(CreateProbeUser(request.UserId), request.Token);
             return BadRequest(new { error = "Invalid or expired confirmation link." });
         }
 
@@ -243,16 +258,27 @@ public class AuthController(
     /// SMA-323: consumes the reset link mailed by <see cref="ForgotPassword"/>.
     /// Deliberately NOT idempotent, unlike confirm-email: ResetPasswordAsync rotates
     /// the security stamp, so a consumed token fails on replay — that is the point of
-    /// a reset token. An unknown user id returns the same body as an invalid token
-    /// (never reveal which ids exist); a refused password returns the raw
-    /// IdentityError[] like ChangePassword, so the client can show WHY.
+    /// a reset token. An unknown user id returns the same body — and, through the
+    /// transient probe (R2), the same response time — as an invalid token (never
+    /// reveal which ids exist); a refused password returns the raw IdentityError[]
+    /// like ChangePassword, so the client can show WHY. Behind the shared
+    /// "passwordReset" budget since R2: this is the endpoint that consumes the token
+    /// and pays for Identity hashing, so it is the one most worth throttling.
     /// </summary>
     [HttpPost("reset-password")]
+    [EnableRateLimiting("passwordReset")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
         var user = await userManager.FindByIdAsync(request.UserId);
         if (user is null)
-            return BadRequest(new[] { new IdentityErrorDescriber().InvalidToken() });
+        {
+            // Timing equalization (R2): probe through the same reset path a real
+            // user takes — safe because ResetPasswordAsync validates the token
+            // BEFORE the password, so nothing can ever be written — and answer
+            // exactly what a real user with a dead token gets.
+            _ = await userManager.ResetPasswordAsync(CreateProbeUser(request.UserId), request.Token, request.NewPassword);
+            return BadRequest(new[] { _errorDescriber.InvalidToken() });
+        }
 
         var result = await userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
         if (!result.Succeeded)
@@ -274,9 +300,11 @@ public class AuthController(
     /// stamp rotates on a successful reset, not from being verified — and exposing it
     /// is safe: a 204/400 here tells the holder of the link nothing they would not
     /// learn by submitting, and the real authority remains <see cref="ResetPassword"/>
-    /// itself. Shares the "passwordReset" budget with forgot-password: same user
-    /// journey, and the shared window stops anyone hammering this endpoint. The
-    /// unknown-user branch returns the same body as an invalid token.
+    /// itself. Shares the "passwordReset" budget with forgot-password and
+    /// reset-password itself (since R2): one throttling door for the whole journey,
+    /// so no endpoint of the flow can be hammered. The unknown-user branch returns
+    /// the same body — and, through the transient probe (R2), the same response
+    /// time — as an invalid token.
     /// </summary>
     [HttpPost("reset-password/validate")]
     [EnableRateLimiting("passwordReset")]
@@ -284,7 +312,17 @@ public class AuthController(
     {
         var user = await userManager.FindByIdAsync(request.UserId);
         if (user is null)
-            return BadRequest(new[] { new IdentityErrorDescriber().InvalidToken() });
+        {
+            // Timing equalization (R2): pay the same verification cost a real
+            // account pays — the identical provider/purpose pair — before
+            // answering exactly what a dead token answers.
+            _ = await userManager.VerifyUserTokenAsync(
+                CreateProbeUser(request.UserId),
+                userManager.Options.Tokens.PasswordResetTokenProvider,
+                UserManager<ApplicationUser>.ResetPasswordTokenPurpose,
+                request.Token);
+            return BadRequest(new[] { _errorDescriber.InvalidToken() });
+        }
 
         // Provider and purpose read off UserManager — the exact pair
         // ResetPasswordAsync verifies with internally, never hard-coded strings.
@@ -294,7 +332,7 @@ public class AuthController(
             UserManager<ApplicationUser>.ResetPasswordTokenPurpose,
             request.Token);
         if (!valid)
-            return BadRequest(new[] { new IdentityErrorDescriber().InvalidToken() });
+            return BadRequest(new[] { _errorDescriber.InvalidToken() });
 
         return NoContent();
     }
