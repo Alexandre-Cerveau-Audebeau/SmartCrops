@@ -61,11 +61,6 @@ public class AuthController(
 {
     private static readonly PasswordHasher<ApplicationUser> _dummyHasher = new();
     private static readonly string _dummyHash = _dummyHasher.HashPassword(new ApplicationUser(), "DummyPassword123!");
-
-    // R2: the InvalidToken shape is answered from three sites (reset-password ×1,
-    // validate ×2); one shared describer keeps them from ever drifting apart —
-    // or from a custom IdentityErrorDescriber registered later.
-    private static readonly IdentityErrorDescriber _errorDescriber = new();
     private static readonly ConcurrentDictionary<string, (string Token, DateTime Expiry, string Binding)> _authCodes = new();
 
     [HttpPost("register")]
@@ -276,8 +271,11 @@ public class AuthController(
             // user takes — safe because ResetPasswordAsync validates the token
             // BEFORE the password, so nothing can ever be written — and answer
             // exactly what a real user with a dead token gets.
+            // The manager's ErrorDescriber is the DI-configured one (R4): a custom
+            // or localized describer (SMA-32) must reach these responses, which a
+            // locally constructed instance would silently bypass.
             _ = await userManager.ResetPasswordAsync(CreateProbeUser(request.UserId), request.Token, request.NewPassword);
-            return BadRequest(new[] { _errorDescriber.InvalidToken() });
+            return BadRequest(new[] { userManager.ErrorDescriber.InvalidToken() });
         }
 
         var result = await userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
@@ -321,7 +319,7 @@ public class AuthController(
                 userManager.Options.Tokens.PasswordResetTokenProvider,
                 UserManager<ApplicationUser>.ResetPasswordTokenPurpose,
                 request.Token);
-            return BadRequest(new[] { _errorDescriber.InvalidToken() });
+            return BadRequest(new[] { userManager.ErrorDescriber.InvalidToken() });
         }
 
         // Provider and purpose read off UserManager — the exact pair
@@ -332,7 +330,7 @@ public class AuthController(
             UserManager<ApplicationUser>.ResetPasswordTokenPurpose,
             request.Token);
         if (!valid)
-            return BadRequest(new[] { _errorDescriber.InvalidToken() });
+            return BadRequest(new[] { userManager.ErrorDescriber.InvalidToken() });
 
         return NoContent();
     }
