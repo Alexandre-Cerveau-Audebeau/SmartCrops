@@ -1857,6 +1857,46 @@ describe('GardenPlanner floating unsaved-changes bar + toasts (SMA-309 R2)', () 
     });
   });
 
+  it('an error toast survives the Escape key and closes only through its X (R6)', async () => {
+    vi.mocked(saveLayout).mockRejectedValue(new Error('boom'));
+    await renderDirty();
+    fireEvent.click(
+      within(screen.getByTestId('dirty-bar')).getByRole('button', {
+        name: 'Save',
+      })
+    );
+    const toast = await screen.findByText('Failed to save layout.');
+    // Dispatched on DOCUMENT, deliberately (declared adaptation): MUI's
+    // escape listener is document-level (useSnackbar registers on document)
+    // and the event bubbles on to the planner's own WINDOW handler — one
+    // keypress, BOTH consumers, exactly the coexistence the guard records.
+    // A window-targeted event would never reach the document listener and
+    // the test would pass without the fix.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    // An IMMEDIATE presence assert would be vacuous: the R3 exit-survival
+    // keeps even a DISMISSED toast mounted through the Grow exit. The real
+    // claim is that the toast never leaves — the disappearance wait must
+    // TIME OUT (proven red against the clickaway-only guard).
+    await expect(
+      waitFor(
+        () =>
+          expect(screen.queryByText('Failed to save layout.')).toBeNull(),
+        { timeout: 1000 }
+      )
+    ).rejects.toThrow();
+    expect(screen.getByText('Failed to save layout.')).toBeInTheDocument();
+    // Its own X remains the ONLY dismissal.
+    fireEvent.click(
+      within(toast.closest('.MuiSnackbar-root') as HTMLElement).getByRole(
+        'button',
+        { name: 'Close' }
+      )
+    );
+    await waitFor(() =>
+      expect(screen.queryByText('Failed to save layout.')).toBeNull()
+    );
+  });
+
   it('an error toast persists past the auto-hide window and closes only on dismissal (R3)', async () => {
     vi.mocked(saveLayout).mockRejectedValue(new Error('boom'));
     await renderDirty();

@@ -14,7 +14,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
-import Snackbar from '@mui/material/Snackbar';
+import Snackbar, { type SnackbarCloseReason } from '@mui/material/Snackbar';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme, type Theme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
@@ -1756,14 +1756,30 @@ export default function GardenPlanner() {
         key={displayedToast?.seq}
         open={message !== null}
         // Errors never auto-hide (R3 ruling): a save failure that vanishes
-        // unread leaves the user believing the save succeeded. The clickaway
-        // reason gets the same treatment for errors — without the guard the
-        // user's next click ANYWHERE dismissed the failure unread (MUI wraps
-        // the open toast in a ClickAwayListener). Success/info keep the
-        // adopted mechanism's clickaway-dismiss; they auto-hide anyway.
+        // unread leaves the user believing the save succeeded.
         autoHideDuration={displayedToast?.src.type === 'error' ? null : 6000}
         onClose={(_, reason) => {
-          if (reason === 'clickaway' && displayedToast?.src.type === 'error') {
+          // All THREE MUI close reasons, accounted for explicitly (R6):
+          //  - 'timeout' cannot fire for errors — autoHideDuration is null
+          //    above;
+          //  - 'clickaway' (adversarial pass) and 'escapeKeyDown' (R6) are
+          //    swallowed for errors here: an unread save failure dismisses
+          //    ONLY through its own X. A future MUI reason slots into the
+          //    array on its own line.
+          // Success/info keep every dismissal path they have today.
+          // Coexistence, NOT a conflict: the same Escape press also reaches
+          // the planner's own window keydown handler (clearSelection /
+          // leaving Place mode), which keeps doing what it does — this guard
+          // is deliberately independent of it and decides only the TOAST's
+          // fate.
+          const errorProofReasons: SnackbarCloseReason[] = [
+            'clickaway',
+            'escapeKeyDown',
+          ];
+          if (
+            displayedToast?.src.type === 'error' &&
+            errorProofReasons.includes(reason)
+          ) {
             return;
           }
           setMessage(null);
