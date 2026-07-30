@@ -249,8 +249,15 @@ export default function GardenPlanner() {
   // becomes the §9 "Ombre portée" hatch overlay — that is what the moment
   // preset visibly moves now that blockers are real. Indoor gardens skip the
   // moment call: their light is schedule-driven, nothing casts.
+  //
+  // SMA-309: NO LONGER gated on `exposureVisible`. The toggle controls whether
+  // the layer is PAINTED, not whether the data exists — the detail panel states
+  // the selected cell's exposure with the layer off. `exposureVisible` left the
+  // dep list with the guard (it no longer participates), so the memo still
+  // recomputes on exactly the inputs it reads and the #181 perf shape holds:
+  // toggling the layer now re-renders without recomputing at all.
   const exposureView = useMemo(() => {
-    if (!exposureVisible || !grid) return null;
+    if (!grid) return null;
     const overrides: Record<string, ExposureCategory> = {};
     grid.forEach((row, r) =>
       row.forEach((cell, c) => {
@@ -276,6 +283,9 @@ export default function GardenPlanner() {
       : null;
     return {
       cells: aggregate.mode === 'aggregate' ? aggregate.cells : null,
+      // SMA-309: the per-cell moment triplet the aggregate pass already used —
+      // the panel needs it to say WHEN a cell is lit without guessing.
+      momentsLit: aggregate.mode === 'aggregate' ? aggregate.momentsLit : null,
       cast:
         momentResult && momentResult.mode === 'moment'
           ? momentResult.cells.map((row) =>
@@ -283,8 +293,9 @@ export default function GardenPlanner() {
             )
           : null,
     };
-  }, [exposureVisible, grid, layoutWidth, layoutHeight, garden, exposureSeason, exposureMoment, blockers, castsShadow]);
+  }, [grid, layoutWidth, layoutHeight, garden, exposureSeason, exposureMoment, blockers, castsShadow]);
   const exposureCells = exposureView?.cells ?? null;
+  const exposureMomentsLit = exposureView?.momentsLit ?? null;
   const castShadowCells = exposureView?.cast ?? null;
 
   // Horizontal scroll state for grid container
@@ -1118,6 +1129,38 @@ export default function GardenPlanner() {
     [selectedPlacementId]
   );
 
+  // SMA-309: notes edits go through the reducer (history + dirty), so the
+  // page's ONE Save button persists them like any other layout edit.
+  const handleSetSelectedNotes = useCallback(
+    (notes: string | null) => {
+      if (!selectedPlacementId) return;
+      dispatch({
+        type: 'SET_PLACEMENT_NOTES',
+        placementId: selectedPlacementId,
+        notes,
+      });
+    },
+    [selectedPlacementId]
+  );
+
+  // SMA-309: the override for the SELECTED placement's anchor cell. Distinct
+  // from the cell-click path on purpose — it must NOT clear the selection
+  // (that would unmount the panel holding the control), and it reaches a cell
+  // that is occupied by definition (the reducer's occupancy guard was lifted
+  // for exactly this).
+  const handleSetSelectedExposureOverride = useCallback(
+    (value: ExposureCategory | null) => {
+      if (!selectedPlacement) return;
+      dispatch({
+        type: 'SET_CELL_EXPOSURE_OVERRIDE',
+        row: selectedPlacement.startRow,
+        col: selectedPlacement.startCol,
+        value,
+      });
+    },
+    [selectedPlacement]
+  );
+
   // Move (mockup Etats): arm the placement's OWN plant — enters Place mode;
   // the lot-2 move-drag takes over from there.
   const handleMoveSelectedPlacement = useCallback(() => {
@@ -1405,15 +1448,33 @@ export default function GardenPlanner() {
   const selectedPlant = selectedPlacement
     ? (allPlants.find((p) => p.id === selectedPlacement.plantId) ?? null)
     : null;
-  const selectedCellSoil =
-    selectedPlacement &&
-    grid &&
+  const anchorInGrid =
+    selectedPlacement !== null &&
+    grid !== null &&
     selectedPlacement.startRow >= 0 &&
     selectedPlacement.startRow < grid.length &&
     selectedPlacement.startCol >= 0 &&
-    selectedPlacement.startCol < (grid[selectedPlacement.startRow]?.length ?? 0)
-      ? grid[selectedPlacement.startRow][selectedPlacement.startCol]?.soil
-      : undefined;
+    selectedPlacement.startCol < (grid[selectedPlacement.startRow]?.length ?? 0);
+  const selectedCellSoil = anchorInGrid
+    ? grid![selectedPlacement!.startRow][selectedPlacement!.startCol]?.soil
+    : undefined;
+  // SMA-309: the anchor cell's exposure facts for the detail panel — category,
+  // the moment triplet behind it, and the cell's manual override. All three
+  // read the SAME cell, and none depends on the layer being visible.
+  const selectedCellExposure = anchorInGrid
+    ? (exposureCells?.[selectedPlacement!.startRow]?.[
+        selectedPlacement!.startCol
+      ] ?? null)
+    : null;
+  const selectedCellMomentsLit = anchorInGrid
+    ? (exposureMomentsLit?.[selectedPlacement!.startRow]?.[
+        selectedPlacement!.startCol
+      ] ?? null)
+    : null;
+  const selectedCellOverride = anchorInGrid
+    ? (grid![selectedPlacement!.startRow][selectedPlacement!.startCol]
+        ?.exposureOverride ?? null)
+    : null;
 
   if (loading) {
     return (
@@ -1948,8 +2009,10 @@ export default function GardenPlanner() {
                   shapeEditMode={shapeEditMode}
                   infraPaintMode={infraMode}
                   placements={enrichedPlacements}
-                  exposure={exposureCells}
-                  castShadow={castShadowCells}
+                  // SMA-309: the toggle gates the PAINTING here — the data
+                  // above is computed either way so the panel can read it.
+                  exposure={exposureVisible ? exposureCells : null}
+                  castShadow={exposureVisible ? castShadowCells : null}
                   onCellClick={handleCellClick}
                   onCellDragStart={handleCellDragStart}
                   onCellDragEnter={handleCellDragEnter}
@@ -2111,11 +2174,17 @@ export default function GardenPlanner() {
                 cellSize={cellSize}
                 gridRows={grid?.length ?? 0}
                 gridCols={grid?.[0]?.length ?? 0}
+                exposure={selectedCellExposure}
+                momentsLit={selectedCellMomentsLit}
+                exposureOverride={selectedCellOverride}
+                onSetExposureOverride={handleSetSelectedExposureOverride}
                 checkFit={handleCheckSelectedFit}
                 describeOverlap={handleDescribeOverlap}
                 onSetFootprint={handleSetSelectedFootprint}
+                onSetNotes={handleSetSelectedNotes}
                 onMove={handleMoveSelectedPlacement}
                 onRemove={handleRemoveSelectedPlacement}
+                onClose={clearSelection}
               />
             )}
           </Box>

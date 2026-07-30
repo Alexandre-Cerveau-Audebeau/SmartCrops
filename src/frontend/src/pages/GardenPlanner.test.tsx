@@ -1557,3 +1557,85 @@ describe('GardenPlanner armed-plant visibility (SMA-18)', () => {
     expect(screen.getByText('120%')).toBeInTheDocument(); // 100% + the 0.2 step
   });
 });
+
+// ── SMA-309: the detail panel leads with the plant ──────────────────────────
+// The page's half of the rework: the exposure computation is decoupled from
+// layer visibility, notes reach the save payload, and the panel's override
+// control keeps the selection alive.
+describe('GardenPlanner placement panel (SMA-309)', () => {
+  async function selectPlacement() {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    await waitFor(() =>
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
+    );
+    // The placement sits at (0,0) — clicking its cell selects it.
+    fireEvent.click(within(grid).getAllByRole('gridcell')[0]!);
+    expect(await screen.findByText('Selected placement')).toBeInTheDocument();
+    return grid;
+  }
+
+  it('states the anchor cell exposure with the LAYER OFF (the decoupling)', async () => {
+    const grid = await selectPlacement();
+    // Layer off: no cell carries a tint...
+    expect(document.querySelector('[data-exposure]')).toBeNull();
+    // ...yet the panel knows the cell is in full sun all day. The 2×2 outdoor
+    // fixture has no blockers, so all three moments are lit — the sentence is
+    // computed, never guessed.
+    expect(screen.getByTestId('summary-exposure')).toHaveTextContent(
+      'Full sun — morning, noon, and evening'
+    );
+    // The layer still paints when toggled on (rendering is what the toggle owns).
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    expect(within(grid).getAllByRole('gridcell')[1]).toHaveAttribute(
+      'data-exposure',
+      'full'
+    );
+  });
+
+  it('the panel close button clears the selection', async () => {
+    await selectPlacement();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Close the placement panel' })
+    );
+    expect(screen.queryByText('Selected placement')).toBeNull();
+  });
+
+  it('a note typed in the panel reaches the save payload (dead data no more)', async () => {
+    vi.mocked(saveLayout).mockResolvedValue(undefined);
+    await selectPlacement();
+
+    fireEvent.change(screen.getByLabelText('Notes'), {
+      target: { value: 'Watered on Tuesday' },
+    });
+    // The page's ONE dirty/Save cycle owns it — no auto-save.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
+    await waitFor(() => expect(saveLayout).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(saveLayout).mock.calls[0]![1];
+    expect(payload.placements[0]!.notes).toBe('Watered on Tuesday');
+  });
+
+  it('the panel override applies UNDER the placement and keeps the panel mounted', async () => {
+    const grid = await selectPlacement();
+    fireEvent.click(screen.getByRole('button', { name: /Adjust exposure/ }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Shade' }));
+
+    // The panel is STILL there (the cell-click path clears the selection; this
+    // one must not), and the override landed on the occupied anchor cell —
+    // which the pre-SMA-309 reducer guard refused outright.
+    expect(screen.getByText('Selected placement')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    expect(within(grid).getAllByRole('gridcell')[0]).toHaveAttribute(
+      'data-exposure',
+      'shade'
+    );
+    // With an override in force the triplet is withheld: the label states the
+    // category alone rather than a sun path that no longer describes the cell.
+    const row = screen.getByTestId('summary-exposure');
+    expect(row).toHaveTextContent('Shade');
+    expect(row).not.toHaveTextContent('morning');
+  });
+});

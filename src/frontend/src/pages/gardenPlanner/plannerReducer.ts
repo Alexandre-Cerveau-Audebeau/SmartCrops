@@ -202,6 +202,7 @@ export type PlannerAction =
       spanRows: number;
       spanCols: number;
     }
+  | { type: 'SET_PLACEMENT_NOTES'; placementId: string; notes: string | null }
   | { type: 'REMOVE_PLACEMENT'; placementId: string }
   | { type: 'SET_SHAPE_EDIT_MODE'; enabled: boolean }
   | { type: 'SET_INFRA_TYPE'; infraType: InfrastructureType | null }
@@ -812,6 +813,33 @@ export function plannerReducer(
       };
     }
 
+    case 'SET_PLACEMENT_NOTES': {
+      // SMA-309: notes were DEAD DATA — hydrated from the server, carried in
+      // this state, written back by every save, and never shown to anyone.
+      // Structural reason this matters: SaveLayout does RemoveRange + re-INSERT
+      // of the whole placement set, so a note survives ONLY because the client
+      // round-trips it. A client that dropped the field would destroy every
+      // note in the garden on the next save — which is why the field stayed in
+      // the reducer while the UI was missing, and why editing it belongs here
+      // (history + dirty) rather than in a component's local state.
+      const target = state.placements.find((p) => p.id === action.placementId);
+      if (!target) return state;
+      // Idempotence (the MOVE / SET_PLACEMENT_FOOTPRINT invariant): an
+      // unchanged value returns the SAME state object — no undo entry, no
+      // dirty churn. Empty text normalises to null so "" and null are one
+      // state (the wire and the DB both store the absence as null).
+      const next = action.notes === null || action.notes === '' ? null : action.notes;
+      if ((target.notes ?? null) === next) return state;
+      return {
+        ...state,
+        past: pushHistory(state),
+        placements: state.placements.map((p) =>
+          p.id === action.placementId ? { ...p, notes: next } : p
+        ),
+        isDirty: true,
+      };
+    }
+
     case 'REMOVE_PLACEMENT':
       return {
         ...state,
@@ -969,15 +997,18 @@ export function plannerReducer(
       // undo entry (nothing would change in the serialized layout).
       const target = state.grid[action.row][action.col];
       if ((target.exposureOverride ?? null) === action.value) return state;
-      // Eligibility (R5, CR accept): a NON-NULL override only applies to an
-      // active cell without a placement (the popover's own opening rule,
-      // now enforced at the reducer boundary). Clearing (null) always works.
-      if (action.value !== null) {
-        const occupied = state.placements.some((p) =>
-          occupiesCell(p, action.row, action.col)
-        );
-        if (!target.active || occupied) return state;
-      }
+      // Eligibility: a NON-NULL override only applies to an ACTIVE cell — an
+      // inactive cell has no exposure to override. Clearing (null) always
+      // works, including on an inactive cell carrying a stale persisted
+      // override.
+      //
+      // SMA-309 lifts the "not under a placement" half of this guard (R5 had
+      // it mirror the popover's cell-click opening rule). The detail panel now
+      // offers the override for the SELECTED placement's anchor cell, which is
+      // occupied BY DEFINITION — keeping the check would have made that
+      // control a silent no-op. The cell-click path keeps its own opening rule
+      // (it never fires on an occupied cell), so nothing regressed there.
+      if (action.value !== null && !target.active) return state;
       const copy = copyGrid(state.grid)!;
       if (action.value === null) {
         // Sparse contract: clearing back to Auto REMOVES the key (an

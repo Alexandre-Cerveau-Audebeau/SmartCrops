@@ -582,10 +582,20 @@
       "footprint": "Empreinte {{cells}}×{{cells}}"
     },
     "placement": {
-      "position": "Position : ligne {{row}}, colonne {{col}}",
+      "title": "Placement sélectionné",
+      "close": "Fermer le panneau de placement",
       "remove": "Retirer du plan",
       "details": "Détails de la plante",
-      "soil": "Sol : {{soil}}",
+      "soilLabel": "Sol",
+      "exposure": "Exposition",
+      "exposureValue": "{{category}} — {{moments}}",
+      "watering": "Arrosage",
+      "careLevel": "Entretien",
+      "lifeCycle": "Cycle de vie",
+      "adjustExposure": "Ajuster l'exposition",
+      "notes": "Notes",
+      "notesPlaceholder": "Notes sur ce placement…",
+      "footprintTitle": "Empreinte",
       "replaceHint": "Sélectionnez une autre plante dans le menu pour remplacer celle-ci."
     }
   },

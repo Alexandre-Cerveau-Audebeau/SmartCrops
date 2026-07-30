@@ -975,7 +975,7 @@ describe('plannerReducer override guards (SMA-17 5.3-D R5)', () => {
     expect(twice.past).toHaveLength(1);
   });
 
-  it('a non-null override is rejected on inactive or occupied cells; clearing always works', () => {
+  it('a non-null override is rejected on an INACTIVE cell; clearing always works', () => {
     // Inactive cell carrying a stale override (hydrated from persisted JSON).
     const s = plannerReducer(initialPlannerState, {
       type: 'HYDRATE_FROM_LAYOUT',
@@ -987,20 +987,11 @@ describe('plannerReducer override guards (SMA-17 5.3-D R5)', () => {
       ]),
       placements: [placement('srv-1', { startRow: 1, startCol: 1 })],
     });
-    // Non-null on the INACTIVE cell → no-op.
+    // Non-null on the INACTIVE cell → no-op (nothing to expose).
     expect(
       plannerReducer(s, {
         type: 'SET_CELL_EXPOSURE_OVERRIDE',
         row: 0,
-        col: 1,
-        value: 'full',
-      })
-    ).toBe(s);
-    // Non-null on the OCCUPIED cell (placement at 1,1) → no-op.
-    expect(
-      plannerReducer(s, {
-        type: 'SET_CELL_EXPOSURE_OVERRIDE',
-        row: 1,
         col: 1,
         value: 'full',
       })
@@ -1014,6 +1005,123 @@ describe('plannerReducer override guards (SMA-17 5.3-D R5)', () => {
     });
     expect(cleared.grid![0][1]).not.toHaveProperty('exposureOverride');
     expect(cleared.isDirty).toBe(true);
+  });
+
+  it('SMA-309: an override on an OCCUPIED cell now APPLIES (the panel path)', () => {
+    // R5 mirrored the cell-click opening rule at the reducer boundary, which
+    // made the detail panel's control — offered for the SELECTED placement's
+    // anchor, occupied by definition — a silent no-op. SMA-309 lifts that half.
+    const s = plannerReducer(initialPlannerState, {
+      type: 'HYDRATE_FROM_LAYOUT',
+      width: 2,
+      height: 2,
+      cellSize: '50cm',
+      cellsJson: null,
+      placements: [placement('srv-1', { startRow: 1, startCol: 1 })],
+    });
+    const after = plannerReducer(s, {
+      type: 'SET_CELL_EXPOSURE_OVERRIDE',
+      row: 1,
+      col: 1,
+      value: 'full',
+    });
+    expect(after.grid![1][1].exposureOverride).toBe('full');
+    expect(after.isDirty).toBe(true);
+    expect(after.past).toHaveLength(1);
+    // The placement itself is untouched.
+    expect(after.placements).toHaveLength(1);
+  });
+});
+
+// ── SMA-309: notes stop being dead data ─────────────────────────────────────
+describe('plannerReducer SET_PLACEMENT_NOTES (SMA-309)', () => {
+  it('writes the note, pushes history and marks dirty', () => {
+    const s = hydrated();
+    const after = plannerReducer(s, {
+      type: 'SET_PLACEMENT_NOTES',
+      placementId: 'srv-1',
+      notes: 'Staked in June',
+    });
+    expect(after.placements[0].notes).toBe('Staked in June');
+    expect(after.isDirty).toBe(true);
+    expect(after.past).toHaveLength(1);
+  });
+
+  it('setting the SAME value is an idempotent no-op returning the same object', () => {
+    const once = plannerReducer(hydrated(), {
+      type: 'SET_PLACEMENT_NOTES',
+      placementId: 'srv-1',
+      notes: 'Staked in June',
+    });
+    const twice = plannerReducer(once, {
+      type: 'SET_PLACEMENT_NOTES',
+      placementId: 'srv-1',
+      notes: 'Staked in June',
+    });
+    expect(twice).toBe(once);
+    expect(twice.past).toHaveLength(1);
+  });
+
+  it('empty text normalises to null — and is then idempotent against null', () => {
+    const s = hydrated();
+    expect(s.placements[0].notes).toBeNull();
+    // "" on an already-null note changes nothing (one state for the absence).
+    expect(
+      plannerReducer(s, {
+        type: 'SET_PLACEMENT_NOTES',
+        placementId: 'srv-1',
+        notes: '',
+      })
+    ).toBe(s);
+    const written = plannerReducer(s, {
+      type: 'SET_PLACEMENT_NOTES',
+      placementId: 'srv-1',
+      notes: 'temp',
+    });
+    const emptied = plannerReducer(written, {
+      type: 'SET_PLACEMENT_NOTES',
+      placementId: 'srv-1',
+      notes: '',
+    });
+    expect(emptied.placements[0].notes).toBeNull();
+  });
+
+  it('an unknown placement id is a guarded no-op', () => {
+    const s = hydrated();
+    expect(
+      plannerReducer(s, {
+        type: 'SET_PLACEMENT_NOTES',
+        placementId: 'nope',
+        notes: 'x',
+      })
+    ).toBe(s);
+  });
+
+  it('the note survives an unrelated move of the same placement', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_PLACEMENT_NOTES',
+      placementId: 'srv-1',
+      notes: 'Keep me',
+    });
+    s = plannerReducer(s, {
+      type: 'MOVE_PLACEMENT',
+      placementId: 'srv-1',
+      startRow: 2,
+      startCol: 2,
+    });
+    expect(s.placements[0].startRow).toBe(2);
+    expect(s.placements[0].notes).toBe('Keep me');
+  });
+
+  it('UNDO restores the previous note', () => {
+    const base = hydrated();
+    const s = plannerReducer(base, {
+      type: 'SET_PLACEMENT_NOTES',
+      placementId: 'srv-1',
+      notes: 'Typed then undone',
+    });
+    const undone = plannerReducer(s, { type: 'UNDO' });
+    expect(undone.placements[0].notes).toBeNull();
   });
 });
 

@@ -12,13 +12,13 @@ import Switch from '@mui/material/Switch';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
 import { useTranslation } from 'react-i18next';
 import { STICKY_OFFSET } from '../../constants/layout';
 import { spacingToFootprintCells } from '../../pages/gardenPlanner/placementGeometry';
-import { footprintBadgeSx, iosSwitchSx } from '../../theme/plannerTokens';
+import { iosSwitchSx } from '../../theme/plannerTokens';
+import { FootprintBadge } from './FootprintBadge';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Plant } from '../../types/Plant';
 import { getPlantDisplayName } from '../../utils/getPlantDisplayName';
@@ -61,38 +61,6 @@ interface Props {
 }
 
 type TabValue = 'plants' | 'soils' | 'infrastructure';
-
-/**
- * Footprint badge (SMA-193 R2/R3), shared since SMA-18 by the list rows AND
- * the armed identity chip — ONE rendering so the chip can never drift from
- * the rows. Known → "N×N" with the plain footprint aria; unknown → the
- * dashed "1×1?" whose tooltip carries the États-component explanation and
- * whose aria combines footprint + meaning (describeChild keeps the NAME
- * while the open tooltip becomes the DESCRIPTION).
- */
-function FootprintBadge({ fp }: { fp: { cells: number; known: boolean } }) {
-  const { t } = useTranslation();
-  const tk = usePlannerTokens();
-  return fp.known ? (
-    <Box
-      component="span"
-      aria-label={t('planner.sidebar.footprint', { cells: fp.cells })}
-      sx={footprintBadgeSx(tk, true)}
-    >
-      {`${fp.cells}×${fp.cells}`}
-    </Box>
-  ) : (
-    <Tooltip title={t('planner.place.footprintUnknown')} describeChild>
-      <Box
-        component="span"
-        aria-label={`1×1 — ${t('planner.place.footprintUnknown')}`}
-        sx={footprintBadgeSx(tk, false)}
-      >
-        1×1?
-      </Box>
-    </Tooltip>
-  );
-}
 
 /**
  * SMA-18 armed identity chip (owner ruling 22 Jul; extracted R3 per the CR
