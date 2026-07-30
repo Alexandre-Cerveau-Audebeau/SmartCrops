@@ -59,6 +59,102 @@ export async function confirmEmail(userId: string, token: string): Promise<void>
   }
 }
 
+/**
+ * Requests a password-reset email (SMA-323). The endpoint answers 202 whether or
+ * not the address exists — the caller learns nothing either way, and the UI is
+ * expected to mirror that silence. Bounded at 10 s via AbortSignal.timeout (the
+ * declarative form of confirmEmail's manual controller dance).
+ */
+export async function forgotPassword(email: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ email }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) {
+    throw new Error('Password reset request failed');
+  }
+}
+
+/**
+ * Pre-validates a reset link (SMA-323 R1-bis) so the page can hide the password
+ * form when the link is already dead. Returns 'valid' on 204 and 'invalid' on
+ * the 400 the backend answers for a dead link. Any OTHER outcome — network
+ * failure, timeout, unexpected status (429 included) — THROWS, and the caller
+ * must fall through to the form: only a positive "this token is refused" may
+ * hide it, because the submit path stays the authority.
+ */
+export async function validateResetToken(
+  userId: string,
+  token: string
+): Promise<'valid' | 'invalid'> {
+  const res = await fetch(`${API_BASE}/auth/reset-password/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ userId, token }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (res.status === 204) return 'valid';
+  if (res.status === 400) return 'invalid';
+  throw new Error(`Unexpected status ${res.status}`);
+}
+
+/**
+ * Sentinel thrown by resetPassword when the server refused the reset without a
+ * single usable description. Exported (R2) so the page compares against the
+ * SAME value instead of a duplicated literal: a drifted sentinel would slip
+ * past the page's filter and be shown verbatim as if it were a server message.
+ */
+export const RESET_FAILED = 'RESET_FAILED';
+
+/**
+ * Sentinel thrown by resetPassword on HTTP 429 (R2): reset-password now sits
+ * behind the "passwordReset" rate-limit policy, and a throttled attempt must
+ * read as "try again later" — never as "your link is dead".
+ */
+export const RESET_RATE_LIMITED = 'RESET_RATE_LIMITED';
+
+/**
+ * Consumes a reset link (SMA-323). On a refused password the backend answers with
+ * Identity's raw error array; the descriptions are joined and thrown so the page
+ * can show WHY. A 429 throws the RESET_RATE_LIMITED sentinel, recognized BEFORE
+ * any body parsing (R2). The RESET_FAILED sentinel (no description available)
+ * and any non-plain-Error rejection (timeout DOMException) are the page's cue
+ * to fall back to its generic message.
+ */
+export async function resetPassword(
+  userId: string,
+  token: string,
+  newPassword: string
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ userId, token, newPassword }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) {
+    // A throttled attempt is not a verdict on the link or the password —
+    // recognized before the IdentityError[] parsing so it can never be
+    // mistaken for (or shown as) a server description.
+    if (res.status === 429) {
+      throw new Error(RESET_RATE_LIMITED);
+    }
+    const body = await res.json().catch(() => null);
+    const message = Array.isArray(body)
+      ? body
+          .map((e: { description?: string }) => e.description)
+          .filter(Boolean)
+          .join(', ')
+      : null;
+    throw new Error(message || RESET_FAILED);
+  }
+}
+
 export async function exchangeCode(code: string): Promise<void> {
   const res = await fetch(`${API_BASE}/auth/exchange-code`, {
     method: 'POST',

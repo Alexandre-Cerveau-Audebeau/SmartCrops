@@ -107,15 +107,18 @@ builder.Services.AddCors(options =>
     });
 });
 
-// ── Rate limiting (SMA-30) ───────────────────────────────────────────────
+// ── Rate limiting (SMA-30, SMA-323) ──────────────────────────────────────
 // Built-in .NET 8 limiter, opt-in per endpoint via [EnableRateLimiting] — a
 // global limiter would also throttle authenticated traffic. The "contact"
 // policy shields the public unauthenticated POST /api/contact (and the paid
-// SMTP relay behind it) from bursts. The IP partition keys on the direct peer
-// (Connection.RemoteIpAddress); behind the future reverse proxy this needs
-// UseForwardedHeaders — deliberately deferred to the OVH deployment ticket
-// (SMA-41). Limits are config-driven so integration tests can pin them
-// deterministically (RateLimiting:Contact:*).
+// SMTP relay behind it) from bursts. "passwordReset" (SMA-323) is a SISTER
+// policy, deliberately NOT a reuse of "contact": a shared budget would let
+// contact-form traffic consume a user's reset attempts at the exact moment
+// they need them. The IP partition keys on the direct peer
+// (Connection.RemoteIpAddress); behind the future reverse proxy BOTH policies
+// need UseForwardedHeaders — deliberately deferred to the OVH deployment
+// ticket (SMA-41). Limits are config-driven so integration tests can pin them
+// deterministically (RateLimiting:Contact:*, RateLimiting:PasswordReset:*).
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -126,6 +129,15 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = builder.Configuration.GetValue("RateLimiting:Contact:PermitLimit", 5),
                 Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:Contact:WindowMinutes", 10)),
+                QueueLimit = 0,
+            }));
+    options.AddPolicy("passwordReset", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = builder.Configuration.GetValue("RateLimiting:PasswordReset:PermitLimit", 5),
+                Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:PasswordReset:WindowMinutes", 15)),
                 QueueLimit = 0,
             }));
 });

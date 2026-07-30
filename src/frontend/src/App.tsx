@@ -13,6 +13,7 @@ import About from './pages/About';
 import AuthCallback from './pages/AuthCallback';
 import ConfirmEmail from './pages/ConfirmEmail';
 import Contact from './pages/Contact';
+import ForgotPassword from './pages/ForgotPassword';
 import GardenPlanner from './pages/GardenPlanner';
 import Home from './pages/Home';
 import LegalNotice from './pages/LegalNotice';
@@ -24,6 +25,7 @@ import PlantLibrary from './pages/PlantLibrary';
 import Privacy from './pages/Privacy';
 import Profile from './pages/Profile';
 import Register from './pages/Register';
+import ResetPassword from './pages/ResetPassword';
 import Shop from './pages/Shop';
 import Terms from './pages/Terms';
 import { ColorModeProvider } from './contexts/ColorModeContext';
@@ -48,9 +50,14 @@ export default function App() {
                         the visitor signed in, so a GuestRoute child would bounce
                         the user who just clicked the link in their mail. */}
                     <Route path="/confirm-email" element={<ConfirmEmail />} />
+                    {/* Outside GuestRoute like /confirm-email (SMA-323): reached
+                        from an email link, and a still-signed-in visitor must not
+                        be bounced to "/". */}
+                    <Route path="/reset-password" element={<ResetPassword />} />
                     <Route element={<GuestRoute />}>
                       <Route path="/login" element={<Login />} />
                       <Route path="/register" element={<Register />} />
+                      <Route path="/forgot-password" element={<ForgotPassword />} />
                     </Route>
                     <Route path="/library/:id" element={<PlantDetail />} />
                     <Route path="/library" element={<PlantLibrary />} />

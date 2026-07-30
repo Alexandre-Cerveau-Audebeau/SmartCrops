@@ -99,6 +99,11 @@ export default function Login() {
             >
               {t('auth.loginButton')}
             </Button>
+            <Typography variant="body2" sx={{ textAlign: 'center' }}>
+              <Link component={RouterLink} to="/forgot-password">
+                {t('auth.forgotPasswordLink')}
+              </Link>
+            </Typography>
           </Box>
 
           <Divider sx={{ my: 3 }}>

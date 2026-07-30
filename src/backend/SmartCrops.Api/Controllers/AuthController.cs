@@ -8,8 +8,11 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using SmartCrops.Api.Configuration;
 using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
@@ -34,6 +37,14 @@ public record ChangePasswordRequest([Required] string CurrentPassword, [Required
 /// <summary>Payload of <c>POST /api/auth/confirm-email</c> (SMA-31). Both values come
 /// straight from the confirmation link's query string, URL-decoded by the SPA.</summary>
 public record ConfirmEmailRequest([Required] string UserId, [Required] string Token);
+/// <summary>Payload of <c>POST /api/auth/forgot-password</c> (SMA-323).</summary>
+public record ForgotPasswordRequest([Required, EmailAddress] string Email);
+/// <summary>Payload of <c>POST /api/auth/reset-password</c> (SMA-323). UserId/Token come
+/// from the reset link's query string, URL-decoded by the SPA; the new password floor
+/// mirrors <see cref="ChangePasswordRequest"/>.</summary>
+public record ResetPasswordRequest([Required] string UserId, [Required] string Token, [Required, MinLength(6)] string NewPassword);
+/// <summary>Payload of <c>POST /api/auth/reset-password/validate</c> (SMA-323 R1-bis).</summary>
+public record ValidateResetTokenRequest([Required] string UserId, [Required] string Token);
 
 [ApiController]
 [Route("api/[controller]")]
@@ -45,6 +56,7 @@ public class AuthController(
     IHostEnvironment hostEnvironment,
     IEmailService emailService,
     ILogger<AuthController> logger,
+    IOptions<FrontendOptions> frontendOptions,
     IWebHostEnvironment env) : ControllerBase
 {
     private static readonly PasswordHasher<ApplicationUser> _dummyHasher = new();
@@ -118,6 +130,23 @@ public class AuthController(
     }
 
     /// <summary>
+    /// R2 of SMA-323: builds the throwaway user that the unknown-id branches of
+    /// <see cref="ConfirmEmail"/>, <see cref="ResetPassword"/> and
+    /// <see cref="ValidateResetToken"/> probe with before answering. Identity reads
+    /// Id/SecurityStamp straight off the instance during token validation and never
+    /// hits the store, and a genuine token embeds the REAL user's id and stamp —
+    /// both mismatch here — so the probe can never succeed and every caller
+    /// discards its result. Its only job is temporal: the miss path pays the same
+    /// token-validation cost as a real account, so response time stops disclosing
+    /// which account ids exist.
+    /// </summary>
+    private static ApplicationUser CreateProbeUser(string userId) => new()
+    {
+        Id = userId,
+        SecurityStamp = Guid.NewGuid().ToString("N"),
+    };
+
+    /// <summary>
     /// SMA-31: confirms an email address from the link mailed at registration.
     /// POST (not GET) because the SPA page owns the exchange, mirroring how the OAuth
     /// callback POSTs its code back. Idempotent — a second click on the same link
@@ -133,16 +162,9 @@ public class AuthController(
         if (user is null)
         {
             // Timing equalization: run the same confirmation path against a transient
-            // user before returning the identical 400. Identity reads Id/SecurityStamp
-            // off the instance during token validation and never hits the store, and
-            // the validation cannot succeed (a genuine token embeds the real user's id
-            // and stamp, both mismatching here), so the result is discarded safely.
-            var probe = new ApplicationUser
-            {
-                Id = request.UserId,
-                SecurityStamp = Guid.NewGuid().ToString("N"),
-            };
-            _ = await userManager.ConfirmEmailAsync(probe, request.Token);
+            // user before returning the identical 400 — see CreateProbeUser for why
+            // the probe is safe, cannot succeed, and its result is discarded.
+            _ = await userManager.ConfirmEmailAsync(CreateProbeUser(request.UserId), request.Token);
             return BadRequest(new { error = "Invalid or expired confirmation link." });
         }
 
@@ -152,6 +174,163 @@ public class AuthController(
         var result = await userManager.ConfirmEmailAsync(user, request.Token);
         if (!result.Succeeded)
             return BadRequest(new { error = "Invalid or expired confirmation link." });
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// SMA-323: mails a password-reset link. Always answers 202 with no body — whether
+    /// the address exists (and whether mail went out) is deliberately not disclosed.
+    /// EmailConfirmed is NOT checked: a user who never confirmed still owns the
+    /// account. Google-only accounts (no local password) get a link too — Identity
+    /// lets them set a first password, a legitimate recovery path.
+    /// </summary>
+    [HttpPost("forgot-password")]
+    [EnableRateLimiting("passwordReset")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken ct)
+    {
+        var user = await userManager.FindByEmailAsync(request.Email);
+
+        // The response is identical either way, but an existing account pays up to 5 s
+        // of inline SMTP while a miss returns instantly — a timing side-channel
+        // remains. Deliberately NOT papered over with an artificial delay: the
+        // structural fix is decoupled delivery (SMA-325), which makes both paths
+        // return immediately.
+        if (user is not null)
+        {
+            await SendPasswordResetEmailAsync(user, request.Email, ct);
+        }
+
+        return Accepted();
+    }
+
+    /// <summary>
+    /// SMA-323: mails the password-reset link. Mirrors
+    /// <see cref="SendConfirmationEmailAsync"/>: the caller is never failed by a
+    /// delivery problem (the endpoint's 202 discloses nothing), the send is capped at
+    /// 5 s (tighter than SmtpEmailService's 10 s SMA-30 budget — not a duplicate),
+    /// and any failure is logged with the masked address, then swallowed.
+    /// </summary>
+    private async Task SendPasswordResetEmailAsync(ApplicationUser user, string email, CancellationToken ct)
+    {
+        try
+        {
+            var token = await userManager.GeneratePasswordResetTokenAsync(user);
+
+            // Both values MUST be percent-encoded: the Identity token is base64-ish and
+            // routinely contains '+' and '/', which would otherwise be decoded as a
+            // space / path separator and silently invalidate the link.
+            var link = $"{ResolveFrontendBaseUrl()}/reset-password" +
+                $"?userId={Uri.EscapeDataString(user.Id)}" +
+                $"&token={Uri.EscapeDataString(token)}";
+
+            // Plain text only — IEmailService carries no HTML body and no templating,
+            // and the backend has no localization, so the copy is English (SMA-323).
+            var textBody =
+                "Hello,\n\n" +
+                "A password reset was requested for your SmartCrops account. Open the link below to choose a new password:\n\n" +
+                $"{link}\n\n" +
+                "If you did not request this, you can safely ignore this message — your password is unchanged.\n";
+
+            using var sendCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            sendCts.CancelAfter(TimeSpan.FromSeconds(5));
+
+            await emailService.SendAsync(
+                email,
+                "Reset your SmartCrops password",
+                textBody,
+                ct: sendCts.Token);
+        }
+        catch (Exception ex)
+        {
+            // Deliberately catches everything, cancellation included: the 202 is
+            // already owed and discloses nothing, so there is no error to surface.
+            logger.LogError(ex, "Password-reset email delivery failed for '{Email}'", MaskEmail(email));
+        }
+    }
+
+    /// <summary>
+    /// SMA-323: consumes the reset link mailed by <see cref="ForgotPassword"/>.
+    /// Deliberately NOT idempotent, unlike confirm-email: ResetPasswordAsync rotates
+    /// the security stamp, so a consumed token fails on replay — that is the point of
+    /// a reset token. An unknown user id returns the same body — and, through the
+    /// transient probe (R2), the same response time — as an invalid token (never
+    /// reveal which ids exist); a refused password returns the raw IdentityError[]
+    /// like ChangePassword, so the client can show WHY. Behind the shared
+    /// "passwordReset" budget since R2: this is the endpoint that consumes the token
+    /// and pays for Identity hashing, so it is the one most worth throttling.
+    /// </summary>
+    [HttpPost("reset-password")]
+    [EnableRateLimiting("passwordReset")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+    {
+        var user = await userManager.FindByIdAsync(request.UserId);
+        if (user is null)
+        {
+            // Timing equalization (R2): probe through the same reset path a real
+            // user takes — safe because ResetPasswordAsync validates the token
+            // BEFORE the password, so nothing can ever be written — and answer
+            // exactly what a real user with a dead token gets.
+            // The manager's ErrorDescriber is the DI-configured one (R4): a custom
+            // or localized describer (SMA-32) must reach these responses, which a
+            // locally constructed instance would silently bypass.
+            _ = await userManager.ResetPasswordAsync(CreateProbeUser(request.UserId), request.Token, request.NewPassword);
+            return BadRequest(new[] { userManager.ErrorDescriber.InvalidToken() });
+        }
+
+        var result = await userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
+        if (!result.Succeeded)
+            return BadRequest(result.Errors);
+
+        // No UpdateSecurityStampAsync here: ResetPasswordAsync already rotated the
+        // stamp internally (that is what kills the token and any live JWTs); calling
+        // it again would be redundant. The cookie delete mirrors ChangePassword —
+        // harmless if absent, correct if this browser still held a session.
+        Response.Cookies.Delete("smartcrops_token", new CookieOptions { Path = "/" });
+        return NoContent();
+    }
+
+    /// <summary>
+    /// SMA-323 R1-bis: pre-validates a reset link so the SPA can hide the password
+    /// form when the link is already dead (consumed, expired, tampered) instead of
+    /// letting the user type a new password that the submit will refuse. Verification
+    /// does NOT consume the token — an Identity reset token dies when the security
+    /// stamp rotates on a successful reset, not from being verified — and exposing it
+    /// is safe: a 204/400 here tells the holder of the link nothing they would not
+    /// learn by submitting, and the real authority remains <see cref="ResetPassword"/>
+    /// itself. Shares the "passwordReset" budget with forgot-password and
+    /// reset-password itself (since R2): one throttling door for the whole journey,
+    /// so no endpoint of the flow can be hammered. The unknown-user branch returns
+    /// the same body — and, through the transient probe (R2), the same response
+    /// time — as an invalid token.
+    /// </summary>
+    [HttpPost("reset-password/validate")]
+    [EnableRateLimiting("passwordReset")]
+    public async Task<IActionResult> ValidateResetToken([FromBody] ValidateResetTokenRequest request)
+    {
+        var user = await userManager.FindByIdAsync(request.UserId);
+        if (user is null)
+        {
+            // Timing equalization (R2): pay the same verification cost a real
+            // account pays — the identical provider/purpose pair — before
+            // answering exactly what a dead token answers.
+            _ = await userManager.VerifyUserTokenAsync(
+                CreateProbeUser(request.UserId),
+                userManager.Options.Tokens.PasswordResetTokenProvider,
+                UserManager<ApplicationUser>.ResetPasswordTokenPurpose,
+                request.Token);
+            return BadRequest(new[] { userManager.ErrorDescriber.InvalidToken() });
+        }
+
+        // Provider and purpose read off UserManager — the exact pair
+        // ResetPasswordAsync verifies with internally, never hard-coded strings.
+        var valid = await userManager.VerifyUserTokenAsync(
+            user,
+            userManager.Options.Tokens.PasswordResetTokenProvider,
+            UserManager<ApplicationUser>.ResetPasswordTokenPurpose,
+            request.Token);
+        if (!valid)
+            return BadRequest(new[] { userManager.ErrorDescriber.InvalidToken() });
 
         return NoContent();
     }
@@ -379,12 +558,16 @@ public class AuthController(
 
     /// <summary>
     /// Public base URL of the SPA, used to build links the user clicks from an email
-    /// or an OAuth redirect. Misconfiguration is fatal outside Development so a
-    /// deployed instance can never mail a link pointing at localhost.
+    /// or an OAuth redirect. Reads the bound <see cref="FrontendOptions"/> (SMA-324):
+    /// Program.cs validates that contract at startup outside Development, and going
+    /// through it keeps a single source of truth for the section name. Only the
+    /// Development fallback and the trailing-slash trim stay local. Misconfiguration
+    /// is fatal outside Development so a deployed instance can never mail a link
+    /// pointing at localhost.
     /// </summary>
     private string ResolveFrontendBaseUrl()
     {
-        var frontendUrl = configuration["Frontend:BaseUrl"];
+        var frontendUrl = frontendOptions.Value.BaseUrl;
         if (string.IsNullOrWhiteSpace(frontendUrl))
         {
             if (!hostEnvironment.IsDevelopment())

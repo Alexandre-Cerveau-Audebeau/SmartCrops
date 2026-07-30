@@ -143,8 +143,9 @@ public sealed class PostgresFixture : IAsyncLifetime
             // every TestServer request on the same partition (no remote IP), so
             // the production limit (5/10min) would 429 the collection. Pin it
             // high here; the dedicated 429 proof uses its own factory with a
-            // limit of 2.
+            // limit of 2. Same deal for the "passwordReset" policy (SMA-323).
             .WithConfig("RateLimiting:Contact:PermitLimit", "100")
+            .WithConfig("RateLimiting:PasswordReset:PermitLimit", "100")
             .WithConnectionString(ConnectionString)
             .WithServices(services =>
             {
