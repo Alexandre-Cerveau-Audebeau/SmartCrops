@@ -471,7 +471,8 @@
     "modes": {
       "selection": "Sélection",
       "place": "Placer",
-      "infrastructure": "Infrastructures"
+      "infrastructure": "Infrastructures",
+      "soils": "Sols"
     },
     "dnd": {
       "collisionToast": "Collision — chevauche {{plant}} ({{cell}})",
@@ -509,6 +510,19 @@
       "badge": {
         "blocks": "Bloque la lumière",
         "noShadow": "Pas d'ombre"
+      }
+    },
+    "soil": {
+      "hint": "Peignez le type de sol de chaque case. La trame reste visible sous les plantes ; les infrastructures la masquent.",
+      "types": {
+        "potting": "Terreau",
+        "loam": "Limoneux",
+        "sand": "Sableux",
+        "clay": "Argileux",
+        "stony": "Caillouteux",
+        "chalk": "Calcaire",
+        "humus": "Humifère",
+        "wet": "Humide"
       }
     },
     "shape": {
@@ -564,7 +578,9 @@
       "exposureCell": "{{category}} — cellule vide à la ligne {{row}}, colonne {{col}}",
       "infraCell": "{{type}} — ligne {{row}}, colonne {{col}}",
       "plantedInfraCell": "{{plant}} sur {{type}} — ligne {{row}}, colonne {{col}}",
-      "paintCell": "Peindre une infrastructure"
+      "soilCell": "Sol {{type}} — ligne {{row}}, colonne {{col}}",
+      "paintCell": "Peindre une infrastructure",
+      "paintSoil": "Peindre le sol"
     },
     "help": {
       "unified": "Cliquez sur une plante dans le menu, puis sur les parcelles pour la placer. Le calque Exposition montre le soleil case par case — réglez le moment et la saison dans la barre d'outils."

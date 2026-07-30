@@ -55,6 +55,7 @@ import {
   infrastructureBlockers,
   type InfrastructureType,
 } from '../utils/infrastructure';
+import type { SoilType } from '../utils/soil';
 import { ExposureLegend } from './gardenPlanner/ExposureLegend';
 import { ExposureOverridePopover } from './gardenPlanner/ExposureOverridePopover';
 import { GridControls } from './gardenPlanner/GridControls';
@@ -148,6 +149,8 @@ export default function GardenPlanner() {
     infraType,
     placeMode,
     placePlantId,
+    soilMode,
+    soilType,
   } = state;
   const hasLastSaved = state.lastSaved !== null;
 
@@ -575,6 +578,17 @@ export default function GardenPlanner() {
     () => dispatch({ type: 'SET_INFRA_MODE', enabled: true }),
     []
   );
+  // SMA-14: the soil mirror of the infra pair — arming from the SOLS tab
+  // enters the mode; the toolbar button re-enters with the remembered type.
+  const handleSoilSelect = useCallback(
+    (type: SoilType | null) =>
+      dispatch({ type: 'SET_SOIL_TYPE', soilType: type }),
+    []
+  );
+  const handleSoilMode = useCallback(
+    () => dispatch({ type: 'SET_SOIL_MODE', enabled: true }),
+    []
+  );
   const handlePlaceMode = useCallback(
     () => dispatch({ type: 'SET_PLACE_MODE', enabled: true }),
     []
@@ -999,9 +1013,9 @@ export default function GardenPlanner() {
       // Lot 2: the click the browser fires right after a drag's pointerup
       // is NOT a click intent — swallow it once.
       if (dragEndedRecentlyRef.current) return;
-      // Both paint modes swallow clicks (5.4): infra cells use the drag
-      // surface, like shape-edit.
-      if (shapeEditMode || infraMode || !grid) return;
+      // All paint modes swallow clicks (5.4; soil since SMA-14): painted
+      // cells use the drag surface, like shape-edit.
+      if (shapeEditMode || infraMode || soilMode || !grid) return;
 
       const existing = placements.find(
         (p) =>
@@ -1107,7 +1121,7 @@ export default function GardenPlanner() {
 
       selectPlacement(existing ? existing.id : null);
     },
-    [shapeEditMode, infraMode, placeMode, placePlantId, grid, placements, allPlants, cellSize, catalogReady, exposureVisible, selectPlacement, toastFitRejection]
+    [shapeEditMode, infraMode, soilMode, placeMode, placePlantId, grid, placements, allPlants, cellSize, catalogReady, exposureVisible, selectPlacement, toastFitRejection]
   );
 
   const handleRemoveSelectedPlacement = useCallback(() => {
@@ -1859,6 +1873,8 @@ export default function GardenPlanner() {
             cellSize={cellSize}
             selectedInfraType={infraType}
             onInfraSelect={handleInfraSelect}
+            selectedSoilType={soilType}
+            onSoilSelect={handleSoilSelect}
             language={language}
             shapeEditMode={shapeEditMode}
             onShapeEditToggle={handleShapeEditToggle}
@@ -1875,6 +1891,8 @@ export default function GardenPlanner() {
               infraMode={infraMode}
               infraArmed={infraType !== null}
               placeMode={placeMode}
+              soilMode={soilMode}
+              soilArmed={soilType !== null}
               armedPlant={armedPlantIndicator}
               onDisarm={handleDisarmPlant}
               zoom={zoom}
@@ -1893,6 +1911,7 @@ export default function GardenPlanner() {
               onSelectionMode={handleSelectionMode}
               onInfraMode={handleInfraMode}
               onPlaceMode={handlePlaceMode}
+              onSoilMode={handleSoilMode}
             />
 
           {/* Grid CARD (§4: radius 12, border card-bd, shadow, padding 20/12) —
@@ -2129,6 +2148,7 @@ export default function GardenPlanner() {
                   grid={grid}
                   shapeEditMode={shapeEditMode}
                   infraPaintMode={infraMode}
+                  soilPaintMode={soilMode}
                   placements={enrichedPlacements}
                   // SMA-309: the toggle gates the PAINTING here — the data
                   // above is computed either way so the panel can read it.

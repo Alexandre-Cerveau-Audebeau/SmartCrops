@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  parseCellsJson,
+  serializeCellsJson,
+} from '../../types/GardenLayout';
+import {
   initialPlannerState,
   NOTES_MAX_LENGTH,
   plannerReducer,
@@ -1917,5 +1921,87 @@ describe('plannerReducer SET_PLACEMENT_FOOTPRINT (SMA-193 lot 3)', () => {
         spanCols: 2,
       })
     ).toBe(s);
+  });
+});
+
+describe('plannerReducer soil paint (SMA-14)', () => {
+  /** Hydrated state with a soil type armed (enters soil mode). */
+  const armed = (type: 'clay' | 'sand' = 'clay'): PlannerState =>
+    plannerReducer(hydrated(), { type: 'SET_SOIL_TYPE', soilType: type });
+
+  it('SET_SOIL_TYPE arms the type, enters the mode and leaves the others', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_INFRA_TYPE',
+      infraType: 'wall',
+    });
+    expect(s.infraMode).toBe(true);
+    s = plannerReducer(s, { type: 'SET_SOIL_TYPE', soilType: 'clay' });
+    expect(s.soilType).toBe('clay');
+    expect(s.soilMode).toBe(true);
+    expect(s.infraMode).toBe(false);
+    expect(s.infraType).toBe('wall'); // remembered, like every mode exit
+    expect(s.shapeEditMode).toBe(false);
+    expect(s.placeMode).toBe(false);
+    // Disarming (null) falls back to selection mode.
+    s = plannerReducer(s, { type: 'SET_SOIL_TYPE', soilType: null });
+    expect(s.soilType).toBeNull();
+    expect(s.soilMode).toBe(false);
+  });
+
+  it('SET_SOIL_MODE cannot enter without an armed type (guarded no-op)', () => {
+    const s = hydrated();
+    expect(plannerReducer(s, { type: 'SET_SOIL_MODE', enabled: true })).toBe(s);
+  });
+
+  it('SET_SOIL_MODE off keeps the type armed for re-entry', () => {
+    // The positive enter path is the toolbar's ONLY dispatch — an inert
+    // reducer case would leave the enabled Sols button silently dead
+    // (adversarial pass, mutation-proven): asserting soilMode true after
+    // re-entry is what makes this describe bite.
+    let s = armed();
+    s = plannerReducer(s, { type: 'SET_SOIL_MODE', enabled: false });
+    expect(s.soilMode).toBe(false);
+    expect(s.soilType).toBe('clay');
+    s = plannerReducer(s, { type: 'SET_SOIL_MODE', enabled: true });
+    expect(s.soilMode).toBe(true);
+  });
+
+  it('a paint drag writes the armed type, then a re-start clears it (toggle polarity)', () => {
+    let s = plannerReducer(armed(), { type: 'PAINT_START', row: 0, col: 0 });
+    expect(s.grid![0][0].soil).toBe('clay');
+    expect(s.soilPaintValue).toBe('clay');
+    expect(s.isDirty).toBe(true);
+    // The cell's other fields are untouched (this is NOT shape-edit).
+    expect(s.grid![0][0].active).toBe(true);
+    s = plannerReducer(s, { type: 'PAINT_ENTER', row: 0, col: 1 });
+    expect(s.grid![0][1].soil).toBe('clay');
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    // Starting again on a painted cell locks a CLEARING drag.
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 });
+    expect(s.grid![0][0]).not.toHaveProperty('soil'); // sparse clear
+    expect(s.soilPaintValue).toBeNull();
+    s = plannerReducer(s, { type: 'PAINT_ENTER', row: 0, col: 1 });
+    expect(s.grid![0][1]).not.toHaveProperty('soil');
+  });
+
+  it('PAINT_ENTER on a matching cell is a guarded no-op returning the SAME state object', () => {
+    let s = plannerReducer(armed(), { type: 'PAINT_START', row: 0, col: 0 });
+    const afterStart = s;
+    // Re-entering the just-painted cell: same object, no copy, no push.
+    s = plannerReducer(s, { type: 'PAINT_ENTER', row: 0, col: 0 });
+    expect(s).toBe(afterStart);
+  });
+
+  it('a soil write survives a serialise/parse round trip', () => {
+    let s = plannerReducer(armed('sand'), {
+      type: 'PAINT_START',
+      row: 2,
+      col: 2,
+    });
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    const json = serializeCellsJson(s.grid!);
+    const back = parseCellsJson(json, 3, 3);
+    expect(back[2][2].soil).toBe('sand');
+    expect(back[0][0]).not.toHaveProperty('soil');
   });
 });

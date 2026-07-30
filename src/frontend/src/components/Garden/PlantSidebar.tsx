@@ -27,6 +27,7 @@ import {
   INFRASTRUCTURE_TYPES,
   type InfrastructureType,
 } from '../../utils/infrastructure';
+import { SOIL_TYPES, type SoilType } from '../../utils/soil';
 import { getPlantColor } from '../../utils/plantColor';
 import { Sym } from '../Sym';
 
@@ -47,6 +48,9 @@ interface Props {
   // for painting (and enters the Infrastructures mode); re-clicking disarms.
   selectedInfraType?: InfrastructureType | null;
   onInfraSelect?: (type: InfrastructureType | null) => void;
+  // SMA-14: the armed soil type — same arming grammar as infrastructure.
+  selectedSoilType?: SoilType | null;
+  onSoilSelect?: (type: SoilType | null) => void;
   language: string;
   shapeEditMode: boolean;
   onShapeEditToggle: (value: boolean) => void;
@@ -164,7 +168,7 @@ function ArmedPlantChip({
   );
 }
 
-function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
+function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, selectedSoilType = null, onSoilSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
   const [activeTab, setActiveTab] = useState<TabValue>('plants');
@@ -224,10 +228,89 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
         }}
       >
         <Tab label={t('planner.tabs.plants')} value="plants" />
-        <Tab label={t('planner.tabs.soils')} value="soils" disabled />
-        {/* Enabled with SMA-15 (5.4) — soils keep their own chantier. */}
+        {/* Enabled with SMA-14 — the disabled promise is over. */}
+        <Tab label={t('planner.tabs.soils')} value="soils" />
         <Tab label={t('planner.tabs.infrastructure')} value="infrastructure" />
       </Tabs>
+      {activeTab === 'soils' && (
+        <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {/* The INFRAS. panel anatomy mirrored (SMA-14): hint line, then the
+              eight §15 rows. */}
+          <Typography
+            sx={{
+              p: '12px 16px',
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: tk.tMeta,
+              borderBottom: `1px solid ${tk.divider}`,
+            }}
+          >
+            {t('planner.soil.hint')}
+          </Typography>
+          <List dense disablePadding>
+            {SOIL_TYPES.map((type) => {
+              const style = tk.soil[type];
+              const selected = type === selectedSoilType;
+              return (
+                <ListItemButton
+                  key={type}
+                  selected={selected}
+                  aria-pressed={selected}
+                  onClick={() => onSoilSelect?.(selected ? null : type)}
+                  sx={{
+                    px: '14px',
+                    py: '10px',
+                    borderLeft: selected
+                      ? `3px solid ${tk.prim}`
+                      : '3px solid transparent',
+                  }}
+                >
+                  {/* §15 pairing as a chip: the avatar previews the type's
+                      OWN trame on the mode's cell base, ringed by the
+                      pastille hue — a trame IS the identity, so no icon.
+                      No badge either: infra's slot flags the shadow-engine
+                      consequence and soil has no model consequence to flag
+                      (deliberately omitted rather than filled). */}
+                  <ListItemAvatar sx={{ minWidth: 42 }}>
+                    <Avatar
+                      sx={{
+                        width: 34,
+                        height: 34,
+                        bgcolor: tk.cellOn,
+                        border: `2px solid ${style.pastille}`,
+                        backgroundImage: style.image,
+                        backgroundSize: style.imageSize,
+                        ...(style.imagePosition && {
+                          backgroundPosition: style.imagePosition,
+                        }),
+                      }}
+                    >
+                      {/* Empty child suppresses the Avatar fallback icon —
+                          the trame is the preview. */}
+                      <span />
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    disableTypography
+                    primary={
+                      <Typography
+                        component="span"
+                        sx={{
+                          fontSize: 13.5,
+                          fontWeight: 700,
+                          color: tk.tTitle,
+                        }}
+                      >
+                        {t(`planner.soil.types.${type}`)}
+                      </Typography>
+                    }
+                  />
+                </ListItemButton>
+              );
+            })}
+          </List>
+        </Box>
+      )}
       {activeTab === 'infrastructure' && (
         <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {/* Mockup hint: blocking elements cast a shadow in the Exposure

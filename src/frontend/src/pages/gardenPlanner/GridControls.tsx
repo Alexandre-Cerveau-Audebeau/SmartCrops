@@ -18,6 +18,7 @@ import {
 } from '../../theme/plannerTokens';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Moment, Season } from '../../utils/exposure';
+import { Sym } from '../../components/Sym';
 import { ModeIconInfra } from './icons/ModeIconInfra';
 import { ModeIconPlace } from './icons/ModeIconPlace';
 import { ModeIconSelect } from './icons/ModeIconSelect';
@@ -279,6 +280,9 @@ interface GridControlsProps {
   infraArmed?: boolean;
   /** Place mode (SMA-193 5.5) — no armed gate since lot 3 R2 (move-only entry). */
   placeMode?: boolean;
+  /** Soil paint mode + whether a type is armed (SMA-14) — the infra gate. */
+  soilMode?: boolean;
+  soilArmed?: boolean;
   /**
    * SMA-18: the armed plant, minimal display shape — the toolbar indicator
    * renders it whatever sidebar tab is active (the reported bug: arming then
@@ -309,6 +313,7 @@ interface GridControlsProps {
   onSelectionMode?: () => void;
   onInfraMode?: () => void;
   onPlaceMode?: () => void;
+  onSoilMode?: () => void;
 }
 
 /**
@@ -324,6 +329,8 @@ export const GridControls = memo(function GridControls({
   infraMode = false,
   infraArmed = false,
   placeMode = false,
+  soilMode = false,
+  soilArmed = false,
   armedPlant = null,
   onDisarm,
   zoom,
@@ -342,6 +349,7 @@ export const GridControls = memo(function GridControls({
   onSelectionMode,
   onInfraMode,
   onPlaceMode,
+  onSoilMode,
 }: GridControlsProps) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
@@ -371,9 +379,11 @@ export const GridControls = memo(function GridControls({
     >
       {/* Row 1 — editing actions. The LEFT slot hosts the mode buttons
           (§10): Sélection + Infrastructures shipped with 5.4 (SMA-15),
-          Placer with 5.5 (SMA-193) — mockup order Sélection/Placer/Infras.
-          Modes are mutually exclusive with shape-edit (the sidebar toggle)
-          — no button reads active while shape-edit is on. */}
+          Placer with 5.5 (SMA-193) — mockup order Sélection/Placer/Infras —
+          and Sols appended with SMA-14 (the mockup stopped at three only
+          because soils were never designed). Modes are mutually exclusive
+          with shape-edit (the sidebar toggle) — no button reads active
+          while shape-edit is on. */}
       <Box
         sx={{
           display: 'flex',
@@ -386,7 +396,7 @@ export const GridControls = memo(function GridControls({
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <ModeButton
               label={t('planner.modes.selection')}
-              active={!shapeEditMode && !infraMode && !placeMode}
+              active={!shapeEditMode && !infraMode && !placeMode && !soilMode}
               icon={<ModeIconSelect />}
               onClick={onSelectionMode}
               tk={tk}
@@ -413,6 +423,23 @@ export const GridControls = memo(function GridControls({
               onClick={onInfraMode}
               tk={tk}
             />
+            {/* SMA-14: Sols mirrors the Infrastructures gate — entering
+                REQUIRES an armed type from the sidebar SOLS tab. The mockup
+                shows three buttons only because soils were never designed.
+                Icon: Material Symbols `texture` via the self-hosted Sym
+                font (the mode-icon SVG set carries no soil glyph and this
+                session downloads nothing — declared deviation; the glyph
+                inherits the button's currentColor like the SVGs do). */}
+            {onSoilMode && (
+              <ModeButton
+                label={t('planner.modes.soils')}
+                active={soilMode}
+                disabled={!soilMode && !soilArmed}
+                icon={<Sym name="texture" size={18} />}
+                onClick={onSoilMode}
+                tk={tk}
+              />
+            )}
           </Box>
         )}
         {shapeEditMode && (

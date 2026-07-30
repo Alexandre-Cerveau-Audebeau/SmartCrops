@@ -2,6 +2,7 @@ import type { CellData } from '../../types/GardenLayout';
 import { parseCellsJson } from '../../types/GardenLayout';
 import type { ExposureCategory, Moment, Season } from '../../utils/exposure';
 import type { InfrastructureType } from '../../utils/infrastructure';
+import type { SoilType } from '../../utils/soil';
 import { footprintFits } from './placementGeometry';
 
 /**
@@ -87,6 +88,17 @@ export interface PlannerState {
   placeMode: boolean;
   placePlantId: string | null;
   /**
+   * Soil paint mode (SMA-14) — the fifth mutually exclusive editing mode,
+   * mirroring infrastructure's grammar field for field: arming a type from
+   * the sidebar SOLS tab ENTERS the mode (and leaves the others); the mode
+   * cannot be entered without an armed type; `soilPaintValue` is the drag
+   * polarity — the type being applied, or null while a drag is CLEARING
+   * (started on a cell already carrying the armed type).
+   */
+  soilMode: boolean;
+  soilType: SoilType | null;
+  soilPaintValue: SoilType | null;
+  /**
    * Snapshot of the last saved layout. This is the planner's whole "undo":
    * Cancel restores it wholesale (there is no history stack — pre-5.1B the
    * snapshot lived in a ref and handleCancel deep-copied it back).
@@ -147,6 +159,9 @@ export const initialPlannerState: PlannerState = {
   infraPaintValue: null,
   placeMode: false,
   placePlantId: null,
+  soilMode: false,
+  soilType: null,
+  soilPaintValue: null,
   lastSaved: null,
   removedCount: 0,
   removedSeq: 0,
@@ -212,6 +227,8 @@ export type PlannerAction =
   | { type: 'SET_SHAPE_EDIT_MODE'; enabled: boolean }
   | { type: 'SET_INFRA_TYPE'; infraType: InfrastructureType | null }
   | { type: 'SET_INFRA_MODE'; enabled: boolean }
+  | { type: 'SET_SOIL_TYPE'; soilType: SoilType | null }
+  | { type: 'SET_SOIL_MODE'; enabled: boolean }
   | { type: 'SET_PLACE_PLANT'; plantId: string | null }
   | { type: 'SET_PLACE_MODE'; enabled: boolean }
   | { type: 'ENTER_SELECTION_MODE' }
@@ -265,6 +282,7 @@ const disarmedPainting = {
   isPainting: false,
   paintAction: null,
   infraPaintValue: null,
+  soilPaintValue: null,
 } as const;
 
 /** Entering an editing context (fresh setup, another garden's hydration)
@@ -283,6 +301,7 @@ const enterSelectionMode = {
   shapeEditMode: false,
   infraMode: false,
   placeMode: false,
+  soilMode: false,
 } as const;
 
 /**
@@ -454,6 +473,31 @@ export function plannerReducer(
           isDirty: true,
         };
       }
+      // Soil paint (SMA-14) — the infrastructure branch mirrored onto
+      // cell.soil: ACTIVE cells only (a painted value on cellOff would be
+      // invisible), placements do NOT block painting (the trame under a
+      // plant is the documented §15 layering), and starting on a cell that
+      // already carries the armed type locks a CLEARING drag.
+      if (state.soilMode && state.soilType) {
+        const cell = state.grid[action.row][action.col];
+        if (!cell.active) return state;
+        const apply = cell.soil === state.soilType ? null : state.soilType;
+        const copy = copyGrid(state.grid)!;
+        if (apply === null) {
+          // Sparse contract (like infrastructure): clearing REMOVES the key.
+          delete copy[action.row][action.col].soil;
+        } else {
+          copy[action.row][action.col].soil = apply;
+        }
+        return {
+          ...state,
+          past: pushHistory(state),
+          grid: copy,
+          isPainting: true,
+          soilPaintValue: apply,
+          isDirty: true,
+        };
+      }
       return state;
     }
 
@@ -507,6 +551,29 @@ export function plannerReducer(
           delete copy[action.row][action.col].infrastructure;
         } else {
           copy[action.row][action.col].infrastructure = state.infraPaintValue;
+        }
+        return {
+          ...state,
+          past: pushHistory(state),
+          grid: copy,
+          isDirty: true,
+        };
+      }
+      // Soil drag (SMA-14): mode + armed type re-checked (the same F6
+      // contract), polarity from PAINT_START's lock, and the same no-op
+      // guard — a cell already matching the locked polarity must not copy
+      // the grid, dirty the draft, or spend an undo entry.
+      if (state.soilMode && state.soilType) {
+        const cell = state.grid[action.row][action.col];
+        if (!cell.active) return state;
+        if ((cell.soil ?? null) === state.soilPaintValue) {
+          return state;
+        }
+        const copy = copyGrid(state.grid)!;
+        if (state.soilPaintValue === null) {
+          delete copy[action.row][action.col].soil;
+        } else {
+          copy[action.row][action.col].soil = state.soilPaintValue;
         }
         return {
           ...state,
@@ -890,6 +957,33 @@ export function plannerReducer(
       if (action.enabled) {
         if (!state.infraType) return state;
         return { ...state, ...enterSelectionMode, infraMode: true };
+      }
+      return { ...state, ...enterSelectionMode };
+
+    // ── Soil mode (SMA-14) — exact infra-grammar mirror ──────────────────────
+    case 'SET_SOIL_TYPE':
+      // Arming a type ENTERS soil mode (and leaves the others); disarming
+      // (null) exits ONLY soil mode — the same own-mode exit rule as
+      // SET_INFRA_TYPE's null branch (a null-disarm can fire while another
+      // mode is active and must not eject the user from it). Both disarm
+      // any in-flight drag (F6 contract).
+      return action.soilType === null
+        ? { ...state, ...disarmedPainting, soilType: null, soilMode: false }
+        : {
+            ...state,
+            ...enterSelectionMode,
+            soilType: action.soilType,
+            soilMode: true,
+          };
+
+    case 'SET_SOIL_MODE':
+      // Entering REQUIRES an armed type (the sidebar SOLS tab arms it) — a
+      // guarded no-op otherwise, the Infrastructures gate exactly (NOT the
+      // Place divergence: soil has no armless function). Leaving keeps the
+      // type armed for a later re-entry.
+      if (action.enabled) {
+        if (!state.soilType) return state;
+        return { ...state, ...enterSelectionMode, soilMode: true };
       }
       return { ...state, ...enterSelectionMode };
 

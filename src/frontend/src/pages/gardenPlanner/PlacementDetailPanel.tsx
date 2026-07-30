@@ -20,6 +20,7 @@ import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Plant } from '../../types/Plant';
 import { getPlantDisplayName } from '../../utils/getPlantDisplayName';
 import { getPlantColor } from '../../utils/plantColor';
+import type { SoilType } from '../../utils/soil';
 import { PLANT_HERO_PLACEHOLDER } from '../../utils/plantDetail';
 import type {
   ExposureCategory,
@@ -38,7 +39,8 @@ import { NOTES_MAX_LENGTH, type PlannerPlacement } from './plannerReducer';
 interface PlacementDetailPanelProps {
   placement: PlannerPlacement;
   plant: Plant | null;
-  soil: string | undefined;
+  /** SMA-14: narrowed at the JSON boundary — no raw string reaches here. */
+  soil: SoilType | undefined;
   language: string;
   // SMA-288: while the active-language catalog is pending, a missing plant is
   // indistinguishable from a not-yet-loaded one — the name slot stays empty
@@ -500,7 +502,9 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
             'soil',
             <GridOnIcon sx={{ fontSize: 15 }} />,
             t('planner.placement.soilLabel'),
-            soil
+            // SMA-14 / SMA-317: the vocabulary exists now — render the
+            // translated label, never the stored key.
+            t(`planner.soil.types.${soil}`)
           )}
       </Box>
 
