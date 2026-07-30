@@ -14,6 +14,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
+import Snackbar, { type SnackbarCloseReason } from '@mui/material/Snackbar';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme, type Theme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
@@ -180,6 +181,41 @@ export default function GardenPlanner() {
     type: 'success' | 'error' | 'info';
     text: string;
   } | null>(null);
+  // What the Snackbar SHOWS outlives `message` (SMA-309 R3). Clearing the
+  // state in the same render that flips `open` to false would hand the exit
+  // transition an undefined child mid-close — Grow clones its child to inject
+  // ref and style, and EVERY feedback path in the planner funnels through this
+  // one Snackbar. The displayed copy follows `message` while it is non-null
+  // (adjust-during-render, the panel's gate pattern) and is dropped only in
+  // onExited. `seq` bumps once per message object so the Snackbar key remounts
+  // and each toast gets a FULL auto-hide window — MUI restarts the timer on
+  // `open`, not on children, so a swap-in-place would inherit the previous
+  // toast's remainder (a collision arriving at 5.5s would flash for 0.5s).
+  const [displayedToast, setDisplayedToast] = useState<{
+    src: { type: 'success' | 'error' | 'info'; text: string };
+    seq: number;
+  } | null>(null);
+  if (message !== null && displayedToast?.src !== message) {
+    setDisplayedToast({ src: message, seq: (displayedToast?.seq ?? 0) + 1 });
+  }
+  // The page reserves the floating bar's REAL height (SMA-309 R3): the bar is
+  // a filled Alert whose height moves with locale (the FR copy is ~40% longer
+  // than the English), with the sm breakpoint where the action row wraps
+  // under the message, and with any future copy change — a literal reservation
+  // drifts silently the moment any of those move.
+  const dirtyBarRef = useRef<HTMLDivElement | null>(null);
+  const [dirtyBarHeight, setDirtyBarHeight] = useState(0);
+  useLayoutEffect(() => {
+    const el = dirtyBarRef.current;
+    if (!isDirty || !el) {
+      setDirtyBarHeight(0);
+      return;
+    }
+    const ro = new ResizeObserver(() => setDirtyBarHeight(el.offsetHeight));
+    ro.observe(el);
+    setDirtyBarHeight(el.offsetHeight);
+    return () => ro.disconnect();
+  }, [isDirty]);
   // The catalog CARRIES its language, and readiness is DERIVED at render
   // (5.2 R4, CR Major): `catalogReady` is true only when the loaded data's
   // locale matches the active one, so the one-render stale-name window
@@ -249,8 +285,20 @@ export default function GardenPlanner() {
   // becomes the §9 "Ombre portée" hatch overlay — that is what the moment
   // preset visibly moves now that blockers are real. Indoor gardens skip the
   // moment call: their light is schedule-driven, nothing casts.
+  //
+  // SMA-309 R3 (cost note, CR outside-diff + orchestrator ruling): computed
+  // ONLY when someone reads it — the layer is visible (it paints), or a
+  // placement is selected (the panel states the anchor cell's exposure with
+  // the layer off, the R1 decoupling). With the layer hidden and nothing
+  // selected — the common paint-drag state — every PAINT_ENTER used to
+  // recompute the whole grid once per traversed cell; the guard now skips
+  // that work entirely. What runs when it IS needed: one aggregate pass over
+  // rows×cols cells (plus one moment pass when something casts shadow). If
+  // grids ever grow an order of magnitude, the narrowing point is the panel's
+  // anchor-cell lookup — it reads ONE cell, not the whole grid.
+  const needExposure = exposureVisible || selectedPlacement !== null;
   const exposureView = useMemo(() => {
-    if (!exposureVisible || !grid) return null;
+    if (!grid || !needExposure) return null;
     const overrides: Record<string, ExposureCategory> = {};
     grid.forEach((row, r) =>
       row.forEach((cell, c) => {
@@ -276,6 +324,9 @@ export default function GardenPlanner() {
       : null;
     return {
       cells: aggregate.mode === 'aggregate' ? aggregate.cells : null,
+      // SMA-309: the per-cell moment triplet the aggregate pass already used —
+      // the panel needs it to say WHEN a cell is lit without guessing.
+      momentsLit: aggregate.mode === 'aggregate' ? aggregate.momentsLit : null,
       cast:
         momentResult && momentResult.mode === 'moment'
           ? momentResult.cells.map((row) =>
@@ -283,8 +334,9 @@ export default function GardenPlanner() {
             )
           : null,
     };
-  }, [exposureVisible, grid, layoutWidth, layoutHeight, garden, exposureSeason, exposureMoment, blockers, castsShadow]);
+  }, [grid, needExposure, layoutWidth, layoutHeight, garden, exposureSeason, exposureMoment, blockers, castsShadow]);
   const exposureCells = exposureView?.cells ?? null;
+  const exposureMomentsLit = exposureView?.momentsLit ?? null;
   const castShadowCells = exposureView?.cast ?? null;
 
   // Horizontal scroll state for grid container
@@ -1118,6 +1170,38 @@ export default function GardenPlanner() {
     [selectedPlacementId]
   );
 
+  // SMA-309: notes edits go through the reducer (history + dirty), so the
+  // page's ONE Save button persists them like any other layout edit.
+  const handleSetSelectedNotes = useCallback(
+    (notes: string | null) => {
+      if (!selectedPlacementId) return;
+      dispatch({
+        type: 'SET_PLACEMENT_NOTES',
+        placementId: selectedPlacementId,
+        notes,
+      });
+    },
+    [selectedPlacementId]
+  );
+
+  // SMA-309: the override for the SELECTED placement's anchor cell. Distinct
+  // from the cell-click path on purpose — it must NOT clear the selection
+  // (that would unmount the panel holding the control), and it reaches a cell
+  // that is occupied by definition (the reducer's occupancy guard was lifted
+  // for exactly this).
+  const handleSetSelectedExposureOverride = useCallback(
+    (value: ExposureCategory | null) => {
+      if (!selectedPlacement) return;
+      dispatch({
+        type: 'SET_CELL_EXPOSURE_OVERRIDE',
+        row: selectedPlacement.startRow,
+        col: selectedPlacement.startCol,
+        value,
+      });
+    },
+    [selectedPlacement]
+  );
+
   // Move (mockup Etats): arm the placement's OWN plant — enters Place mode;
   // the lot-2 move-drag takes over from there.
   const handleMoveSelectedPlacement = useCallback(() => {
@@ -1405,15 +1489,36 @@ export default function GardenPlanner() {
   const selectedPlant = selectedPlacement
     ? (allPlants.find((p) => p.id === selectedPlacement.plantId) ?? null)
     : null;
-  const selectedCellSoil =
-    selectedPlacement &&
-    grid &&
+  // The anchor resolved ONCE (R4): the old boolean bought correctness but no
+  // TypeScript narrowing, so every derivation repeated the index expression
+  // plus a non-null assertion. Resolving row/col/cell here removes every `!`
+  // and makes "all of these read the SAME cell" true by construction. `cell`
+  // narrows the GRID read only — the exposure arrays are separate structures
+  // (independently null) and keep their own optional chaining by index.
+  const anchor =
+    selectedPlacement !== null &&
+    grid !== null &&
     selectedPlacement.startRow >= 0 &&
     selectedPlacement.startRow < grid.length &&
     selectedPlacement.startCol >= 0 &&
     selectedPlacement.startCol < (grid[selectedPlacement.startRow]?.length ?? 0)
-      ? grid[selectedPlacement.startRow][selectedPlacement.startCol]?.soil
-      : undefined;
+      ? {
+          row: selectedPlacement.startRow,
+          col: selectedPlacement.startCol,
+          cell: grid[selectedPlacement.startRow][selectedPlacement.startCol],
+        }
+      : null;
+  const selectedCellSoil = anchor?.cell?.soil;
+  // SMA-309: the anchor cell's exposure facts for the detail panel — category,
+  // the moment triplet behind it, and the cell's manual override. All three
+  // read the SAME cell, and none depends on the layer being visible.
+  const selectedCellExposure = anchor
+    ? (exposureCells?.[anchor.row]?.[anchor.col] ?? null)
+    : null;
+  const selectedCellMomentsLit = anchor
+    ? (exposureMomentsLit?.[anchor.row]?.[anchor.col] ?? null)
+    : null;
+  const selectedCellOverride = anchor?.cell?.exposureOverride ?? null;
 
   if (loading) {
     return (
@@ -1429,7 +1534,17 @@ export default function GardenPlanner() {
     // Full-width page (R3 item F): the lg Container is replaced by a
     // full-width wrapper with 24px lateral padding — settled #177 layout
     // (24px laterals + the always-reserved 330px detail lane; v32 §0.3.26).
-    <Box sx={{ px: '24px', py: 4 }}>
+    // While the floating unsaved-changes bar is up, the page reserves its
+    // MEASURED height (+ the bar's 16px offset and a 16px gap) in bottom
+    // padding so the bar never covers the last row of content (SMA-309 R2,
+    // measured rather than guessed in R3).
+    <Box
+      sx={{
+        px: '24px',
+        py: 4,
+        ...(isDirty && { pb: `${dirtyBarHeight + 32}px` }),
+      }}
+    >
       {/* Config dialog — first setup (a garden with no layout yet) */}
       <GardenConfigDialog
         open={showSetup}
@@ -1580,49 +1695,116 @@ export default function GardenPlanner() {
         </Button>
       </Box>
 
+      {/* Unsaved-changes bar (SMA-309 R2) — OUT of the document flow, anchored
+          to the viewport bottom: its appearance shifts nothing, and it stays
+          in sight while scrolling a tall garden. The Alert itself (severity,
+          actions, handlers, disabled logic) is unchanged, so the role="alert"
+          announcement survives the move. */}
       {isDirty && (
-        <Alert
-          severity="warning"
-          variant="filled"
-          sx={{ mb: 2 }}
-          action={
-            <>
-              <Button
-                color="inherit"
-                size="small"
-                onClick={handleCancel}
-                disabled={saving}
-                sx={{ mr: 1 }}
-              >
-                {t('planner.toolbar.cancel')}
-              </Button>
-              <Button
-                color="inherit"
-                size="small"
-                variant="outlined"
-                onClick={handleSave}
-                disabled={saving}
-              >
-                {saving
-                  ? t('planner.toolbar.saving')
-                  : t('planner.toolbar.save')}
-              </Button>
-            </>
-          }
+        <Box
+          data-testid="dirty-bar"
+          ref={dirtyBarRef}
+          sx={{
+            position: 'fixed',
+            bottom: 16,
+            left: 24,
+            right: 24,
+            zIndex: 'appBar',
+          }}
         >
-          {t('planner.toolbar.unsavedChanges')}
-        </Alert>
+          <Alert
+            severity="warning"
+            variant="filled"
+            sx={{ boxShadow: 6 }}
+            action={
+              <>
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={handleCancel}
+                  disabled={saving}
+                  sx={{ mr: 1 }}
+                >
+                  {t('planner.toolbar.cancel')}
+                </Button>
+                <Button
+                  color="inherit"
+                  size="small"
+                  variant="outlined"
+                  onClick={handleSave}
+                  disabled={saving}
+                >
+                  {saving
+                    ? t('planner.toolbar.saving')
+                    : t('planner.toolbar.save')}
+                </Button>
+              </>
+            }
+          >
+            {t('planner.toolbar.unsavedChanges')}
+          </Alert>
+        </Box>
       )}
 
-      {message && (
-        <Alert
-          severity={message.type}
-          sx={{ mb: 2 }}
-          onClose={() => setMessage(null)}
-        >
-          {message.text}
-        </Alert>
-      )}
+      {/* Save / removal / collision feedback (SMA-309 R2) — the transient
+          `message` moves onto the app's snackbar mechanism (PlantDetail's
+          admin toast, reproduced prop for prop): fixed-position, so it no
+          longer pushes the page down when it appears. Every caller funnels
+          through `setMessage`, so the collision and removal toasts ride the
+          same migration. */}
+      <Snackbar
+        key={displayedToast?.seq}
+        open={message !== null}
+        // Errors never auto-hide (R3 ruling): a save failure that vanishes
+        // unread leaves the user believing the save succeeded.
+        autoHideDuration={displayedToast?.src.type === 'error' ? null : 6000}
+        onClose={(_, reason) => {
+          // All THREE MUI close reasons, accounted for explicitly (R6):
+          //  - 'timeout' cannot fire for errors — autoHideDuration is null
+          //    above;
+          //  - 'clickaway' (adversarial pass) and 'escapeKeyDown' (R6) are
+          //    swallowed for errors here: an unread save failure dismisses
+          //    ONLY through its own X. A future MUI reason slots into the
+          //    array on its own line.
+          // Success/info keep every dismissal path they have today.
+          // Coexistence, NOT a conflict: the same Escape press also reaches
+          // the planner's own window keydown handler (clearSelection /
+          // leaving Place mode), which keeps doing what it does — this guard
+          // is deliberately independent of it and decides only the TOAST's
+          // fate.
+          const errorProofReasons: SnackbarCloseReason[] = [
+            'clickaway',
+            'escapeKeyDown',
+          ];
+          if (
+            displayedToast?.src.type === 'error' &&
+            errorProofReasons.includes(reason)
+          ) {
+            return;
+          }
+          setMessage(null);
+        }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        // R5: while the unsaved-changes bar is up, the toast rides ABOVE it —
+        // the same measured height (+ the bar's 16px offset and a 16px gap)
+        // the page padding reserves, so the two can't drift apart. Round 2
+        // accepted the overlap while toasts were transient; round 3 made
+        // errors persist until dismissed, and a failed save then buried the
+        // very Save/Cancel buttons the toast asks you to retry with.
+        sx={isDirty ? { bottom: `${dirtyBarHeight + 32}px` } : undefined}
+        TransitionProps={{ onExited: () => setDisplayedToast(null) }}
+      >
+        {displayedToast ? (
+          <Alert
+            onClose={() => setMessage(null)}
+            severity={displayedToast.src.type}
+            variant="filled"
+            sx={{ width: '100%' }}
+          >
+            {displayedToast.src.text}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
 
       {/* Help banner (R3 item D — §11 --banner-*, radius 10, padding 13×16,
           close 19px). R4: dismissal persists via the versioned localStorage
@@ -1948,8 +2130,10 @@ export default function GardenPlanner() {
                   shapeEditMode={shapeEditMode}
                   infraPaintMode={infraMode}
                   placements={enrichedPlacements}
-                  exposure={exposureCells}
-                  castShadow={castShadowCells}
+                  // SMA-309: the toggle gates the PAINTING here — the data
+                  // above is computed either way so the panel can read it.
+                  exposure={exposureVisible ? exposureCells : null}
+                  castShadow={exposureVisible ? castShadowCells : null}
                   onCellClick={handleCellClick}
                   onCellDragStart={handleCellDragStart}
                   onCellDragEnter={handleCellDragEnter}
@@ -2111,11 +2295,19 @@ export default function GardenPlanner() {
                 cellSize={cellSize}
                 gridRows={grid?.length ?? 0}
                 gridCols={grid?.[0]?.length ?? 0}
+                exposure={selectedCellExposure}
+                momentsLit={selectedCellMomentsLit}
+                exposureOverride={selectedCellOverride}
+                onSetExposureOverride={handleSetSelectedExposureOverride}
                 checkFit={handleCheckSelectedFit}
                 describeOverlap={handleDescribeOverlap}
                 onSetFootprint={handleSetSelectedFootprint}
+                onSetNotes={handleSetSelectedNotes}
                 onMove={handleMoveSelectedPlacement}
                 onRemove={handleRemoveSelectedPlacement}
+                onClose={clearSelection}
+                gardenId={id}
+                gardenName={garden?.name}
               />
             )}
           </Box>

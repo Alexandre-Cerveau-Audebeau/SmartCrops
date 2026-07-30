@@ -582,10 +582,20 @@
       "footprint": "{{cells}}×{{cells}} footprint"
     },
     "placement": {
-      "position": "Position: row {{row}}, col {{col}}",
+      "title": "Selected placement",
+      "close": "Close the placement panel",
       "remove": "Remove from plan",
       "details": "Plant details",
-      "soil": "Soil: {{soil}}",
+      "soilLabel": "Soil",
+      "exposure": "Exposure",
+      "exposureValue": "{{category}} — {{moments}}",
+      "watering": "Watering",
+      "careLevel": "Care",
+      "lifeCycle": "Life cycle",
+      "adjustExposure": "Adjust exposure",
+      "notes": "Notes",
+      "notesPlaceholder": "Notes about this placement…",
+      "footprintTitle": "Footprint",
       "replaceHint": "Select another plant in the sidebar to replace this one."
     }
   },

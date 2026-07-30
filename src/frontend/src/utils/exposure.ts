@@ -62,8 +62,33 @@ export interface ExposureParams {
   moment?: Moment;
 }
 
+/**
+ * Which of the three moments a cell is lit at (aggregate mode).
+ *
+ * SMA-309: the aggregate category ALONE cannot answer "when is this cell
+ * sunny" — `aggregateExposure` maps both {morning, noon, evening} and the
+ * ratified noon-only case to 'full', so any enumeration derived from the
+ * category would be a guess. The aggregate pass already computes the three
+ * shadow sets internally, so surfacing the triplet it used costs nothing;
+ * the panel renders an EXACT sentence or none at all.
+ *
+ * `null` for a cell whose category does not come from the sun path — an
+ * inactive cell, an indoor garden (schedule-driven, no moments), or a manual
+ * override (which replaces the category, so the physical triplet would
+ * contradict the label shown).
+ */
+export interface MomentsLit {
+  morning: boolean;
+  noon: boolean;
+  evening: boolean;
+}
+
 export type ExposureGridResult =
-  | { mode: 'aggregate'; cells: (ExposureCategory | null)[][] }
+  | {
+      mode: 'aggregate';
+      cells: (ExposureCategory | null)[][];
+      momentsLit: (MomentsLit | null)[][];
+    }
   | { mode: 'moment'; moment: Moment; cells: (CellMomentState | null)[][] };
 
 // ── Sun directions (engraved) ────────────────────────────────────────────────
@@ -278,6 +303,11 @@ export function computeExposureGrid(params: ExposureParams): ExposureGridResult 
   // Aggregate mode: the 4-category grid. Precedence per cell:
   // inactive → null; manual override → override; indoor → uniform; computed.
   const cells: (ExposureCategory | null)[][] = [];
+  // SMA-309: the triplet each computed category came from, surfaced so a
+  // caller can state WHEN a cell is lit without re-deriving (and without
+  // guessing — see MomentsLit). Stays null wherever the category did not come
+  // from the sun path: inactive, override, indoor.
+  const momentsLit: (MomentsLit | null)[][] = [];
   const uniformIndoor = isIndoor ? indoorCategory(params.lightSchedule) : null;
   const shadowSets = isIndoor
     ? null
@@ -288,7 +318,9 @@ export function computeExposureGrid(params: ExposureParams): ExposureGridResult 
       };
   for (let r = 0; r < rows; r++) {
     cells[r] = [];
+    momentsLit[r] = [];
     for (let c = 0; c < cols; c++) {
+      momentsLit[r][c] = null;
       if (!isActive(r, c)) {
         cells[r][c] = null; // overrides on inactive cells are ignored
         continue;
@@ -303,12 +335,14 @@ export function computeExposureGrid(params: ExposureParams): ExposureGridResult 
         cells[r][c] = uniformIndoor;
         continue;
       }
-      cells[r][c] = aggregateExposure({
+      const lit = {
         morning: !shadowSets!.morning.has(key),
         noon: !shadowSets!.noon.has(key),
         evening: !shadowSets!.evening.has(key),
-      });
+      };
+      momentsLit[r][c] = lit;
+      cells[r][c] = aggregateExposure(lit);
     }
   }
-  return { mode: 'aggregate', cells };
+  return { mode: 'aggregate', cells, momentsLit };
 }
