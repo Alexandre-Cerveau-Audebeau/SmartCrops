@@ -1639,3 +1639,83 @@ describe('GardenPlanner placement panel (SMA-309)', () => {
     expect(row).not.toHaveTextContent('morning');
   });
 });
+
+// ── SMA-309 R2: the page keeps still ────────────────────────────────────────
+// The unsaved-changes banner leaves the document flow for a viewport-anchored
+// bar (zero layout shift by construction, visible while scrolling), and the
+// transient save/removal/collision feedback moves onto the app's snackbar
+// mechanism — the Alerts themselves (severity, actions, announcement) are
+// unchanged, only their positioning is.
+describe('GardenPlanner floating unsaved-changes bar + toasts (SMA-309 R2)', () => {
+  async function renderDirty() {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    await waitFor(() =>
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
+    );
+    // Clean: no bar anywhere.
+    expect(screen.queryByTestId('dirty-bar')).toBeNull();
+    // Dirty the draft (the header-gating spec's idiom: an override via the
+    // exposure popover).
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    fireEvent.click(within(grid).getAllByRole('gridcell')[1]!);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Shade' }));
+    return grid;
+  }
+
+  it('the bar appears OUT of the document flow when dirty, and stays announced', async () => {
+    await renderDirty();
+    const bar = screen.getByTestId('dirty-bar');
+    // Fixed = removed from the flow: its appearance cannot push content down.
+    expect(bar).toHaveStyle({ position: 'fixed' });
+    // The announcement moved WITH the Alert, not away from it.
+    expect(within(bar).getByRole('alert')).toHaveTextContent(
+      'You have unsaved changes'
+    );
+  });
+
+  it('Cancel from the bar discards, and the report rides the fixed toast', async () => {
+    await renderDirty();
+    fireEvent.click(
+      within(screen.getByTestId('dirty-bar')).getByRole('button', {
+        name: 'Cancel',
+      })
+    );
+    expect(screen.queryByTestId('dirty-bar')).toBeNull();
+    const toast = await screen.findByText('Changes discarded');
+    // The toast occupies no flow space either — same defect, same fix.
+    expect(toast.closest('.MuiSnackbar-root')).toHaveStyle({
+      position: 'fixed',
+    });
+  });
+
+  it('Save from the bar persists; the success toast is fixed and dismissable', async () => {
+    vi.mocked(saveLayout).mockResolvedValue(undefined);
+    await renderDirty();
+    fireEvent.click(
+      within(screen.getByTestId('dirty-bar')).getByRole('button', {
+        name: 'Save',
+      })
+    );
+    await waitFor(() => expect(saveLayout).toHaveBeenCalledTimes(1));
+    const toast = await screen.findByText('Layout saved successfully.');
+    expect(toast.closest('.MuiSnackbar-root')).toHaveStyle({
+      position: 'fixed',
+    });
+    // Saved → clean → the bar is gone.
+    expect(screen.queryByTestId('dirty-bar')).toBeNull();
+    // Dismissability survived the migration (the Alert's own X).
+    fireEvent.click(
+      within(toast.closest('.MuiSnackbar-root') as HTMLElement).getByRole(
+        'button',
+        { name: 'Close' }
+      )
+    );
+    await waitFor(() =>
+      expect(screen.queryByText('Layout saved successfully.')).toBeNull()
+    );
+  });
+});

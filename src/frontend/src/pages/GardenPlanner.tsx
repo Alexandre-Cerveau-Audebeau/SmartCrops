@@ -14,6 +14,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
+import Snackbar from '@mui/material/Snackbar';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme, type Theme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
@@ -1490,7 +1491,10 @@ export default function GardenPlanner() {
     // Full-width page (R3 item F): the lg Container is replaced by a
     // full-width wrapper with 24px lateral padding — settled #177 layout
     // (24px laterals + the always-reserved 330px detail lane; v32 §0.3.26).
-    <Box sx={{ px: '24px', py: 4 }}>
+    // While the floating unsaved-changes bar is up, the page reserves its
+    // height in bottom padding so the bar never covers the last row of
+    // content (SMA-309 R2).
+    <Box sx={{ px: '24px', py: 4, ...(isDirty && { pb: '104px' }) }}>
       {/* Config dialog — first setup (a garden with no layout yet) */}
       <GardenConfigDialog
         open={showSetup}
@@ -1641,49 +1645,79 @@ export default function GardenPlanner() {
         </Button>
       </Box>
 
+      {/* Unsaved-changes bar (SMA-309 R2) — OUT of the document flow, anchored
+          to the viewport bottom: its appearance shifts nothing, and it stays
+          in sight while scrolling a tall garden. The Alert itself (severity,
+          actions, handlers, disabled logic) is unchanged, so the role="alert"
+          announcement survives the move. */}
       {isDirty && (
-        <Alert
-          severity="warning"
-          variant="filled"
-          sx={{ mb: 2 }}
-          action={
-            <>
-              <Button
-                color="inherit"
-                size="small"
-                onClick={handleCancel}
-                disabled={saving}
-                sx={{ mr: 1 }}
-              >
-                {t('planner.toolbar.cancel')}
-              </Button>
-              <Button
-                color="inherit"
-                size="small"
-                variant="outlined"
-                onClick={handleSave}
-                disabled={saving}
-              >
-                {saving
-                  ? t('planner.toolbar.saving')
-                  : t('planner.toolbar.save')}
-              </Button>
-            </>
-          }
+        <Box
+          data-testid="dirty-bar"
+          sx={{
+            position: 'fixed',
+            bottom: 16,
+            left: 24,
+            right: 24,
+            zIndex: 'appBar',
+          }}
         >
-          {t('planner.toolbar.unsavedChanges')}
-        </Alert>
+          <Alert
+            severity="warning"
+            variant="filled"
+            sx={{ boxShadow: 6 }}
+            action={
+              <>
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={handleCancel}
+                  disabled={saving}
+                  sx={{ mr: 1 }}
+                >
+                  {t('planner.toolbar.cancel')}
+                </Button>
+                <Button
+                  color="inherit"
+                  size="small"
+                  variant="outlined"
+                  onClick={handleSave}
+                  disabled={saving}
+                >
+                  {saving
+                    ? t('planner.toolbar.saving')
+                    : t('planner.toolbar.save')}
+                </Button>
+              </>
+            }
+          >
+            {t('planner.toolbar.unsavedChanges')}
+          </Alert>
+        </Box>
       )}
 
-      {message && (
-        <Alert
-          severity={message.type}
-          sx={{ mb: 2 }}
-          onClose={() => setMessage(null)}
-        >
-          {message.text}
-        </Alert>
-      )}
+      {/* Save / removal / collision feedback (SMA-309 R2) — the transient
+          `message` moves onto the app's snackbar mechanism (PlantDetail's
+          admin toast, reproduced prop for prop): fixed-position, so it no
+          longer pushes the page down when it appears. Every caller funnels
+          through `setMessage`, so the collision and removal toasts ride the
+          same migration. */}
+      <Snackbar
+        open={message !== null}
+        autoHideDuration={6000}
+        onClose={() => setMessage(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        {message ? (
+          <Alert
+            onClose={() => setMessage(null)}
+            severity={message.type}
+            variant="filled"
+            sx={{ width: '100%' }}
+          >
+            {message.text}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
 
       {/* Help banner (R3 item D — §11 --banner-*, radius 10, padding 13×16,
           close 19px). R4: dismissal persists via the versioned localStorage
@@ -2185,6 +2219,8 @@ export default function GardenPlanner() {
                 onMove={handleMoveSelectedPlacement}
                 onRemove={handleRemoveSelectedPlacement}
                 onClose={clearSelection}
+                gardenId={id}
+                gardenName={garden?.name}
               />
             )}
           </Box>

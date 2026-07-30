@@ -78,6 +78,13 @@ interface PlacementDetailPanelProps {
   onRemove: () => void;
   /** Clears the selection — the header's X (SMA-309). */
   onClose?: () => void;
+  /**
+   * Origin carried to the plant detail page through router state — the SAME
+   * mechanism the PlantsInGardenSection chips use, so the detail page offers
+   * its back-to-garden affordance from the panel link too (SMA-309 R2).
+   */
+  gardenId?: string;
+  gardenName?: string;
 }
 
 const MOMENT_ORDER: Moment[] = ['morning', 'noon', 'evening'];
@@ -113,6 +120,8 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
   onMove,
   onRemove,
   onClose,
+  gardenId,
+  gardenName,
 }: PlacementDetailPanelProps) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
@@ -468,7 +477,15 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
 
       {plant && (
         <Typography sx={{ mt: 1, fontSize: 12 }}>
-          <Link component={RouterLink} to={`/library/${plant.id}`}>
+          <Link
+            component={RouterLink}
+            to={`/library/${plant.id}`}
+            state={{
+              from: 'planner',
+              gardenId,
+              gardenName,
+            }}
+          >
             {t('planner.placement.details')}
           </Link>
         </Typography>

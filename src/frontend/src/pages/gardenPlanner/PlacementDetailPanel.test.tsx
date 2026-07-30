@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n/i18n';
@@ -446,5 +446,65 @@ describe('PlacementDetailPanel exposure override (SMA-309)', () => {
     expect(screen.getByText('Selected placement')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Shade' }));
     expect(onSetExposureOverride).toHaveBeenCalledWith('shade');
+  });
+});
+
+// SMA-309 R2: the details link must carry the SAME origin the
+// PlantsInGardenSection chips carry (router state, not the URL), so the
+// detail page offers its back-to-garden affordance from either entry point —
+// and a pasted /library URL still degrades to the plain plant page.
+describe('PlacementDetailPanel plant-details link origin (SMA-309 R2)', () => {
+  function LocationProbe() {
+    const location = useLocation();
+    return (
+      <div data-testid="location-probe">
+        {JSON.stringify({ pathname: location.pathname, state: location.state })}
+      </div>
+    );
+  }
+
+  it('navigating through the link lands on the plant page with the planner origin', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <PlacementDetailPanel
+                placement={placement}
+                plant={spacedPlant}
+                soil={undefined}
+                language={i18n.language}
+                catalogReady
+                cellSize="50cm"
+                gridRows={3}
+                gridCols={3}
+                checkFit={() => ({ ok: true })}
+                describeOverlap={() => ({ plant: '', cell: '' })}
+                onSetFootprint={vi.fn()}
+                onMove={vi.fn()}
+                onRemove={vi.fn()}
+                gardenId="g7"
+                gardenName="Potager du fond"
+              />
+            }
+          />
+          <Route path="/library/:id" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('link', { name: 'Plant details' }));
+
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(
+      JSON.stringify({
+        pathname: '/library/p1',
+        state: {
+          from: 'planner',
+          gardenId: 'g7',
+          gardenName: 'Potager du fond',
+        },
+      })
+    );
   });
 });

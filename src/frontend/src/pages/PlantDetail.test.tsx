@@ -6,7 +6,7 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { AuthProvider } from '../contexts/AuthContext';
@@ -165,15 +165,29 @@ function makePerenualData(
   return { ...base, ...overrides };
 }
 
-function renderAtPlant(plant: Plant) {
+// SMA-309 R2: renders the garden id it landed on — proves the back affordance
+// returns to the RIGHT garden's planner, not just any planner route.
+function PlannerProbe() {
+  const { id } = useParams<{ id: string }>();
+  return <div data-testid="planner-probe">{id}</div>;
+}
+
+function renderAtPlant(plant: Plant, entryState?: unknown) {
   vi.mocked(fetchPlantById).mockResolvedValue(plant);
   return render(
     <LanguageProvider>
       <UnitSystemProvider>
         <AuthProvider>
-          <MemoryRouter initialEntries={[`/library/${plant.id}`]}>
+          <MemoryRouter
+            initialEntries={[
+              // A plain visit carries state null — exactly what a pasted or
+              // bookmarked /library URL has (SMA-309 R2).
+              { pathname: `/library/${plant.id}`, state: entryState ?? null },
+            ]}
+          >
             <Routes>
               <Route path="/library/:id" element={<PlantDetail />} />
+              <Route path="/gardens/:id/planner" element={<PlannerProbe />} />
             </Routes>
           </MemoryRouter>
         </AuthProvider>
@@ -571,5 +585,30 @@ describe('PlantDetail', () => {
 
     fireEvent.keyDown(window, { key: 'ArrowLeft' }); // wraps back to the last
     expect(dialog.getByText('2 / 2')).toBeInTheDocument();
+  });
+});
+
+// SMA-309 R2 — the back-to-garden affordance rides router state (the
+// PlantsInGardenSection mechanism, now shared by the placement panel's link):
+// present when the visit carries the planner origin, absent on a direct visit.
+describe('PlantDetail back-to-garden affordance (SMA-309 R2)', () => {
+  it('offers the way back to the RIGHT garden when arriving with the planner origin', async () => {
+    renderAtPlant(makePlant(), {
+      from: 'planner',
+      gardenId: 'g1',
+      gardenName: 'Test garden',
+    });
+    const back = await screen.findByRole('button', {
+      name: 'Back to Test garden',
+    });
+    fireEvent.click(back);
+    // Landed on /gardens/:id/planner for the SAME garden the state named.
+    expect(screen.getByTestId('planner-probe')).toHaveTextContent('g1');
+  });
+
+  it('renders no back affordance when reached directly', async () => {
+    renderAtPlant(makePlant());
+    await screen.findByRole('heading', { name: 'Basil' });
+    expect(screen.queryByRole('button', { name: /Back to/ })).toBeNull();
   });
 });
