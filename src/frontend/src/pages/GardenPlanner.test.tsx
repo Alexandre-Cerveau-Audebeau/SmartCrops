@@ -1818,6 +1818,45 @@ describe('GardenPlanner floating unsaved-changes bar + toasts (SMA-309 R2)', () 
     );
   });
 
+  it('the toast rides ABOVE the bar while it is shown, and returns to its place without it (R5)', async () => {
+    vi.mocked(saveLayout).mockRejectedValue(new Error('boom'));
+    await renderDirty();
+    // Failed save: the bar STAYS (still dirty) and the error toast opens on
+    // top of the same bottom-centre anchor — the R4 Minor's exact scenario.
+    fireEvent.click(
+      within(screen.getByTestId('dirty-bar')).getByRole('button', {
+        name: 'Save',
+      })
+    );
+    const toast = await screen.findByText('Failed to save layout.');
+    expect(screen.getByTestId('dirty-bar')).toBeInTheDocument();
+    // jsdom: the stubbed ResizeObserver leaves the measured height at 0, so
+    // the offset degrades to the 32px gap — still the sx the bar's presence
+    // switches on, and pinned to OUR constant rather than a coordinate.
+    expect(toast.closest('.MuiSnackbar-root')).toHaveStyle({ bottom: '32px' });
+    // Dismiss the error, discard via the bar: the next toast has NO bar under
+    // it and sits at the mechanism's own default again.
+    fireEvent.click(
+      within(toast.closest('.MuiSnackbar-root') as HTMLElement).getByRole(
+        'button',
+        { name: 'Close' }
+      )
+    );
+    await waitFor(() =>
+      expect(screen.queryByText('Failed to save layout.')).toBeNull()
+    );
+    fireEvent.click(
+      within(screen.getByTestId('dirty-bar')).getByRole('button', {
+        name: 'Cancel',
+      })
+    );
+    const discard = await screen.findByText('Changes discarded');
+    expect(screen.queryByTestId('dirty-bar')).toBeNull();
+    expect(discard.closest('.MuiSnackbar-root')).not.toHaveStyle({
+      bottom: '32px',
+    });
+  });
+
   it('an error toast persists past the auto-hide window and closes only on dismissal (R3)', async () => {
     vi.mocked(saveLayout).mockRejectedValue(new Error('boom'));
     await renderDirty();

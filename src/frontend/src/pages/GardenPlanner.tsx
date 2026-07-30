@@ -1769,6 +1769,13 @@ export default function GardenPlanner() {
           setMessage(null);
         }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        // R5: while the unsaved-changes bar is up, the toast rides ABOVE it —
+        // the same measured height (+ the bar's 16px offset and a 16px gap)
+        // the page padding reserves, so the two can't drift apart. Round 2
+        // accepted the overlap while toasts were transient; round 3 made
+        // errors persist until dismissed, and a failed save then buried the
+        // very Save/Cancel buttons the toast asks you to retry with.
+        sx={isDirty ? { bottom: `${dirtyBarHeight + 32}px` } : undefined}
         TransitionProps={{ onExited: () => setDisplayedToast(null) }}
       >
         {displayedToast ? (
