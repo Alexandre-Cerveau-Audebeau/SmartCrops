@@ -1489,33 +1489,36 @@ export default function GardenPlanner() {
   const selectedPlant = selectedPlacement
     ? (allPlants.find((p) => p.id === selectedPlacement.plantId) ?? null)
     : null;
-  const anchorInGrid =
+  // The anchor resolved ONCE (R4): the old boolean bought correctness but no
+  // TypeScript narrowing, so every derivation repeated the index expression
+  // plus a non-null assertion. Resolving row/col/cell here removes every `!`
+  // and makes "all of these read the SAME cell" true by construction. `cell`
+  // narrows the GRID read only — the exposure arrays are separate structures
+  // (independently null) and keep their own optional chaining by index.
+  const anchor =
     selectedPlacement !== null &&
     grid !== null &&
     selectedPlacement.startRow >= 0 &&
     selectedPlacement.startRow < grid.length &&
     selectedPlacement.startCol >= 0 &&
-    selectedPlacement.startCol < (grid[selectedPlacement.startRow]?.length ?? 0);
-  const selectedCellSoil = anchorInGrid
-    ? grid![selectedPlacement!.startRow][selectedPlacement!.startCol]?.soil
-    : undefined;
+    selectedPlacement.startCol < (grid[selectedPlacement.startRow]?.length ?? 0)
+      ? {
+          row: selectedPlacement.startRow,
+          col: selectedPlacement.startCol,
+          cell: grid[selectedPlacement.startRow][selectedPlacement.startCol],
+        }
+      : null;
+  const selectedCellSoil = anchor?.cell?.soil;
   // SMA-309: the anchor cell's exposure facts for the detail panel — category,
   // the moment triplet behind it, and the cell's manual override. All three
   // read the SAME cell, and none depends on the layer being visible.
-  const selectedCellExposure = anchorInGrid
-    ? (exposureCells?.[selectedPlacement!.startRow]?.[
-        selectedPlacement!.startCol
-      ] ?? null)
+  const selectedCellExposure = anchor
+    ? (exposureCells?.[anchor.row]?.[anchor.col] ?? null)
     : null;
-  const selectedCellMomentsLit = anchorInGrid
-    ? (exposureMomentsLit?.[selectedPlacement!.startRow]?.[
-        selectedPlacement!.startCol
-      ] ?? null)
+  const selectedCellMomentsLit = anchor
+    ? (exposureMomentsLit?.[anchor.row]?.[anchor.col] ?? null)
     : null;
-  const selectedCellOverride = anchorInGrid
-    ? (grid![selectedPlacement!.startRow][selectedPlacement!.startCol]
-        ?.exposureOverride ?? null)
-    : null;
+  const selectedCellOverride = anchor?.cell?.exposureOverride ?? null;
 
   if (loading) {
     return (
