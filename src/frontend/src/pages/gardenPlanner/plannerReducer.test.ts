@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   initialPlannerState,
+  NOTES_MAX_LENGTH,
   plannerReducer,
   type PlannerPlacement,
   type PlannerState,
@@ -1122,6 +1123,55 @@ describe('plannerReducer SET_PLACEMENT_NOTES (SMA-309)', () => {
     });
     const undone = plannerReducer(s, { type: 'UNDO' });
     expect(undone.placements[0].notes).toBeNull();
+  });
+
+  // R3 (Extension c36be778 ⊃ GitHub e82c4da2): the reducer boundary owns the
+  // wire/DB contract — trim, whitespace-only → null, clamp to the exported
+  // NOTES_MAX_LENGTH the panel's input reads.
+  it('whitespace-only text normalises to the same null the empty string maps to', () => {
+    const s = hydrated();
+    expect(
+      plannerReducer(s, {
+        type: 'SET_PLACEMENT_NOTES',
+        placementId: 'srv-1',
+        notes: '   \n\t ',
+      })
+    ).toBe(s);
+    const written = plannerReducer(s, {
+      type: 'SET_PLACEMENT_NOTES',
+      placementId: 'srv-1',
+      notes: 'temp',
+    });
+    const blanked = plannerReducer(written, {
+      type: 'SET_PLACEMENT_NOTES',
+      placementId: 'srv-1',
+      notes: '   ',
+    });
+    expect(blanked.placements[0].notes).toBeNull();
+  });
+
+  it('an over-long note is clamped to NOTES_MAX_LENGTH at the boundary', () => {
+    const after = plannerReducer(hydrated(), {
+      type: 'SET_PLACEMENT_NOTES',
+      placementId: 'srv-1',
+      notes: 'x'.repeat(NOTES_MAX_LENGTH + 100),
+    });
+    expect(after.placements[0].notes).toHaveLength(NOTES_MAX_LENGTH);
+  });
+
+  it('a value equal AFTER normalisation is still the idempotent same object', () => {
+    const once = plannerReducer(hydrated(), {
+      type: 'SET_PLACEMENT_NOTES',
+      placementId: 'srv-1',
+      notes: 'Staked in June',
+    });
+    const padded = plannerReducer(once, {
+      type: 'SET_PLACEMENT_NOTES',
+      placementId: 'srv-1',
+      notes: '  Staked in June  ',
+    });
+    expect(padded).toBe(once);
+    expect(padded.past).toHaveLength(1);
   });
 });
 

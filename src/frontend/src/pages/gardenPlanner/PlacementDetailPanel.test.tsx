@@ -402,6 +402,21 @@ describe('PlacementDetailPanel summary rows (SMA-309)', () => {
     expect(row).not.toHaveTextContent('—');
   });
 
+  it('enumerates the lit moments in FRENCH — the joiner is locale-supplied, never hard-coded (R3)', async () => {
+    // Intl.ListFormat output is genuinely locale-dependent (EN Oxford comma
+    // vs FR « matin, midi et soir ») — the cheapest guard against a future
+    // refactor hard-coding a joiner.
+    await i18n.changeLanguage('fr');
+    renderIdentity({
+      language: 'fr',
+      exposure: 'full',
+      momentsLit: { morning: true, noon: true, evening: true },
+    });
+    expect(screen.getByTestId('summary-exposure')).toHaveTextContent(
+      'Plein soleil — matin, midi et soir'
+    );
+  });
+
   it('links to the plant record', () => {
     renderIdentity();
     expect(screen.getByRole('link', { name: 'Plant details' })).toHaveAttribute(
@@ -412,7 +427,7 @@ describe('PlacementDetailPanel summary rows (SMA-309)', () => {
 });
 
 describe('PlacementDetailPanel notes (SMA-309)', () => {
-  it('shows the existing note and reports every edit to the page', () => {
+  it('shows the existing note and commits on BLUR, not per keystroke (R3)', () => {
     const onSetNotes = vi.fn();
     renderIdentity({
       placement: { ...placement, notes: 'Staked in June' },
@@ -420,8 +435,63 @@ describe('PlacementDetailPanel notes (SMA-309)', () => {
     });
     const field = screen.getByLabelText('Notes');
     expect(field).toHaveValue('Staked in June');
+    fireEvent.change(field, { target: { value: 'Staked in Jul' } });
     fireEvent.change(field, { target: { value: 'Staked in July' } });
+    // Typing dispatches NOTHING — no history entry (and no grid deep-copy)
+    // per letter.
+    expect(onSetNotes).not.toHaveBeenCalled();
+    fireEvent.blur(field);
+    expect(onSetNotes).toHaveBeenCalledTimes(1);
     expect(onSetNotes).toHaveBeenCalledWith('Staked in July');
+  });
+
+  it('resyncs the draft when the committed note changes UNDERNEATH it (R3)', () => {
+    const onSetNotes = vi.fn();
+    const { rerender } = renderIdentity({
+      placement: { ...placement, notes: 'Committed' },
+      onSetNotes,
+    });
+    const field = screen.getByLabelText('Notes');
+    fireEvent.change(field, { target: { value: 'Typed but reverted' } });
+    // An Undo/Cancel at the page reverts placement.notes while the SAME
+    // placement stays selected — the field must follow the committed truth,
+    // or the next keystroke resurrects the discarded text.
+    rerender(
+      <MemoryRouter>
+        <PlacementDetailPanel
+          placement={{ ...placement, notes: null }}
+          plant={identityPlant}
+          soil={undefined}
+          language="en"
+          catalogReady
+          cellSize="50cm"
+          gridRows={3}
+          gridCols={3}
+          checkFit={() => ({ ok: true })}
+          describeOverlap={() => ({ plant: '', cell: '' })}
+          onSetFootprint={vi.fn()}
+          onMove={vi.fn()}
+          onRemove={vi.fn()}
+          onSetNotes={onSetNotes}
+        />
+      </MemoryRouter>
+    );
+    expect(field).toHaveValue('');
+  });
+
+  it('a focus-then-blur with NO edit dispatches nothing — even on a legacy untrimmed note (R3)', () => {
+    // Pre-R3 saves stored raw per-keystroke text, so an untrimmed note is a
+    // reachable hydrated state; without the changed-guard the blur would
+    // round-trip it through the reducer's trim into a phantom dirty + undo.
+    const onSetNotes = vi.fn();
+    renderIdentity({
+      placement: { ...placement, notes: 'Watered on Tuesday ' },
+      onSetNotes,
+    });
+    const field = screen.getByLabelText('Notes');
+    fireEvent.focus(field);
+    fireEvent.blur(field);
+    expect(onSetNotes).not.toHaveBeenCalled();
   });
 
   it('caps the field at the 500 characters the server column allows', () => {

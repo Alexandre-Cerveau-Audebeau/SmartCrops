@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -1608,14 +1609,88 @@ describe('GardenPlanner placement panel (SMA-309)', () => {
     vi.mocked(saveLayout).mockResolvedValue(undefined);
     await selectPlacement();
 
-    fireEvent.change(screen.getByLabelText('Notes'), {
-      target: { value: 'Watered on Tuesday' },
-    });
+    const field = screen.getByLabelText('Notes');
+    fireEvent.change(field, { target: { value: 'Watered on Tuesday' } });
+    // R3: the commit rides the BLUR (fireEvent.click fires no blur, so the
+    // synthetic path states it explicitly; the real pointer sequence is
+    // pinned by the userEvent test below).
+    fireEvent.blur(field);
     // The page's ONE dirty/Save cycle owns it — no auto-save.
     fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
     await waitFor(() => expect(saveLayout).toHaveBeenCalledTimes(1));
     const payload = vi.mocked(saveLayout).mock.calls[0]![1];
     expect(payload.placements[0]!.notes).toBe('Watered on Tuesday');
+  });
+
+  it('the REAL pointer sequence blurs before the click: Save right after typing still commits (R3)', async () => {
+    vi.mocked(saveLayout).mockResolvedValue(undefined);
+    const grid = await selectPlacement();
+    // Pre-dirty through another edit (the override idiom): with a note as
+    // the ONLY change, Save stays disabled until the field loses focus —
+    // typing alone commits nothing by design (declared R3 consequence).
+    fireEvent.click(screen.getByRole('button', { name: /Adjust exposure/ }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Shade' }));
+    expect(grid).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText('Notes'));
+    await user.keyboard('Mulched on Friday');
+    // No manual blur: userEvent replays the full browser sequence, where
+    // pressing a button blurs the focused field BEFORE the click lands.
+    await user.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
+    await waitFor(() => expect(saveLayout).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(saveLayout).mock.calls[0]![1];
+    expect(payload.placements[0]!.notes).toBe('Mulched on Friday');
+  });
+
+  it('after an Undo the field shows the reverted note — nothing resurrects (R3)', async () => {
+    await selectPlacement();
+    const field = screen.getByLabelText('Notes');
+    fireEvent.change(field, { target: { value: 'Ephemeral' } });
+    fireEvent.blur(field);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo last action' }));
+    // The reducer reverted placement.notes to null; the draft must follow —
+    // the pre-R3 gate kept 'Ephemeral' in the textarea, and the next
+    // keystroke resurrected it into the save payload.
+    expect(field).toHaveValue('');
+  });
+
+  it('a committed note discarded by Cancel does not resurrect on re-select (R3)', async () => {
+    const grid = await selectPlacement();
+    const field = screen.getByLabelText('Notes');
+    fireEvent.change(field, { target: { value: 'Draft to discard' } });
+    fireEvent.blur(field);
+    // handleCancel clears the SELECTION too (5.5 review lineage) — the panel
+    // unmounts, so the Cancel scenario resolves through a clean remount (the
+    // in-place external-change resync is pinned at the unit level and by the
+    // Undo test above).
+    fireEvent.click(
+      within(screen.getByTestId('dirty-bar')).getByRole('button', {
+        name: 'Cancel',
+      })
+    );
+    expect(screen.queryByText('Selected placement')).toBeNull();
+    fireEvent.click(within(grid).getAllByRole('gridcell')[0]!);
+    expect(await screen.findByLabelText('Notes')).toHaveValue('');
+    expect(screen.queryByTestId('dirty-bar')).toBeNull();
+  });
+
+  it('Escape abandons an uncommitted draft — nothing commits, nothing resurrects (R3)', async () => {
+    const grid = await selectPlacement();
+    const field = screen.getByLabelText('Notes');
+    field.focus();
+    fireEvent.change(field, { target: { value: 'Typed then Escape' } });
+    // No blur: Escape tears the panel down through the window keydown path.
+    // The uncommitted draft is ABANDONED by design (declared R3): a flush
+    // here would also fire on Cancel's unmount, where it would re-commit the
+    // just-discarded text onto the restored state.
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByText('Selected placement')).toBeNull();
+    // Nothing was committed: the page is clean and a re-select starts from
+    // the committed (empty) note.
+    expect(screen.queryByTestId('dirty-bar')).toBeNull();
+    fireEvent.click(within(grid).getAllByRole('gridcell')[0]!);
+    expect(await screen.findByLabelText('Notes')).toHaveValue('');
   });
 
   it('the panel override applies UNDER the placement and keeps the panel mounted', async () => {
@@ -1717,5 +1792,72 @@ describe('GardenPlanner floating unsaved-changes bar + toasts (SMA-309 R2)', () 
     await waitFor(() =>
       expect(screen.queryByText('Layout saved successfully.')).toBeNull()
     );
+  });
+
+  it('dismissing a toast keeps its content mounted through the exit (R3, Critical)', async () => {
+    await renderDirty();
+    fireEvent.click(
+      within(screen.getByTestId('dirty-bar')).getByRole('button', {
+        name: 'Cancel',
+      })
+    );
+    const toast = await screen.findByText('Changes discarded');
+    // Dismiss: `message` is null from this render on, but the DISPLAYED copy
+    // must survive — the Grow exit clones its child, and an undefined child
+    // mid-transition is the crash CodeRabbit flagged.
+    fireEvent.click(
+      within(toast.closest('.MuiSnackbar-root') as HTMLElement).getByRole(
+        'button',
+        { name: 'Close' }
+      )
+    );
+    expect(screen.getByText('Changes discarded')).toBeInTheDocument();
+    // ...and it leaves cleanly once the exit completes (onExited).
+    await waitFor(() =>
+      expect(screen.queryByText('Changes discarded')).toBeNull()
+    );
+  });
+
+  it('an error toast persists past the auto-hide window and closes only on dismissal (R3)', async () => {
+    vi.mocked(saveLayout).mockRejectedValue(new Error('boom'));
+    await renderDirty();
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(
+        within(screen.getByTestId('dirty-bar')).getByRole('button', {
+          name: 'Save',
+        })
+      );
+      // Flush the rejected save's microtasks, then jump far past the 6s
+      // window every OTHER severity auto-hides at (advances wrapped in act:
+      // MUI's timers flip React state).
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByText('Failed to save layout.')).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(screen.getByText('Failed to save layout.')).toBeInTheDocument();
+      // A clickaway must not dismiss it either (workflow-caught): without the
+      // reason guard, the user's next click anywhere closed the failure
+      // unread through MUI's ClickAwayListener.
+      fireEvent.click(document.body);
+      expect(screen.getByText('Failed to save layout.')).toBeInTheDocument();
+      // Only the explicit dismissal closes it.
+      fireEvent.click(
+        within(
+          screen
+            .getByText('Failed to save layout.')
+            .closest('.MuiSnackbar-root') as HTMLElement
+        ).getByRole('button', { name: 'Close' })
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      expect(screen.queryByText('Failed to save layout.')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

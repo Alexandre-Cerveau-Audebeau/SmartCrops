@@ -123,6 +123,11 @@ export interface PlannerState {
 export const ZOOM_MIN = 0.5;
 export const ZOOM_MAX = 2;
 
+/** Mirrors GardenPlacement.Notes' HasMaxLength(500). The reducer boundary
+ * owns the wire/DB ceiling (SET_PLACEMENT_NOTES clamps to it); the panel's
+ * input maxLength reads THIS constant so the two can never drift. */
+export const NOTES_MAX_LENGTH = 500;
+
 /** Undo history cap — the oldest snapshot falls off beyond this. */
 export const UNDO_CAP = 50;
 
@@ -826,9 +831,14 @@ export function plannerReducer(
       if (!target) return state;
       // Idempotence (the MOVE / SET_PLACEMENT_FOOTPRINT invariant): an
       // unchanged value returns the SAME state object — no undo entry, no
-      // dirty churn. Empty text normalises to null so "" and null are one
-      // state (the wire and the DB both store the absence as null).
-      const next = action.notes === null || action.notes === '' ? null : action.notes;
+      // dirty churn. Boundary discipline (R3, the SET_PLACEMENT_FOOTPRINT
+      // precedent): this is the ONLY write path for a field the server
+      // constrains, so the 500 ceiling is enforced HERE, not only in a
+      // presentational input attribute. Trimmed; whitespace-only collapses
+      // into the same null "" already maps to (wire and DB store the absence
+      // as null).
+      const trimmed = (action.notes ?? '').trim();
+      const next = trimmed === '' ? null : trimmed.slice(0, NOTES_MAX_LENGTH);
       if ((target.notes ?? null) === next) return state;
       return {
         ...state,

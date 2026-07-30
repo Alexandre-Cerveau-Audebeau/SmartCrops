@@ -181,6 +181,41 @@ export default function GardenPlanner() {
     type: 'success' | 'error' | 'info';
     text: string;
   } | null>(null);
+  // What the Snackbar SHOWS outlives `message` (SMA-309 R3). Clearing the
+  // state in the same render that flips `open` to false would hand the exit
+  // transition an undefined child mid-close — Grow clones its child to inject
+  // ref and style, and EVERY feedback path in the planner funnels through this
+  // one Snackbar. The displayed copy follows `message` while it is non-null
+  // (adjust-during-render, the panel's gate pattern) and is dropped only in
+  // onExited. `seq` bumps once per message object so the Snackbar key remounts
+  // and each toast gets a FULL auto-hide window — MUI restarts the timer on
+  // `open`, not on children, so a swap-in-place would inherit the previous
+  // toast's remainder (a collision arriving at 5.5s would flash for 0.5s).
+  const [displayedToast, setDisplayedToast] = useState<{
+    src: { type: 'success' | 'error' | 'info'; text: string };
+    seq: number;
+  } | null>(null);
+  if (message !== null && displayedToast?.src !== message) {
+    setDisplayedToast({ src: message, seq: (displayedToast?.seq ?? 0) + 1 });
+  }
+  // The page reserves the floating bar's REAL height (SMA-309 R3): the bar is
+  // a filled Alert whose height moves with locale (the FR copy is ~40% longer
+  // than the English), with the sm breakpoint where the action row wraps
+  // under the message, and with any future copy change — a literal reservation
+  // drifts silently the moment any of those move.
+  const dirtyBarRef = useRef<HTMLDivElement | null>(null);
+  const [dirtyBarHeight, setDirtyBarHeight] = useState(0);
+  useLayoutEffect(() => {
+    const el = dirtyBarRef.current;
+    if (!isDirty || !el) {
+      setDirtyBarHeight(0);
+      return;
+    }
+    const ro = new ResizeObserver(() => setDirtyBarHeight(el.offsetHeight));
+    ro.observe(el);
+    setDirtyBarHeight(el.offsetHeight);
+    return () => ro.disconnect();
+  }, [isDirty]);
   // The catalog CARRIES its language, and readiness is DERIVED at render
   // (5.2 R4, CR Major): `catalogReady` is true only when the loaded data's
   // locale matches the active one, so the one-render stale-name window
@@ -251,14 +286,19 @@ export default function GardenPlanner() {
   // preset visibly moves now that blockers are real. Indoor gardens skip the
   // moment call: their light is schedule-driven, nothing casts.
   //
-  // SMA-309: NO LONGER gated on `exposureVisible`. The toggle controls whether
-  // the layer is PAINTED, not whether the data exists — the detail panel states
-  // the selected cell's exposure with the layer off. `exposureVisible` left the
-  // dep list with the guard (it no longer participates), so the memo still
-  // recomputes on exactly the inputs it reads and the #181 perf shape holds:
-  // toggling the layer now re-renders without recomputing at all.
+  // SMA-309 R3 (cost note, CR outside-diff + orchestrator ruling): computed
+  // ONLY when someone reads it — the layer is visible (it paints), or a
+  // placement is selected (the panel states the anchor cell's exposure with
+  // the layer off, the R1 decoupling). With the layer hidden and nothing
+  // selected — the common paint-drag state — every PAINT_ENTER used to
+  // recompute the whole grid once per traversed cell; the guard now skips
+  // that work entirely. What runs when it IS needed: one aggregate pass over
+  // rows×cols cells (plus one moment pass when something casts shadow). If
+  // grids ever grow an order of magnitude, the narrowing point is the panel's
+  // anchor-cell lookup — it reads ONE cell, not the whole grid.
+  const needExposure = exposureVisible || selectedPlacement !== null;
   const exposureView = useMemo(() => {
-    if (!grid) return null;
+    if (!grid || !needExposure) return null;
     const overrides: Record<string, ExposureCategory> = {};
     grid.forEach((row, r) =>
       row.forEach((cell, c) => {
@@ -294,7 +334,7 @@ export default function GardenPlanner() {
             )
           : null,
     };
-  }, [grid, layoutWidth, layoutHeight, garden, exposureSeason, exposureMoment, blockers, castsShadow]);
+  }, [grid, needExposure, layoutWidth, layoutHeight, garden, exposureSeason, exposureMoment, blockers, castsShadow]);
   const exposureCells = exposureView?.cells ?? null;
   const exposureMomentsLit = exposureView?.momentsLit ?? null;
   const castShadowCells = exposureView?.cast ?? null;
@@ -1492,9 +1532,16 @@ export default function GardenPlanner() {
     // full-width wrapper with 24px lateral padding — settled #177 layout
     // (24px laterals + the always-reserved 330px detail lane; v32 §0.3.26).
     // While the floating unsaved-changes bar is up, the page reserves its
-    // height in bottom padding so the bar never covers the last row of
-    // content (SMA-309 R2).
-    <Box sx={{ px: '24px', py: 4, ...(isDirty && { pb: '104px' }) }}>
+    // MEASURED height (+ the bar's 16px offset and a 16px gap) in bottom
+    // padding so the bar never covers the last row of content (SMA-309 R2,
+    // measured rather than guessed in R3).
+    <Box
+      sx={{
+        px: '24px',
+        py: 4,
+        ...(isDirty && { pb: `${dirtyBarHeight + 32}px` }),
+      }}
+    >
       {/* Config dialog — first setup (a garden with no layout yet) */}
       <GardenConfigDialog
         open={showSetup}
@@ -1653,6 +1700,7 @@ export default function GardenPlanner() {
       {isDirty && (
         <Box
           data-testid="dirty-bar"
+          ref={dirtyBarRef}
           sx={{
             position: 'fixed',
             bottom: 16,
@@ -1702,19 +1750,32 @@ export default function GardenPlanner() {
           through `setMessage`, so the collision and removal toasts ride the
           same migration. */}
       <Snackbar
+        key={displayedToast?.seq}
         open={message !== null}
-        autoHideDuration={6000}
-        onClose={() => setMessage(null)}
+        // Errors never auto-hide (R3 ruling): a save failure that vanishes
+        // unread leaves the user believing the save succeeded. The clickaway
+        // reason gets the same treatment for errors — without the guard the
+        // user's next click ANYWHERE dismissed the failure unread (MUI wraps
+        // the open toast in a ClickAwayListener). Success/info keep the
+        // adopted mechanism's clickaway-dismiss; they auto-hide anyway.
+        autoHideDuration={displayedToast?.src.type === 'error' ? null : 6000}
+        onClose={(_, reason) => {
+          if (reason === 'clickaway' && displayedToast?.src.type === 'error') {
+            return;
+          }
+          setMessage(null);
+        }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        TransitionProps={{ onExited: () => setDisplayedToast(null) }}
       >
-        {message ? (
+        {displayedToast ? (
           <Alert
             onClose={() => setMessage(null)}
-            severity={message.type}
+            severity={displayedToast.src.type}
             variant="filled"
             sx={{ width: '100%' }}
           >
-            {message.text}
+            {displayedToast.src.text}
           </Alert>
         ) : undefined}
       </Snackbar>

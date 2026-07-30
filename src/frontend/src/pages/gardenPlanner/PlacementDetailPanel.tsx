@@ -33,7 +33,7 @@ import {
   spacingToFootprintCells,
   type FootprintFitResult,
 } from './placementGeometry';
-import type { PlannerPlacement } from './plannerReducer';
+import { NOTES_MAX_LENGTH, type PlannerPlacement } from './plannerReducer';
 
 interface PlacementDetailPanelProps {
   placement: PlannerPlacement;
@@ -89,6 +89,19 @@ interface PlacementDetailPanelProps {
 
 const MOMENT_ORDER: Moment[] = ['morning', 'noon', 'evening'];
 
+// Intl constructors are among the costlier stdlib objects to instantiate and
+// the only variable input here is the language — one formatter per locale,
+// cached at module scope instead of rebuilt on every render (SMA-309 R3).
+const listFormatCache = new Map<string, Intl.ListFormat>();
+function getListFormat(language: string): Intl.ListFormat {
+  let fmt = listFormatCache.get(language);
+  if (!fmt) {
+    fmt = new Intl.ListFormat(language, { style: 'long', type: 'conjunction' });
+    listFormatCache.set(language, fmt);
+  }
+  return fmt;
+}
+
 /**
  * SMA-309 — the placement panel leads with the PLANT, not the grid: identity
  * header (photo, name, scientific name, footprint badge), a brief summary of
@@ -139,22 +152,41 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
   // render-phase adjust pattern (no effect, no extra paint); a misfit draft
   // on the SAME placement survives, per the mockup.
   const [synced, setSynced] = useState(placement);
-  // Notes draft (SMA-309): typed locally, dispatched on every keystroke so the
-  // page's ONE dirty/Save cycle owns persistence — no auto-save, no per-field
-  // save button (this frontend has no auto-save precedent). Re-synced with the
-  // selection through the same adjust-during-render gate as the spans.
+  // Notes draft (SMA-309, R3): the draft is the LIVE UI value; the reducer is
+  // committed on BLUR — one undoable step per editing session, one pushHistory
+  // per edit instead of one grid deep-copy per keystroke. The page's ONE
+  // dirty/Save cycle still owns persistence (no auto-save). Because nothing
+  // moves `placement.notes` while the user types, the gate below resyncs the
+  // draft exactly when the committed note changes UNDERNEATH the panel (Undo,
+  // Cancel/restore, the reducer's own trim) and can never fight the user.
   const [notesDraft, setNotesDraft] = useState(placement.notes ?? '');
+  const spansChanged =
+    synced.spanRows !== placement.spanRows ||
+    synced.spanCols !== placement.spanCols;
   if (
     synced.id !== placement.id ||
-    synced.spanRows !== placement.spanRows ||
-    synced.spanCols !== placement.spanCols
+    spansChanged ||
+    synced.notes !== placement.notes
   ) {
     setSynced(placement);
-    setDraft({ rows: placement.spanRows, cols: placement.spanCols });
-    if (synced.id !== placement.id) {
+    // A misfit footprint draft on the SAME placement still survives (mockup):
+    // a notes-only change must not reset the steppers.
+    if (synced.id !== placement.id || spansChanged) {
+      setDraft({ rows: placement.spanRows, cols: placement.spanCols });
+    }
+    if (synced.id !== placement.id || synced.notes !== placement.notes) {
       setNotesDraft(placement.notes ?? '');
     }
   }
+
+  // NO unmount flush, deliberately (R3). Every persistence path blurs the
+  // field before it acts (Save/Cancel/X are pointer interactions — mousedown
+  // blurs first), so a commit is never missed there. The one blur-less
+  // teardown is Escape, and Escape ABANDONS the uncommitted draft by design:
+  // a flush was tried and rejected, because the same unmount also fires when
+  // Cancel clears the selection — where flushing would re-commit the just-
+  // discarded text onto the restored state, the exact resurrection the
+  // resync gate above exists to kill.
 
   // Exposure override picker: anchored on the panel's own control, so opening
   // it can never disturb the selection that renders this panel (the cell-click
@@ -240,10 +272,7 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
     if (lit.length === 0) return category;
     return t('planner.placement.exposureValue', {
       category,
-      moments: new Intl.ListFormat(language, {
-        style: 'long',
-        type: 'conjunction',
-      }).format(lit),
+      moments: getListFormat(language).format(lit),
     });
   })();
 
@@ -523,33 +552,32 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
       )}
 
       {/* Notes (SMA-309): edits ride the page's existing dirty/Save cycle —
-          the 500 cap matches GardenPlacement.Notes' HasMaxLength(500). */}
+          the cap mirrors GardenPlacement.Notes through the reducer's exported
+          constant. R3: TextField's OWN label (programmatic association for
+          free — htmlFor, click-to-focus, consistent AT behaviour — where the
+          old detached Typography + aria-label had none of it), and the commit
+          happens on blur: buttons fire blur before click, so Save right after
+          typing still commits first. */}
       {onSetNotes && (
         <Box sx={{ mt: 2 }}>
-          <Typography
-            sx={{
-              fontSize: 12,
-              fontWeight: 700,
-              color: tk.tMeta,
-              mb: 0.5,
-            }}
-          >
-            {t('planner.placement.notes')}
-          </Typography>
           <TextField
             fullWidth
             multiline
             rows={3}
             size="small"
+            label={t('planner.placement.notes')}
             placeholder={t('planner.placement.notesPlaceholder')}
-            inputProps={{
-              maxLength: 500,
-              'aria-label': t('planner.placement.notes'),
-            }}
+            slotProps={{ htmlInput: { maxLength: NOTES_MAX_LENGTH } }}
             value={notesDraft}
-            onChange={(e) => {
-              setNotesDraft(e.target.value);
-              onSetNotes(e.target.value);
+            onChange={(e) => setNotesDraft(e.target.value)}
+            // No-edit blurs dispatch nothing: a legacy note stored UNTRIMMED
+            // by the pre-R3 per-keystroke path would otherwise round-trip
+            // through the reducer's trim on a mere focus-then-blur — a
+            // phantom undo entry and a dirty bar the user never caused.
+            onBlur={() => {
+              if (notesDraft !== (placement.notes ?? '')) {
+                onSetNotes(notesDraft);
+              }
             }}
             sx={{
               '& .MuiOutlinedInput-root': {
@@ -595,7 +623,7 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
             : t('planner.place.footprintUnknown')}
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', mt: 1 }}>
-          <Stepper
+          <FootprintStepper
             axis="rows"
             value={draft.rows}
             max={gridRows}
@@ -605,7 +633,7 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
           <Typography component="span" sx={{ fontSize: 13, color: tk.tMeta }}>
             ×
           </Typography>
-          <Stepper
+          <FootprintStepper
             axis="cols"
             value={draft.cols}
             max={gridCols}
@@ -668,7 +696,7 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
  * announced via its live region. Extracted from the panel body in SMA-309 so
  * the demoted geometry box stays readable — behaviour is unchanged.
  */
-function Stepper({
+function FootprintStepper({
   axis,
   value,
   max,
