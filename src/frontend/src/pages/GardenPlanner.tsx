@@ -55,7 +55,7 @@ import {
   infrastructureBlockers,
   type InfrastructureType,
 } from '../utils/infrastructure';
-import type { SoilType } from '../utils/soil';
+import type { ArmedSoil } from '../utils/soil';
 import { ExposureLegend } from './gardenPlanner/ExposureLegend';
 import { ExposureOverridePopover } from './gardenPlanner/ExposureOverridePopover';
 import { GridControls } from './gardenPlanner/GridControls';
@@ -580,13 +580,18 @@ export default function GardenPlanner() {
   );
   // SMA-14: the soil mirror of the infra pair — arming from the SOLS tab
   // enters the mode; the toolbar button re-enters with the remembered type.
+  // R3: the armed value admits the eraser sentinel too.
   const handleSoilSelect = useCallback(
-    (type: SoilType | null) =>
+    (type: ArmedSoil | null) =>
       dispatch({ type: 'SET_SOIL_TYPE', soilType: type }),
     []
   );
   const handleSoilMode = useCallback(
     () => dispatch({ type: 'SET_SOIL_MODE', enabled: true }),
+    []
+  );
+  const handleSoilFillAll = useCallback(
+    () => dispatch({ type: 'SET_ALL_SOIL' }),
     []
   );
   const handlePlaceMode = useCallback(
@@ -1875,6 +1880,7 @@ export default function GardenPlanner() {
             onInfraSelect={handleInfraSelect}
             selectedSoilType={soilType}
             onSoilSelect={handleSoilSelect}
+            onSoilFillAll={handleSoilFillAll}
             language={language}
             shapeEditMode={shapeEditMode}
             onShapeEditToggle={handleShapeEditToggle}

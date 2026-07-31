@@ -41,6 +41,19 @@ export const SOIL_TYPES = [
 export type SoilType = (typeof SOIL_TYPES)[number];
 
 /**
+ * The eraser sentinel (SMA-14 R3) — ARMABLE like a type, NEVER STORABLE:
+ * "no soil" is a state one chooses (a garden mixes cultivable ground with
+ * paving or concrete), not merely the default of a cell nobody painted.
+ * Deliberately NOT a member of SOIL_TYPES, so `isSoilType` keeps rejecting
+ * it at the JSON boundary and `CellData.soil` cannot carry it — the shape
+ * that keeps SoilType unpolluted.
+ */
+export const SOIL_ERASER = 'erase' as const;
+
+/** What the SOLS panel can arm: one of the 8 soils, or the eraser. */
+export type ArmedSoil = SoilType | typeof SOIL_ERASER;
+
+/**
  * Runtime guard at the JSON boundary (same contract as isInfrastructureType /
  * isExposureCategory): persisted CellsJson may carry anything — an unknown
  * value must be dropped, never enter CellData as a fake SoilType (it would

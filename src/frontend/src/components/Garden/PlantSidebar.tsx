@@ -27,7 +27,7 @@ import {
   INFRASTRUCTURE_TYPES,
   type InfrastructureType,
 } from '../../utils/infrastructure';
-import { SOIL_TYPES, type SoilType } from '../../utils/soil';
+import { SOIL_ERASER, SOIL_TYPES, type ArmedSoil } from '../../utils/soil';
 import { getPlantColor } from '../../utils/plantColor';
 import { Sym } from '../Sym';
 
@@ -48,9 +48,12 @@ interface Props {
   // for painting (and enters the Infrastructures mode); re-clicking disarms.
   selectedInfraType?: InfrastructureType | null;
   onInfraSelect?: (type: InfrastructureType | null) => void;
-  // SMA-14: the armed soil type — same arming grammar as infrastructure.
-  selectedSoilType?: SoilType | null;
-  onSoilSelect?: (type: SoilType | null) => void;
+  // SMA-14: the armed soil type OR the eraser (R3) — same arming grammar
+  // as infrastructure.
+  selectedSoilType?: ArmedSoil | null;
+  onSoilSelect?: (type: ArmedSoil | null) => void;
+  /** R3: fill every active cell with the armed soil (eraser = clear all). */
+  onSoilFillAll?: () => void;
   language: string;
   shapeEditMode: boolean;
   onShapeEditToggle: (value: boolean) => void;
@@ -168,7 +171,7 @@ function ArmedPlantChip({
   );
 }
 
-function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, selectedSoilType = null, onSoilSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
+function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, selectedSoilType = null, onSoilSelect, onSoilFillAll, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
   const [activeTab, setActiveTab] = useState<TabValue>('plants');
@@ -308,7 +311,78 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
                 </ListItemButton>
               );
             })}
+            {/* R3 eraser row — BOTTOM of the list, deliberately: the eight
+                types keep the §15 catalog order and primacy (painting is
+                the common case) and the eraser sits next to the fill
+                action below, forming the panel's utility zone. Armable
+                exactly like a type; the avatar reads as ABSENCE, not a
+                ninth soil: the inactive-cell fill (cellOff) with the
+                anomaly-marker dashed muted ring and the ink_eraser glyph —
+                existing tokens only, no trame preview. */}
+            <ListItemButton
+              key="eraser"
+              selected={selectedSoilType === SOIL_ERASER}
+              aria-pressed={selectedSoilType === SOIL_ERASER}
+              onClick={() =>
+                onSoilSelect?.(
+                  selectedSoilType === SOIL_ERASER ? null : SOIL_ERASER
+                )
+              }
+              sx={{
+                px: '14px',
+                py: '10px',
+                borderLeft:
+                  selectedSoilType === SOIL_ERASER
+                    ? `3px solid ${tk.prim}`
+                    : '3px solid transparent',
+              }}
+            >
+              <ListItemAvatar sx={{ minWidth: 42 }}>
+                <Avatar
+                  sx={{
+                    width: 34,
+                    height: 34,
+                    bgcolor: tk.cellOff,
+                    border: `1.5px dashed ${tk.muted}`,
+                  }}
+                >
+                  <Sym name="ink_eraser" size={18} color={tk.muted} />
+                </Avatar>
+              </ListItemAvatar>
+              <ListItemText
+                disableTypography
+                primary={
+                  <Typography
+                    component="span"
+                    sx={{ fontSize: 13.5, fontWeight: 700, color: tk.tTitle }}
+                  >
+                    {t('planner.soil.eraser')}
+                  </Typography>
+                }
+              />
+            </ListItemButton>
           </List>
+          {/* R3 fill-the-garden action — enabled only when something is
+              armed; the label says what it DOES for the armed value (fill
+              vs clear). NO confirmation dialog, deliberately: the action
+              is fully undoable in ONE step and the planner has no
+              confirmation anywhere yet — introducing the first one here
+              would pre-empt SMA-18, which owns that concern. */}
+          <Box sx={{ p: '12px 16px', borderTop: `1px solid ${tk.divider}` }}>
+            <Button
+              size="small"
+              variant="outlined"
+              fullWidth
+              disabled={selectedSoilType === null}
+              onClick={() => onSoilFillAll?.()}
+            >
+              {t(
+                selectedSoilType === SOIL_ERASER
+                  ? 'planner.soil.clearAll'
+                  : 'planner.soil.fillAll'
+              )}
+            </Button>
+          </Box>
         </Box>
       )}
       {activeTab === 'infrastructure' && (

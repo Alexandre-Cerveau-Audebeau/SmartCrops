@@ -514,6 +514,9 @@
     },
     "soil": {
       "hint": "Peignez le type de sol de chaque case. La trame reste visible sous les plantes ; les infrastructures la masquent.",
+      "eraser": "Gomme — aucun sol",
+      "fillAll": "Remplir le jardin avec ce sol",
+      "clearAll": "Effacer le sol du jardin",
       "types": {
         "potting": "Terreau",
         "loam": "Limoneux",
@@ -578,6 +581,7 @@
       "exposureCell": "{{category}} — cellule vide à la ligne {{row}}, colonne {{col}}",
       "infraCell": "{{type}} — ligne {{row}}, colonne {{col}}",
       "plantedInfraCell": "{{plant}} sur {{type}} — ligne {{row}}, colonne {{col}}",
+      "plantedSoilCell": "{{plant}} sur sol {{type}} — ligne {{row}}, colonne {{col}}",
       "soilCell": "Sol {{type}} — ligne {{row}}, colonne {{col}}",
       "soilExposureCell": "Sol {{type}} — {{category}} — ligne {{row}}, colonne {{col}}",
       "infraExposureCell": "{{type}} — {{category}} — ligne {{row}}, colonne {{col}}",

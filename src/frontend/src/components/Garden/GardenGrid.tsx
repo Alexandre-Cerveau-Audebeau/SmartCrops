@@ -488,8 +488,20 @@ const GridCell = memo(function GridCell({
                 row: r + 1,
                 col: columnLabel(c),
               })
-            : placementName
-              ? t('planner.cell.plantedCell', { plant: placementName, row: r + 1, col: columnLabel(c) })
+            // R3 (triply convergent Minor): the pastille renders ABOVE the
+            // plant block precisely so a planted cell keeps its soil
+            // identifiable — the label says what the pastille shows. The
+            // infra combination cannot reach here (the branch above wins),
+            // so soil is never announced under a masking infrastructure.
+            : placementName && cell.soil
+              ? t('planner.cell.plantedSoilCell', {
+                  plant: placementName,
+                  type: t(`planner.soil.types.${cell.soil}`),
+                  row: r + 1,
+                  col: columnLabel(c),
+                })
+              : placementName
+                ? t('planner.cell.plantedCell', { plant: placementName, row: r + 1, col: columnLabel(c) })
               : cell.infrastructure
                 // R2 (the GitHub Minor's test applied to every combination):
                 // the TRELLIS is the one §6 type whose fill is translucent in

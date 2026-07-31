@@ -372,4 +372,25 @@ describe('GardenGrid combined announcements (SMA-14 R2)', () => {
     );
     expect(cells[3]).toHaveAccessibleName('Wall — row 2, column B');
   });
+
+  it('a planted cell with soil announces both; without soil it keeps its label (R3)', () => {
+    render(
+      <ThemeProvider theme={createTheme()}>
+        <GardenGrid
+          grid={[[{ active: true, soil: 'clay' }, { active: true }]]}
+          shapeEditMode={false}
+          placements={[
+            { plantId: 'p1', startRow: 0, startCol: 0, spanRows: 1, spanCols: 1, plantName: 'Basil' },
+            { plantId: 'p2', startRow: 0, startCol: 1, spanRows: 1, spanCols: 1, plantName: 'Basil' },
+          ]}
+        />
+      </ThemeProvider>
+    );
+    const cells = screen.getAllByRole('gridcell');
+    // The pastille renders ABOVE the plant block — the label now says so.
+    expect(cells[0]).toHaveAccessibleName(
+      'Basil on Clay soil — row 1, column A'
+    );
+    expect(cells[1]).toHaveAccessibleName('Basil at row 1, column B');
+  });
 });

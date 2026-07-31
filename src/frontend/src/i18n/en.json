@@ -514,6 +514,9 @@
     },
     "soil": {
       "hint": "Paint each cell's soil type. The pattern stays visible under plants; infrastructures mask it.",
+      "eraser": "Eraser — no soil",
+      "fillAll": "Fill the garden with this soil",
+      "clearAll": "Clear the garden's soil",
       "types": {
         "potting": "Potting mix",
         "loam": "Loam",
@@ -578,6 +581,7 @@
       "exposureCell": "{{category}} — empty cell at row {{row}}, column {{col}}",
       "infraCell": "{{type}} — row {{row}}, column {{col}}",
       "plantedInfraCell": "{{plant}} on {{type}} — row {{row}}, column {{col}}",
+      "plantedSoilCell": "{{plant}} on {{type}} soil — row {{row}}, column {{col}}",
       "soilCell": "{{type}} soil — row {{row}}, column {{col}}",
       "soilExposureCell": "{{type}} soil — {{category}} — row {{row}}, column {{col}}",
       "infraExposureCell": "{{type}} — {{category}} — row {{row}}, column {{col}}",

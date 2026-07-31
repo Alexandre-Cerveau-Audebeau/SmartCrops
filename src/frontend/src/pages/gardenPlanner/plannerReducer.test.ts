@@ -3,6 +3,7 @@ import {
   parseCellsJson,
   serializeCellsJson,
 } from '../../types/GardenLayout';
+import { isSoilType, SOIL_ERASER } from '../../utils/soil';
 import {
   initialPlannerState,
   NOTES_MAX_LENGTH,
@@ -2003,5 +2004,154 @@ describe('plannerReducer soil paint (SMA-14)', () => {
     const back = parseCellsJson(json, 3, 3);
     expect(back[2][2].soil).toBe('sand');
     expect(back[0][0]).not.toHaveProperty('soil');
+  });
+
+  // ── R3: the eraser ────────────────────────────────────────────────────────
+
+  it('arming the ERASER enters soil mode; a drag clears cells of ANY type', () => {
+    // Paint two DIFFERENT soils…
+    let s = plannerReducer(armed('clay'), { type: 'PAINT_START', row: 0, col: 0 });
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    s = plannerReducer(s, { type: 'SET_SOIL_TYPE', soilType: 'sand' });
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 1 });
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    expect(s.grid![0][0].soil).toBe('clay');
+    expect(s.grid![0][1].soil).toBe('sand');
+    // …then one eraser drag clears BOTH — no need to re-arm each type.
+    s = plannerReducer(s, { type: 'SET_SOIL_TYPE', soilType: SOIL_ERASER });
+    expect(s.soilMode).toBe(true);
+    expect(s.soilType).toBe(SOIL_ERASER);
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 });
+    expect(s.soilPaintValue).toBeNull(); // always-clear polarity
+    s = plannerReducer(s, { type: 'PAINT_ENTER', row: 0, col: 1 });
+    expect(s.grid![0][0]).not.toHaveProperty('soil');
+    expect(s.grid![0][1]).not.toHaveProperty('soil');
+  });
+
+  it('the eraser sentinel never reaches the layout', () => {
+    // Not a SoilType — the JSON boundary keeps rejecting it…
+    expect(isSoilType(SOIL_ERASER)).toBe(false);
+    const back = parseCellsJson(
+      JSON.stringify([{ row: 0, col: 0, soil: 'erase' }]),
+      2,
+      1
+    );
+    expect(back[0][0]).not.toHaveProperty('soil');
+    // …and an erasing drag only ever DELETES the key: the serialized
+    // layout after erasing carries no soil field at all.
+    let s = plannerReducer(armed('clay'), { type: 'PAINT_START', row: 0, col: 0 });
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    s = plannerReducer(s, { type: 'SET_SOIL_TYPE', soilType: SOIL_ERASER });
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 });
+    expect(serializeCellsJson(s.grid!) ?? '').not.toContain('soil');
+  });
+
+  it('an erasing START on a cell with nothing to clear locks the drag without dirtying', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_SOIL_TYPE',
+      soilType: SOIL_ERASER,
+    });
+    const before = s;
+    s = plannerReducer(s, { type: 'PAINT_START', row: 0, col: 0 });
+    // The drag is LOCKED (entered cells will erase)…
+    expect(s.isPainting).toBe(true);
+    expect(s.soilPaintValue).toBeNull();
+    // …but nothing changed: no dirty, no undo entry, no grid copy.
+    expect(s.isDirty).toBe(false);
+    expect(s.past).toHaveLength(before.past.length);
+    expect(s.grid).toBe(before.grid);
+  });
+
+  // ── R3: fill the whole garden ─────────────────────────────────────────────
+
+  it('SET_ALL_SOIL fills every ACTIVE cell in ONE history entry, skipping inactive ones', () => {
+    // Deactivate one cell first (shape-edit), then arm and fill.
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_SHAPE_EDIT_MODE',
+      enabled: true,
+    });
+    s = plannerReducer(s, { type: 'PAINT_START', row: 2, col: 2 });
+    s = plannerReducer(s, { type: 'PAINT_END' });
+    s = plannerReducer(s, { type: 'SET_SOIL_TYPE', soilType: 'clay' });
+    const before = s;
+    s = plannerReducer(s, { type: 'SET_ALL_SOIL' });
+    expect(s.past).toHaveLength(before.past.length + 1); // ONE entry, not 8
+    expect(s.isDirty).toBe(true);
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        if (r === 2 && c === 2) {
+          expect(s.grid![r][c]).not.toHaveProperty('soil'); // inactive: skipped
+        } else {
+          expect(s.grid![r][c].soil).toBe('clay');
+        }
+      }
+    }
+  });
+
+  it('SET_ALL_SOIL is an idempotent guarded no-op returning the SAME state object', () => {
+    const filled = plannerReducer(armed('clay'), { type: 'SET_ALL_SOIL' });
+    expect(filled.grid![0][0].soil).toBe('clay');
+    expect(plannerReducer(filled, { type: 'SET_ALL_SOIL' })).toBe(filled);
+  });
+
+  it('SET_ALL_SOIL works with a type armed even after leaving the mode (the button state)', () => {
+    // The panel's button enables on the ARMED value, which every mode exit
+    // remembers — the action must not silently no-op from selection mode.
+    let s = plannerReducer(armed('clay'), { type: 'ENTER_SELECTION_MODE' });
+    expect(s.soilMode).toBe(false);
+    expect(s.soilType).toBe('clay');
+    s = plannerReducer(s, { type: 'SET_ALL_SOIL' });
+    expect(s.grid![0][0].soil).toBe('clay');
+  });
+
+  it('SET_ALL_SOIL with the ERASER armed clears the whole garden', () => {
+    let s = plannerReducer(armed('clay'), { type: 'SET_ALL_SOIL' });
+    s = plannerReducer(s, { type: 'SET_SOIL_TYPE', soilType: SOIL_ERASER });
+    s = plannerReducer(s, { type: 'SET_ALL_SOIL' });
+    for (const row of s.grid!) {
+      for (const cell of row) {
+        expect(cell).not.toHaveProperty('soil');
+      }
+    }
+    // Clearing an already-clear garden is the same-object no-op.
+    expect(plannerReducer(s, { type: 'SET_ALL_SOIL' })).toBe(s);
+  });
+});
+
+// SMA-14 R3 — the GitHub Major, requalified by the harvest: the two draft
+// lifecycle actions spread only disarmedPainting since their birth, so ALL
+// FOUR modes (shape-edit, infra, place, soil) survived a Cancel/Discard and
+// the next pointer action mutated the freshly restored layout. They now
+// adopt the SMA-303 "always lands in SELECTION mode" contract that HYDRATE
+// and SETUP_CONFIRMED already honour.
+describe('plannerReducer lifecycle mode reset (SMA-14 R3)', () => {
+  it('RESTORE_LAST_SAVED lands back in SELECTION mode — all four flags off', () => {
+    let s = plannerReducer(hydrated(), {
+      type: 'SET_SOIL_TYPE',
+      soilType: 'clay',
+    });
+    expect(s.soilMode).toBe(true);
+    s = plannerReducer(s, { type: 'RESTORE_LAST_SAVED' });
+    expect(s.shapeEditMode).toBe(false);
+    expect(s.infraMode).toBe(false);
+    expect(s.placeMode).toBe(false);
+    expect(s.soilMode).toBe(false);
+    expect(s.soilType).toBe('clay'); // armed value remembered, like every exit
+  });
+
+  it('DISCARD_DRAFT lands back in SELECTION mode — all four flags off', () => {
+    let s = plannerReducer(initialPlannerState, {
+      type: 'SETUP_CONFIRMED',
+      cols: 3,
+      rows: 3,
+      cellSize: '50cm',
+    });
+    s = plannerReducer(s, { type: 'SET_SHAPE_EDIT_MODE', enabled: true });
+    expect(s.shapeEditMode).toBe(true);
+    s = plannerReducer(s, { type: 'DISCARD_DRAFT' });
+    expect(s.shapeEditMode).toBe(false);
+    expect(s.infraMode).toBe(false);
+    expect(s.placeMode).toBe(false);
+    expect(s.soilMode).toBe(false);
   });
 });
