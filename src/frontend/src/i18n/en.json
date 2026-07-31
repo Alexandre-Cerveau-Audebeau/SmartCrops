@@ -603,6 +603,10 @@
       "deselect": "Deselect plant",
       "footprint": "{{cells}}×{{cells}} footprint"
     },
+    "sheet": {
+      "trigger": "Plants & infrastructure",
+      "tapHint": "Tap-to-place: choose then tap the grid"
+    },
     "placement": {
       "title": "Selected placement",
       "close": "Close the placement panel",

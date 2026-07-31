@@ -603,6 +603,10 @@
       "deselect": "Désélectionner la plante",
       "footprint": "Empreinte {{cells}}×{{cells}}"
     },
+    "sheet": {
+      "trigger": "Plantes & infrastructures",
+      "tapHint": "Tap-to-place : choisissez puis touchez la grille"
+    },
     "placement": {
       "title": "Placement sélectionné",
       "close": "Fermer le panneau de placement",

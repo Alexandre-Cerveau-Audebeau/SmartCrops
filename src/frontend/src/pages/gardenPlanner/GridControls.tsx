@@ -97,10 +97,14 @@ function PresetSegmented<T extends string>({
 /**
  * §10 mode button (SMA-15 5.4): h 38 (34 mobile) · padding-x 14 (10) ·
  * fs 13.5 (12) ; active = `--prim` fill, white text. §10's mobile icon-only
- * variant is NOT implemented — the doc names no icons for the mode buttons
- * (labels stay visible at every breakpoint; deviation declared for
- * ratification). The inactive face reuses the outlined-button tokens
- * (obtnBd/tMeta — nearest existing, no invented hex).
+ * variant ships with SMA-18: below sm the LABEL is hidden and the glyph
+ * carries the button alone (the historical deviation — "the doc names no
+ * icons" — expired once every mode button gained one). The accessible name
+ * is an explicit `aria-label` present at EVERY breakpoint, never
+ * conditionally: no assistive technology and no test may depend on the
+ * viewport for the button's name (§10 aria contract). The inactive face
+ * reuses the outlined-button tokens (obtnBd/tMeta — nearest existing, no
+ * invented hex).
  */
 function ModeButton({
   label,
@@ -123,6 +127,9 @@ function ModeButton({
       component="button"
       type="button"
       aria-pressed={active}
+      // SMA-18: the name lives here unconditionally — the visible label is
+      // display-gated below sm, and an accessible name must not be.
+      aria-label={label}
       disabled={disabled}
       onClick={onClick}
       sx={{
@@ -157,7 +164,11 @@ function ModeButton({
           {icon}
         </Box>
       )}
-      {label}
+      {/* §10 "labels masqués sur mobile (icône seule)" — hidden BELOW sm;
+          the aria-label above keeps the name at every breakpoint. */}
+      <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+        {label}
+      </Box>
     </Box>
   );
 }
@@ -176,7 +187,12 @@ function ArmedPlantIndicator({
   tk,
   t,
 }: {
-  armedPlant: { name: string; footprint: string; footprintKnown: boolean };
+  armedPlant: {
+    name: string;
+    footprint: string;
+    footprintKnown: boolean;
+    footprintMulti?: boolean;
+  };
   onDisarm?: () => void;
   tk: PlannerTokens;
   t: ReturnType<typeof useTranslation>['t'];
@@ -251,7 +267,11 @@ function ArmedPlantIndicator({
         </Typography>
         <Box
           component="span"
-          sx={footprintBadgeSx(tk, armedPlant.footprintKnown)}
+          sx={footprintBadgeSx(
+            tk,
+            armedPlant.footprintKnown,
+            armedPlant.footprintMulti
+          )}
         >
           {armedPlant.footprint}
         </Box>
@@ -293,6 +313,10 @@ interface GridControlsProps {
     name: string;
     footprint: string;
     footprintKnown: boolean;
+    /** SMA-18 mobile: true for an N×N footprint with N > 1 — the badge's
+     * mobile size steps up for multi-cell footprints (§11). Optional so the
+     * shape stays backward-compatible; absent = single. */
+    footprintMulti?: boolean;
   } | null;
   /** SMA-18 R2: explicit disarm from the indicator's X — same dispatch as
    * the sidebar chip's X (SET_PLACE_PLANT null on the page side). */
@@ -373,7 +397,9 @@ export const GridControls = memo(function GridControls({
         border: `1px solid ${tk.cardBd}`,
         borderRadius: '12px',
         boxShadow: tk.shadow,
-        p: '12px 16px',
+        // §10: 12×16, 10×12 mobile (SMA-18 — the mobile pair was specified
+        // but never implemented).
+        p: { xs: '10px 12px', sm: '12px 16px' },
         mb: 1.5,
       }}
     >
@@ -498,8 +524,15 @@ export const GridControls = memo(function GridControls({
         </Box>
       </Box>
 
-      {/* Full-width divider (§10: margin 12px -16px across the card padding) */}
-      <Box sx={{ borderTop: `1px solid ${tk.divider}`, my: '12px', mx: '-16px' }} />
+      {/* Full-width divider (§10: margin 12px -16px across the card padding;
+          10px -12px mobile — SMA-18, tracking the card's own mobile pair) */}
+      <Box
+        sx={{
+          borderTop: `1px solid ${tk.divider}`,
+          my: { xs: '10px', sm: '12px' },
+          mx: { xs: '-12px', sm: '-16px' },
+        }}
+      />
 
       {/* Row 2 (tokens §10): Exposition toggle + moment/season presets. The
           presets only drive the legend title until 5.4 ships cast shadows. */}

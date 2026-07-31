@@ -13,6 +13,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import Snackbar, { type SnackbarCloseReason } from '@mui/material/Snackbar';
 import Typography from '@mui/material/Typography';
@@ -269,6 +270,13 @@ export default function GardenPlanner() {
   // DnD (lot 2): the §4 gap at the same breakpoint — the pointer→cell math
   // inverts the exact track formula the overlays use.
   const dndGapPx = isMobile ? GAP_PX.xs : GAP_PX.sm;
+  // SMA-18: below lg — the SAME breakpoint that stacks the rails, on purpose
+  // (the app already runs three breakpoints: sm sizes, lg layout, md navbar;
+  // a fourth would be a maintenance trap) — the sidebar leaves the flow and
+  // becomes a bottom sheet. Conditional MOUNTING (rail vs Drawer portal), so
+  // sx cannot carry it: this is the file's existing useMediaQuery case.
+  const isNarrow = useMediaQuery(theme.breakpoints.down('lg'));
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   // Real blockers (SMA-15 5.4): blocking infrastructure regions derived from
   // the per-cell storage — the [] placeholder era ends here.
@@ -597,6 +605,33 @@ export default function GardenPlanner() {
   const handlePlaceMode = useCallback(
     () => dispatch({ type: 'SET_PLACE_MODE', enabled: true }),
     []
+  );
+
+  // SMA-18: the sheet variants of the three arming handlers — arming CLOSES
+  // the sheet (the user's next gesture is on the grid; the Navbar drawer's
+  // every-action-closes convention). Disarming (null) keeps it open: the
+  // user is still choosing. Fill-all keeps the sheet open too — it acts
+  // immediately and needs no grid gesture (declared choice).
+  const handlePlantSelectSheet = useCallback(
+    (plantId: string | null) => {
+      handlePlantSelect(plantId);
+      if (plantId !== null) setSheetOpen(false);
+    },
+    [handlePlantSelect]
+  );
+  const handleInfraSelectSheet = useCallback(
+    (type: InfrastructureType | null) => {
+      handleInfraSelect(type);
+      if (type !== null) setSheetOpen(false);
+    },
+    [handleInfraSelect]
+  );
+  const handleSoilSelectSheet = useCallback(
+    (type: ArmedSoil | null) => {
+      handleSoilSelect(type);
+      if (type !== null) setSheetOpen(false);
+    },
+    [handleSoilSelect]
   );
 
   // ── DnD drag engine (SMA-193 lot 2) ─────────────────────────────────────
@@ -1370,6 +1405,7 @@ export default function GardenPlanner() {
             name: t('planner.unknownPlant'),
             footprint: '1×1?',
             footprintKnown: false,
+            footprintMulti: false,
           }
         : null;
     }
@@ -1382,6 +1418,8 @@ export default function GardenPlanner() {
       name: getPlantDisplayName(armed, language),
       footprint: fp.known ? `${fp.cells}×${fp.cells}` : '1×1?',
       footprintKnown: fp.known,
+      // SMA-18 mobile badge sizing (§11: 11.5 single / 13 multi).
+      footprintMulti: fp.known && fp.cells > 1,
     };
   }, [placePlantId, allPlants, cellSize, language, catalogReady, t]);
 
@@ -1618,7 +1656,8 @@ export default function GardenPlanner() {
           <Typography
             component="h1"
             sx={{
-              fontSize: 32,
+              // §11: fs 32 (26 mobile) — SMA-18.
+              fontSize: { xs: 26, sm: 32 },
               fontWeight: 800,
               letterSpacing: '-0.01em',
               lineHeight: 1.2,
@@ -1640,7 +1679,12 @@ export default function GardenPlanner() {
               {metaFigures && (
                 // R4 (item C): the numbers-bearing text is semi-bold.
                 <Typography
-                  sx={{ fontSize: 14.5, fontWeight: 600, color: tk.tMeta }}
+                  // §11: méta fs 14.5 (12.5 mobile) — SMA-18.
+                  sx={{
+                    fontSize: { xs: 12.5, sm: 14.5 },
+                    fontWeight: 600,
+                    color: tk.tMeta,
+                  }}
                 >
                   {metaFigures}
                 </Typography>
@@ -1656,11 +1700,13 @@ export default function GardenPlanner() {
             variant="outlined"
             startIcon={<SettingsIcon sx={{ fontSize: 19 }} />}
             onClick={handleOpenSettings}
+            // §11 header buttons: h 44 (40) · px 17 (13) · fs 14.5 (13) —
+            // SMA-18 adds the mobile triple to all three actions.
             sx={{
-              height: 44,
-              px: '17px',
+              height: { xs: 40, sm: 44 },
+              px: { xs: '13px', sm: '17px' },
               borderRadius: '8px',
-              fontSize: 14.5,
+              fontSize: { xs: 13, sm: 14.5 },
               fontWeight: 700,
               bgcolor: tk.card,
               borderColor: tk.obtnBd,
@@ -1678,10 +1724,10 @@ export default function GardenPlanner() {
             onClick={handleCancel}
             disabled={saving}
             sx={{
-              height: 44,
-              px: '17px',
+              height: { xs: 40, sm: 44 },
+              px: { xs: '13px', sm: '17px' },
               borderRadius: '8px',
-              fontSize: 14.5,
+              fontSize: { xs: 13, sm: 14.5 },
               fontWeight: 700,
               borderColor: tk.obtnBd,
               color: tk.obtnTx,
@@ -1703,10 +1749,10 @@ export default function GardenPlanner() {
           disabled={!isDirty || saving}
           onClick={handleSave}
           sx={{
-            height: 44,
-            px: '17px',
+            height: { xs: 40, sm: 44 },
+            px: { xs: '13px', sm: '17px' },
             borderRadius: '8px',
-            fontSize: 14.5,
+            fontSize: { xs: 13, sm: 14.5 },
             fontWeight: 700,
           }}
         >
@@ -1868,26 +1914,31 @@ export default function GardenPlanner() {
             minHeight: 0,
           }}
         >
-          <PlantSidebar
-            plants={allPlants}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            selectedPlantId={placePlantId}
-            onPlantSelect={handlePlantSelect}
-            onPlantPointerDown={handlePlantPointerDown}
-            cellSize={cellSize}
-            selectedInfraType={infraType}
-            onInfraSelect={handleInfraSelect}
-            selectedSoilType={soilType}
-            onSoilSelect={handleSoilSelect}
-            onSoilFillAll={handleSoilFillAll}
-            language={language}
-            shapeEditMode={shapeEditMode}
-            onShapeEditToggle={handleShapeEditToggle}
-            catalogReady={catalogReady}
-            catalogFailed={catalogFailed}
-            onCatalogRetry={handleCatalogRetry}
-          />
+          {/* SMA-18: the sticky rail exists ABOVE lg only — below it the
+              same component mounts inside the bottom sheet instead of
+              unrolling the whole catalogue above the grid. */}
+          {!isNarrow && (
+            <PlantSidebar
+              plants={allPlants}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              selectedPlantId={placePlantId}
+              onPlantSelect={handlePlantSelect}
+              onPlantPointerDown={handlePlantPointerDown}
+              cellSize={cellSize}
+              selectedInfraType={infraType}
+              onInfraSelect={handleInfraSelect}
+              selectedSoilType={soilType}
+              onSoilSelect={handleSoilSelect}
+              onSoilFillAll={handleSoilFillAll}
+              language={language}
+              shapeEditMode={shapeEditMode}
+              onShapeEditToggle={handleShapeEditToggle}
+              catalogReady={catalogReady}
+              catalogFailed={catalogFailed}
+              onCatalogRetry={handleCatalogRetry}
+            />
+          )}
 
           <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             {/* Toolbar card (R2, §10) — grid column only, above the grid card */}
@@ -2293,6 +2344,33 @@ export default function GardenPlanner() {
                 showDndTargets={placeMode}
               />
             )}
+
+            {/* SMA-18: the sheet trigger — États position: after the legend,
+                at the foot of the grid column. Visible only while the sheet
+                is closed; the header outlined-button treatment (obtn tokens —
+                nearest existing, no invented hex). aria-controls targets the
+                sheet Paper's id, the FilterPanel trigger convention. */}
+            {isNarrow && !sheetOpen && (
+              <Button
+                fullWidth
+                variant="outlined"
+                onClick={() => setSheetOpen(true)}
+                aria-expanded={false}
+                aria-controls="planner-sheet"
+                sx={{
+                  mt: 1.5,
+                  height: 44,
+                  borderRadius: '8px',
+                  fontSize: 14.5,
+                  fontWeight: 700,
+                  bgcolor: tk.card,
+                  borderColor: tk.obtnBd,
+                  color: tk.obtnTx,
+                }}
+              >
+                {t('planner.sheet.trigger')}
+              </Button>
+            )}
           </Box>
 
           {/* Right detail LANE (R4, owner reversal of R3's on-demand lane):
@@ -2338,6 +2416,114 @@ export default function GardenPlanner() {
             )}
           </Box>
         </Box>
+      )}
+
+      {/* SMA-18: the bottom SHEET — the sidebar's below-lg home. FilterPanel
+          precedent throughout: disableScrollLock (the project's stable-gutter
+          overlay rule) and the dialog identity on the PAPER (MUI's Modal root
+          is role="presentation"), named by the title via aria-labelledby.
+          États chrome: anchor bottom, top radius 18, height 560 CAPPED at
+          85dvh — the cap bites below ~660px of viewport (landscape phones,
+          short androids), where a fixed 560 would leave almost nothing of
+          the page visible; dvh so the cap tracks the real visible height
+          under mobile browser bars. Scrim rgba(9,22,16,0.45), 42×5 grab
+          handle in the track colour. */}
+      {isNarrow && (
+        <Drawer
+          anchor="bottom"
+          open={sheetOpen}
+          onClose={() => setSheetOpen(false)}
+          ModalProps={{ disableScrollLock: true }}
+          slotProps={{
+            backdrop: { sx: { bgcolor: 'rgba(9,22,16,0.45)' } },
+            paper: {
+              id: 'planner-sheet',
+              role: 'dialog',
+              'aria-modal': true,
+              'aria-labelledby': 'planner-sheet-title',
+              sx: {
+                height: 560,
+                maxHeight: '85dvh',
+                borderTopLeftRadius: '18px',
+                borderTopRightRadius: '18px',
+                bgcolor: tk.card,
+                display: 'flex',
+                flexDirection: 'column',
+              },
+            },
+          }}
+        >
+          <Box
+            aria-hidden
+            sx={{
+              width: 42,
+              height: 5,
+              borderRadius: '999px',
+              bgcolor: tk.track,
+              alignSelf: 'center',
+              mt: '10px',
+              flexShrink: 0,
+            }}
+          />
+          {/* Title row (États): 16/800 title + count chip (the page's
+              existing cntChip pair via metaChipSx) + 21px muted close. The
+              sidebar's own shape-edit switch row now sits BELOW this title —
+              the sheet header is Drawer chrome, not sidebar content. */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              p: '10px 16px 8px',
+              flexShrink: 0,
+            }}
+          >
+            <Typography
+              id="planner-sheet-title"
+              component="h2"
+              sx={{ fontSize: 16, fontWeight: 800, color: tk.tTitle }}
+            >
+              {t('planner.sheet.trigger')}
+            </Typography>
+            <Box component="span" sx={metaChipSx}>
+              {allPlants.length}
+            </Box>
+            <IconButton
+              size="small"
+              onClick={() => setSheetOpen(false)}
+              aria-label={t('planner.config.close')}
+              sx={{ ml: 'auto', p: '2px', color: tk.muted }}
+            >
+              <CloseIcon sx={{ fontSize: 21 }} />
+            </IconButton>
+          </Box>
+          {/* The sidebar mounts AS-IS (pre-flight): the sheet variant only
+              strips the card chrome and fills the Paper — the bounded height
+              activates the existing fixed-chrome/scrollable-list splits. NO
+              onPlantPointerDown: there is no drag source from a modal sheet
+              (tap-to-place is the mobile flow), and omitting it lifts the
+              rows' touchAction clamp so the list scrolls under a finger. */}
+          <PlantSidebar
+            variant="sheet"
+            plants={allPlants}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            selectedPlantId={placePlantId}
+            onPlantSelect={handlePlantSelectSheet}
+            cellSize={cellSize}
+            selectedInfraType={infraType}
+            onInfraSelect={handleInfraSelectSheet}
+            selectedSoilType={soilType}
+            onSoilSelect={handleSoilSelectSheet}
+            onSoilFillAll={handleSoilFillAll}
+            language={language}
+            shapeEditMode={shapeEditMode}
+            onShapeEditToggle={handleShapeEditToggle}
+            catalogReady={catalogReady}
+            catalogFailed={catalogFailed}
+            onCatalogRetry={handleCatalogRetry}
+          />
+        </Drawer>
       )}
 
       {/* Per-cell exposure override picker (5.3-D) */}
@@ -2429,7 +2615,17 @@ export default function GardenPlanner() {
           {/* The N×N chip mirrors the sidebar footprint badge — the
               project's one footprint-chip styling (no placement pill
               exists; declared adaptation). */}
-          <Box component="span" sx={{ ...footprintBadgeSx(tk, true), bgcolor: tk.card }}>
+          <Box
+            component="span"
+            sx={{
+              ...footprintBadgeSx(
+                tk,
+                true,
+                dragState.spanRows * dragState.spanCols > 1
+              ),
+              bgcolor: tk.card,
+            }}
+          >
             {`${dragState.spanRows}×${dragState.spanCols}`}
           </Box>
         </Box>

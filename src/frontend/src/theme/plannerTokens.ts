@@ -495,9 +495,16 @@ export const GAP_PX = { xs: 2, sm: 3 } as const;
 
 /** Footprint badge chip (SMA-193): solid border when the spacing is known,
  * dashed for the mockup's unknown "1×1?" (Achillea). Shared by the sidebar
- * rows and the DnD ghost's N×N chip (lot 2) so the variants never drift. */
-export const footprintBadgeSx = (tk: PlannerTokens, known: boolean) => ({
-  fontSize: 10.5,
+ * rows and the DnD ghost's N×N chip (lot 2) so the variants never drift.
+ * SMA-18: the mockup sizes the badge UP on mobile — 11.5 for a single-cell
+ * footprint, 13 for a multi-cell one (the N×N is the information that
+ * matters on a 30px cell) — while desktop keeps the original 10.5. */
+export const footprintBadgeSx = (
+  tk: PlannerTokens,
+  known: boolean,
+  multi = false
+) => ({
+  fontSize: { xs: multi ? 13 : 11.5, sm: 10.5 },
   fontWeight: 700,
   lineHeight: 1.4,
   borderRadius: '999px',
