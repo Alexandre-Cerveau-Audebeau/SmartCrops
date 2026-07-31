@@ -1,10 +1,17 @@
 import type { ExposureCategory } from '../utils/exposure';
 import type { InfrastructureType } from '../utils/infrastructure';
 import { isInfrastructureType } from '../utils/infrastructure';
+import type { SoilType } from '../utils/soil';
+import { isSoilType } from '../utils/soil';
 
 export interface CellData {
   active: boolean;
-  soil?: string;
+  /**
+   * Painted soil (SMA-14): per-cell like infrastructure, narrowed to the 8
+   * known types at the JSON boundary — the free-string era (when nothing
+   * ever wrote the field) is over. Sparse (absent = unknown soil).
+   */
+  soil?: SoilType;
   /**
    * Painted infrastructure (SMA-15 5.4): still the per-cell string it always
    * was on the wire, but narrowed to the 6 known types in memory — the JSON
@@ -36,12 +43,17 @@ export function parseCellsJson(json: string | null, width: number, height: numbe
   }
   if (!json) return grid;
   try {
-    const cells: Array<{ row: number; col: number; active?: boolean; soil?: string; infrastructure?: unknown; exposureOverride?: unknown }> = JSON.parse(json);
+    const cells: Array<{ row: number; col: number; active?: boolean; soil?: unknown; infrastructure?: unknown; exposureOverride?: unknown }> = JSON.parse(json);
     for (const cell of cells) {
       if (cell.row >= 0 && cell.row < height && cell.col >= 0 && cell.col < width) {
         grid[cell.row][cell.col] = {
           active: cell.active !== false,
-          soil: cell.soil,
+          // Same boundary contract as its neighbours (SMA-14): only the 8
+          // known soils enter CellData — unknown persisted values are
+          // dropped, which also shields the §15 trame lookup. This retires
+          // the legacy free-string era ('terreau'/'sable'/'argile' hexes):
+          // no UI ever wrote soil, so no real garden carries them.
+          ...(isSoilType(cell.soil) && { soil: cell.soil }),
           // Same boundary contract as the override (5.4): only the 6 known
           // types enter CellData — unknown persisted values are dropped.
           ...(isInfrastructureType(cell.infrastructure) && { infrastructure: cell.infrastructure }),
@@ -54,7 +66,7 @@ export function parseCellsJson(json: string | null, width: number, height: numbe
 }
 
 export function serializeCellsJson(grid: CellData[][]): string | null {
-  const cells: Array<{ row: number; col: number; active?: boolean; soil?: string; infrastructure?: InfrastructureType; exposureOverride?: ExposureCategory }> = [];
+  const cells: Array<{ row: number; col: number; active?: boolean; soil?: SoilType; infrastructure?: InfrastructureType; exposureOverride?: ExposureCategory }> = [];
   for (let r = 0; r < grid.length; r++) {
     for (let c = 0; c < grid[r].length; c++) {
       const cell = grid[r][c];

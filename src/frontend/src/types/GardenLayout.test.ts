@@ -89,4 +89,18 @@ describe('CellData.exposureOverride serialization (sparse)', () => {
     expect(grid[0][0].active).toBe(true); // the rest of the cell still parses
     expect(grid[0][1].infrastructure).toBe('trellis');
   });
+
+  // SMA-14: soil joins the same JSON-boundary guard — only the 8 known types
+  // enter CellData. The legacy free-string era's 'terreau' is the canonical
+  // casualty: dropped by design (no UI ever wrote soil, nothing real is lost).
+  it('drops an unknown soil at the parsing boundary, keeps known ones', () => {
+    const json = JSON.stringify([
+      { row: 0, col: 0, soil: 'terreau' },
+      { row: 0, col: 1, soil: 'potting' },
+    ]);
+    const grid = parseCellsJson(json, 2, 1);
+    expect(grid[0][0]).not.toHaveProperty('soil');
+    expect(grid[0][0].active).toBe(true); // the rest of the cell still parses
+    expect(grid[0][1].soil).toBe('potting');
+  });
 });

@@ -471,7 +471,8 @@
     "modes": {
       "selection": "Selection",
       "place": "Place",
-      "infrastructure": "Infrastructures"
+      "infrastructure": "Infrastructures",
+      "soils": "Soils"
     },
     "dnd": {
       "collisionToast": "Collision — overlaps {{plant}} ({{cell}})",
@@ -509,6 +510,22 @@
       "badge": {
         "blocks": "Blocks light",
         "noShadow": "No shadow"
+      }
+    },
+    "soil": {
+      "hint": "Paint each cell's soil type. The pattern stays visible under plants; infrastructures mask it.",
+      "eraser": "Eraser — no soil",
+      "fillAll": "Fill the garden with this soil",
+      "clearAll": "Clear the garden's soil",
+      "types": {
+        "potting": "Potting mix",
+        "loam": "Loam",
+        "sand": "Sandy",
+        "clay": "Clay",
+        "stony": "Stony",
+        "chalk": "Chalky",
+        "humus": "Humus-rich",
+        "wet": "Wet"
       }
     },
     "shape": {
@@ -564,7 +581,12 @@
       "exposureCell": "{{category}} — empty cell at row {{row}}, column {{col}}",
       "infraCell": "{{type}} — row {{row}}, column {{col}}",
       "plantedInfraCell": "{{plant}} on {{type}} — row {{row}}, column {{col}}",
-      "paintCell": "Paint infrastructure"
+      "plantedSoilCell": "{{plant}} on {{type}} soil — row {{row}}, column {{col}}",
+      "soilCell": "{{type}} soil — row {{row}}, column {{col}}",
+      "soilExposureCell": "{{type}} soil — {{category}} — row {{row}}, column {{col}}",
+      "infraExposureCell": "{{type}} — {{category}} — row {{row}}, column {{col}}",
+      "paintCell": "Paint infrastructure",
+      "paintSoil": "Paint soil"
     },
     "help": {
       "unified": "Click a plant in the sidebar, then click cells to place it. The Exposure layer shows per-cell sunlight — set the time and season in the toolbar."

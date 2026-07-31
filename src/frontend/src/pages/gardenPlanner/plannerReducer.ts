@@ -2,6 +2,8 @@ import type { CellData } from '../../types/GardenLayout';
 import { parseCellsJson } from '../../types/GardenLayout';
 import type { ExposureCategory, Moment, Season } from '../../utils/exposure';
 import type { InfrastructureType } from '../../utils/infrastructure';
+import type { ArmedSoil, SoilType } from '../../utils/soil';
+import { SOIL_ERASER } from '../../utils/soil';
 import { footprintFits } from './placementGeometry';
 
 /**
@@ -87,6 +89,19 @@ export interface PlannerState {
   placeMode: boolean;
   placePlantId: string | null;
   /**
+   * Soil paint mode (SMA-14) — the fifth mutually exclusive editing mode,
+   * mirroring infrastructure's grammar field for field: arming a type from
+   * the sidebar SOLS tab ENTERS the mode (and leaves the others); the mode
+   * cannot be entered without an armed type; `soilPaintValue` is the drag
+   * polarity — the type being applied, or null while a drag is CLEARING
+   * (started on a cell already carrying the armed type, or with the ERASER
+   * armed — R3: the sentinel is armable but never storable, so the polarity
+   * stays SoilType | null and nothing 'erase'-shaped can reach the grid).
+   */
+  soilMode: boolean;
+  soilType: ArmedSoil | null;
+  soilPaintValue: SoilType | null;
+  /**
    * Snapshot of the last saved layout. This is the planner's whole "undo":
    * Cancel restores it wholesale (there is no history stack — pre-5.1B the
    * snapshot lived in a ref and handleCancel deep-copied it back).
@@ -147,6 +162,9 @@ export const initialPlannerState: PlannerState = {
   infraPaintValue: null,
   placeMode: false,
   placePlantId: null,
+  soilMode: false,
+  soilType: null,
+  soilPaintValue: null,
   lastSaved: null,
   removedCount: 0,
   removedSeq: 0,
@@ -212,6 +230,13 @@ export type PlannerAction =
   | { type: 'SET_SHAPE_EDIT_MODE'; enabled: boolean }
   | { type: 'SET_INFRA_TYPE'; infraType: InfrastructureType | null }
   | { type: 'SET_INFRA_MODE'; enabled: boolean }
+  /** Arm a soil type or the eraser (enters soil mode) or disarm with null. */
+  | { type: 'SET_SOIL_TYPE'; soilType: ArmedSoil | null }
+  /** Enter (requires an armed type) or leave soil paint mode. */
+  | { type: 'SET_SOIL_MODE'; enabled: boolean }
+  /** R3: write the armed soil to EVERY active cell (the eraser clears them)
+   * in one history entry — a real garden has one dominant soil. */
+  | { type: 'SET_ALL_SOIL' }
   | { type: 'SET_PLACE_PLANT'; plantId: string | null }
   | { type: 'SET_PLACE_MODE'; enabled: boolean }
   | { type: 'ENTER_SELECTION_MODE' }
@@ -265,6 +290,7 @@ const disarmedPainting = {
   isPainting: false,
   paintAction: null,
   infraPaintValue: null,
+  soilPaintValue: null,
 } as const;
 
 /** Entering an editing context (fresh setup, another garden's hydration)
@@ -283,6 +309,7 @@ const enterSelectionMode = {
   shapeEditMode: false,
   infraMode: false,
   placeMode: false,
+  soilMode: false,
 } as const;
 
 /**
@@ -454,6 +481,43 @@ export function plannerReducer(
           isDirty: true,
         };
       }
+      // Soil paint (SMA-14) — the infrastructure branch mirrored onto
+      // cell.soil: ACTIVE cells only (a painted value on cellOff would be
+      // invisible), placements do NOT block painting (the trame under a
+      // plant is the documented §15 layering), and starting on a cell that
+      // already carries the armed type locks a CLEARING drag. With the
+      // ERASER armed (R3) the drag ALWAYS clears, whatever the cell
+      // carries — the discoverable path the same-type toggle never was.
+      if (state.soilMode && state.soilType) {
+        const cell = state.grid[action.row][action.col];
+        if (!cell.active) return state;
+        const apply =
+          state.soilType === SOIL_ERASER || cell.soil === state.soilType
+            ? null
+            : state.soilType;
+        // Starting a CLEARING drag on a cell with nothing to clear (only
+        // reachable with the eraser) must still lock the drag so entered
+        // cells erase, but without copying, dirtying or spending an undo
+        // entry — the PAINT_ENTER no-op contract applied to the start.
+        if ((cell.soil ?? null) === apply) {
+          return { ...state, isPainting: true, soilPaintValue: apply };
+        }
+        const copy = copyGrid(state.grid)!;
+        if (apply === null) {
+          // Sparse contract (like infrastructure): clearing REMOVES the key.
+          delete copy[action.row][action.col].soil;
+        } else {
+          copy[action.row][action.col].soil = apply;
+        }
+        return {
+          ...state,
+          past: pushHistory(state),
+          grid: copy,
+          isPainting: true,
+          soilPaintValue: apply,
+          isDirty: true,
+        };
+      }
       return state;
     }
 
@@ -507,6 +571,29 @@ export function plannerReducer(
           delete copy[action.row][action.col].infrastructure;
         } else {
           copy[action.row][action.col].infrastructure = state.infraPaintValue;
+        }
+        return {
+          ...state,
+          past: pushHistory(state),
+          grid: copy,
+          isDirty: true,
+        };
+      }
+      // Soil drag (SMA-14): mode + armed type re-checked (the same F6
+      // contract), polarity from PAINT_START's lock, and the same no-op
+      // guard — a cell already matching the locked polarity must not copy
+      // the grid, dirty the draft, or spend an undo entry.
+      if (state.soilMode && state.soilType) {
+        const cell = state.grid[action.row][action.col];
+        if (!cell.active) return state;
+        if ((cell.soil ?? null) === state.soilPaintValue) {
+          return state;
+        }
+        const copy = copyGrid(state.grid)!;
+        if (state.soilPaintValue === null) {
+          delete copy[action.row][action.col].soil;
+        } else {
+          copy[action.row][action.col].soil = state.soilPaintValue;
         }
         return {
           ...state,
@@ -893,6 +980,78 @@ export function plannerReducer(
       }
       return { ...state, ...enterSelectionMode };
 
+    // ── Soil mode (SMA-14) — exact infra-grammar mirror ──────────────────────
+    case 'SET_SOIL_TYPE':
+      // Arming a type ENTERS soil mode (and leaves the others); disarming
+      // (null) exits ONLY soil mode — the same own-mode exit rule as
+      // SET_INFRA_TYPE's null branch (a null-disarm can fire while another
+      // mode is active and must not eject the user from it). Both disarm
+      // any in-flight drag (F6 contract).
+      return action.soilType === null
+        ? { ...state, ...disarmedPainting, soilType: null, soilMode: false }
+        : {
+            ...state,
+            ...enterSelectionMode,
+            soilType: action.soilType,
+            soilMode: true,
+          };
+
+    case 'SET_SOIL_MODE':
+      // Entering REQUIRES an armed type (the sidebar SOLS tab arms it) — a
+      // guarded no-op otherwise, the Infrastructures gate exactly (NOT the
+      // Place divergence: soil has no armless function). Leaving keeps the
+      // type armed for a later re-entry.
+      if (action.enabled) {
+        if (!state.soilType) return state;
+        return { ...state, ...enterSelectionMode, soilMode: true };
+      }
+      return { ...state, ...enterSelectionMode };
+
+    case 'SET_ALL_SOIL': {
+      // R3: fill the whole garden with the armed soil — ACTIVE cells only
+      // (the paint branch's own eligibility), placements do not block
+      // (consistent with painting), and infrastructure cells are WRITTEN
+      // like the paint branch writes under them today: masking is a RENDER
+      // rule, so the soil survives if the infrastructure is later removed.
+      // With the ERASER armed the same action clears every cell's soil —
+      // that falls out of the shared polarity, deliberately.
+      if (!state.grid) return state;
+      // Armed type ONLY — deliberately NOT gated on soilMode: the panel's
+      // button enables on the armed value (which every mode exit remembers),
+      // and a button click is explicit intent, unlike the ambient pointer
+      // events that make the PAINT_* branches require their mode.
+      if (!state.soilType) return state;
+      const value = state.soilType === SOIL_ERASER ? null : state.soilType;
+      // Idempotence (the guarded-action contract): if every eligible cell
+      // already carries the value, return the SAME state object — no copy,
+      // no dirty, no history entry.
+      const wouldChange = state.grid.some((row) =>
+        row.some((cell) => cell.active && (cell.soil ?? null) !== value)
+      );
+      if (!wouldChange) return state;
+      return {
+        ...state,
+        // ONE history entry for the whole fill — a single undo restores
+        // every cell, unlike a per-cell paint drag.
+        past: pushHistory(state),
+        grid: state.grid.map((row) =>
+          row.map((cell) => {
+            if (!cell.active || (cell.soil ?? null) === value) {
+              return { ...cell };
+            }
+            const copy = { ...cell };
+            if (value === null) {
+              delete copy.soil; // sparse contract, like the paint branches
+            } else {
+              copy.soil = value;
+            }
+            return copy;
+          })
+        ),
+        isDirty: true,
+      };
+    }
+
     // ── Place mode (SMA-193 5.5) — exact infra-grammar mirror ────────────────
     case 'SET_PLACE_PLANT':
       // Arming a plant ENTERS place mode (and leaves the others); disarming
@@ -962,7 +1121,15 @@ export function plannerReducer(
       const snap = state.lastSaved;
       return {
         ...state,
-        ...disarmedPainting,
+        // SMA-14 R3 (GitHub Major, PRE-EXISTING across all four modes): the
+        // SMA-303 "always lands in SELECTION mode" contract that HYDRATE and
+        // SETUP_CONFIRMED honour was never adopted by the two lifecycle
+        // actions — spreading only disarmedPainting left shapeEdit/infra/
+        // place (since their birth) and then soil in whatever mode was
+        // active, so the pointer action after a Cancel could mutate the
+        // freshly restored layout. Armed values stay remembered, as on
+        // every mode exit.
+        ...enterSelectionMode,
         // Draft-lifecycle reset (like HYDRATE): the abandoned draft's history
         // must not resurface through UNDO after a wholesale restore.
         past: [],
@@ -978,7 +1145,7 @@ export function plannerReducer(
     case 'DISCARD_DRAFT':
       return {
         ...state,
-        ...disarmedPainting,
+        ...enterSelectionMode, // same SMA-303 adoption as RESTORE_LAST_SAVED
         past: [], // draft-lifecycle reset, same rationale as RESTORE_LAST_SAVED
         grid: null,
         placements: [],

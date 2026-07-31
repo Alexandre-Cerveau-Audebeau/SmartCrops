@@ -10,6 +10,7 @@ import {
   INFRA_META,
   type InfraRegion,
 } from '../../utils/infrastructure';
+import type { SoilType } from '../../utils/soil';
 import { GAP_PX, getPlannerTokens, type PlannerTokens } from '../../theme/plannerTokens';
 import { getPlantColor } from '../../utils/plantColor';
 import { Sym } from '../Sym';
@@ -32,6 +33,8 @@ interface Props {
    * semantics via the reducer's mode state).
    */
   infraPaintMode?: boolean;
+  /** Soil paint mode (SMA-14): same drag wiring, reducer-routed semantics. */
+  soilPaintMode?: boolean;
   placements?: PlacementOverlay[];
   /**
    * Exposure layer (SMA-17 5.3-D): the derived per-cell categories (null =
@@ -76,13 +79,12 @@ interface Props {
 
 // Base cells re-skinned to the design tokens (SMA-209: cellOn/cellOff exist
 // in BOTH modes). Infrastructures no longer color the base cell (5.4): they
-// render as §6 region blocks in the overlay layer; the soil colors stay the
-// legacy hardcoded values (soils ship with their own chantier).
+// render as §6 region blocks in the overlay layer. Soil no longer colors it
+// either (SMA-14): the background is the EXPOSURE layer's exclusive property
+// (§15) — soil expresses itself as the trame + pastille, which retired the
+// legacy three-colour fill that used to live here.
 function getCellBg(cell: CellData, tk: PlannerTokens): string {
   if (!cell.active) return tk.cellOff;
-  if (cell.soil === 'terreau') return '#8d6e63';
-  if (cell.soil === 'sable') return '#ffe0b2';
-  if (cell.soil === 'argile') return '#bcaaa4';
   return tk.cellOn;
 }
 
@@ -92,7 +94,6 @@ function getCellBg(cell: CellData, tk: PlannerTokens): string {
 // on the night palette).
 function getCellHoverBg(cell: CellData, tk: PlannerTokens): string {
   if (!cell.active) return tk.cellOffBd;
-  if (cell.soil) return getCellBg(cell, tk);
   return tk.cellOnBd;
 }
 
@@ -291,6 +292,7 @@ const GridCell = memo(function GridCell({
   c,
   paintMode,
   shapeEditMode,
+  soilPaintMode,
   hasDrag,
   tint,
   cast,
@@ -310,6 +312,8 @@ const GridCell = memo(function GridCell({
   c: number;
   paintMode: boolean;
   shapeEditMode: boolean;
+  /** SMA-14: soil paint mode — picks the soil paint label over the infra one. */
+  soilPaintMode: boolean;
   hasDrag: boolean;
   tint: ExposureCategory | null;
   cast: boolean;
@@ -341,6 +345,20 @@ const GridCell = memo(function GridCell({
             ? tk.cellOnBd
             : tk.cellOffBd
       }`;
+  // §15 trame (SMA-14): soil is a background-image on the CELL — under every
+  // overlay, so it sits below the plant blocks naturally. The §3 hatch
+  // COMPOSES with it as a comma list, hatch FIRST (the first background
+  // paints on top: the shadow reads as a wash over the soil, not under it).
+  // DnD target states win outright — a targeted cell shows target feedback,
+  // not soil (excluding soil here also keeps the invalid redHatch spread
+  // below from inheriting the trame's background-size). Infra cells carry no
+  // trame (infrastructure masks soil entirely, §15) and neither do inactive
+  // cells (they render cellOff; painting is active-only).
+  const soilStyle =
+    targetState === null && cell.active && cell.soil && !cell.infrastructure
+      ? tk.soil[cell.soil]
+      : null;
+  const hatched = tint === 'shade' || cast;
   const commonSx = {
     width: cellSizePx,
     height: cellSizePx,
@@ -348,7 +366,20 @@ const GridCell = memo(function GridCell({
     // "Ombre" AND "Ombre portée" carry the §3 hatch (§9) as the cell's
     // background-image — the cast overlay is what the moment/season presets
     // visibly move (5.4).
-    ...((tint === 'shade' || cast) && { backgroundImage: tk.hatch }),
+    ...(hatched && !soilStyle && { backgroundImage: tk.hatch }),
+    ...(soilStyle && {
+      backgroundImage: hatched
+        ? `${tk.hatch}, ${soilStyle.image}`
+        : soilStyle.image,
+      backgroundSize: hatched
+        ? `auto, ${soilStyle.imageSize}`
+        : soilStyle.imageSize,
+      ...(soilStyle.imagePosition && {
+        backgroundPosition: hatched
+          ? `0% 0%, ${soilStyle.imagePosition}`
+          : soilStyle.imagePosition,
+      }),
+    }),
     border,
     borderRadius: '4px', // §4: radius cellule 4px (border 1px)
     transition: 'background-color 0.1s',
@@ -371,13 +402,17 @@ const GridCell = memo(function GridCell({
   };
 
   if (paintMode) {
-    // The infra label ANNOUNCES the cell's current type (a paint tap on a
-    // matching cell clears it — the toggle polarity).
+    // The infra/soil label ANNOUNCES the cell's current type (a paint tap on
+    // a matching cell clears it — the toggle polarity).
     const paintLabel = shapeEditMode
       ? t('planner.cell.toggleCell')
-      : cell.infrastructure
-        ? `${t(`planner.infra.types.${cell.infrastructure}`)} — ${t('planner.cell.paintCell')}`
-        : t('planner.cell.paintCell');
+      : soilPaintMode
+        ? cell.soil
+          ? `${t(`planner.soil.types.${cell.soil}`)} — ${t('planner.cell.paintSoil')}`
+          : t('planner.cell.paintSoil')
+        : cell.infrastructure
+          ? `${t(`planner.infra.types.${cell.infrastructure}`)} — ${t('planner.cell.paintCell')}`
+          : t('planner.cell.paintCell');
     return (
       <Box
         component="button"
@@ -453,21 +488,66 @@ const GridCell = memo(function GridCell({
                 row: r + 1,
                 col: columnLabel(c),
               })
-            : placementName
-              ? t('planner.cell.plantedCell', { plant: placementName, row: r + 1, col: columnLabel(c) })
+            // R3 (triply convergent Minor): the pastille renders ABOVE the
+            // plant block precisely so a planted cell keeps its soil
+            // identifiable — the label says what the pastille shows. The
+            // infra combination cannot reach here (the branch above wins),
+            // so soil is never announced under a masking infrastructure.
+            : placementName && cell.soil
+              ? t('planner.cell.plantedSoilCell', {
+                  plant: placementName,
+                  type: t(`planner.soil.types.${cell.soil}`),
+                  row: r + 1,
+                  col: columnLabel(c),
+                })
+              : placementName
+                ? t('planner.cell.plantedCell', { plant: placementName, row: r + 1, col: columnLabel(c) })
               : cell.infrastructure
-                ? t('planner.cell.infraCell', {
-                    type: t(`planner.infra.types.${cell.infrastructure}`),
-                    row: r + 1,
-                    col: columnLabel(c),
-                  })
-                : tint
-                  ? t('planner.cell.exposureCell', {
+                // R2 (the GitHub Minor's test applied to every combination):
+                // the TRELLIS is the one §6 type whose fill is translucent in
+                // BOTH palettes (0.08/0.10) — the tint genuinely shows
+                // through the lattice, so it is announced too. Wall, fence
+                // and path are opaque hexes in both modes (occluded → type
+                // only); water and pot are opaque by day and translucent by
+                // night, and an aria label must not vary with the palette,
+                // so they keep the type-only label (declared).
+                ? cell.infrastructure === 'trellis' && tint
+                  ? t('planner.cell.infraExposureCell', {
+                      type: t(`planner.infra.types.${cell.infrastructure}`),
                       category: t(`planner.exposure.categories.${tint}`),
                       row: r + 1,
                       col: columnLabel(c),
                     })
-                  : t('planner.cell.emptyCell', { row: r + 1, col: columnLabel(c) })
+                  : t('planner.cell.infraCell', {
+                      type: t(`planner.infra.types.${cell.infrastructure}`),
+                      row: r + 1,
+                      col: columnLabel(c),
+                    })
+                // SMA-14 R2 (GitHub Minor): soil and a tint are visible AT
+                // THE SAME TIME — the tint is the cell background, the trame
+                // sits on top — unlike a plant or an opaque infrastructure
+                // whose block covers the cell. Both signals are announced;
+                // soil-only and tint-only keep their existing labels.
+                : cell.soil
+                  ? tint
+                    ? t('planner.cell.soilExposureCell', {
+                        type: t(`planner.soil.types.${cell.soil}`),
+                        category: t(`planner.exposure.categories.${tint}`),
+                        row: r + 1,
+                        col: columnLabel(c),
+                      })
+                    : t('planner.cell.soilCell', {
+                        type: t(`planner.soil.types.${cell.soil}`),
+                        row: r + 1,
+                        col: columnLabel(c),
+                      })
+                  : tint
+                    ? t('planner.cell.exposureCell', {
+                        category: t(`planner.exposure.categories.${tint}`),
+                        row: r + 1,
+                        col: columnLabel(c),
+                      })
+                    : t('planner.cell.emptyCell', { row: r + 1, col: columnLabel(c) })
           : t('planner.cell.inactiveCell', { row: r + 1, col: columnLabel(c) })
       }
       sx={{
@@ -489,14 +569,15 @@ const GridCell = memo(function GridCell({
   );
 });
 
-function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, placements, exposure, castShadow, onCellClick, onCellDragStart, onCellDragEnter, onCellDragEnd, cellSizePx = 44, onCellPointerDown, dragTarget = null, gridElRef }: Props) {
+function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, soilPaintMode = false, placements, exposure, castShadow, onCellClick, onCellDragStart, onCellDragEnter, onCellDragEnd, cellSizePx = 44, onCellPointerDown, dragTarget = null, gridElRef }: Props) {
   const { t } = useTranslation();
   const theme = useTheme();
   const tk = getPlannerTokens(theme.palette.mode === 'dark' ? 'dark' : 'light');
   const height = grid.length;
   const width = height > 0 ? grid[0].length : 0;
-  // Both paint modes share the drag wiring; the reducer routes the semantics.
-  const paintMode = shapeEditMode || infraPaintMode;
+  // All three paint modes share the drag wiring; the reducer routes the
+  // semantics.
+  const paintMode = shapeEditMode || infraPaintMode || soilPaintMode;
   const hasDrag = paintMode && onCellDragStart && onCellDragEnter && onCellDragEnd;
   // §6 region blocks derived from the per-cell storage at render (SMA-15).
   const infraRegions = useMemo(() => groupInfrastructureRegions(grid), [grid]);
@@ -507,6 +588,31 @@ function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, placements, e
   // inset, resolved at the same breakpoint (3px inset mobile — scaled).
   const overlayGapPx = isMobile ? GAP_PX.xs : GAP_PX.sm;
   const plantInsetPx = isMobile ? 3 : 5;
+  /** §15 pastille edge (SMA-14) — PROPORTIONAL, not fixed: the design
+   * component draws 11 px on a 68 px cell (≈ 16 % of the edge). A fixed
+   * 11 px would eat 37 % of a 30 px mobile cell; a pure 16 % would shrink
+   * to 5 px there. The 7 px floor (≈ 23 % at 30 px) keeps the dot readable
+   * because at small sizes the pastille CARRIES the identification (SMA-14
+   * ruling) — the trame is only a reminder. */
+  const pastilleSize = Math.max(7, Math.round(cellSizePx * 0.16));
+  /** §15: the dot's corner offset — the component's 3 px at 68 px (≈ 4.5 %). */
+  const pastilleInset = Math.max(2, Math.round(cellSizePx * 0.045));
+  /** §15: the dot's rounding — the component's 3.5 px on 11 px (≈ 32 %). */
+  const pastilleRadius = Math.round(pastilleSize * 0.32);
+  /** §15: one dot per active, non-infra soil cell — infrastructure masks
+   * soil entirely (no trame, no pastille) and inactive cells carry neither
+   * (same gating as GridCell's trame). */
+  const soilPastilles = useMemo(() => {
+    const out: Array<{ r: number; c: number; soil: SoilType }> = [];
+    grid.forEach((row, r) =>
+      row.forEach((cell, c) => {
+        if (cell.active && cell.soil && !cell.infrastructure) {
+          out.push({ r, c, soil: cell.soil });
+        }
+      })
+    );
+    return out;
+  }, [grid]);
   // Per-placement fill context (R4): translucent when ANY footprint cell
   // carries an infrastructure (the pattern must show through wherever the
   // block overlaps it); dimmed when ANY footprint cell is inactive (the
@@ -656,6 +762,7 @@ function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, placements, e
               c={c}
               paintMode={paintMode}
               shapeEditMode={shapeEditMode}
+              soilPaintMode={soilPaintMode}
               hasDrag={!!hasDrag}
               tint={tint}
               cast={cast}
@@ -732,6 +839,65 @@ function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, placements, e
               dimmed={context.onInactive}
               tk={tk}
             />
+          );
+        })}
+      </Box>
+    )}
+    {/* §15 soil pastilles (SMA-14) — the corner identity dot ABOVE the plant
+        blocks (zIndex 3, the focus-ring precedent — plant blocks sit at 2):
+        a planted cell keeps its soil identifiable. Decorative overlay —
+        aria-hidden, pointer events fall through to the cells (the soil info
+        reaches AT through the cell labels and the placement panel). */}
+    {soilPastilles.length > 0 && (
+      <Box
+        aria-hidden
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          pointerEvents: 'none',
+          zIndex: 3,
+        }}
+      >
+        {soilPastilles.map(({ r, c, soil }) => {
+          // R4 (GitHub outside-diff): drag-target feedback wins OUTRIGHT —
+          // the R1 ruling GridCell already applies to the trame, applied to
+          // its twin. Deliberately RENDER-TIME rather than a dragTarget dep
+          // on the memo: dragTarget changes once per traversed cell, so a
+          // dep would re-walk the whole grid per traversal — the exact
+          // per-drag O(grid) pattern the DnD perf round measured and
+          // removed. This per-pastille bounds check rides a render that
+          // happens anyway (the overlay re-renders with the page), like the
+          // trame's own targetState check in commonSx.
+          if (
+            dragTarget &&
+            r >= dragTarget.startRow &&
+            r < dragTarget.startRow + dragTarget.spanRows &&
+            c >= dragTarget.startCol &&
+            c < dragTarget.startCol + dragTarget.spanCols
+          ) {
+            return null;
+          }
+          return (
+          <Box
+            key={`${r}-${c}`}
+            data-soil-pastille={soil}
+            sx={{
+              position: 'absolute',
+              // §15: bas-gauche (the component's left:3px; bottom:3px at
+              // 68 px, made proportional above).
+              left: `${c * (cellSizePx + overlayGapPx) + pastilleInset}px`,
+              top: `${r * (cellSizePx + overlayGapPx) + cellSizePx - pastilleSize - pastilleInset}px`,
+              width: `${pastilleSize}px`,
+              height: `${pastilleSize}px`,
+              boxSizing: 'border-box',
+              borderRadius: `${pastilleRadius}px`,
+              bgcolor: tk.soil[soil].pastille,
+              border: `1px solid ${tk.soilPastilleBd}`,
+            }}
+          />
           );
         })}
       </Box>

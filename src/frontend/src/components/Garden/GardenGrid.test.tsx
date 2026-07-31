@@ -321,3 +321,105 @@ describe('GardenGrid infrastructure regions (SMA-15 5.4)', () => {
     expect(gridCells[1]).not.toHaveAttribute('data-cast-shadow');
   });
 });
+
+// SMA-14 R2 (GitHub Minor) — a soil and an exposure tint are visible AT THE
+// SAME TIME (tint = background, trame on top), so both are announced; the
+// same test applied to infra found the trellis (translucent in BOTH
+// palettes) equally double-signalled, while opaque types stay type-only.
+// The tint-only label is pinned by the existing axes test above.
+describe('GardenGrid combined announcements (SMA-14 R2)', () => {
+  const comboGrid: CellData[][] = [
+    [{ active: true, soil: 'clay' }, { active: true, soil: 'clay' }],
+    [
+      { active: true, infrastructure: 'trellis' },
+      { active: true, infrastructure: 'wall' },
+    ],
+  ];
+  const comboExposure: (ExposureCategory | null)[][] = [
+    ['full', null],
+    ['morning', 'morning'],
+  ];
+  const renderCombo = () =>
+    render(
+      <ThemeProvider theme={createTheme()}>
+        <GardenGrid
+          grid={comboGrid}
+          shapeEditMode={false}
+          exposure={comboExposure}
+        />
+      </ThemeProvider>
+    );
+
+  it('a cell with soil AND a tint announces both', () => {
+    renderCombo();
+    expect(screen.getAllByRole('gridcell')[0]).toHaveAccessibleName(
+      'Clay soil — Full sun — row 1, column A'
+    );
+  });
+
+  it('the soil-only branch keeps its existing label', () => {
+    renderCombo();
+    expect(screen.getAllByRole('gridcell')[1]).toHaveAccessibleName(
+      'Clay soil — row 1, column B'
+    );
+  });
+
+  it('a trellis with a tint announces both; an opaque infrastructure stays type-only', () => {
+    renderCombo();
+    const cells = screen.getAllByRole('gridcell');
+    expect(cells[2]).toHaveAccessibleName(
+      'Trellis — Morning sun — row 2, column A'
+    );
+    expect(cells[3]).toHaveAccessibleName('Wall — row 2, column B');
+  });
+
+  it('a planted cell with soil announces both; without soil it keeps its label (R3)', () => {
+    render(
+      <ThemeProvider theme={createTheme()}>
+        <GardenGrid
+          grid={[[{ active: true, soil: 'clay' }, { active: true }]]}
+          shapeEditMode={false}
+          placements={[
+            { plantId: 'p1', startRow: 0, startCol: 0, spanRows: 1, spanCols: 1, plantName: 'Basil' },
+            { plantId: 'p2', startRow: 0, startCol: 1, spanRows: 1, spanCols: 1, plantName: 'Basil' },
+          ]}
+        />
+      </ThemeProvider>
+    );
+    const cells = screen.getAllByRole('gridcell');
+    // The pastille renders ABOVE the plant block — the label now says so.
+    expect(cells[0]).toHaveAccessibleName(
+      'Basil on Clay soil — row 1, column A'
+    );
+    expect(cells[1]).toHaveAccessibleName('Basil at row 1, column B');
+  });
+
+  it('no pastille is emitted for a soil cell inside a drag target (R4)', () => {
+    render(
+      <ThemeProvider theme={createTheme()}>
+        <GardenGrid
+          grid={[
+            [
+              { active: true, soil: 'clay' },
+              { active: true, soil: 'sand' },
+            ],
+          ]}
+          shapeEditMode={false}
+          dragTarget={{
+            startRow: 0,
+            startCol: 0,
+            spanRows: 1,
+            spanCols: 1,
+            valid: true,
+          }}
+        />
+      </ThemeProvider>
+    );
+    // Target feedback wins outright — the R1 trame ruling's twin (R4).
+    expect(document.querySelector('[data-soil-pastille="clay"]')).toBeNull();
+    // The uncovered soil cell keeps its dot.
+    expect(
+      document.querySelector('[data-soil-pastille="sand"]')
+    ).not.toBeNull();
+  });
+});

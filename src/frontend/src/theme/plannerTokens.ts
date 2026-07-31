@@ -13,6 +13,8 @@
 
 import type { ExposureCategory } from '../utils/exposure';
 import type { InfrastructureType } from '../utils/infrastructure';
+import type { SoilType } from '../utils/soil';
+import { SOIL_TYPES } from '../utils/soil';
 
 export type PlannerThemeMode = 'light' | 'dark';
 
@@ -37,6 +39,19 @@ export interface InfraStyle {
   imageSize?: string;
   icon: string;
   label: string;
+}
+
+/**
+ * One §15 soil style: the trame with the mode's ink already applied — the
+ * `image`/`imageSize` pair follows InfraStyle's pattern precedent;
+ * `imagePosition` exists because the humide staggered dashes are the one
+ * trame whose two tiles must offset (§15) — plus the pastille's solid hue.
+ */
+export interface SoilStyle {
+  image: string;
+  imageSize: string;
+  imagePosition?: string;
+  pastille: string;
 }
 
 export interface PlannerTokens {
@@ -110,7 +125,134 @@ export interface PlannerTokens {
   // new hex here — if a §6 value is missing, STOP AND REPORT (file-header
   // rule).
   infra: Record<InfrastructureType, InfraStyle>;
+  // Soils (§15): per-type trame + pastille hue. Six geometries/hues are
+  // doc-verbatim from the Couche Sols design component; limoneux (loam) and
+  // humide (wet) come from the SMA-14 ruling (30 Jul 2026). Same file-header
+  // rule as §6: if a value is missing, STOP AND REPORT — never invent hex.
+  soil: Record<SoilType, SoilStyle>;
+  /** §15: the trame ink opacity for this mode (day 0.38 / night 0.46). */
+  soilTrameOpacity: number;
+  /** §15: the pastille ring — day black 25 % / night white 35 %. */
+  soilPastilleBd: string;
 }
+
+/**
+ * §15 trame geometry — the design component's `pat` functions transcribed
+ * verbatim (six), plus the SMA-14 ruling's two additions (limoneux
+ * crosshatch, humide staggered dashes). Each takes the mode's INK (the
+ * type's hue at the mode's trame opacity) and returns the background
+ * image/size(/position) triple. NO 45° anywhere, deliberately: the diagonal
+ * belongs to the §3 shadow hatch, and its 135° mirror was rejected too — on
+ * a shaded-and-wet cell the two directions would form a parasitic crosshatch
+ * visually identical to limoneux (§15 cohabitation rule).
+ */
+const SOIL_PATTERNS: Record<
+  SoilType,
+  (ink: string) => { image: string; size: string; position?: string }
+> = {
+  potting: (ink) => ({
+    image: `radial-gradient(circle at 5px 5px, ${ink} 1.8px, transparent 2.4px)`,
+    size: '11px 11px',
+  }),
+  loam: (ink) => ({
+    image: `repeating-linear-gradient(0deg, ${ink} 0px, ${ink} 1.2px, transparent 1.2px, transparent 7.5px), repeating-linear-gradient(90deg, ${ink} 0px, ${ink} 1.2px, transparent 1.2px, transparent 7.5px)`,
+    size: 'auto, auto',
+  }),
+  sand: (ink) => ({
+    image: `radial-gradient(circle at 2.2px 2.2px, ${ink} 0.95px, transparent 1.45px)`,
+    size: '4.6px 4.6px',
+  }),
+  clay: (ink) => ({
+    image: `repeating-linear-gradient(0deg, ${ink} 0px, ${ink} 1.4px, transparent 1.4px, transparent 6.2px)`,
+    size: 'auto',
+  }),
+  stony: (ink) => ({
+    image: `radial-gradient(circle at 3.5px 3.5px, ${ink} 2.1px, transparent 2.8px), radial-gradient(circle at 10px 10px, ${ink} 1.4px, transparent 2px)`,
+    size: '13px 13px, 13px 13px',
+  }),
+  chalk: (ink) => ({
+    image: `repeating-linear-gradient(90deg, ${ink} 0px, ${ink} 1.4px, transparent 1.4px, transparent 7px)`,
+    size: 'auto',
+  }),
+  humus: (ink) => ({
+    image: `radial-gradient(circle at 2px 2px, ${ink} 1.5px, transparent 2px), radial-gradient(circle at 5.8px 5.8px, ${ink} 1.5px, transparent 2px)`,
+    size: '7.6px 7.6px, 7.6px 7.6px',
+  }),
+  // ⚠️ Corrected from the SMA-14 comment's CSS (adversarial pass, declared):
+  // its linear-gradient(90deg, …) is color-invariant along y, so the 10px
+  // tile height and the 5px stagger were geometric no-ops — the "tirets"
+  // rendered as CONTINUOUS vertical stripes inking ~89 % of the cell (an
+  // aplat, which §15 rule 1 forbids and the ruling's own word « brisés »
+  // contradicts). The stated intent (4px-long horizontal dashes, 9×10
+  // quinconce tiles, offset 4.5/5) is kept; the dash is realized as an
+  // elongated ellipse — the same radial primitive as the dot trames —
+  // because a one-axis gradient cannot bound ink on both axes.
+  wet: (ink) => ({
+    image: `radial-gradient(2.6px 1px at 2.5px 2px, ${ink} 70%, transparent 100%), radial-gradient(2.6px 1px at 2.5px 2px, ${ink} 70%, transparent 100%)`,
+    size: '9px 10px, 9px 10px',
+    position: '0 0, 4.5px 5px',
+  }),
+};
+
+/** §15 hues — day encres foncées / night versions claires (same hues, more
+ * light), doc-verbatim per type. */
+const SOIL_HUES: Record<PlannerThemeMode, Record<SoilType, string>> = {
+  light: {
+    potting: '#7A5233',
+    loam: '#6E6B45',
+    sand: '#A67C1E',
+    clay: '#B0583A',
+    stony: '#5F6E7E',
+    chalk: '#948C7B',
+    humus: '#4A3728',
+    wet: '#3E6B66',
+  },
+  dark: {
+    potting: '#C89B72',
+    loam: '#C4C08A',
+    sand: '#E3C46B',
+    clay: '#E08A66',
+    stony: '#9FB0C2',
+    chalk: '#CFC8B8',
+    humus: '#B99B78',
+    wet: '#8FC4BD',
+  },
+};
+
+/** §15 trame ink opacity — the component's rule (opDay 0.38; opNight =
+ * min(0.7, opDay + 0.08)) frozen to its computed values. */
+const SOIL_TRAME_OPACITY: Record<PlannerThemeMode, number> = {
+  light: 0.38,
+  dark: 0.46,
+};
+
+/** The component's ink builder: the hue at the mode's trame opacity. */
+const soilInk = (hex: string, opacity: number): string => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${opacity})`;
+};
+
+/** Assemble one mode's §15 soil record: each type's trame geometry inked at
+ * the mode's opacity, plus the pastille hue — LIGHT and DARK both call this
+ * so the two palettes can never drift structurally. */
+const buildSoilStyles = (mode: PlannerThemeMode): Record<SoilType, SoilStyle> =>
+  Object.fromEntries(
+    SOIL_TYPES.map((type) => {
+      const hue = SOIL_HUES[mode][type];
+      const pattern = SOIL_PATTERNS[type](
+        soilInk(hue, SOIL_TRAME_OPACITY[mode])
+      );
+      return [
+        type,
+        {
+          image: pattern.image,
+          imageSize: pattern.size,
+          ...(pattern.position && { imagePosition: pattern.position }),
+          pastille: hue,
+        },
+      ];
+    })
+  ) as Record<SoilType, SoilStyle>;
 
 // Day-contrast deviation v2 (product decision, 16/07/2026): the mockup's day
 // palette is judged too low-contrast — font AND border day values are
@@ -222,6 +364,10 @@ const LIGHT: PlannerTokens = {
       label: '#A0522D',
     },
   },
+  // §15 day column: encres foncées sur case #F1F7EE, pastille liseré noir 25 %.
+  soil: buildSoilStyles('light'),
+  soilTrameOpacity: SOIL_TRAME_OPACITY.light,
+  soilPastilleBd: 'rgba(0,0,0,0.25)',
 };
 
 const DARK: PlannerTokens = {
@@ -326,6 +472,10 @@ const DARK: PlannerTokens = {
       label: '#E9A06B',
     },
   },
+  // §15 night column: encres claires sur case #132740, pastille liseré blanc 35 %.
+  soil: buildSoilStyles('dark'),
+  soilTrameOpacity: SOIL_TRAME_OPACITY.dark,
+  soilPastilleBd: 'rgba(255,255,255,0.35)',
 };
 
 export function getPlannerTokens(mode: PlannerThemeMode): PlannerTokens {

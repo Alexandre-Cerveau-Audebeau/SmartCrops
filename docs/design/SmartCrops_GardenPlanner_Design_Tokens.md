@@ -258,3 +258,54 @@ En mode DnD s'ajoutent à droite : « Cible valide » (dashed `--prim`) · « Co
 3. `sr-only` : toujours `visuallyHidden` de `@mui/utils` (jamais `width:1`).
 4. Rappel modèle gravé (SMA-17) : le calque est une **estimation** (libellé assumé) ;
    hemisphere + latitudeBand = 2 contrôles ajoutés **au code** dans ce dialog, zéro retouche maquette.
+
+## 15. Sols (SMA-14 — trame + pastille, 8 types)
+
+Source : composant Claude Design « Couche Sols » (6 types) + ruling SMA-14 du 30/07
+(vocabulaire tranché par la donnée ; limoneux et humide composés dans la même grammaire).
+Clés stockées **anglaises** (`potting`, `loam`, `sand`, `clay`, `stony`, `chalk`,
+`humus`, `wet`) — alignées sur le vocabulaire Perenual pour un matching SMA-21 direct.
+
+**Encre de trame** = la teinte du type à l'opacité du mode : **jour 38 %**, **nuit 46 %**
+(`opNight = min(0.7, opJour + 0.08)`). Jour : encres foncées sur case `#F1F7EE` ; nuit :
+mêmes hues en version claire sur case `#132740`. **Aucune géométrie à 45°**, délibérément :
+la diagonale appartient aux hachures d'ombre portée (§3), et le miroir 135° a été écarté
+(sur une case ombrée + humide les deux directions formeraient un croisillon parasite,
+visuellement identique au limoneux).
+
+| Sol (clé) | Hue jour | Hue nuit | Trame (INK = encre du mode) |
+|---|---|---|---|
+| **Terreau** (`potting`) | `#7A5233` | `#C89B72` | points moyens espacés : `radial-gradient(circle at 5px 5px, INK 1.8px, transparent 2.4px)` · size `11px 11px` |
+| **Limoneux** (`loam`) | `#6E6B45` | `#C4C08A` | croisillon (seule géométrie bi-axiale) : `repeating-linear-gradient(0deg, INK 0px, INK 1.2px, transparent 1.2px, transparent 7.5px), repeating-linear-gradient(90deg, INK 0px, INK 1.2px, transparent 1.2px, transparent 7.5px)` · size `auto, auto` |
+| **Sableux** (`sand`) | `#A67C1E` | `#E3C46B` | grain fin serré : `radial-gradient(circle at 2.2px 2.2px, INK 0.95px, transparent 1.45px)` · size `4.6px 4.6px` |
+| **Argileux** (`clay`) | `#B0583A` | `#E08A66` | strates horizontales : `repeating-linear-gradient(0deg, INK 0px, INK 1.4px, transparent 1.4px, transparent 6.2px)` · size `auto` |
+| **Caillouteux** (`stony`) | `#5F6E7E` | `#9FB0C2` | moucheture bicalibre : `radial-gradient(circle at 3.5px 3.5px, INK 2.1px, transparent 2.8px), radial-gradient(circle at 10px 10px, INK 1.4px, transparent 2px)` · size `13px 13px, 13px 13px` |
+| **Calcaire** (`chalk`) | `#948C7B` | `#CFC8B8` | lignes verticales : `repeating-linear-gradient(90deg, INK 0px, INK 1.4px, transparent 1.4px, transparent 7px)` · size `auto` |
+| **Humifère** (`humus`) | `#4A3728` | `#B99B78` | grain dense décalé : `radial-gradient(circle at 2px 2px, INK 1.5px, transparent 2px), radial-gradient(circle at 5.8px 5.8px, INK 1.5px, transparent 2px)` · size `7.6px 7.6px, 7.6px 7.6px` |
+| **Humide** (`wet`) | `#3E6B66` | `#8FC4BD` | tirets horizontaux en quinconce : `radial-gradient(2.6px 1px at 2.5px 2px, INK 70%, transparent 100%)` ×2 · size `9px 10px, 9px 10px` · position `0 0, 4.5px 5px` — ⚠️ géométrie CORRIGÉE du commentaire SMA-14 : son `linear-gradient(90deg, …)` était invariant en y (hauteur de tuile et décalage 5px sans effet → rayures verticales continues à ~89 %, un aplat que la règle 1 interdit et que « brisés » contredit) ; l'intention (tirets 4px, quinconce 9×10, décalage 4,5/5) est réalisée en ellipse — la primitive radiale des trames à points |
+
+**Pastille d'angle** : bas-gauche, teinte pleine du type ; liseré **noir 25 %** (jour) /
+**blanc 35 %** (nuit). Référence composant : 11 px / inset 3 px / radius 3.5 px sur case
+68 px — en code, PROPORTIONNELLE : `max(7px, 16 % du côté)`, inset `max(2px, 4,5 %)`,
+radius 32 % de la pastille (le plancher 7 px garde la pastille lisible en mobile, où
+c'est ELLE qui porte l'identification — la trame n'est qu'un rappel).
+
+**Règles de cohabitation** :
+
+1. Le fond de case n'est **jamais** un aplat « sol » : l'exposition garde sa teinte pleine
+   (le fond appartient exclusivement au calque §3) ; la trame se lit par-dessus à
+   l'opacité du mode.
+2. La trame passe **sous** les plantes (§5) ; la pastille reste **au-dessus** de tout :
+   une case plantée garde son sol identifiable.
+3. Les **infrastructures masquent le sol** : ni trame ni pastille sur ces cases (mêmes
+   les translucides — treillis, eau, pot).
+4. Trame + hachure d'ombre (§3) **composent** en backgrounds multiples, hachure en
+   premier (elle se peint au-dessus : l'ombre se lit comme un lavis sur le sol).
+   Les états cible DnD (§7) gagnent purement et simplement — une case ciblée montre le
+   retour de cible, pas le sol.
+
+Sidebar SOLS : mêmes rangées que INFRAS. (avatar 34 px = aperçu de la PROPRE trame du
+type sur la case du mode, liseré = hue pastille ; pas d'icône, pas de badge — l'emplacement
+badge d'INFRAS. signale une conséquence moteur, le sol n'en a pas). Bouton toolbar
+« Sols » : miroir d'Infrastructures (désactivé sans type armé), icône Material Symbols
+`texture`.

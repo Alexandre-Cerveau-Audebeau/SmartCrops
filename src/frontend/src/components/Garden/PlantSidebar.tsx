@@ -27,6 +27,7 @@ import {
   INFRASTRUCTURE_TYPES,
   type InfrastructureType,
 } from '../../utils/infrastructure';
+import { SOIL_ERASER, SOIL_TYPES, type ArmedSoil } from '../../utils/soil';
 import { getPlantColor } from '../../utils/plantColor';
 import { Sym } from '../Sym';
 
@@ -47,6 +48,12 @@ interface Props {
   // for painting (and enters the Infrastructures mode); re-clicking disarms.
   selectedInfraType?: InfrastructureType | null;
   onInfraSelect?: (type: InfrastructureType | null) => void;
+  // SMA-14: the armed soil type OR the eraser (R3) — same arming grammar
+  // as infrastructure.
+  selectedSoilType?: ArmedSoil | null;
+  onSoilSelect?: (type: ArmedSoil | null) => void;
+  /** R3: fill every active cell with the armed soil (eraser = clear all). */
+  onSoilFillAll?: () => void;
   language: string;
   shapeEditMode: boolean;
   onShapeEditToggle: (value: boolean) => void;
@@ -164,7 +171,7 @@ function ArmedPlantChip({
   );
 }
 
-function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
+function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, selectedSoilType = null, onSoilSelect, onSoilFillAll, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
   const [activeTab, setActiveTab] = useState<TabValue>('plants');
@@ -224,10 +231,166 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
         }}
       >
         <Tab label={t('planner.tabs.plants')} value="plants" />
-        <Tab label={t('planner.tabs.soils')} value="soils" disabled />
-        {/* Enabled with SMA-15 (5.4) — soils keep their own chantier. */}
+        {/* Enabled with SMA-14 — the disabled promise is over. */}
+        <Tab label={t('planner.tabs.soils')} value="soils" />
         <Tab label={t('planner.tabs.infrastructure')} value="infrastructure" />
       </Tabs>
+      {activeTab === 'soils' && (
+        <>
+          {/* The INFRAS. panel anatomy mirrored (SMA-14): hint line, then the
+              eight §15 rows. R4 (GitHub): hint and fill button are FIXED
+              chrome — the plants tab's own split (search box fixed, list
+              scrolls) — so the one action that operates on the WHOLE garden
+              never scrolls out of reach; only the type list scrolls. */}
+          <Typography
+            sx={{
+              p: '12px 16px',
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: tk.tMeta,
+              borderBottom: `1px solid ${tk.divider}`,
+            }}
+          >
+            {t('planner.soil.hint')}
+          </Typography>
+          <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          <List dense disablePadding>
+            {SOIL_TYPES.map((type) => {
+              const style = tk.soil[type];
+              const selected = type === selectedSoilType;
+              return (
+                <ListItemButton
+                  key={type}
+                  selected={selected}
+                  aria-pressed={selected}
+                  onClick={() => onSoilSelect?.(selected ? null : type)}
+                  sx={{
+                    px: '14px',
+                    py: '10px',
+                    borderLeft: selected
+                      ? `3px solid ${tk.prim}`
+                      : '3px solid transparent',
+                  }}
+                >
+                  {/* §15 pairing as a chip: the avatar previews the type's
+                      OWN trame on the mode's cell base, ringed by the
+                      pastille hue — a trame IS the identity, so no icon.
+                      No badge either: infra's slot flags the shadow-engine
+                      consequence and soil has no model consequence to flag
+                      (deliberately omitted rather than filled). */}
+                  <ListItemAvatar sx={{ minWidth: 42 }}>
+                    <Avatar
+                      sx={{
+                        width: 34,
+                        height: 34,
+                        bgcolor: tk.cellOn,
+                        border: `2px solid ${style.pastille}`,
+                        backgroundImage: style.image,
+                        backgroundSize: style.imageSize,
+                        ...(style.imagePosition && {
+                          backgroundPosition: style.imagePosition,
+                        }),
+                      }}
+                    >
+                      {/* Empty child suppresses the Avatar fallback icon —
+                          the trame is the preview. */}
+                      <span />
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    disableTypography
+                    primary={
+                      <Typography
+                        component="span"
+                        sx={{
+                          fontSize: 13.5,
+                          fontWeight: 700,
+                          color: tk.tTitle,
+                        }}
+                      >
+                        {t(`planner.soil.types.${type}`)}
+                      </Typography>
+                    }
+                  />
+                </ListItemButton>
+              );
+            })}
+            {/* R3 eraser row — BOTTOM of the list, deliberately: the eight
+                types keep the §15 catalog order and primacy (painting is
+                the common case) and the eraser sits next to the fill
+                action below, forming the panel's utility zone. Armable
+                exactly like a type; the avatar reads as ABSENCE, not a
+                ninth soil: the inactive-cell fill (cellOff) with the
+                anomaly-marker dashed muted ring and the ink_eraser glyph —
+                existing tokens only, no trame preview. */}
+            <ListItemButton
+              key="eraser"
+              selected={selectedSoilType === SOIL_ERASER}
+              aria-pressed={selectedSoilType === SOIL_ERASER}
+              onClick={() =>
+                onSoilSelect?.(
+                  selectedSoilType === SOIL_ERASER ? null : SOIL_ERASER
+                )
+              }
+              sx={{
+                px: '14px',
+                py: '10px',
+                borderLeft:
+                  selectedSoilType === SOIL_ERASER
+                    ? `3px solid ${tk.prim}`
+                    : '3px solid transparent',
+              }}
+            >
+              <ListItemAvatar sx={{ minWidth: 42 }}>
+                <Avatar
+                  sx={{
+                    width: 34,
+                    height: 34,
+                    bgcolor: tk.cellOff,
+                    border: `1.5px dashed ${tk.muted}`,
+                  }}
+                >
+                  <Sym name="ink_eraser" size={18} color={tk.muted} />
+                </Avatar>
+              </ListItemAvatar>
+              <ListItemText
+                disableTypography
+                primary={
+                  <Typography
+                    component="span"
+                    sx={{ fontSize: 13.5, fontWeight: 700, color: tk.tTitle }}
+                  >
+                    {t('planner.soil.eraser')}
+                  </Typography>
+                }
+              />
+            </ListItemButton>
+          </List>
+          </Box>
+          {/* R3 fill-the-garden action (R4: OUTSIDE the scroll — fixed
+              chrome, always reachable) — enabled only when something is
+              armed; the label says what it DOES for the armed value (fill
+              vs clear). NO confirmation dialog, deliberately: the action
+              is fully undoable in ONE step and the planner has no
+              confirmation anywhere yet — introducing the first one here
+              would pre-empt SMA-18, which owns that concern. */}
+          <Box sx={{ p: '12px 16px', borderTop: `1px solid ${tk.divider}` }}>
+            <Button
+              size="small"
+              variant="outlined"
+              fullWidth
+              disabled={selectedSoilType === null}
+              onClick={() => onSoilFillAll?.()}
+            >
+              {t(
+                selectedSoilType === SOIL_ERASER
+                  ? 'planner.soil.clearAll'
+                  : 'planner.soil.fillAll'
+              )}
+            </Button>
+          </Box>
+        </>
+      )}
       {activeTab === 'infrastructure' && (
         <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {/* Mockup hint: blocking elements cast a shadow in the Exposure
