@@ -232,6 +232,9 @@ const soilInk = (hex: string, opacity: number): string => {
   return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${opacity})`;
 };
 
+/** Assemble one mode's §15 soil record: each type's trame geometry inked at
+ * the mode's opacity, plus the pastille hue — LIGHT and DARK both call this
+ * so the two palettes can never drift structurally. */
 const buildSoilStyles = (mode: PlannerThemeMode): Record<SoilType, SoilStyle> =>
   Object.fromEntries(
     SOIL_TYPES.map((type) => {

@@ -227,7 +227,9 @@ export type PlannerAction =
   | { type: 'SET_SHAPE_EDIT_MODE'; enabled: boolean }
   | { type: 'SET_INFRA_TYPE'; infraType: InfrastructureType | null }
   | { type: 'SET_INFRA_MODE'; enabled: boolean }
+  /** Arm a soil type (enters soil mode) or disarm with null (exits it). */
   | { type: 'SET_SOIL_TYPE'; soilType: SoilType | null }
+  /** Enter (requires an armed type) or leave soil paint mode. */
   | { type: 'SET_SOIL_MODE'; enabled: boolean }
   | { type: 'SET_PLACE_PLANT'; plantId: string | null }
   | { type: 'SET_PLACE_MODE'; enabled: boolean }

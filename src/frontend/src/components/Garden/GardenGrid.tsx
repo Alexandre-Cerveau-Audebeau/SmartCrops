@@ -312,6 +312,7 @@ const GridCell = memo(function GridCell({
   c: number;
   paintMode: boolean;
   shapeEditMode: boolean;
+  /** SMA-14: soil paint mode — picks the soil paint label over the infra one. */
   soilPaintMode: boolean;
   hasDrag: boolean;
   tint: ExposureCategory | null;
@@ -490,21 +491,44 @@ const GridCell = memo(function GridCell({
             : placementName
               ? t('planner.cell.plantedCell', { plant: placementName, row: r + 1, col: columnLabel(c) })
               : cell.infrastructure
-                ? t('planner.cell.infraCell', {
-                    type: t(`planner.infra.types.${cell.infrastructure}`),
-                    row: r + 1,
-                    col: columnLabel(c),
-                  })
-                // SMA-14: a soil-only cell announces its soil (the trame and
-                // pastille are aria-hidden decoration). Combinations keep
-                // their existing labels — plant/infra win, matching the
-                // visual priority (declared limitation).
-                : cell.soil
-                  ? t('planner.cell.soilCell', {
-                      type: t(`planner.soil.types.${cell.soil}`),
+                // R2 (the GitHub Minor's test applied to every combination):
+                // the TRELLIS is the one §6 type whose fill is translucent in
+                // BOTH palettes (0.08/0.10) — the tint genuinely shows
+                // through the lattice, so it is announced too. Wall, fence
+                // and path are opaque hexes in both modes (occluded → type
+                // only); water and pot are opaque by day and translucent by
+                // night, and an aria label must not vary with the palette,
+                // so they keep the type-only label (declared).
+                ? cell.infrastructure === 'trellis' && tint
+                  ? t('planner.cell.infraExposureCell', {
+                      type: t(`planner.infra.types.${cell.infrastructure}`),
+                      category: t(`planner.exposure.categories.${tint}`),
                       row: r + 1,
                       col: columnLabel(c),
                     })
+                  : t('planner.cell.infraCell', {
+                      type: t(`planner.infra.types.${cell.infrastructure}`),
+                      row: r + 1,
+                      col: columnLabel(c),
+                    })
+                // SMA-14 R2 (GitHub Minor): soil and a tint are visible AT
+                // THE SAME TIME — the tint is the cell background, the trame
+                // sits on top — unlike a plant or an opaque infrastructure
+                // whose block covers the cell. Both signals are announced;
+                // soil-only and tint-only keep their existing labels.
+                : cell.soil
+                  ? tint
+                    ? t('planner.cell.soilExposureCell', {
+                        type: t(`planner.soil.types.${cell.soil}`),
+                        category: t(`planner.exposure.categories.${tint}`),
+                        row: r + 1,
+                        col: columnLabel(c),
+                      })
+                    : t('planner.cell.soilCell', {
+                        type: t(`planner.soil.types.${cell.soil}`),
+                        row: r + 1,
+                        col: columnLabel(c),
+                      })
                   : tint
                     ? t('planner.cell.exposureCell', {
                         category: t(`planner.exposure.categories.${tint}`),
@@ -552,18 +576,20 @@ function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, soilPaintMode
   // inset, resolved at the same breakpoint (3px inset mobile — scaled).
   const overlayGapPx = isMobile ? GAP_PX.xs : GAP_PX.sm;
   const plantInsetPx = isMobile ? 3 : 5;
-  // §15 pastille metrics (SMA-14) — PROPORTIONAL, not fixed: the design
-  // component draws 11 px on a 68 px cell (≈ 16 % of the edge, 3 px inset,
-  // radius 3.5 ≈ 32 % of the dot). A fixed 11 px would eat 37 % of a 30 px
-  // mobile cell; a pure 16 % would shrink to 5 px there. The 7 px floor
-  // (≈ 23 % at 30 px) keeps the dot readable because at small sizes the
-  // pastille CARRIES the identification (SMA-14 ruling) — the trame is only
-  // a reminder.
+  /** §15 pastille edge (SMA-14) — PROPORTIONAL, not fixed: the design
+   * component draws 11 px on a 68 px cell (≈ 16 % of the edge). A fixed
+   * 11 px would eat 37 % of a 30 px mobile cell; a pure 16 % would shrink
+   * to 5 px there. The 7 px floor (≈ 23 % at 30 px) keeps the dot readable
+   * because at small sizes the pastille CARRIES the identification (SMA-14
+   * ruling) — the trame is only a reminder. */
   const pastilleSize = Math.max(7, Math.round(cellSizePx * 0.16));
+  /** §15: the dot's corner offset — the component's 3 px at 68 px (≈ 4.5 %). */
   const pastilleInset = Math.max(2, Math.round(cellSizePx * 0.045));
+  /** §15: the dot's rounding — the component's 3.5 px on 11 px (≈ 32 %). */
   const pastilleRadius = Math.round(pastilleSize * 0.32);
-  // §15: soil dots for active, non-infra soil cells — infrastructure masks
-  // soil entirely (no trame, no pastille), inactive cells carry neither.
+  /** §15: one dot per active, non-infra soil cell — infrastructure masks
+   * soil entirely (no trame, no pastille) and inactive cells carry neither
+   * (same gating as GridCell's trame). */
   const soilPastilles = useMemo(() => {
     const out: Array<{ r: number; c: number; soil: SoilType }> = [];
     grid.forEach((row, r) =>

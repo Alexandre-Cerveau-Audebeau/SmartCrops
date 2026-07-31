@@ -36,6 +36,8 @@ export const SOIL_TYPES = [
   'wet',
 ] as const;
 
+/** One of the 8 stored soil keys — the English, data-aligned vocabulary
+ * (see the module docstring for why the keys are not French). */
 export type SoilType = (typeof SOIL_TYPES)[number];
 
 /**

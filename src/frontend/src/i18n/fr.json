@@ -579,6 +579,8 @@
       "infraCell": "{{type}} — ligne {{row}}, colonne {{col}}",
       "plantedInfraCell": "{{plant}} sur {{type}} — ligne {{row}}, colonne {{col}}",
       "soilCell": "Sol {{type}} — ligne {{row}}, colonne {{col}}",
+      "soilExposureCell": "Sol {{type}} — {{category}} — ligne {{row}}, colonne {{col}}",
+      "infraExposureCell": "{{type}} — {{category}} — ligne {{row}}, colonne {{col}}",
       "paintCell": "Peindre une infrastructure",
       "paintSoil": "Peindre le sol"
     },

@@ -321,3 +321,55 @@ describe('GardenGrid infrastructure regions (SMA-15 5.4)', () => {
     expect(gridCells[1]).not.toHaveAttribute('data-cast-shadow');
   });
 });
+
+// SMA-14 R2 (GitHub Minor) — a soil and an exposure tint are visible AT THE
+// SAME TIME (tint = background, trame on top), so both are announced; the
+// same test applied to infra found the trellis (translucent in BOTH
+// palettes) equally double-signalled, while opaque types stay type-only.
+// The tint-only label is pinned by the existing axes test above.
+describe('GardenGrid combined announcements (SMA-14 R2)', () => {
+  const comboGrid: CellData[][] = [
+    [{ active: true, soil: 'clay' }, { active: true, soil: 'clay' }],
+    [
+      { active: true, infrastructure: 'trellis' },
+      { active: true, infrastructure: 'wall' },
+    ],
+  ];
+  const comboExposure: (ExposureCategory | null)[][] = [
+    ['full', null],
+    ['morning', 'morning'],
+  ];
+  const renderCombo = () =>
+    render(
+      <ThemeProvider theme={createTheme()}>
+        <GardenGrid
+          grid={comboGrid}
+          shapeEditMode={false}
+          exposure={comboExposure}
+        />
+      </ThemeProvider>
+    );
+
+  it('a cell with soil AND a tint announces both', () => {
+    renderCombo();
+    expect(screen.getAllByRole('gridcell')[0]).toHaveAccessibleName(
+      'Clay soil — Full sun — row 1, column A'
+    );
+  });
+
+  it('the soil-only branch keeps its existing label', () => {
+    renderCombo();
+    expect(screen.getAllByRole('gridcell')[1]).toHaveAccessibleName(
+      'Clay soil — row 1, column B'
+    );
+  });
+
+  it('a trellis with a tint announces both; an opaque infrastructure stays type-only', () => {
+    renderCombo();
+    const cells = screen.getAllByRole('gridcell');
+    expect(cells[2]).toHaveAccessibleName(
+      'Trellis — Morning sun — row 2, column A'
+    );
+    expect(cells[3]).toHaveAccessibleName('Wall — row 2, column B');
+  });
+});
