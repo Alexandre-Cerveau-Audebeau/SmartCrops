@@ -861,7 +861,26 @@ function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, soilPaintMode
           zIndex: 3,
         }}
       >
-        {soilPastilles.map(({ r, c, soil }) => (
+        {soilPastilles.map(({ r, c, soil }) => {
+          // R4 (GitHub outside-diff): drag-target feedback wins OUTRIGHT —
+          // the R1 ruling GridCell already applies to the trame, applied to
+          // its twin. Deliberately RENDER-TIME rather than a dragTarget dep
+          // on the memo: dragTarget changes once per traversed cell, so a
+          // dep would re-walk the whole grid per traversal — the exact
+          // per-drag O(grid) pattern the DnD perf round measured and
+          // removed. This per-pastille bounds check rides a render that
+          // happens anyway (the overlay re-renders with the page), like the
+          // trame's own targetState check in commonSx.
+          if (
+            dragTarget &&
+            r >= dragTarget.startRow &&
+            r < dragTarget.startRow + dragTarget.spanRows &&
+            c >= dragTarget.startCol &&
+            c < dragTarget.startCol + dragTarget.spanCols
+          ) {
+            return null;
+          }
+          return (
           <Box
             key={`${r}-${c}`}
             data-soil-pastille={soil}
@@ -879,7 +898,8 @@ function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, soilPaintMode
               border: `1px solid ${tk.soilPastilleBd}`,
             }}
           />
-        ))}
+          );
+        })}
       </Box>
     )}
     </Box>

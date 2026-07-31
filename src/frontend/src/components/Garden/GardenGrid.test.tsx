@@ -393,4 +393,33 @@ describe('GardenGrid combined announcements (SMA-14 R2)', () => {
     );
     expect(cells[1]).toHaveAccessibleName('Basil at row 1, column B');
   });
+
+  it('no pastille is emitted for a soil cell inside a drag target (R4)', () => {
+    render(
+      <ThemeProvider theme={createTheme()}>
+        <GardenGrid
+          grid={[
+            [
+              { active: true, soil: 'clay' },
+              { active: true, soil: 'sand' },
+            ],
+          ]}
+          shapeEditMode={false}
+          dragTarget={{
+            startRow: 0,
+            startCol: 0,
+            spanRows: 1,
+            spanCols: 1,
+            valid: true,
+          }}
+        />
+      </ThemeProvider>
+    );
+    // Target feedback wins outright — the R1 trame ruling's twin (R4).
+    expect(document.querySelector('[data-soil-pastille="clay"]')).toBeNull();
+    // The uncovered soil cell keeps its dot.
+    expect(
+      document.querySelector('[data-soil-pastille="sand"]')
+    ).not.toBeNull();
+  });
 });

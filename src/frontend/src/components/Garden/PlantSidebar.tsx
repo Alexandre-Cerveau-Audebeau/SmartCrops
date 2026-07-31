@@ -236,9 +236,12 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
         <Tab label={t('planner.tabs.infrastructure')} value="infrastructure" />
       </Tabs>
       {activeTab === 'soils' && (
-        <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        <>
           {/* The INFRAS. panel anatomy mirrored (SMA-14): hint line, then the
-              eight §15 rows. */}
+              eight §15 rows. R4 (GitHub): hint and fill button are FIXED
+              chrome — the plants tab's own split (search box fixed, list
+              scrolls) — so the one action that operates on the WHOLE garden
+              never scrolls out of reach; only the type list scrolls. */}
           <Typography
             sx={{
               p: '12px 16px',
@@ -250,6 +253,7 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
           >
             {t('planner.soil.hint')}
           </Typography>
+          <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
           <List dense disablePadding>
             {SOIL_TYPES.map((type) => {
               const style = tk.soil[type];
@@ -362,7 +366,9 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
               />
             </ListItemButton>
           </List>
-          {/* R3 fill-the-garden action — enabled only when something is
+          </Box>
+          {/* R3 fill-the-garden action (R4: OUTSIDE the scroll — fixed
+              chrome, always reachable) — enabled only when something is
               armed; the label says what it DOES for the armed value (fill
               vs clear). NO confirmation dialog, deliberately: the action
               is fully undoable in ONE step and the planner has no
@@ -383,7 +389,7 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
               )}
             </Button>
           </Box>
-        </Box>
+        </>
       )}
       {activeTab === 'infrastructure' && (
         <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>

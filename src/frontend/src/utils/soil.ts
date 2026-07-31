@@ -47,8 +47,15 @@ export type SoilType = (typeof SOIL_TYPES)[number];
  * Deliberately NOT a member of SOIL_TYPES, so `isSoilType` keeps rejecting
  * it at the JSON boundary and `CellData.soil` cannot carry it — the shape
  * that keeps SoilType unpolluted.
+ *
+ * COMPILE-TIME guard (R4): the `Exclude` annotation is a type-level
+ * assertion of the never-a-member invariant that several files' comments
+ * rely on — if a future SOIL_TYPES entry ever collides with 'erase', the
+ * annotation resolves to `never` and the BUILD fails, instead of waiting
+ * for the runtime `isSoilType(SOIL_ERASER) === false` test (kept — the two
+ * guard different moments: authoring time vs parsed-data time).
  */
-export const SOIL_ERASER = 'erase' as const;
+export const SOIL_ERASER: Exclude<'erase', SoilType> = 'erase';
 
 /** What the SOLS panel can arm: one of the 8 soils, or the eraser. */
 export type ArmedSoil = SoilType | typeof SOIL_ERASER;
