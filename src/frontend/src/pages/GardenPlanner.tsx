@@ -1909,7 +1909,15 @@ export default function GardenPlanner() {
             display: 'flex',
             flexDirection: { xs: 'column', lg: 'row' },
             gap: 2,
-            alignItems: 'flex-start',
+            // SMA-18 R2 (measured at 390px): in the COLUMN direction,
+            // alignItems governs the HORIZONTAL axis — flex-start sized each
+            // child to its own content, so the grid column took the grid's
+            // intrinsic width (651px against a 342px row) and carried the
+            // toolbar off-viewport; the grid's own overflowX:auto one level
+            // down never saw any overflow (626/626/626). stretch (the flex
+            // default) makes the stacked children fill the row; flex-start
+            // stays ≥lg where it top-aligns the sticky rails.
+            alignItems: { xs: 'stretch', lg: 'flex-start' },
             pb: 2,
             minHeight: 0,
           }}
