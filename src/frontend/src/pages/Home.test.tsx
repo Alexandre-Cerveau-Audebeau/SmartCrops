@@ -207,6 +207,10 @@ describe('Home — the page says only what ships (SMA-353)', () => {
   it('names the assistant link in French too', async () => {
     localStorage.setItem('smartcrops-language', 'fr');
     renderHome();
+    // The assistant link renders whatever auth says, so awaiting it alone would
+    // leave fetchMe pending past the end of the test (R4). The CTA is the
+    // signal that auth resolved — the same one the other French tests use.
+    await screen.findByRole('link', { name: 'Créer un compte' });
 
     const link = await screen.findByRole('link', {
       name: 'En savoir plus — Branchez votre propre assistant',
