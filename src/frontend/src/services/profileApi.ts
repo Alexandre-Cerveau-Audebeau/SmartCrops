@@ -31,6 +31,33 @@ export async function updateProfile(data: UpdateProfileData): Promise<UserProfil
   return res.json();
 }
 
+/**
+ * SMA-341 (GDPR art. 17): deletes the caller's account. The confirmation is the
+ * account's own email address, typed by the user — the backend re-checks it.
+ */
+export async function deleteAccount(confirmation: string): Promise<void> {
+  const res = await fetch('/api/auth/account', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ confirmation }),
+  });
+  if (!res.ok) throw new Error('Failed to delete account');
+}
+
+/**
+ * SMA-341 (GDPR art. 20): downloads the caller's data export. The filename comes
+ * from the Content-Disposition the backend sets (dated), with a static fallback
+ * if the header is unreadable.
+ */
+export async function exportAccountData(): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetch('/api/auth/account/export', { credentials: 'include' });
+  if (!res.ok) throw new Error('Failed to export account data');
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const match = /filename="?([^";]+)"?/.exec(disposition);
+  return { blob: await res.blob(), filename: match?.[1] ?? 'smartcrops-export.json' };
+}
+
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
   const res = await fetch('/api/auth/change-password', {
     method: 'POST',

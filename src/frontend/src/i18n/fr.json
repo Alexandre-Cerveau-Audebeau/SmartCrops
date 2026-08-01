@@ -385,7 +385,23 @@
     "passwordError": "Impossible de changer le mot de passe.",
     "passwordMismatch": "Les mots de passe ne correspondent pas.",
     "loadError": "Impossible de charger le profil.",
-    "googleAccount": "Votre compte utilise la connexion Google. La gestion du mot de passe n'est pas disponible."
+    "googleAccount": "Votre compte utilise la connexion Google. La gestion du mot de passe n'est pas disponible.",
+    "dangerZone": "Zone de danger",
+    "exportTitle": "Exporter vos données",
+    "exportBody": "Téléchargez tout ce que le service détient sur vous — profil, jardins, plans et notes de placement — dans un fichier JSON (droit RGPD à la portabilité).",
+    "exportButton": "Télécharger mes données",
+    "exportError": "Impossible d'exporter vos données. Veuillez réessayer.",
+    "deleteTitle": "Supprimer votre compte",
+    "deleteBody": "Supprime définitivement votre compte et tout ce qu'il contient. Cette action est irréversible.",
+    "deleteButton": "Supprimer mon compte",
+    "deleteDialogTitle": "Supprimer ce compte ?",
+    "deleteDialogWarning": "Vos jardins et leurs plans, vos notes de placement, les informations de votre profil et le compte lui-même seront définitivement détruits.",
+    "deleteDialogIrreversible": "Cette action est irréversible.",
+    "deleteDialogPrompt": "Pour confirmer, saisissez votre adresse e-mail ({{email}}) ci-dessous.",
+    "deleteDialogConfirmLabel": "Votre adresse e-mail",
+    "deleteDialogCancel": "Annuler",
+    "deleteDialogConfirm": "Supprimer définitivement",
+    "deleteError": "La suppression a échoué. Veuillez réessayer."
   },
   "planner": {
     "title": "Planificateur de jardin",
@@ -1304,7 +1320,7 @@
       "s07": {
         "title": "Quels sont vos droits ?",
         "p1": "Conformément au RGPD et à la loi Informatique et Libertés, vous disposez des droits suivants sur vos données : **accès**, **rectification**, **effacement**, **limitation du traitement**, **opposition**, **portabilité**, ainsi que du droit de définir des directives post-mortem.",
-        "p2": "**Pour exercer ces droits** : écrivez à **contact@smartcrops.fr** depuis l'adresse associée à votre compte (une vérification d'identité pourra être demandée). Réponse sous un mois. Vous pouvez supprimer vous-même vos contenus (jardins) depuis l'application ; la suppression du compte s'effectue sur demande à l'adresse ci-dessus (réponse sous un mois).",
+        "p2": "**Pour exercer ces droits** : la **suppression de votre compte** et l'**export de vos données** (profil, jardins et plans, au format JSON) s'effectuent directement depuis l'application, sur votre page Profil. Vous pouvez également supprimer vous-même vos contenus (jardins) depuis l'application. Pour les autres droits (accès, rectification, limitation, opposition, directives post-mortem) : écrivez à **contact@smartcrops.fr** depuis l'adresse associée à votre compte (une vérification d'identité pourra être demandée) ; réponse sous un mois.",
         "p3": "Si vous estimez que vos droits ne sont pas respectés, vous pouvez introduire une réclamation auprès de la **CNIL** (www.cnil.fr)."
       },
       "s08": {
