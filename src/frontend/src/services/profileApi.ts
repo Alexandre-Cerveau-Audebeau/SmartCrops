@@ -32,23 +32,56 @@ export async function updateProfile(data: UpdateProfileData): Promise<UserProfil
 }
 
 /**
+ * Sentinel thrown by deleteAccount when its 10 s bound aborts the request
+ * (SMA-341 R3). An abort is INDETERMINATE, not a failure: it cannot tell "the
+ * server never got it" from "the server committed and the response was lost".
+ * The dialog must treat it as its own case, never as a plain error — a retry
+ * against a committed deletion meets a 404 on an account that no longer
+ * exists. Same sentinel pattern as authApi's RESET_FAILED / RESET_RATE_LIMITED.
+ */
+export const DELETE_TIMEOUT = 'DELETE_TIMEOUT';
+
+/**
+ * Sentinel thrown by deleteAccount when the request failed WITHOUT a backend
+ * explanation (network error, or a non-OK response whose body carried no
+ * usable detail). The dialog maps it to its localized generic copy; only
+ * messages that are NOT this sentinel are genuine backend explanations, safe
+ * to render verbatim (SMA-341 R3).
+ */
+export const DELETE_FAILED = 'DELETE_FAILED';
+
+/**
  * SMA-341 (GDPR art. 17): deletes the caller's account. The confirmation is the
  * account's own email address, typed by the user — the backend re-checks it.
  * Bounded at 10 s (AbortSignal.timeout, the SMA-323 declarative precedent): the
  * dialog blocks EVERY exit while deleting, so an unbounded hung request would
- * trap the user in the modal with no way out. On a non-OK response the
- * backend's own reason (the `{ error }` mismatch message, or Identity's error
- * descriptions) is surfaced so the dialog can show WHY, mirroring the
- * changePassword parser below.
+ * trap the user in the modal with no way out.
+ *
+ * Error contract (R3): the ABORT case is recognized FIRST and thrown as
+ * DELETE_TIMEOUT (indeterminate — see the sentinel). Every other failure is
+ * either a genuine backend explanation (the `{ error }` mismatch message, or
+ * Identity's error descriptions — thrown verbatim, mirroring the
+ * changePassword parser below) or DELETE_FAILED when no such detail exists.
  */
 export async function deleteAccount(confirmation: string): Promise<void> {
-  const res = await fetch('/api/auth/account', {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ confirmation }),
-    signal: AbortSignal.timeout(10_000),
-  });
+  let res: Response;
+  try {
+    res = await fetch('/api/auth/account', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ confirmation }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    // Abort first: browsers reject with a DOMException named TimeoutError
+    // (older engines: AbortError). Anything else is a network failure with no
+    // backend explanation to show.
+    if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+      throw new Error(DELETE_TIMEOUT);
+    }
+    throw new Error(DELETE_FAILED);
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const message =
@@ -60,7 +93,7 @@ export async function deleteAccount(confirmation: string): Promise<void> {
               .filter(Boolean)
               .join(', ')
           : null;
-    throw new Error(message || 'Failed to delete account');
+    throw new Error(message || DELETE_FAILED);
   }
 }
 

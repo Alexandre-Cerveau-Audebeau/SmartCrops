@@ -141,8 +141,10 @@ export default function Profile() {
   // the source, rather than with a catch at the dialog's call site: the dialog
   // fires onDeleted() without awaiting it, so a rejection escaping this
   // function would surface nowhere — the dialog would sit frozen at
-  // deleting=true over an account that no longer exists. Any logout() failure
-  // (network, 5xx, abort) is swallowed and navigation ALWAYS completes.
+  // deleting=true over an account that no longer exists. Completion is
+  // BOUNDED, not merely non-rejecting (R3): authApi.logout carries its own
+  // 10 s AbortSignal.timeout, so this await cannot hang — a stalled relay
+  // becomes a rejection, the catch swallows it, and navigation ALWAYS runs.
   const handleDeleted = async () => {
     try {
       await logout();

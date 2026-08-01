@@ -401,7 +401,9 @@
     "deleteDialogConfirmLabel": "Your email address",
     "deleteDialogCancel": "Cancel",
     "deleteDialogConfirm": "Delete permanently",
-    "deleteError": "Deletion failed. Please try again."
+    "deleteError": "Deletion failed. Please try again.",
+    "deleteTimeoutWarning": "The request timed out without confirmation. Your account has most likely been deleted. As a precaution you will be signed out; if the account still exists, sign back in and try again.",
+    "deleteTimeoutContinue": "Sign out"
   },
   "planner": {
     "title": "Garden planner",

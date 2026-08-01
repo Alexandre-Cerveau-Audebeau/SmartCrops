@@ -1,12 +1,16 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { AuthProvider } from '../contexts/AuthContext';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import type { AuthUser } from '../types/Auth';
 
-vi.mock('../services/profileApi', () => ({
+// importOriginal (R3): the real module also exports the DELETE_TIMEOUT /
+// DELETE_FAILED sentinels the dialog compares against — a plain factory would
+// replace them with undefined and silently break the comparisons under test.
+vi.mock('../services/profileApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../services/profileApi')>()),
   fetchProfile: vi.fn().mockResolvedValue({
     email: 'user@example.com',
     displayName: 'User',
@@ -27,7 +31,7 @@ vi.mock('../services/authApi', () => ({
 
 import Profile from './Profile';
 import { fetchMe, logout } from '../services/authApi';
-import { deleteAccount, exportAccountData } from '../services/profileApi';
+import { DELETE_TIMEOUT, deleteAccount, exportAccountData } from '../services/profileApi';
 
 beforeEach(() => {
   localStorage.clear();
@@ -47,6 +51,35 @@ function renderProfileAs(user: AuthUser) {
       </AuthProvider>
     </LanguageProvider>,
   );
+}
+
+// Routed variant (R3): tests that assert "the user actually LEFT the page"
+// need a real route to land on — navigation is unobservable when the page is
+// mounted outside any Route.
+function renderProfileWithRoutesAs(user: AuthUser) {
+  vi.mocked(fetchMe).mockResolvedValue(user);
+  return render(
+    <LanguageProvider>
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/profile']}>
+          <Routes>
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/" element={<div>HOME</div>} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>
+    </LanguageProvider>,
+  );
+}
+
+// Opens the deletion dialog, types the matching address, submits.
+async function armAndConfirmDeletion() {
+  fireEvent.click(screen.getByRole('button', { name: 'Delete my account' }));
+  await screen.findByRole('dialog');
+  fireEvent.change(screen.getByLabelText('Your email address'), {
+    target: { value: 'user@example.com' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }));
 }
 
 const baseUser: AuthUser = {
@@ -101,6 +134,39 @@ describe('Danger zone (SMA-341)', () => {
     await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
   });
 
+  it('still navigates home when logout rejects after a successful deletion', async () => {
+    // FIX 3 (R2)'s guarantee, now pinned (R3): a logout rejection must not
+    // strand the user — navigation always completes. The hanging-logout
+    // variant is NOT asserted here: authApi is module-mocked, so the 10 s
+    // bound lives inside a fetch these tests replace — fake timers would
+    // exercise the mock, not the bound.
+    vi.mocked(logout).mockRejectedValueOnce(new Error('relay down'));
+    renderProfileWithRoutesAs(baseUser);
+    await screen.findByText('My Profile');
+
+    await armAndConfirmDeletion();
+
+    await screen.findByText('HOME');
+    expect(logout).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a deletion timeout as assumed completion with a single sign-out exit', async () => {
+    // R3: an abort of the 10 s bound is INDETERMINATE — the dialog must tell
+    // the user the deletion may have completed (never "failed") and its only
+    // exit signs them out.
+    vi.mocked(deleteAccount).mockRejectedValueOnce(new Error(DELETE_TIMEOUT));
+    renderProfileWithRoutesAs(baseUser);
+    await screen.findByText('My Profile');
+
+    await armAndConfirmDeletion();
+
+    await screen.findByText(/timed out without confirmation/);
+    expect(screen.queryByText('Deletion failed. Please try again.')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    await screen.findByText('HOME');
+    await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
+  });
+
   it('export button downloads the file returned by the API', async () => {
     // jsdom has no createObjectURL — stub the global via vi.stubGlobal (R2: a
     // plain assignment would outlive the test, since vi.clearAllMocks clears
@@ -115,8 +181,9 @@ describe('Danger zone (SMA-341)', () => {
         static revokeObjectURL = revokeObjectURL;
       },
     );
+    const exportBlob = new Blob(['{}'], { type: 'application/json' });
     vi.mocked(exportAccountData).mockResolvedValue({
-      blob: new Blob(['{}'], { type: 'application/json' }),
+      blob: exportBlob,
       filename: 'smartcrops-export-2026-08-01.json',
     });
     const clickSpy = vi
@@ -136,6 +203,9 @@ describe('Danger zone (SMA-341)', () => {
       const anchor = clickSpy.mock.contexts[0] as HTMLAnchorElement;
       expect(anchor.download).toBe('smartcrops-export-2026-08-01.json');
       expect(createObjectURL).toHaveBeenCalledTimes(1);
+      // The SAME Blob the API returned reached createObjectURL (R3) — the call
+      // count alone would pass with any blob.
+      expect(createObjectURL).toHaveBeenCalledWith(exportBlob);
       // The revoke is deferred a tick (R2) so the click can start consuming
       // the blob URL first — hence the waitFor.
       await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url'));

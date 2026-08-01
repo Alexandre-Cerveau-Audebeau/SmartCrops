@@ -176,10 +176,19 @@ export async function fetchMe(): Promise<AuthUser> {
   return res.json();
 }
 
+/**
+ * Bounded at 10 s (SMA-341 R3): the account-deletion flow awaits this call
+ * behind a modal that locks every exit, and a fetch that HANGS never reaches
+ * anyone's catch or finally — rejection handling alone cannot unfreeze it.
+ * Every caller already tolerates a rejection (AuthProvider clears the client
+ * state in a finally; the Navbar handlers swallow it), so the timeout turns a
+ * silent hang into the failure path that already works.
+ */
 export async function logout(): Promise<void> {
   const res = await fetch(`${API_BASE}/auth/logout`, {
     method: 'POST',
     credentials: 'include',
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
     console.warn('Logout request failed:', res.status);

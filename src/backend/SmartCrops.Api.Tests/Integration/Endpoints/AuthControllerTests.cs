@@ -621,6 +621,7 @@ public class AuthControllerTests : IntegrationTestBase
         var (email, userId) = await RegisterUserAsync();
         Guid suggestionId;
         Guid reviewedSuggestionId;
+        DateTime seededUpdatedAt;
         using (var scope = CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
@@ -658,6 +659,12 @@ public class AuthControllerTests : IntegrationTestBase
             await db.SaveChangesAsync();
             suggestionId = suggestion.Id;
             reviewedSuggestionId = reviewed.Id;
+            // DB truth, not the tracked instance: the stored pre-deletion stamp
+            // is the baseline the anonymization must move (R3).
+            seededUpdatedAt = await db.PlantSuggestions.AsNoTracking()
+                .Where(s => s.Id == suggestion.Id)
+                .Select(s => s.UpdatedAt)
+                .SingleAsync();
         }
         AuthAs(userId);
 
@@ -671,6 +678,11 @@ public class AuthControllerTests : IntegrationTestBase
         var kept = await checkDb.PlantSuggestions.FindAsync(suggestionId);
         Assert.NotNull(kept);
         Assert.Null(kept!.UserId);
+        // ExecuteUpdateAsync bypasses UpdateTimestampInterceptor (set-based
+        // SQL, no tracked entities), so the endpoint stamps UpdatedAt itself
+        // (R3) — a stale stamp would make the audit trail claim the row was
+        // last touched before its own anonymization.
+        Assert.NotEqual(seededUpdatedAt, kept.UpdatedAt);
         var keptReviewed = await checkDb.PlantSuggestions.FindAsync(reviewedSuggestionId);
         Assert.NotNull(keptReviewed);
         Assert.Null(keptReviewed!.ReviewedBy);
@@ -713,6 +725,9 @@ public class AuthControllerTests : IntegrationTestBase
                 PlantId = plant.Id,
                 UserId = ownerId,
                 FieldName = "CommonName",
+                // Localized (R3): Language identifies the locale when FieldName
+                // targets translated data — the export must preserve it.
+                Language = "fr",
                 SuggestedValue = "Authored by owner",
             });
             db.PlantSuggestions.Add(new PlantSuggestion
@@ -737,6 +752,9 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.Matches(
             @"smartcrops-export-\d{4}-\d{2}-\d{2}\.json",
             response.Content.Headers.ContentDisposition?.FileName ?? "");
+        // Defence in depth (R3): a personal-data document must not be kept by
+        // the browser's disk cache or any intermediary.
+        Assert.True(response.Headers.CacheControl?.NoStore);
 
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var root = doc.RootElement;
@@ -758,5 +776,8 @@ public class AuthControllerTests : IntegrationTestBase
             .ToList();
         Assert.Contains("Authored by owner", suggestionValues);
         Assert.DoesNotContain("Merely reviewed by owner", suggestionValues);
+        // The locale rides along (R3): without it, two otherwise identical
+        // suggestions for different locales are the same row in the file.
+        Assert.Equal("fr", root.GetProperty("suggestions")[0].GetProperty("language").GetString());
     }
 }

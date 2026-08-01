@@ -65,8 +65,10 @@ public record AccountExportProfile(string Email, string? DisplayName, string? Fi
 /// <summary>One plant suggestion the user AUTHORED (R2, arts. 17/20 scope
 /// parity): the deletion path anonymizes these rows as the person's data, so
 /// the portability export must carry them too — the two articles cover one
-/// data set.</summary>
-public record AccountExportSuggestion(Guid PlantId, string FieldName, string SuggestedValue, string? Reason, string Status, DateTime CreatedAt);
+/// data set. <see cref="Language"/> (R3) identifies the locale when
+/// <see cref="FieldName"/> targets translated data — without it, two otherwise
+/// identical suggestions for different locales are the same row in the file.</summary>
+public record AccountExportSuggestion(Guid PlantId, string FieldName, string? Language, string SuggestedValue, string? Reason, string Status, DateTime CreatedAt);
 public record AccountExportPlacement(Guid PlantId, int StartRow, int StartCol, int SpanRows, int SpanCols, string? Notes, DateTime PlacedAt);
 public record AccountExportGarden(
     Guid Id,
@@ -652,12 +654,22 @@ public class AuthController(
         // correction with community value and no personal content; erasure
         // requires severing the link to the person, not destroying the
         // contribution. (0 rows carry a UserId today; this is structural.)
+        // UpdatedAt is stamped EXPLICITLY (R3): ExecuteUpdateAsync is set-based
+        // SQL with no tracked entities, so UpdateTimestampInterceptor — which
+        // only sees tracked SaveChanges — never fires here, and the audit
+        // trail would silently claim the rows were last touched before their
+        // own anonymization.
+        var anonymizedAt = DateTime.UtcNow;
         await dbContext.PlantSuggestions
             .Where(s => s.UserId == userId)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.UserId, (string?)null), ct);
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.UserId, (string?)null)
+                .SetProperty(x => x.UpdatedAt, anonymizedAt), ct);
         await dbContext.PlantSuggestions
             .Where(s => s.ReviewedBy == userId)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.ReviewedBy, (string?)null), ct);
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.ReviewedBy, (string?)null)
+                .SetProperty(x => x.UpdatedAt, anonymizedAt), ct);
 
         // Same scoped DbContext as the store behind UserManager, so this delete
         // joins the transaction above. The AspNetUserLogins row of a Google-linked
@@ -730,7 +742,8 @@ public class AuthController(
 
     /// <summary>
     /// SMA-341 (GDPR art. 20): machine-readable export of the caller's own data —
-    /// profile, gardens with their full layout, placements with their notes. Served
+    /// profile, gardens with their full layout, placements with their notes, and
+    /// the plant suggestions they authored (with their locale, R3). Served
     /// as a FILE download (this codebase's first): <c>File()</c> with a
     /// <c>fileDownloadName</c> emits <c>Content-Disposition: attachment</c>, so the
     /// browser saves a dated <c>.json</c> instead of rendering a wall of JSON — the
@@ -809,6 +822,7 @@ public class AuthController(
             suggestions.Select(s => new AccountExportSuggestion(
                 s.PlantId,
                 s.FieldName,
+                s.Language,
                 s.SuggestedValue,
                 s.Reason,
                 s.Status,
@@ -816,6 +830,10 @@ public class AuthController(
                 .ToList());
 
         var fileName = $"smartcrops-export-{exportedAt:yyyy-MM-dd}.json";
+        // Defence in depth (R3): the document carries email, name, city,
+        // layouts, notes and suggestions — tell the browser's disk cache and
+        // any intermediary not to keep a copy.
+        Response.Headers.CacheControl = "no-store";
         // Buffering ceiling, recorded on both review surfaces (R2): the whole
         // document is materialized and serialized to a byte array before a
         // single byte reaches the wire. Fine at today's shape (a handful of
