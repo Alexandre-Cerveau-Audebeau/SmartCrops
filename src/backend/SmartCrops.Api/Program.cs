@@ -122,8 +122,9 @@ builder.Services.AddCors(options =>
 // throttles the two account endpoints: the export materializes every garden
 // and serializes the whole graph per request (the documented buffering
 // ceiling), which a valid session could otherwise drive in a loop; deletion
-// is cheaper but a wrong-confirmation loop still pays a user lookup and a
-// transaction begin/rollback per attempt. The IP partition keys on the
+// is cheaper but a wrong-confirmation loop still pays a user lookup and the
+// confirmation comparison per attempt — the transaction begins only once
+// the confirmation matches. The IP partition keys on the
 // direct peer (Connection.RemoteIpAddress); behind the future reverse proxy
 // ALL THREE policies need UseForwardedHeaders — deliberately deferred to the
 // OVH deployment ticket (SMA-41). Limits are config-driven so integration
