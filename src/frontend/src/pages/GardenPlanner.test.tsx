@@ -2131,11 +2131,14 @@ describe('SMA-18 mobile touch (lot 2)', () => {
     delete (window as { matchMedia?: unknown }).matchMedia;
   });
 
-  // Desktop coordinates (58px cell + 3px gap → 61px track, grid rect at
-  // (0,0) in jsdom) — the SMA-193 DnD convention.
+  // MOBILE coordinates (R4, GitHub Minor 2955d067): the touch tests run at
+  // the breakpoint they claim to cover — cell 30px + GAP_PX.xs 2px → 32px
+  // track (the lot-2 originals ran the 61px desktop track, proving the
+  // mechanism on geometry a finger never meets). Grid rect at (0,0) in
+  // jsdom, cell (r,c) hit at (c*32+5, r*32+5).
   const at = (row: number, col: number) => ({
-    clientX: col * 61 + 5,
-    clientY: row * 61 + 5,
+    clientX: col * 32 + 5,
+    clientY: row * 32 + 5,
   });
 
   async function renderPaintable() {
@@ -2149,6 +2152,25 @@ describe('SMA-18 mobile touch (lot 2)', () => {
     vi.mocked(fetchPlants).mockResolvedValue([basil]);
     renderPlanner();
     return await screen.findByRole('grid');
+  }
+
+  // The touch-paint harness: MOBILE breakpoint, shape edit entered through
+  // the SHEET — the only below-lg home of the switch, i.e. the real mobile
+  // flow (open, toggle, close). Cells must be (re)queried by the caller
+  // AFTER this returns: entering a paint mode swaps the cell elements.
+  async function renderPaintableMobile() {
+    mockMatchMedia(true);
+    const grid = await renderPaintable();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Plants & infrastructure',
+    });
+    fireEvent.click(within(dialog).getByText('Edit shape'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    return grid;
   }
 
   async function renderWithPlacement() {
@@ -2166,8 +2188,7 @@ describe('SMA-18 mobile touch (lot 2)', () => {
   }
 
   it('a TOUCH paint stroke propagates across cells with no pointerenter ever firing (FIX A)', async () => {
-    const grid = await renderPaintable();
-    fireEvent.click(screen.getByText('Edit shape'));
+    const grid = await renderPaintableMobile();
     const cells = within(grid).getAllByRole('gridcell');
     // The touch reality, byte for byte: implicit capture retargets every
     // event to the START cell, so the stroke is pointerdown there plus
@@ -2187,8 +2208,7 @@ describe('SMA-18 mobile touch (lot 2)', () => {
   });
 
   it('the paint stroke ends at pointerup: later moves paint nothing (FIX A)', async () => {
-    const grid = await renderPaintable();
-    fireEvent.click(screen.getByText('Edit shape'));
+    const grid = await renderPaintableMobile();
     const cells = within(grid).getAllByRole('gridcell');
     fireEvent.pointerDown(cells[0]!, { ...at(0, 0), pointerId: 1, isPrimary: true, pointerType: 'touch' });
     fireEvent.pointerUp(document, { ...at(0, 0), pointerId: 1, isPrimary: true, pointerType: 'touch' });
@@ -2197,7 +2217,35 @@ describe('SMA-18 mobile touch (lot 2)', () => {
     expect(cells[1]).toHaveStyle({ backgroundColor: '#F1F7EE' });
   });
 
+  it('a second touch cannot hijack a live stroke: no new START, no polarity flip, its release does not end it (R4)', async () => {
+    const grid = await renderPaintableMobile();
+    const cells = within(grid).getAllByRole('gridcell');
+    // Finger 1 (the index) opens a DEACTIVATING stroke on (0,0).
+    fireEvent.pointerDown(cells[0]!, { ...at(0, 0), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    expect(cells[0]).toHaveStyle({ backgroundColor: '#ECEEEA' });
+    // A second finger (the resting thumb) lands ON the just-painted cell.
+    // Pre-R4 this fired a real PAINT_START: the cell toggled back ACTIVE
+    // and the locked polarity flipped to "activate".
+    fireEvent.pointerDown(cells[0]!, { ...at(0, 0), pointerId: 2, isPrimary: false, pointerType: 'touch' });
+    expect(cells[0]).toHaveStyle({ backgroundColor: '#ECEEEA' }); // no flip
+    // The thumb lifts. Pre-R4 the end handlers received no event at all,
+    // so ANY release anywhere ended the index's stroke right here.
+    fireEvent.pointerUp(document, { ...at(0, 0), pointerId: 2, isPrimary: false, pointerType: 'touch' });
+    // The index keeps painting: the stroke survived the intruder.
+    fireEvent.pointerMove(document, { ...at(0, 1), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    expect(cells[1]).toHaveStyle({ backgroundColor: '#ECEEEA' });
+    // The OWNER's release does end it: later moves paint nothing.
+    fireEvent.pointerUp(document, { ...at(0, 1), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    fireEvent.pointerMove(document, { ...at(0, 2), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    expect(cells[2]).toHaveStyle({ backgroundColor: '#F1F7EE' });
+  });
+
   it('the grid root clamps touch-action in a paint mode and not in Selection (FIX B)', async () => {
+    // Deliberately the ONE desktop-breakpoint render left here (R4): this
+    // pins the touch-action CSS contract on the grid root, which does not
+    // vary with the breakpoint — no coordinates involved — and the rail
+    // keeps the shape-edit switch directly reachable. Desktop COORDINATE
+    // coverage lives in the SMA-193 DnD suite (61px track throughout).
     const grid = await renderPaintable();
     // Selection mode: no clamp — a finger scrolls the grid.
     expect(grid).not.toHaveStyle({ touchAction: 'none' });

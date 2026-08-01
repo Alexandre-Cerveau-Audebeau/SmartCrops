@@ -597,19 +597,61 @@ export default function GardenPlanner() {
     setShowConfig(false);
   };
 
-  // Drag-to-paint handlers (guards live in the reducer)
+  // Drag-to-paint handlers (state guards live in the reducer; POINTER
+  // IDENTITY lives here — R4, GitHub Major 2955d067). A paint stroke
+  // belongs to the pointer that started it: on a phone held in one hand, a
+  // thumb resting on the screen while the index paints is ordinary, and
+  // before this ref the thumb's touch fired a real PAINT_START (re-locking
+  // the polarity from its cell) and its release ended the index's stroke
+  // through the unfiltered end handlers. pointerId — not isPrimary — on
+  // purpose: (a) the end handlers fire for ANY pointer's release, so only
+  // identity can tell the owner's up from an intruder's; (b) pen and touch
+  // each have their own primary, so two concurrent "primary" pointers
+  // exist in mixed input; (c) a finger that lands while NO stroke is live
+  // may legitimately start one even if another pointer rests elsewhere
+  // (isPrimary would refuse it). The DnD sources' isPrimary guards serve
+  // their own single-drag engine and stay as they are.
+  // The KEYBOARD path (GridCell's detail-0 click) paints start-then-end
+  // with no pointer at all — an undefined event passes every guard.
+  const paintPointerIdRef = useRef<number | null>(null);
   const handleCellDragStart = useCallback(
-    (row: number, col: number) => dispatch({ type: 'PAINT_START', row, col }),
+    (row: number, col: number, e?: { pointerId: number }) => {
+      if (e !== undefined) {
+        // A live stroke ignores every other pointer's START — the polarity
+        // stays locked to the owner's opening cell.
+        if (paintPointerIdRef.current !== null) return;
+        paintPointerIdRef.current = e.pointerId;
+      }
+      dispatch({ type: 'PAINT_START', row, col });
+    },
     []
   );
   const handleCellDragEnter = useCallback(
-    (row: number, col: number) => dispatch({ type: 'PAINT_ENTER', row, col }),
+    (row: number, col: number, e?: { pointerId: number }) => {
+      if (
+        e !== undefined &&
+        paintPointerIdRef.current !== null &&
+        e.pointerId !== paintPointerIdRef.current
+      ) {
+        return;
+      }
+      dispatch({ type: 'PAINT_ENTER', row, col });
+    },
     []
   );
-  const handleCellDragEnd = useCallback(
-    () => dispatch({ type: 'PAINT_END' }),
-    []
-  );
+  const handleCellDragEnd = useCallback((e?: { pointerId: number }) => {
+    // Only the OWNER's release (or cancel) ends the stroke; the keyboard
+    // path carries no event and always may.
+    if (
+      e !== undefined &&
+      paintPointerIdRef.current !== null &&
+      e.pointerId !== paintPointerIdRef.current
+    ) {
+      return;
+    }
+    paintPointerIdRef.current = null;
+    dispatch({ type: 'PAINT_END' });
+  }, []);
 
   const handleSelectAll = useCallback(
     () => dispatch({ type: 'SET_ALL_CELLS', active: true }),
@@ -1091,7 +1133,14 @@ export default function GardenPlanner() {
   // dispatch nothing.
   const lastPaintCellRef = useRef<{ row: number; col: number } | null>(null);
   useEffect(() => {
-    if (!isPainting) return;
+    if (!isPainting) {
+      // R4: ownership is released on EVERY path that ends painting — the
+      // gesture handlers clear it synchronously, and this covers the
+      // reducer-side exits (mode switch mid-stroke) so a stale owner can
+      // never lock painting out.
+      paintPointerIdRef.current = null;
+      return;
+    }
     lastPaintCellRef.current = null;
     const onPaintPointerMove = (e: PointerEvent) => {
       // R3 (both surfaces convergent): mouse strokes already propagate
@@ -1102,6 +1151,15 @@ export default function GardenPlanner() {
       // per-pixel coordinate inversion for mouse moves; the reducer's
       // no-op guards were already absorbing the duplicates state-side.
       if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+      // R4: the type filter discriminates the KIND of pointer, this one its
+      // IDENTITY — a second finger is also 'touch', but only the stroke's
+      // owner feeds it.
+      if (
+        paintPointerIdRef.current !== null &&
+        e.pointerId !== paintPointerIdRef.current
+      ) {
+        return;
+      }
       const cell = pointerToCell(e.clientX, e.clientY);
       if (!cell) return;
       const last = lastPaintCellRef.current;
