@@ -46,7 +46,7 @@ Conventions may evolve; significant changes should be made via PR and discussed.
 
 ## 4. Frontend TypeScript / React conventions
 
-- **Target**: React 18 + Vite + TypeScript strict mode + MUI v7.
+- **Target**: React 19 + Vite + TypeScript strict mode + MUI v7.
 - **No `any` type**. Use `unknown` and narrow, or define a proper type. TypeScript's strict mode (incl. `noImplicitAny`) prevents *implicit* `any` (when type inference fails); explicit `any` annotations remain permitted unless an ESLint rule like `@typescript-eslint/no-explicit-any` is enabled. The team standard is to avoid explicit `any` even where the compiler allows it.
 - **Component naming**: PascalCase for component files (`PlantCard.tsx`), camelCase for hook and utility files (`usePlantData.ts`). Functions use camelCase; types and interfaces use PascalCase.
 - **MUI v7 only**. Don't introduce other UI libraries. If a component is missing, build it from MUI primitives.

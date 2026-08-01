@@ -66,15 +66,19 @@
       "title": "Why SmartCrops?",
       "subtitle": "Everything you need to plan, plant, and grow — all in one place.",
       "plantLibrary": "Plant Library",
-      "plantLibraryDesc": "Browse hundreds of plants with detailed growing conditions, seasonal info, and multilingual descriptions.",
+      "plantLibraryDesc": "Browse hundreds of plants with detailed growing conditions and seasonal information, drawn from trusted botanical sources.",
       "virtualGarden": "Virtual Garden",
-      "virtualGardenDesc": "Design your garden layout, track your plants, and get personalized growing advice.",
+      "virtualGardenDesc": "Design your garden layout, track what you planted where, and keep your own notes on each plant.",
       "bilingualSupport": "Bilingual Support",
-      "bilingualSupportDesc": "Access plant information in English and French, with more languages planned.",
+      "bilingualSupportDesc": "The interface is fully bilingual. Most plants carry their French name; their descriptions are in English. More languages are planned.",
       "gardenPlanner": "Garden Planner",
       "gardenPlannerDesc": "Design your garden layout with drag-and-drop. Place plants on a virtual grid and plan your space.",
       "smartMonitoring": "Smart Monitoring",
       "smartMonitoringDesc": "Connect weather data and IoT sensors to get personalized care recommendations for your plants.",
+      "assistant": "Bring your own assistant",
+      "assistantDesc": "Ask Claude, ChatGPT, Gemini or Mistral about your garden, from the conversation you already use. We never receive your keys.",
+      "assistantLearnMore": "Learn more",
+      "explainedAtAriaLabel": "{{label}} — {{feature}}",
       "comingSoon": "Coming Soon"
     },
     "libraryPreview": {
@@ -92,7 +96,7 @@
       "step2Title": "Plan",
       "step2Desc": "Create virtual gardens and organize your plants with notes and growing conditions.",
       "step3Title": "Grow",
-      "step3Desc": "Follow personalized recommendations and track your garden's progress throughout the seasons."
+      "step3Desc": "Keep your notes on what you planted, and follow your garden's progress through the seasons."
     },
     "testimonials": {
       "title": "What Our Users Say"
@@ -113,7 +117,7 @@
       "subtitle": "Get updates on new plants, features, and seasonal tips.",
       "placeholder": "Email address",
       "subscribe": "Subscribe (Coming soon)",
-      "disclaimer": "No spam, unsubscribe anytime."
+      "disclaimer": "The form is not live yet — nothing is collected."
     }
   },
   "library": {
@@ -1462,14 +1466,15 @@
     "project": {
       "title": "The project",
       "p1": "**SmartCrops** is an open, portfolio-driven project — a real, working application rather than a demo. Everything you see runs on a live backend, with public source code.",
-      "p2": "At its core: a botanical library aggregating multiple sources (GBIF, Trefle, Perenual), a drag-and-drop garden planner, and — on the roadmap — AI-, weather-, and IoT-assisted recommendations to tailor advice to your garden."
+      "p2": "At its core: a botanical library aggregating multiple sources (GBIF, Trefle, Perenual), a drag-and-drop garden planner, and — on the roadmap — weather and sensor data, plus a connection to the assistant you already use.",
+      "signature": "Designed and built by Alexandre Cerveau-Audebeau."
     },
     "pillars": {
       "title": "What SmartCrops is made of",
       "subtitle": "Four pillars, from today's library to tomorrow's intelligence.",
       "library": {
         "title": "Plant Library",
-        "desc": "Hundreds of plants with growing conditions, seasonal info, and bilingual descriptions, aggregated from trusted botanical sources."
+        "desc": "Hundreds of plants with growing conditions and seasonal information, aggregated from trusted botanical sources."
       },
       "planner": {
         "title": "Garden Planner",
@@ -1477,11 +1482,11 @@
       },
       "bilingual": {
         "title": "Bilingual",
-        "desc": "Full English and French support across the library and interface, with more languages planned."
+        "desc": "The interface is fully bilingual. In the library, most plants carry their French name, while their descriptions are in English. More languages are planned."
       },
       "intelligence": {
         "title": "Intelligence to come",
-        "desc": "AI, weather data, and IoT sensors will turn the library into personalised, garden-specific advice."
+        "desc": "Weather data and sensors will turn the library into advice for your own garden. On the assistant side, the choice is deliberate: rather than embedding one more chatbot, SmartCrops will connect to the assistant you already pay for — Claude, ChatGPT, Gemini or Mistral — so you can ask about your garden inside the conversation you already have. Your keys stay yours: SmartCrops never receives them, and the assistant is granted the narrow access you choose, never your account. You keep your assistant, your subscription and your history."
       }
     },
     "builtWith": {

@@ -9,6 +9,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
+import { SECOND_ACTION_MIN_WIDTH } from '../constants/layout';
+import { useAuth } from '../hooks/useAuth';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
@@ -27,6 +29,12 @@ const heroImages = [
 
 export default function HeroCarousel() {
   const { t } = useTranslation();
+  // SMA-360: `loading` is a genuine third state — it is NOT "signed out". The
+  // hero is the first thing painted, so offering "Create Account" to someone who
+  // may already have one, then correcting it under their eye, is the worst
+  // possible place for a flicker. The slot keeps its space and stays blank
+  // until the answer is known.
+  const { isAuthenticated, loading } = useAuth();
   const [activeIndex, setActiveIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -145,14 +153,16 @@ export default function HeroCarousel() {
               variant="contained"
               size="large"
               component={RouterLink}
-              to="/register"
+              to={isAuthenticated ? '/gardens' : '/register'}
               sx={{
+                minWidth: SECOND_ACTION_MIN_WIDTH,
+                visibility: loading ? 'hidden' : 'visible',
                 bgcolor: '#fff',
                 color: 'primary.main',
                 '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' },
               }}
             >
-              {t('home.hero.createAccount')}
+              {isAuthenticated ? t('nav.myGardens') : t('home.hero.createAccount')}
             </Button>
           </Box>
         </Container>

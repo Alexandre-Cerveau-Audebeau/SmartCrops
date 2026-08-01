@@ -21,6 +21,7 @@ import GridOnIcon from '@mui/icons-material/GridOn';
 import SensorsIcon from '@mui/icons-material/Sensors';
 import GrassIcon from '@mui/icons-material/Grass';
 import HandymanIcon from '@mui/icons-material/Handyman';
+import HubIcon from '@mui/icons-material/Hub';
 import StarIcon from '@mui/icons-material/Star';
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
@@ -28,6 +29,7 @@ import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import HeroCarousel from '../components/HeroCarousel';
 import { TECH_STACK } from '../constants/techStack';
 import { fetchPlants } from '../services/plantApi';
+import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../hooks/useLanguage';
 import PlantCard from '../components/PlantCard';
 import type { Plant } from '../types/Plant';
@@ -36,7 +38,21 @@ interface FeatureItem {
   icon: ReactNode;
   titleKey: string;
   descKey: string;
+  /**
+   * Amber "Coming Soon" chip — Home's badge style. ComingSoonChip's terracotta
+   * belongs to About and Contact (R2: two shades of the same word read as
+   * inconsistency, not as meaning — nobody decodes badge colour without a
+   * legend).
+   */
   comingSoon?: boolean;
+  /** SMA-359: route to the page that explains this card in full. */
+  explainedAt?: string;
+  /**
+   * Label for the `explainedAt` link. Belongs to the card, not to the renderer
+   * (R3): pinning the assistant's key in the JSX made the next card to adopt
+   * `explainedAt` speak for the assistant.
+   */
+  explainedAtLabelKey?: string;
 }
 
 interface TechItem {
@@ -55,7 +71,6 @@ const features: FeatureItem[] = [
     icon: <YardIcon sx={{ fontSize: 48, color: 'primary.main' }} />,
     titleKey: 'home.features.virtualGarden',
     descKey: 'home.features.virtualGardenDesc',
-    comingSoon: true,
   },
   {
     icon: <TranslateIcon sx={{ fontSize: 48, color: 'primary.main' }} />,
@@ -63,12 +78,9 @@ const features: FeatureItem[] = [
     descKey: 'home.features.bilingualSupportDesc',
   },
   {
-    icon: (
-      <GridOnIcon sx={{ fontSize: 48, color: 'primary.main', opacity: 0.85 }} />
-    ),
+    icon: <GridOnIcon sx={{ fontSize: 48, color: 'primary.main' }} />,
     titleKey: 'home.features.gardenPlanner',
     descKey: 'home.features.gardenPlannerDesc',
-    comingSoon: true,
   },
   {
     icon: (
@@ -79,6 +91,16 @@ const features: FeatureItem[] = [
     titleKey: 'home.features.smartMonitoring',
     descKey: 'home.features.smartMonitoringDesc',
     comingSoon: true,
+  },
+  {
+    icon: (
+      <HubIcon sx={{ fontSize: 48, color: 'primary.main', opacity: 0.85 }} />
+    ),
+    titleKey: 'home.features.assistant',
+    descKey: 'home.features.assistantDesc',
+    comingSoon: true,
+    explainedAt: '/about',
+    explainedAtLabelKey: 'home.features.assistantLearnMore',
   },
 ];
 
@@ -100,80 +122,23 @@ const steps = [
   },
 ];
 
-const testimonials = [
-  {
-    name: 'Marie L.',
-    location: 'Lyon, France',
-    initials: 'ML',
-    rating: 5,
-    quote:
-      'SmartCrops helped me plan my first vegetable garden. The plant library is incredibly detailed!',
-  },
-  {
-    name: 'Thomas C.',
-    location: 'Brussels, Belgium',
-    initials: 'TC',
-    rating: 5,
-    quote:
-      'The bilingual support is a game-changer. I switch between French and English all the time.',
-  },
-  {
-    name: 'Sarah E.',
-    location: 'London, UK',
-    initials: 'SE',
-    rating: 5,
-    quote:
-      "I can't wait for the virtual garden feature. Already using the library every week!",
-  },
-  {
-    name: 'Pierre D.',
-    location: 'Paris, France',
-    initials: 'PD',
-    rating: 5,
-    quote:
-      "Finally a plant app that doesn't try to sell me anything. Clean, useful, and free.",
-  },
-  {
-    name: 'Emma W.',
-    location: 'Amsterdam, Netherlands',
-    initials: 'EW',
-    rating: 4,
-    quote:
-      'Great start! Would love to see more plants and a sowing calendar in the future.',
-  },
-  {
-    name: 'Lucas M.',
-    location: 'Geneva, Switzerland',
-    initials: 'LM',
-    rating: 5,
-    quote:
-      'The search feature works beautifully. Found exactly the herbs I needed for my balcony.',
-  },
-  {
-    name: 'Isabelle R.',
-    location: 'Bordeaux, France',
-    initials: 'IR',
-    rating: 5,
-    quote:
-      "I love that it's open source. Feels like a community project, not a corporate product.",
-  },
-  {
-    name: 'James K.',
-    location: 'Dublin, Ireland',
-    initials: 'JK',
-    rating: 4,
-    quote:
-      'Simple and effective. The growing conditions section saved me from planting in the wrong spot.',
-  },
-  {
-    name: 'Clara B.',
-    location: 'Berlin, Germany',
-    initials: 'CB',
-    rating: 5,
-    quote:
-      'Beautiful design and so easy to use. My kids love browsing the plant cards!',
-  },
-];
+interface Testimonial {
+  name: string;
+  location: string;
+  initials: string;
+  rating: number;
+  quote: string;
+}
+
+/**
+ * SMA-353: deliberately empty. What lived here were nine invented people —
+ * names, cities and star ratings for users who do not exist — written in
+ * English under a heading that translates, and two of them still asking for
+ * features that have since shipped. The carousel, the stars, the initials and
+ * the pagination all stay; the section renders NOTHING while this is empty,
+ * and SMA-356 refills it from real submissions.
+ */
+const testimonials: Testimonial[] = [];
 
 const currentTech: TechItem[] = [
   ...TECH_STACK,
@@ -200,11 +165,6 @@ const plannedTech: TechItem[] = [
   { name: 'AWS', logo: '/images/tech/aws.svg', role: 'Cloud Platform' },
   { name: 'Redis', logo: '/images/tech/redis.svg', role: 'Caching' },
   {
-    name: 'Typesense',
-    logo: '/images/tech/typesense.svg',
-    role: 'Search Engine',
-  },
-  {
     name: 'Terraform',
     logo: '/images/tech/terraform.svg',
     role: 'Infrastructure as Code',
@@ -227,6 +187,7 @@ function formatPlantCount(n: number): string {
 export default function Home() {
   const { t } = useTranslation();
   const { language } = useLanguage();
+  const { isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -327,7 +288,9 @@ export default function Home() {
               {
                 id: 'tools',
                 icon: <HandymanIcon sx={{ fontSize: 24 }} />,
-                value: '5',
+                // SMA-353: the four cards below that actually ship. The two
+                // badged ones are not tools yet, so they are not counted.
+                value: '4',
                 label: t('home.stats.tools'),
                 onClick: () =>
                   document
@@ -438,6 +401,25 @@ export default function Home() {
                 <Typography variant="body2" color="text.secondary">
                   {t(feature.descKey)}
                 </Typography>
+                {feature.explainedAt && feature.explainedAtLabelKey && (
+                  <Button
+                    size="small"
+                    component={RouterLink}
+                    to={feature.explainedAt}
+                    // The visible label stays short — it sits under a card that
+                    // names its subject. The ACCESSIBLE name must not: the
+                    // cookie banner offers its own "Learn more" to /privacy on
+                    // the same first visit, and two links answering to one name
+                    // are indistinguishable in a screen reader's link list (R3).
+                    aria-label={t('home.features.explainedAtAriaLabel', {
+                      label: t(feature.explainedAtLabelKey),
+                      feature: t(feature.titleKey),
+                    })}
+                    sx={{ mt: 1.5 }}
+                  >
+                    {t(feature.explainedAtLabelKey)}
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -538,7 +520,10 @@ export default function Home() {
         </Box>
       </Container>
 
-      {/* ==================== SECTION 6 — TESTIMONIALS ==================== */}
+      {/* ==================== SECTION 6 — TESTIMONIALS ====================
+          Renders nothing at all while the source is empty (SMA-353): no
+          heading, no empty carousel, no hollow frame around zero reviews. */}
+      {testimonials.length > 0 && (
       <Box sx={{ bgcolor: 'background.default', py: 8 }}>
         <Container maxWidth="lg">
           <Typography variant="h4" textAlign="center" gutterBottom>
@@ -670,6 +655,7 @@ export default function Home() {
           </Box>
         </Container>
       </Box>
+      )}
 
       {/* ==================== SECTION 7 — BUILT WITH ==================== */}
       <Box sx={{ bgcolor: 'surfaceSubtle', py: 8 }}>
@@ -770,25 +756,34 @@ export default function Home() {
         </Container>
       </Box>
 
-      {/* ==================== SECTION 8 — CTA FINAL ==================== */}
-      <Box sx={{ py: 8, textAlign: 'center' }}>
-        <Container maxWidth="sm">
-          <Typography variant="h4" gutterBottom>
-            {t('home.cta.title')}
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            {t('home.cta.subtitle')}
-          </Typography>
-          <Button
-            variant="contained"
-            size="large"
-            component={RouterLink}
-            to="/register"
-          >
-            {t('home.cta.button')}
-          </Button>
-        </Container>
-      </Box>
+      {/* ==================== SECTION 8 — CTA FINAL ====================
+          Addressed to someone without an account from its heading down
+          ("Ready to Start Growing?", "Join SmartCrops today…"), so it steps
+          aside whole for those who already signed up (SMA-360) — dropping the
+          button alone would leave an invitation with no door. While auth is
+          still resolving it stays away too: this sits below the fold, so a
+          late arrival costs nothing, whereas pitching a signup to a signed-in
+          visitor and retracting it is the very thing this lot is fixing. */}
+      {!loading && !isAuthenticated && (
+        <Box sx={{ py: 8, textAlign: 'center' }}>
+          <Container maxWidth="sm">
+            <Typography variant="h4" gutterBottom>
+              {t('home.cta.title')}
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+              {t('home.cta.subtitle')}
+            </Typography>
+            <Button
+              variant="contained"
+              size="large"
+              component={RouterLink}
+              to="/register"
+            >
+              {t('home.cta.button')}
+            </Button>
+          </Container>
+        </Box>
+      )}
 
       {/* ==================== SECTION 9 — NEWSLETTER ==================== */}
       <Box sx={{ bgcolor: 'brandTintBg', py: 6 }}>

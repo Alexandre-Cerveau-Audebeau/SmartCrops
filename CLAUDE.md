@@ -5,9 +5,9 @@ Operational guide for AI coding agents and context for automated review.
 
 ## Stack
 
-- Frontend: React 18 + TypeScript + Vite + MUI v7; i18n via react-i18next (`src/i18n/fr.json`, `src/i18n/en.json`).
+- Frontend: React 19 + TypeScript + Vite + MUI v7; i18n via react-i18next (`src/frontend/src/i18n/fr.json`, `src/frontend/src/i18n/en.json`).
 - Backend: .NET 8 + EF Core + PostgreSQL; Docker; GitHub Actions CI.
-- Search: **Typesense** is the selected engine (settled over Elasticsearch), but it is **not yet wired** into `docker-compose` or the backend on `develop` — it currently appears only as a tech-stack logo on the landing page. Verify the live search path before assuming Typesense is callable.
+- Search: **Typesense** is the selected engine (settled over Elasticsearch) and is **live** since SMA-255 — a `typesense` service in `docker-compose`, an API key validated at boot (`ValidateOnStart`), and the Library's single data path through the finder endpoint since T4. It is current stack, not roadmap.
 
 ## Environment & commands
 
@@ -33,10 +33,10 @@ Gauge-worthy data lives in **`PlantPerenualData`** (~96% filled), **not** in the
 
 ## Licensing gate (SMA-70)
 
-`ExposeSourceText=false` in both `appsettings.json` gates every Perenual free-text care field (full care-guide JSON, propagation/sowing instructions). Only non-copyrightable factual values are exposed. Don't un-gate free text without a product/legal decision.
+`ExposeSourceText=false` in the one tracked `src/backend/SmartCrops.Api/appsettings.json` (the Development variant is gitignored and has never been committed) gates every Perenual free-text care field (full care-guide JSON, propagation/sowing instructions). Only non-copyrightable factual values are exposed. Don't un-gate free text without a product/legal decision.
 
 ## Plant Detail v2 — structure
 
 - Frozen 15-section skeleton: 01 hero, 02 gallery, 03 distribution, 04 calendar, 05 scientific (`#scientific-data`), 06 characteristics (`#characteristics`), 07 culture (`#edible`), 08 pests (`#pests`, rendered only when `pests.length > 0`), 09–15 (names, synonyms, observations, resources, similar, FAQ, community).
 - `SectionHeader` is a **default** export. Each section component is a **named** export, wrapped in `memo`, and mode-aware (reads `palette.mode`).
-- Shared parse/util helpers live in `src/utils/plantDetail.ts` (e.g. `toCamelKey`, `getCultureFacts`) and are the single source feeding both a section's visibility gate and its render.
+- Shared parse/util helpers live in `src/frontend/src/utils/plantDetail.ts` (e.g. `toCamelKey`, `getCultureFacts`) and are the single source feeding both a section's visibility gate and its render.
