@@ -21,10 +21,12 @@ import GridOnIcon from '@mui/icons-material/GridOn';
 import SensorsIcon from '@mui/icons-material/Sensors';
 import GrassIcon from '@mui/icons-material/Grass';
 import HandymanIcon from '@mui/icons-material/Handyman';
+import HubIcon from '@mui/icons-material/Hub';
 import StarIcon from '@mui/icons-material/Star';
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import ComingSoonChip from '../components/ComingSoonChip';
 import HeroCarousel from '../components/HeroCarousel';
 import { TECH_STACK } from '../constants/techStack';
 import { fetchPlants } from '../services/plantApi';
@@ -36,7 +38,15 @@ interface FeatureItem {
   icon: ReactNode;
   titleKey: string;
   descKey: string;
+  /** Amber "Coming Soon" chip — Home's own badge style. */
   comingSoon?: boolean;
+  /**
+   * SMA-359: route to the page that explains this card in full. Carries the
+   * terracotta ComingSoonChip instead of the amber one, because what it
+   * announces is a connection to something the visitor already owns rather
+   * than another feature of ours.
+   */
+  explainedAt?: string;
 }
 
 interface TechItem {
@@ -55,7 +65,6 @@ const features: FeatureItem[] = [
     icon: <YardIcon sx={{ fontSize: 48, color: 'primary.main' }} />,
     titleKey: 'home.features.virtualGarden',
     descKey: 'home.features.virtualGardenDesc',
-    comingSoon: true,
   },
   {
     icon: <TranslateIcon sx={{ fontSize: 48, color: 'primary.main' }} />,
@@ -63,12 +72,9 @@ const features: FeatureItem[] = [
     descKey: 'home.features.bilingualSupportDesc',
   },
   {
-    icon: (
-      <GridOnIcon sx={{ fontSize: 48, color: 'primary.main', opacity: 0.85 }} />
-    ),
+    icon: <GridOnIcon sx={{ fontSize: 48, color: 'primary.main' }} />,
     titleKey: 'home.features.gardenPlanner',
     descKey: 'home.features.gardenPlannerDesc',
-    comingSoon: true,
   },
   {
     icon: (
@@ -79,6 +85,14 @@ const features: FeatureItem[] = [
     titleKey: 'home.features.smartMonitoring',
     descKey: 'home.features.smartMonitoringDesc',
     comingSoon: true,
+  },
+  {
+    icon: (
+      <HubIcon sx={{ fontSize: 48, color: 'primary.main', opacity: 0.85 }} />
+    ),
+    titleKey: 'home.features.assistant',
+    descKey: 'home.features.assistantDesc',
+    explainedAt: '/about',
   },
 ];
 
@@ -100,80 +114,23 @@ const steps = [
   },
 ];
 
-const testimonials = [
-  {
-    name: 'Marie L.',
-    location: 'Lyon, France',
-    initials: 'ML',
-    rating: 5,
-    quote:
-      'SmartCrops helped me plan my first vegetable garden. The plant library is incredibly detailed!',
-  },
-  {
-    name: 'Thomas C.',
-    location: 'Brussels, Belgium',
-    initials: 'TC',
-    rating: 5,
-    quote:
-      'The bilingual support is a game-changer. I switch between French and English all the time.',
-  },
-  {
-    name: 'Sarah E.',
-    location: 'London, UK',
-    initials: 'SE',
-    rating: 5,
-    quote:
-      "I can't wait for the virtual garden feature. Already using the library every week!",
-  },
-  {
-    name: 'Pierre D.',
-    location: 'Paris, France',
-    initials: 'PD',
-    rating: 5,
-    quote:
-      "Finally a plant app that doesn't try to sell me anything. Clean, useful, and free.",
-  },
-  {
-    name: 'Emma W.',
-    location: 'Amsterdam, Netherlands',
-    initials: 'EW',
-    rating: 4,
-    quote:
-      'Great start! Would love to see more plants and a sowing calendar in the future.',
-  },
-  {
-    name: 'Lucas M.',
-    location: 'Geneva, Switzerland',
-    initials: 'LM',
-    rating: 5,
-    quote:
-      'The search feature works beautifully. Found exactly the herbs I needed for my balcony.',
-  },
-  {
-    name: 'Isabelle R.',
-    location: 'Bordeaux, France',
-    initials: 'IR',
-    rating: 5,
-    quote:
-      "I love that it's open source. Feels like a community project, not a corporate product.",
-  },
-  {
-    name: 'James K.',
-    location: 'Dublin, Ireland',
-    initials: 'JK',
-    rating: 4,
-    quote:
-      'Simple and effective. The growing conditions section saved me from planting in the wrong spot.',
-  },
-  {
-    name: 'Clara B.',
-    location: 'Berlin, Germany',
-    initials: 'CB',
-    rating: 5,
-    quote:
-      'Beautiful design and so easy to use. My kids love browsing the plant cards!',
-  },
-];
+interface Testimonial {
+  name: string;
+  location: string;
+  initials: string;
+  rating: number;
+  quote: string;
+}
+
+/**
+ * SMA-353: deliberately empty. What lived here were nine invented people —
+ * names, cities and star ratings for users who do not exist — written in
+ * English under a heading that translates, and two of them still asking for
+ * features that have since shipped. The carousel, the stars, the initials and
+ * the pagination all stay; the section renders NOTHING while this is empty,
+ * and SMA-356 refills it from real submissions.
+ */
+const testimonials: Testimonial[] = [];
 
 const currentTech: TechItem[] = [
   ...TECH_STACK,
@@ -199,11 +156,6 @@ const plannedTech: TechItem[] = [
   },
   { name: 'AWS', logo: '/images/tech/aws.svg', role: 'Cloud Platform' },
   { name: 'Redis', logo: '/images/tech/redis.svg', role: 'Caching' },
-  {
-    name: 'Typesense',
-    logo: '/images/tech/typesense.svg',
-    role: 'Search Engine',
-  },
   {
     name: 'Terraform',
     logo: '/images/tech/terraform.svg',
@@ -327,7 +279,9 @@ export default function Home() {
               {
                 id: 'tools',
                 icon: <HandymanIcon sx={{ fontSize: 24 }} />,
-                value: '5',
+                // SMA-353: the four cards below that actually ship. The two
+                // badged ones are not tools yet, so they are not counted.
+                value: '4',
                 label: t('home.stats.tools'),
                 onClick: () =>
                   document
@@ -416,7 +370,7 @@ export default function Home() {
                 position: 'relative',
                 transition: 'box-shadow 0.2s',
                 '&:hover': { boxShadow: 4 },
-                ...(feature.comingSoon && {
+                ...((feature.comingSoon || feature.explainedAt) && {
                   borderStyle: 'dashed',
                   opacity: 0.85,
                 }),
@@ -430,6 +384,11 @@ export default function Home() {
                   sx={{ position: 'absolute', top: 12, right: 12 }}
                 />
               )}
+              {feature.explainedAt && (
+                <ComingSoonChip
+                  sx={{ position: 'absolute', top: 12, right: 12 }}
+                />
+              )}
               <CardContent>
                 {feature.icon}
                 <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
@@ -438,6 +397,16 @@ export default function Home() {
                 <Typography variant="body2" color="text.secondary">
                   {t(feature.descKey)}
                 </Typography>
+                {feature.explainedAt && (
+                  <Button
+                    size="small"
+                    component={RouterLink}
+                    to={feature.explainedAt}
+                    sx={{ mt: 1.5 }}
+                  >
+                    {t('home.features.assistantLearnMore')}
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -538,7 +507,10 @@ export default function Home() {
         </Box>
       </Container>
 
-      {/* ==================== SECTION 6 — TESTIMONIALS ==================== */}
+      {/* ==================== SECTION 6 — TESTIMONIALS ====================
+          Renders nothing at all while the source is empty (SMA-353): no
+          heading, no empty carousel, no hollow frame around zero reviews. */}
+      {testimonials.length > 0 && (
       <Box sx={{ bgcolor: 'background.default', py: 8 }}>
         <Container maxWidth="lg">
           <Typography variant="h4" textAlign="center" gutterBottom>
@@ -670,6 +642,7 @@ export default function Home() {
           </Box>
         </Container>
       </Box>
+      )}
 
       {/* ==================== SECTION 7 — BUILT WITH ==================== */}
       <Box sx={{ bgcolor: 'surfaceSubtle', py: 8 }}>

@@ -7,7 +7,7 @@ Operational guide for AI coding agents and context for automated review.
 
 - Frontend: React 18 + TypeScript + Vite + MUI v7; i18n via react-i18next (`src/i18n/fr.json`, `src/i18n/en.json`).
 - Backend: .NET 8 + EF Core + PostgreSQL; Docker; GitHub Actions CI.
-- Search: **Typesense** is the selected engine (settled over Elasticsearch), but it is **not yet wired** into `docker-compose` or the backend on `develop` — it currently appears only as a tech-stack logo on the landing page. Verify the live search path before assuming Typesense is callable.
+- Search: **Typesense** is the selected engine (settled over Elasticsearch) and is **live** since SMA-255 — a `typesense` service in `docker-compose`, an API key validated at boot (`ValidateOnStart`), and the Library's single data path through the finder endpoint since T4. It is current stack, not roadmap.
 
 ## Environment & commands
 

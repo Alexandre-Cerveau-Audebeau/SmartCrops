@@ -14,6 +14,13 @@ export const TECH_STACK = [
   { name: 'Vite', logo: '/images/tech/vite.svg', role: 'Build Tool' },
   { name: '.NET 8', logo: '/images/tech/dotnet.svg', role: 'Backend API' },
   { name: 'PostgreSQL', logo: '/images/tech/postgresql.svg', role: 'Database' },
+  // SMA-353: current stack, not roadmap — the container runs, its key is
+  // validated at boot, and the library's search goes through it (SMA-255 T4).
+  {
+    name: 'Typesense',
+    logo: '/images/tech/typesense.svg',
+    role: 'Search Engine',
+  },
   { name: 'Docker', logo: '/images/tech/docker.svg', role: 'Containers' },
 ] as const;
 

@@ -66,15 +66,18 @@
       "title": "Pourquoi SmartCrops ?",
       "subtitle": "Tout ce qu'il faut pour planifier, planter et cultiver — au même endroit.",
       "plantLibrary": "Bibliothèque de plantes",
-      "plantLibraryDesc": "Parcourez des centaines de plantes avec leurs conditions de culture, informations saisonnières et descriptions multilingues.",
+      "plantLibraryDesc": "Parcourez des centaines de plantes avec leurs conditions de culture et leurs informations saisonnières, issues de sources botaniques fiables.",
       "virtualGarden": "Jardin Virtuel",
-      "virtualGardenDesc": "Concevez l'agencement de votre jardin, suivez vos plantes et recevez des conseils de culture personnalisés.",
+      "virtualGardenDesc": "Concevez l'agencement de votre jardin, suivez ce que vous avez planté et où, et gardez vos notes sur chaque plante.",
       "bilingualSupport": "Support Bilingue",
-      "bilingualSupportDesc": "Accédez aux informations sur les plantes en anglais et en français, d'autres langues sont prévues.",
+      "bilingualSupportDesc": "L'interface est entièrement bilingue. La plupart des plantes portent leur nom français ; leurs descriptions sont en anglais. D'autres langues sont prévues.",
       "gardenPlanner": "Planificateur de Jardin",
       "gardenPlannerDesc": "Concevez votre jardin en glisser-déposer. Placez les plantes sur une grille virtuelle et planifiez votre espace.",
       "smartMonitoring": "Suivi Intelligent",
       "smartMonitoringDesc": "Connectez les données météo et les capteurs IoT pour recevoir des recommandations de soins personnalisées.",
+      "assistant": "Branchez votre propre assistant",
+      "assistantDesc": "Interrogez Claude, ChatGPT, Gemini ou Mistral sur votre jardin, depuis la conversation que vous utilisez déjà. Nous ne recevons jamais vos clés.",
+      "assistantLearnMore": "En savoir plus",
       "comingSoon": "Bientôt disponible"
     },
     "libraryPreview": {
@@ -92,7 +95,7 @@
       "step2Title": "Planifiez",
       "step2Desc": "Créez des jardins virtuels et organisez vos plantes avec des notes et des conditions de culture.",
       "step3Title": "Cultivez",
-      "step3Desc": "Suivez les recommandations personnalisées et suivez l'évolution de votre jardin au fil des saisons."
+      "step3Desc": "Gardez vos notes sur ce que vous avez planté et suivez l'évolution de votre jardin au fil des saisons."
     },
     "testimonials": {
       "title": "Ce que disent nos utilisateurs"
@@ -113,7 +116,7 @@
       "subtitle": "Recevez les nouveautés sur les plantes, les fonctionnalités et les conseils de saison.",
       "placeholder": "Adresse e-mail",
       "subscribe": "S'abonner (Bientôt)",
-      "disclaimer": "Pas de spam, désabonnement à tout moment."
+      "disclaimer": "Le formulaire n'est pas encore actif — rien n'est collecté."
     }
   },
   "library": {
@@ -1462,14 +1465,15 @@
     "project": {
       "title": "Le projet",
       "p1": "**SmartCrops** est un projet ouvert, à vocation portfolio — une vraie application qui fonctionne, pas une démo. Tout ce que vous voyez tourne sur un backend réel, avec un code source public.",
-      "p2": "Au cœur du projet : une bibliothèque botanique agrégeant plusieurs sources (GBIF, Trefle, Perenual), un planificateur de jardin en glisser-déposer, et — sur la feuille de route — des recommandations assistées par IA, météo et IoT pour adapter les conseils à votre jardin."
+      "p2": "Au cœur du projet : une bibliothèque botanique agrégeant plusieurs sources (GBIF, Trefle, Perenual), un planificateur de jardin en glisser-déposer, et — sur la feuille de route — les données météo et capteurs, ainsi qu'une connexion à l'assistant que vous utilisez déjà.",
+      "signature": "Conçu et développé par Alexandre Cerveau-Audebeau."
     },
     "pillars": {
       "title": "Ce qui compose SmartCrops",
       "subtitle": "Quatre piliers, de la bibliothèque d'aujourd'hui à l'intelligence de demain.",
       "library": {
         "title": "Bibliothèque de plantes",
-        "desc": "Des centaines de plantes avec conditions de culture, informations saisonnières et descriptions bilingues, agrégées depuis des sources botaniques fiables."
+        "desc": "Des centaines de plantes avec leurs conditions de culture et leurs informations saisonnières, agrégées depuis des sources botaniques fiables."
       },
       "planner": {
         "title": "Planificateur de jardin",
@@ -1477,11 +1481,11 @@
       },
       "bilingual": {
         "title": "Bilingue",
-        "desc": "Support complet en français et en anglais dans toute la bibliothèque et l'interface, d'autres langues sont prévues."
+        "desc": "L'interface est entièrement bilingue. Dans la bibliothèque, la plupart des plantes portent leur nom français, tandis que leurs descriptions sont en anglais. D'autres langues sont prévues."
       },
       "intelligence": {
         "title": "L'intelligence à venir",
-        "desc": "IA, données météo et capteurs IoT transformeront la bibliothèque en conseils personnalisés, adaptés à votre jardin."
+        "desc": "Les données météo et les capteurs transformeront la bibliothèque en conseils adaptés à votre propre jardin. Côté assistant, le choix est assumé : plutôt que d'embarquer un robot conversationnel de plus, SmartCrops se connectera à l'assistant que vous payez déjà — Claude, ChatGPT, Gemini ou Mistral — pour que vous puissiez l'interroger sur votre jardin dans la conversation que vous avez déjà. Vos clés restent les vôtres : SmartCrops ne les reçoit jamais, et l'assistant ne reçoit que l'accès restreint que vous choisissez, jamais votre compte. Vous gardez votre assistant, votre abonnement et votre historique."
       }
     },
     "builtWith": {

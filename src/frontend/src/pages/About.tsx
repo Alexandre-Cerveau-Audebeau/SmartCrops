@@ -163,6 +163,11 @@ export default function About() {
             <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
               <LegalText text={t('about.project.p2')} />
             </Typography>
+            {/* SMA-353: the page called itself portfolio-driven without ever
+                saying whose portfolio. One line, no biography. */}
+            <Typography variant="body2" color="text.secondary">
+              {t('about.project.signature')}
+            </Typography>
           </Box>
         </Container>
       </Box>
