@@ -723,7 +723,13 @@ function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, soilPaintMode
         display: 'inline-flex',
         flexDirection: 'column',
         gap: CELL_GAP,
-        ...(paintMode && { userSelect: 'none', touchAction: 'none' }),
+        // SMA-18 lot 2: the clamp follows the DRAG WIRING (the lot-1 sidebar
+        // pattern), not the mode flag alone — a paint mode's finger paints
+        // (pointerdown paints instantly, so the gesture can never double as
+        // a scroll), while Selection/Place keep the root unclamped and a
+        // finger scrolls the grid. Place-mode move-drags keep their own
+        // PER-CELL clamp in GridCell, independent of this one.
+        ...(hasDrag && { userSelect: 'none', touchAction: 'none' }),
       }}
     >
       {grid.map((row, r) => (

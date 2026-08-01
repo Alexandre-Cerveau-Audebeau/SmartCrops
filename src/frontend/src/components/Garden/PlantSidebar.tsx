@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo } from 'react';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -74,9 +74,19 @@ interface Props {
    * maxHeight. Content and behavior are identical between the two.
    */
   variant?: 'rail' | 'sheet';
+  /**
+   * SMA-18 lot 2 (SMA-345 item 3): the active tab is PAGE state, not
+   * component state — the sheet Drawer unmounts this component when it
+   * closes, and the nominal mobile gesture (arm, place, reopen, arm again)
+   * must land back on the tab the user was working in. Lifting costs zero
+   * DOM where keepMounted would hold the whole catalogue list behind a
+   * closed sheet; it also carries the tab across rail↔sheet transitions.
+   */
+  activeTab: PlantSidebarTab;
+  onActiveTabChange: (tab: PlantSidebarTab) => void;
 }
 
-type TabValue = 'plants' | 'soils' | 'infrastructure';
+export type PlantSidebarTab = 'plants' | 'soils' | 'infrastructure';
 
 /**
  * SMA-18 armed identity chip (owner ruling 22 Jul; extracted R3 per the CR
@@ -180,10 +190,9 @@ function ArmedPlantChip({
   );
 }
 
-function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, selectedSoilType = null, onSoilSelect, onSoilFillAll, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady, variant = 'rail' }: Props) {
+function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, selectedSoilType = null, onSoilSelect, onSoilFillAll, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady, variant = 'rail', activeTab, onActiveTabChange }: Props) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
-  const [activeTab, setActiveTab] = useState<TabValue>('plants');
 
   // Search matches the DISPLAYED name (shared Library resolver, SMA-194) OR the
   // scientific name — typing "tomate"/"tomato" must hit, not just "solanum".
@@ -241,7 +250,7 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
       </Box>
       <Tabs
         value={activeTab}
-        onChange={(_, v: TabValue) => setActiveTab(v)}
+        onChange={(_, v: PlantSidebarTab) => onActiveTabChange(v)}
         variant="scrollable"
         scrollButtons="auto"
         allowScrollButtonsMobile

@@ -2115,3 +2115,206 @@ describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => 
     }
   });
 });
+
+// ── SMA-18 lot 2 — the planner WORKS under a finger ────────────────────────
+// FIX A: paint strokes propagate by COORDINATES (document pointermove +
+// pointerToCell), because a touch pointer's implicit capture pins every
+// event to the pointerdown cell — neighbours NEVER fire pointerenter. The
+// tests below reproduce that reality exactly: pointerdown on the start
+// cell, then document-level moves only. FIX B: the touch-action clamp
+// exists exactly in paint modes. FIX C: below lg the placement panel is a
+// second bottom sheet, mutually exclusive with the catalogue sheet.
+// FIX D (SMA-345 item 3): the catalogue tab is page state and survives the
+// sheet unmounting.
+describe('SMA-18 mobile touch (lot 2)', () => {
+  afterEach(() => {
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  // Desktop coordinates (58px cell + 3px gap → 61px track, grid rect at
+  // (0,0) in jsdom) — the SMA-193 DnD convention.
+  const at = (row: number, col: number) => ({
+    clientX: col * 61 + 5,
+    clientY: row * 61 + 5,
+  });
+
+  async function renderPaintable() {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      width: 4,
+      height: 4,
+      placements: [],
+    });
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+    return await screen.findByRole('grid');
+  }
+
+  async function renderWithPlacement() {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+    await screen.findByRole('grid');
+    // Grabbed EARLY on purpose: once a sheet modal opens, MUI marks the
+    // page content aria-hidden and role queries stop seeing the grid —
+    // the DOM node itself stays valid for fireEvent.
+    return await screen.findByRole('gridcell', {
+      name: 'Basilicum fixture at row 1, column A',
+    });
+  }
+
+  it('a TOUCH paint stroke propagates across cells with no pointerenter ever firing (FIX A)', async () => {
+    const grid = await renderPaintable();
+    fireEvent.click(screen.getByText('Edit shape'));
+    const cells = within(grid).getAllByRole('gridcell');
+    // The touch reality, byte for byte: implicit capture retargets every
+    // event to the START cell, so the stroke is pointerdown there plus
+    // document-level pointermoves — the neighbouring cells receive NO
+    // pointerenter at any time.
+    fireEvent.pointerDown(cells[0]!, { ...at(0, 0), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    fireEvent.pointerMove(document, { ...at(0, 1), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    fireEvent.pointerMove(document, { ...at(0, 2), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    fireEvent.pointerUp(document, { ...at(0, 2), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    // All three traversed cells painted (active → inactive, the toggle
+    // polarity locked at the start cell) — not only the first.
+    expect(cells[0]).toHaveStyle({ backgroundColor: '#ECEEEA' });
+    expect(cells[1]).toHaveStyle({ backgroundColor: '#ECEEEA' });
+    expect(cells[2]).toHaveStyle({ backgroundColor: '#ECEEEA' });
+    // An untraversed cell keeps the active fill.
+    expect(cells[3]).toHaveStyle({ backgroundColor: '#F1F7EE' });
+  });
+
+  it('the paint stroke ends at pointerup: later moves paint nothing (FIX A)', async () => {
+    const grid = await renderPaintable();
+    fireEvent.click(screen.getByText('Edit shape'));
+    const cells = within(grid).getAllByRole('gridcell');
+    fireEvent.pointerDown(cells[0]!, { ...at(0, 0), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    fireEvent.pointerUp(document, { ...at(0, 0), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    // The finger lifts, then the user pans elsewhere — nothing paints.
+    fireEvent.pointerMove(document, { ...at(0, 1), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    expect(cells[1]).toHaveStyle({ backgroundColor: '#F1F7EE' });
+  });
+
+  it('the grid root clamps touch-action in a paint mode and not in Selection (FIX B)', async () => {
+    const grid = await renderPaintable();
+    // Selection mode: no clamp — a finger scrolls the grid.
+    expect(grid).not.toHaveStyle({ touchAction: 'none' });
+    // A paint mode: the clamp is on — the finger paints instead.
+    fireEvent.click(screen.getByText('Edit shape'));
+    expect(grid).toHaveStyle({ touchAction: 'none' });
+  });
+
+  it('selecting a placement opens the panel sheet and closes the catalogue sheet (FIX C)', async () => {
+    mockMatchMedia(true);
+    const placedCell = await renderWithPlacement();
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    );
+    await screen.findByRole('dialog', { name: 'Plants & infrastructure' });
+
+    // A tap on the placed cell selects it: the catalogue sheet yields the
+    // bottom to the panel sheet.
+    fireEvent.click(placedCell);
+    const panelSheet = await screen.findByRole('dialog', {
+      name: 'Selected placement',
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Plants & infrastructure' })
+      ).toBeNull()
+    );
+    // The panel content lives inside the sheet (no lane below lg). The
+    // fixture has no common name, so display name AND scientific line both
+    // render the scientific string — hence getAllByText.
+    expect(
+      within(panelSheet).getAllByText('Basilicum fixture').length
+    ).toBeGreaterThan(0);
+
+    // Clearing the selection closes it — the title row's X.
+    await user.click(
+      within(panelSheet).getByRole('button', {
+        name: 'Close the placement panel',
+      })
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('opening the catalogue sheet clears the selection and closes the panel sheet (FIX C)', async () => {
+    mockMatchMedia(true);
+    const placedCell = await renderWithPlacement();
+    const trigger = screen.getByRole('button', {
+      name: 'Plants & infrastructure',
+    });
+
+    fireEvent.click(placedCell);
+    await screen.findByRole('dialog', { name: 'Selected placement' });
+
+    fireEvent.click(trigger);
+    await screen.findByRole('dialog', { name: 'Plants & infrastructure' });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Selected placement' })
+      ).toBeNull()
+    );
+  });
+
+  it('Escape clears the selection and the panel sheet closes with it (FIX C)', async () => {
+    mockMatchMedia(true);
+    const placedCell = await renderWithPlacement();
+
+    fireEvent.click(placedCell);
+    const panelSheet = await screen.findByRole('dialog', {
+      name: 'Selected placement',
+    });
+    // MUI's Modal consumes the press and calls onClose → clearSelection —
+    // the same primitive the planner's own window handler dispatches.
+    fireEvent.keyDown(panelSheet, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('the catalogue sheet remembers its tab across close and reopen (FIX D, SMA-345)', async () => {
+    mockMatchMedia(true);
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+    await screen.findByRole('grid');
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    );
+    let dialog = await screen.findByRole('dialog', {
+      name: 'Plants & infrastructure',
+    });
+    await user.click(within(dialog).getByRole('tab', { name: 'Soils' }));
+    expect(within(dialog).getByRole('tab', { name: 'Soils' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+
+    // Close and reopen: the Drawer unmounts the sidebar, but the tab is
+    // page state now — the nominal gesture (arm, place, reopen, arm again)
+    // lands back on SOILS, not PLANTS.
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await user.click(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    );
+    dialog = await screen.findByRole('dialog', {
+      name: 'Plants & infrastructure',
+    });
+    expect(within(dialog).getByRole('tab', { name: 'Soils' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    // And the SOILS panel is the one on screen.
+    expect(
+      within(dialog).getByRole('button', { name: 'Potting mix' })
+    ).toBeInTheDocument();
+  });
+});

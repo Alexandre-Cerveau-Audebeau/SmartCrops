@@ -87,6 +87,15 @@ interface PlacementDetailPanelProps {
    */
   gardenId?: string;
   gardenName?: string;
+  /**
+   * SMA-18 lot 2: where the panel lives. 'lane' (default) = the ≥lg 330px
+   * card with its own chrome and header. 'sheet' = inside the bottom
+   * Drawer: the card chrome is STRIPPED (the sheet Paper owns radius and
+   * elevation), the header row too (the Drawer's title row is the sheet
+   * chrome, PlantSidebar convention), and the root becomes the scroll
+   * surface filling the Paper's bounded height.
+   */
+  variant?: 'lane' | 'sheet';
 }
 
 const MOMENT_ORDER: Moment[] = ['morning', 'noon', 'evening'];
@@ -137,6 +146,7 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
   onClose,
   gardenId,
   gardenName,
+  variant = 'lane',
 }: PlacementDetailPanelProps) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
@@ -340,48 +350,61 @@ export const PlacementDetailPanel = memo(function PlacementDetailPanel({
     // ALWAYS-reserved 330px right lane — the LANE (in GardenPlanner) owns
     // stickiness and scrolling; the panel no longer positions itself.
     // R5 (CR accept): planner-token surface (mode-aware, no theme drift).
+    // SMA-18 lot 2: in the SHEET the card chrome goes away (the Drawer
+    // Paper owns radius/elevation/bgcolor) and the root IS the scroll
+    // surface — flex:1/minHeight:0 takes the Paper's bounded height, the
+    // PlantSidebar sheet-variant contract.
     <Box
-      sx={{
-        width: '100%',
-        p: 2,
-        border: `1px solid ${tk.cardBd}`,
-        borderRadius: '12px',
-        bgcolor: tk.card,
-        boxShadow: tk.shadow,
-      }}
+      sx={
+        variant === 'sheet'
+          ? { width: '100%', p: 2, flex: 1, minHeight: 0, overflowY: 'auto' }
+          : {
+              width: '100%',
+              p: 2,
+              border: `1px solid ${tk.cardBd}`,
+              borderRadius: '12px',
+              bgcolor: tk.card,
+              boxShadow: tk.shadow,
+            }
+      }
     >
-      {/* Header (SMA-309): the panel says what it is, and offers the way out. */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          mb: 1.5,
-        }}
-      >
-        <Typography
-          component="h2"
+      {/* Header (SMA-309): the panel says what it is, and offers the way
+          out. Sheet variant: the Drawer's title row already does both — a
+          second title and a second X would fight it (PlantSidebar keeps its
+          switch row but never its own header, same rule). */}
+      {variant !== 'sheet' && (
+        <Box
           sx={{
-            fontSize: 11.5,
-            fontWeight: 800,
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            color: tk.muted,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            mb: 1.5,
           }}
         >
-          {t('planner.placement.title')}
-        </Typography>
-        {onClose && (
-          <IconButton
-            size="small"
-            aria-label={t('planner.placement.close')}
-            onClick={onClose}
-            sx={{ ml: 'auto', p: '2px', color: tk.muted }}
+          <Typography
+            component="h2"
+            sx={{
+              fontSize: 11.5,
+              fontWeight: 800,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              color: tk.muted,
+            }}
           >
-            <CloseIcon sx={{ fontSize: 18 }} />
-          </IconButton>
-        )}
-      </Box>
+            {t('planner.placement.title')}
+          </Typography>
+          {onClose && (
+            <IconButton
+              size="small"
+              aria-label={t('planner.placement.close')}
+              onClick={onClose}
+              sx={{ ml: 'auto', p: '2px', color: tk.muted }}
+            >
+              <CloseIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          )}
+        </Box>
+      )}
 
       {/* Identity: the photo takes the slot the sidebar gives its initial. */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

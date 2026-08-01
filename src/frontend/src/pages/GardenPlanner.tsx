@@ -27,7 +27,9 @@ import SaveIcon from '@mui/icons-material/Save';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { CompassRose } from '../components/Garden/CompassRose';
 import GardenGrid from '../components/Garden/GardenGrid';
-import PlantSidebar from '../components/Garden/PlantSidebar';
+import PlantSidebar, {
+  type PlantSidebarTab,
+} from '../components/Garden/PlantSidebar';
 import GardenConfigDialog, {
   type DialogDimensions,
 } from '../components/Garden/GardenConfigDialog';
@@ -130,6 +132,36 @@ const headerBtnSx = {
   fontSize: { xs: 13, sm: 14.5 },
 } as const;
 
+// SMA-18 lot 2: ONE definition of the bottom-sheet family chrome — the
+// catalogue sheet (lot 1) and the placement-panel sheet (lot 2) must read as
+// one family, so the États numbers (560 capped 85dvh, top radius 18, scrim,
+// 42×5 handle, title row metrics) live once. Mode-dependent colours (tk.card,
+// tk.track) stay at the call sites — tokens come from a hook.
+const sheetBackdropSx = { bgcolor: 'rgba(9,22,16,0.45)' } as const;
+const sheetPaperSx = {
+  height: 560,
+  maxHeight: '85dvh',
+  borderTopLeftRadius: '18px',
+  borderTopRightRadius: '18px',
+  display: 'flex',
+  flexDirection: 'column',
+} as const;
+const sheetHandleSx = {
+  width: 42,
+  height: 5,
+  borderRadius: '999px',
+  alignSelf: 'center',
+  mt: '10px',
+  flexShrink: 0,
+} as const;
+const sheetTitleRowSx = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 1,
+  p: '10px 16px 8px',
+  flexShrink: 0,
+} as const;
+
 export default function GardenPlanner() {
   const { t } = useTranslation();
   const { language } = useLanguage();
@@ -162,6 +194,7 @@ export default function GardenPlanner() {
     placePlantId,
     soilMode,
     soilType,
+    isPainting,
   } = state;
   const hasLastSaved = state.lastSaved !== null;
 
@@ -287,6 +320,14 @@ export default function GardenPlanner() {
   // sx cannot carry it: this is the file's existing useMediaQuery case.
   const isNarrow = useMediaQuery(theme.breakpoints.down('lg'));
   const [sheetOpen, setSheetOpen] = useState(false);
+  // SMA-345 item 3 (lot 2, FIX D): the sidebar's active tab is PAGE state.
+  // The sheet Drawer unmounts the sidebar when it closes, and the nominal
+  // mobile gesture — arm, place, reopen, arm again — must land back on the
+  // tab the user was working in (going to SOILS, arming, reopening used to
+  // land on PLANTS every time). Lifting costs zero DOM; the keepMounted
+  // alternative would keep the whole catalogue list mounted behind a closed
+  // sheet — now behind TWO sheets — on the most constrained devices.
+  const [sidebarTab, setSidebarTab] = useState<PlantSidebarTab>('plants');
   // R3 (GitHub cf65425f — the one substantive finding of the lot): above lg
   // the Drawer unmounts but its state survived, so narrowing the viewport
   // again (a resized window, a rotated tablet) reopened the sheet on its
@@ -294,6 +335,15 @@ export default function GardenPlanner() {
   useEffect(() => {
     if (!isNarrow) setSheetOpen(false);
   }, [isNarrow]);
+  // SMA-18 lot 2 (FIX C): the two bottom sheets are mutually exclusive —
+  // both anchor bottom and neither is useful behind the other. A selection
+  // means the PANEL sheet (its open state IS the selection), so the
+  // catalogue sheet yields; the reverse direction lives on the trigger,
+  // which clears the selection as it opens the catalogue. Above lg this is
+  // a no-op (sheetOpen is already false).
+  useEffect(() => {
+    if (selectedPlacementId !== null) setSheetOpen(false);
+  }, [selectedPlacementId]);
 
   // Real blockers (SMA-15 5.4): blocking infrastructure regions derived from
   // the per-cell storage — the [] placeholder era ends here.
@@ -1024,6 +1074,37 @@ export default function GardenPlanner() {
     },
     [beginPendingDrag]
   );
+  // ── Touch paint propagation (SMA-18 lot 2, FIX A) ───────────────────────
+  // Painting propagates by COORDINATES while a stroke is live, not only by
+  // pointerenter: a TOUCH pointer holds implicit capture on the cell that
+  // received pointerdown, so neighbouring cells never fire pointerenter and
+  // a swipe painted exactly one cell. The DnD engine above already solved
+  // this shape — document-level pointermove + the inverted track formula —
+  // so the paint drag reuses pointerToCell instead of inventing a second
+  // mechanism (and instead of releasing the implicit capture, whose
+  // sibling-boundary-event behaviour is the least-conformant corner of
+  // pointer events on mobile WebKit). Mouse strokes still fire pointerenter
+  // per cell; the reducer's PAINT_ENTER no-op guards make the two dispatch
+  // paths converge instead of double-painting. Cell-granular like the DnD
+  // move handler: same-cell moves dispatch nothing.
+  const lastPaintCellRef = useRef<{ row: number; col: number } | null>(null);
+  useEffect(() => {
+    if (!isPainting) return;
+    lastPaintCellRef.current = null;
+    const onPaintPointerMove = (e: PointerEvent) => {
+      const cell = pointerToCell(e.clientX, e.clientY);
+      if (!cell) return;
+      const last = lastPaintCellRef.current;
+      if (last && last.row === cell.row && last.col === cell.col) return;
+      lastPaintCellRef.current = cell;
+      dispatch({ type: 'PAINT_ENTER', row: cell.row, col: cell.col });
+    };
+    document.addEventListener('pointermove', onPaintPointerMove);
+    return () =>
+      document.removeEventListener('pointermove', onPaintPointerMove);
+    // pointerToCell reads only refs (the DnD engine's own contract).
+  }, [isPainting]);
+
   const handleToggleExposure = useCallback(
     () => dispatch({ type: 'TOGGLE_EXPOSURE' }),
     []
@@ -1605,12 +1686,13 @@ export default function GardenPlanner() {
   }
 
   // SMA-18 R3 (CR 07a87095): the rail and sheet mounts of PlantSidebar
-  // shared FOURTEEN byte-identical props — one object, spread at both call
-  // sites, so a future prop addition cannot silently land in only one of
-  // the two mounts (it would land in the one tested least). The props that
-  // legitimately DIFFER — variant, the drag source, the three
-  // sheet-flavored arming handlers — stay explicit at each site so the
-  // divergence remains visible.
+  // shared SIXTEEN byte-identical props (fourteen at R3; lot 2 added the
+  // lifted tab pair) — one object, spread at both call sites, so a future
+  // prop addition cannot silently land in only one of the two mounts (it
+  // would land in the one tested least). The props that legitimately
+  // DIFFER — variant, the drag source, the three sheet-flavored arming
+  // handlers — stay explicit at each site so the divergence remains
+  // visible.
   const sharedSidebarProps = {
     plants: allPlants,
     searchQuery,
@@ -1626,7 +1708,40 @@ export default function GardenPlanner() {
     catalogReady,
     catalogFailed,
     onCatalogRetry: handleCatalogRetry,
+    activeTab: sidebarTab,
+    onActiveTabChange: setSidebarTab,
   };
+
+  // SMA-18 lot 2 (FIX C): the lane and sheet mounts of PlacementDetailPanel
+  // share every prop — the sharedSidebarProps rule applied to the panel the
+  // day it grew its second mount. Null while nothing is selected (the panel
+  // requires a placement); `variant` stays explicit at the sheet site.
+  const placementPanelProps =
+    selectedPlacement !== null
+      ? {
+          placement: selectedPlacement,
+          plant: selectedPlant,
+          soil: selectedCellSoil,
+          language,
+          catalogReady,
+          cellSize,
+          gridRows: grid?.length ?? 0,
+          gridCols: grid?.[0]?.length ?? 0,
+          exposure: selectedCellExposure,
+          momentsLit: selectedCellMomentsLit,
+          exposureOverride: selectedCellOverride,
+          onSetExposureOverride: handleSetSelectedExposureOverride,
+          checkFit: handleCheckSelectedFit,
+          describeOverlap: handleDescribeOverlap,
+          onSetFootprint: handleSetSelectedFootprint,
+          onSetNotes: handleSetSelectedNotes,
+          onMove: handleMoveSelectedPlacement,
+          onRemove: handleRemoveSelectedPlacement,
+          onClose: clearSelection,
+          gardenId: id,
+          gardenName: garden?.name,
+        }
+      : null;
 
   return (
     // Full-width page (R3 item F): the lg Container is replaced by a
@@ -2379,7 +2494,13 @@ export default function GardenPlanner() {
               <Button
                 fullWidth
                 variant="outlined"
-                onClick={() => setSheetOpen(true)}
+                // FIX C: the sheets are mutually exclusive — opening the
+                // catalogue closes the panel sheet by clearing the selection
+                // that IS its open state (a no-op with nothing selected).
+                onClick={() => {
+                  clearSelection();
+                  setSheetOpen(true);
+                }}
                 aria-expanded={false}
                 aria-controls="planner-sheet"
                 sx={{
@@ -2402,44 +2523,28 @@ export default function GardenPlanner() {
               the 330px column is ALWAYS reserved — an empty spacer when
               nothing is selected. Sticky rail below the navbar
               (STICKY_OFFSET = NAVBAR_HEIGHT 64 + 16), viewport-capped and
-              self-scrolling so its content stays on screen. */}
-          <Box
-            sx={{
-              width: { xs: '100%', lg: 330 },
-              flexShrink: 0,
-              position: { xs: 'static', lg: 'sticky' },
-              top: { lg: STICKY_OFFSET },
-              alignSelf: { xs: 'stretch', lg: 'flex-start' },
-              maxHeight: { lg: `calc(100vh - ${STICKY_OFFSET}px)` },
-              overflowY: { lg: 'auto' },
-            }}
-          >
-            {selectedPlacement && (
-              <PlacementDetailPanel
-                placement={selectedPlacement}
-                plant={selectedPlant}
-                soil={selectedCellSoil}
-                language={language}
-                catalogReady={catalogReady}
-                cellSize={cellSize}
-                gridRows={grid?.length ?? 0}
-                gridCols={grid?.[0]?.length ?? 0}
-                exposure={selectedCellExposure}
-                momentsLit={selectedCellMomentsLit}
-                exposureOverride={selectedCellOverride}
-                onSetExposureOverride={handleSetSelectedExposureOverride}
-                checkFit={handleCheckSelectedFit}
-                describeOverlap={handleDescribeOverlap}
-                onSetFootprint={handleSetSelectedFootprint}
-                onSetNotes={handleSetSelectedNotes}
-                onMove={handleMoveSelectedPlacement}
-                onRemove={handleRemoveSelectedPlacement}
-                onClose={clearSelection}
-                gardenId={id}
-                gardenName={garden?.name}
-              />
-            )}
-          </Box>
+              self-scrolling so its content stays on screen.
+              SMA-18 lot 2 (FIX C): ≥lg ONLY — below lg the lane used to
+              stack LAST, pushing the panel off-viewport exactly where the
+              screen is smallest; the panel's below-lg home is the second
+              bottom sheet instead. */}
+          {!isNarrow && (
+            <Box
+              sx={{
+                width: 330,
+                flexShrink: 0,
+                position: 'sticky',
+                top: STICKY_OFFSET,
+                alignSelf: 'flex-start',
+                maxHeight: `calc(100vh - ${STICKY_OFFSET}px)`,
+                overflowY: 'auto',
+              }}
+            >
+              {placementPanelProps && (
+                <PlacementDetailPanel {...placementPanelProps} />
+              )}
+            </Box>
+          )}
         </Box>
       )}
 
@@ -2460,49 +2565,22 @@ export default function GardenPlanner() {
           onClose={() => setSheetOpen(false)}
           ModalProps={{ disableScrollLock: true }}
           slotProps={{
-            backdrop: { sx: { bgcolor: 'rgba(9,22,16,0.45)' } },
+            backdrop: { sx: sheetBackdropSx },
             paper: {
               id: 'planner-sheet',
               role: 'dialog',
               'aria-modal': true,
               'aria-labelledby': 'planner-sheet-title',
-              sx: {
-                height: 560,
-                maxHeight: '85dvh',
-                borderTopLeftRadius: '18px',
-                borderTopRightRadius: '18px',
-                bgcolor: tk.card,
-                display: 'flex',
-                flexDirection: 'column',
-              },
+              sx: { ...sheetPaperSx, bgcolor: tk.card },
             },
           }}
         >
-          <Box
-            aria-hidden
-            sx={{
-              width: 42,
-              height: 5,
-              borderRadius: '999px',
-              bgcolor: tk.track,
-              alignSelf: 'center',
-              mt: '10px',
-              flexShrink: 0,
-            }}
-          />
+          <Box aria-hidden sx={{ ...sheetHandleSx, bgcolor: tk.track }} />
           {/* Title row (États): 16/800 title + count chip (the page's
               existing cntChip pair via metaChipSx) + 21px muted close. The
               sidebar's own shape-edit switch row now sits BELOW this title —
               the sheet header is Drawer chrome, not sidebar content. */}
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              p: '10px 16px 8px',
-              flexShrink: 0,
-            }}
-          >
+          <Box sx={sheetTitleRowSx}>
             <Typography
               id="planner-sheet-title"
               component="h2"
@@ -2535,6 +2613,62 @@ export default function GardenPlanner() {
             onInfraSelect={handleInfraSelectSheet}
             onSoilSelect={handleSoilSelectSheet}
           />
+        </Drawer>
+      )}
+
+      {/* SMA-18 lot 2 (FIX C): the placement panel's below-lg home — a
+          SECOND bottom sheet in the exact lot-1 chrome (shared constants
+          above), replacing the stacked lane a phone user could not reach.
+          Its open state IS the selection: selecting a placement opens it,
+          clearing the selection closes it — so every existing exit
+          (removal, Cancel, the panel's own X) closes the sheet for free.
+          Escape: MUI's Modal consumes the press (stopPropagation) and calls
+          onClose → clearSelection — the same primitive the planner's window
+          keydown handler dispatches when no modal eats the event first; the
+          two paths converge instead of fighting. During the exit slide the
+          Paper empties (the selection is already gone) — accepted, the
+          scrim is mid-fade and the catalogue sheet arms the same way. */}
+      {isNarrow && (
+        <Drawer
+          anchor="bottom"
+          open={selectedPlacement !== null}
+          onClose={clearSelection}
+          ModalProps={{ disableScrollLock: true }}
+          slotProps={{
+            backdrop: { sx: sheetBackdropSx },
+            paper: {
+              id: 'planner-placement-sheet',
+              role: 'dialog',
+              'aria-modal': true,
+              'aria-labelledby': 'planner-placement-sheet-title',
+              sx: { ...sheetPaperSx, bgcolor: tk.card },
+            },
+          }}
+        >
+          <Box aria-hidden sx={{ ...sheetHandleSx, bgcolor: tk.track }} />
+          {/* Title row = Drawer chrome (the catalogue-sheet convention): the
+              panel's own header is variant-stripped, this row owns the name
+              and the way out. */}
+          <Box sx={sheetTitleRowSx}>
+            <Typography
+              id="planner-placement-sheet-title"
+              component="h2"
+              sx={{ fontSize: 16, fontWeight: 800, color: tk.tTitle }}
+            >
+              {t('planner.placement.title')}
+            </Typography>
+            <IconButton
+              size="small"
+              onClick={clearSelection}
+              aria-label={t('planner.placement.close')}
+              sx={{ ml: 'auto', p: '2px', color: tk.muted }}
+            >
+              <CloseIcon sx={{ fontSize: 21 }} />
+            </IconButton>
+          </Box>
+          {placementPanelProps && (
+            <PlacementDetailPanel {...placementPanelProps} variant="sheet" />
+          )}
         </Drawer>
       )}
 
