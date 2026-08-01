@@ -59,10 +59,21 @@ function renderHome() {
   );
 }
 
-/** Waits out the plant fetch so the library preview settles before asserting. */
+/**
+ * Waits out the plant fetch only. Reserved for the tests that deliberately
+ * leave auth pending — everything else must also settle the auth promise, or
+ * React updates state outside act() after the test has returned (R3).
+ */
 async function renderHomeSettled() {
   const result = renderHome();
   await waitFor(() => expect(vi.mocked(fetchPlants)).toHaveBeenCalled());
+  return result;
+}
+
+/** Renders with auth resolved to a visitor without an account. */
+async function renderHomeAnonymous() {
+  const result = await renderHomeSettled();
+  await screen.findByRole('link', { name: 'Create Account' });
   return result;
 }
 
@@ -89,7 +100,7 @@ describe('Home — the page says only what ships (SMA-353)', () => {
   });
 
   it('renders NOTHING for testimonials while the source is empty', async () => {
-    await renderHomeSettled();
+    await renderHomeAnonymous();
 
     // No heading, no carousel, no hollow frame: the section is absent, not
     // empty. The i18n key survives for SMA-356; nothing renders it today.
@@ -108,7 +119,7 @@ describe('Home — the page says only what ships (SMA-353)', () => {
   });
 
   it('names no invented reviewer', async () => {
-    await renderHomeSettled();
+    await renderHomeAnonymous();
 
     // The nine people who never existed. Naming them here is the point: if a
     // literal ever comes back, this fails.
@@ -128,7 +139,7 @@ describe('Home — the page says only what ships (SMA-353)', () => {
   });
 
   it('does not badge the virtual garden or the planner as forthcoming', async () => {
-    await renderHomeSettled();
+    await renderHomeAnonymous();
 
     for (const title of ['Virtual Garden', 'Garden Planner']) {
       const card = screen
@@ -142,7 +153,7 @@ describe('Home — the page says only what ships (SMA-353)', () => {
   });
 
   it('keeps the badge on what genuinely has not shipped', async () => {
-    await renderHomeSettled();
+    await renderHomeAnonymous();
 
     // Smart Monitoring (weather + IoT) and the assistant connection — two out
     // of six cards, the ceiling agreed for this grid.
@@ -158,19 +169,54 @@ describe('Home — the page says only what ships (SMA-353)', () => {
   });
 
   it('offers the assistant card with a route to the explanation (SMA-359)', async () => {
-    await renderHomeSettled();
+    await renderHomeAnonymous();
 
     const card = screen
       .getByRole('heading', { name: 'Bring your own assistant' })
       .closest('.MuiCard-root') as HTMLElement;
-    expect(within(card).getByRole('link', { name: 'Learn more' })).toHaveAttribute(
-      'href',
-      '/about'
-    );
+    // Visible label stays short; the accessible name is what changed (R3).
+    const link = within(card).getByRole('link', {
+      name: 'Learn more — Bring your own assistant',
+    });
+    expect(link).toHaveAttribute('href', '/about');
+    expect(link).toHaveTextContent('Learn more');
+  });
+
+  // R3 — the cookie banner offers its own "Learn more", to /privacy, on the
+  // same first visit. Two links answering to one name are indistinguishable in
+  // a screen reader's link list, so this pins the difference rather than the
+  // wording.
+  it('does not answer to the same accessible name as the cookie banner', async () => {
+    await renderHomeAnonymous();
+
+    // Nothing on the page may be reachable by the bare label any more.
+    expect(
+      screen.queryByRole('link', { name: 'Learn more' })
+    ).not.toBeInTheDocument();
+
+    const assistantLink = screen.getByRole('link', {
+      name: 'Learn more — Bring your own assistant',
+    });
+    // cookies.learnMore, the label this used to collide with, verbatim.
+    expect(i18next.t('cookies.learnMore')).toBe('Learn more');
+    expect(
+      assistantLink.getAttribute('aria-label')
+    ).not.toBe(i18next.t('cookies.learnMore'));
+  });
+
+  it('names the assistant link in French too', async () => {
+    localStorage.setItem('smartcrops-language', 'fr');
+    renderHome();
+
+    const link = await screen.findByRole('link', {
+      name: 'En savoir plus — Branchez votre propre assistant',
+    });
+    expect(link).toHaveAttribute('href', '/about');
+    expect(link).toHaveTextContent('En savoir plus');
   });
 
   it('never calls the assistant connection our own AI', async () => {
-    const { container } = await renderHomeSettled();
+    const { container } = await renderHomeAnonymous();
 
     // The differentiator IS that the assistant is the visitor's, already paid
     // for. Generic "AI-powered" phrasing would erase it — and the privacy
@@ -182,7 +228,7 @@ describe('Home — the page says only what ships (SMA-353)', () => {
   });
 
   it('lists Typesense in the current stack, not on the roadmap', async () => {
-    const { container } = await renderHomeSettled();
+    const { container } = await renderHomeAnonymous();
 
     const roadmapCaption = screen.getByText('On Our Roadmap');
     const roadmapRow = roadmapCaption.nextElementSibling as HTMLElement;
@@ -199,14 +245,14 @@ describe('Home — the page says only what ships (SMA-353)', () => {
   });
 
   it('counts only the tools that ship', async () => {
-    await renderHomeSettled();
+    await renderHomeAnonymous();
 
     const toolsStat = screen.getByRole('button', { name: 'Tools' });
     expect(within(toolsStat).getByText('4')).toBeInTheDocument();
   });
 
   it('says the library descriptions are in English, in both locales', async () => {
-    const { unmount } = await renderHomeSettled();
+    const { unmount } = await renderHomeAnonymous();
     expect(
       screen.getByText(/their descriptions are in English/i)
     ).toBeInTheDocument();
@@ -215,6 +261,8 @@ describe('Home — the page says only what ships (SMA-353)', () => {
 
     localStorage.setItem('smartcrops-language', 'fr');
     renderHome();
+    // Settles auth inside the test too — the CTA only appears once resolved.
+    await screen.findByRole('link', { name: 'Créer un compte' });
     expect(
       await screen.findByText(/leurs descriptions sont en anglais/i)
     ).toBeInTheDocument();
@@ -224,7 +272,7 @@ describe('Home — the page says only what ships (SMA-353)', () => {
   });
 
   it('promises no personalized recommendations in the present tense', async () => {
-    const { container } = await renderHomeSettled();
+    const { container } = await renderHomeAnonymous();
 
     expect(within(container).queryByText(/Follow personalized recommendations/i))
       .not.toBeInTheDocument();
@@ -234,7 +282,7 @@ describe('Home — the page says only what ships (SMA-353)', () => {
   });
 
   it('does not promise unsubscription from a form that cannot subscribe', async () => {
-    await renderHomeSettled();
+    await renderHomeAnonymous();
 
     expect(screen.queryByText(/unsubscribe anytime/i)).not.toBeInTheDocument();
     expect(
@@ -267,7 +315,7 @@ describe('Home — what a signed-in visitor is offered (SMA-360)', () => {
   });
 
   it('still offers the account to a visitor without one', async () => {
-    await renderHomeSettled();
+    await renderHomeAnonymous();
 
     expect(
       await screen.findByRole('link', { name: 'Create Account' })
@@ -291,7 +339,7 @@ describe('Home — what a signed-in visitor is offered (SMA-360)', () => {
   });
 
   it('keeps the closing pitch for a visitor without an account', async () => {
-    await renderHomeSettled();
+    await renderHomeAnonymous();
 
     expect(
       await screen.findByRole('heading', { name: 'Ready to Start Growing?' })

@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
+import { SECOND_ACTION_MIN_WIDTH } from '../constants/layout';
 import { useAuth } from '../hooks/useAuth';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -25,14 +26,6 @@ const heroImages = [
   { src: '/images/hero/hero-5.jpg', alt: 'Potted plants on a sunny windowsill', credit: 'Elly M' },
   { src: '/images/hero/hero-8.jpg', alt: 'Colorful seedling trays from above', credit: 'Zoe Richardson' },
 ];
-
-/**
- * Width reserved for the hero's second action, in every auth state (SMA-360).
- * The slot is wider than the longest label in either locale ("Créer un compte"),
- * so resolving from unknown to signed-in or signed-out swaps the text without
- * ever moving "Browse Library" beside it.
- */
-const SECOND_ACTION_MIN_WIDTH = 180;
 
 export default function HeroCarousel() {
   const { t } = useTranslation();

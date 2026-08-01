@@ -47,6 +47,12 @@ interface FeatureItem {
   comingSoon?: boolean;
   /** SMA-359: route to the page that explains this card in full. */
   explainedAt?: string;
+  /**
+   * Label for the `explainedAt` link. Belongs to the card, not to the renderer
+   * (R3): pinning the assistant's key in the JSX made the next card to adopt
+   * `explainedAt` speak for the assistant.
+   */
+  explainedAtLabelKey?: string;
 }
 
 interface TechItem {
@@ -94,6 +100,7 @@ const features: FeatureItem[] = [
     descKey: 'home.features.assistantDesc',
     comingSoon: true,
     explainedAt: '/about',
+    explainedAtLabelKey: 'home.features.assistantLearnMore',
   },
 ];
 
@@ -394,14 +401,23 @@ export default function Home() {
                 <Typography variant="body2" color="text.secondary">
                   {t(feature.descKey)}
                 </Typography>
-                {feature.explainedAt && (
+                {feature.explainedAt && feature.explainedAtLabelKey && (
                   <Button
                     size="small"
                     component={RouterLink}
                     to={feature.explainedAt}
+                    // The visible label stays short — it sits under a card that
+                    // names its subject. The ACCESSIBLE name must not: the
+                    // cookie banner offers its own "Learn more" to /privacy on
+                    // the same first visit, and two links answering to one name
+                    // are indistinguishable in a screen reader's link list (R3).
+                    aria-label={t('home.features.explainedAtAriaLabel', {
+                      label: t(feature.explainedAtLabelKey),
+                      feature: t(feature.titleKey),
+                    })}
                     sx={{ mt: 1.5 }}
                   >
-                    {t('home.features.assistantLearnMore')}
+                    {t(feature.explainedAtLabelKey)}
                   </Button>
                 )}
               </CardContent>

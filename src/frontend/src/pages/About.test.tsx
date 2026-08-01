@@ -31,6 +31,19 @@ function renderAbout() {
   );
 }
 
+/**
+ * Renders and waits out AuthProvider's fetchMe (R3). Without this, a test that
+ * asserts synchronously returns before the mocked rejection settles, React runs
+ * setUser(null)/setLoading(false) outside act(), and both the warning and the
+ * state update land in whichever test runs next. Every test whose auth state
+ * RESOLVES goes through here; the deliberately-pending one does not.
+ */
+async function renderAboutSettled() {
+  const result = renderAbout();
+  await screen.findByRole('link', { name: 'Create Account' });
+  return result;
+}
+
 describe('About (SMA-36)', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -39,7 +52,7 @@ describe('About (SMA-36)', () => {
   });
 
   it('renders the hero title, the four pillars and the CTA links (EN)', async () => {
-    renderAbout();
+    await renderAboutSettled();
     expect(
       screen.getByRole('heading', {
         level: 1,
@@ -66,8 +79,8 @@ describe('About (SMA-36)', () => {
 
   // SMA-353 — About is where the homepage's assistant card sends the visitor,
   // so the explanation has to be here, and it has to stay the user's assistant.
-  it('explains the assistant connection inside the Intelligence pillar (SMA-359)', () => {
-    const { container } = renderAbout();
+  it('explains the assistant connection inside the Intelligence pillar (SMA-359)', async () => {
+    const { container } = await renderAboutSettled();
 
     const pillar = screen
       .getByRole('heading', { name: 'Intelligence to come' })
@@ -93,15 +106,15 @@ describe('About (SMA-36)', () => {
     }
   });
 
-  it('is signed, without a biography (SMA-353)', () => {
-    renderAbout();
+  it('is signed, without a biography (SMA-353)', async () => {
+    await renderAboutSettled();
     expect(
       screen.getByText('Designed and built by Alexandre Cerveau-Audebeau.')
     ).toBeInTheDocument();
   });
 
-  it('lists Typesense among the current stack chips', () => {
-    renderAbout();
+  it('lists Typesense among the current stack chips', async () => {
+    await renderAboutSettled();
     expect(screen.getByText('Typesense')).toBeInTheDocument();
   });
 
@@ -139,8 +152,8 @@ describe('About (SMA-36)', () => {
     });
   });
 
-  it('does not claim bilingual plant descriptions', () => {
-    renderAbout();
+  it('does not claim bilingual plant descriptions', async () => {
+    await renderAboutSettled();
     expect(screen.queryByText(/bilingual descriptions/i)).not.toBeInTheDocument();
     // The language truth lives in the Bilingual pillar, said once.
     const pillar = screen
@@ -152,7 +165,10 @@ describe('About (SMA-36)', () => {
   it('renders in French', async () => {
     await i18next.changeLanguage('fr');
     renderAbout();
-    // findBy* retries until React flushes the language change (de-flakes R19).
+    // findBy* retries until React flushes the language change (de-flakes R19)
+    // and, since the CTA only appears once auth resolves, it settles the
+    // provider's promise inside the test as well (R3).
+    await screen.findByRole('link', { name: 'Créer un compte' });
     expect(
       await screen.findByRole('heading', {
         level: 1,

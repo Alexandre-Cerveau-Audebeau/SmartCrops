@@ -78,6 +78,7 @@
       "assistant": "Bring your own assistant",
       "assistantDesc": "Ask Claude, ChatGPT, Gemini or Mistral about your garden, from the conversation you already use. We never receive your keys.",
       "assistantLearnMore": "Learn more",
+      "explainedAtAriaLabel": "{{label}} — {{feature}}",
       "comingSoon": "Coming Soon"
     },
     "libraryPreview": {

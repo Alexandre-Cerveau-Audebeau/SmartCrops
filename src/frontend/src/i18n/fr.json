@@ -78,6 +78,7 @@
       "assistant": "Branchez votre propre assistant",
       "assistantDesc": "Interrogez Claude, ChatGPT, Gemini ou Mistral sur votre jardin, depuis la conversation que vous utilisez déjà. Nous ne recevons jamais vos clés.",
       "assistantLearnMore": "En savoir plus",
+      "explainedAtAriaLabel": "{{label}} — {{feature}}",
       "comingSoon": "Bientôt disponible"
     },
     "libraryPreview": {

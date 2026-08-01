@@ -14,6 +14,7 @@ import TranslateIcon from '@mui/icons-material/Translate';
 import SensorsIcon from '@mui/icons-material/Sensors';
 import ComingSoonChip from '../components/ComingSoonChip';
 import LegalText from '../components/Legal/LegalText';
+import { SECOND_ACTION_MIN_WIDTH } from '../constants/layout';
 import { TECH_STACK } from '../constants/techStack';
 import { useAuth } from '../hooks/useAuth';
 
@@ -69,9 +70,6 @@ function SectionHeading({ children }: { children: ReactNode }) {
     </Typography>
   );
 }
-
-/** Matches the hero's reserved slot so the CTA pair never reflows (SMA-360). */
-const SECOND_ACTION_MIN_WIDTH = 180;
 
 /** SMA-36: /about — About Us page (mockups A1/A3, photo hero). */
 export default function About() {
