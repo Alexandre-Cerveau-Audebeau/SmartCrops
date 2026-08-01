@@ -605,7 +605,7 @@
     },
     "sheet": {
       "trigger": "Plantes & infrastructures",
-      "tapHint": "Tap-to-place : choisissez puis touchez la grille"
+      "tapHint": "Toucher pour placer : choisissez puis touchez la grille"
     },
     "placement": {
       "title": "Placement sélectionné",

@@ -120,6 +120,16 @@ const removeBtnSx = {
   '&:hover': { bgcolor: 'error.light', color: '#fff' },
 };
 
+// §11 header buttons: h 44 (40 mobile) · px 17 (13) · fs 14.5 (13) — SMA-18;
+// extracted R3 (CR ff1ec2b1) per this file's addBtnSx/removeBtnSx precedent,
+// so a future size change lands once instead of three times.
+const headerBtnSx = {
+  height: { xs: 40, sm: 44 },
+  px: { xs: '13px', sm: '17px' },
+  borderRadius: '8px',
+  fontSize: { xs: 13, sm: 14.5 },
+} as const;
+
 export default function GardenPlanner() {
   const { t } = useTranslation();
   const { language } = useLanguage();
@@ -277,6 +287,13 @@ export default function GardenPlanner() {
   // sx cannot carry it: this is the file's existing useMediaQuery case.
   const isNarrow = useMediaQuery(theme.breakpoints.down('lg'));
   const [sheetOpen, setSheetOpen] = useState(false);
+  // R3 (GitHub cf65425f — the one substantive finding of the lot): above lg
+  // the Drawer unmounts but its state survived, so narrowing the viewport
+  // again (a resized window, a rotated tablet) reopened the sheet on its
+  // own while the trigger stayed hidden. Leaving the phone layout closes it.
+  useEffect(() => {
+    if (!isNarrow) setSheetOpen(false);
+  }, [isNarrow]);
 
   // Real blockers (SMA-15 5.4): blocking infrastructure regions derived from
   // the per-cell storage — the [] placeholder era ends here.
@@ -1587,6 +1604,30 @@ export default function GardenPlanner() {
     );
   }
 
+  // SMA-18 R3 (CR 07a87095): the rail and sheet mounts of PlantSidebar
+  // shared FOURTEEN byte-identical props — one object, spread at both call
+  // sites, so a future prop addition cannot silently land in only one of
+  // the two mounts (it would land in the one tested least). The props that
+  // legitimately DIFFER — variant, the drag source, the three
+  // sheet-flavored arming handlers — stay explicit at each site so the
+  // divergence remains visible.
+  const sharedSidebarProps = {
+    plants: allPlants,
+    searchQuery,
+    onSearchChange: setSearchQuery,
+    selectedPlantId: placePlantId,
+    cellSize,
+    selectedInfraType: infraType,
+    selectedSoilType: soilType,
+    onSoilFillAll: handleSoilFillAll,
+    language,
+    shapeEditMode,
+    onShapeEditToggle: handleShapeEditToggle,
+    catalogReady,
+    catalogFailed,
+    onCatalogRetry: handleCatalogRetry,
+  };
+
   return (
     // Full-width page (R3 item F): the lg Container is replaced by a
     // full-width wrapper with 24px lateral padding — settled #177 layout
@@ -1700,13 +1741,8 @@ export default function GardenPlanner() {
             variant="outlined"
             startIcon={<SettingsIcon sx={{ fontSize: 19 }} />}
             onClick={handleOpenSettings}
-            // §11 header buttons: h 44 (40) · px 17 (13) · fs 14.5 (13) —
-            // SMA-18 adds the mobile triple to all three actions.
             sx={{
-              height: { xs: 40, sm: 44 },
-              px: { xs: '13px', sm: '17px' },
-              borderRadius: '8px',
-              fontSize: { xs: 13, sm: 14.5 },
+              ...headerBtnSx,
               fontWeight: 700,
               bgcolor: tk.card,
               borderColor: tk.obtnBd,
@@ -1724,10 +1760,7 @@ export default function GardenPlanner() {
             onClick={handleCancel}
             disabled={saving}
             sx={{
-              height: { xs: 40, sm: 44 },
-              px: { xs: '13px', sm: '17px' },
-              borderRadius: '8px',
-              fontSize: { xs: 13, sm: 14.5 },
+              ...headerBtnSx,
               fontWeight: 700,
               borderColor: tk.obtnBd,
               color: tk.obtnTx,
@@ -1749,10 +1782,7 @@ export default function GardenPlanner() {
           disabled={!isDirty || saving}
           onClick={handleSave}
           sx={{
-            height: { xs: 40, sm: 44 },
-            px: { xs: '13px', sm: '17px' },
-            borderRadius: '8px',
-            fontSize: { xs: 13, sm: 14.5 },
+            ...headerBtnSx,
             fontWeight: 700,
           }}
         >
@@ -1927,24 +1957,11 @@ export default function GardenPlanner() {
               unrolling the whole catalogue above the grid. */}
           {!isNarrow && (
             <PlantSidebar
-              plants={allPlants}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              selectedPlantId={placePlantId}
+              {...sharedSidebarProps}
               onPlantSelect={handlePlantSelect}
               onPlantPointerDown={handlePlantPointerDown}
-              cellSize={cellSize}
-              selectedInfraType={infraType}
               onInfraSelect={handleInfraSelect}
-              selectedSoilType={soilType}
               onSoilSelect={handleSoilSelect}
-              onSoilFillAll={handleSoilFillAll}
-              language={language}
-              shapeEditMode={shapeEditMode}
-              onShapeEditToggle={handleShapeEditToggle}
-              catalogReady={catalogReady}
-              catalogFailed={catalogFailed}
-              onCatalogRetry={handleCatalogRetry}
             />
           )}
 
@@ -2512,24 +2529,11 @@ export default function GardenPlanner() {
               (tap-to-place is the mobile flow), and omitting it lifts the
               rows' touchAction clamp so the list scrolls under a finger. */}
           <PlantSidebar
+            {...sharedSidebarProps}
             variant="sheet"
-            plants={allPlants}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            selectedPlantId={placePlantId}
             onPlantSelect={handlePlantSelectSheet}
-            cellSize={cellSize}
-            selectedInfraType={infraType}
             onInfraSelect={handleInfraSelectSheet}
-            selectedSoilType={soilType}
             onSoilSelect={handleSoilSelectSheet}
-            onSoilFillAll={handleSoilFillAll}
-            language={language}
-            shapeEditMode={shapeEditMode}
-            onShapeEditToggle={handleShapeEditToggle}
-            catalogReady={catalogReady}
-            catalogFailed={catalogFailed}
-            onCatalogRetry={handleCatalogRetry}
           />
         </Drawer>
       )}
