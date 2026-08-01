@@ -61,7 +61,7 @@ import {
 import type { ArmedSoil } from '../utils/soil';
 import { ExposureLegend } from './gardenPlanner/ExposureLegend';
 import { ExposureOverridePopover } from './gardenPlanner/ExposureOverridePopover';
-import { GridControls } from './gardenPlanner/GridControls';
+import { GridControls, UndoZoomCluster } from './gardenPlanner/GridControls';
 import { PlacementDetailPanel } from './gardenPlanner/PlacementDetailPanel';
 import { PlantsInGardenSection } from './gardenPlanner/PlantsInGardenSection';
 import {
@@ -2124,6 +2124,12 @@ export default function GardenPlanner() {
               borderRadius: '12px',
               boxShadow: tk.shadow,
               p: { xs: '12px', sm: '20px' },
+              // SMA-18 lot 2 R2: below sm the anchored undo/zoom row occupies
+              // the card's top band (y −10..30, the compass's own line) — the
+              // top padding clears it so no axis letter is hidden and no
+              // tappable cell ever sits under the INTERACTIVE pill (the
+              // decorative compass never needed this: pointerEvents none).
+              pt: { xs: '38px', sm: '20px' },
             }}
           >
             {/* Permanent compass (5.3-D, tokens §8): top-right corner of the
@@ -2170,6 +2176,51 @@ export default function GardenPlanner() {
                 }
               />
             </Box>
+
+            {/* SMA-18 lot 2 R2 (Alexandre, phone pass over the LAN): below
+                sm, undo and zoom join the grid CARD — reaching them meant
+                scrolling up to a toolbar the user is no longer looking at.
+                The dictated order: undo · percentage · zoom out · zoom in ·
+                compass (the compass keeps its corner; this row sits to its
+                left). SAME anchoring mechanism as the compass — absolute
+                against the card (position:relative context), NOT the scroll
+                area — so the row stays put while the grid scrolls under it;
+                same top offset (-10) and 40px height as the compass disc so
+                the five read as ONE line. Chrome = the compass disc's own
+                (card/cardBd/shadow), pill-rounded like every chip. The
+                toolbar's cluster is UNMOUNTED below sm (GridControls), so
+                each accessible name exists exactly once per viewport. */}
+            {isMobile && (
+              <Box
+                data-testid="grid-zoom-row"
+                sx={{
+                  position: 'absolute',
+                  // The compass disc spans right −6..34 (40px, §8 mobile);
+                  // 8px gap puts the row's right edge at 42.
+                  right: 42,
+                  top: -10,
+                  zIndex: 10,
+                  height: 40,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  px: '6px',
+                  borderRadius: '999px',
+                  bgcolor: tk.card,
+                  border: `1px solid ${tk.cardBd}`,
+                  boxShadow: tk.shadow,
+                }}
+              >
+                <UndoZoomCluster
+                  order="grid"
+                  zoom={zoom}
+                  canUndo={state.past.length > 0}
+                  onUndo={handleUndo}
+                  onZoomIn={handleZoomIn}
+                  onZoomOut={handleZoomOut}
+                />
+              </Box>
+            )}
 
             {/* TOP +/- row — OUTSIDE scroll, centered in wrapper width (= visible viewport) */}
             {shapeEditMode && (

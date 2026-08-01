@@ -2318,3 +2318,129 @@ describe('SMA-18 mobile touch (lot 2)', () => {
     ).toBeInTheDocument();
   });
 });
+
+// ── SMA-18 lot 2 R2 — the in-grid undo/zoom row on phones ─────────────────
+// Alexandre's phone pass: reaching zoom meant scrolling up to the toolbar,
+// away from the very thing being zoomed. Below sm the undo/zoom cluster
+// mounts INSIDE the grid card beside the compass (dictated order: undo ·
+// percentage · zoom out · zoom in · compass), anchored to the CARD like the
+// compass so it never scrolls away with the grid content. The toolbar's own
+// cluster is UNMOUNTED below sm — one control, one accessible name, at any
+// viewport. Both clusters are ONE shared component (UndoZoomCluster), so
+// handlers, bounds and names cannot drift.
+describe('SMA-18 lot 2 R2 — in-grid undo/zoom row (mobile)', () => {
+  afterEach(() => {
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  async function renderMobile() {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+    return await screen.findByRole('grid');
+  }
+
+  it('below sm the row renders in the dictated order and each name resolves to exactly ONE control', async () => {
+    mockMatchMedia(true);
+    await renderMobile();
+
+    const row = screen.getByTestId('grid-zoom-row');
+    // Dictated order, left to right: undo · percentage · zoom out · zoom in
+    // (the compass sits to the row's right, §8 corner — separate mount).
+    expect(
+      Array.from(row.children).map(
+        (el) => el.getAttribute('aria-label') ?? el.textContent
+      )
+    ).toEqual(['Undo last action', '100%', 'Zoom out', 'Zoom in']);
+
+    // The accessible-name resolution: getByRole THROWS on duplicates, so
+    // these three lines pin "one control per name" — a future change that
+    // remounts the toolbar cluster below sm turns them red.
+    expect(
+      screen.getByRole('button', { name: 'Undo last action' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zoom out' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zoom in' })).toBeInTheDocument();
+  });
+
+  it('the in-grid magnifiers drive the shared zoom state and disable at the real bounds (50% / 200%)', async () => {
+    mockMatchMedia(true);
+    await renderMobile();
+    const row = screen.getByTestId('grid-zoom-row');
+    const zoomOut = within(row).getByRole('button', { name: 'Zoom out' });
+    const zoomIn = within(row).getByRole('button', { name: 'Zoom in' });
+
+    // ZOOM_MIN = 0.5 (plannerReducer): 100 → 80 → 60 → 50, then disabled.
+    fireEvent.click(zoomOut);
+    fireEvent.click(zoomOut);
+    fireEvent.click(zoomOut);
+    expect(within(row).getByText('50%')).toBeInTheDocument();
+    expect(zoomOut).toBeDisabled();
+    expect(zoomIn).toBeEnabled();
+
+    // ZOOM_MAX = 2 (plannerReducer — the constants are the single source;
+    // the dictation's "150" does not exist in the code): 50 → … → 200.
+    for (let i = 0; i < 8; i++) fireEvent.click(zoomIn);
+    expect(within(row).getByText('200%')).toBeInTheDocument();
+    expect(zoomIn).toBeDisabled();
+    expect(zoomOut).toBeEnabled();
+  });
+
+  it('the two clusters read the SAME zoom state: set from the row, read from the toolbar after widening', async () => {
+    const mq = mockMatchMedia(true);
+    await renderMobile();
+
+    fireEvent.click(
+      within(screen.getByTestId('grid-zoom-row')).getByRole('button', {
+        name: 'Zoom in',
+      })
+    );
+    expect(
+      within(screen.getByTestId('grid-zoom-row')).getByText('120%')
+    ).toBeInTheDocument();
+
+    // Widen past sm: the in-grid row unmounts, the toolbar cluster mounts —
+    // and shows the SAME 120%, because there is only one zoom state.
+    act(() => mq.set(false));
+    await waitFor(() =>
+      expect(screen.queryByTestId('grid-zoom-row')).toBeNull()
+    );
+    expect(screen.getByText('120%')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Undo last action' })
+    ).toBeInTheDocument();
+  });
+
+  it('undo works from the in-grid row (override → undone, disabled state tracks history)', async () => {
+    mockMatchMedia(true);
+    const grid = await renderMobile();
+    const row = screen.getByTestId('grid-zoom-row');
+    const undo = within(row).getByRole('button', { name: 'Undo last action' });
+    expect(undo).toBeDisabled(); // no content edit yet
+
+    // Same content edit as the desktop undo test: a manual cell override.
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    const cells = within(grid).getAllByRole('gridcell');
+    fireEvent.click(cells[1]!);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Shade' }));
+    expect(cells[1]).toHaveAttribute('data-exposure', 'shade');
+    expect(undo).toBeEnabled();
+
+    fireEvent.click(undo);
+    expect(cells[1]).toHaveAttribute('data-exposure', 'full');
+    expect(undo).toBeDisabled(); // history empty again
+  });
+
+  it('above sm no in-grid row renders and the toolbar keeps its single cluster', async () => {
+    // No matchMedia mock: desktop, the suite default.
+    await renderMobile();
+    expect(screen.queryByTestId('grid-zoom-row')).toBeNull();
+    // Singular getByRole = the toolbar's cluster is the only name holder.
+    expect(
+      screen.getByRole('button', { name: 'Undo last action' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zoom in' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zoom out' })).toBeInTheDocument();
+  });
+});
