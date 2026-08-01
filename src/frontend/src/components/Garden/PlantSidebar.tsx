@@ -65,6 +65,15 @@ interface Props {
   // the results area shows a neutral loading state; the localized no-results
   // message is reserved for a READY catalog.
   catalogReady: boolean;
+  /**
+   * SMA-18: where the sidebar lives. 'rail' (default) = the sticky ≥lg card
+   * with its own border/radius/shadow. 'sheet' = inside the bottom Drawer:
+   * the card chrome is STRIPPED (the sheet Paper owns radius and elevation)
+   * and the root fills the Paper's bounded height, which is what activates
+   * the fixed-chrome/scrollable-list splits the rail only gets from its lg
+   * maxHeight. Content and behavior are identical between the two.
+   */
+  variant?: 'rail' | 'sheet';
 }
 
 type TabValue = 'plants' | 'soils' | 'infrastructure';
@@ -171,7 +180,7 @@ function ArmedPlantChip({
   );
 }
 
-function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, selectedSoilType = null, onSoilSelect, onSoilFillAll, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady }: Props) {
+function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, selectedSoilType = null, onSoilSelect, onSoilFillAll, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady, variant = 'rail' }: Props) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
   const [activeTab, setActiveTab] = useState<TabValue>('plants');
@@ -193,7 +202,23 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
     // the navbar, capped to the viewport — the INNER list is the scroll
     // surface (root overflowY:auto would double-scroll against it).
     // R5 (CR accept): below lg the rails STACK — full width, no sticky.
-    <Box sx={{ width: { xs: '100%', lg: 320 }, maxHeight: { lg: `calc(100vh - ${STICKY_OFFSET}px)` }, display: 'flex', flexDirection: 'column', border: `1px solid ${tk.cardBd}`, borderRadius: '12px', boxShadow: tk.shadow, bgcolor: tk.card, flexShrink: 0, overflow: 'hidden', position: { xs: 'static', lg: 'sticky' }, top: { lg: STICKY_OFFSET }, alignSelf: { lg: 'flex-start' } }}>
+    // SMA-18: in the SHEET the card chrome goes away (the Drawer Paper owns
+    // radius/elevation) and flex:1/minHeight:0 hands the Paper's bounded
+    // height to the internal splits.
+    <Box
+      sx={
+        variant === 'sheet'
+          ? {
+              width: '100%',
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }
+          : { width: { xs: '100%', lg: 320 }, maxHeight: { lg: `calc(100vh - ${STICKY_OFFSET}px)` }, display: 'flex', flexDirection: 'column', border: `1px solid ${tk.cardBd}`, borderRadius: '12px', boxShadow: tk.shadow, bgcolor: tk.card, flexShrink: 0, overflow: 'hidden', position: { xs: 'static', lg: 'sticky' }, top: { lg: STICKY_OFFSET }, alignSelf: { lg: 'flex-start' } }
+      }
+    >
       {/* R5 (owner item): the shape-edit toggle adopts the SHARED iPhone-style
           switch (identical to Exposition); mockup row padding 13×16 aligns the
           control with the sidebar content, label 14.5/600 tTitle. */}
@@ -580,8 +605,12 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
                       sx={{
                         px: '14px',
                         py: '10px',
-                        // Extension (lot 2 R1): a touch drag must feed the pointer engine, not scroll the list.
-                        touchAction: 'none',
+                        // Extension (lot 2 R1): a touch drag must feed the
+                        // pointer engine, not scroll the list. SMA-18: the
+                        // clamp follows the drag wiring (GardenGrid's own
+                        // pattern) — the sheet passes no onPlantPointerDown,
+                        // and its list MUST scroll under a finger.
+                        ...(onPlantPointerDown && { touchAction: 'none' }),
                         // R5 (CR accept): the selected marker uses the planner
                         // token, not the generic theme primary.
                         borderLeft: selected
@@ -621,6 +650,31 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
               </List>
             )}
           </Box>
+          {/* SMA-18: the États foot CTA — the tap-to-place hint, SHEET only
+              and PLANTS tab only. Coexistence with the SOLS foot (the SMA-14
+              R4 fill button) is BY TAB: each tab owns its own fixed foot
+              slot, so the two never render together and neither is dropped.
+              INFRAS keeps no foot (nothing to say there). */}
+          {variant === 'sheet' && (
+            <Box
+              sx={{
+                p: '12px 16px',
+                borderTop: `1px solid ${tk.divider}`,
+                flexShrink: 0,
+              }}
+            >
+              <Typography
+                sx={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  textAlign: 'center',
+                  color: tk.tMeta,
+                }}
+              >
+                {t('planner.sheet.tapHint')}
+              </Typography>
+            </Box>
+          )}
         </>
       )}
     </Box>

@@ -1940,3 +1940,178 @@ describe('GardenPlanner floating unsaved-changes bar + toasts (SMA-309 R2)', () 
     }
   });
 });
+
+// ── SMA-18 lot 1 — the sidebar as a bottom sheet below lg ─────────────────
+// jsdom has no matchMedia; MUI's useMediaQuery drives BOTH planner splits
+// (sm sizes, lg rail-vs-sheet). The PlantLibrary.test pattern: one blanket
+// mock — true = every down() query matches (a phone), absent = none match
+// (desktop, this suite's default, which is why the older describes need no
+// mock to keep their inline rail).
+// R3: the mock is listener-aware and returns a setter — flipping `matches`
+// notifies MUI's useMediaQuery subscriptions, so a test can walk the
+// viewport across the breakpoint mid-run the way a resized window or a
+// rotating tablet does. Callers that never flip just ignore the return.
+function mockMatchMedia(initial: boolean) {
+  let matches = initial;
+  const listeners = new Set<(e: { matches: boolean }) => void>();
+  window.matchMedia = ((query: string) => ({
+    get matches() {
+      return matches;
+    },
+    media: query,
+    onchange: null,
+    addListener: (fn: (e: { matches: boolean }) => void) => {
+      listeners.add(fn);
+    },
+    removeListener: (fn: (e: { matches: boolean }) => void) => {
+      listeners.delete(fn);
+    },
+    addEventListener: (_: string, fn: (e: { matches: boolean }) => void) => {
+      listeners.add(fn);
+    },
+    removeEventListener: (_: string, fn: (e: { matches: boolean }) => void) => {
+      listeners.delete(fn);
+    },
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+  return {
+    set(next: boolean) {
+      matches = next;
+      listeners.forEach((fn) => fn({ matches: next }));
+    },
+  };
+}
+
+describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => {
+  afterEach(() => {
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  async function renderLoadedPlanner(plants: Plant[] = [basil]) {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue(plants);
+    renderPlanner();
+    await screen.findByRole('grid');
+  }
+
+  it('below lg the rail is gone; the trigger opens a labelled dialog sheet and close closes it', async () => {
+    mockMatchMedia(true);
+    await renderLoadedPlanner();
+
+    // The catalogue no longer sits in the page flow above the grid.
+    expect(
+      screen.queryByRole('textbox', { name: 'Search plants...' })
+    ).toBeNull();
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    );
+
+    // FilterPanel convention: the PAPER is the dialog, named by the sheet
+    // title through aria-labelledby.
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Plants & infrastructure',
+    });
+    expect(
+      within(dialog).getByRole('textbox', { name: 'Search plants...' })
+    ).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // The trigger returns once the sheet is closed.
+    expect(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    ).toBeInTheDocument();
+  });
+
+  it('arming a plant from inside the sheet closes it and arms it', async () => {
+    mockMatchMedia(true);
+    await renderLoadedPlanner();
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Plants & infrastructure',
+    });
+
+    await user.click(
+      within(dialog).getByRole('button', { name: /Basilicum fixture/ })
+    );
+    // Arming closes the sheet (the next gesture is on the grid)…
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // …and the plant IS armed: the toolbar indicator shows it.
+    expect(screen.getByTestId('armed-plant-indicator')).toHaveTextContent(
+      'Basilicum fixture'
+    );
+  });
+
+  it('arming a soil from inside the sheet closes it too', async () => {
+    mockMatchMedia(true);
+    await renderLoadedPlanner();
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Plants & infrastructure',
+    });
+
+    await user.click(within(dialog).getByRole('tab', { name: 'Soils' }));
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Potting mix' })
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('closes the sheet when the layout returns to desktop (GitHub cf65425f)', async () => {
+    const mq = mockMatchMedia(true);
+    await renderLoadedPlanner();
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    );
+    await screen.findByRole('dialog', { name: 'Plants & infrastructure' });
+
+    // The viewport widens past lg (window resized, tablet rotated): the
+    // Drawer unmounts — and its STATE must reset with it.
+    act(() => mq.set(false));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // Narrowing again must not reopen the sheet on its own: closed, with
+    // the trigger back on screen.
+    act(() => mq.set(true));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(
+      await screen.findByRole('button', { name: 'Plants & infrastructure' })
+    ).toBeInTheDocument();
+  });
+
+  it('above lg the rail renders inline and no sheet trigger exists', async () => {
+    // No matchMedia mock: desktop, the suite default.
+    await renderLoadedPlanner();
+
+    expect(
+      screen.getByRole('textbox', { name: 'Search plants...' })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Plants & infrastructure' })
+    ).toBeNull();
+  });
+
+  it('every mode button keeps an explicit accessible name while its label is display-gated (mobile)', async () => {
+    mockMatchMedia(true);
+    await renderLoadedPlanner();
+
+    // The aria-label is unconditional — the same four names resolve on a
+    // phone viewport, where the visible label is hidden below sm.
+    for (const name of ['Selection', 'Place', 'Infrastructures', 'Soils']) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    }
+  });
+});

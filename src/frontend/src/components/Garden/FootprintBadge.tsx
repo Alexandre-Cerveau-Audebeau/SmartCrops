@@ -30,7 +30,7 @@ export function FootprintBadge({
     <Box
       component="span"
       aria-label={t('planner.sidebar.footprint', { cells: fp.cells })}
-      sx={footprintBadgeSx(tk, true)}
+      sx={footprintBadgeSx(tk, true, fp.cells > 1)}
     >
       {`${fp.cells}×${fp.cells}`}
     </Box>

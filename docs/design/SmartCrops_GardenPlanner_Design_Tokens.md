@@ -179,9 +179,12 @@ En mode DnD s'ajoutent à droite : « Cible valide » (dashed `--prim`) · « Co
 ## 10. Toolbar & contrôles segmentés
 
 - Carte toolbar : padding **12px 16px** (10×12 mobile) ; 2 rangées, divider pleine largeur
-  (`margin 12px -16px`).
-- Boutons de mode (Sélection/Placer/Infrastructures) : h **38** (34) · padding-x 14 (10) ·
-  fs 13.5 (12) ; actif = fond `--prim` texte blanc ; labels masqués sur mobile (icône seule).
+  (`margin 12px -16px` ; `10px -12px` mobile).
+- Boutons de mode (Sélection/Placer/Infrastructures/Sols — Sols ajouté par SMA-14, §15) :
+  h **38** (34) · padding-x 14 (10) · fs 13.5 (12) ; actif = fond `--prim` texte blanc ;
+  labels masqués sur mobile (icône seule). **Contrat aria (SMA-18)** : le nom accessible de
+  chaque bouton est un `aria-label` explicite portant le libellé traduit, présent à TOUS les
+  breakpoints — jamais conditionné au viewport, ni pour l'AT ni pour les tests.
 - Rangée 2 : toggle **Exposition** (switch 34×19, pouce 15, actif `--prim`, inactif `--track`)
   + icône soleil `--expo-icc` ; segmented **Matin/Midi/Soir** et **Été/Hiver** :
   conteneur `--seg-bg` radius 9 padding 3 ; item padding **8px 14px** (6×9) radius 7
