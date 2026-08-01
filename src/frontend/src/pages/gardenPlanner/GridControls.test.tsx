@@ -27,6 +27,10 @@ function renderControls(
   return render(
     <GridControls
       hasGrid
+      // R3: the breakpoint decision is the PAGE's (threaded prop) — these
+      // tests exercise the desktop toolbar, where the undo/zoom cluster
+      // mounts here rather than in the grid card.
+      isMobile={false}
       shapeEditMode={false}
       placeMode={overrides.placeMode}
       onSelectionMode={overrides.onSelectionMode}

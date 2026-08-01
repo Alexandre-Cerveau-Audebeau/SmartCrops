@@ -6,8 +6,6 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import { useTheme } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
 import UndoIcon from '@mui/icons-material/Undo';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
@@ -401,6 +399,16 @@ interface GridControlsProps {
   /** SMA-18 R2: explicit disarm from the indicator's X — same dispatch as
    * the sidebar chip's X (SET_PLACE_PLANT null on the page side). */
   onDisarm?: () => void;
+  /**
+   * SMA-18 lot 2 R3 (GitHub Major 7f61fafb): the below-sm decision is made
+   * ONCE, by the page — GardenPlanner already derives this exact value at
+   * the same breakpoint to mount the in-grid cluster, so re-deriving it
+   * here meant two matchMedia subscriptions answering one question. The
+   * prop is REQUIRED: the invariant "exactly one undo/zoom cluster mounts"
+   * (which the Extension verified holds) now rests on a single source of
+   * truth by construction.
+   */
+  isMobile: boolean;
   zoom: number;
   canUndo: boolean;
   exposureVisible: boolean;
@@ -437,6 +445,7 @@ export const GridControls = memo(function GridControls({
   soilArmed = false,
   armedPlant = null,
   onDisarm,
+  isMobile,
   zoom,
   canUndo,
   exposureVisible,
@@ -457,13 +466,6 @@ export const GridControls = memo(function GridControls({
 }: GridControlsProps) {
   const { t } = useTranslation();
   const tk = usePlannerTokens();
-  const theme = useTheme();
-  // SMA-18 lot 2 R2: below sm the whole right cluster moves INTO the grid
-  // card (beside the compass) — reaching undo/zoom meant scrolling away
-  // from the very thing being changed. Conditional MOUNTING, not display
-  // gating: the in-grid row carries the same accessible names, and two
-  // controls doing the same thing must never claim the same name at once.
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const momentLabels: Record<Moment, string> = {
     morning: t('planner.exposure.moments.morning'),

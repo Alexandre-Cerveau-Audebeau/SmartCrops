@@ -2270,10 +2270,45 @@ describe('SMA-18 mobile touch (lot 2)', () => {
     const panelSheet = await screen.findByRole('dialog', {
       name: 'Selected placement',
     });
-    // MUI's Modal consumes the press and calls onClose → clearSelection —
-    // the same primitive the planner's own window handler dispatches.
+    // MUI's Modal consumes the press and calls onClose, which carries the
+    // full Escape grammar itself (R3) — here, in Selection mode, that is
+    // just clearing the selection.
     fireEvent.keyDown(panelSheet, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('Escape on the sheet ALSO leaves Place mode, like the desktop key (R3, Extension fa53c9b5)', async () => {
+    mockMatchMedia(true);
+    const placedCell = await renderWithPlacement();
+
+    // Armless Place mode (move-only entry, lot 3 R2 ruling) — the case the
+    // finding names: placeMode active, placePlantId null.
+    fireEvent.click(screen.getByRole('button', { name: 'Place' }));
+    expect(screen.getByRole('button', { name: 'Place' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    // In Place mode a tap on the placed cell SELECTS it (no armed plant) —
+    // the panel sheet opens.
+    fireEvent.click(placedCell);
+    const panelSheet = await screen.findByRole('dialog', {
+      name: 'Selected placement',
+    });
+
+    // MUI consumes Escape before the window handler ever runs — the sheet's
+    // onClose must run the SAME grammar: close AND exit to Selection. The
+    // pre-R3 sheet only cleared the selection, so desktop and mobile
+    // diverged on half the gesture.
+    fireEvent.keyDown(panelSheet, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Place' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+    expect(screen.getByRole('button', { name: 'Selection' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
   });
 
   it('the catalogue sheet remembers its tab across close and reopen (FIX D, SMA-345)', async () => {

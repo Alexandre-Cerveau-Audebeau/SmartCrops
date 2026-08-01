@@ -578,3 +578,56 @@ describe('PlacementDetailPanel plant-details link origin (SMA-309 R2)', () => {
     );
   });
 });
+
+// SMA-18 lot 2 R3 (GitHub trivial, 7f61fafb) — the sheet variant gets a
+// DIRECT contract test: until now it was proven only indirectly through the
+// page (GardenPlanner.test). In the sheet, the Drawer's title row owns the
+// name and the way out — the panel must not render a second header — while
+// every piece of content stays.
+describe('PlacementDetailPanel sheet variant (SMA-18 lot 2 R3)', () => {
+  function renderVariant(variant?: 'lane' | 'sheet') {
+    return render(
+      <MemoryRouter>
+        <PlacementDetailPanel
+          placement={placement}
+          plant={spacedPlant}
+          soil={undefined}
+          language={i18n.language}
+          catalogReady
+          cellSize="50cm"
+          gridRows={3}
+          gridCols={3}
+          checkFit={() => ({ ok: true })}
+          describeOverlap={() => ({ plant: '', cell: '' })}
+          onSetFootprint={vi.fn()}
+          onMove={vi.fn()}
+          onRemove={vi.fn()}
+          onClose={vi.fn()}
+          {...(variant ? { variant } : {})}
+        />
+      </MemoryRouter>
+    );
+  }
+
+  it('variant="sheet" strips the local title and close button while the content still renders', () => {
+    renderVariant('sheet');
+    // No second header: the Drawer chrome owns both in the sheet.
+    expect(screen.queryByText('Selected placement')).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: 'Close the placement panel' })
+    ).toBeNull();
+    // The content is intact (the fixture has no common name, so the display
+    // name and the scientific line both carry the scientific string).
+    expect(screen.getAllByText('Arbor fixture').length).toBeGreaterThan(0);
+    expect(screen.getByText('Footprint')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move' })).toBeInTheDocument();
+  });
+
+  it('the default lane variant keeps its own header (the contrast that keeps the pin honest)', () => {
+    renderVariant();
+    expect(screen.getByText('Selected placement')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Close the placement panel' })
+    ).toBeInTheDocument();
+  });
+});

@@ -1083,15 +1083,25 @@ export default function GardenPlanner() {
   // so the paint drag reuses pointerToCell instead of inventing a second
   // mechanism (and instead of releasing the implicit capture, whose
   // sibling-boundary-event behaviour is the least-conformant corner of
-  // pointer events on mobile WebKit). Mouse strokes still fire pointerenter
-  // per cell; the reducer's PAINT_ENTER no-op guards make the two dispatch
-  // paths converge instead of double-painting. Cell-granular like the DnD
-  // move handler: same-cell moves dispatch nothing.
+  // pointer events on mobile WebKit). Mouse strokes keep the cells' own
+  // pointerenter path EXCLUSIVELY (the R3 pointer-type gate below); the
+  // reducer's PAINT_ENTER no-op guards absorb the one overlap that
+  // remains — the start cell, painted at pointerdown and revisited by the
+  // first moves. Cell-granular like the DnD move handler: same-cell moves
+  // dispatch nothing.
   const lastPaintCellRef = useRef<{ row: number; col: number } | null>(null);
   useEffect(() => {
     if (!isPainting) return;
     lastPaintCellRef.current = null;
     const onPaintPointerMove = (e: PointerEvent) => {
+      // R3 (both surfaces convergent): mouse strokes already propagate
+      // through the cells' own pointerenter — this listener exists for the
+      // pointer types whose implicit capture starves those events: touch,
+      // and pen, which captures the same way (the Extension's wording,
+      // deliberately wider than touch-only). Returning early spares the
+      // per-pixel coordinate inversion for mouse moves; the reducer's
+      // no-op guards were already absorbing the duplicates state-side.
+      if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
       const cell = pointerToCell(e.clientX, e.clientY);
       if (!cell) return;
       const last = lastPaintCellRef.current;
@@ -1361,32 +1371,40 @@ export default function GardenPlanner() {
     dispatch({ type: 'SET_PLACE_PLANT', plantId: selectedPlacement.plantId });
   }, [selectedPlacement]);
 
+  // The selection-exit grammar Escape follows outside a drag (R3 ruling,
+  // extracted lot 2 R3): clear the selection; in Place mode ALSO exit to
+  // selection while the armed plant stays REMEMBERED (exact infra-grammar
+  // mirror: the toolbar Placer button stays enabled to re-enter). Gated on
+  // placeMode so Escape in shape-edit/infra keeps that mode untouched. The
+  // sidebar re-click toggle remains the explicit DISARM (SET_PLACE_PLANT
+  // null) — a different intent. ONE definition shared by the window keydown
+  // handler and the placement sheet's Escape close (Extension fa53c9b5,
+  // lot 2 R3): MUI consumes Escape for its top modal, so the sheet path
+  // must carry the SAME grammar itself or the mobile gesture only runs
+  // half of it.
+  const escapeSelectionExit = useCallback(() => {
+    clearSelection();
+    if (placeMode) {
+      dispatch({ type: 'ENTER_SELECTION_MODE' });
+    }
+  }, [clearSelection, placeMode]);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         // Lot 2 precedence: Escape DURING an active drag cancels the drag
         // ONLY — mode stays, plant stays armed. The selection-exit grammar
-        // below applies when no drag is active.
+        // applies when no drag is active.
         if (dragRef.current) {
           endDrag(false);
           return;
         }
-        // Escape clears the placement selection; in Place mode it EXITS to
-        // selection while the armed plant stays REMEMBERED (R3, both review
-        // surfaces converging — exact infra-grammar mirror: the toolbar
-        // Placer button stays enabled to re-enter). Still gated on placeMode
-        // so Escape in shape-edit/infra keeps that mode (and its in-flight
-        // drag) untouched. The sidebar re-click toggle remains the explicit
-        // DISARM (SET_PLACE_PLANT null) — a different intent.
-        clearSelection();
-        if (placeMode) {
-          dispatch({ type: 'ENTER_SELECTION_MODE' });
-        }
+        escapeSelectionExit();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [clearSelection, placeMode, endDrag]);
+  }, [escapeSelectionExit, endDrag]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -2084,6 +2102,9 @@ export default function GardenPlanner() {
             {/* Toolbar card (R2, §10) — grid column only, above the grid card */}
             <GridControls
               hasGrid={grid !== null}
+              // R3 (GitHub Major): the page's own below-sm value — computed
+              // once, threaded down; GridControls no longer re-derives it.
+              isMobile={isMobile}
               shapeEditMode={shapeEditMode}
               infraMode={infraMode}
               infraArmed={infraType !== null}
@@ -2673,17 +2694,25 @@ export default function GardenPlanner() {
           Its open state IS the selection: selecting a placement opens it,
           clearing the selection closes it — so every existing exit
           (removal, Cancel, the panel's own X) closes the sheet for free.
-          Escape: MUI's Modal consumes the press (stopPropagation) and calls
-          onClose → clearSelection — the same primitive the planner's window
-          keydown handler dispatches when no modal eats the event first; the
-          two paths converge instead of fighting. During the exit slide the
+          Escape (corrected lot 2 R3, Extension fa53c9b5): MUI's Modal
+          consumes the press (stopPropagation) BEFORE the planner's window
+          keydown handler, so this onClose must carry the FULL Escape
+          grammar itself — the earlier claim that the two paths "converge"
+          held only for clearSelection and silently dropped the Place-mode
+          exit: on desktop Escape left Place mode, through the sheet it did
+          not. Reason-differentiated on purpose: escapeKeyDown runs the
+          shared escapeSelectionExit (the whole gesture); a backdrop tap
+          stays a plain dismissal (clearSelection), like clicking elsewhere
+          on desktop, which never exits the mode. During the exit slide the
           Paper empties (the selection is already gone) — accepted, the
           scrim is mid-fade and the catalogue sheet arms the same way. */}
       {isNarrow && (
         <Drawer
           anchor="bottom"
           open={selectedPlacement !== null}
-          onClose={clearSelection}
+          onClose={(_, reason) =>
+            reason === 'escapeKeyDown' ? escapeSelectionExit() : clearSelection()
+          }
           ModalProps={{ disableScrollLock: true }}
           slotProps={{
             backdrop: { sx: sheetBackdropSx },
