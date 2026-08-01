@@ -15,6 +15,7 @@ import SensorsIcon from '@mui/icons-material/Sensors';
 import ComingSoonChip from '../components/ComingSoonChip';
 import LegalText from '../components/Legal/LegalText';
 import { TECH_STACK } from '../constants/techStack';
+import { useAuth } from '../hooks/useAuth';
 
 interface Pillar {
   icon: ReactNode;
@@ -69,9 +70,15 @@ function SectionHeading({ children }: { children: ReactNode }) {
   );
 }
 
+/** Matches the hero's reserved slot so the CTA pair never reflows (SMA-360). */
+const SECOND_ACTION_MIN_WIDTH = 180;
+
 /** SMA-36: /about — About Us page (mockups A1/A3, photo hero). */
 export default function About() {
   const { t } = useTranslation();
+  // SMA-360: same rule as the hero — "loading" is not "signed out", so the
+  // second action keeps its width and waits rather than guessing.
+  const { isAuthenticated, loading } = useAuth();
 
   return (
     <Box sx={{ bgcolor: 'background.default' }}>
@@ -297,14 +304,16 @@ export default function About() {
               variant="contained"
               size="large"
               component={RouterLink}
-              to="/register"
+              to={isAuthenticated ? '/gardens' : '/register'}
               sx={{
+                minWidth: SECOND_ACTION_MIN_WIDTH,
+                visibility: loading ? 'hidden' : 'visible',
                 bgcolor: '#fff',
                 color: 'primary.dark',
                 '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' },
               }}
             >
-              {t('about.cta.createAccount')}
+              {isAuthenticated ? t('nav.myGardens') : t('about.cta.createAccount')}
             </Button>
           </Box>
         </Container>

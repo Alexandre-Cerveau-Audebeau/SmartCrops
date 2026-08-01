@@ -2,14 +2,31 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
+import { AuthProvider } from '../contexts/AuthContext';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import type { AuthUser } from '../types/Auth';
 
 vi.mock('../services/plantApi', () => ({
   fetchPlants: vi.fn(),
 }));
+// SMA-360: the page reads auth state, and AuthProvider gets it from fetchMe —
+// the same seam Profile.test drives, so an authenticated render is a resolved
+// fetchMe and an anonymous one is a rejected fetchMe.
+vi.mock('../services/authApi', () => ({
+  fetchMe: vi.fn(),
+  logout: vi.fn(),
+}));
 
 import Home from './Home';
 import { fetchPlants } from '../services/plantApi';
+import { fetchMe } from '../services/authApi';
+
+const signedInUser: AuthUser = {
+  userId: 'u-1',
+  email: 'user@example.com',
+  displayName: 'User',
+  isAdmin: false,
+};
 
 // SMA-353 — this suite exists to keep the public page honest. Each pin below
 // stands for a claim the 01/08 audit found false or stale; a regression here
@@ -34,7 +51,9 @@ function renderHome() {
   return render(
     <MemoryRouter>
       <LanguageProvider>
-        <Home />
+        <AuthProvider>
+          <Home />
+        </AuthProvider>
       </LanguageProvider>
     </MemoryRouter>
   );
@@ -47,11 +66,22 @@ async function renderHomeSettled() {
   return result;
 }
 
+/** Renders with auth resolved to a signed-in visitor. */
+async function renderHomeSignedIn() {
+  vi.mocked(fetchMe).mockResolvedValue(signedInUser);
+  const result = await renderHomeSettled();
+  await screen.findByRole('link', { name: 'My Gardens' });
+  return result;
+}
+
 describe('Home — the page says only what ships (SMA-353)', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockMatchMedia(false);
     vi.mocked(fetchPlants).mockResolvedValue([]);
+    // Anonymous unless a test says otherwise: fetchMe rejects for a visitor
+    // with no session, exactly as the real endpoint 401s.
+    vi.mocked(fetchMe).mockRejectedValue(new Error('Not authenticated'));
     // LanguageProvider re-applies its own language on mount, so the locale has
     // to be set the way a returning visitor sets it, not on i18next directly.
     localStorage.removeItem('smartcrops-language');
@@ -210,5 +240,93 @@ describe('Home — the page says only what ships (SMA-353)', () => {
     expect(
       screen.getByText('The form is not live yet — nothing is collected.')
     ).toBeInTheDocument();
+  });
+});
+
+// SMA-360 — the page stopped asserting that its reader has no account.
+describe('Home — what a signed-in visitor is offered (SMA-360)', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockMatchMedia(false);
+    vi.mocked(fetchPlants).mockResolvedValue([]);
+    vi.mocked(fetchMe).mockRejectedValue(new Error('Not authenticated'));
+    localStorage.removeItem('smartcrops-language');
+    await i18next.changeLanguage('en');
+  });
+
+  it('sends a signed-in visitor to their gardens instead of a signup', async () => {
+    await renderHomeSignedIn();
+
+    expect(screen.getByRole('link', { name: 'My Gardens' })).toHaveAttribute(
+      'href',
+      '/gardens'
+    );
+    expect(
+      screen.queryByRole('link', { name: 'Create Account' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('still offers the account to a visitor without one', async () => {
+    await renderHomeSettled();
+
+    expect(
+      await screen.findByRole('link', { name: 'Create Account' })
+    ).toHaveAttribute('href', '/register');
+    expect(
+      screen.queryByRole('link', { name: 'My Gardens' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('withdraws the whole closing pitch from someone who already signed up', async () => {
+    await renderHomeSignedIn();
+
+    // Heading, subtitle and button are one invitation: none of it survives.
+    expect(
+      screen.queryByRole('heading', { name: 'Ready to Start Growing?' })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Join SmartCrops today/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: "Get Started — It's Free" })
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps the closing pitch for a visitor without an account', async () => {
+    await renderHomeSettled();
+
+    expect(
+      await screen.findByRole('heading', { name: 'Ready to Start Growing?' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: "Get Started — It's Free" })
+    ).toHaveAttribute('href', '/register');
+  });
+
+  it('shows no account offer at all while auth is still unknown', async () => {
+    // A promise that never settles keeps the provider in its loading state —
+    // the flicker window. Neither label may be announced in it, and the pitch
+    // must not appear only to be retracted.
+    vi.mocked(fetchMe).mockReturnValue(new Promise(() => {}));
+    await renderHomeSettled();
+
+    expect(
+      screen.queryByRole('link', { name: 'Create Account' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'My Gardens' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Ready to Start Growing?' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('reserves the hero slot so resolving auth never moves the other action', async () => {
+    vi.mocked(fetchMe).mockReturnValue(new Promise(() => {}));
+    const { container } = await renderHomeSettled();
+
+    // The button still occupies its box while hidden — that is what keeps
+    // "Browse Library" from sliding when the answer arrives.
+    const reserved = container.querySelector('a[href="/register"]');
+    expect(reserved).not.toBeNull();
+    expect(reserved).toHaveStyle({ visibility: 'hidden' });
   });
 });

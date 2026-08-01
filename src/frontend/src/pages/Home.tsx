@@ -26,10 +26,10 @@ import StarIcon from '@mui/icons-material/Star';
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
-import ComingSoonChip from '../components/ComingSoonChip';
 import HeroCarousel from '../components/HeroCarousel';
 import { TECH_STACK } from '../constants/techStack';
 import { fetchPlants } from '../services/plantApi';
+import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../hooks/useLanguage';
 import PlantCard from '../components/PlantCard';
 import type { Plant } from '../types/Plant';
@@ -38,14 +38,14 @@ interface FeatureItem {
   icon: ReactNode;
   titleKey: string;
   descKey: string;
-  /** Amber "Coming Soon" chip — Home's own badge style. */
-  comingSoon?: boolean;
   /**
-   * SMA-359: route to the page that explains this card in full. Carries the
-   * terracotta ComingSoonChip instead of the amber one, because what it
-   * announces is a connection to something the visitor already owns rather
-   * than another feature of ours.
+   * Amber "Coming Soon" chip — Home's badge style. ComingSoonChip's terracotta
+   * belongs to About and Contact (R2: two shades of the same word read as
+   * inconsistency, not as meaning — nobody decodes badge colour without a
+   * legend).
    */
+  comingSoon?: boolean;
+  /** SMA-359: route to the page that explains this card in full. */
   explainedAt?: string;
 }
 
@@ -92,6 +92,7 @@ const features: FeatureItem[] = [
     ),
     titleKey: 'home.features.assistant',
     descKey: 'home.features.assistantDesc',
+    comingSoon: true,
     explainedAt: '/about',
   },
 ];
@@ -179,6 +180,7 @@ function formatPlantCount(n: number): string {
 export default function Home() {
   const { t } = useTranslation();
   const { language } = useLanguage();
+  const { isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -370,7 +372,7 @@ export default function Home() {
                 position: 'relative',
                 transition: 'box-shadow 0.2s',
                 '&:hover': { boxShadow: 4 },
-                ...((feature.comingSoon || feature.explainedAt) && {
+                ...(feature.comingSoon && {
                   borderStyle: 'dashed',
                   opacity: 0.85,
                 }),
@@ -381,11 +383,6 @@ export default function Home() {
                   label={t('home.features.comingSoon')}
                   color="warning"
                   size="small"
-                  sx={{ position: 'absolute', top: 12, right: 12 }}
-                />
-              )}
-              {feature.explainedAt && (
-                <ComingSoonChip
                   sx={{ position: 'absolute', top: 12, right: 12 }}
                 />
               )}
@@ -743,25 +740,34 @@ export default function Home() {
         </Container>
       </Box>
 
-      {/* ==================== SECTION 8 — CTA FINAL ==================== */}
-      <Box sx={{ py: 8, textAlign: 'center' }}>
-        <Container maxWidth="sm">
-          <Typography variant="h4" gutterBottom>
-            {t('home.cta.title')}
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            {t('home.cta.subtitle')}
-          </Typography>
-          <Button
-            variant="contained"
-            size="large"
-            component={RouterLink}
-            to="/register"
-          >
-            {t('home.cta.button')}
-          </Button>
-        </Container>
-      </Box>
+      {/* ==================== SECTION 8 — CTA FINAL ====================
+          Addressed to someone without an account from its heading down
+          ("Ready to Start Growing?", "Join SmartCrops today…"), so it steps
+          aside whole for those who already signed up (SMA-360) — dropping the
+          button alone would leave an invitation with no door. While auth is
+          still resolving it stays away too: this sits below the fold, so a
+          late arrival costs nothing, whereas pitching a signup to a signed-in
+          visitor and retracting it is the very thing this lot is fixing. */}
+      {!loading && !isAuthenticated && (
+        <Box sx={{ py: 8, textAlign: 'center' }}>
+          <Container maxWidth="sm">
+            <Typography variant="h4" gutterBottom>
+              {t('home.cta.title')}
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+              {t('home.cta.subtitle')}
+            </Typography>
+            <Button
+              variant="contained"
+              size="large"
+              component={RouterLink}
+              to="/register"
+            >
+              {t('home.cta.button')}
+            </Button>
+          </Container>
+        </Box>
+      )}
 
       {/* ==================== SECTION 9 — NEWSLETTER ==================== */}
       <Box sx={{ bgcolor: 'brandTintBg', py: 6 }}>

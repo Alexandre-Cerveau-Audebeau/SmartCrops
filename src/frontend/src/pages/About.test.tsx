@@ -1,23 +1,44 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
+import { AuthProvider } from '../contexts/AuthContext';
+import type { AuthUser } from '../types/Auth';
+
+// SMA-360: the CTA reads auth state; AuthProvider gets it from fetchMe.
+vi.mock('../services/authApi', () => ({
+  fetchMe: vi.fn(),
+  logout: vi.fn(),
+}));
+
 import About from './About';
+import { fetchMe } from '../services/authApi';
+
+const signedInUser: AuthUser = {
+  userId: 'u-1',
+  email: 'user@example.com',
+  displayName: 'User',
+  isAdmin: false,
+};
 
 function renderAbout() {
   return render(
     <MemoryRouter>
-      <About />
+      <AuthProvider>
+        <About />
+      </AuthProvider>
     </MemoryRouter>
   );
 }
 
 describe('About (SMA-36)', () => {
   beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.mocked(fetchMe).mockRejectedValue(new Error('Not authenticated'));
     await i18next.changeLanguage('en');
   });
 
-  it('renders the hero title, the four pillars and the CTA links (EN)', () => {
+  it('renders the hero title, the four pillars and the CTA links (EN)', async () => {
     renderAbout();
     expect(
       screen.getByRole('heading', {
@@ -37,8 +58,9 @@ describe('About (SMA-36)', () => {
     expect(
       screen.getByRole('link', { name: 'Browse Library' })
     ).toHaveAttribute('href', '/library');
+    // findBy*: the second action stays in reserve until auth resolves (SMA-360).
     expect(
-      screen.getByRole('link', { name: 'Create Account' })
+      await screen.findByRole('link', { name: 'Create Account' })
     ).toHaveAttribute('href', '/register');
   });
 
@@ -81,6 +103,40 @@ describe('About (SMA-36)', () => {
   it('lists Typesense among the current stack chips', () => {
     renderAbout();
     expect(screen.getByText('Typesense')).toBeInTheDocument();
+  });
+
+  // SMA-360 — the CTA stopped offering an account to people who have one.
+  it('sends a signed-in visitor to their gardens instead of a signup', async () => {
+    vi.mocked(fetchMe).mockResolvedValue(signedInUser);
+    renderAbout();
+
+    expect(
+      await screen.findByRole('link', { name: 'My Gardens' })
+    ).toHaveAttribute('href', '/gardens');
+    expect(
+      screen.queryByRole('link', { name: 'Create Account' })
+    ).not.toBeInTheDocument();
+    // The other action is untouched — the pair keeps both its buttons.
+    expect(screen.getByRole('link', { name: 'Browse Library' })).toHaveAttribute(
+      'href',
+      '/library'
+    );
+  });
+
+  it('reserves the CTA slot while auth is unknown', async () => {
+    vi.mocked(fetchMe).mockReturnValue(new Promise(() => {}));
+    const { container } = renderAbout();
+
+    await waitFor(() => expect(vi.mocked(fetchMe)).toHaveBeenCalled());
+    expect(
+      screen.queryByRole('link', { name: 'Create Account' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'My Gardens' })
+    ).not.toBeInTheDocument();
+    expect(container.querySelector('a[href="/register"]')).toHaveStyle({
+      visibility: 'hidden',
+    });
   });
 
   it('does not claim bilingual plant descriptions', () => {
