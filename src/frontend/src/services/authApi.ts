@@ -177,20 +177,31 @@ export async function fetchMe(): Promise<AuthUser> {
 }
 
 /**
- * Bounded at 10 s (SMA-341 R3): the account-deletion flow awaits this call
- * behind a modal that locks every exit, and a fetch that HANGS never reaches
- * anyone's catch or finally — rejection handling alone cannot unfreeze it.
- * Every caller already tolerates a rejection (AuthProvider clears the client
- * state in a finally; the Navbar handlers swallow it), so the timeout turns a
- * silent hang into the failure path that already works.
+ * Bounded at 10 s (SMA-341 R3) and INCAPABLE of rejecting (R4): the
+ * account-deletion flow awaits this call behind a modal that locks every
+ * exit, and a fetch that HANGS never reaches anyone's catch or finally — the
+ * timeout turns a silent hang into a settled outcome. R3 claimed "every
+ * caller tolerates a rejection" and its audit missed one
+ * (Profile.handleChangePassword awaits logout in the same try as
+ * changePassword, so a successful password change could report an error).
+ * Rather than re-auditing callers forever, the invariant is collapsed at the
+ * single place it can be enforced: a network failure or a timeout is warned
+ * and swallowed, exactly like a non-OK status already was — no caller needs
+ * to tolerate anything.
  */
 export async function logout(): Promise<void> {
-  const res = await fetch(`${API_BASE}/auth/logout`, {
-    method: 'POST',
-    credentials: 'include',
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) {
-    console.warn('Logout request failed:', res.status);
+  try {
+    const res = await fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) {
+      console.warn('Logout request failed:', res.status);
+    }
+  } catch (err) {
+    // Server-side, the cookie either died with the request or dies with its
+    // 7-day expiry; client-side, every caller clears its own state regardless.
+    console.warn('Logout request failed:', err);
   }
 }

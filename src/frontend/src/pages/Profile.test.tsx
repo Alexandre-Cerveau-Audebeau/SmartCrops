@@ -31,7 +31,7 @@ vi.mock('../services/authApi', () => ({
 
 import Profile from './Profile';
 import { fetchMe, logout } from '../services/authApi';
-import { DELETE_TIMEOUT, deleteAccount, exportAccountData } from '../services/profileApi';
+import { DELETE_FAILED, DELETE_TIMEOUT, deleteAccount, exportAccountData } from '../services/profileApi';
 
 beforeEach(() => {
   localStorage.clear();
@@ -165,6 +165,21 @@ describe('Danger zone (SMA-341)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     await screen.findByText('HOME');
     await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
+  });
+
+  it('shows the generic deletion error when deleteAccount fails without a backend detail', async () => {
+    // The third sentinel branch (R4): DELETE_FAILED must render the localized
+    // generic copy — never the sentinel string itself — and keep the dialog
+    // open for a retry.
+    vi.mocked(deleteAccount).mockRejectedValueOnce(new Error(DELETE_FAILED));
+    renderProfileAs(baseUser);
+    await screen.findByText('My Profile');
+
+    await armAndConfirmDeletion();
+
+    await screen.findByText('Deletion failed. Please try again.');
+    expect(screen.queryByText(DELETE_FAILED)).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('export button downloads the file returned by the API', async () => {

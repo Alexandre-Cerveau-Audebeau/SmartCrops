@@ -402,7 +402,7 @@
     "deleteDialogCancel": "Annuler",
     "deleteDialogConfirm": "Supprimer définitivement",
     "deleteError": "La suppression a échoué. Veuillez réessayer.",
-    "deleteTimeoutWarning": "La demande a expiré sans confirmation. Votre compte a très probablement été supprimé. Par précaution, votre session va être fermée ; si le compte existe encore, reconnectez-vous et réessayez.",
+    "deleteTimeoutWarning": "La demande a expiré sans confirmation. Votre compte a peut-être été supprimé. Par précaution, votre session va être fermée ; si le compte existe encore, reconnectez-vous et réessayez.",
     "deleteTimeoutContinue": "Fermer la session"
   },
   "planner": {

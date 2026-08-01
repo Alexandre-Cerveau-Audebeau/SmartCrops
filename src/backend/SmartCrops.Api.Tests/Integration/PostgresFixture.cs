@@ -146,6 +146,11 @@ public sealed class PostgresFixture : IAsyncLifetime
             // limit of 2. Same deal for the "passwordReset" policy (SMA-323).
             .WithConfig("RateLimiting:Contact:PermitLimit", "100")
             .WithConfig("RateLimiting:PasswordReset:PermitLimit", "100")
+            // Same deal for the "account" policy (SMA-341 R4): every TestServer
+            // request shares the "unknown" partition, so the production 10/10min
+            // would 429 the account-endpoint tests; the dedicated 429 proof
+            // pins its own limit of 2.
+            .WithConfig("RateLimiting:Account:PermitLimit", "100")
             .WithConnectionString(ConnectionString)
             .WithServices(services =>
             {

@@ -137,14 +137,12 @@ export default function Profile() {
   };
 
   // The backend already destroyed the account and its cookie; logout() just
-  // clears the cookie again and resets the client auth state. Guarded HERE, at
-  // the source, rather than with a catch at the dialog's call site: the dialog
-  // fires onDeleted() without awaiting it, so a rejection escaping this
-  // function would surface nowhere — the dialog would sit frozen at
-  // deleting=true over an account that no longer exists. Completion is
-  // BOUNDED, not merely non-rejecting (R3): authApi.logout carries its own
-  // 10 s AbortSignal.timeout, so this await cannot hang — a stalled relay
-  // becomes a rejection, the catch swallows it, and navigation ALWAYS runs.
+  // clears the cookie again and resets the client auth state. Since R4,
+  // authApi.logout is BOUNDED (10 s) and INCAPABLE of rejecting — it warns
+  // and returns on any failure — so navigation is guaranteed by logout's own
+  // contract. The try/catch below is deliberately KEPT as belt-and-braces,
+  // not as the guarantor: this flow is irreversible, and defence in depth
+  // against a future logout regression costs nothing.
   const handleDeleted = async () => {
     try {
       await logout();

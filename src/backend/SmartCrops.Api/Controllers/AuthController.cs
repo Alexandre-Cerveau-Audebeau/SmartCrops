@@ -624,6 +624,7 @@ public class AuthController(
     /// </summary>
     [Authorize]
     [HttpDelete("account")]
+    [EnableRateLimiting("account")]
     public async Task<IActionResult> DeleteAccount([FromBody] DeleteAccountRequest request, CancellationToken ct)
     {
         var userId = GetCurrentUserId();
@@ -751,6 +752,7 @@ public class AuthController(
     /// </summary>
     [Authorize]
     [HttpGet("account/export")]
+    [EnableRateLimiting("account")]
     public async Task<IActionResult> ExportAccountData(CancellationToken ct)
     {
         var userId = GetCurrentUserId();

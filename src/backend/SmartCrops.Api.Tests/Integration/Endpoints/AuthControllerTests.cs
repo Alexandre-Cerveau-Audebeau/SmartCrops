@@ -622,6 +622,7 @@ public class AuthControllerTests : IntegrationTestBase
         Guid suggestionId;
         Guid reviewedSuggestionId;
         DateTime seededUpdatedAt;
+        DateTime seededReviewedUpdatedAt;
         using (var scope = CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
@@ -660,9 +661,15 @@ public class AuthControllerTests : IntegrationTestBase
             suggestionId = suggestion.Id;
             reviewedSuggestionId = reviewed.Id;
             // DB truth, not the tracked instance: the stored pre-deletion stamp
-            // is the baseline the anonymization must move (R3).
+            // is the baseline the anonymization must move (R3). Both rows get a
+            // baseline (R4): asserting only the authored one would let a
+            // regression in the ReviewedBy chain's stamping pass unnoticed.
             seededUpdatedAt = await db.PlantSuggestions.AsNoTracking()
                 .Where(s => s.Id == suggestion.Id)
+                .Select(s => s.UpdatedAt)
+                .SingleAsync();
+            seededReviewedUpdatedAt = await db.PlantSuggestions.AsNoTracking()
+                .Where(s => s.Id == reviewed.Id)
                 .Select(s => s.UpdatedAt)
                 .SingleAsync();
         }
@@ -686,6 +693,12 @@ public class AuthControllerTests : IntegrationTestBase
         var keptReviewed = await checkDb.PlantSuggestions.FindAsync(reviewedSuggestionId);
         Assert.NotNull(keptReviewed);
         Assert.Null(keptReviewed!.ReviewedBy);
+        Assert.NotEqual(seededReviewedUpdatedAt, keptReviewed.UpdatedAt);
+        // CONTRACTUAL, not incidental (R4): the endpoint takes ONE anonymizedAt
+        // for both ExecuteUpdate chains on purpose — one logical anonymization
+        // event, one instant. This equality pins that; loosen it only if the
+        // two chains are ever deliberately decoupled.
+        Assert.Equal(kept.UpdatedAt, keptReviewed.UpdatedAt);
     }
 
     [Fact]

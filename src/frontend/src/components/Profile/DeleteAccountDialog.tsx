@@ -41,10 +41,23 @@ export default function DeleteAccountDialog({ open, email, onClose, onDeleted }:
   const [error, setError] = useState<string | null>(null);
   // R3: the request's 10 s bound aborted — an INDETERMINATE outcome, not a
   // failure. The dialog switches to an assume-completion state whose every
-  // exit signs the user out (see handleClose and the timedOut rendering).
+  // exit signs the user out (see completeSignOut and the timedOut rendering).
   const [timedOut, setTimedOut] = useState(false);
+  // R4: single-fire guard for the timedOut exits — deleting is false in that
+  // state, so without it a second Escape, backdrop click or button press
+  // would fire another logout()+navigate() before the first completes.
+  const [signingOut, setSigningOut] = useState(false);
 
   const matches = typed.trim().toLowerCase() === email.trim().toLowerCase();
+
+  // The one door out of the timedOut state: Escape, backdrop and the button
+  // all land here, and only the FIRST trigger fires onDeleted — the same
+  // shape as the confirm button's disabled+spinner guard in the normal branch.
+  const completeSignOut = () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    onDeleted();
+  };
 
   const handleClose = () => {
     if (deleting) return;
@@ -53,7 +66,7 @@ export default function DeleteAccountDialog({ open, email, onClose, onDeleted }:
     // of a possibly-deleted account would recreate the dead end this state
     // exists to prevent. If the account still exists, they sign back in.
     if (timedOut) {
-      onDeleted();
+      completeSignOut();
       return;
     }
     setTyped('');
@@ -111,7 +124,12 @@ export default function DeleteAccountDialog({ open, email, onClose, onDeleted }:
             <Alert severity="info">{t('profile.deleteTimeoutWarning')}</Alert>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button variant="contained" onClick={onDeleted}>
+            <Button
+              variant="contained"
+              onClick={completeSignOut}
+              disabled={signingOut}
+              startIcon={signingOut ? <CircularProgress size={18} color="inherit" aria-hidden="true" /> : undefined}
+            >
               {t('profile.deleteTimeoutContinue')}
             </Button>
           </DialogActions>
