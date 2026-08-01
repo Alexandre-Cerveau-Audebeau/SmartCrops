@@ -33,10 +33,10 @@ Gauge-worthy data lives in **`PlantPerenualData`** (~96% filled), **not** in the
 
 ## Licensing gate (SMA-70)
 
-`ExposeSourceText=false` in both `appsettings.json` gates every Perenual free-text care field (full care-guide JSON, propagation/sowing instructions). Only non-copyrightable factual values are exposed. Don't un-gate free text without a product/legal decision.
+`ExposeSourceText=false` in the one tracked `src/backend/SmartCrops.Api/appsettings.json` (the Development variant is gitignored and has never been committed) gates every Perenual free-text care field (full care-guide JSON, propagation/sowing instructions). Only non-copyrightable factual values are exposed. Don't un-gate free text without a product/legal decision.
 
 ## Plant Detail v2 — structure
 
 - Frozen 15-section skeleton: 01 hero, 02 gallery, 03 distribution, 04 calendar, 05 scientific (`#scientific-data`), 06 characteristics (`#characteristics`), 07 culture (`#edible`), 08 pests (`#pests`, rendered only when `pests.length > 0`), 09–15 (names, synonyms, observations, resources, similar, FAQ, community).
 - `SectionHeader` is a **default** export. Each section component is a **named** export, wrapped in `memo`, and mode-aware (reads `palette.mode`).
-- Shared parse/util helpers live in `src/utils/plantDetail.ts` (e.g. `toCamelKey`, `getCultureFacts`) and are the single source feeding both a section's visibility gate and its render.
+- Shared parse/util helpers live in `src/frontend/src/utils/plantDetail.ts` (e.g. `toCamelKey`, `getCultureFacts`) and are the single source feeding both a section's visibility gate and its render.
