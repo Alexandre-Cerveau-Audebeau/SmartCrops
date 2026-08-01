@@ -26,7 +26,7 @@ vi.mock('../services/authApi', () => ({
 }));
 
 import Profile from './Profile';
-import { fetchMe } from '../services/authApi';
+import { fetchMe, logout } from '../services/authApi';
 import { deleteAccount, exportAccountData } from '../services/profileApi';
 
 beforeEach(() => {
@@ -96,12 +96,25 @@ describe('Danger zone (SMA-341)', () => {
 
     fireEvent.click(confirmButton);
     await waitFor(() => expect(deleteAccount).toHaveBeenCalledWith('USER@example.com'));
+    // The core success path of the erasure flow: the client session is cleared
+    // after the backend confirmed the deletion — nothing else pins it (R2).
+    await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
   });
 
   it('export button downloads the file returned by the API', async () => {
-    // jsdom has no createObjectURL — install one for this test.
-    URL.createObjectURL = vi.fn(() => 'blob:mock-url');
-    URL.revokeObjectURL = vi.fn();
+    // jsdom has no createObjectURL — stub the global via vi.stubGlobal (R2: a
+    // plain assignment would outlive the test, since vi.clearAllMocks clears
+    // call history but never undoes an assignment). The subclass keeps `new
+    // URL(...)` working for anything else that runs while the stub is live.
+    const createObjectURL = vi.fn(() => 'blob:mock-url');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal(
+      'URL',
+      class extends URL {
+        static createObjectURL = createObjectURL;
+        static revokeObjectURL = revokeObjectURL;
+      },
+    );
     vi.mocked(exportAccountData).mockResolvedValue({
       blob: new Blob(['{}'], { type: 'application/json' }),
       filename: 'smartcrops-export-2026-08-01.json',
@@ -122,10 +135,13 @@ describe('Danger zone (SMA-341)', () => {
       // proving it carried the dated filename the backend chose.
       const anchor = clickSpy.mock.contexts[0] as HTMLAnchorElement;
       expect(anchor.download).toBe('smartcrops-export-2026-08-01.json');
-      expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
-      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      // The revoke is deferred a tick (R2) so the click can start consuming
+      // the blob URL first — hence the waitFor.
+      await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url'));
     } finally {
       clickSpy.mockRestore();
+      vi.unstubAllGlobals();
     }
   });
 });

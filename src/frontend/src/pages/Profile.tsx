@@ -125,7 +125,10 @@ export default function Profile() {
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      URL.revokeObjectURL(url);
+      // Deferred a tick (R2): some engines historically start consuming the
+      // blob URL only after the click settles; revoking synchronously could
+      // kill the download it just triggered.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch {
       setExportError(true);
     } finally {
@@ -133,12 +136,22 @@ export default function Profile() {
     }
   };
 
-  // The backend already destroyed the account and its cookie; logout() is not
-  // gated on a live session (the endpoint just clears the cookie again) and
-  // resets the client auth state before leaving for the home page.
+  // The backend already destroyed the account and its cookie; logout() just
+  // clears the cookie again and resets the client auth state. Guarded HERE, at
+  // the source, rather than with a catch at the dialog's call site: the dialog
+  // fires onDeleted() without awaiting it, so a rejection escaping this
+  // function would surface nowhere — the dialog would sit frozen at
+  // deleting=true over an account that no longer exists. Any logout() failure
+  // (network, 5xx, abort) is swallowed and navigation ALWAYS completes.
   const handleDeleted = async () => {
-    await logout();
-    navigate('/', { replace: true });
+    try {
+      await logout();
+    } catch {
+      // The account is already gone server-side; a client-side logout failure
+      // must not block navigation away from a dead account page.
+    } finally {
+      navigate('/', { replace: true });
+    }
   };
 
   if (loading) {

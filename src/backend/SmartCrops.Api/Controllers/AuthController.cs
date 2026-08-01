@@ -56,12 +56,17 @@ public record DeleteAccountRequest([Required] string Confirmation);
 
 // ── GDPR art. 20 export shapes (SMA-341) ────────────────────────────────────
 // The export carries the user's PERSONAL data only: profile fields, gardens and
-// placements (with notes). Catalogue data (plant names, botany) is public
-// reference data, not theirs — placements carry the PlantId reference alone.
-// CellsJson / LightScheduleJson are exported as the raw stored strings: faithful
-// to what the service holds, and immune to legacy payloads a re-parse could
-// choke on.
+// placements (with notes), and the plant suggestions they AUTHORED. Catalogue
+// data (plant names, botany) is public reference data, not theirs — placements
+// and suggestions carry the PlantId reference alone. CellsJson /
+// LightScheduleJson are exported as the raw stored strings: faithful to what
+// the service holds, and immune to legacy payloads a re-parse could choke on.
 public record AccountExportProfile(string Email, string? DisplayName, string? FirstName, string? LastName, string? City);
+/// <summary>One plant suggestion the user AUTHORED (R2, arts. 17/20 scope
+/// parity): the deletion path anonymizes these rows as the person's data, so
+/// the portability export must carry them too — the two articles cover one
+/// data set.</summary>
+public record AccountExportSuggestion(Guid PlantId, string FieldName, string SuggestedValue, string? Reason, string Status, DateTime CreatedAt);
 public record AccountExportPlacement(Guid PlantId, int StartRow, int StartCol, int SpanRows, int SpanCols, string? Notes, DateTime PlacedAt);
 public record AccountExportGarden(
     Guid Id,
@@ -82,7 +87,13 @@ public record AccountExportGarden(
 /// <summary>Top-level export document: <see cref="ExportedAt"/> dates it,
 /// <see cref="SchemaVersion"/> versions it — an undatable, unversionable
 /// portability export ages badly.</summary>
-public record AccountExportResponse(DateTime ExportedAt, int SchemaVersion, AccountExportProfile Profile, List<AccountExportGarden> Gardens);
+public record AccountExportResponse(DateTime ExportedAt, int SchemaVersion, AccountExportProfile Profile, List<AccountExportGarden> Gardens, List<AccountExportSuggestion> Suggestions)
+{
+    /// <summary>The version external consumers pin against (R2): named HERE,
+    /// beside the contract it versions, rather than as a bare literal in the
+    /// endpoint. Bump on any breaking shape change.</summary>
+    public const int CurrentSchemaVersion = 1;
+}
 
 [ApiController]
 [Route("api/[controller]")]
@@ -668,7 +679,17 @@ public class AuthController(
         // per-request security-stamp check the moment the user lookup misses.
         Response.Cookies.Delete("smartcrops_token", new CookieOptions { Path = "/" });
 
-        await SendAccountDeletedEmailAsync(email, ct);
+        // CancellationToken.None — a DELIBERATE break of symmetry with
+        // SendConfirmationEmailAsync (which forwards the request token). Past
+        // the commit above the deletion is irreversible, and this notice is the
+        // only one the user will ever get: it is part of the art. 17
+        // deliverable, not a courtesy. The request token would tie the send to
+        // the CLIENT's connection — and the SPA redirects away on success,
+        // making a disconnect ordinary. At registration nothing has committed
+        // that the user cannot verify by simply logging in; here there is no
+        // account left to check. The helper's own 5 s cap remains the only
+        // bound, so the request cannot hang on a dead relay either.
+        await SendAccountDeletedEmailAsync(email, CancellationToken.None);
         return NoContent();
     }
 
@@ -731,9 +752,27 @@ public class AuthController(
             .AsNoTracking()
             .ToListAsync(ct);
 
+        // AUTHORED suggestions only (UserId == caller) — arts. 17/20 cover the
+        // same data set, and the deletion path already treats these rows as the
+        // person's (it anonymizes them). Suggestions the caller merely REVIEWED
+        // as an admin are deliberately EXCLUDED: those are moderation records
+        // about someone else's contribution, and exporting them would leak
+        // another person's data into this user's file.
+        var suggestions = await dbContext.PlantSuggestions
+            .Where(s => s.UserId == userId)
+            .OrderBy(s => s.CreatedAt)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        // ONE timestamp for both the document and the filename (R2): two
+        // DateTime.UtcNow reads can straddle UTC midnight and produce a file
+        // named for one day whose exportedAt says the day before — a
+        // self-contradicting compliance artifact a user may hold for years.
+        var exportedAt = DateTime.UtcNow;
+
         var export = new AccountExportResponse(
-            DateTime.UtcNow,
-            1,
+            exportedAt,
+            AccountExportResponse.CurrentSchemaVersion,
             new AccountExportProfile(
                 user.Email ?? "",
                 user.DisplayName,
@@ -766,9 +805,25 @@ public class AuthController(
                         p.Notes,
                         p.PlacedAt))
                     .ToList()))
+                .ToList(),
+            suggestions.Select(s => new AccountExportSuggestion(
+                s.PlantId,
+                s.FieldName,
+                s.SuggestedValue,
+                s.Reason,
+                s.Status,
+                s.CreatedAt))
                 .ToList());
 
-        var fileName = $"smartcrops-export-{DateTime.UtcNow:yyyy-MM-dd}.json";
+        var fileName = $"smartcrops-export-{exportedAt:yyyy-MM-dd}.json";
+        // Buffering ceiling, recorded on both review surfaces (R2): the whole
+        // document is materialized and serialized to a byte array before a
+        // single byte reaches the wire. Fine at today's shape (a handful of
+        // gardens, low-hundreds of placements); it becomes a memory-pressure
+        // concern if layouts grow substantially, since GDPR exports tend to
+        // arrive in bursts. The future direction is streaming —
+        // JsonSerializer.SerializeAsync against Response.Body with the
+        // Content-Disposition header set manually — deliberately NOT done now.
         return File(JsonSerializer.SerializeToUtf8Bytes(export, ExportJson), "application/json", fileName);
     }
 

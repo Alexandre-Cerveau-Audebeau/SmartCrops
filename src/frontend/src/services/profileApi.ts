@@ -34,6 +34,12 @@ export async function updateProfile(data: UpdateProfileData): Promise<UserProfil
 /**
  * SMA-341 (GDPR art. 17): deletes the caller's account. The confirmation is the
  * account's own email address, typed by the user — the backend re-checks it.
+ * Bounded at 10 s (AbortSignal.timeout, the SMA-323 declarative precedent): the
+ * dialog blocks EVERY exit while deleting, so an unbounded hung request would
+ * trap the user in the modal with no way out. On a non-OK response the
+ * backend's own reason (the `{ error }` mismatch message, or Identity's error
+ * descriptions) is surfaced so the dialog can show WHY, mirroring the
+ * changePassword parser below.
  */
 export async function deleteAccount(confirmation: string): Promise<void> {
   const res = await fetch('/api/auth/account', {
@@ -41,17 +47,34 @@ export async function deleteAccount(confirmation: string): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify({ confirmation }),
+    signal: AbortSignal.timeout(10_000),
   });
-  if (!res.ok) throw new Error('Failed to delete account');
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const message =
+      typeof body?.error === 'string'
+        ? body.error
+        : Array.isArray(body)
+          ? body
+              .map((e: { description?: string }) => e.description)
+              .filter(Boolean)
+              .join(', ')
+          : null;
+    throw new Error(message || 'Failed to delete account');
+  }
 }
 
 /**
  * SMA-341 (GDPR art. 20): downloads the caller's data export. The filename comes
  * from the Content-Disposition the backend sets (dated), with a static fallback
- * if the header is unreadable.
+ * if the header is unreadable. Bounded at 10 s like deleteAccount — nothing else
+ * bounds the request, and the export button would otherwise spin forever.
  */
 export async function exportAccountData(): Promise<{ blob: Blob; filename: string }> {
-  const res = await fetch('/api/auth/account/export', { credentials: 'include' });
+  const res = await fetch('/api/auth/account/export', {
+    credentials: 'include',
+    signal: AbortSignal.timeout(10_000),
+  });
   if (!res.ok) throw new Error('Failed to export account data');
   const disposition = res.headers.get('Content-Disposition') ?? '';
   const match = /filename="?([^";]+)"?/.exec(disposition);

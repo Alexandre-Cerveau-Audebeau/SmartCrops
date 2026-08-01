@@ -35,27 +35,33 @@ export default function DeleteAccountDialog({ open, email, onClose, onDeleted }:
   const { t } = useTranslation();
   const [typed, setTyped] = useState('');
   const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState(false);
+  // null = no error; '' = failed without a usable detail (generic copy shown);
+  // non-empty = the backend's own reason, surfaced verbatim (the changePassword
+  // precedent — the API layer already extracts it).
+  const [error, setError] = useState<string | null>(null);
 
   const matches = typed.trim().toLowerCase() === email.trim().toLowerCase();
 
   const handleClose = () => {
     if (deleting) return;
     setTyped('');
-    setError(false);
+    setError(null);
     onClose();
   };
 
   const handleConfirm = async () => {
-    setError(false);
+    setError(null);
     setDeleting(true);
     try {
       await deleteAccount(typed.trim());
+      // Deliberately not awaited: the parent's onDeleted (Profile.handleDeleted)
+      // guarantees it cannot reject — logout failures are swallowed at the
+      // source and navigation always runs — so no catch is needed here.
       onDeleted();
-    } catch {
+    } catch (err) {
       // Keep the dialog open with the typed value intact so a transient
       // failure can be retried without re-arming from scratch.
-      setError(true);
+      setError(err instanceof Error ? err.message : '');
       setDeleting(false);
     }
   };
@@ -76,7 +82,9 @@ export default function DeleteAccountDialog({ open, email, onClose, onDeleted }:
         <Typography variant="body2" fontWeight={600}>
           {t('profile.deleteDialogIrreversible')}
         </Typography>
-        {error && <Alert severity="error">{t('profile.deleteError')}</Alert>}
+        {error !== null && (
+          <Alert severity="error">{error || t('profile.deleteError')}</Alert>
+        )}
         <Typography variant="body2">
           {t('profile.deleteDialogPrompt', { email })}
         </Typography>

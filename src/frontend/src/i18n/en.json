@@ -388,7 +388,7 @@
     "googleAccount": "Your account uses Google sign-in. Password management is not available.",
     "dangerZone": "Danger zone",
     "exportTitle": "Export your data",
-    "exportBody": "Download everything the service holds about you — profile, gardens, layouts and placement notes — as a JSON file (GDPR right to portability).",
+    "exportBody": "Download everything the service holds about you — profile, gardens, layouts, placement notes and plant suggestions — as a JSON file (GDPR right to portability).",
     "exportButton": "Download my data",
     "exportError": "Failed to export your data. Please try again.",
     "deleteTitle": "Delete your account",
@@ -1188,7 +1188,7 @@
   "legal": {
     "layout": {
       "lastUpdated": "Last updated:",
-      "updatedDate": "July 10, 2026",
+      "updatedDate": "August 1, 2026",
       "courtesy": "Courtesy translation — in case of any discrepancy, the French version prevails."
     },
     "mentions": {
@@ -1320,7 +1320,7 @@
       "s07": {
         "title": "What are your rights?",
         "p1": "Under the GDPR and the French Data Protection Act, you have the following rights over your data: **access**, **rectification**, **erasure**, **restriction of processing**, **objection**, **portability**, as well as the right to set post-mortem directives.",
-        "p2": "**To exercise these rights**: **deleting your account** and **exporting your data** (profile, gardens and layouts, as JSON) are available directly in the application, from your Profile page. You can also delete your own content (gardens) from the application. For the other rights (access, rectification, restriction, objection, post-mortem directives): write to **contact@smartcrops.fr** from the address associated with your account (identity verification may be requested); answer within one month.",
+        "p2": "**To exercise these rights**: **deleting your account** and **exporting your data** (profile, gardens, layouts, notes and plant suggestions, as JSON) are available directly in the application, from your Profile page. You can also delete your own content (gardens) from the application. For the other rights (access, rectification, restriction, objection, post-mortem directives): write to **contact@smartcrops.fr** from the address associated with your account (identity verification may be requested); answer within one month.",
         "p3": "If you believe your rights are not being respected, you can lodge a complaint with the **CNIL** (www.cnil.fr), the French data protection authority."
       },
       "s08": {
@@ -1398,7 +1398,7 @@
         "title": "User account",
         "items": {
           "accuracy": "You agree to provide accurate information and to keep your credentials confidential. Any activity carried out through your account is deemed to be yours.",
-          "signup": "You can sign up with email/password or via Google. You may request the deletion of your account at any time (see the Privacy Policy)."
+          "signup": "You can sign up with email/password or via Google. You may delete your account at any time, directly from the application (see the Privacy Policy)."
         }
       },
       "s04": {
@@ -1428,7 +1428,7 @@
       },
       "s08": {
         "title": "Suspension and termination",
-        "body": "The publisher may suspend or delete an account in case of breach of these Terms (notably the “User content” section), after a warning except in urgent cases. You may stop using the Service and request the deletion of your account at any time."
+        "body": "The publisher may suspend or delete an account in case of breach of these Terms (notably the “User content” section), after a warning except in urgent cases. You may stop using the Service and delete your account at any time, directly from the application."
       },
       "s09": {
         "title": "Changes to the Terms",

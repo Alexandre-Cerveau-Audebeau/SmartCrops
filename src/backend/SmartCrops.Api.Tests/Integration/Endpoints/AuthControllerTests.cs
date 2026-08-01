@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SmartCrops.Api.Controllers;
 using SmartCrops.Core.Entities;
 using SmartCrops.Infrastructure.Data;
 
@@ -468,6 +469,17 @@ public class AuthControllerTests : IntegrationTestBase
         Client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
 
+    /// <summary>
+    /// R2: explicit credential clear for tests whose NAME promises anonymity.
+    /// Today each test instance gets a fresh Client (InitializeAsync), so no
+    /// header can leak between tests — but AuthAs writes into the shared
+    /// default headers, and a test that claims to send an anonymous request
+    /// must not depend on that lifecycle detail staying true. The clear makes
+    /// anonymity a property of the test, not of the fixture's plumbing.
+    /// </summary>
+    private void AuthAsAnonymous() =>
+        Client.DefaultRequestHeaders.Authorization = null;
+
     private async Task<HttpResponseMessage> DeleteAccountAsync(string confirmation)
     {
         // DELETE with a JSON body — HttpClient has no DeleteAsJsonAsync.
@@ -520,7 +532,7 @@ public class AuthControllerTests : IntegrationTestBase
     public async Task DeleteAccount_UserWithGardens_RemovesUserGardensAndPlacements()
     {
         var (email, userId) = await RegisterUserAsync();
-        await SeedGardenWithPlacementAsync(userId, "Balcony");
+        var gardenId = await SeedGardenWithPlacementAsync(userId, "Balcony");
         Fixture.EmailStub.Reset();
         AuthAs(userId);
 
@@ -534,7 +546,11 @@ public class AuthControllerTests : IntegrationTestBase
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
         Assert.Equal(0, await db.Gardens.CountAsync(g => g.UserId == userId));
-        Assert.Equal(0, await db.GardenPlacements.CountAsync());
+        // Scoped to THIS test's garden (R2): a service-wide count against the
+        // shared fixture DB collides with neighbours that deliberately keep
+        // placements alive ("Kept", "Mine"/"NotMine"). The scoped count is also
+        // the invariant actually under test: the cascade behind Gardens fired.
+        Assert.Equal(0, await db.GardenPlacements.CountAsync(p => p.GardenId == gardenId));
         var sent = Assert.Single(Fixture.EmailStub.Sent);
         Assert.Equal(email, sent.To);
         Assert.Contains("account has been deleted", sent.Subject);
@@ -591,6 +607,9 @@ public class AuthControllerTests : IntegrationTestBase
     [Fact]
     public async Task DeleteAccount_Anonymous_Returns401()
     {
+        // The name promises anonymity — make it a property of the test (R2).
+        AuthAsAnonymous();
+
         var response = await DeleteAccountAsync("whoever@example.com");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -601,6 +620,7 @@ public class AuthControllerTests : IntegrationTestBase
     {
         var (email, userId) = await RegisterUserAsync();
         Guid suggestionId;
+        Guid reviewedSuggestionId;
         using (var scope = CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
@@ -618,28 +638,50 @@ public class AuthControllerTests : IntegrationTestBase
                 FieldName = "CommonName",
                 SuggestedValue = "Sage",
             };
+            // Second row exercising the SYMMETRIC branch (R2): the user only
+            // REVIEWED this one. ReviewedBy carries no foreign key, so without
+            // this assertion an admin deleting their own account would leave
+            // their identity stamped on every moderation record they touched —
+            // and dropping either ExecuteUpdateAsync would stay green.
+            var reviewed = new PlantSuggestion
+            {
+                Id = Guid.NewGuid(),
+                PlantId = plant.Id,
+                UserId = null,
+                ReviewedBy = userId,
+                FieldName = "CommonName",
+                SuggestedValue = "Garden sage",
+            };
             db.Plants.Add(plant);
             db.PlantSuggestions.Add(suggestion);
+            db.PlantSuggestions.Add(reviewed);
             await db.SaveChangesAsync();
             suggestionId = suggestion.Id;
+            reviewedSuggestionId = reviewed.Id;
         }
         AuthAs(userId);
 
         Assert.Equal(HttpStatusCode.NoContent, (await DeleteAccountAsync(email)).StatusCode);
 
-        // PlantSuggestions.UserId is a free string with NO foreign key: the
-        // deletion must sever the link to the person (anonymize) while the
-        // botanical contribution itself survives.
+        // PlantSuggestions.UserId / ReviewedBy are free strings with NO foreign
+        // key: the deletion must sever the link to the person (anonymize) while
+        // the botanical contribution itself survives.
         using var check = CreateScope();
         var checkDb = check.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
         var kept = await checkDb.PlantSuggestions.FindAsync(suggestionId);
         Assert.NotNull(kept);
         Assert.Null(kept!.UserId);
+        var keptReviewed = await checkDb.PlantSuggestions.FindAsync(reviewedSuggestionId);
+        Assert.NotNull(keptReviewed);
+        Assert.Null(keptReviewed!.ReviewedBy);
     }
 
     [Fact]
     public async Task ExportAccount_Anonymous_Returns401()
     {
+        // The name promises anonymity — make it a property of the test (R2).
+        AuthAsAnonymous();
+
         var response = await Client.GetAsync("/api/auth/account/export");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -652,6 +694,38 @@ public class AuthControllerTests : IntegrationTestBase
         var (_, otherId) = await RegisterUserAsync();
         await SeedGardenWithPlacementAsync(ownerId, "Mine");
         await SeedGardenWithPlacementAsync(otherId, "NotMine");
+        // Arts. 17/20 scope parity (R2): one suggestion the owner AUTHORED
+        // (exported) and one they merely REVIEWED as an admin (excluded — a
+        // moderation record about someone else's contribution).
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var plant = new Plant
+            {
+                Id = Guid.NewGuid(),
+                ScientificName = $"Thymus vulgaris {Guid.NewGuid():N}",
+                PlantTypeId = 1,
+            };
+            db.Plants.Add(plant);
+            db.PlantSuggestions.Add(new PlantSuggestion
+            {
+                Id = Guid.NewGuid(),
+                PlantId = plant.Id,
+                UserId = ownerId,
+                FieldName = "CommonName",
+                SuggestedValue = "Authored by owner",
+            });
+            db.PlantSuggestions.Add(new PlantSuggestion
+            {
+                Id = Guid.NewGuid(),
+                PlantId = plant.Id,
+                UserId = otherId,
+                ReviewedBy = ownerId,
+                FieldName = "CommonName",
+                SuggestedValue = "Merely reviewed by owner",
+            });
+            await db.SaveChangesAsync();
+        }
         AuthAs(ownerId);
 
         var response = await Client.GetAsync("/api/auth/account/export");
@@ -666,7 +740,9 @@ public class AuthControllerTests : IntegrationTestBase
 
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var root = doc.RootElement;
-        Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(
+            AccountExportResponse.CurrentSchemaVersion,
+            root.GetProperty("schemaVersion").GetInt32());
         Assert.True(root.TryGetProperty("exportedAt", out _));
         var gardenNames = root.GetProperty("gardens").EnumerateArray()
             .Select(g => g.GetProperty("name").GetString())
@@ -676,5 +752,11 @@ public class AuthControllerTests : IntegrationTestBase
         // Placements ride along with their notes — they are the user's words.
         var placements = root.GetProperty("gardens")[0].GetProperty("placements");
         Assert.Equal("sunny corner", placements[0].GetProperty("notes").GetString());
+        // Authored suggestions are the caller's data; reviewed-only ones are not.
+        var suggestionValues = root.GetProperty("suggestions").EnumerateArray()
+            .Select(s => s.GetProperty("suggestedValue").GetString())
+            .ToList();
+        Assert.Contains("Authored by owner", suggestionValues);
+        Assert.DoesNotContain("Merely reviewed by owner", suggestionValues);
     }
 }
