@@ -51,9 +51,27 @@ interface Props {
   castShadow?: boolean[][] | null;
   /** The anchor element makes the cell-exposure popover attachable (5.3-D). */
   onCellClick?: (row: number, col: number, anchorEl?: HTMLElement) => void;
-  onCellDragStart?: (row: number, col: number) => void;
-  onCellDragEnter?: (row: number, col: number) => void;
-  onCellDragEnd?: () => void;
+  /**
+   * Paint wiring (R4, GitHub Major 2955d067): every paint callback CARRIES
+   * its pointer event so the page can bind the stroke to the pointer that
+   * started it — before this, the end handlers did not even receive the
+   * event, so any release anywhere in the window closed the stroke and a
+   * second touch could re-lock the polarity mid-trace. The event is OPTIONAL
+   * because the keyboard path (GridCell's detail-0 click) paints with no
+   * pointer at all. Structural `{ pointerId }` — the page reads nothing
+   * else, and both React and native pointer events satisfy it.
+   */
+  onCellDragStart?: (
+    row: number,
+    col: number,
+    e?: { pointerId: number }
+  ) => void;
+  onCellDragEnter?: (
+    row: number,
+    col: number,
+    e?: { pointerId: number }
+  ) => void;
+  onCellDragEnd?: (e?: { pointerId: number }) => void;
   cellSizePx?: number;
   /**
    * DnD (lot 2): raw pointerdown on a NON-paint cell — the page's drag
@@ -323,9 +341,17 @@ const GridCell = memo(function GridCell({
   cellSizePx: number;
   tk: PlannerTokens;
   onCellClick?: (row: number, col: number, anchorEl?: HTMLElement) => void;
-  onCellDragStart?: (row: number, col: number) => void;
-  onCellDragEnter?: (row: number, col: number) => void;
-  onCellDragEnd?: () => void;
+  onCellDragStart?: (
+    row: number,
+    col: number,
+    e?: { pointerId: number }
+  ) => void;
+  onCellDragEnter?: (
+    row: number,
+    col: number,
+    e?: { pointerId: number }
+  ) => void;
+  onCellDragEnd?: (e?: { pointerId: number }) => void;
   onCellPointerDown?: (row: number, col: number, e: React.PointerEvent) => void;
 }) {
   const { t } = useTranslation();
@@ -425,8 +451,8 @@ const GridCell = memo(function GridCell({
         aria-colindex={c + 1}
         data-exposure={tint ?? undefined}
         data-cast-shadow={cast || undefined}
-        onPointerDown={hasDrag ? (e: React.PointerEvent) => { e.preventDefault(); onCellDragStart!(r, c); } : undefined}
-        onPointerEnter={hasDrag ? () => onCellDragEnter!(r, c) : undefined}
+        onPointerDown={hasDrag ? (e: React.PointerEvent) => { e.preventDefault(); onCellDragStart!(r, c, e); } : undefined}
+        onPointerEnter={hasDrag ? (e: React.PointerEvent) => onCellDragEnter!(r, c, e) : undefined}
         // Keyboard path (5.4): Enter/Space fire a detail-0 click on a real
         // <button> — treated as a one-cell paint (start + end). Pointer
         // clicks (detail > 0) are ignored: their pointerdown already
@@ -633,7 +659,10 @@ function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, soilPaintMode
 
   useEffect(() => {
     if (!hasDrag || !onCellDragEnd) return;
-    const handlePointerUp = () => onCellDragEnd();
+    // R4: the event is FORWARDED — the page ends the stroke only on its
+    // OWNER's release. The old zero-argument form meant any pointer's
+    // release anywhere in the window closed any live stroke.
+    const handlePointerUp = (e: PointerEvent) => onCellDragEnd(e);
     window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('pointercancel', handlePointerUp);
     return () => {
@@ -717,13 +746,19 @@ function GardenGrid({ grid, shapeEditMode, infraPaintMode = false, soilPaintMode
       aria-label={t('planner.grid.label')}
       aria-rowcount={height}
       aria-colcount={width}
-      onPointerUp={hasDrag ? () => onCellDragEnd!() : undefined}
-      onPointerLeave={hasDrag ? () => onCellDragEnd!() : undefined}
+      onPointerUp={hasDrag ? (e: React.PointerEvent) => onCellDragEnd!(e) : undefined}
+      onPointerLeave={hasDrag ? (e: React.PointerEvent) => onCellDragEnd!(e) : undefined}
       sx={{
         display: 'inline-flex',
         flexDirection: 'column',
         gap: CELL_GAP,
-        ...(paintMode && { userSelect: 'none', touchAction: 'none' }),
+        // SMA-18 lot 2: the clamp follows the DRAG WIRING (the lot-1 sidebar
+        // pattern), not the mode flag alone — a paint mode's finger paints
+        // (pointerdown paints instantly, so the gesture can never double as
+        // a scroll), while Selection/Place keep the root unclamped and a
+        // finger scrolls the grid. Place-mode move-drags keep their own
+        // PER-CELL clamp in GridCell, independent of this one.
+        ...(hasDrag && { userSelect: 'none', touchAction: 'none' }),
       }}
     >
       {grid.map((row, r) => (

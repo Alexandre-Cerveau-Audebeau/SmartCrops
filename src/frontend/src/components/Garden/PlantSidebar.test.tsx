@@ -1,9 +1,10 @@
+import { useState } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n/i18n';
 import type { Plant } from '../../types/Plant';
 import type { InfrastructureType } from '../../utils/infrastructure';
-import PlantSidebar from './PlantSidebar';
+import PlantSidebar, { type PlantSidebarTab } from './PlantSidebar';
 
 // SMA-194 locks: the picker's primary label is the SAME localized common name
 // the Library shows (flat list-DTO `commonName`, scientific fallback), and the
@@ -34,25 +35,39 @@ type SidebarOverrides = {
   onInfraSelect?: (type: InfrastructureType | null) => void;
 };
 
+// SMA-18 lot 2: the tab is a controlled prop now (lifted to the page so it
+// survives the sheet Drawer unmounting) — the harness plays the page's role
+// and owns it, so tab clicks keep switching panels in these tests. State
+// survives the rerender-based toggle tests because the element TYPE is the
+// same stateful wrapper.
+function StatefulSidebar(overrides: SidebarOverrides) {
+  const [tab, setTab] = useState<PlantSidebarTab>('plants');
+  return (
+    <PlantSidebar
+      plants={overrides.plants ?? [ivy, fern]}
+      searchQuery={overrides.searchQuery ?? ''}
+      onSearchChange={vi.fn()}
+      selectedPlantId={overrides.selectedPlantId ?? null}
+      onPlantSelect={overrides.onPlantSelect ?? vi.fn()}
+      cellSize={overrides.cellSize}
+      selectedInfraType={overrides.selectedInfraType ?? null}
+      onInfraSelect={overrides.onInfraSelect ?? vi.fn()}
+      language="fr"
+      shapeEditMode={false}
+      onShapeEditToggle={vi.fn()}
+      catalogFailed={false}
+      onCatalogRetry={vi.fn()}
+      catalogReady={overrides.catalogReady ?? true}
+      activeTab={tab}
+      onActiveTabChange={setTab}
+    />
+  );
+}
+
 // Built as an element (not rendered) so a test can re-render the SAME instance
 // with a new armed type — the callback's toggle branch needs that round-trip.
 const sidebar = (overrides: SidebarOverrides = {}) => (
-  <PlantSidebar
-    plants={overrides.plants ?? [ivy, fern]}
-    searchQuery={overrides.searchQuery ?? ''}
-    onSearchChange={vi.fn()}
-    selectedPlantId={overrides.selectedPlantId ?? null}
-    onPlantSelect={overrides.onPlantSelect ?? vi.fn()}
-    cellSize={overrides.cellSize}
-    selectedInfraType={overrides.selectedInfraType ?? null}
-    onInfraSelect={overrides.onInfraSelect ?? vi.fn()}
-    language="fr"
-    shapeEditMode={false}
-    onShapeEditToggle={vi.fn()}
-    catalogFailed={false}
-    onCatalogRetry={vi.fn()}
-    catalogReady={overrides.catalogReady ?? true}
-  />
+  <StatefulSidebar {...overrides} />
 );
 
 function renderSidebar(overrides: SidebarOverrides = {}) {

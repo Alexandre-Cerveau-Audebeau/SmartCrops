@@ -27,7 +27,9 @@ import SaveIcon from '@mui/icons-material/Save';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { CompassRose } from '../components/Garden/CompassRose';
 import GardenGrid from '../components/Garden/GardenGrid';
-import PlantSidebar from '../components/Garden/PlantSidebar';
+import PlantSidebar, {
+  type PlantSidebarTab,
+} from '../components/Garden/PlantSidebar';
 import GardenConfigDialog, {
   type DialogDimensions,
 } from '../components/Garden/GardenConfigDialog';
@@ -59,7 +61,7 @@ import {
 import type { ArmedSoil } from '../utils/soil';
 import { ExposureLegend } from './gardenPlanner/ExposureLegend';
 import { ExposureOverridePopover } from './gardenPlanner/ExposureOverridePopover';
-import { GridControls } from './gardenPlanner/GridControls';
+import { GridControls, UndoZoomCluster } from './gardenPlanner/GridControls';
 import { PlacementDetailPanel } from './gardenPlanner/PlacementDetailPanel';
 import { PlantsInGardenSection } from './gardenPlanner/PlantsInGardenSection';
 import {
@@ -130,6 +132,36 @@ const headerBtnSx = {
   fontSize: { xs: 13, sm: 14.5 },
 } as const;
 
+// SMA-18 lot 2: ONE definition of the bottom-sheet family chrome — the
+// catalogue sheet (lot 1) and the placement-panel sheet (lot 2) must read as
+// one family, so the États numbers (560 capped 85dvh, top radius 18, scrim,
+// 42×5 handle, title row metrics) live once. Mode-dependent colours (tk.card,
+// tk.track) stay at the call sites — tokens come from a hook.
+const sheetBackdropSx = { bgcolor: 'rgba(9,22,16,0.45)' } as const;
+const sheetPaperSx = {
+  height: 560,
+  maxHeight: '85dvh',
+  borderTopLeftRadius: '18px',
+  borderTopRightRadius: '18px',
+  display: 'flex',
+  flexDirection: 'column',
+} as const;
+const sheetHandleSx = {
+  width: 42,
+  height: 5,
+  borderRadius: '999px',
+  alignSelf: 'center',
+  mt: '10px',
+  flexShrink: 0,
+} as const;
+const sheetTitleRowSx = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 1,
+  p: '10px 16px 8px',
+  flexShrink: 0,
+} as const;
+
 export default function GardenPlanner() {
   const { t } = useTranslation();
   const { language } = useLanguage();
@@ -162,6 +194,7 @@ export default function GardenPlanner() {
     placePlantId,
     soilMode,
     soilType,
+    isPainting,
   } = state;
   const hasLastSaved = state.lastSaved !== null;
 
@@ -287,6 +320,14 @@ export default function GardenPlanner() {
   // sx cannot carry it: this is the file's existing useMediaQuery case.
   const isNarrow = useMediaQuery(theme.breakpoints.down('lg'));
   const [sheetOpen, setSheetOpen] = useState(false);
+  // SMA-345 item 3 (lot 2, FIX D): the sidebar's active tab is PAGE state.
+  // The sheet Drawer unmounts the sidebar when it closes, and the nominal
+  // mobile gesture — arm, place, reopen, arm again — must land back on the
+  // tab the user was working in (going to SOILS, arming, reopening used to
+  // land on PLANTS every time). Lifting costs zero DOM; the keepMounted
+  // alternative would keep the whole catalogue list mounted behind a closed
+  // sheet — now behind TWO sheets — on the most constrained devices.
+  const [sidebarTab, setSidebarTab] = useState<PlantSidebarTab>('plants');
   // R3 (GitHub cf65425f — the one substantive finding of the lot): above lg
   // the Drawer unmounts but its state survived, so narrowing the viewport
   // again (a resized window, a rotated tablet) reopened the sheet on its
@@ -294,6 +335,15 @@ export default function GardenPlanner() {
   useEffect(() => {
     if (!isNarrow) setSheetOpen(false);
   }, [isNarrow]);
+  // SMA-18 lot 2 (FIX C): the two bottom sheets are mutually exclusive —
+  // both anchor bottom and neither is useful behind the other. A selection
+  // means the PANEL sheet (its open state IS the selection), so the
+  // catalogue sheet yields; the reverse direction lives on the trigger,
+  // which clears the selection as it opens the catalogue. Above lg this is
+  // a no-op (sheetOpen is already false).
+  useEffect(() => {
+    if (selectedPlacementId !== null) setSheetOpen(false);
+  }, [selectedPlacementId]);
 
   // Real blockers (SMA-15 5.4): blocking infrastructure regions derived from
   // the per-cell storage — the [] placeholder era ends here.
@@ -547,19 +597,61 @@ export default function GardenPlanner() {
     setShowConfig(false);
   };
 
-  // Drag-to-paint handlers (guards live in the reducer)
+  // Drag-to-paint handlers (state guards live in the reducer; POINTER
+  // IDENTITY lives here — R4, GitHub Major 2955d067). A paint stroke
+  // belongs to the pointer that started it: on a phone held in one hand, a
+  // thumb resting on the screen while the index paints is ordinary, and
+  // before this ref the thumb's touch fired a real PAINT_START (re-locking
+  // the polarity from its cell) and its release ended the index's stroke
+  // through the unfiltered end handlers. pointerId — not isPrimary — on
+  // purpose: (a) the end handlers fire for ANY pointer's release, so only
+  // identity can tell the owner's up from an intruder's; (b) pen and touch
+  // each have their own primary, so two concurrent "primary" pointers
+  // exist in mixed input; (c) a finger that lands while NO stroke is live
+  // may legitimately start one even if another pointer rests elsewhere
+  // (isPrimary would refuse it). The DnD sources' isPrimary guards serve
+  // their own single-drag engine and stay as they are.
+  // The KEYBOARD path (GridCell's detail-0 click) paints start-then-end
+  // with no pointer at all — an undefined event passes every guard.
+  const paintPointerIdRef = useRef<number | null>(null);
   const handleCellDragStart = useCallback(
-    (row: number, col: number) => dispatch({ type: 'PAINT_START', row, col }),
+    (row: number, col: number, e?: { pointerId: number }) => {
+      if (e !== undefined) {
+        // A live stroke ignores every other pointer's START — the polarity
+        // stays locked to the owner's opening cell.
+        if (paintPointerIdRef.current !== null) return;
+        paintPointerIdRef.current = e.pointerId;
+      }
+      dispatch({ type: 'PAINT_START', row, col });
+    },
     []
   );
   const handleCellDragEnter = useCallback(
-    (row: number, col: number) => dispatch({ type: 'PAINT_ENTER', row, col }),
+    (row: number, col: number, e?: { pointerId: number }) => {
+      if (
+        e !== undefined &&
+        paintPointerIdRef.current !== null &&
+        e.pointerId !== paintPointerIdRef.current
+      ) {
+        return;
+      }
+      dispatch({ type: 'PAINT_ENTER', row, col });
+    },
     []
   );
-  const handleCellDragEnd = useCallback(
-    () => dispatch({ type: 'PAINT_END' }),
-    []
-  );
+  const handleCellDragEnd = useCallback((e?: { pointerId: number }) => {
+    // Only the OWNER's release (or cancel) ends the stroke; the keyboard
+    // path carries no event and always may.
+    if (
+      e !== undefined &&
+      paintPointerIdRef.current !== null &&
+      e.pointerId !== paintPointerIdRef.current
+    ) {
+      return;
+    }
+    paintPointerIdRef.current = null;
+    dispatch({ type: 'PAINT_END' });
+  }, []);
 
   const handleSelectAll = useCallback(
     () => dispatch({ type: 'SET_ALL_CELLS', active: true }),
@@ -1024,6 +1116,63 @@ export default function GardenPlanner() {
     },
     [beginPendingDrag]
   );
+  // ── Touch paint propagation (SMA-18 lot 2, FIX A) ───────────────────────
+  // Painting propagates by COORDINATES while a stroke is live, not only by
+  // pointerenter: a TOUCH pointer holds implicit capture on the cell that
+  // received pointerdown, so neighbouring cells never fire pointerenter and
+  // a swipe painted exactly one cell. The DnD engine above already solved
+  // this shape — document-level pointermove + the inverted track formula —
+  // so the paint drag reuses pointerToCell instead of inventing a second
+  // mechanism (and instead of releasing the implicit capture, whose
+  // sibling-boundary-event behaviour is the least-conformant corner of
+  // pointer events on mobile WebKit). Mouse strokes keep the cells' own
+  // pointerenter path EXCLUSIVELY (the R3 pointer-type gate below); the
+  // reducer's PAINT_ENTER no-op guards absorb the one overlap that
+  // remains — the start cell, painted at pointerdown and revisited by the
+  // first moves. Cell-granular like the DnD move handler: same-cell moves
+  // dispatch nothing.
+  const lastPaintCellRef = useRef<{ row: number; col: number } | null>(null);
+  useEffect(() => {
+    if (!isPainting) {
+      // R4: ownership is released on EVERY path that ends painting — the
+      // gesture handlers clear it synchronously, and this covers the
+      // reducer-side exits (mode switch mid-stroke) so a stale owner can
+      // never lock painting out.
+      paintPointerIdRef.current = null;
+      return;
+    }
+    lastPaintCellRef.current = null;
+    const onPaintPointerMove = (e: PointerEvent) => {
+      // R3 (both surfaces convergent): mouse strokes already propagate
+      // through the cells' own pointerenter — this listener exists for the
+      // pointer types whose implicit capture starves those events: touch,
+      // and pen, which captures the same way (the Extension's wording,
+      // deliberately wider than touch-only). Returning early spares the
+      // per-pixel coordinate inversion for mouse moves; the reducer's
+      // no-op guards were already absorbing the duplicates state-side.
+      if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+      // R4: the type filter discriminates the KIND of pointer, this one its
+      // IDENTITY — a second finger is also 'touch', but only the stroke's
+      // owner feeds it.
+      if (
+        paintPointerIdRef.current !== null &&
+        e.pointerId !== paintPointerIdRef.current
+      ) {
+        return;
+      }
+      const cell = pointerToCell(e.clientX, e.clientY);
+      if (!cell) return;
+      const last = lastPaintCellRef.current;
+      if (last && last.row === cell.row && last.col === cell.col) return;
+      lastPaintCellRef.current = cell;
+      dispatch({ type: 'PAINT_ENTER', row: cell.row, col: cell.col });
+    };
+    document.addEventListener('pointermove', onPaintPointerMove);
+    return () =>
+      document.removeEventListener('pointermove', onPaintPointerMove);
+    // pointerToCell reads only refs (the DnD engine's own contract).
+  }, [isPainting]);
+
   const handleToggleExposure = useCallback(
     () => dispatch({ type: 'TOGGLE_EXPOSURE' }),
     []
@@ -1280,32 +1429,40 @@ export default function GardenPlanner() {
     dispatch({ type: 'SET_PLACE_PLANT', plantId: selectedPlacement.plantId });
   }, [selectedPlacement]);
 
+  // The selection-exit grammar Escape follows outside a drag (R3 ruling,
+  // extracted lot 2 R3): clear the selection; in Place mode ALSO exit to
+  // selection while the armed plant stays REMEMBERED (exact infra-grammar
+  // mirror: the toolbar Placer button stays enabled to re-enter). Gated on
+  // placeMode so Escape in shape-edit/infra keeps that mode untouched. The
+  // sidebar re-click toggle remains the explicit DISARM (SET_PLACE_PLANT
+  // null) — a different intent. ONE definition shared by the window keydown
+  // handler and the placement sheet's Escape close (Extension fa53c9b5,
+  // lot 2 R3): MUI consumes Escape for its top modal, so the sheet path
+  // must carry the SAME grammar itself or the mobile gesture only runs
+  // half of it.
+  const escapeSelectionExit = useCallback(() => {
+    clearSelection();
+    if (placeMode) {
+      dispatch({ type: 'ENTER_SELECTION_MODE' });
+    }
+  }, [clearSelection, placeMode]);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         // Lot 2 precedence: Escape DURING an active drag cancels the drag
         // ONLY — mode stays, plant stays armed. The selection-exit grammar
-        // below applies when no drag is active.
+        // applies when no drag is active.
         if (dragRef.current) {
           endDrag(false);
           return;
         }
-        // Escape clears the placement selection; in Place mode it EXITS to
-        // selection while the armed plant stays REMEMBERED (R3, both review
-        // surfaces converging — exact infra-grammar mirror: the toolbar
-        // Placer button stays enabled to re-enter). Still gated on placeMode
-        // so Escape in shape-edit/infra keeps that mode (and its in-flight
-        // drag) untouched. The sidebar re-click toggle remains the explicit
-        // DISARM (SET_PLACE_PLANT null) — a different intent.
-        clearSelection();
-        if (placeMode) {
-          dispatch({ type: 'ENTER_SELECTION_MODE' });
-        }
+        escapeSelectionExit();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [clearSelection, placeMode, endDrag]);
+  }, [escapeSelectionExit, endDrag]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -1605,12 +1762,13 @@ export default function GardenPlanner() {
   }
 
   // SMA-18 R3 (CR 07a87095): the rail and sheet mounts of PlantSidebar
-  // shared FOURTEEN byte-identical props — one object, spread at both call
-  // sites, so a future prop addition cannot silently land in only one of
-  // the two mounts (it would land in the one tested least). The props that
-  // legitimately DIFFER — variant, the drag source, the three
-  // sheet-flavored arming handlers — stay explicit at each site so the
-  // divergence remains visible.
+  // shared SIXTEEN byte-identical props (fourteen at R3; lot 2 added the
+  // lifted tab pair) — one object, spread at both call sites, so a future
+  // prop addition cannot silently land in only one of the two mounts (it
+  // would land in the one tested least). The props that legitimately
+  // DIFFER — variant, the drag source, the three sheet-flavored arming
+  // handlers — stay explicit at each site so the divergence remains
+  // visible.
   const sharedSidebarProps = {
     plants: allPlants,
     searchQuery,
@@ -1626,7 +1784,40 @@ export default function GardenPlanner() {
     catalogReady,
     catalogFailed,
     onCatalogRetry: handleCatalogRetry,
+    activeTab: sidebarTab,
+    onActiveTabChange: setSidebarTab,
   };
+
+  // SMA-18 lot 2 (FIX C): the lane and sheet mounts of PlacementDetailPanel
+  // share every prop — the sharedSidebarProps rule applied to the panel the
+  // day it grew its second mount. Null while nothing is selected (the panel
+  // requires a placement); `variant` stays explicit at the sheet site.
+  const placementPanelProps =
+    selectedPlacement !== null
+      ? {
+          placement: selectedPlacement,
+          plant: selectedPlant,
+          soil: selectedCellSoil,
+          language,
+          catalogReady,
+          cellSize,
+          gridRows: grid?.length ?? 0,
+          gridCols: grid?.[0]?.length ?? 0,
+          exposure: selectedCellExposure,
+          momentsLit: selectedCellMomentsLit,
+          exposureOverride: selectedCellOverride,
+          onSetExposureOverride: handleSetSelectedExposureOverride,
+          checkFit: handleCheckSelectedFit,
+          describeOverlap: handleDescribeOverlap,
+          onSetFootprint: handleSetSelectedFootprint,
+          onSetNotes: handleSetSelectedNotes,
+          onMove: handleMoveSelectedPlacement,
+          onRemove: handleRemoveSelectedPlacement,
+          onClose: clearSelection,
+          gardenId: id,
+          gardenName: garden?.name,
+        }
+      : null;
 
   return (
     // Full-width page (R3 item F): the lg Container is replaced by a
@@ -1969,6 +2160,9 @@ export default function GardenPlanner() {
             {/* Toolbar card (R2, §10) — grid column only, above the grid card */}
             <GridControls
               hasGrid={grid !== null}
+              // R3 (GitHub Major): the page's own below-sm value — computed
+              // once, threaded down; GridControls no longer re-derives it.
+              isMobile={isMobile}
               shapeEditMode={shapeEditMode}
               infraMode={infraMode}
               infraArmed={infraType !== null}
@@ -2009,6 +2203,12 @@ export default function GardenPlanner() {
               borderRadius: '12px',
               boxShadow: tk.shadow,
               p: { xs: '12px', sm: '20px' },
+              // SMA-18 lot 2 R2: below sm the anchored undo/zoom row occupies
+              // the card's top band (y −10..30, the compass's own line) — the
+              // top padding clears it so no axis letter is hidden and no
+              // tappable cell ever sits under the INTERACTIVE pill (the
+              // decorative compass never needed this: pointerEvents none).
+              pt: { xs: '38px', sm: '20px' },
             }}
           >
             {/* Permanent compass (5.3-D, tokens §8): top-right corner of the
@@ -2055,6 +2255,51 @@ export default function GardenPlanner() {
                 }
               />
             </Box>
+
+            {/* SMA-18 lot 2 R2 (Alexandre, phone pass over the LAN): below
+                sm, undo and zoom join the grid CARD — reaching them meant
+                scrolling up to a toolbar the user is no longer looking at.
+                The dictated order: undo · percentage · zoom out · zoom in ·
+                compass (the compass keeps its corner; this row sits to its
+                left). SAME anchoring mechanism as the compass — absolute
+                against the card (position:relative context), NOT the scroll
+                area — so the row stays put while the grid scrolls under it;
+                same top offset (-10) and 40px height as the compass disc so
+                the five read as ONE line. Chrome = the compass disc's own
+                (card/cardBd/shadow), pill-rounded like every chip. The
+                toolbar's cluster is UNMOUNTED below sm (GridControls), so
+                each accessible name exists exactly once per viewport. */}
+            {isMobile && (
+              <Box
+                data-testid="grid-zoom-row"
+                sx={{
+                  position: 'absolute',
+                  // The compass disc spans right −6..34 (40px, §8 mobile);
+                  // 8px gap puts the row's right edge at 42.
+                  right: 42,
+                  top: -10,
+                  zIndex: 10,
+                  height: 40,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  px: '6px',
+                  borderRadius: '999px',
+                  bgcolor: tk.card,
+                  border: `1px solid ${tk.cardBd}`,
+                  boxShadow: tk.shadow,
+                }}
+              >
+                <UndoZoomCluster
+                  order="grid"
+                  zoom={zoom}
+                  canUndo={state.past.length > 0}
+                  onUndo={handleUndo}
+                  onZoomIn={handleZoomIn}
+                  onZoomOut={handleZoomOut}
+                />
+              </Box>
+            )}
 
             {/* TOP +/- row — OUTSIDE scroll, centered in wrapper width (= visible viewport) */}
             {shapeEditMode && (
@@ -2379,7 +2624,13 @@ export default function GardenPlanner() {
               <Button
                 fullWidth
                 variant="outlined"
-                onClick={() => setSheetOpen(true)}
+                // FIX C: the sheets are mutually exclusive — opening the
+                // catalogue closes the panel sheet by clearing the selection
+                // that IS its open state (a no-op with nothing selected).
+                onClick={() => {
+                  clearSelection();
+                  setSheetOpen(true);
+                }}
                 aria-expanded={false}
                 aria-controls="planner-sheet"
                 sx={{
@@ -2402,44 +2653,28 @@ export default function GardenPlanner() {
               the 330px column is ALWAYS reserved — an empty spacer when
               nothing is selected. Sticky rail below the navbar
               (STICKY_OFFSET = NAVBAR_HEIGHT 64 + 16), viewport-capped and
-              self-scrolling so its content stays on screen. */}
-          <Box
-            sx={{
-              width: { xs: '100%', lg: 330 },
-              flexShrink: 0,
-              position: { xs: 'static', lg: 'sticky' },
-              top: { lg: STICKY_OFFSET },
-              alignSelf: { xs: 'stretch', lg: 'flex-start' },
-              maxHeight: { lg: `calc(100vh - ${STICKY_OFFSET}px)` },
-              overflowY: { lg: 'auto' },
-            }}
-          >
-            {selectedPlacement && (
-              <PlacementDetailPanel
-                placement={selectedPlacement}
-                plant={selectedPlant}
-                soil={selectedCellSoil}
-                language={language}
-                catalogReady={catalogReady}
-                cellSize={cellSize}
-                gridRows={grid?.length ?? 0}
-                gridCols={grid?.[0]?.length ?? 0}
-                exposure={selectedCellExposure}
-                momentsLit={selectedCellMomentsLit}
-                exposureOverride={selectedCellOverride}
-                onSetExposureOverride={handleSetSelectedExposureOverride}
-                checkFit={handleCheckSelectedFit}
-                describeOverlap={handleDescribeOverlap}
-                onSetFootprint={handleSetSelectedFootprint}
-                onSetNotes={handleSetSelectedNotes}
-                onMove={handleMoveSelectedPlacement}
-                onRemove={handleRemoveSelectedPlacement}
-                onClose={clearSelection}
-                gardenId={id}
-                gardenName={garden?.name}
-              />
-            )}
-          </Box>
+              self-scrolling so its content stays on screen.
+              SMA-18 lot 2 (FIX C): ≥lg ONLY — below lg the lane used to
+              stack LAST, pushing the panel off-viewport exactly where the
+              screen is smallest; the panel's below-lg home is the second
+              bottom sheet instead. */}
+          {!isNarrow && (
+            <Box
+              sx={{
+                width: 330,
+                flexShrink: 0,
+                position: 'sticky',
+                top: STICKY_OFFSET,
+                alignSelf: 'flex-start',
+                maxHeight: `calc(100vh - ${STICKY_OFFSET}px)`,
+                overflowY: 'auto',
+              }}
+            >
+              {placementPanelProps && (
+                <PlacementDetailPanel {...placementPanelProps} />
+              )}
+            </Box>
+          )}
         </Box>
       )}
 
@@ -2460,49 +2695,22 @@ export default function GardenPlanner() {
           onClose={() => setSheetOpen(false)}
           ModalProps={{ disableScrollLock: true }}
           slotProps={{
-            backdrop: { sx: { bgcolor: 'rgba(9,22,16,0.45)' } },
+            backdrop: { sx: sheetBackdropSx },
             paper: {
               id: 'planner-sheet',
               role: 'dialog',
               'aria-modal': true,
               'aria-labelledby': 'planner-sheet-title',
-              sx: {
-                height: 560,
-                maxHeight: '85dvh',
-                borderTopLeftRadius: '18px',
-                borderTopRightRadius: '18px',
-                bgcolor: tk.card,
-                display: 'flex',
-                flexDirection: 'column',
-              },
+              sx: { ...sheetPaperSx, bgcolor: tk.card },
             },
           }}
         >
-          <Box
-            aria-hidden
-            sx={{
-              width: 42,
-              height: 5,
-              borderRadius: '999px',
-              bgcolor: tk.track,
-              alignSelf: 'center',
-              mt: '10px',
-              flexShrink: 0,
-            }}
-          />
+          <Box aria-hidden sx={{ ...sheetHandleSx, bgcolor: tk.track }} />
           {/* Title row (États): 16/800 title + count chip (the page's
               existing cntChip pair via metaChipSx) + 21px muted close. The
               sidebar's own shape-edit switch row now sits BELOW this title —
               the sheet header is Drawer chrome, not sidebar content. */}
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              p: '10px 16px 8px',
-              flexShrink: 0,
-            }}
-          >
+          <Box sx={sheetTitleRowSx}>
             <Typography
               id="planner-sheet-title"
               component="h2"
@@ -2535,6 +2743,70 @@ export default function GardenPlanner() {
             onInfraSelect={handleInfraSelectSheet}
             onSoilSelect={handleSoilSelectSheet}
           />
+        </Drawer>
+      )}
+
+      {/* SMA-18 lot 2 (FIX C): the placement panel's below-lg home — a
+          SECOND bottom sheet in the exact lot-1 chrome (shared constants
+          above), replacing the stacked lane a phone user could not reach.
+          Its open state IS the selection: selecting a placement opens it,
+          clearing the selection closes it — so every existing exit
+          (removal, Cancel, the panel's own X) closes the sheet for free.
+          Escape (corrected lot 2 R3, Extension fa53c9b5): MUI's Modal
+          consumes the press (stopPropagation) BEFORE the planner's window
+          keydown handler, so this onClose must carry the FULL Escape
+          grammar itself — the earlier claim that the two paths "converge"
+          held only for clearSelection and silently dropped the Place-mode
+          exit: on desktop Escape left Place mode, through the sheet it did
+          not. Reason-differentiated on purpose: escapeKeyDown runs the
+          shared escapeSelectionExit (the whole gesture); a backdrop tap
+          stays a plain dismissal (clearSelection), like clicking elsewhere
+          on desktop, which never exits the mode. During the exit slide the
+          Paper empties (the selection is already gone) — accepted, the
+          scrim is mid-fade and the catalogue sheet arms the same way. */}
+      {isNarrow && (
+        <Drawer
+          anchor="bottom"
+          open={selectedPlacement !== null}
+          onClose={(_, reason) =>
+            reason === 'escapeKeyDown' ? escapeSelectionExit() : clearSelection()
+          }
+          ModalProps={{ disableScrollLock: true }}
+          slotProps={{
+            backdrop: { sx: sheetBackdropSx },
+            paper: {
+              id: 'planner-placement-sheet',
+              role: 'dialog',
+              'aria-modal': true,
+              'aria-labelledby': 'planner-placement-sheet-title',
+              sx: { ...sheetPaperSx, bgcolor: tk.card },
+            },
+          }}
+        >
+          <Box aria-hidden sx={{ ...sheetHandleSx, bgcolor: tk.track }} />
+          {/* Title row = Drawer chrome (the catalogue-sheet convention): the
+              panel's own header is variant-stripped, this row owns the name
+              and the way out. */}
+          <Box sx={sheetTitleRowSx}>
+            <Typography
+              id="planner-placement-sheet-title"
+              component="h2"
+              sx={{ fontSize: 16, fontWeight: 800, color: tk.tTitle }}
+            >
+              {t('planner.placement.title')}
+            </Typography>
+            <IconButton
+              size="small"
+              onClick={clearSelection}
+              aria-label={t('planner.placement.close')}
+              sx={{ ml: 'auto', p: '2px', color: tk.muted }}
+            >
+              <CloseIcon sx={{ fontSize: 21 }} />
+            </IconButton>
+          </Box>
+          {placementPanelProps && (
+            <PlacementDetailPanel {...placementPanelProps} variant="sheet" />
+          )}
         </Drawer>
       )}
 

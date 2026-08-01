@@ -292,6 +292,84 @@ function ArmedPlantIndicator({
   );
 }
 
+/**
+ * SMA-18 lot 2 R2 (Alexandre, phone pass): the undo/zoom cluster, ONE
+ * definition for its two homes — the toolbar's right slot (≥sm, mockup R4
+ * order: undo · − · % · +) and the in-grid anchored row (<sm, the dictated
+ * order: undo · % · − · +, the percentage reading as a label for the
+ * magnifiers that follow it). Same handlers, same ZOOM_MIN/ZOOM_MAX
+ * disabled predicates, same accessible names — the two clusters can never
+ * drift because there is only this one, and they are never MOUNTED at the
+ * same breakpoint, so a name exists exactly once at any viewport.
+ */
+export function UndoZoomCluster({
+  order,
+  zoom,
+  canUndo,
+  onUndo,
+  onZoomIn,
+  onZoomOut,
+}: {
+  order: 'toolbar' | 'grid';
+  zoom: number;
+  canUndo: boolean;
+  onUndo: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+}) {
+  const { t } = useTranslation();
+  const undoBtn = (
+    <IconButton
+      size="small"
+      onClick={onUndo}
+      disabled={!canUndo}
+      aria-label={t('planner.toolbar.undo')}
+    >
+      <UndoIcon fontSize="small" />
+    </IconButton>
+  );
+  const readout = (
+    <Typography variant="caption" sx={{ minWidth: 40, textAlign: 'center' }}>
+      {Math.round(zoom * 100)}%
+    </Typography>
+  );
+  const zoomOutBtn = (
+    <IconButton
+      size="small"
+      onClick={onZoomOut}
+      disabled={zoom <= ZOOM_MIN}
+      aria-label={t('planner.toolbar.zoomOut')}
+    >
+      <ZoomOutIcon fontSize="small" />
+    </IconButton>
+  );
+  const zoomInBtn = (
+    <IconButton
+      size="small"
+      onClick={onZoomIn}
+      disabled={zoom >= ZOOM_MAX}
+      aria-label={t('planner.toolbar.zoomIn')}
+    >
+      <ZoomInIcon fontSize="small" />
+    </IconButton>
+  );
+  return order === 'toolbar' ? (
+    <>
+      {undoBtn}
+      {zoomOutBtn}
+      {readout}
+      {zoomInBtn}
+    </>
+  ) : (
+    <>
+      {undoBtn}
+      {readout}
+      {zoomOutBtn}
+      {zoomInBtn}
+    </>
+  );
+}
+
 interface GridControlsProps {
   hasGrid: boolean;
   shapeEditMode: boolean;
@@ -321,6 +399,16 @@ interface GridControlsProps {
   /** SMA-18 R2: explicit disarm from the indicator's X — same dispatch as
    * the sidebar chip's X (SET_PLACE_PLANT null on the page side). */
   onDisarm?: () => void;
+  /**
+   * SMA-18 lot 2 R3 (GitHub Major 7f61fafb): the below-sm decision is made
+   * ONCE, by the page — GardenPlanner already derives this exact value at
+   * the same breakpoint to mount the in-grid cluster, so re-deriving it
+   * here meant two matchMedia subscriptions answering one question. The
+   * prop is REQUIRED: the invariant "exactly one undo/zoom cluster mounts"
+   * (which the Extension verified holds) now rests on a single source of
+   * truth by construction.
+   */
+  isMobile: boolean;
   zoom: number;
   canUndo: boolean;
   exposureVisible: boolean;
@@ -357,6 +445,7 @@ export const GridControls = memo(function GridControls({
   soilArmed = false,
   armedPlant = null,
   onDisarm,
+  isMobile,
   zoom,
   canUndo,
   exposureVisible,
@@ -489,39 +578,24 @@ export const GridControls = memo(function GridControls({
         )}
 
         {/* R4 (mockup arrangement): undo sits INSIDE the right cluster,
-            immediately left of the zoom-out magnifier. */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 'auto' }}>
-          <IconButton
-            size="small"
-            onClick={onUndo}
-            disabled={!canUndo}
-            aria-label={t('planner.toolbar.undo')}
+            immediately left of the zoom-out magnifier. SMA-18 lot 2 R2:
+            ≥sm ONLY — below sm the same cluster (shared component above)
+            mounts inside the grid card beside the compass instead, where
+            the user is actually looking. */}
+        {!isMobile && (
+          <Box
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 'auto' }}
           >
-            <UndoIcon fontSize="small" />
-          </IconButton>
-          <IconButton
-            size="small"
-            onClick={onZoomOut}
-            disabled={zoom <= ZOOM_MIN}
-            aria-label={t('planner.toolbar.zoomOut')}
-          >
-            <ZoomOutIcon fontSize="small" />
-          </IconButton>
-          <Typography
-            variant="caption"
-            sx={{ minWidth: 40, textAlign: 'center' }}
-          >
-            {Math.round(zoom * 100)}%
-          </Typography>
-          <IconButton
-            size="small"
-            onClick={onZoomIn}
-            disabled={zoom >= ZOOM_MAX}
-            aria-label={t('planner.toolbar.zoomIn')}
-          >
-            <ZoomInIcon fontSize="small" />
-          </IconButton>
-        </Box>
+            <UndoZoomCluster
+              order="toolbar"
+              zoom={zoom}
+              canUndo={canUndo}
+              onUndo={onUndo}
+              onZoomIn={onZoomIn}
+              onZoomOut={onZoomOut}
+            />
+          </Box>
+        )}
       </Box>
 
       {/* Full-width divider (§10: margin 12px -16px across the card padding;

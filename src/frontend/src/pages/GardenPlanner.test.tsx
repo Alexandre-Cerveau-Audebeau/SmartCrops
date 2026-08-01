@@ -2115,3 +2115,415 @@ describe('SMA-18 mobile layout — bottom sheet, trigger, toolbar names', () => 
     }
   });
 });
+
+// ── SMA-18 lot 2 — the planner WORKS under a finger ────────────────────────
+// FIX A: paint strokes propagate by COORDINATES (document pointermove +
+// pointerToCell), because a touch pointer's implicit capture pins every
+// event to the pointerdown cell — neighbours NEVER fire pointerenter. The
+// tests below reproduce that reality exactly: pointerdown on the start
+// cell, then document-level moves only. FIX B: the touch-action clamp
+// exists exactly in paint modes. FIX C: below lg the placement panel is a
+// second bottom sheet, mutually exclusive with the catalogue sheet.
+// FIX D (SMA-345 item 3): the catalogue tab is page state and survives the
+// sheet unmounting.
+describe('SMA-18 mobile touch (lot 2)', () => {
+  afterEach(() => {
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  // MOBILE coordinates (R4, GitHub Minor 2955d067): the touch tests run at
+  // the breakpoint they claim to cover — cell 30px + GAP_PX.xs 2px → 32px
+  // track (the lot-2 originals ran the 61px desktop track, proving the
+  // mechanism on geometry a finger never meets). Grid rect at (0,0) in
+  // jsdom, cell (r,c) hit at (c*32+5, r*32+5).
+  const at = (row: number, col: number) => ({
+    clientX: col * 32 + 5,
+    clientY: row * 32 + 5,
+  });
+
+  async function renderPaintable() {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      width: 4,
+      height: 4,
+      placements: [],
+    });
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+    return await screen.findByRole('grid');
+  }
+
+  // The touch-paint harness: MOBILE breakpoint, shape edit entered through
+  // the SHEET — the only below-lg home of the switch, i.e. the real mobile
+  // flow (open, toggle, close). Cells must be (re)queried by the caller
+  // AFTER this returns: entering a paint mode swaps the cell elements.
+  async function renderPaintableMobile() {
+    mockMatchMedia(true);
+    const grid = await renderPaintable();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Plants & infrastructure',
+    });
+    fireEvent.click(within(dialog).getByText('Edit shape'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    return grid;
+  }
+
+  async function renderWithPlacement() {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+    await screen.findByRole('grid');
+    // Grabbed EARLY on purpose: once a sheet modal opens, MUI marks the
+    // page content aria-hidden and role queries stop seeing the grid —
+    // the DOM node itself stays valid for fireEvent.
+    return await screen.findByRole('gridcell', {
+      name: 'Basilicum fixture at row 1, column A',
+    });
+  }
+
+  it('a TOUCH paint stroke propagates across cells with no pointerenter ever firing (FIX A)', async () => {
+    const grid = await renderPaintableMobile();
+    const cells = within(grid).getAllByRole('gridcell');
+    // The touch reality, byte for byte: implicit capture retargets every
+    // event to the START cell, so the stroke is pointerdown there plus
+    // document-level pointermoves — the neighbouring cells receive NO
+    // pointerenter at any time.
+    fireEvent.pointerDown(cells[0]!, { ...at(0, 0), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    fireEvent.pointerMove(document, { ...at(0, 1), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    fireEvent.pointerMove(document, { ...at(0, 2), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    fireEvent.pointerUp(document, { ...at(0, 2), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    // All three traversed cells painted (active → inactive, the toggle
+    // polarity locked at the start cell) — not only the first.
+    expect(cells[0]).toHaveStyle({ backgroundColor: '#ECEEEA' });
+    expect(cells[1]).toHaveStyle({ backgroundColor: '#ECEEEA' });
+    expect(cells[2]).toHaveStyle({ backgroundColor: '#ECEEEA' });
+    // An untraversed cell keeps the active fill.
+    expect(cells[3]).toHaveStyle({ backgroundColor: '#F1F7EE' });
+  });
+
+  it('the paint stroke ends at pointerup: later moves paint nothing (FIX A)', async () => {
+    const grid = await renderPaintableMobile();
+    const cells = within(grid).getAllByRole('gridcell');
+    fireEvent.pointerDown(cells[0]!, { ...at(0, 0), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    fireEvent.pointerUp(document, { ...at(0, 0), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    // The finger lifts, then the user pans elsewhere — nothing paints.
+    fireEvent.pointerMove(document, { ...at(0, 1), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    expect(cells[1]).toHaveStyle({ backgroundColor: '#F1F7EE' });
+  });
+
+  it('a second touch cannot hijack a live stroke: no new START, no polarity flip, its release does not end it (R4)', async () => {
+    const grid = await renderPaintableMobile();
+    const cells = within(grid).getAllByRole('gridcell');
+    // Finger 1 (the index) opens a DEACTIVATING stroke on (0,0).
+    fireEvent.pointerDown(cells[0]!, { ...at(0, 0), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    expect(cells[0]).toHaveStyle({ backgroundColor: '#ECEEEA' });
+    // A second finger (the resting thumb) lands ON the just-painted cell.
+    // Pre-R4 this fired a real PAINT_START: the cell toggled back ACTIVE
+    // and the locked polarity flipped to "activate".
+    fireEvent.pointerDown(cells[0]!, { ...at(0, 0), pointerId: 2, isPrimary: false, pointerType: 'touch' });
+    expect(cells[0]).toHaveStyle({ backgroundColor: '#ECEEEA' }); // no flip
+    // The thumb lifts. Pre-R4 the end handlers received no event at all,
+    // so ANY release anywhere ended the index's stroke right here.
+    fireEvent.pointerUp(document, { ...at(0, 0), pointerId: 2, isPrimary: false, pointerType: 'touch' });
+    // The index keeps painting: the stroke survived the intruder.
+    fireEvent.pointerMove(document, { ...at(0, 1), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    expect(cells[1]).toHaveStyle({ backgroundColor: '#ECEEEA' });
+    // The OWNER's release does end it: later moves paint nothing.
+    fireEvent.pointerUp(document, { ...at(0, 1), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    fireEvent.pointerMove(document, { ...at(0, 2), pointerId: 1, isPrimary: true, pointerType: 'touch' });
+    expect(cells[2]).toHaveStyle({ backgroundColor: '#F1F7EE' });
+  });
+
+  it('the grid root clamps touch-action in a paint mode and not in Selection (FIX B)', async () => {
+    // Deliberately the ONE desktop-breakpoint render left here (R4): this
+    // pins the touch-action CSS contract on the grid root, which does not
+    // vary with the breakpoint — no coordinates involved — and the rail
+    // keeps the shape-edit switch directly reachable. Desktop COORDINATE
+    // coverage lives in the SMA-193 DnD suite (61px track throughout).
+    const grid = await renderPaintable();
+    // Selection mode: no clamp — a finger scrolls the grid.
+    expect(grid).not.toHaveStyle({ touchAction: 'none' });
+    // A paint mode: the clamp is on — the finger paints instead.
+    fireEvent.click(screen.getByText('Edit shape'));
+    expect(grid).toHaveStyle({ touchAction: 'none' });
+  });
+
+  it('selecting a placement opens the panel sheet and closes the catalogue sheet (FIX C)', async () => {
+    mockMatchMedia(true);
+    const placedCell = await renderWithPlacement();
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    );
+    await screen.findByRole('dialog', { name: 'Plants & infrastructure' });
+
+    // A tap on the placed cell selects it: the catalogue sheet yields the
+    // bottom to the panel sheet.
+    fireEvent.click(placedCell);
+    const panelSheet = await screen.findByRole('dialog', {
+      name: 'Selected placement',
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Plants & infrastructure' })
+      ).toBeNull()
+    );
+    // The panel content lives inside the sheet (no lane below lg). The
+    // fixture has no common name, so display name AND scientific line both
+    // render the scientific string — hence getAllByText.
+    expect(
+      within(panelSheet).getAllByText('Basilicum fixture').length
+    ).toBeGreaterThan(0);
+
+    // Clearing the selection closes it — the title row's X.
+    await user.click(
+      within(panelSheet).getByRole('button', {
+        name: 'Close the placement panel',
+      })
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('opening the catalogue sheet clears the selection and closes the panel sheet (FIX C)', async () => {
+    mockMatchMedia(true);
+    const placedCell = await renderWithPlacement();
+    const trigger = screen.getByRole('button', {
+      name: 'Plants & infrastructure',
+    });
+
+    fireEvent.click(placedCell);
+    await screen.findByRole('dialog', { name: 'Selected placement' });
+
+    fireEvent.click(trigger);
+    await screen.findByRole('dialog', { name: 'Plants & infrastructure' });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Selected placement' })
+      ).toBeNull()
+    );
+  });
+
+  it('Escape clears the selection and the panel sheet closes with it (FIX C)', async () => {
+    mockMatchMedia(true);
+    const placedCell = await renderWithPlacement();
+
+    fireEvent.click(placedCell);
+    const panelSheet = await screen.findByRole('dialog', {
+      name: 'Selected placement',
+    });
+    // MUI's Modal consumes the press and calls onClose, which carries the
+    // full Escape grammar itself (R3) — here, in Selection mode, that is
+    // just clearing the selection.
+    fireEvent.keyDown(panelSheet, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('Escape on the sheet ALSO leaves Place mode, like the desktop key (R3, Extension fa53c9b5)', async () => {
+    mockMatchMedia(true);
+    const placedCell = await renderWithPlacement();
+
+    // Armless Place mode (move-only entry, lot 3 R2 ruling) — the case the
+    // finding names: placeMode active, placePlantId null.
+    fireEvent.click(screen.getByRole('button', { name: 'Place' }));
+    expect(screen.getByRole('button', { name: 'Place' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    // In Place mode a tap on the placed cell SELECTS it (no armed plant) —
+    // the panel sheet opens.
+    fireEvent.click(placedCell);
+    const panelSheet = await screen.findByRole('dialog', {
+      name: 'Selected placement',
+    });
+
+    // MUI consumes Escape before the window handler ever runs — the sheet's
+    // onClose must run the SAME grammar: close AND exit to Selection. The
+    // pre-R3 sheet only cleared the selection, so desktop and mobile
+    // diverged on half the gesture.
+    fireEvent.keyDown(panelSheet, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Place' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+    expect(screen.getByRole('button', { name: 'Selection' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  it('the catalogue sheet remembers its tab across close and reopen (FIX D, SMA-345)', async () => {
+    mockMatchMedia(true);
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+    await screen.findByRole('grid');
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    );
+    let dialog = await screen.findByRole('dialog', {
+      name: 'Plants & infrastructure',
+    });
+    await user.click(within(dialog).getByRole('tab', { name: 'Soils' }));
+    expect(within(dialog).getByRole('tab', { name: 'Soils' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+
+    // Close and reopen: the Drawer unmounts the sidebar, but the tab is
+    // page state now — the nominal gesture (arm, place, reopen, arm again)
+    // lands back on SOILS, not PLANTS.
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await user.click(
+      screen.getByRole('button', { name: 'Plants & infrastructure' })
+    );
+    dialog = await screen.findByRole('dialog', {
+      name: 'Plants & infrastructure',
+    });
+    expect(within(dialog).getByRole('tab', { name: 'Soils' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    // And the SOILS panel is the one on screen.
+    expect(
+      within(dialog).getByRole('button', { name: 'Potting mix' })
+    ).toBeInTheDocument();
+  });
+});
+
+// ── SMA-18 lot 2 R2 — the in-grid undo/zoom row on phones ─────────────────
+// Alexandre's phone pass: reaching zoom meant scrolling up to the toolbar,
+// away from the very thing being zoomed. Below sm the undo/zoom cluster
+// mounts INSIDE the grid card beside the compass (dictated order: undo ·
+// percentage · zoom out · zoom in · compass), anchored to the CARD like the
+// compass so it never scrolls away with the grid content. The toolbar's own
+// cluster is UNMOUNTED below sm — one control, one accessible name, at any
+// viewport. Both clusters are ONE shared component (UndoZoomCluster), so
+// handlers, bounds and names cannot drift.
+describe('SMA-18 lot 2 R2 — in-grid undo/zoom row (mobile)', () => {
+  afterEach(() => {
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  async function renderMobile() {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+    return await screen.findByRole('grid');
+  }
+
+  it('below sm the row renders in the dictated order and each name resolves to exactly ONE control', async () => {
+    mockMatchMedia(true);
+    await renderMobile();
+
+    const row = screen.getByTestId('grid-zoom-row');
+    // Dictated order, left to right: undo · percentage · zoom out · zoom in
+    // (the compass sits to the row's right, §8 corner — separate mount).
+    expect(
+      Array.from(row.children).map(
+        (el) => el.getAttribute('aria-label') ?? el.textContent
+      )
+    ).toEqual(['Undo last action', '100%', 'Zoom out', 'Zoom in']);
+
+    // The accessible-name resolution: getByRole THROWS on duplicates, so
+    // these three lines pin "one control per name" — a future change that
+    // remounts the toolbar cluster below sm turns them red.
+    expect(
+      screen.getByRole('button', { name: 'Undo last action' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zoom out' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zoom in' })).toBeInTheDocument();
+  });
+
+  it('the in-grid magnifiers drive the shared zoom state and disable at the real bounds (50% / 200%)', async () => {
+    mockMatchMedia(true);
+    await renderMobile();
+    const row = screen.getByTestId('grid-zoom-row');
+    const zoomOut = within(row).getByRole('button', { name: 'Zoom out' });
+    const zoomIn = within(row).getByRole('button', { name: 'Zoom in' });
+
+    // ZOOM_MIN = 0.5 (plannerReducer): 100 → 80 → 60 → 50, then disabled.
+    fireEvent.click(zoomOut);
+    fireEvent.click(zoomOut);
+    fireEvent.click(zoomOut);
+    expect(within(row).getByText('50%')).toBeInTheDocument();
+    expect(zoomOut).toBeDisabled();
+    expect(zoomIn).toBeEnabled();
+
+    // ZOOM_MAX = 2 (plannerReducer — the constants are the single source;
+    // the dictation's "150" does not exist in the code): 50 → … → 200.
+    for (let i = 0; i < 8; i++) fireEvent.click(zoomIn);
+    expect(within(row).getByText('200%')).toBeInTheDocument();
+    expect(zoomIn).toBeDisabled();
+    expect(zoomOut).toBeEnabled();
+  });
+
+  it('the two clusters read the SAME zoom state: set from the row, read from the toolbar after widening', async () => {
+    const mq = mockMatchMedia(true);
+    await renderMobile();
+
+    fireEvent.click(
+      within(screen.getByTestId('grid-zoom-row')).getByRole('button', {
+        name: 'Zoom in',
+      })
+    );
+    expect(
+      within(screen.getByTestId('grid-zoom-row')).getByText('120%')
+    ).toBeInTheDocument();
+
+    // Widen past sm: the in-grid row unmounts, the toolbar cluster mounts —
+    // and shows the SAME 120%, because there is only one zoom state.
+    act(() => mq.set(false));
+    await waitFor(() =>
+      expect(screen.queryByTestId('grid-zoom-row')).toBeNull()
+    );
+    expect(screen.getByText('120%')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Undo last action' })
+    ).toBeInTheDocument();
+  });
+
+  it('undo works from the in-grid row (override → undone, disabled state tracks history)', async () => {
+    mockMatchMedia(true);
+    const grid = await renderMobile();
+    const row = screen.getByTestId('grid-zoom-row');
+    const undo = within(row).getByRole('button', { name: 'Undo last action' });
+    expect(undo).toBeDisabled(); // no content edit yet
+
+    // Same content edit as the desktop undo test: a manual cell override.
+    fireEvent.click(screen.getByRole('switch', { name: 'Exposure' }));
+    const cells = within(grid).getAllByRole('gridcell');
+    fireEvent.click(cells[1]!);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Shade' }));
+    expect(cells[1]).toHaveAttribute('data-exposure', 'shade');
+    expect(undo).toBeEnabled();
+
+    fireEvent.click(undo);
+    expect(cells[1]).toHaveAttribute('data-exposure', 'full');
+    expect(undo).toBeDisabled(); // history empty again
+  });
+
+  it('above sm no in-grid row renders and the toolbar keeps its single cluster', async () => {
+    // No matchMedia mock: desktop, the suite default.
+    await renderMobile();
+    expect(screen.queryByTestId('grid-zoom-row')).toBeNull();
+    // Singular getByRole = the toolbar's cluster is the only name holder.
+    expect(
+      screen.getByRole('button', { name: 'Undo last action' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zoom in' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zoom out' })).toBeInTheDocument();
+  });
+});

@@ -10,6 +10,7 @@ import { GridControls } from './GridControls';
 
 function renderControls(
   overrides: {
+    isMobile?: boolean;
     canUndo?: boolean;
     exposureVisible?: boolean;
     exposureMoment?: Moment;
@@ -27,6 +28,10 @@ function renderControls(
   return render(
     <GridControls
       hasGrid
+      // R3: the breakpoint decision is the PAGE's (threaded prop) — the
+      // default exercises the desktop toolbar, where the undo/zoom cluster
+      // mounts here rather than in the grid card; R4 adds the mobile case.
+      isMobile={overrides.isMobile ?? false}
       shapeEditMode={false}
       placeMode={overrides.placeMode}
       onSelectionMode={overrides.onSelectionMode}
@@ -66,6 +71,19 @@ describe('GridControls undo (SMA-17 5.3-D R2)', () => {
     expect(undo).toBeEnabled();
     fireEvent.click(undo);
     expect(onUndo).toHaveBeenCalledTimes(1);
+  });
+
+  // R4 (Extension 141b7798): the component-level leg of the invariant the
+  // page tests already pin (the R2 one-control-per-name and
+  // breakpoint-crossing tests) — below sm the toolbar's undo/zoom cluster
+  // must not mount here at all (its home is the in-grid row).
+  it('does not mount the toolbar undo/zoom cluster on mobile', () => {
+    renderControls({ isMobile: true });
+    expect(
+      screen.queryByRole('button', { name: 'Undo last action' })
+    ).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Zoom in' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Zoom out' })).toBeNull();
   });
 });
 
