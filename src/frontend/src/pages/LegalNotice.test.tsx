@@ -32,7 +32,7 @@ describe('LegalNotice (SMA-35)', () => {
     expect(
       screen.getByText(/2 rue Kellermann - 59100 Roubaix - France/)
     ).toBeInTheDocument();
-    expect(screen.getByText(/July 10, 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/August 1, 2026/)).toBeInTheDocument();
     expect(screen.getByText(/the French version prevails/)).toBeInTheDocument();
     // SMA-157 regression: no unresolved [À REMPLIR/CONFIRMER/ACTIVER] marker.
     expect(container.textContent).not.toContain('[À');
@@ -52,7 +52,7 @@ describe('LegalNotice (SMA-35)', () => {
       screen.getAllByText('Alexandre Cerveau Audebeau').length
     ).toBeGreaterThan(0);
     expect(screen.getByText('OVH SAS')).toBeInTheDocument();
-    expect(screen.getByText(/10 juillet 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/1er août 2026/)).toBeInTheDocument();
     expect(
       screen.queryByText(/the French version prevails/)
     ).not.toBeInTheDocument();

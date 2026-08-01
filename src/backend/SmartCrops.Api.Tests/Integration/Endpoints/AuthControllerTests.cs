@@ -1,9 +1,14 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SmartCrops.Api.Controllers;
 using SmartCrops.Core.Entities;
+using SmartCrops.Infrastructure.Data;
 
 namespace SmartCrops.Api.Tests.Integration.Endpoints;
 
@@ -456,5 +461,336 @@ public class AuthControllerTests : IntegrationTestBase
         // The exact scenario that motivated R1-bis: reopening an already-consumed
         // link must be told apart from a live one BEFORE any form renders.
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // ── SMA-341: account deletion (art. 17) + data export (art. 20) ──────────
+
+    private void AuthAs(string userId) =>
+        Client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
+
+    /// <summary>
+    /// R2: explicit credential clear for tests whose NAME promises anonymity.
+    /// Today each test instance gets a fresh Client (InitializeAsync), so no
+    /// header can leak between tests — but AuthAs writes into the shared
+    /// default headers, and a test that claims to send an anonymous request
+    /// must not depend on that lifecycle detail staying true. The clear makes
+    /// anonymity a property of the test, not of the fixture's plumbing.
+    /// </summary>
+    private void AuthAsAnonymous() =>
+        Client.DefaultRequestHeaders.Authorization = null;
+
+    private async Task<HttpResponseMessage> DeleteAccountAsync(string confirmation)
+    {
+        // DELETE with a JSON body — HttpClient has no DeleteAsJsonAsync.
+        var request = new HttpRequestMessage(HttpMethod.Delete, "/api/auth/account")
+        {
+            Content = JsonContent.Create(new { confirmation }),
+        };
+        return await Client.SendAsync(request);
+    }
+
+    private async Task<(string Email, string UserId)> RegisterUserAsync()
+    {
+        var email = NewEmail();
+        Assert.Equal(HttpStatusCode.Created, (await RegisterAsync(email)).StatusCode);
+        var user = await FindUserAsync(email);
+        Assert.NotNull(user);
+        return (email, user!.Id);
+    }
+
+    private async Task<Guid> SeedGardenWithPlacementAsync(string userId, string name)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var garden = new Garden { Id = Guid.NewGuid(), Name = name, UserId = userId };
+        var plant = new Plant
+        {
+            Id = Guid.NewGuid(),
+            ScientificName = $"Hedera helix {Guid.NewGuid():N}",
+            PlantTypeId = 1,
+        };
+        db.Gardens.Add(garden);
+        db.Plants.Add(plant);
+        db.GardenPlacements.Add(new GardenPlacement
+        {
+            Id = Guid.NewGuid(),
+            GardenId = garden.Id,
+            PlantId = plant.Id,
+            StartRow = 0,
+            StartCol = 0,
+            SpanRows = 1,
+            SpanCols = 1,
+            Notes = "sunny corner",
+            PlacedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        return garden.Id;
+    }
+
+    [Fact]
+    public async Task DeleteAccount_UserWithGardens_RemovesUserGardensAndPlacements()
+    {
+        var (email, userId) = await RegisterUserAsync();
+        var gardenId = await SeedGardenWithPlacementAsync(userId, "Balcony");
+        Fixture.EmailStub.Reset();
+        AuthAs(userId);
+
+        var response = await DeleteAccountAsync(email);
+
+        // THE RESTRICT case: Gardens → AspNetUsers blocks a bare DeleteAsync, so
+        // a user who owns a garden must still be deletable end-to-end — this is
+        // the test that would have caught the whole problem.
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Null(await FindUserAsync(email));
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        Assert.Equal(0, await db.Gardens.CountAsync(g => g.UserId == userId));
+        // Scoped to THIS test's garden (R2): a service-wide count against the
+        // shared fixture DB collides with neighbours that deliberately keep
+        // placements alive ("Kept", "Mine"/"NotMine"). The scoped count is also
+        // the invariant actually under test: the cascade behind Gardens fired.
+        Assert.Equal(0, await db.GardenPlacements.CountAsync(p => p.GardenId == gardenId));
+        var sent = Assert.Single(Fixture.EmailStub.Sent);
+        Assert.Equal(email, sent.To);
+        Assert.Contains("account has been deleted", sent.Subject);
+    }
+
+    [Fact]
+    public async Task DeleteAccount_ConfirmationCaseInsensitiveAndTrimmed_Succeeds()
+    {
+        var (email, userId) = await RegisterUserAsync();
+        AuthAs(userId);
+
+        // Product ruling: the brake is the ACT of typing — casing and stray
+        // whitespace must not fail a genuine confirmation.
+        var response = await DeleteAccountAsync($"  {email.ToUpperInvariant()}  ");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Null(await FindUserAsync(email));
+    }
+
+    [Fact]
+    public async Task DeleteAccount_WrongConfirmation_Returns400AndDeletesNothing()
+    {
+        var (email, userId) = await RegisterUserAsync();
+        var gardenId = await SeedGardenWithPlacementAsync(userId, "Kept");
+        AuthAs(userId);
+
+        var response = await DeleteAccountAsync("someone-else@example.com");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(await FindUserAsync(email));
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        Assert.NotNull(await db.Gardens.FindAsync(gardenId));
+    }
+
+    [Fact]
+    public async Task DeleteAccount_RelayThrows_StillDeletesTheAccount()
+    {
+        var (email, userId) = await RegisterUserAsync();
+        await SeedGardenWithPlacementAsync(userId, "Doomed");
+        Fixture.EmailStub.Reset();
+        Fixture.EmailStub.ThrowOnSend = true;
+        AuthAs(userId);
+
+        var response = await DeleteAccountAsync(email);
+
+        // The account is already gone when the mail goes out — a delivery
+        // failure must not fail the deletion.
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Null(await FindUserAsync(email));
+        Assert.Empty(Fixture.EmailStub.Sent);
+    }
+
+    [Fact]
+    public async Task DeleteAccount_Anonymous_Returns401()
+    {
+        // The name promises anonymity — make it a property of the test (R2).
+        AuthAsAnonymous();
+
+        var response = await DeleteAccountAsync("whoever@example.com");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteAccount_AnonymizesPlantSuggestionsInsteadOfOrphaningThem()
+    {
+        var (email, userId) = await RegisterUserAsync();
+        Guid suggestionId;
+        Guid reviewedSuggestionId;
+        DateTime seededUpdatedAt;
+        DateTime seededReviewedUpdatedAt;
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var plant = new Plant
+            {
+                Id = Guid.NewGuid(),
+                ScientificName = $"Salvia officinalis {Guid.NewGuid():N}",
+                PlantTypeId = 1,
+            };
+            var suggestion = new PlantSuggestion
+            {
+                Id = Guid.NewGuid(),
+                PlantId = plant.Id,
+                UserId = userId,
+                FieldName = "CommonName",
+                SuggestedValue = "Sage",
+            };
+            // Second row exercising the SYMMETRIC branch (R2): the user only
+            // REVIEWED this one. ReviewedBy carries no foreign key, so without
+            // this assertion an admin deleting their own account would leave
+            // their identity stamped on every moderation record they touched —
+            // and dropping either ExecuteUpdateAsync would stay green.
+            var reviewed = new PlantSuggestion
+            {
+                Id = Guid.NewGuid(),
+                PlantId = plant.Id,
+                UserId = null,
+                ReviewedBy = userId,
+                FieldName = "CommonName",
+                SuggestedValue = "Garden sage",
+            };
+            db.Plants.Add(plant);
+            db.PlantSuggestions.Add(suggestion);
+            db.PlantSuggestions.Add(reviewed);
+            await db.SaveChangesAsync();
+            suggestionId = suggestion.Id;
+            reviewedSuggestionId = reviewed.Id;
+            // DB truth, not the tracked instance: the stored pre-deletion stamp
+            // is the baseline the anonymization must move (R3). Both rows get a
+            // baseline (R4): asserting only the authored one would let a
+            // regression in the ReviewedBy chain's stamping pass unnoticed.
+            seededUpdatedAt = await db.PlantSuggestions.AsNoTracking()
+                .Where(s => s.Id == suggestion.Id)
+                .Select(s => s.UpdatedAt)
+                .SingleAsync();
+            seededReviewedUpdatedAt = await db.PlantSuggestions.AsNoTracking()
+                .Where(s => s.Id == reviewed.Id)
+                .Select(s => s.UpdatedAt)
+                .SingleAsync();
+        }
+        AuthAs(userId);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await DeleteAccountAsync(email)).StatusCode);
+
+        // PlantSuggestions.UserId / ReviewedBy are free strings with NO foreign
+        // key: the deletion must sever the link to the person (anonymize) while
+        // the botanical contribution itself survives.
+        using var check = CreateScope();
+        var checkDb = check.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var kept = await checkDb.PlantSuggestions.FindAsync(suggestionId);
+        Assert.NotNull(kept);
+        Assert.Null(kept!.UserId);
+        // ExecuteUpdateAsync bypasses UpdateTimestampInterceptor (set-based
+        // SQL, no tracked entities), so the endpoint stamps UpdatedAt itself
+        // (R3) — a stale stamp would make the audit trail claim the row was
+        // last touched before its own anonymization.
+        Assert.NotEqual(seededUpdatedAt, kept.UpdatedAt);
+        var keptReviewed = await checkDb.PlantSuggestions.FindAsync(reviewedSuggestionId);
+        Assert.NotNull(keptReviewed);
+        Assert.Null(keptReviewed!.ReviewedBy);
+        Assert.NotEqual(seededReviewedUpdatedAt, keptReviewed.UpdatedAt);
+        // CONTRACTUAL, not incidental (R4): the endpoint takes ONE anonymizedAt
+        // for both ExecuteUpdate chains on purpose — one logical anonymization
+        // event, one instant. This equality pins that; loosen it only if the
+        // two chains are ever deliberately decoupled.
+        Assert.Equal(kept.UpdatedAt, keptReviewed.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task ExportAccount_Anonymous_Returns401()
+    {
+        // The name promises anonymity — make it a property of the test (R2).
+        AuthAsAnonymous();
+
+        var response = await Client.GetAsync("/api/auth/account/export");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ExportAccount_ContainsOwnGardensAndNotAnotherUsers()
+    {
+        var (_, ownerId) = await RegisterUserAsync();
+        var (_, otherId) = await RegisterUserAsync();
+        await SeedGardenWithPlacementAsync(ownerId, "Mine");
+        await SeedGardenWithPlacementAsync(otherId, "NotMine");
+        // Arts. 17/20 scope parity (R2): one suggestion the owner AUTHORED
+        // (exported) and one they merely REVIEWED as an admin (excluded — a
+        // moderation record about someone else's contribution).
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var plant = new Plant
+            {
+                Id = Guid.NewGuid(),
+                ScientificName = $"Thymus vulgaris {Guid.NewGuid():N}",
+                PlantTypeId = 1,
+            };
+            db.Plants.Add(plant);
+            db.PlantSuggestions.Add(new PlantSuggestion
+            {
+                Id = Guid.NewGuid(),
+                PlantId = plant.Id,
+                UserId = ownerId,
+                FieldName = "CommonName",
+                // Localized (R3): Language identifies the locale when FieldName
+                // targets translated data — the export must preserve it.
+                Language = "fr",
+                SuggestedValue = "Authored by owner",
+            });
+            db.PlantSuggestions.Add(new PlantSuggestion
+            {
+                Id = Guid.NewGuid(),
+                PlantId = plant.Id,
+                UserId = otherId,
+                ReviewedBy = ownerId,
+                FieldName = "CommonName",
+                SuggestedValue = "Merely reviewed by owner",
+            });
+            await db.SaveChangesAsync();
+        }
+        AuthAs(ownerId);
+
+        var response = await Client.GetAsync("/api/auth/account/export");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        // File-download contract (the codebase's first): attachment disposition
+        // with a dated filename, so a browser saves instead of rendering.
+        Assert.Equal("attachment", response.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Matches(
+            @"smartcrops-export-\d{4}-\d{2}-\d{2}\.json",
+            response.Content.Headers.ContentDisposition?.FileName ?? "");
+        // Defence in depth (R3): a personal-data document must not be kept by
+        // the browser's disk cache or any intermediary.
+        Assert.True(response.Headers.CacheControl?.NoStore);
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = doc.RootElement;
+        Assert.Equal(
+            AccountExportResponse.CurrentSchemaVersion,
+            root.GetProperty("schemaVersion").GetInt32());
+        Assert.True(root.TryGetProperty("exportedAt", out _));
+        var gardenNames = root.GetProperty("gardens").EnumerateArray()
+            .Select(g => g.GetProperty("name").GetString())
+            .ToList();
+        Assert.Contains("Mine", gardenNames);
+        Assert.DoesNotContain("NotMine", gardenNames);
+        // Placements ride along with their notes — they are the user's words.
+        var placements = root.GetProperty("gardens")[0].GetProperty("placements");
+        Assert.Equal("sunny corner", placements[0].GetProperty("notes").GetString());
+        // Authored suggestions are the caller's data; reviewed-only ones are not.
+        var suggestionValues = root.GetProperty("suggestions").EnumerateArray()
+            .Select(s => s.GetProperty("suggestedValue").GetString())
+            .ToList();
+        Assert.Contains("Authored by owner", suggestionValues);
+        Assert.DoesNotContain("Merely reviewed by owner", suggestionValues);
+        // The locale rides along (R3): without it, two otherwise identical
+        // suggestions for different locales are the same row in the file.
+        Assert.Equal("fr", root.GetProperty("suggestions")[0].GetProperty("language").GetString());
     }
 }

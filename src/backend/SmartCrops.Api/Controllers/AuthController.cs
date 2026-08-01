@@ -3,12 +3,14 @@ using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -16,6 +18,8 @@ using SmartCrops.Api.Configuration;
 using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
+using SmartCrops.Infrastructure.Data;
+using SmartCrops.Infrastructure.Email;
 
 namespace SmartCrops.Api.Controllers;
 
@@ -45,6 +49,53 @@ public record ForgotPasswordRequest([Required, EmailAddress] string Email);
 public record ResetPasswordRequest([Required] string UserId, [Required] string Token, [Required, MinLength(6)] string NewPassword);
 /// <summary>Payload of <c>POST /api/auth/reset-password/validate</c> (SMA-323 R1-bis).</summary>
 public record ValidateResetTokenRequest([Required] string UserId, [Required] string Token);
+/// <summary>Payload of <c>DELETE /api/auth/account</c> (SMA-341). The confirmation is
+/// the account's OWN email address, typed by the user — uniform across account types
+/// by product ruling (Google-only accounts have no password to re-prove).</summary>
+public record DeleteAccountRequest([Required] string Confirmation);
+
+// ── GDPR art. 20 export shapes (SMA-341) ────────────────────────────────────
+// The export carries the user's PERSONAL data only: profile fields, gardens and
+// placements (with notes), and the plant suggestions they AUTHORED. Catalogue
+// data (plant names, botany) is public reference data, not theirs — placements
+// and suggestions carry the PlantId reference alone. CellsJson /
+// LightScheduleJson are exported as the raw stored strings: faithful to what
+// the service holds, and immune to legacy payloads a re-parse could choke on.
+public record AccountExportProfile(string Email, string? DisplayName, string? FirstName, string? LastName, string? City);
+/// <summary>One plant suggestion the user AUTHORED (R2, arts. 17/20 scope
+/// parity): the deletion path anonymizes these rows as the person's data, so
+/// the portability export must carry them too — the two articles cover one
+/// data set. <see cref="Language"/> (R3) identifies the locale when
+/// <see cref="FieldName"/> targets translated data — without it, two otherwise
+/// identical suggestions for different locales are the same row in the file.</summary>
+public record AccountExportSuggestion(Guid PlantId, string FieldName, string? Language, string SuggestedValue, string? Reason, string Status, DateTime CreatedAt);
+public record AccountExportPlacement(Guid PlantId, int StartRow, int StartCol, int SpanRows, int SpanCols, string? Notes, DateTime PlacedAt);
+public record AccountExportGarden(
+    Guid Id,
+    string Name,
+    string? Description,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    int? LayoutWidth,
+    int? LayoutHeight,
+    string? CellSize,
+    string? CellsJson,
+    string? Orientation,
+    string? GardenType,
+    string? LightScheduleJson,
+    string? Hemisphere,
+    string? LatitudeBand,
+    List<AccountExportPlacement> Placements);
+/// <summary>Top-level export document: <see cref="ExportedAt"/> dates it,
+/// <see cref="SchemaVersion"/> versions it — an undatable, unversionable
+/// portability export ages badly.</summary>
+public record AccountExportResponse(DateTime ExportedAt, int SchemaVersion, AccountExportProfile Profile, List<AccountExportGarden> Gardens, List<AccountExportSuggestion> Suggestions)
+{
+    /// <summary>The version external consumers pin against (R2): named HERE,
+    /// beside the contract it versions, rather than as a bare literal in the
+    /// endpoint. Bump on any breaking shape change.</summary>
+    public const int CurrentSchemaVersion = 1;
+}
 
 [ApiController]
 [Route("api/[controller]")]
@@ -57,11 +108,18 @@ public class AuthController(
     IEmailService emailService,
     ILogger<AuthController> logger,
     IOptions<FrontendOptions> frontendOptions,
+    IOptions<SmtpOptions> smtpOptions,
+    SmartCropsDbContext dbContext,
     IWebHostEnvironment env) : ControllerBase
 {
     private static readonly PasswordHasher<ApplicationUser> _dummyHasher = new();
     private static readonly string _dummyHash = _dummyHasher.HashPassword(new ApplicationUser(), "DummyPassword123!");
     private static readonly ConcurrentDictionary<string, (string Token, DateTime Expiry, string Binding)> _authCodes = new();
+
+    // Indented on purpose: the export is a file the USER opens, not a wire
+    // payload — legibility beats the few saved bytes.
+    private static readonly JsonSerializerOptions ExportJson =
+        new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken ct)
@@ -550,6 +608,243 @@ public class AuthController(
         await userManager.UpdateSecurityStampAsync(user);
         Response.Cookies.Delete("smartcrops_token", new CookieOptions { Path = "/" });
         return NoContent();
+    }
+
+    /// <summary>
+    /// SMA-341 (GDPR art. 17): self-service account deletion, mirroring
+    /// ChangePassword's shape. Confirmation is the account's own email address,
+    /// typed — uniform across account types, unlike a password re-proof (Google-only
+    /// accounts have none). Gardens are deleted BEFORE the user because their FK to
+    /// AspNetUsers is DeleteBehavior.Restrict: the obvious
+    /// <c>userManager.DeleteAsync</c> one-liner fails outright for any user who owns
+    /// a garden (placements then cascade behind gardens, and the four Identity
+    /// satellites — claims, logins, roles, tokens — cascade behind the user). The
+    /// whole sequence runs in ONE transaction: a half-deleted account (gardens gone,
+    /// user still there) is worse than a failed deletion.
+    /// </summary>
+    [Authorize]
+    [HttpDelete("account")]
+    [EnableRateLimiting("account")]
+    public async Task<IActionResult> DeleteAccount([FromBody] DeleteAccountRequest request, CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+        var user = await userManager.FindByIdAsync(userId);
+        if (user == null) return NotFound();
+
+        var email = user.Email;
+
+        // Case-insensitive + trimmed by product ruling: the brake is the ACT of
+        // typing, not casing pedantry. The error body reveals nothing the caller
+        // does not already know — they are authenticated as this very account.
+        if (string.IsNullOrEmpty(email) ||
+            !string.Equals(request.Confirmation.Trim(), email, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { error = "The confirmation does not match your account email address." });
+        }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(ct);
+
+        // Gardens first (Restrict — see the method summary); GardenPlacements
+        // cascade in-database behind them.
+        await dbContext.Gardens.Where(g => g.UserId == userId).ExecuteDeleteAsync(ct);
+
+        // PlantSuggestions.UserId / ReviewedBy are free strings with NO foreign
+        // key (pre-flight), so a user delete would leave them dangling. Decision:
+        // ANONYMIZE, not delete — a suggestion's text is a botanical fact
+        // correction with community value and no personal content; erasure
+        // requires severing the link to the person, not destroying the
+        // contribution. (0 rows carry a UserId today; this is structural.)
+        // UpdatedAt is stamped EXPLICITLY (R3): ExecuteUpdateAsync is set-based
+        // SQL with no tracked entities, so UpdateTimestampInterceptor — which
+        // only sees tracked SaveChanges — never fires here, and the audit
+        // trail would silently claim the rows were last touched before their
+        // own anonymization.
+        var anonymizedAt = DateTime.UtcNow;
+        await dbContext.PlantSuggestions
+            .Where(s => s.UserId == userId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.UserId, (string?)null)
+                .SetProperty(x => x.UpdatedAt, anonymizedAt), ct);
+        await dbContext.PlantSuggestions
+            .Where(s => s.ReviewedBy == userId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.ReviewedBy, (string?)null)
+                .SetProperty(x => x.UpdatedAt, anonymizedAt), ct);
+
+        // Same scoped DbContext as the store behind UserManager, so this delete
+        // joins the transaction above. The AspNetUserLogins row of a Google-linked
+        // account cascades away with the user — but the OAuth grant living in the
+        // user's GOOGLE account is NOT revoked here: no revocation API is called
+        // anywhere in this codebase; the user retires it from their Google
+        // security settings.
+        var result = await userManager.DeleteAsync(user);
+        if (!result.Succeeded)
+        {
+            await transaction.RollbackAsync(ct);
+            return BadRequest(result.Errors);
+        }
+
+        await transaction.CommitAsync(ct);
+
+        // Cookie delete mirrors ChangePassword. No UpdateSecurityStampAsync here:
+        // there is no row left to stamp — any still-issued JWT dies at the
+        // per-request security-stamp check the moment the user lookup misses.
+        Response.Cookies.Delete("smartcrops_token", new CookieOptions { Path = "/" });
+
+        // CancellationToken.None — a DELIBERATE break of symmetry with
+        // SendConfirmationEmailAsync (which forwards the request token). Past
+        // the commit above the deletion is irreversible, and this notice is the
+        // only one the user will ever get: it is part of the art. 17
+        // deliverable, not a courtesy. The request token would tie the send to
+        // the CLIENT's connection — and the SPA redirects away on success,
+        // making a disconnect ordinary. At registration nothing has committed
+        // that the user cannot verify by simply logging in; here there is no
+        // account left to check. The helper's own 5 s cap remains the only
+        // bound, so the request cannot hang on a dead relay either.
+        await SendAccountDeletedEmailAsync(email, CancellationToken.None);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// SMA-341: mails the deletion confirmation. Mirrors
+    /// <see cref="SendConfirmationEmailAsync"/>: 5 s linked-CTS cap, failure logged
+    /// with the masked address and swallowed. A delivery failure must NOT fail the
+    /// deletion — the account is already gone and there is nothing to roll back to.
+    /// </summary>
+    private async Task SendAccountDeletedEmailAsync(string email, CancellationToken ct)
+    {
+        try
+        {
+            // Plain text only — IEmailService carries no HTML body and no templating,
+            // and the backend has no localization, so the copy is English (SMA-31).
+            var textBody =
+                "Hello,\n\n" +
+                "Your SmartCrops account has been deleted, along with your gardens, their layouts and your profile information. This cannot be undone.\n\n" +
+                $"If you did not perform this action, please contact {smtpOptions.Value.ContactRecipient} immediately.\n\n" +
+                "Thank you for having gardened with us.\n";
+
+            using var sendCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            sendCts.CancelAfter(TimeSpan.FromSeconds(5));
+
+            await emailService.SendAsync(
+                email,
+                "Your SmartCrops account has been deleted",
+                textBody,
+                ct: sendCts.Token);
+        }
+        catch (Exception ex)
+        {
+            // Deliberately catches everything, cancellation included: the deletion is
+            // already committed, so there is nothing the caller could do with the error.
+            logger.LogError(ex, "Account-deletion confirmation email delivery failed for '{Email}'", MaskEmail(email));
+        }
+    }
+
+    /// <summary>
+    /// SMA-341 (GDPR art. 20): machine-readable export of the caller's own data —
+    /// profile, gardens with their full layout, placements with their notes, and
+    /// the plant suggestions they authored (with their locale, R3). Served
+    /// as a FILE download (this codebase's first): <c>File()</c> with a
+    /// <c>fileDownloadName</c> emits <c>Content-Disposition: attachment</c>, so the
+    /// browser saves a dated <c>.json</c> instead of rendering a wall of JSON — the
+    /// point of portability is a file the user can carry away.
+    /// </summary>
+    [Authorize]
+    [HttpGet("account/export")]
+    [EnableRateLimiting("account")]
+    public async Task<IActionResult> ExportAccountData(CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+        var user = await userManager.FindByIdAsync(userId);
+        if (user == null) return NotFound();
+
+        var gardens = await dbContext.Gardens
+            .Where(g => g.UserId == userId)
+            .Include(g => g.Placements)
+            .OrderBy(g => g.CreatedAt)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        // AUTHORED suggestions only (UserId == caller) — arts. 17/20 cover the
+        // same data set, and the deletion path already treats these rows as the
+        // person's (it anonymizes them). Suggestions the caller merely REVIEWED
+        // as an admin are deliberately EXCLUDED: those are moderation records
+        // about someone else's contribution, and exporting them would leak
+        // another person's data into this user's file.
+        var suggestions = await dbContext.PlantSuggestions
+            .Where(s => s.UserId == userId)
+            .OrderBy(s => s.CreatedAt)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        // ONE timestamp for both the document and the filename (R2): two
+        // DateTime.UtcNow reads can straddle UTC midnight and produce a file
+        // named for one day whose exportedAt says the day before — a
+        // self-contradicting compliance artifact a user may hold for years.
+        var exportedAt = DateTime.UtcNow;
+
+        var export = new AccountExportResponse(
+            exportedAt,
+            AccountExportResponse.CurrentSchemaVersion,
+            new AccountExportProfile(
+                user.Email ?? "",
+                user.DisplayName,
+                user.FirstName,
+                user.LastName,
+                user.City),
+            gardens.Select(g => new AccountExportGarden(
+                g.Id,
+                g.Name,
+                g.Description,
+                g.CreatedAt,
+                g.UpdatedAt,
+                g.LayoutWidth,
+                g.LayoutHeight,
+                g.CellSize,
+                g.CellsJson,
+                g.Orientation,
+                g.GardenType,
+                g.LightScheduleJson,
+                g.Hemisphere,
+                g.LatitudeBand,
+                g.Placements
+                    .OrderBy(p => p.PlacedAt)
+                    .Select(p => new AccountExportPlacement(
+                        p.PlantId,
+                        p.StartRow,
+                        p.StartCol,
+                        p.SpanRows,
+                        p.SpanCols,
+                        p.Notes,
+                        p.PlacedAt))
+                    .ToList()))
+                .ToList(),
+            suggestions.Select(s => new AccountExportSuggestion(
+                s.PlantId,
+                s.FieldName,
+                s.Language,
+                s.SuggestedValue,
+                s.Reason,
+                s.Status,
+                s.CreatedAt))
+                .ToList());
+
+        var fileName = $"smartcrops-export-{exportedAt:yyyy-MM-dd}.json";
+        // Defence in depth (R3): the document carries email, name, city,
+        // layouts, notes and suggestions — tell the browser's disk cache and
+        // any intermediary not to keep a copy.
+        Response.Headers.CacheControl = "no-store";
+        // Buffering ceiling, recorded on both review surfaces (R2): the whole
+        // document is materialized and serialized to a byte array before a
+        // single byte reaches the wire. Fine at today's shape (a handful of
+        // gardens, low-hundreds of placements); it becomes a memory-pressure
+        // concern if layouts grow substantially, since GDPR exports tend to
+        // arrive in bursts. The future direction is streaming —
+        // JsonSerializer.SerializeAsync against Response.Body with the
+        // Content-Disposition header set manually — deliberately NOT done now.
+        return File(JsonSerializer.SerializeToUtf8Bytes(export, ExportJson), "application/json", fileName);
     }
 
     private string? GetCurrentUserId() =>

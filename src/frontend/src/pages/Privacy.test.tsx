@@ -42,7 +42,7 @@ describe('Privacy (SMA-35)', () => {
     expect(screen.getByText('sc_cookie_notice_ack')).toBeInTheDocument();
     // Newsletter has no backend: its rows are gone from the page.
     expect(screen.queryByText(/Newsletter/)).not.toBeInTheDocument();
-    expect(screen.getByText(/July 10, 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/August 1, 2026/)).toBeInTheDocument();
     // SMA-157 regression: no unresolved [À REMPLIR/CONFIRMER/ACTIVER] marker.
     expect(container.textContent).not.toContain('[À');
     expect(container.textContent).not.toContain('[OPTION');
@@ -66,7 +66,7 @@ describe('Privacy (SMA-35)', () => {
     expect(screen.getByText('7 jours')).toBeInTheDocument();
     expect(screen.getByText('2 minutes')).toBeInTheDocument();
     expect(screen.getByText('sc_cookie_notice_ack')).toBeInTheDocument();
-    expect(screen.getByText(/10 juillet 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/1er août 2026/)).toBeInTheDocument();
     expect(container.textContent).not.toContain('[À');
     expect(container.textContent).not.toContain('[OPTION');
   });

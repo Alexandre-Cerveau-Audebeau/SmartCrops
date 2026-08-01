@@ -385,7 +385,25 @@
     "passwordError": "Impossible de changer le mot de passe.",
     "passwordMismatch": "Les mots de passe ne correspondent pas.",
     "loadError": "Impossible de charger le profil.",
-    "googleAccount": "Votre compte utilise la connexion Google. La gestion du mot de passe n'est pas disponible."
+    "googleAccount": "Votre compte utilise la connexion Google. La gestion du mot de passe n'est pas disponible.",
+    "dangerZone": "Zone de danger",
+    "exportTitle": "Exporter vos données",
+    "exportBody": "Téléchargez tout ce que le service détient sur vous — profil, jardins, plans, notes de placement et suggestions de plantes — dans un fichier JSON (droit RGPD à la portabilité).",
+    "exportButton": "Télécharger mes données",
+    "exportError": "Impossible d'exporter vos données. Veuillez réessayer.",
+    "deleteTitle": "Supprimer votre compte",
+    "deleteBody": "Supprime définitivement votre compte et tout ce qu'il contient. Cette action est irréversible.",
+    "deleteButton": "Supprimer mon compte",
+    "deleteDialogTitle": "Supprimer ce compte ?",
+    "deleteDialogWarning": "Vos jardins et leurs plans, vos notes de placement, les informations de votre profil et le compte lui-même seront définitivement détruits.",
+    "deleteDialogIrreversible": "Cette action est irréversible.",
+    "deleteDialogPrompt": "Pour confirmer, saisissez votre adresse e-mail ({{email}}) ci-dessous.",
+    "deleteDialogConfirmLabel": "Votre adresse e-mail",
+    "deleteDialogCancel": "Annuler",
+    "deleteDialogConfirm": "Supprimer définitivement",
+    "deleteError": "La suppression a échoué. Veuillez réessayer.",
+    "deleteTimeoutWarning": "La demande a expiré sans confirmation. Votre compte a peut-être été supprimé. Par précaution, votre session va être fermée ; si le compte existe encore, reconnectez-vous et réessayez.",
+    "deleteTimeoutContinue": "Fermer la session"
   },
   "planner": {
     "title": "Planificateur de jardin",
@@ -1172,7 +1190,7 @@
   "legal": {
     "layout": {
       "lastUpdated": "Dernière mise à jour :",
-      "updatedDate": "10 juillet 2026",
+      "updatedDate": "1er août 2026",
       "courtesy": "Version originale française — en cas de divergence avec la traduction, la version française fait foi."
     },
     "mentions": {
@@ -1304,7 +1322,7 @@
       "s07": {
         "title": "Quels sont vos droits ?",
         "p1": "Conformément au RGPD et à la loi Informatique et Libertés, vous disposez des droits suivants sur vos données : **accès**, **rectification**, **effacement**, **limitation du traitement**, **opposition**, **portabilité**, ainsi que du droit de définir des directives post-mortem.",
-        "p2": "**Pour exercer ces droits** : écrivez à **contact@smartcrops.fr** depuis l'adresse associée à votre compte (une vérification d'identité pourra être demandée). Réponse sous un mois. Vous pouvez supprimer vous-même vos contenus (jardins) depuis l'application ; la suppression du compte s'effectue sur demande à l'adresse ci-dessus (réponse sous un mois).",
+        "p2": "**Pour exercer ces droits** : la **suppression de votre compte** et l'**export de vos données** (profil, jardins, plans, notes et suggestions de plantes, au format JSON) s'effectuent directement depuis l'application, sur votre page Profil. Vous pouvez également supprimer vous-même vos contenus (jardins) depuis l'application. Pour les autres droits (accès, rectification, limitation, opposition, directives post-mortem) : écrivez à **contact@smartcrops.fr** depuis l'adresse associée à votre compte (une vérification d'identité pourra être demandée) ; réponse sous un mois.",
         "p3": "Si vous estimez que vos droits ne sont pas respectés, vous pouvez introduire une réclamation auprès de la **CNIL** (www.cnil.fr)."
       },
       "s08": {
@@ -1382,7 +1400,7 @@
         "title": "Compte utilisateur",
         "items": {
           "accuracy": "Vous vous engagez à fournir des informations exactes et à maintenir la confidentialité de vos identifiants. Toute activité réalisée via votre compte est réputée effectuée par vous.",
-          "signup": "L'inscription peut s'effectuer par email/mot de passe ou via Google. Vous pouvez demander la suppression de votre compte à tout moment (voir Politique de confidentialité)."
+          "signup": "L'inscription peut s'effectuer par email/mot de passe ou via Google. Vous pouvez supprimer votre compte à tout moment, directement depuis l'application (voir Politique de confidentialité)."
         }
       },
       "s04": {
@@ -1412,7 +1430,7 @@
       },
       "s08": {
         "title": "Suspension et résiliation",
-        "body": "L'éditeur peut suspendre ou supprimer un compte en cas de violation des présentes CGU (notamment la section « Contenus utilisateur »), après avertissement sauf urgence. Vous pouvez cesser d'utiliser le Service et demander la suppression de votre compte à tout moment."
+        "body": "L'éditeur peut suspendre ou supprimer un compte en cas de violation des présentes CGU (notamment la section « Contenus utilisateur »), après avertissement sauf urgence. Vous pouvez cesser d'utiliser le Service et supprimer votre compte à tout moment, directement depuis l'application."
       },
       "s09": {
         "title": "Modification des CGU",

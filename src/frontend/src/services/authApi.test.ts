@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { RESET_RATE_LIMITED, resetPassword } from './authApi';
+import { logout, RESET_RATE_LIMITED, resetPassword } from './authApi';
 
 // contactApi.test.ts pattern: stub global fetch, restore after each test.
 // First service-level coverage of authApi (SMA-323 R4): the page tests mock
@@ -17,6 +17,33 @@ function mockFetch(response: {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe('logout (SMA-341 R4)', () => {
+  // The non-throwing contract IS the fix for the handleChangePassword
+  // conflation: a component test mocking logout to reject would exercise the
+  // mock, not this guarantee — the right level to pin it is the source.
+  it('resolves and warns when the fetch itself rejects (network failure, timeout)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    try {
+      await expect(logout()).resolves.toBeUndefined();
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('resolves and warns on a non-OK response', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockFetch({ ok: false, status: 500 });
+    try {
+      await expect(logout()).resolves.toBeUndefined();
+      expect(warn).toHaveBeenCalledWith('Logout request failed:', 500);
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 describe('resetPassword (SMA-323)', () => {

@@ -25,7 +25,7 @@ describe('Terms (SMA-35)', () => {
     expect(
       screen.getByRole('heading', { name: 'Governing law' })
     ).toBeInTheDocument();
-    expect(screen.getByText(/July 10, 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/August 1, 2026/)).toBeInTheDocument();
     // SMA-157 regression: no unresolved [À REMPLIR/CONFIRMER/ACTIVER] marker.
     expect(container.textContent).not.toContain('[À');
     expect(container.textContent).not.toContain('[OPTION');
@@ -60,7 +60,7 @@ describe('Terms (SMA-35)', () => {
         /ne constituent en aucun cas un avis médical, vétérinaire/
       )
     ).toBeInTheDocument();
-    expect(screen.getByText(/10 juillet 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/1er août 2026/)).toBeInTheDocument();
     expect(container.textContent).not.toContain('[À');
     expect(container.textContent).not.toContain('[OPTION');
   });

@@ -13,7 +13,8 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import { useAuth } from '../hooks/useAuth';
-import { fetchProfile, updateProfile, changePassword } from '../services/profileApi';
+import DeleteAccountDialog from '../components/Profile/DeleteAccountDialog';
+import { fetchProfile, updateProfile, changePassword, exportAccountData } from '../services/profileApi';
 
 export default function Profile() {
   const { t } = useTranslation();
@@ -37,6 +38,12 @@ export default function Profile() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
   const [passwordMsg, setPasswordMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // SMA-341 danger zone: export needs no confirmation (not destructive);
+  // deletion is armed through the typing dialog.
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -100,6 +107,50 @@ export default function Profile() {
       setPasswordMsg({ type: 'error', text: err instanceof Error ? err.message : t('profile.passwordError') });
     } finally {
       setChangingPassword(false);
+    }
+  };
+
+  const handleExport = async () => {
+    setExportError(false);
+    setExporting(true);
+    try {
+      const { blob, filename } = await exportAccountData();
+      // First download path in the codebase (SMA-341): a transient anchor with
+      // the `download` attribute — the fetch already carried the auth cookie,
+      // and the blob URL keeps the dated filename the backend chose.
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      // Deferred a tick (R2): some engines historically start consuming the
+      // blob URL only after the click settles; revoking synchronously could
+      // kill the download it just triggered.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch {
+      setExportError(true);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // The backend already destroyed the account and its cookie; logout() just
+  // clears the cookie again and resets the client auth state. Since R4,
+  // authApi.logout is BOUNDED (10 s) and INCAPABLE of rejecting — it warns
+  // and returns on any failure — so navigation is guaranteed by logout's own
+  // contract. The try/catch below is deliberately KEPT as belt-and-braces,
+  // not as the guarantor: this flow is irreversible, and defence in depth
+  // against a future logout regression costs nothing.
+  const handleDeleted = async () => {
+    try {
+      await logout();
+    } catch {
+      // The account is already gone server-side; a client-side logout failure
+      // must not block navigation away from a dead account page.
+    } finally {
+      navigate('/', { replace: true });
     }
   };
 
@@ -245,6 +296,61 @@ export default function Profile() {
       ) : (
         <Alert severity="info">{t('profile.googleAccount')}</Alert>
       )}
+
+      {/* ── Danger zone (SMA-341) ── deliberately LAST and visually set apart:
+          one does not delete an account next to the language picker. */}
+      <Card
+        variant="outlined"
+        sx={{ borderRadius: 3, mt: 3, borderColor: 'error.main' }}
+      >
+        <CardContent sx={{ p: 4 }}>
+          <Typography variant="h6" color="error" sx={{ mb: 2 }}>
+            {t('profile.dangerZone')}
+          </Typography>
+
+          <Typography variant="subtitle1" fontWeight={600}>
+            {t('profile.exportTitle')}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            {t('profile.exportBody')}
+          </Typography>
+          {exportError && (
+            <Alert severity="error" sx={{ mb: 1.5 }}>
+              {t('profile.exportError')}
+            </Alert>
+          )}
+          <Button
+            variant="outlined"
+            onClick={handleExport}
+            disabled={exporting}
+            startIcon={exporting ? <CircularProgress size={18} color="inherit" aria-hidden="true" /> : undefined}
+          >
+            {t('profile.exportButton')}
+          </Button>
+
+          <Typography variant="subtitle1" fontWeight={600} sx={{ mt: 3 }}>
+            {t('profile.deleteTitle')}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            {t('profile.deleteBody')}
+          </Typography>
+          <Button
+            variant="outlined"
+            color="error"
+            onClick={() => setDeleteOpen(true)}
+            disabled={!profileLoaded}
+          >
+            {t('profile.deleteButton')}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <DeleteAccountDialog
+        open={deleteOpen}
+        email={email}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={handleDeleted}
+      />
     </Container>
   );
 }

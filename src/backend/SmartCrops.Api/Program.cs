@@ -107,18 +107,29 @@ builder.Services.AddCors(options =>
     });
 });
 
-// ── Rate limiting (SMA-30, SMA-323) ──────────────────────────────────────
+// ── Rate limiting (SMA-30, SMA-323, SMA-341) ─────────────────────────────
 // Built-in .NET 8 limiter, opt-in per endpoint via [EnableRateLimiting] — a
 // global limiter would also throttle authenticated traffic. The "contact"
 // policy shields the public unauthenticated POST /api/contact (and the paid
 // SMTP relay behind it) from bursts. "passwordReset" (SMA-323) is a SISTER
 // policy, deliberately NOT a reuse of "contact": a shared budget would let
 // contact-form traffic consume a user's reset attempts at the exact moment
-// they need them. The IP partition keys on the direct peer
-// (Connection.RemoteIpAddress); behind the future reverse proxy BOTH policies
-// need UseForwardedHeaders — deliberately deferred to the OVH deployment
-// ticket (SMA-41). Limits are config-driven so integration tests can pin them
-// deterministically (RateLimiting:Contact:*, RateLimiting:PasswordReset:*).
+// they need them. "account" (SMA-341 R4) is a THIRD sister for the same
+// reason, deliberately NOT a reuse of "passwordReset": the partition keys on
+// IP + policy NAME, so a reuse would drain one bucket — a user who just
+// reset their password has already spent up to three of its five permits
+// (forgot + validate + reset) and would meet a 429 on their export. It
+// throttles the two account endpoints: the export materializes every garden
+// and serializes the whole graph per request (the documented buffering
+// ceiling), which a valid session could otherwise drive in a loop; deletion
+// is cheaper but a wrong-confirmation loop still pays a user lookup and the
+// confirmation comparison per attempt — the transaction begins only once
+// the confirmation matches. The IP partition keys on the
+// direct peer (Connection.RemoteIpAddress); behind the future reverse proxy
+// ALL THREE policies need UseForwardedHeaders — deliberately deferred to the
+// OVH deployment ticket (SMA-41). Limits are config-driven so integration
+// tests can pin them deterministically (RateLimiting:Contact:*,
+// RateLimiting:PasswordReset:*, RateLimiting:Account:*).
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -138,6 +149,19 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = builder.Configuration.GetValue("RateLimiting:PasswordReset:PermitLimit", 5),
                 Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:PasswordReset:WindowMinutes", 15)),
+                QueueLimit = 0,
+            }));
+    // 10/10min: roomy enough that no legitimate journey can hit it (an export
+    // or two, a mistyped deletion confirmation, a timeout retry), tight
+    // enough that a scripted loop over the buffered export drops from
+    // "unbounded" to one heavy serialization per minute sustained.
+    options.AddPolicy("account", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = builder.Configuration.GetValue("RateLimiting:Account:PermitLimit", 10),
+                Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:Account:WindowMinutes", 10)),
                 QueueLimit = 0,
             }));
 });
