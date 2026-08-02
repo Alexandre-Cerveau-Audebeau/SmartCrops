@@ -1,0 +1,32 @@
+# Production image: build the static bundle, serve it with nginx.
+# The dev Dockerfile (Vite dev server) is untouched — this file is the
+# deployment artifact only, built in CI and pulled from GHCR by tag.
+FROM node:20-alpine AS build
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+# Vite envs are baked at BUILD time, not runtime — these args ARE the
+# deployment's URL policy. Measured (Lot 2 pre-flight):
+# - VITE_AUTH_API_URL feeds only the Google-button redirect in
+#   Login/Register via `import.meta.env.VITE_AUTH_API_URL || 'http://localhost:5000'`,
+#   and the path already carries /api. An EMPTY value would be defeated by
+#   the `||` (falsy -> the localhost fallback gets baked), and "/" would
+#   yield a scheme-relative //api/... — so the canonical origin is the one
+#   value that keeps every call same-origin without touching app code.
+# - VITE_API_URL is consumed ONLY by the dev-server proxy in vite.config.ts
+#   and never reaches the bundle; declared here for contract completeness.
+ARG VITE_API_URL=""
+ARG VITE_AUTH_API_URL="https://smartcrops.fr"
+ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_AUTH_API_URL=${VITE_AUTH_API_URL}
+
+RUN npm run build
+
+FROM nginx:1.27-alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
