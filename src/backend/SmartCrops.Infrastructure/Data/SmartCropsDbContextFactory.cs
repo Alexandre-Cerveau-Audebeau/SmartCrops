@@ -12,16 +12,22 @@ public class SmartCropsDbContextFactory : IDesignTimeDbContextFactory<SmartCrops
 {
     public SmartCropsDbContext CreateDbContext(string[] args)
     {
-        // SMA-355 — no committed password. Model-only commands (dotnet ef
-        // migrations add/remove) never open a connection, so the password-less
-        // fallback is enough for them; migrations are applied at runtime by the
-        // API on boot. Commands that do reach the database (dotnet ef database
-        // update) need the real string exported first:
+        // SMA-355 — no committed password, and no real host either. `dotnet ef
+        // migrations add` only needs the string to PARSE — it never opens a
+        // connection (proven against a live server) — so this fallback keeps
+        // the common command working with zero secrets. `dotnet ef migrations
+        // remove` DOES reach the database (it reads the applied-migration
+        // history, even without --force), as does `database update`; for those,
+        // export the real string first:
         //   $env:ConnectionStrings__DefaultConnection =
         //     "Host=localhost;Database=smartcrops;Username=smartcrops;Password=<dev password>"
+        // The fallback host is deliberately unresolvable so a command that
+        // tries to connect fails loudly, by name, instead of silently reaching
+        // whatever answers on localhost:5432 (a native Windows Postgres has
+        // squatted that port on dev machines before).
         var connectionString =
             Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
-            ?? "Host=localhost;Database=smartcrops;Username=smartcrops";
+            ?? "Host=connectionstrings-defaultconnection-not-set.invalid;Database=smartcrops;Username=smartcrops";
 
         var options = new DbContextOptionsBuilder<SmartCropsDbContext>()
             .UseNpgsql(connectionString)

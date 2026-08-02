@@ -5,12 +5,21 @@ services:
     environment:
       POSTGRES_DB: smartcrops
       POSTGRES_USER: smartcrops
-      # SMA-355 — dev DB password. Set the real value in
-      # docker-compose.override.yml (gitignored); the port is published to the
-      # host, so a committed password here is a public credential on any
-      # untrusted network. Postgres only reads this when the
-      # smartcrops-db-data volume is first initialized — an existing volume
-      # keeps the password it was created with.
+      # SMA-355 — dev DB password; the port is published to the host, so a
+      # committed value here would be a public credential on any untrusted
+      # network. Two supply routes work — pick ONE:
+      #   1. POSTGRES_PASSWORD=<value> in a gitignored .env — interpolation
+      #      fills it here AND in the api connection string below;
+      #   2. db.environment.POSTGRES_PASSWORD in docker-compose.override.yml
+      #      AND the api service's full connection string overridden there too.
+      #      Compose interpolation reads the shell/.env only, NEVER another
+      #      service's environment: an override value here leaves
+      #      ${POSTGRES_PASSWORD} empty on the api side.
+      # Postgres reads this only when the smartcrops-db-data volume is first
+      # initialized; an existing volume keeps its original password. To rotate:
+      # ALTER USER smartcrops WITH PASSWORD '<new>' inside psql, then align the
+      # override/.env — do NOT `docker compose down -v`, that destroys the
+      # database.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     ports:
       - "5432:5432"
@@ -24,18 +33,15 @@ services:
     container_name: smartcrops-api
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      # SMA-355 — the DB password must match the db service's
-      # POSTGRES_PASSWORD. Set the real string in docker-compose.override.yml
-      # (gitignored), or supply POSTGRES_PASSWORD via .env (gitignored) so the
-      # substitution below fills it in.
+      # SMA-355 — must match the db password; see the two supply routes and
+      # the rotation note on the db service's POSTGRES_PASSWORD above.
       ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=smartcrops;Username=smartcrops;Password=${POSTGRES_PASSWORD:-}"
       # SMA-355 — HS256 key signing every API session token. Set the real
       # value in docker-compose.override.yml (gitignored); an empty value
       # fails the API boot via the Program.cs JWT guard (same contract as the
-      # Typesense/Smtp keys). The literal that used to sit here passed
-      # gitleaks AND trufflehog — a hand-written readable string falls below
-      # their entropy floor — so no scanner will flag a regression: never
-      # commit a value here.
+      # Typesense/Smtp keys). Secret scanners have already missed a committed
+      # value at this exact spot once — do not expect a tool to catch a
+      # regression: never commit a value here.
       Jwt__Key: ${JWT_KEY:-}
       Google__ClientId: ${GOOGLE_CLIENT_ID:-}
       Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
