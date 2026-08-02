@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using SmartCrops.Api.Controllers;
 using SmartCrops.Core.Entities;
 using SmartCrops.Infrastructure.Data;
@@ -385,6 +386,13 @@ public class AuthControllerTests : IntegrationTestBase
         return new ExternalLoginInfo(principal, "Google", providerKey, "Google");
     }
 
+    /// <summary>
+    /// AspNetUserLogins is keyed on (LoginProvider, ProviderKey) and the
+    /// fixture database is shared: keys follow the same unique-by-convention
+    /// rule as NewEmail so no two tests — or runs — can ever collide (R3).
+    /// </summary>
+    private static string NewProviderKey(string label) => $"{label}-{Guid.NewGuid():N}";
+
     [Fact]
     public async Task GoogleMerge_PreHijackedUnconfirmedAccount_KillsPasswordAndConfirms()
     {
@@ -400,8 +408,9 @@ public class AuthControllerTests : IntegrationTestBase
             var user = await users.FindByEmailAsync(email);
             Assert.NotNull(user);
 
-            Assert.True(await AuthController.EnsureSafeGoogleMergeAsync(users, user!, GoogleInfo(email, "true", "gkey-hijack")));
-            Assert.True((await users.AddLoginAsync(user!, GoogleInfo(email, "true", "gkey-hijack"))).Succeeded);
+            var key = NewProviderKey("gkey-hijack");
+            Assert.True(await AuthController.EnsureSafeGoogleMergeAsync(users, user!, GoogleInfo(email, "true", key), NullLogger.Instance));
+            Assert.True((await users.AddLoginAsync(user!, GoogleInfo(email, "true", key))).Succeeded);
 
             Assert.False(await users.HasPasswordAsync(user!));
             Assert.True(user!.EmailConfirmed);
@@ -427,7 +436,7 @@ public class AuthControllerTests : IntegrationTestBase
             Assert.NotNull(user);
             preMergeToken = Fixture.GenerateStampedToken(user!.Id, user.SecurityStamp!);
 
-            Assert.True(await AuthController.EnsureSafeGoogleMergeAsync(users, user, GoogleInfo(email, "true", "gkey-rotate")));
+            Assert.True(await AuthController.EnsureSafeGoogleMergeAsync(users, user, GoogleInfo(email, "true", NewProviderKey("gkey-rotate")), NullLogger.Instance));
 
             // The tracked instance carries the rotated stamp — the same read
             // the callback's token minting performs after the merge.
@@ -446,9 +455,19 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.OK, (await Client.SendAsync(after)).StatusCode);
     }
 
-    [Fact]
-    public async Task GoogleMerge_UnverifiedEmail_RefusedAndAccountUntouched()
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("True", true)]
+    [InlineData("TRUE", true)]
+    [InlineData("false", false)]
+    [InlineData(null, false)]
+    [InlineData("garbage", false)]
+    public async Task GoogleMerge_VerifiedClaim_GatesTheMerge(string? verifiedRaw, bool expectMerge)
     {
+        // Pins OUR TryParse consumption of the mapped claim (R3): MapJsonKey
+        // stringifies the userinfo boolean, and the exact casing must not
+        // matter — while anything unparsable or false refuses the merge and
+        // leaves the account completely untouched.
         var email = NewEmail();
         await RegisterAsync(email);
 
@@ -457,10 +476,59 @@ public class AuthControllerTests : IntegrationTestBase
         var user = await users.FindByEmailAsync(email);
         Assert.NotNull(user);
 
-        // The verified claim IS the ownership proof: false or absent, no merge.
-        Assert.False(await AuthController.EnsureSafeGoogleMergeAsync(users, user!, GoogleInfo(email, "false", "gkey-unverified")));
-        Assert.False(await AuthController.EnsureSafeGoogleMergeAsync(users, user!, GoogleInfo(email, null, "gkey-unverified")));
+        var merged = await AuthController.EnsureSafeGoogleMergeAsync(
+            users, user!, GoogleInfo(email, verifiedRaw, NewProviderKey("gkey-claim")), NullLogger.Instance);
 
+        Assert.Equal(expectMerge, merged);
+        var fresh = await users.FindByEmailAsync(email);
+        Assert.NotNull(fresh);
+        Assert.Equal(expectMerge, fresh!.EmailConfirmed);
+        Assert.Equal(expectMerge, !await users.HasPasswordAsync(fresh));
+        Assert.Empty(await users.GetLoginsAsync(fresh));
+    }
+
+    [Fact]
+    public async Task GoogleMerge_PasswordlessUnconfirmedAccount_ConfirmsWithoutRemovingAnything()
+    {
+        // The HasPasswordAsync guard's FALSE branch (R3): a Google-only
+        // account left behind by a failed AddLoginAsync — no password to
+        // remove, and RemovePasswordAsync must never be called (it fails on
+        // an absent password and would turn every such merge into a refusal).
+        var email = NewEmail();
+
+        using var scope = CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        Assert.True((await users.CreateAsync(new ApplicationUser { UserName = email, Email = email })).Succeeded);
+        var user = await users.FindByEmailAsync(email);
+        Assert.NotNull(user);
+        Assert.False(user!.EmailConfirmed);
+        Assert.False(await users.HasPasswordAsync(user));
+
+        Assert.True(await AuthController.EnsureSafeGoogleMergeAsync(
+            users, user, GoogleInfo(email, "true", NewProviderKey("gkey-passwordless")), NullLogger.Instance));
+
+        Assert.True(user.EmailConfirmed);
+        Assert.False(await users.HasPasswordAsync(user));
+    }
+
+    [Fact]
+    public async Task GoogleMerge_EmailMismatch_RefusedAndAccountUntouched()
+    {
+        // The precondition guard (R3): `user` must be the account the Google
+        // identity NAMES. A mismatched pair — a future caller bug — must
+        // never neutralize an unrelated account's password.
+        var email = NewEmail();
+        await RegisterAsync(email);
+
+        using var scope = CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await users.FindByEmailAsync(email);
+        Assert.NotNull(user);
+
+        var refused = await AuthController.EnsureSafeGoogleMergeAsync(
+            users, user!, GoogleInfo(NewEmail(), "true", NewProviderKey("gkey-mismatch")), NullLogger.Instance);
+
+        Assert.False(refused);
         var fresh = await users.FindByEmailAsync(email);
         Assert.NotNull(fresh);
         Assert.False(fresh!.EmailConfirmed);
@@ -484,8 +552,9 @@ public class AuthControllerTests : IntegrationTestBase
             Assert.True(user!.EmailConfirmed);
             var stampBefore = user.SecurityStamp;
 
-            Assert.True(await AuthController.EnsureSafeGoogleMergeAsync(users, user, GoogleInfo(email, "true", "gkey-confirmed")));
-            Assert.True((await users.AddLoginAsync(user, GoogleInfo(email, "true", "gkey-confirmed"))).Succeeded);
+            var key = NewProviderKey("gkey-confirmed");
+            Assert.True(await AuthController.EnsureSafeGoogleMergeAsync(users, user, GoogleInfo(email, "true", key), NullLogger.Instance));
+            Assert.True((await users.AddLoginAsync(user, GoogleInfo(email, "true", key))).Succeeded);
 
             // The standard model: verified-email linking into a confirmed
             // account touches nothing — password kept, stamp kept, link added.

@@ -516,7 +516,7 @@ public class AuthController(
                 // account — it must be proven and made safe BEFORE any login is
                 // added or any token minted (the fresh stamp the minting below
                 // reads is the one the neutralization rotates).
-                if (!await EnsureSafeGoogleMergeAsync(userManager, user, info))
+                if (!await EnsureSafeGoogleMergeAsync(userManager, user, info, logger))
                     return Redirect($"{frontendUrl}/login?error=google-failed");
 
                 var logins = await userManager.GetLoginsAsync(user);
@@ -558,38 +558,62 @@ public class AuthController(
     /// merge lands the Google login on the attacker's account and the
     /// attacker's password stays alive as a backdoor.
     ///
-    /// <para>The trust model: Google's <c>email_verified</c> claim IS the
-    /// ownership proof this merge rests on — absent or false, the merge is
-    /// refused outright (a). When the target account was never confirmed —
-    /// the pre-hijacking window — its pre-existing credentials are neutralized
-    /// BEFORE linking, in this order (b): the latent password dies
-    /// (<c>RemovePasswordAsync</c>, guarded by <c>HasPasswordAsync</c> — the
-    /// true owner can set a new one later through the now-working reset flow);
-    /// the security stamp rotates, so every outstanding stamped token for the
-    /// account — the attacker's included — dies at the OnTokenValidated lock;
-    /// only then is the account confirmed and persisted. The caller links and
-    /// mints AFTER this method, so the fresh session carries the rotated
-    /// stamp — minting first would die on its own mismatch. A confirmed
-    /// account (c) is the standard verified-email linking case: password
-    /// untouched, nothing to neutralize. The R1 lockout UX resolves itself
-    /// here: the merge confirms the account, so the exchanged token works.</para>
+    /// <para>The trust model: the merge only makes sense for the account this
+    /// Google identity actually NAMES — the email claim must match
+    /// <c>user.Email</c> (the precondition the callback satisfies by resolving
+    /// the user from that very claim; a mismatched caller would neutralize an
+    /// unrelated account's password, so the invariant lives here, R3) — and
+    /// Google's <c>email_verified</c> claim IS the ownership proof this merge
+    /// rests on: absent or false, the merge is refused outright (a). When the
+    /// target account was never confirmed — the pre-hijacking window — its
+    /// pre-existing credentials are neutralized BEFORE linking (b): the latent
+    /// password dies (<c>RemovePasswordAsync</c>, guarded by
+    /// <c>HasPasswordAsync</c>); then ONE persisted write commits the stamp
+    /// rotation AND the confirmation together — <c>UpdateSecurityStampAsync</c>
+    /// persists the whole tracked entity, and <c>EmailConfirmed</c> rides it.
+    /// Recovery contract, precisely: the only intermediate state a process
+    /// death can leave is [password removed, still unconfirmed, unlinked] —
+    /// recoverable BY DESIGN via ForgotPassword, which deliberately accepts
+    /// unconfirmed and passwordless accounts. Every outstanding stamped token
+    /// — the attacker's included — dies at the OnTokenValidated lock; the
+    /// caller links and mints AFTER this method, so the fresh session carries
+    /// the rotated stamp. A confirmed account (c) is the standard
+    /// verified-email linking case: password untouched, nothing to
+    /// neutralize. The R1 lockout UX resolves itself here: the merge confirms
+    /// the account, so the exchanged token works. Refusals are logged
+    /// (R3) — a silent security decision cannot be operated.</para>
     ///
     /// <para>Static and store-driven so the contract is provable against the
     /// real Identity store without a fake-Google harness (none exists — the
     /// integration tests drive this method plus <c>AddLoginAsync</c>, the
-    /// exact sequence the callback runs).</para>
+    /// exact sequence the callback runs). Service extraction: SMA-370.</para>
     /// </summary>
     public static async Task<bool> EnsureSafeGoogleMergeAsync(
         UserManager<ApplicationUser> userManager,
         ApplicationUser user,
-        ExternalLoginInfo info)
+        ExternalLoginInfo info,
+        ILogger logger)
     {
+        // The precondition guard (R3): `user` must be the account this Google
+        // identity names. Both sides non-null, case-insensitive — anything
+        // else is a caller bug or a hostile pair, never a linkable state.
+        var claimedEmail = info.Principal.FindFirstValue(ClaimTypes.Email);
+        if (string.IsNullOrEmpty(claimedEmail) || string.IsNullOrEmpty(user.Email)
+            || !string.Equals(claimedEmail, user.Email, StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogWarning("google merge refused: email mismatch");
+            return false;
+        }
+
         // (a) The verified claim is mapped in Program.cs (MapJsonKey) from the
         // userinfo boolean — stringified, hence TryParse. Absent or false:
         // refuse like any invalid callback.
         var verifiedRaw = info.Principal.FindFirstValue("email_verified");
         if (!bool.TryParse(verifiedRaw, out var verified) || !verified)
+        {
+            logger.LogWarning("google merge refused: email_verified absent or false");
             return false;
+        }
 
         if (!user.EmailConfirmed)
         {
@@ -601,11 +625,12 @@ public class AuthController(
                     return false;
             }
 
-            await userManager.UpdateSecurityStampAsync(user);
-
+            // ONE checked write commits both facts: the manager's rotation is
+            // the contract (never hand-set the stamp), and it persists the
+            // whole tracked entity — EmailConfirmed rides the same write.
             user.EmailConfirmed = true;
-            var updateResult = await userManager.UpdateAsync(user);
-            if (!updateResult.Succeeded)
+            var stampResult = await userManager.UpdateSecurityStampAsync(user);
+            if (!stampResult.Succeeded)
                 return false;
         }
         // (c) Confirmed account: standard verified-email linking — password untouched.
