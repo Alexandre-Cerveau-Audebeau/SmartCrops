@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=block" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Inter', system-ui, sans-serif; }
+  a { color: #2E8B57; } a:hover { color: #1B5E3A; }
+  .ms { font-family: 'Material Symbols Outlined'; font-weight: 400; font-style: normal; line-height: 1; white-space: nowrap; }
+</style>
+</helmet>
+
+<div data-screen-label="{{ screenLabel }}" style="width:{{ artW }}px;min-width:{{ artW }}px;background:{{ pageBg }};font-family:'Inter',system-ui,sans-serif;position:relative;overflow:hidden;border-radius:2px">
+
+  <!-- NAVBAR -->
+  <nav style="height:{{ navH }}px;background:{{ navBg }};display:flex;align-items:center;padding:0 {{ padX }}px;gap:16px">
+    <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
+      <div style="width:{{ logoS }}px;height:{{ logoS }}px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;position:relative">
+        <span style="font-family:Georgia,serif;font-size:{{ logoFs }}px;font-weight:700;color:#1B5E3A;line-height:1">S</span>
+        <span style="position:absolute;right:2px;top:5px;width:8px;height:8px;border-radius:50% 0;background:#4CB47C;transform:rotate(15deg)"></span>
+      </div>
+      <span style="font-size:{{ brandFs }}px;font-weight:800;color:#fff;letter-spacing:-0.01em;white-space:nowrap">SmartCrops</span>
+    </div>
+    <sc-if value="{{ deskNav }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap">
+        <span style="display:inline-flex;align-items:center;gap:8px;padding:9px 12px;font-size:16px;font-weight:600;color:rgba(255,255,255,0.75);white-space:nowrap"><span class="ms" style="font-size:20px">potted_plant</span>Bibliothèque</span>
+        <span style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.17);border-radius:10px;padding:9px 16px;font-size:16px;font-weight:600;color:#fff;white-space:nowrap"><span class="ms" style="font-size:20px">yard</span>Mes Jardins</span>
+        <span style="display:inline-flex;align-items:center;gap:8px;padding:9px 4px 9px 12px;font-size:16px;font-weight:600;color:rgba(255,255,255,0.75);white-space:nowrap"><span class="ms" style="font-size:20px">storefront</span>Boutique</span>
+        <span style="display:inline-flex;align-items:center;background:rgba(233,160,107,0.10);border:1px solid rgba(233,160,107,0.5);border-radius:999px;padding:5px 13px;font-size:13.5px;font-weight:600;color:#E9A06B;white-space:nowrap">Bientôt disponible</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:22px;flex-shrink:0;justify-content:flex-end">
+        <span style="display:inline-flex;align-items:center;gap:8px">
+          <svg width="21" height="15" viewBox="0 0 21 15" style="border-radius:2px"><rect width="7" height="15" fill="#0055A4"/><rect x="7" width="7" height="15" fill="#fff"/><rect x="14" width="7" height="15" fill="#EF4135"/></svg>
+          <span style="font-size:16px;font-weight:700;color:#fff">FR</span>
+          <span class="ms" style="font-size:18px;color:rgba(255,255,255,0.8)">expand_more</span>
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:7px;color:#fff">
+          <span class="ms" style="font-size:22px">person</span><span style="font-size:16px;font-weight:700">O2BO</span>
+          <span class="ms" style="font-size:18px;color:rgba(255,255,255,0.8)">arrow_drop_down</span>
+        </span>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;display:flex;align-items:center;justify-content:flex-end;gap:14px">
+        <span style="display:inline-flex;background:#fff;border-radius:999px;padding:3px">
+          <span style="padding:4px 12px;border-radius:999px;font-size:13px;font-weight:700;background:#1B5E3A;color:#fff">°C</span>
+          <span style="padding:4px 12px;border-radius:999px;font-size:13px;font-weight:700;color:#3C4A42">°F</span>
+        </span>
+        <span class="ms" style="font-size:26px;color:#fff">menu</span>
+      </div>
+    </sc-if>
+  </nav>
+
+  <div style="padding:0 {{ padX }}px">
+
+    <!-- EN-TÊTE PAGE -->
+    <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;margin:{{ headMargin }}">
+      <div style="flex:1;min-width:200px">
+        <h1 style="margin:0;font-size:{{ h1Size }}px;font-weight:800;letter-spacing:-0.01em;color:{{ h1c }}">Mes Jardins</h1>
+        <div style="font-size:{{ metaFs }}px;color:{{ tMeta }};margin-top:7px">{{ metaLine }}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:4px">
+        <span style="display:inline-flex;align-items:center;gap:7px;height:{{ chipH }}px;padding:0 14px;border-radius:999px;border:1px solid {{ obtnBd }};background:{{ card }};color:{{ tMeta }};font-size:{{ chipFs }}px;font-weight:700;white-space:nowrap"><span class="ms" style="font-size:17px;color:{{ prim }}">tune</span>{{ levelChip }}</span>
+        <sc-if value="{{ deskNav }}" hint-placeholder-val="{{ true }}">
+          <span style="display:inline-flex;align-items:center;gap:8px;height:{{ btnH }}px;padding:0 17px;border-radius:8px;background:{{ card }};border:1px solid {{ obtnBd }};color:{{ obtnTx }};font-size:14.5px;font-weight:700;white-space:nowrap"><span class="ms" style="font-size:19px">dashboard_customize</span>Personnaliser</span>
+        </sc-if>
+        <span style="display:inline-flex;align-items:center;gap:8px;height:{{ btnH }}px;padding:0 {{ btnPx }}px;border-radius:8px;background:{{ prim }};color:#fff;font-size:{{ btnFs }}px;font-weight:700;white-space:nowrap"><span class="ms" style="font-size:19px">add</span>Créer un jardin</span>
+      </div>
+    </div>
+
+    <!-- KPI (expert / missing) -->
+    <sc-if value="{{ kpiOn }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:14px;margin-bottom:18px">
+        <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+          <div style="background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};padding:15px 18px">
+            <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:800;letter-spacing:0.05em;color:{{ muted }};text-transform:uppercase"><span class="ms" style="font-size:16px;color:{{ prim }}">{{ k.ic }}</span>{{ k.lab }}</div>
+            <div style="font-size:27px;font-weight:800;color:{{ tTitle }};margin-top:7px;letter-spacing:-0.01em">{{ k.val }}<span style="font-size:14px;font-weight:700;color:{{ muted }};margin-left:5px">{{ k.unit }}</span></div>
+            <div style="font-size:12px;color:{{ k.subc }};margin-top:3px;font-weight:{{ k.subW }}">{{ k.sub }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- CARTES JARDINS (novice / customize / mobile) -->
+    <sc-if value="{{ bigCards }}" hint-placeholder-val="{{ true }}">
+      <div style="display:grid;grid-template-columns:{{ cardCols }};gap:{{ cardGap }}px;margin-bottom:{{ cardMb }}px">
+        <sc-for list="{{ gardens }}" as="g" hint-placeholder-count="3">
+          <div style="background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};overflow:hidden">
+            <div style="display:grid;grid-template-columns:repeat(20, 1fr);grid-auto-rows:1fr;gap:2px;height:{{ stripH }}px;padding:6px;background:{{ stripBg }}">
+              <sc-for list="{{ g.strip }}" as="c" hint-placeholder-count="60">
+                <span style="border-radius:2px;background:{{ c }}"></span>
+              </sc-for>
+            </div>
+            <div style="padding:14px 16px 15px">
+              <div style="display:flex;align-items:center;gap:9px">
+                <span style="flex:1;font-size:{{ gNameFs }}px;font-weight:800;color:{{ tTitle }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ g.name }}</span>
+                <span class="ms" style="font-size:17px;color:{{ muted }}">edit</span>
+                <span class="ms" style="font-size:17px;color:{{ dangTx }}">delete</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:9px">
+                <span style="display:inline-flex;align-items:center;gap:5px;border:1px solid {{ obtnBd }};border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:700;color:{{ tMeta }};white-space:nowrap"><span class="ms" style="font-size:14px;color:{{ prim }}">{{ g.typeIc }}</span>{{ g.type }}</span>
+                <span style="display:inline-flex;align-items:center;border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;background:{{ cntChipBg }};color:{{ cntChipTx }}">{{ g.plants }}</span>
+                <sc-if value="{{ g.orn }}" hint-placeholder-val="{{ false }}">
+                  <span style="display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:700;background:{{ ornBg }};color:{{ ornTx }}"><span class="ms" style="font-size:13px">filter_vintage</span>Ornemental</span>
+                </sc-if>
+              </div>
+              <div style="font-size:{{ gListFs }}px;color:{{ tSci }};margin-top:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ g.listed }}</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:12px">
+                <span style="display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 11px;font-size:12px;font-weight:700;background:{{ wxBg }};color:{{ wxTx }}"><span class="ms" style="font-size:15px;color:{{ wxIc }}">clear_day</span>{{ g.wx }}</span>
+                <span style="flex:1"></span>
+                <span style="font-size:12px;color:{{ muted }}">{{ g.upd }}</span>
+                <span class="ms" style="font-size:20px;color:{{ prim }}">chevron_right</span>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- LIGNES JARDINS (expert / missing) -->
+    <sc-if value="{{ rowCards }}" hint-placeholder-val="{{ false }}">
+      <div style="background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};overflow:hidden;margin-bottom:18px">
+        <div style="display:grid;grid-template-columns:76px 1.5fr 0.7fr 1.1fr 1fr 1fr 1.1fr 30px;gap:12px;align-items:center;padding:10px 18px;border-bottom:1px solid {{ divider }}">
+          <span style="font-size:10.5px;font-weight:800;letter-spacing:0.06em;color:{{ muted }}">JARDIN</span><span></span>
+          <span style="font-size:10.5px;font-weight:800;letter-spacing:0.06em;color:{{ muted }}">PLANTES</span>
+          <span style="font-size:10.5px;font-weight:800;letter-spacing:0.06em;color:{{ muted }}">OCCUPATION</span>
+          <span style="font-size:10.5px;font-weight:800;letter-spacing:0.06em;color:{{ muted }}">EXPOSITION</span>
+          <span style="font-size:10.5px;font-weight:800;letter-spacing:0.06em;color:{{ muted }}">MÉTÉO</span>
+          <span style="font-size:10.5px;font-weight:800;letter-spacing:0.06em;color:{{ muted }}">RÉCOLTE</span><span></span>
+        </div>
+        <sc-for list="{{ gardenRows }}" as="r" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:76px 1.5fr 0.7fr 1.1fr 1fr 1fr 1.1fr 30px;gap:12px;align-items:center;padding:13px 18px;border-bottom:1px solid {{ r.rowBd }}">
+            <span style="display:grid;grid-template-columns:repeat(10, 1fr);grid-auto-rows:1fr;gap:1.5px;height:42px;border-radius:6px;overflow:hidden;padding:3px;background:{{ stripBg }}">
+              <sc-for list="{{ r.thumb }}" as="c" hint-placeholder-count="30">
+                <span style="border-radius:1.5px;background:{{ c }}"></span>
+              </sc-for>
+            </span>
+            <span style="min-width:0">
+              <span style="display:block;font-size:15px;font-weight:800;color:{{ tTitle }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span>
+              <span style="display:flex;align-items:center;gap:5px;font-size:12px;color:{{ tSci }};margin-top:2px"><span class="ms" style="font-size:14px;color:{{ prim }}">{{ r.typeIc }}</span>{{ r.typeLab }}</span>
+            </span>
+            <span style="font-size:14.5px;font-weight:800;color:{{ tTitle }}">{{ r.plants }}<span style="display:block;font-size:11px;font-weight:600;color:{{ muted }};margin-top:1px">{{ r.plantsSub }}</span></span>
+            <span>
+              <span style="display:flex;align-items:center;gap:8px">
+                <span style="flex:1;height:7px;border-radius:999px;background:{{ track }};overflow:hidden;display:block"><span style="display:block;height:100%;width:{{ r.occ }}%;border-radius:999px;background:{{ prim }}"></span></span>
+                <span style="font-size:13px;font-weight:800;color:{{ tTitle }}">{{ r.occ }}%</span>
+              </span>
+              <span style="display:block;font-size:11px;color:{{ muted }};margin-top:3px">{{ r.occSub }}</span>
+            </span>
+            <span style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:{{ tMeta }}"><span style="width:13px;height:13px;border-radius:4px;background:{{ r.expoSw }};border:1px solid {{ r.expoBd }};flex-shrink:0"></span>{{ r.expo }}</span>
+            <span>
+              <sc-if value="{{ r.wxOn }}" hint-placeholder-val="{{ true }}">
+                <span style="display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 11px;font-size:12px;font-weight:700;background:{{ wxBg }};color:{{ wxTx }}"><span class="ms" style="font-size:15px;color:{{ wxIc }}">clear_day</span>{{ r.wx }}</span>
+              </sc-if>
+              <sc-if value="{{ r.wxAdd }}" hint-placeholder-val="{{ false }}">
+                <span style="display:inline-flex;align-items:center;gap:6px;border:1.5px dashed {{ invBd }};border-radius:999px;padding:4px 11px;font-size:12px;font-weight:700;color:{{ prim }}"><span class="ms" style="font-size:15px">add_location_alt</span>localisation</span>
+              </sc-if>
+            </span>
+            <span style="font-size:12.5px;font-weight:700;color:{{ r.harvC }}">{{ r.harv }}<span style="display:block;font-size:11px;font-weight:600;color:{{ muted }};margin-top:1px">{{ r.harvSub }}</span></span>
+            <span class="ms" style="font-size:20px;color:{{ prim }}">chevron_right</span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- BLOCS EXPERT / MISSING -->
+    <sc-if value="{{ blocksOn }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;padding-bottom:{{ mainPadB }}px">
+
+        <!-- Compteurs par variété -->
+        <div style="background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};padding:18px 20px">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px">
+            <span class="ms" style="font-size:20px;color:{{ prim }}">potted_plant</span>
+            <span style="font-size:15.5px;font-weight:800;color:{{ tTitle }}">Compteurs par variété</span>
+            <span style="margin-left:auto;display:inline-flex;border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:700;background:{{ cntChipBg }};color:{{ cntChipTx }}">128 plantes</span>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+            <sc-for list="{{ varFilters }}" as="f" hint-placeholder-count="4">
+              <span style="display:inline-flex;align-items:center;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:700;background:{{ f.bg }};color:{{ f.tx }};border:1px solid {{ f.bd }};white-space:nowrap">{{ f.lab }}</span>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{ varieties }}" as="v" hint-placeholder-count="7">
+              <div style="display:grid;grid-template-columns:16px 84px 1fr 34px;gap:9px;align-items:center">
+                <span style="width:13px;height:13px;border-radius:50%;background:{{ v.dot }};border:1px solid {{ v.dotBd }}"></span>
+                <span style="font-size:13px;font-weight:700;color:{{ tMeta }}">{{ v.name }}</span>
+                <span style="height:8px;border-radius:999px;background:{{ track }};overflow:hidden;display:block"><span style="display:block;height:100%;width:{{ v.w }}%;border-radius:999px;background:{{ v.bar }}"></span></span>
+                <span style="font-size:13px;font-weight:800;color:{{ tTitle }};text-align:right">{{ v.n }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="height:1px;background:{{ divider }};margin:14px 0 12px"></div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:{{ tMeta }}">
+            <span class="ms" style="font-size:16px;color:{{ ornTx }}">filter_vintage</span>
+            <span><b>Ornement</b> — Géranium × 7 · Rosier × 6 · Lavande × 5</span>
+            <span style="margin-left:auto;font-size:11.5px;color:{{ muted }}">Balcon sud</span>
+          </div>
+          <div style="font-size:12.5px;font-weight:700;color:{{ prim }};margin-top:12px">Ajouter depuis la Bibliothèque (536 plantes) →</div>
+        </div>
+
+        <!-- Récolte -->
+        <div style="background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};padding:18px 20px">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px">
+            <span class="ms" style="font-size:20px;color:{{ prim }}">agriculture</span>
+            <span style="font-size:15.5px;font-weight:800;color:{{ tTitle }}">Récolte</span>
+            <sc-if value="{{ stagePillOn }}" hint-placeholder-val="{{ false }}">
+              <span style="display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:700;background:{{ neutralPillBg }};color:{{ neutralPillTx }}"><span class="ms" style="font-size:13px">eco</span>stades : 68/110</span>
+            </sc-if>
+            <span style="margin-left:auto;display:inline-flex;background:{{ segBg }};border-radius:9px;padding:3px">
+              <span style="padding:5px 12px;border-radius:7px;font-size:12px;font-weight:700;background:{{ segOnBg }};color:{{ segOnTx }};box-shadow:0 1px 4px rgba(0,0,0,0.14)">À venir</span>
+              <span style="padding:5px 12px;border-radius:7px;font-size:12px;font-weight:700;color:{{ tMeta }}">Réalisée</span>
+            </span>
+          </div>
+          <div style="font-size:25px;font-weight:800;color:{{ tTitle }};letter-spacing:-0.01em">{{ harvHero }}</div>
+          <div style="font-size:12.5px;color:{{ muted }};margin-top:3px">{{ harvHeroSub }}</div>
+          <sc-if value="{{ harvInvite }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:11px;align-items:flex-start;border:1.5px dashed {{ invBd }};background:{{ invBg }};border-radius:10px;padding:12px 14px;margin-top:13px">
+              <span style="width:30px;height:30px;border-radius:50%;background:{{ invIcBg }};display:flex;align-items:center;justify-content:center;flex-shrink:0"><span class="ms" style="font-size:17px;color:{{ prim }}">eco</span></span>
+              <span style="flex:1">
+                <span style="display:block;font-size:13px;font-weight:700;color:{{ tTitle }}">42 plants n'ont pas de stade de croissance</span>
+                <span style="display:block;font-size:12px;line-height:1.55;color:{{ tMeta }};margin-top:3px">Dont 14 de vos 22 laitues et 9 de vos 16 poireaux. L'estimation ne peut pas les compter — renseignez le stade (graine, plantule, jeune plant, en production) depuis chaque jardin.</span>
+                <span style="display:block;font-size:12.5px;font-weight:700;color:{{ prim }};margin-top:7px">Renseigner les stades →</span>
+              </span>
+            </div>
+          </sc-if>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+            <sc-for list="{{ harvRows }}" as="h" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:10px;border:1px solid {{ divider }};border-radius:9px;padding:9px 12px">
+                <span style="width:13px;height:13px;border-radius:50%;background:{{ h.dot }};border:1px solid {{ h.dotBd }};flex-shrink:0"></span>
+                <span style="font-size:13px;font-weight:700;color:{{ tTitle }}">{{ h.name }}</span>
+                <span style="font-size:12.5px;color:{{ muted }}">{{ h.count }}</span>
+                <span style="margin-left:auto;display:inline-flex;border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:700;background:{{ h.whenBg }};color:{{ h.whenTx }}">{{ h.when }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:{{ muted }};margin-top:12px"><span class="ms" style="font-size:15px;color:{{ ornTx }}">filter_vintage</span>Balcon sud est ornemental — aucune récolte attendue, et c'est normal.</div>
+        </div>
+
+        <!-- Météo -->
+        <div style="background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};padding:18px 20px">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px">
+            <span class="ms" style="font-size:20px;color:{{ prim }}">partly_cloudy_day</span>
+            <span style="font-size:15.5px;font-weight:800;color:{{ tTitle }}">Météo</span>
+            <sc-if value="{{ wxPillOn }}" hint-placeholder-val="{{ false }}">
+              <span style="display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:700;background:{{ neutralPillBg }};color:{{ neutralPillTx }}"><span class="ms" style="font-size:13px">location_on</span>1/3 localisé</span>
+            </sc-if>
+            <span style="margin-left:auto;font-size:12px;color:{{ muted }}">{{ wxHeadNote }}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px">
+            <span class="ms" style="font-size:46px;color:{{ wxIc }}">clear_day</span>
+            <span>
+              <span style="display:block;font-size:31px;font-weight:800;color:{{ tTitle }};letter-spacing:-0.01em">29°C</span>
+              <span style="display:block;font-size:12.5px;color:{{ tMeta }};margin-top:1px">Ensoleillé · ressenti 31° · {{ wxWho }}</span>
+            </span>
+            <span style="margin-left:auto;text-align:right;font-size:12px;color:{{ muted }};line-height:1.7">Vent 14 km/h<br>Pluie 0 mm · UV 8</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:9px;margin-top:14px">
+            <sc-for list="{{ days }}" as="d" hint-placeholder-count="3">
+              <span style="display:flex;flex-direction:column;align-items:center;gap:4px;border:1px solid {{ divider }};border-radius:9px;padding:9px 6px">
+                <span style="font-size:11px;font-weight:800;letter-spacing:0.04em;color:{{ muted }}">{{ d.lab }}</span>
+                <span class="ms" style="font-size:21px;color:{{ d.icc }}">{{ d.ic }}</span>
+                <span style="font-size:13.5px;font-weight:800;color:{{ tTitle }}">{{ d.t }}</span>
+              </span>
+            </sc-for>
+          </div>
+          <sc-if value="{{ wxAllSet }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:{{ muted }};margin-top:12px"><span class="ms" style="font-size:15px;color:{{ prim }}">location_on</span>Vos 3 jardins partagent cette localisation.</div>
+          </sc-if>
+          <sc-if value="{{ wxMissingOn }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:9px;margin-top:13px">
+              <sc-for list="{{ wxMissing }}" as="m" hint-placeholder-count="2">
+                <div style="display:flex;gap:11px;align-items:flex-start;border:1.5px dashed {{ invBd }};background:{{ invBg }};border-radius:10px;padding:11px 13px">
+                  <span style="width:30px;height:30px;border-radius:50%;background:{{ invIcBg }};display:flex;align-items:center;justify-content:center;flex-shrink:0"><span class="ms" style="font-size:17px;color:{{ prim }}">add_location_alt</span></span>
+                  <span style="flex:1">
+                    <span style="display:block;font-size:13px;font-weight:700;color:{{ tTitle }}">{{ m.title }}</span>
+                    <span style="display:block;font-size:12px;line-height:1.5;color:{{ tMeta }};margin-top:2px">{{ m.body }}</span>
+                  </span>
+                  <span style="font-size:12.5px;font-weight:700;color:{{ prim }};white-space:nowrap;align-self:center">Ajouter →</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- Statistiques -->
+        <div style="background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};padding:18px 20px">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
+            <span class="ms" style="font-size:20px;color:{{ prim }}">monitoring</span>
+            <span style="font-size:15.5px;font-weight:800;color:{{ tTitle }}">Statistiques</span>
+            <span style="margin-left:auto;font-size:12px;color:{{ muted }}">parcelles actives uniquement</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <sc-for list="{{ statRows }}" as="s" hint-placeholder-count="3">
+              <div style="display:grid;grid-template-columns:118px 1fr 88px;gap:11px;align-items:center">
+                <span style="font-size:13px;font-weight:700;color:{{ tMeta }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.name }}</span>
+                <span style="height:8px;border-radius:999px;background:{{ track }};overflow:hidden;display:block"><span style="display:block;height:100%;width:{{ s.occ }}%;border-radius:999px;background:{{ prim }}"></span></span>
+                <span style="font-size:12px;color:{{ muted }};text-align:right;font-weight:600">{{ s.m2 }} · <b style="color:{{ tTitle }}">{{ s.occ }}%</b></span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="height:1px;background:{{ divider }};margin:15px 0 13px"></div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:0.05em;color:{{ muted }};margin-bottom:9px">EXPOSITION DOMINANTE — ÉTÉ · MIDI</div>
+          <div style="display:flex;height:14px;border-radius:999px;overflow:hidden">
+            <sc-for list="{{ expoDist }}" as="e" hint-placeholder-count="4">
+              <span style="width:{{ e.w }}%;background:{{ e.sw }}"></span>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:13px;flex-wrap:wrap;margin-top:9px">
+            <sc-for list="{{ expoDist }}" as="e" hint-placeholder-count="4">
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:{{ tMeta }}"><span style="width:11px;height:11px;border-radius:3.5px;background:{{ e.sw }};border:1px solid {{ e.bd }}"></span>{{ e.lab }} {{ e.w }}%</span>
+            </sc-for>
+          </div>
+          <div style="font-size:12px;color:{{ muted }};margin-top:13px">68 cases libres au total — dont 28 en plein soleil.</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- BLOCS NOVICE / CUSTOMIZE / MOBILE -->
+    <sc-if value="{{ simpleOn }}" hint-placeholder-val="{{ true }}">
+      <div style="display:grid;grid-template-columns:{{ simpleCols }};gap:{{ cardGap }}px;padding-bottom:{{ simplePadB }}px">
+        <div style="background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};padding:{{ simplePad }}">
+          <div style="display:flex;align-items:center;gap:9px">
+            <span style="width:34px;height:34px;border-radius:50%;background:{{ invIcBg }};display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:18px;color:{{ prim }}">agriculture</span></span>
+            <span style="font-size:{{ blkTitleFs }}px;font-weight:800;color:{{ tTitle }}">À récolter bientôt</span>
+          </div>
+          <div style="font-size:{{ blkBodyFs }}px;line-height:1.6;color:{{ tMeta }};margin-top:11px">Vos premières <b>courgettes</b> arrivent — <b>6 pieds</b> prêts début août. 24 tomates suivront vers la mi-août.</div>
+          <div style="font-size:12.5px;font-weight:700;color:{{ prim }};margin-top:10px">Voir la récolte →</div>
+        </div>
+        <div style="background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};padding:{{ simplePad }}">
+          <div style="display:flex;align-items:center;gap:9px">
+            <span style="width:34px;height:34px;border-radius:50%;background:{{ invIcBg }};display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:18px;color:{{ wxIc }}">clear_day</span></span>
+            <span style="font-size:{{ blkTitleFs }}px;font-weight:800;color:{{ tTitle }}">Météo — Lyon</span>
+            <span style="margin-left:auto;font-size:22px;font-weight:800;color:{{ tTitle }}">29°C</span>
+          </div>
+          <div style="font-size:{{ blkBodyFs }}px;color:{{ tMeta }};margin-top:11px">Ensoleillé toute la journée — un bon jour pour arroser en soirée.</div>
+          <div style="display:flex;gap:8px;margin-top:11px">
+            <sc-for list="{{ days }}" as="d" hint-placeholder-count="3">
+              <span style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid {{ divider }};border-radius:8px;padding:7px 4px;font-size:12px;font-weight:700;color:{{ tMeta }}"><span style="color:{{ muted }};font-weight:800;font-size:10.5px">{{ d.lab }}</span><span class="ms" style="font-size:16px;color:{{ d.icc }}">{{ d.ic }}</span>{{ d.t }}</span>
+            </sc-for>
+          </div>
+        </div>
+        <sc-if value="{{ custBlocks }}" hint-placeholder-val="{{ false }}">
+          <div style="grid-column:1 / -1;background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};padding:18px 20px">
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
+              <span class="ms" style="font-size:20px;color:{{ prim }}">potted_plant</span>
+              <span style="font-size:15.5px;font-weight:800;color:{{ tTitle }}">Compteurs par variété</span>
+              <span style="margin-left:auto;display:inline-flex;border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:700;background:{{ cntChipBg }};color:{{ cntChipTx }}">128 plantes</span>
+            </div>
+            <div style="display:flex;gap:9px;flex-wrap:wrap">
+              <sc-for list="{{ varChips }}" as="v" hint-placeholder-count="7">
+                <span style="display:inline-flex;align-items:center;gap:7px;border:1px solid {{ obtnBd }};border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:700;color:{{ tMeta }}"><span style="width:11px;height:11px;border-radius:50%;background:{{ v.dot }};border:1px solid {{ v.dotBd }}"></span>{{ v.name }} × {{ v.n }}</span>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <!-- Invitation niveau (novice) -->
+    <sc-if value="{{ noviceHint }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;justify-content:center;gap:9px;padding:0 0 {{ mainPadB }}px;font-size:13px;color:{{ muted }}">
+        <span class="ms" style="font-size:16px;color:{{ prim }}">dashboard_customize</span>
+        Besoin de plus ? Le niveau <b style="color:{{ tMeta }}">&nbsp;Jardinier&nbsp;</b> ajoute météo par jardin, récolte et compteurs —
+        <span style="font-weight:700;color:{{ prim }}">Personnaliser</span>
+      </div>
+    </sc-if>
+  </div>
+
+  <!-- FOOTER -->
+  <sc-if value="{{ showFoot }}" hint-placeholder-val="{{ false }}">
+    <footer style="background:#1B5E3A;padding:44px {{ padX }}px 0;margin-top:10px">
+      <div style="display:flex;gap:56px;flex-wrap:wrap">
+        <div style="width:280px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:34px;height:34px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center"><span style="font-family:Georgia,serif;font-size:21px;font-weight:700;color:#1B5E3A">S</span></div>
+            <span style="font-size:20px;font-weight:800;color:#fff">SmartCrops</span>
+          </div>
+          <div style="font-size:14px;line-height:1.6;color:rgba(255,255,255,0.75);margin-top:14px">Votre compagnon de jardin virtuel — découvrez, cultivez et partagez des plantes du monde entier.</div>
+          <div style="font-size:13px;color:rgba(255,255,255,0.55);margin-top:16px">© 2026 SmartCrops</div>
+        </div>
+        <sc-for list="{{ footCols }}" as="fc" hint-placeholder-count="4">
+          <div>
+            <div style="font-size:13px;font-weight:800;letter-spacing:0.08em;color:#fff;margin-bottom:14px">{{ fc.h }}</div>
+            <div style="display:flex;flex-direction:column;gap:11px">
+              <sc-for list="{{ fc.links }}" as="lk" hint-placeholder-count="3">
+                <span style="display:flex;align-items:center;gap:9px;font-size:15px;color:rgba(255,255,255,0.85)">{{ lk.lab }}<sc-if value="{{ lk.soon }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;border-radius:999px;background:rgba(233,160,107,0.10);border:1px solid rgba(233,160,107,0.5);padding:3px 10px;font-size:11.5px;font-weight:600;color:#E9A06B">Bientôt disponible</span></sc-if></span>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,0.16);margin-top:36px;padding:20px 0;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap">
+        <span style="font-size:14.5px;color:rgba(255,255,255,0.8)">© 2026 SmartCrops. Tous droits réservés.</span>
+        <span style="color:rgba(255,255,255,0.4)">·</span><span style="font-size:14.5px;color:rgba(255,255,255,0.9)">Mentions légales</span>
+        <span style="color:rgba(255,255,255,0.4)">·</span><span style="font-size:14.5px;color:rgba(255,255,255,0.9)">CGU</span>
+        <span style="color:rgba(255,255,255,0.4)">·</span><span style="font-size:14.5px;color:rgba(255,255,255,0.9)">Confidentialité</span>
+        <span style="display:inline-flex;background:rgba(255,255,255,0.14);border-radius:999px;padding:3px;margin-left:6px">
+          <span style="width:32px;height:32px;border-radius:50%;background:{{ sunBg }};display:inline-flex;align-items:center;justify-content:center"><span class="ms" style="font-size:18px;color:{{ sunTx }}">light_mode</span></span>
+          <span style="width:32px;height:32px;border-radius:50%;background:{{ moonBg }};display:inline-flex;align-items:center;justify-content:center"><span class="ms" style="font-size:17px;color:{{ moonTx }}">dark_mode</span></span>
+        </span>
+      </div>
+    </footer>
+  </sc-if>
+
+  <!-- PANNEAU PERSONNALISATION -->
+  <sc-if value="{{ panelOn }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:rgba(9,22,16,0.45);z-index:40"></div>
+    <div style="position:absolute;right:16px;top:16px;bottom:16px;width:392px;background:{{ card }};border-radius:14px;box-shadow:0 26px 70px rgba(0,0,0,0.38);z-index:41;display:flex;flex-direction:column;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:17px 20px;border-bottom:1px solid {{ divider }}">
+        <span class="ms" style="font-size:21px;color:{{ prim }}">dashboard_customize</span>
+        <span style="flex:1"><span style="display:block;font-size:16px;font-weight:800;color:{{ tTitle }}">Personnaliser le tableau de bord</span><span style="display:block;font-size:12px;color:{{ muted }};margin-top:2px">Niveau global + réglage bloc par bloc</span></span>
+        <span class="ms" style="font-size:20px;color:{{ muted }}">close</span>
+      </div>
+      <div style="flex:1;padding:18px 20px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+        <div>
+          <div style="font-size:11.5px;font-weight:800;letter-spacing:0.06em;color:{{ muted }};margin-bottom:9px">NIVEAU <span style="font-weight:600;letter-spacing:0;text-transform:none;color:{{ muted }}">— un point de départ, pas une prison</span></div>
+          <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px">
+            <sc-for list="{{ levels }}" as="l" hint-placeholder-count="3">
+              <span style="display:flex;flex-direction:column;gap:5px;border:{{ l.bd }};background:{{ l.bg }};border-radius:10px;padding:11px 10px">
+                <span style="display:flex;align-items:center;gap:5px;font-size:12.5px;font-weight:800;color:{{ l.tx }}"><span class="ms" style="font-size:15px;color:{{ l.icc }}">{{ l.ic }}</span>{{ l.name }}</span>
+                <span style="font-size:10.5px;line-height:1.45;color:{{ muted }}">{{ l.desc }}</span>
+              </span>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start;font-size:11.5px;line-height:1.5;color:{{ muted }};margin-top:9px"><span class="ms" style="font-size:14px;color:{{ prim }};margin-top:1px">info</span>Le niveau pré-configure les blocs ci-dessous. Vos réglages manuels restent prioritaires — le badge « ajusté » apparaît alors sur le niveau.</div>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:11.5px;font-weight:800;letter-spacing:0.06em;color:{{ muted }};margin-bottom:9px">BLOCS <span style="font-weight:600;letter-spacing:0;color:{{ muted }}">— afficher, masquer, réordonner</span></div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <sc-for list="{{ modRows }}" as="m" hint-placeholder-count="6">
+              <sc-if value="{{ m.isDrop }}" hint-placeholder-val="{{ false }}">
+                <div style="height:3px;border-radius:999px;background:{{ prim }};margin:1px 2px"></div>
+              </sc-if>
+              <sc-if value="{{ m.isRow }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;align-items:center;gap:11px;border:{{ m.bd }};background:{{ m.bg }};border-radius:10px;padding:11px 13px;box-shadow:{{ m.sh }};transform:{{ m.tf }}">
+                  <span class="ms" style="font-size:18px;color:{{ muted }}">drag_indicator</span>
+                  <span style="flex:1;min-width:0">
+                    <span style="display:block;font-size:13.5px;font-weight:700;color:{{ m.nameTx }}">{{ m.name }}</span>
+                    <span style="display:block;font-size:11px;color:{{ muted }};margin-top:1px">{{ m.desc }}</span>
+                  </span>
+                  <sc-if value="{{ m.locked }}" hint-placeholder-val="{{ false }}">
+                    <span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;color:{{ muted }};background:{{ neutralPillBg }};border-radius:999px;padding:4px 9px"><span class="ms" style="font-size:12px">lock</span>toujours affiché</span>
+                  </sc-if>
+                  <sc-if value="{{ m.hasToggle }}" hint-placeholder-val="{{ true }}">
+                    <span style="width:34px;height:19px;border-radius:999px;background:{{ m.tgBg }};position:relative;flex-shrink:0"><span style="position:absolute;left:{{ m.tgL }}px;top:2px;width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.25)"></span></span>
+                  </sc-if>
+                </div>
+              </sc-if>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;font-size:11.5px;color:{{ muted }};margin-top:10px"><span class="ms" style="font-size:15px;color:{{ prim }}">open_with</span>« Compteurs par variété » en cours de déplacement — relâchez pour le placer sous Météo.</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 20px;border-top:1px solid {{ divider }};background:{{ searchBg }}">
+        <span style="font-size:12.5px;font-weight:700;color:{{ tMeta }}">Réinitialiser au niveau Jardinier</span>
+        <span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 18px;border-radius:8px;background:{{ prim }};color:#fff;font-size:13.5px;font-weight:800"><span class="ms" style="font-size:17px">check</span>Terminé</span>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1460,&quot;height&quot;:1400},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;novice&quot;,&quot;expert&quot;,&quot;missing&quot;,&quot;customize&quot;,&quot;mobile&quot;],&quot;default&quot;:&quot;novice&quot;,&quot;section&quot;:&quot;État&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;day&quot;,&quot;night&quot;],&quot;default&quot;:&quot;day&quot;,&quot;section&quot;:&quot;État&quot;},&quot;showFooter&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;État&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props || {};
+    const variant = p.variant || 'novice';
+    const theme = p.theme || 'day';
+    const night = theme === 'night';
+    const isMobile = variant === 'mobile';
+    const isExpert = variant === 'expert' || variant === 'missing';
+    const isMissing = variant === 'missing';
+    const isCust = variant === 'customize';
+    const showFoot = p.showFooter === true || p.showFooter === 'true';
+
+    const T = night ? {
+      pageBg: '#0D1D34', navBg: '#306D4C', card: '#16294A', cardBd: '#22375C',
+      shadow: '0 2px 10px rgba(0,0,0,0.28)',
+      tTitle: '#F2F6FA', tSci: '#9FACC2', tMeta: '#D6DEEC', muted: '#7E8CA6',
+      prim: '#4CB47C', h1c: '#4CB47C', divider: '#24395F', inputBd: '#2C3F63',
+      searchBg: '#0F2038', track: '#31456B',
+      segBg: '#0F2038', segOnBg: '#4CB47C', segOnTx: '#0D1D34',
+      obtnBd: '#31456B', obtnTx: '#DCE4F0',
+      cntChipBg: 'rgba(76,180,124,0.16)', cntChipTx: '#7ED0A4',
+      dangTx: '#F08A8A',
+      invBd: 'rgba(76,180,124,0.35)', invBg: 'rgba(76,180,124,0.07)', invIcBg: 'rgba(76,180,124,0.15)',
+      neutralPillBg: 'rgba(126,140,166,0.16)', neutralPillTx: '#B4C0D4',
+      ornBg: 'rgba(244,143,177,0.16)', ornTx: '#F4A7C3',
+      wxBg: 'rgba(255,203,84,0.13)', wxTx: '#FFD98A', wxIc: '#FFCB54',
+      stripBg: '#0F2038',
+      expoSw: ['rgba(255,203,84,0.45)', 'rgba(196,214,100,0.40)', 'rgba(255,148,92,0.42)', 'rgba(124,152,190,0.38)'],
+      expoBd: ['rgba(255,203,84,0.55)', 'rgba(196,214,100,0.48)', 'rgba(255,148,92,0.52)', 'rgba(124,152,190,0.42)']
+    } : {
+      pageBg: '#FAFDF7', navBg: '#1B5E3A', card: '#FFFFFF', cardBd: '#F0F4EE',
+      shadow: '0 2px 10px rgba(27,94,58,0.07)',
+      tTitle: '#22302A', tSci: '#75827A', tMeta: '#3C4A42', muted: '#7A8781',
+      prim: '#2E8B57', h1c: '#2E8B57', divider: '#EDF2EC', inputBd: '#D8E0D8',
+      searchBg: '#FBFDFA', track: '#E9EFE7',
+      segBg: '#EFF3EE', segOnBg: '#FFFFFF', segOnTx: '#1B5E3A',
+      obtnBd: '#D8E0D8', obtnTx: '#3C4A42',
+      cntChipBg: '#E4F3E9', cntChipTx: '#20713F',
+      dangTx: '#C05B52',
+      invBd: '#C5D9C6', invBg: '#F6FBF4', invIcBg: '#E4F3E9',
+      neutralPillBg: '#EFF3EE', neutralPillTx: '#55645B',
+      ornBg: '#F8E3EC', ornTx: '#A34D74',
+      wxBg: '#FFF4D6', wxTx: '#8A6A14', wxIc: '#E8890C',
+      stripBg: '#FBFDFA',
+      expoSw: ['#FFE7A3', '#EDF3B4', '#FFD6A6', '#CBD8E4'],
+      expoBd: ['#EFD27E', '#D9E38C', '#EFBD7F', '#B4C5D6']
+    };
+
+    // vignettes mini-grilles
+    const vegPal = night
+      ? ['rgba(232,117,107,0.35)', 'rgba(129,199,132,0.35)', 'rgba(76,180,124,0.40)', 'rgba(174,213,129,0.35)', 'rgba(255,203,84,0.30)', 'rgba(196,214,100,0.28)']
+      : ['#F6C9C4', '#CDE8CE', '#BFE3CB', '#DFEFC2', '#FFE7A3', '#EDF3B4'];
+    const ornPal = night
+      ? ['rgba(244,143,177,0.38)', 'rgba(149,117,205,0.38)', 'rgba(255,171,145,0.35)', 'rgba(124,152,190,0.30)']
+      : ['#F8D3E0', '#DFD4F0', '#FCDACC', '#CBD8E4'];
+    const base = night ? '#132740' : '#F1F7EE';
+    const thumb = (n, seed, density, pal) => Array.from({ length: n }, (_, i) =>
+      ((i * 37 + seed * 11) % 100) < density ? pal[(i * 13 + seed * 7) % pal.length] : base
+    );
+
+    const gardensData = [
+      { name: 'Potager du fond', type: 'Potager · 10 × 4 m', typeLab: 'Potager · 38 m²', typeIc: 'grass', plants: '78 plantes', plantsN: '78', listed: 'Tomate, Laitue, Poireau, Carotte +3', occ: 82, occSub: '124/152 cases', expoI: 0, expo: 'Plein soleil', wx: '29° Ensoleillé', upd: 'modifié il y a 2 h', seed: 1, density: 62, pal: vegPal, harv: '24 pieds en prod', harvSub: 'tomates & courgettes', orn: false },
+      { name: 'Serre', type: 'Serre · 5 × 4 m', typeLab: 'Serre · 20 m²', typeIc: 'cabin', plants: '32 plantes', plantsN: '32', listed: 'Tomate, Basilic, Fraisier, Laitue', occ: 71, occSub: '57/80 cases', expoI: 0, expo: 'Plein soleil', wx: '29° Ensoleillé', upd: 'modifié hier', seed: 2, density: 52, pal: vegPal, harv: '14 pieds en prod', harvSub: 'fraisiers & basilic', orn: false },
+      { name: 'Balcon sud', type: 'Balcon · 5 × 4 m', typeLab: 'Balcon · 15 m²', typeIc: 'balcony', plants: '18 plantes', plantsN: '18', listed: 'Rosier, Lavande, Géranium', occ: 45, occSub: '27/60 cases', expoI: 2, expo: 'Après-midi', wx: '29° Ensoleillé', upd: 'modifié il y a 5 j', seed: 3, density: 34, pal: ornPal, harv: '—', harvSub: 'jardin ornemental', orn: true }
+    ];
+
+    const gardens = gardensData.map((g) => ({
+      ...g, strip: thumb(60, g.seed, g.density, g.pal), plants: g.plants
+    }));
+
+    const gardenRows = gardensData.map((g, i) => ({
+      name: g.name, typeIc: g.typeIc, typeLab: g.typeLab,
+      plants: g.plantsN, plantsSub: g.orn ? 'fleurs' : 'potagères',
+      occ: g.occ, occSub: g.occSub,
+      expoSw: T.expoSw[g.expoI], expoBd: T.expoBd[g.expoI], expo: g.expo,
+      wxOn: !isMissing || i === 0, wxAdd: isMissing && i > 0, wx: g.wx,
+      harv: g.orn ? '— ornemental' : (isMissing && i === 1 ? 'à compléter' : g.harv),
+      harvSub: g.orn ? 'et c\'est normal' : (isMissing && i === 1 ? '12 plants sans stade' : g.harvSub),
+      harvC: g.orn ? T.muted : (isMissing && i === 1 ? T.prim : T.tTitle),
+      thumb: thumb(30, g.seed, g.density, g.pal),
+      rowBd: i < 2 ? T.divider : 'transparent'
+    }));
+
+    const kpis = [
+      { ic: 'square_foot', lab: 'Surface active', val: '73', unit: 'm²', sub: '3 jardins · 292 cases', subc: T.muted, subW: 400 },
+      { ic: 'grid_on', lab: 'Occupation', val: '71', unit: '%', sub: '208 cases plantées', subc: T.muted, subW: 400 },
+      { ic: 'potted_plant', lab: 'Plantes', val: '128', unit: '', sub: '10 variétés · 536 au catalogue', subc: T.muted, subW: 400 },
+      isMissing
+        ? { ic: 'agriculture', lab: 'En production', val: '≥ 26', unit: 'pieds', sub: 'estimation incomplète — stades 68/110', subc: T.prim, subW: 700 }
+        : { ic: 'agriculture', lab: 'En production', val: '38', unit: 'pieds', sub: '+34 attendus d\'ici septembre', subc: T.muted, subW: 400 }
+    ];
+
+    const plantDots = {
+      tomate: ['#F6C9C4', '#EBA9A1'], laitue: ['#DFEFC2', '#C4DE97'], poireau: ['#CDE8CE', '#A8D4AA'],
+      carotte: ['#FFD6A6', '#EFBD7F'], basilic: ['#CDE8CE', '#A8D4AA'], fraisier: ['#F8D3E0', '#EDAFC6'], courgette: ['#BFE3CB', '#2E8B57']
+    };
+    const nDot = (k) => night ? plantDots[k].map((c) => c) : plantDots[k];
+    const mkVar = (name, key, n) => ({ name, n: String(n), w: Math.round(n / 32 * 100), dot: nDot(key)[0], dotBd: nDot(key)[1], bar: T.prim });
+    const varieties = [
+      mkVar('Tomate', 'tomate', 32), mkVar('Laitue', 'laitue', 22), mkVar('Poireau', 'poireau', 16),
+      mkVar('Carotte', 'carotte', 12), mkVar('Basilic', 'basilic', 12), mkVar('Fraisier', 'fraisier', 10), mkVar('Courgette', 'courgette', 6)
+    ];
+    const varChips = varieties.slice(0, 7).map((v) => ({ name: v.name, n: v.n, dot: v.dot, dotBd: v.dotBd }));
+    const varFilters = ['Tous les jardins', 'Potager du fond', 'Serre', 'Balcon sud'].map((lab, i) => ({
+      lab, bg: i === 0 ? T.prim : 'transparent', tx: i === 0 ? '#fff' : T.tMeta, bd: i === 0 ? T.prim : T.obtnBd
+    }));
+
+    const whenSoon = { whenBg: T.cntChipBg, whenTx: T.cntChipTx };
+    const whenLater = { whenBg: T.neutralPillBg, whenTx: T.neutralPillTx };
+    const harvRows = isMissing ? [
+      { name: 'Courgette', count: '6 pieds · stades complets', when: 'début août', ...whenSoon, dot: nDot('courgette')[0], dotBd: nDot('courgette')[1] },
+      { name: 'Tomate', count: '20 pieds comptés · 12 sans stade', when: '~ mi-août', ...whenSoon, dot: nDot('tomate')[0], dotBd: nDot('tomate')[1] },
+      { name: 'Laitue', count: '8 comptées · 14 sans stade', when: 'incomplet', ...whenLater, dot: nDot('laitue')[0], dotBd: nDot('laitue')[1] },
+      { name: 'Poireau', count: '7 comptés · 9 sans stade', when: 'incomplet', ...whenLater, dot: nDot('poireau')[0], dotBd: nDot('poireau')[1] }
+    ] : [
+      { name: 'Courgette', count: '6 pieds', when: 'début août', ...whenSoon, dot: nDot('courgette')[0], dotBd: nDot('courgette')[1] },
+      { name: 'Fraisier', count: '8 pieds', when: 'en cours', ...whenSoon, dot: nDot('fraisier')[0], dotBd: nDot('fraisier')[1] },
+      { name: 'Tomate', count: '24 pieds', when: '~ mi-août', ...whenSoon, dot: nDot('tomate')[0], dotBd: nDot('tomate')[1] },
+      { name: 'Laitue', count: '14 pieds', when: 'fin août', ...whenLater, dot: nDot('laitue')[0], dotBd: nDot('laitue')[1] }
+    ];
+
+    const days = [
+      { lab: 'SAM', ic: 'clear_day', icc: '#E8890C', t: '31°' },
+      { lab: 'DIM', ic: 'partly_cloudy_day', icc: night ? '#9FB0C2' : '#7A8781', t: '27°' },
+      { lab: 'LUN', ic: 'rainy', icc: night ? '#90CAF9' : '#4A7FB5', t: '24°' }
+    ];
+
+    const wxMissing = [
+      { title: 'Balcon sud — pas de localisation', body: 'La météo de ce jardin s\'affichera ici dès que sa localisation est renseignée (Réglages du jardin → Localisation).' },
+      { title: 'Serre — pas de localisation', body: 'Même sous serre, la météo locale guide l\'aération et l\'arrosage. Une adresse approximative suffit.' }
+    ];
+
+    const statRows = [
+      { name: 'Potager du fond', occ: 82, m2: '38 m²' },
+      { name: 'Serre', occ: 71, m2: '20 m²' },
+      { name: 'Balcon sud', occ: 45, m2: '15 m²' }
+    ];
+    const expoDist = [
+      { lab: 'Plein soleil', w: 54, sw: T.expoSw[0], bd: T.expoBd[0] },
+      { lab: 'Matin', w: 18, sw: T.expoSw[1], bd: T.expoBd[1] },
+      { lab: 'Après-midi', w: 17, sw: T.expoSw[2], bd: T.expoBd[2] },
+      { lab: 'Ombre', w: 11, sw: T.expoSw[3], bd: T.expoBd[3] }
+    ];
+
+    const levels = [
+      { name: 'Novice', ic: 'spa', desc: 'Vos jardins + récolte proche et météo', on: false },
+      { name: 'Jardinier', ic: 'yard', desc: '+ compteurs par variété et par jardin', on: true },
+      { name: 'Expert', ic: 'monitoring', desc: 'Tout : agrégats, occupation, comparaisons', on: false }
+    ].map((l) => ({
+      ...l,
+      bd: l.on ? ('2px solid ' + T.prim) : ('1px solid ' + T.inputBd),
+      bg: l.on ? T.invBg : 'transparent',
+      tx: l.on ? T.prim : T.tMeta, icc: l.on ? T.prim : T.muted
+    }));
+
+    const tgOn = { tgBg: T.prim, tgL: 17 };
+    const tgOff = { tgBg: T.track, tgL: 2 };
+    const row = (name, desc, o) => ({
+      isRow: true, isDrop: false, name, desc,
+      bd: '1px solid ' + T.divider, bg: 'transparent', sh: 'none', tf: 'none',
+      nameTx: T.tTitle, hasToggle: true, locked: false, ...tgOn, ...o
+    });
+    const modRows = [
+      row('Jardins', 'Navigation vers vos jardins — l\'action n° 1', { hasToggle: false, locked: true }),
+      row('Météo', 'Conditions à la localisation de chaque jardin', {}),
+      { isRow: false, isDrop: true },
+      row('Compteurs par variété', 'Tomate × 32, Laitue × 22… par jardin ou global', { bd: '2px solid ' + T.prim, bg: T.invBg, sh: '0 12px 30px rgba(15,60,35,0.25)', tf: 'rotate(-1.2deg)' }),
+      row('Récolte', 'Estimation en pieds, puis récolte réalisée', {}),
+      row('Statistiques', 'Surface, occupation, exposition dominante', { ...tgOff, nameTx: T.muted })
+    ];
+
+    const footCols = [
+      { h: 'EXPLORER', links: [{ lab: 'Bibliothèque' }, { lab: 'Mes Jardins' }, { lab: 'Boutique', soon: true }] },
+      { h: 'RESSOURCES', links: [{ lab: 'À propos de nous' }, { lab: 'Centre d\'aide', soon: true }, { lab: 'Actualités', soon: true }, { lab: 'Contact' }] },
+      { h: 'COMPTE', links: [{ lab: 'Mon compte' }, { lab: 'Déconnexion' }] },
+      { h: 'RESTONS CONNECTÉS', links: [{ lab: 'Suivez-nous', soon: true }] }
+    ];
+
+    const levelChips = { novice: 'Vue Novice · 3 blocs', expert: 'Vue Expert · 5 blocs', missing: 'Vue Expert · 5 blocs', customize: 'Vue Jardinier · ajustée', mobile: 'Vue Novice' };
+    const metaLines = {
+      novice: '3 jardins · 128 plantes · tout va bien',
+      expert: '3 jardins · 128 plantes · 73 m² actifs · Lyon, France',
+      missing: '3 jardins · 128 plantes · 73 m² actifs · Lyon, France',
+      customize: '3 jardins · 128 plantes · Lyon, France',
+      mobile: '3 jardins · 128 plantes'
+    };
+    const screenLabels = { novice: 'Dashboard novice', expert: 'Dashboard expert', missing: 'Dashboard données manquantes', customize: 'Personnalisation', mobile: 'Dashboard mobile nuit' };
+
+    return {
+      artW: isMobile ? 390 : 1460, padX: isMobile ? 14 : 56,
+      navH: isMobile ? 56 : 64, logoS: isMobile ? 32 : 38, logoFs: isMobile ? 20 : 24, brandFs: isMobile ? 19 : 23,
+      deskNav: !isMobile, isMobile,
+      pageBg: T.pageBg, navBg: T.navBg, card: T.card, cardBd: T.cardBd, shadow: T.shadow,
+      tTitle: T.tTitle, tSci: T.tSci, tMeta: T.tMeta, muted: T.muted, prim: T.prim, h1c: T.h1c,
+      divider: T.divider, searchBg: T.searchBg, track: T.track,
+      segBg: T.segBg, segOnBg: T.segOnBg, segOnTx: T.segOnTx, obtnBd: T.obtnBd, obtnTx: T.obtnTx,
+      cntChipBg: T.cntChipBg, cntChipTx: T.cntChipTx, dangTx: T.dangTx,
+      invBd: T.invBd, invBg: T.invBg, invIcBg: T.invIcBg,
+      neutralPillBg: T.neutralPillBg, neutralPillTx: T.neutralPillTx,
+      ornBg: T.ornBg, ornTx: T.ornTx, wxBg: T.wxBg, wxTx: T.wxTx, wxIc: T.wxIc, stripBg: T.stripBg,
+      screenLabel: screenLabels[variant],
+
+      headMargin: isMobile ? '18px 0 14px' : '26px 0 20px',
+      h1Size: isMobile ? 25 : 32, metaFs: isMobile ? 12.5 : 14.5,
+      metaLine: metaLines[variant], levelChip: levelChips[variant],
+      chipH: isMobile ? 32 : 38, chipFs: isMobile ? 11.5 : 12.5,
+      btnH: isMobile ? 38 : 44, btnPx: isMobile ? 13 : 17, btnFs: isMobile ? 12.5 : 14.5,
+
+      kpiOn: isExpert, kpis,
+      bigCards: !isExpert, cardCols: isMobile ? '1fr' : 'repeat(3, 1fr)',
+      cardGap: isMobile ? 12 : 18, cardMb: isMobile ? 12 : 18,
+      stripH: isMobile ? 44 : 58, gNameFs: isMobile ? 16 : 17, gListFs: isMobile ? 12 : 12.5,
+      gardens,
+      rowCards: isExpert, gardenRows,
+
+      blocksOn: isExpert, mainPadB: isMobile ? 26 : 34,
+      varFilters, varieties, varChips,
+      stagePillOn: isMissing, harvInvite: isMissing,
+      harvHero: isMissing ? 'Au moins 26 pieds en production' : '38 pieds en production',
+      harvHeroSub: isMissing ? 'sur les 68 plants comestibles dont le stade est connu' : '+34 arriveront d\'ici septembre · sur 110 plants comestibles',
+      harvRows,
+      wxPillOn: isMissing, wxAllSet: isExpert && !isMissing, wxMissingOn: isMissing, wxMissing,
+      wxHeadNote: isMissing ? 'vendredi 1 août' : 'Lyon, France · vendredi 1 août',
+      wxWho: isMissing ? 'Potager du fond (Lyon)' : 'Lyon',
+      days, statRows, expoDist,
+
+      simpleOn: !isExpert, simpleCols: isMobile ? '1fr' : '1fr 1fr',
+      simplePad: isMobile ? '15px 16px' : '17px 20px', simplePadB: isCust ? 18 : (isMobile ? 26 : 14),
+      blkTitleFs: isMobile ? 14.5 : 15.5, blkBodyFs: isMobile ? 13 : 13.5,
+      custBlocks: isCust,
+      noviceHint: variant === 'novice' || isMobile,
+
+      panelOn: isCust, levels, modRows,
+      showFoot, footCols,
+      sunBg: night ? 'transparent' : '#fff', sunTx: night ? 'rgba(255,255,255,0.75)' : '#E8890C',
+      moonBg: night ? '#fff' : 'transparent', moonTx: night ? '#1B5E3A' : 'rgba(255,255,255,0.75)'
+    };
+  }
+}
+</script>
+</body>
+</html>

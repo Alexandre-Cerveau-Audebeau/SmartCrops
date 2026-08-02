@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=block" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Inter', system-ui, sans-serif; }
+  a { color: #2E8B57; } a:hover { color: #1B5E3A; }
+  .ms { font-family: 'Material Symbols Outlined'; font-weight: 400; font-style: normal; line-height: 1; white-space: nowrap; }
+</style>
+</helmet>
+
+<div style="width:{{ artW }}px;min-width:{{ artW }}px;background:{{ pageBg }};font-family:'Inter',system-ui,sans-serif;position:relative;overflow:hidden;border-radius:2px">
+
+  <!-- ================= NAVBAR (existant, reproduit) ================= -->
+  <nav style="height:{{ navH }}px;background:{{ navBg }};display:flex;align-items:center;padding:0 {{ padX }}px;gap:16px">
+    <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
+      <div style="width:{{ logoS }}px;height:{{ logoS }}px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;position:relative">
+        <span style="font-family:Georgia,serif;font-size:{{ logoFs }}px;font-weight:700;color:#1B5E3A;line-height:1">S</span>
+        <span style="position:absolute;right:2px;top:5px;width:8px;height:8px;border-radius:50% 0;background:#4CB47C;transform:rotate(15deg)"></span>
+      </div>
+      <span style="font-size:{{ brandFs }}px;font-weight:800;color:#fff;letter-spacing:-0.01em;white-space:nowrap">SmartCrops</span>
+    </div>
+    <sc-if value="{{ deskNav }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap">
+        <span style="display:inline-flex;align-items:center;gap:8px;padding:9px 12px;font-size:16px;font-weight:600;color:rgba(255,255,255,0.75);white-space:nowrap"><span class="ms" style="font-size:20px">potted_plant</span>{{ nav1 }}</span>
+        <span style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.17);border-radius:10px;padding:9px 16px;font-size:16px;font-weight:600;color:#fff;white-space:nowrap"><span class="ms" style="font-size:20px">yard</span>{{ nav2 }}</span>
+        <span style="display:inline-flex;align-items:center;gap:8px;padding:9px 4px 9px 12px;font-size:16px;font-weight:600;color:rgba(255,255,255,0.75);white-space:nowrap"><span class="ms" style="font-size:20px">storefront</span>{{ nav3 }}</span>
+        <span style="display:inline-flex;align-items:center;background:rgba(233,160,107,0.10);border:1px solid rgba(233,160,107,0.5);border-radius:999px;padding:5px 13px;font-size:13.5px;font-weight:600;color:#E9A06B;white-space:nowrap">{{ navSoon }}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:22px;flex-shrink:0;justify-content:flex-end">
+        <span style="display:inline-flex;align-items:center;gap:8px">
+          <svg width="21" height="15" viewBox="0 0 21 15" style="border-radius:2px;display:{{ flagUsDisp }}"><rect width="21" height="15" fill="#B22234"/><rect y="1.15" width="21" height="1.15" fill="#fff"/><rect y="3.46" width="21" height="1.15" fill="#fff"/><rect y="5.77" width="21" height="1.15" fill="#fff"/><rect y="8.08" width="21" height="1.15" fill="#fff"/><rect y="10.38" width="21" height="1.15" fill="#fff"/><rect y="12.69" width="21" height="1.15" fill="#fff"/><rect width="8.4" height="8.08" fill="#3C3B6E"/></svg>
+          <svg width="21" height="15" viewBox="0 0 21 15" style="border-radius:2px;display:{{ flagFrDisp }}"><rect width="7" height="15" fill="#0055A4"/><rect x="7" width="7" height="15" fill="#fff"/><rect x="14" width="7" height="15" fill="#EF4135"/></svg>
+          <span style="font-size:16px;font-weight:700;color:#fff">{{ langLab }}</span>
+          <span class="ms" style="font-size:18px;color:rgba(255,255,255,0.8)">expand_more</span>
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:7px;color:#fff">
+          <span class="ms" style="font-size:22px">person</span><span style="font-size:16px;font-weight:700">O2BO</span>
+          <span class="ms" style="font-size:18px;color:rgba(255,255,255,0.8)">arrow_drop_down</span>
+        </span>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;display:flex;align-items:center;justify-content:flex-end;gap:14px">
+        <span style="display:inline-flex;background:#fff;border-radius:999px;padding:3px">
+          <span style="padding:4px 12px;border-radius:999px;font-size:13px;font-weight:700;color:#3C4A42">°C</span>
+          <span style="padding:4px 12px;border-radius:999px;font-size:13px;font-weight:700;background:#1B5E3A;color:#fff">°F</span>
+        </span>
+        <span class="ms" style="font-size:26px;color:#fff">menu</span>
+      </div>
+    </sc-if>
+  </nav>
+
+  <!-- ================= EN-TÊTE PAGE ================= -->
+  <div style="padding:0 {{ padX }}px">
+    <div style="display:flex;align-items:center;gap:9px;margin:{{ backMargin }};color:{{ prim }};font-size:15px;font-weight:600">
+      <span class="ms" style="font-size:20px">arrow_back</span>{{ backLab }}
+    </div>
+
+    <div style="display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="flex:1;min-width:220px">
+        <h1 style="margin:0;font-size:{{ h1Size }}px;font-weight:800;letter-spacing:-0.01em;color:{{ h1c }}">Test Garden</h1>
+        <div style="font-size:{{ metaFs }}px;color:{{ tMeta }};margin-top:7px">{{ metaLine }}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:4px">
+        <span style="display:inline-flex;align-items:center;gap:8px;height:{{ btnH }}px;padding:0 {{ btnPx }}px;border-radius:8px;background:{{ card }};border:1px solid {{ obtnBd }};color:{{ obtnTx }};font-size:{{ btnFs }}px;font-weight:700;white-space:nowrap"><span class="ms" style="font-size:19px">download</span>{{ exportLab }}</span>
+        <span style="display:inline-flex;align-items:center;gap:8px;height:{{ btnH }}px;padding:0 {{ btnPx }}px;border-radius:8px;background:{{ card }};border:1px solid {{ obtnBd }};color:{{ obtnTx }};font-size:{{ btnFs }}px;font-weight:700;white-space:nowrap"><span class="ms" style="font-size:19px">settings</span>{{ settingsLab }}</span>
+        <span style="display:inline-flex;align-items:center;gap:8px;height:{{ btnH }}px;padding:0 {{ btnPx }}px;border-radius:8px;background:{{ prim }};color:#fff;font-size:{{ btnFs }}px;font-weight:700;white-space:nowrap"><span class="ms" style="font-size:19px">save</span>{{ saveLab }}</span>
+      </div>
+    </div>
+
+    <!-- Bandeau d'aide (existant, copy enrichie calque) -->
+    <sc-if value="{{ showBanner }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:flex-start;gap:12px;background:{{ bannerBg }};border:1px solid {{ bannerBd }};border-radius:10px;padding:13px 16px;margin-bottom:16px">
+        <span style="flex:1;font-size:{{ bannerFs }}px;line-height:1.55;color:{{ bannerTx }}">{{ bannerCopy }}</span>
+        <span class="ms" style="font-size:19px;color:{{ bannerTx }}">close</span>
+      </div>
+    </sc-if>
+
+    <!-- Bannière tap-to-place (mobile) -->
+    <sc-if value="{{ placeBanner }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:11px;background:{{ prim }};border-radius:10px;padding:12px 14px;margin-bottom:14px">
+        <span class="ms" style="font-size:22px;color:#fff">touch_app</span>
+        <span style="flex:1;font-size:13.5px;line-height:1.45;color:#fff;font-weight:600">{{ placeBannerTx }}</span>
+        <span class="ms" style="font-size:19px;color:rgba(255,255,255,0.85)">close</span>
+      </div>
+    </sc-if>
+
+    <!-- ================= RANGÉE PRINCIPALE ================= -->
+    <div style="display:flex;gap:18px;align-items:flex-start;padding-bottom:{{ mainPadB }}px">
+
+      <!-- SIDEBAR PALETTE -->
+      <sc-if value="{{ sideOn }}" hint-placeholder-val="{{ false }}">
+        <aside style="width:288px;flex-shrink:0;background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid {{ divider }}">
+            <span style="width:34px;height:19px;border-radius:999px;background:{{ track }};position:relative;flex-shrink:0"><span style="position:absolute;left:2px;top:2px;width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.25)"></span></span>
+            <span style="font-size:14.5px;font-weight:600;color:{{ tTitle }}">{{ editShapeLab }}</span>
+          </div>
+          <div style="display:flex;align-items:center;border-bottom:1px solid {{ divider }};padding:0 6px">
+            <span class="ms" style="font-size:19px;color:{{ muted }};padding:0 4px">chevron_left</span>
+            <span style="flex:1;text-align:center;padding:13px 0 11px;font-size:13.5px;font-weight:800;letter-spacing:0.04em;color:{{ tabPlantsTx }};border-bottom:2px solid {{ tabPlantsBd }}">{{ tabPlants }}</span>
+            <span style="flex:1;text-align:center;padding:13px 0 11px;font-size:13.5px;font-weight:700;letter-spacing:0.04em;color:{{ muted }};border-bottom:2px solid transparent">{{ tabSoils }}</span>
+            <span style="flex:1;text-align:center;padding:13px 0 11px;font-size:13.5px;font-weight:800;letter-spacing:0.04em;color:{{ tabInfraTx }};border-bottom:2px solid {{ tabInfraBd }}">{{ tabInfra }}</span>
+            <span class="ms" style="font-size:19px;color:{{ muted }};padding:0 4px">chevron_right</span>
+          </div>
+
+          <!-- Liste PLANTES -->
+          <sc-if value="{{ sidePlants }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:14px 14px 6px">
+              <div style="display:flex;align-items:center;gap:9px;height:42px;border:1px solid {{ inputBd }};border-radius:9px;padding:0 12px;background:{{ searchBg }}">
+                <span class="ms" style="font-size:19px;color:{{ muted }}">search</span>
+                <span style="font-size:14px;color:{{ ph }}">{{ searchPh }}</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;padding:6px 10px 12px">
+              <sc-for list="{{ plantRows }}" as="p" hint-placeholder-count="6">
+                <div style="display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:9px;background:{{ p.rowBg }};border:1px solid {{ p.rowBd }};box-shadow:{{ p.lift }};margin-bottom:3px">
+                  <span style="width:34px;height:34px;border-radius:50%;background:{{ p.abg }};color:{{ p.atx }};display:flex;align-items:center;justify-content:center;font-size:14.5px;font-weight:800;flex-shrink:0">{{ p.letter }}</span>
+                  <span style="flex:1;min-width:0">
+                    <span style="display:block;font-size:14px;font-weight:700;color:{{ tTitle }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.name }}</span>
+                    <span style="display:block;font-size:12px;font-style:italic;color:{{ tSci }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.sci }}</span>
+                  </span>
+                  <span style="display:inline-flex;align-items:center;border-radius:999px;padding:3px 9px;font-size:11.5px;font-weight:700;background:{{ p.chipBg }};color:{{ p.chipTx }};white-space:nowrap">{{ p.chip }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <!-- Liste INFRASTRUCTURES -->
+          <sc-if value="{{ sideInfra }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:13px 14px 4px;font-size:12px;line-height:1.5;color:{{ muted }}">{{ infraHint }}</div>
+            <div style="display:flex;flex-direction:column;padding:8px 10px 14px">
+              <sc-for list="{{ infraRows }}" as="f" hint-placeholder-count="6">
+                <div style="display:flex;align-items:center;gap:11px;padding:10px;border-radius:9px;background:{{ f.rowBg }};border:1px solid {{ f.rowBd }};margin-bottom:3px">
+                  <span style="width:34px;height:34px;border-radius:9px;background:{{ f.ibg }};display:flex;align-items:center;justify-content:center;flex-shrink:0"><span class="ms" style="font-size:19px;color:{{ f.icc }}">{{ f.ic }}</span></span>
+                  <span style="flex:1;font-size:14px;font-weight:700;color:{{ tTitle }}">{{ f.name }}</span>
+                  <span style="display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:700;background:{{ f.bBg }};color:{{ f.bTx }};white-space:nowrap"><span class="ms" style="font-size:13px">{{ f.bIc }}</span>{{ f.badge }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </aside>
+      </sc-if>
+
+      <!-- COLONNE GRILLE -->
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:12px">
+
+        <!-- Barre d'outils -->
+        <div style="background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};padding:{{ tbPad }}">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow:hidden">
+            <sc-for list="{{ modeBtns }}" as="m" hint-placeholder-count="3">
+              <span style="display:inline-flex;align-items:center;gap:7px;height:{{ tbBtnH }}px;padding:0 {{ tbBtnPx }}px;border-radius:8px;background:{{ m.bg }};border:1px solid {{ m.bd }};color:{{ m.tx }};font-size:{{ tbFs }}px;font-weight:700;white-space:nowrap">
+                <span class="ms" style="font-size:18px">{{ m.ic }}</span><span style="display:{{ tbLabDisp }}">{{ m.lab }}</span>
+              </span>
+            </sc-for>
+            <span style="flex:1"></span>
+            <span class="ms" style="font-size:20px;color:{{ tMeta }};padding:0 3px">undo</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;color:{{ tMeta }}">
+              <span class="ms" style="font-size:20px">zoom_out</span>
+              <span style="font-size:{{ tbFs }}px;font-weight:700">100%</span>
+              <span class="ms" style="font-size:20px">zoom_in</span>
+            </span>
+          </div>
+          <div style="height:1px;background:{{ divider }};margin:{{ tbDivM }}"></div>
+          <div style="display:flex;align-items:center;gap:{{ tbRow2Gap }}px;flex-wrap:nowrap;overflow:hidden">
+            <span style="display:inline-flex;align-items:center;gap:9px;white-space:nowrap">
+              <span style="width:34px;height:19px;border-radius:999px;background:{{ prim }};position:relative;flex-shrink:0"><span style="position:absolute;right:2px;top:2px;width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.25)"></span></span>
+              <span class="ms" style="font-size:19px;color:{{ expoIcc }}">wb_sunny</span>
+              <span style="font-size:{{ tbFs }}px;font-weight:800;color:{{ tTitle }}">{{ expoLab }}</span>
+            </span>
+            <span style="display:inline-flex;background:{{ segBg }};border-radius:9px;padding:3px">
+              <sc-for list="{{ momentBtns }}" as="b" hint-placeholder-count="3">
+                <span style="padding:{{ segPy }}px {{ segPx }}px;border-radius:7px;font-size:{{ segFs }}px;font-weight:700;background:{{ b.bg }};color:{{ b.tx }};box-shadow:{{ b.sh }};white-space:nowrap">{{ b.lab }}</span>
+              </sc-for>
+            </span>
+            <span style="display:inline-flex;background:{{ segBg }};border-radius:9px;padding:3px">
+              <sc-for list="{{ seasonBtns }}" as="b" hint-placeholder-count="2">
+                <span style="padding:{{ segPy }}px {{ segPx }}px;border-radius:7px;font-size:{{ segFs }}px;font-weight:700;background:{{ b.bg }};color:{{ b.tx }};box-shadow:{{ b.sh }};white-space:nowrap">{{ b.lab }}</span>
+              </sc-for>
+            </span>
+          </div>
+        </div>
+
+        <!-- Carte grille -->
+        <div style="background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};padding:{{ gridCardPad }}px;position:relative">
+          <div style="position:relative;width:{{ gridBoxW }}px;height:{{ gridBoxH }}px;margin:0 auto">
+            <!-- axes -->
+            <sc-for list="{{ axisCols }}" as="a" hint-placeholder-count="10">
+              <span style="position:absolute;left:{{ a.x }}px;top:0;width:{{ cellW }}px;text-align:center;font-size:{{ axisFs }}px;font-weight:700;color:{{ muted }}">{{ a.lab }}</span>
+            </sc-for>
+            <sc-for list="{{ axisRows }}" as="a" hint-placeholder-count="8">
+              <span style="position:absolute;left:0;top:{{ a.y }}px;width:{{ axisL }}px;line-height:{{ cellW }}px;text-align:left;font-size:{{ axisFs }}px;font-weight:700;color:{{ muted }}">{{ a.lab }}</span>
+            </sc-for>
+            <!-- cases -->
+            <sc-for list="{{ cells }}" as="c" hint-placeholder-count="40">
+              <span style="position:absolute;left:{{ c.x }}px;top:{{ c.y }}px;width:{{ cellW }}px;height:{{ cellW }}px;background:{{ c.bg }};background-image:{{ c.bgi }};background-size:{{ c.bgs }};border:1px solid {{ c.bd }};border-radius:4px"></span>
+            </sc-for>
+            <!-- infrastructures -->
+            <sc-for list="{{ infras }}" as="f" hint-placeholder-count="5">
+              <span style="position:absolute;left:{{ f.x }}px;top:{{ f.y }}px;width:{{ f.w }}px;height:{{ f.h }}px;background:{{ f.bg }};background-image:{{ f.bgi }};background-size:{{ f.bgs }};border:{{ f.bd }};border-radius:{{ f.rad }}px;display:flex;align-items:center;justify-content:center;gap:5px;overflow:hidden">
+                <span class="ms" style="font-size:{{ f.ics }}px;color:{{ f.icc }}">{{ f.ic }}</span>
+                <span style="display:{{ f.labDisp }};font-size:{{ infraLabFs }}px;font-weight:800;color:{{ f.labc }};letter-spacing:0.02em">{{ f.lab }}</span>
+              </span>
+            </sc-for>
+            <!-- cibles DnD / collision -->
+            <sc-for list="{{ targetCells }}" as="t" hint-placeholder-count="4">
+              <span style="position:absolute;left:{{ t.x }}px;top:{{ t.y }}px;width:{{ cellW }}px;height:{{ cellW }}px;background:{{ t.bg }};background-image:{{ t.bgi }};background-size:{{ t.bgs }};border:2px dashed {{ t.bd }};border-radius:4px;z-index:4"></span>
+            </sc-for>
+            <!-- plantes -->
+            <sc-for list="{{ places }}" as="p" hint-placeholder-count="7">
+              <span style="position:absolute;left:{{ p.x }}px;top:{{ p.y }}px;width:{{ p.w }}px;height:{{ p.h }}px;background:{{ p.bg }};border:{{ p.bd }};border-radius:7px;box-shadow:{{ p.sh }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;z-index:3">
+                <span style="font-size:{{ p.fs }}px;font-weight:800;color:{{ p.tx }}">{{ p.letter }}</span>
+                <span style="display:{{ p.labDisp }};font-size:{{ placeLabFs }}px;font-weight:700;color:{{ p.tx }};background:{{ p.labBg }};border-radius:999px;padding:2px 8px;white-space:nowrap">{{ p.lab }}</span>
+              </span>
+            </sc-for>
+            <!-- poignées -->
+            <sc-for list="{{ handles }}" as="h" hint-placeholder-count="4">
+              <span style="position:absolute;left:{{ h.x }}px;top:{{ h.y }}px;width:10px;height:10px;background:#fff;border:2px solid {{ prim }};border-radius:3px;z-index:6"></span>
+            </sc-for>
+            <!-- fantôme DnD -->
+            <sc-if value="{{ ghostOn }}" hint-placeholder-val="{{ false }}">
+              <span style="position:absolute;left:{{ ghostX }}px;top:{{ ghostY }}px;width:{{ ghostW }}px;height:{{ ghostH }}px;background:{{ ghostBg }};border:2px solid {{ prim }};border-radius:9px;box-shadow:0 14px 30px rgba(10,40,20,0.35);transform:rotate(-2.5deg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;z-index:8;opacity:0.93">
+                <span style="font-size:16px;font-weight:800;color:{{ ghostTx }}">C</span>
+                <span style="font-size:{{ placeLabFs }}px;font-weight:700;color:{{ ghostTx }}">{{ ghostLab }}</span>
+              </span>
+              <span class="ms" style="position:absolute;left:{{ cursorX }}px;top:{{ cursorY }}px;font-size:22px;color:{{ tTitle }};z-index:9;text-shadow:0 1px 3px rgba(255,255,255,0.6)">near_me</span>
+            </sc-if>
+            <!-- boussole -->
+            <span style="position:absolute;right:-6px;top:-10px;width:{{ compS }}px;height:{{ compS }}px;border-radius:50%;background:{{ card }};border:1px solid {{ cardBd }};box-shadow:{{ shadow }};display:flex;align-items:center;justify-content:center;z-index:10">
+              <svg width="{{ compSvg }}" height="{{ compSvg }}" viewBox="0 0 40 40">
+                <circle cx="20" cy="20" r="18" fill="none" stroke="{{ compRing }}" stroke-width="1.4"></circle>
+                <polygon points="20,7 23.2,20 16.8,20" fill="#D64545"></polygon>
+                <polygon points="20,33 23.2,20 16.8,20" fill="{{ compSTail }}"></polygon>
+                <text x="20" y="6.4" text-anchor="middle" font-size="6.6" font-weight="800" fill="{{ compTx }}" font-family="Inter,sans-serif">N</text>
+                <text x="35.6" y="22.4" text-anchor="middle" font-size="6" font-weight="700" fill="{{ compMut }}" font-family="Inter,sans-serif">{{ compE }}</text>
+                <text x="20" y="38.6" text-anchor="middle" font-size="6" font-weight="700" fill="{{ compMut }}" font-family="Inter,sans-serif">S</text>
+                <text x="4.4" y="22.4" text-anchor="middle" font-size="6" font-weight="700" fill="{{ compMut }}" font-family="Inter,sans-serif">{{ compW }}</text>
+              </svg>
+            </span>
+            <!-- toast collision -->
+            <sc-if value="{{ toastOn }}" hint-placeholder-val="{{ false }}">
+              <span style="position:absolute;left:50%;top:-8px;transform:translateX(-50%);display:inline-flex;align-items:center;gap:8px;background:{{ dangBg }};border:1px solid {{ dangBd }};color:{{ dangTx }};border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;white-space:nowrap;box-shadow:0 8px 22px rgba(120,20,20,0.18);z-index:12">
+                <span class="ms" style="font-size:17px">error</span>{{ toastTx }}
+              </span>
+            </sc-if>
+            <!-- hint DnD -->
+            <sc-if value="{{ ghostOn }}" hint-placeholder-val="{{ false }}">
+              <span style="position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);display:inline-flex;align-items:center;gap:7px;background:{{ hintBg }};color:{{ hintTx }};border-radius:999px;padding:7px 14px;font-size:12px;font-weight:600;white-space:nowrap;z-index:12">{{ dropHint }}</span>
+            </sc-if>
+          </div>
+        </div>
+
+        <!-- Légende du calque -->
+        <div style="background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};padding:12px 16px;display:flex;align-items:center;gap:{{ legGap }}px;flex-wrap:wrap">
+          <span style="font-size:{{ legTitleFs }}px;font-weight:800;color:{{ tTitle }};white-space:nowrap">{{ legendTitle }}</span>
+          <sc-for list="{{ legend }}" as="l" hint-placeholder-count="5">
+            <span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap">
+              <span style="width:{{ legSw }}px;height:{{ legSw }}px;border-radius:5px;background:{{ l.sw }};background-image:{{ l.bgi }};background-size:{{ l.bgs }};border:1px solid {{ l.bd }}"></span>
+              <span style="font-size:{{ legFs }}px;font-weight:600;color:{{ tMeta }}">{{ l.lab }}</span>
+            </span>
+          </sc-for>
+          <sc-if value="{{ dndNote }}" hint-placeholder-val="{{ false }}">
+            <span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap;margin-left:auto">
+              <span style="width:{{ legSw }}px;height:{{ legSw }}px;border-radius:5px;background:{{ validSw }};border:2px dashed {{ prim }}"></span>
+              <span style="font-size:{{ legFs }}px;font-weight:600;color:{{ tMeta }}">{{ validLab }}</span>
+              <span style="width:{{ legSw }}px;height:{{ legSw }}px;border-radius:5px;background:{{ invalidSw }};border:2px dashed {{ dangTx }};margin-left:8px"></span>
+              <span style="font-size:{{ legFs }}px;font-weight:600;color:{{ tMeta }}">{{ invalidLab }}</span>
+            </span>
+          </sc-if>
+        </div>
+      </div>
+
+      <!-- PANNEAU DE DÉTAIL -->
+      <sc-if value="{{ panelOpen }}" hint-placeholder-val="{{ false }}">
+        <aside style="width:330px;flex-shrink:0;background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:{{ shadow }};overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid {{ divider }}">
+            <span style="font-size:15px;font-weight:800;color:{{ tTitle }}">{{ panelTitle }}</span>
+            <span class="ms" style="margin-left:auto;font-size:19px;color:{{ muted }}">close</span>
+          </div>
+          <div style="padding:16px;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="width:44px;height:44px;border-radius:12px;background:{{ selAbg }};color:{{ selAtx }};display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:800">C</span>
+              <span>
+                <span style="display:block;font-size:16.5px;font-weight:800;color:{{ tTitle }}">{{ selName }}</span>
+                <span style="display:block;font-size:13px;font-style:italic;color:{{ tSci }}">Cucurbita pepo</span>
+              </span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <span style="display:flex;align-items:center;gap:9px;font-size:13.5px;color:{{ tMeta }}"><span class="ms" style="font-size:18px;color:{{ muted }}">grid_on</span>{{ selPos }}</span>
+              <span style="display:flex;align-items:center;gap:9px;font-size:13.5px;color:{{ tMeta }}"><span class="ms" style="font-size:18px;color:#E8890C">wb_sunny</span>{{ selExpo }}</span>
+            </div>
+            <div style="border:1px solid {{ divider }};border-radius:10px;padding:13px 14px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                <span class="ms" style="font-size:18px;color:{{ prim }}">aspect_ratio</span>
+                <span style="font-size:13.5px;font-weight:800;color:{{ tTitle }}">{{ footprintLab }}</span>
+              </div>
+              <div style="font-size:12px;color:{{ muted }};margin-bottom:11px">{{ footprintSrc }}</div>
+              <div style="display:flex;align-items:center;gap:9px">
+                <span style="display:inline-flex;align-items:center;border:1px solid {{ inputBd }};border-radius:8px;overflow:hidden">
+                  <span class="ms" style="font-size:16px;color:{{ muted }};padding:8px 9px">remove</span>
+                  <span style="min-width:34px;text-align:center;font-size:14.5px;font-weight:800;color:{{ tTitle }}">{{ fpW }}</span>
+                  <span class="ms" style="font-size:16px;color:{{ prim }};padding:8px 9px">add</span>
+                </span>
+                <span style="font-size:13px;font-weight:700;color:{{ muted }}">×</span>
+                <span style="display:inline-flex;align-items:center;border:1px solid {{ inputBd }};border-radius:8px;overflow:hidden">
+                  <span class="ms" style="font-size:16px;color:{{ muted }};padding:8px 9px">remove</span>
+                  <span style="min-width:34px;text-align:center;font-size:14.5px;font-weight:800;color:{{ tTitle }}">{{ fpH }}</span>
+                  <span class="ms" style="font-size:16px;color:{{ prim }};padding:8px 9px">add</span>
+                </span>
+                <span style="font-size:12px;color:{{ muted }}">{{ fpUnit }}</span>
+              </div>
+              <sc-if value="{{ warnOn }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;gap:8px;background:{{ dangBg }};border:1px solid {{ dangBd }};border-radius:8px;padding:9px 11px;margin-top:11px">
+                  <span class="ms" style="font-size:16px;color:{{ dangTx }}">warning</span>
+                  <span style="font-size:12px;line-height:1.5;color:{{ dangTx }};font-weight:600">{{ warnTx }}</span>
+                </div>
+              </sc-if>
+            </div>
+            <div style="display:flex;gap:9px">
+              <span style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;height:40px;border-radius:8px;border:1px solid {{ obtnBd }};color:{{ obtnTx }};font-size:13.5px;font-weight:700"><span class="ms" style="font-size:17px">open_with</span>{{ moveLab }}</span>
+              <span style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;height:40px;border-radius:8px;border:1px solid {{ dangBd }};color:{{ dangTx }};font-size:13.5px;font-weight:700"><span class="ms" style="font-size:17px">delete</span>{{ delLab }}</span>
+            </div>
+          </div>
+        </aside>
+      </sc-if>
+    </div>
+
+    <!-- Plantes dans ce jardin (existant) -->
+    <sc-if value="{{ showFoot }}" hint-placeholder-val="{{ false }}">
+      <div style="padding-bottom:34px">
+        <div style="font-size:21px;font-weight:800;color:{{ tTitle }};margin:4px 0 16px">{{ gardenPlantsTitle }}</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <sc-for list="{{ gardenChips }}" as="g" hint-placeholder-count="7">
+            <span style="display:inline-flex;align-items:center;gap:11px;background:{{ card }};border:1px solid {{ cardBd }};border-radius:10px;padding:11px 16px;box-shadow:{{ shadow }};min-width:200px">
+              <span style="width:34px;height:34px;border-radius:50%;background:{{ g.abg }};color:{{ g.atx }};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800">{{ g.letter }}</span>
+              <span>
+                <span style="display:block;font-size:14px;font-weight:700;color:{{ tTitle }}">{{ g.name }}</span>
+                <span style="display:block;font-size:12px;font-style:italic;color:{{ tSci }}">{{ g.sci }}</span>
+              </span>
+            </span>
+          </sc-for>
+        </div>
+        <div style="font-size:13.5px;color:{{ prim }};margin-top:18px">{{ savedNote }}</div>
+      </div>
+    </sc-if>
+  </div>
+
+  <!-- Bouton drawer (mobile) -->
+  <sc-if value="{{ drawerBtn }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:20">
+      <span style="display:inline-flex;align-items:center;gap:9px;height:48px;padding:0 22px;border-radius:999px;background:{{ prim }};color:#fff;font-size:14.5px;font-weight:800;box-shadow:0 10px 26px rgba(10,40,20,0.35);white-space:nowrap"><span class="ms" style="font-size:20px">menu_open</span>{{ drawerBtnLab }}</span>
+    </div>
+  </sc-if>
+
+  <!-- ================= FOOTER (existant, reproduit) ================= -->
+  <sc-if value="{{ showFoot }}" hint-placeholder-val="{{ false }}">
+    <footer style="background:#1B5E3A;padding:44px {{ padX }}px 0">
+      <div style="display:flex;gap:56px;flex-wrap:wrap">
+        <div style="width:280px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:34px;height:34px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center"><span style="font-family:Georgia,serif;font-size:21px;font-weight:700;color:#1B5E3A">S</span></div>
+            <span style="font-size:20px;font-weight:800;color:#fff">SmartCrops</span>
+          </div>
+          <div style="font-size:14px;line-height:1.6;color:rgba(255,255,255,0.75);margin-top:14px">{{ footTag }}</div>
+          <div style="font-size:13px;color:rgba(255,255,255,0.55);margin-top:16px">© 2026 SmartCrops</div>
+        </div>
+        <sc-for list="{{ footCols }}" as="fc" hint-placeholder-count="4">
+          <div>
+            <div style="font-size:13px;font-weight:800;letter-spacing:0.08em;color:#fff;margin-bottom:14px">{{ fc.h }}</div>
+            <div style="display:flex;flex-direction:column;gap:11px">
+              <sc-for list="{{ fc.links }}" as="lk" hint-placeholder-count="3">
+                <span style="display:flex;align-items:center;gap:9px;font-size:15px;color:rgba(255,255,255,0.85)">{{ lk.lab }}<sc-if value="{{ lk.soon }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;border-radius:999px;background:rgba(233,160,107,0.10);border:1px solid rgba(233,160,107,0.5);padding:3px 10px;font-size:11.5px;font-weight:600;color:#E9A06B">{{ navSoon }}</span></sc-if></span>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,0.16);margin-top:36px;padding:20px 0;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap">
+        <span style="font-size:14.5px;color:rgba(255,255,255,0.8)">{{ footCopy }}</span>
+        <span style="color:rgba(255,255,255,0.4)">·</span><span style="font-size:14.5px;color:rgba(255,255,255,0.9)">{{ footL1 }}</span>
+        <span style="color:rgba(255,255,255,0.4)">·</span><span style="font-size:14.5px;color:rgba(255,255,255,0.9)">{{ footL2 }}</span>
+        <span style="color:rgba(255,255,255,0.4)">·</span><span style="font-size:14.5px;color:rgba(255,255,255,0.9)">{{ footL3 }}</span>
+        <span style="display:inline-flex;background:rgba(255,255,255,0.14);border-radius:999px;padding:3px;margin-left:6px">
+          <span style="width:32px;height:32px;border-radius:50%;background:{{ sunBg }};display:inline-flex;align-items:center;justify-content:center"><span class="ms" style="font-size:18px;color:{{ sunTx }}">light_mode</span></span>
+          <span style="width:32px;height:32px;border-radius:50%;background:{{ moonBg }};display:inline-flex;align-items:center;justify-content:center"><span class="ms" style="font-size:17px;color:{{ moonTx }}">dark_mode</span></span>
+        </span>
+      </div>
+    </footer>
+  </sc-if>
+
+  <!-- ================= OVERLAYS ================= -->
+
+  <!-- Popover export -->
+  <sc-if value="{{ showExport }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;right:{{ exportPopR }}px;top:{{ exportPopT }}px;width:324px;background:{{ card }};border:1px solid {{ cardBd }};border-radius:12px;box-shadow:0 22px 54px rgba(10,25,18,0.30);padding:18px;z-index:40">
+      <div style="font-size:15px;font-weight:800;color:{{ tTitle }};margin-bottom:13px">{{ expTitle }}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:13px">
+        <span style="display:flex;align-items:center;gap:10px;border:2px solid {{ prim }};border-radius:9px;padding:11px 12px;background:{{ expSelBg }}">
+          <span class="ms" style="font-size:20px;color:{{ prim }}">radio_button_checked</span>
+          <span class="ms" style="font-size:20px;color:{{ dangTx }}">picture_as_pdf</span>
+          <span style="flex:1"><span style="display:block;font-size:13.5px;font-weight:700;color:{{ tTitle }}">{{ expPdf }}</span><span style="display:block;font-size:11.5px;color:{{ muted }}">{{ expPdfSub }}</span></span>
+        </span>
+        <span style="display:flex;align-items:center;gap:10px;border:1px solid {{ inputBd }};border-radius:9px;padding:11px 12px">
+          <span class="ms" style="font-size:20px;color:{{ muted }}">radio_button_unchecked</span>
+          <span class="ms" style="font-size:20px;color:{{ tMeta }}">image</span>
+          <span style="flex:1"><span style="display:block;font-size:13.5px;font-weight:700;color:{{ tTitle }}">{{ expPng }}</span><span style="display:block;font-size:11.5px;color:{{ muted }}">{{ expPngSub }}</span></span>
+        </span>
+      </div>
+      <span style="display:flex;align-items:center;gap:9px;font-size:13px;color:{{ tMeta }};margin-bottom:15px">
+        <span class="ms" style="font-size:19px;color:{{ prim }}">check_box</span>{{ expLayer }}
+      </span>
+      <span style="display:flex;align-items:center;justify-content:center;gap:8px;height:42px;border-radius:8px;background:{{ prim }};color:#fff;font-size:14px;font-weight:800"><span class="ms" style="font-size:18px">download</span>{{ exportLab }}</span>
+    </div>
+  </sc-if>
+
+  <!-- Scrim + dialogues -->
+  <sc-if value="{{ scrimOn }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:rgba(9,22,16,0.52);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:{{ dlgPadT }}px 20px 40px">
+
+      <!-- SetupLayoutDialog étendu -->
+      <sc-if value="{{ showConfig }}" hint-placeholder-val="{{ false }}">
+        <div style="width:{{ dlgW }}px;max-width:100%;background:{{ card }};border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,0.4);overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;padding:19px 24px;border-bottom:1px solid {{ divider }}">
+            <span class="ms" style="font-size:22px;color:{{ prim }}">settings</span>
+            <span style="flex:1"><span style="display:block;font-size:18px;font-weight:800;color:{{ tTitle }}">{{ cfgTitle }}</span><span style="display:block;font-size:12.5px;color:{{ muted }};margin-top:2px">{{ cfgSub }}</span></span>
+            <span class="ms" style="font-size:21px;color:{{ muted }}">close</span>
+          </div>
+          <div style="padding:22px 24px;display:flex;flex-direction:column;gap:22px">
+
+            <div>
+              <div style="font-size:13px;font-weight:800;color:{{ tTitle }};margin-bottom:10px">{{ cfgDims }}</div>
+              <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+                <span><span style="display:block;font-size:11.5px;font-weight:700;color:{{ muted }};margin-bottom:5px">{{ cfgCols }}</span><span style="display:inline-flex;align-items:center;justify-content:center;width:86px;height:42px;border:1px solid {{ inputBd }};border-radius:9px;font-size:15px;font-weight:800;color:{{ tTitle }};background:{{ searchBg }}">10</span></span>
+                <span style="font-size:14px;color:{{ muted }};padding-bottom:11px">×</span>
+                <span><span style="display:block;font-size:11.5px;font-weight:700;color:{{ muted }};margin-bottom:5px">{{ cfgRows }}</span><span style="display:inline-flex;align-items:center;justify-content:center;width:86px;height:42px;border:1px solid {{ inputBd }};border-radius:9px;font-size:15px;font-weight:800;color:{{ tTitle }};background:{{ searchBg }}">8</span></span>
+                <span style="flex:1"></span>
+                <span><span style="display:block;font-size:11.5px;font-weight:700;color:{{ muted }};margin-bottom:5px">{{ cfgCell }}</span><span style="display:inline-flex;background:{{ segBg }};border-radius:9px;padding:3px">
+                  <span style="padding:9px 14px;border-radius:7px;font-size:13px;font-weight:700;color:{{ tMeta }}">25 cm</span>
+                  <span style="padding:9px 14px;border-radius:7px;font-size:13px;font-weight:700;background:{{ segOnBg }};color:{{ segOnTx }};box-shadow:0 1px 4px rgba(0,0,0,0.18)">50 cm</span>
+                  <span style="padding:9px 14px;border-radius:7px;font-size:13px;font-weight:700;color:{{ tMeta }}">1 m</span>
+                </span></span>
+              </div>
+            </div>
+
+            <div style="height:1px;background:{{ divider }}"></div>
+
+            <div style="display:flex;gap:20px;align-items:flex-start">
+              <div style="flex:1">
+                <div style="font-size:13px;font-weight:800;color:{{ tTitle }};margin-bottom:3px">{{ cfgOrient }}</div>
+                <div style="font-size:12px;color:{{ muted }};margin-bottom:12px">{{ cfgOrientSub }}</div>
+                <span style="display:inline-flex;background:{{ segBg }};border-radius:9px;padding:3px">
+                  <sc-for list="{{ orientBtns }}" as="o" hint-placeholder-count="4">
+                    <span style="padding:9px 17px;border-radius:7px;font-size:13.5px;font-weight:800;background:{{ o.bg }};color:{{ o.tx }};box-shadow:{{ o.sh }}">{{ o.lab }}</span>
+                  </sc-for>
+                </span>
+                <div style="font-size:12px;color:{{ tMeta }};margin-top:12px;line-height:1.5">{{ cfgOrientNote }}</div>
+              </div>
+              <span style="width:104px;height:104px;border-radius:50%;background:{{ searchBg }};border:1px solid {{ inputBd }};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <svg width="84" height="84" viewBox="0 0 40 40">
+                  <circle cx="20" cy="20" r="18" fill="none" stroke="{{ compRing }}" stroke-width="1.2"></circle>
+                  <path d="M 6 20 A 14 14 0 0 1 34 20" fill="none" stroke="#E8890C" stroke-width="1.6" stroke-dasharray="2.5 2.2"></path>
+                  <circle cx="20" cy="6" r="2.1" fill="#E8890C"></circle>
+                  <polygon points="20,10 22.6,20 17.4,20" fill="#D64545"></polygon>
+                  <polygon points="20,30 22.6,20 17.4,20" fill="{{ compSTail }}"></polygon>
+                  <text x="20" y="5" text-anchor="middle" font-size="5.4" font-weight="800" fill="{{ compTx }}" font-family="Inter,sans-serif">N</text>
+                  <text x="36.4" y="21.8" text-anchor="middle" font-size="5.2" font-weight="700" fill="{{ compMut }}" font-family="Inter,sans-serif">{{ compE }}</text>
+                  <text x="20" y="38.8" text-anchor="middle" font-size="5.2" font-weight="800" fill="{{ prim }}" font-family="Inter,sans-serif">S</text>
+                  <text x="3.6" y="21.8" text-anchor="middle" font-size="5.2" font-weight="700" fill="{{ compMut }}" font-family="Inter,sans-serif">{{ compW }}</text>
+                </svg>
+              </span>
+            </div>
+
+            <div style="height:1px;background:{{ divider }}"></div>
+
+            <div>
+              <div style="font-size:13px;font-weight:800;color:{{ tTitle }};margin-bottom:10px">{{ cfgType }}</div>
+              <div style="display:flex;gap:9px">
+                <sc-for list="{{ typeCards }}" as="t" hint-placeholder-count="5">
+                  <span style="flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;padding:13px 6px 11px;border-radius:10px;background:{{ t.bg }};border:{{ t.bd }}">
+                    <span class="ms" style="font-size:23px;color:{{ t.icc }}">{{ t.ic }}</span>
+                    <span style="font-size:11.5px;font-weight:700;color:{{ t.tx }};text-align:center">{{ t.lab }}</span>
+                  </span>
+                </sc-for>
+              </div>
+            </div>
+
+            <!-- lightSchedule — uniquement type intérieur -->
+            <sc-if value="{{ showIndoor }}" hint-placeholder-val="{{ false }}">
+              <div style="border:1px solid {{ zoneABd }};background:{{ zoneABg }};border-radius:12px;padding:15px 16px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                  <span class="ms" style="font-size:19px;color:{{ prim }}">lightbulb</span>
+                  <span style="font-size:13.5px;font-weight:800;color:{{ tTitle }}">{{ schedTitle }}</span>
+                </div>
+                <div style="font-size:12px;color:{{ tMeta }};margin-bottom:13px;line-height:1.5">{{ schedSub }}</div>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:11px">
+                  <sc-for list="{{ schedRows }}" as="s" hint-placeholder-count="2">
+                    <span style="display:flex;align-items:center;gap:11px;background:{{ card }};border:1px solid {{ inputBd }};border-radius:9px;padding:10px 12px">
+                      <span class="ms" style="font-size:18px;color:{{ prim }}">schedule</span>
+                      <span style="font-size:13.5px;font-weight:700;color:{{ tTitle }}">{{ s.t1 }}</span>
+                      <span class="ms" style="font-size:15px;color:{{ muted }}">arrow_forward</span>
+                      <span style="font-size:13.5px;font-weight:700;color:{{ tTitle }}">{{ s.t2 }}</span>
+                      <span style="margin-left:auto;font-size:11.5px;font-weight:700;color:{{ prim }};background:{{ cntChipBg }};border-radius:999px;padding:3px 9px">{{ s.hrs }}</span>
+                      <span class="ms" style="font-size:17px;color:{{ muted }}">close</span>
+                    </span>
+                  </sc-for>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px">
+                  <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:{{ prim }}"><span class="ms" style="font-size:16px">add</span>{{ schedAdd }}</span>
+                  <span style="margin-left:auto;font-size:12px;font-weight:600;color:{{ tMeta }}">{{ schedTotal }}</span>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid {{ divider }};background:{{ searchBg }}">
+            <span style="display:inline-flex;align-items:center;height:42px;padding:0 18px;border-radius:8px;border:1px solid {{ obtnBd }};color:{{ obtnTx }};font-size:14px;font-weight:700">{{ cancelLab }}</span>
+            <span style="display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 20px;border-radius:8px;background:{{ prim }};color:#fff;font-size:14px;font-weight:800"><span class="ms" style="font-size:18px">check</span>{{ applyLab }}</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- Galerie de templates -->
+      <sc-if value="{{ showTemplates }}" hint-placeholder-val="{{ false }}">
+        <div style="width:880px;max-width:100%;background:{{ card }};border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,0.4);overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;padding:19px 24px;border-bottom:1px solid {{ divider }}">
+            <span class="ms" style="font-size:22px;color:{{ prim }}">dashboard</span>
+            <span style="flex:1"><span style="display:block;font-size:18px;font-weight:800;color:{{ tTitle }}">{{ tplTitle }}</span><span style="display:block;font-size:12.5px;color:{{ muted }};margin-top:2px">{{ tplSub }}</span></span>
+            <span class="ms" style="font-size:21px;color:{{ muted }}">close</span>
+          </div>
+          <div style="display:flex;gap:16px;padding:22px 24px">
+            <sc-for list="{{ tplCards }}" as="t" hint-placeholder-count="3">
+              <span style="flex:1;display:flex;flex-direction:column;border:{{ t.bd }};border-radius:12px;overflow:hidden;background:{{ searchBg }}">
+                <span style="display:grid;grid-template-columns:repeat(10, 1fr);gap:2px;padding:12px;background:{{ t.miniBg }}">
+                  <sc-for list="{{ t.mini }}" as="mc" hint-placeholder-count="30">
+                    <span style="aspect-ratio:1;border-radius:2.5px;background:{{ mc }}"></span>
+                  </sc-for>
+                </span>
+                <span style="padding:14px 16px 16px;display:flex;flex-direction:column;gap:6px">
+                  <span style="font-size:15px;font-weight:800;color:{{ tTitle }}">{{ t.name }}</span>
+                  <span style="font-size:12.5px;line-height:1.5;color:{{ tMeta }}">{{ t.desc }}</span>
+                  <span style="font-size:11.5px;font-weight:700;color:{{ muted }};margin-bottom:6px">{{ t.meta }}</span>
+                  <span style="display:inline-flex;align-items:center;justify-content:center;gap:7px;height:38px;border-radius:8px;background:{{ t.btnBg }};border:{{ t.btnBd }};color:{{ t.btnTx }};font-size:13px;font-weight:800">{{ tplUse }}</span>
+                </span>
+              </span>
+            </sc-for>
+          </div>
+          <div style="padding:0 24px 20px;font-size:12.5px;color:{{ muted }}">{{ tplNote }}</div>
+        </div>
+      </sc-if>
+
+      <!-- Modale suppression placement -->
+      <sc-if value="{{ showDelete }}" hint-placeholder-val="{{ false }}">
+        <div style="width:470px;max-width:100%;background:{{ card }};border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,0.4);padding:26px 26px 22px">
+          <div style="display:flex;gap:15px">
+            <span style="width:46px;height:46px;border-radius:50%;background:{{ dangBg }};display:flex;align-items:center;justify-content:center;flex-shrink:0"><span class="ms" style="font-size:23px;color:{{ dangTx }}">delete</span></span>
+            <span style="flex:1">
+              <span style="display:block;font-size:17px;font-weight:800;color:{{ tTitle }}">{{ delPTitle }}</span>
+              <span style="display:block;font-size:13.5px;line-height:1.6;color:{{ tMeta }};margin-top:7px">{{ delPBody }}</span>
+            </span>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:22px">
+            <span style="display:inline-flex;align-items:center;height:42px;padding:0 18px;border-radius:8px;border:1px solid {{ obtnBd }};color:{{ obtnTx }};font-size:14px;font-weight:700">{{ cancelLab }}</span>
+            <span style="display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 20px;border-radius:8px;background:{{ dangSolid }};color:#fff;font-size:14px;font-weight:800"><span class="ms" style="font-size:18px">delete</span>{{ delConfirm }}</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- Modale suppression jardin -->
+      <sc-if value="{{ showDeleteG }}" hint-placeholder-val="{{ false }}">
+        <div style="width:470px;max-width:100%;background:{{ card }};border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,0.4);padding:26px 26px 22px">
+          <div style="display:flex;gap:15px">
+            <span style="width:46px;height:46px;border-radius:50%;background:{{ dangBg }};display:flex;align-items:center;justify-content:center;flex-shrink:0"><span class="ms" style="font-size:23px;color:{{ dangTx }}">warning</span></span>
+            <span style="flex:1">
+              <span style="display:block;font-size:17px;font-weight:800;color:{{ tTitle }}">{{ delGTitle }}</span>
+              <span style="display:block;font-size:13.5px;line-height:1.6;color:{{ tMeta }};margin-top:7px">{{ delGBody }}</span>
+            </span>
+          </div>
+          <div style="margin-top:16px">
+            <div style="font-size:12px;font-weight:700;color:{{ muted }};margin-bottom:6px">{{ delGFieldLab }}</div>
+            <div style="display:flex;align-items:center;height:44px;border:1px solid {{ inputBd }};border-radius:9px;padding:0 14px;background:{{ searchBg }};font-size:14.5px;font-weight:700;color:{{ tTitle }}">Test Garden</div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">
+            <span style="display:inline-flex;align-items:center;height:42px;padding:0 18px;border-radius:8px;border:1px solid {{ obtnBd }};color:{{ obtnTx }};font-size:14px;font-weight:700">{{ cancelLab }}</span>
+            <span style="display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 20px;border-radius:8px;background:{{ dangSolid }};color:#fff;font-size:14px;font-weight:800"><span class="ms" style="font-size:18px">delete_forever</span>{{ delGConfirm }}</span>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- ================= DRAWER MOBILE (bottom sheet) ================= -->
+  <sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:rgba(9,22,16,0.45);z-index:60"></div>
+    <div style="position:absolute;left:0;right:0;bottom:0;height:{{ drawerH }}px;background:{{ card }};border-radius:18px 18px 0 0;box-shadow:0 -14px 44px rgba(0,0,0,0.35);z-index:61;display:flex;flex-direction:column;overflow:hidden">
+      <div style="display:flex;justify-content:center;padding:10px 0 4px"><span style="width:42px;height:5px;border-radius:999px;background:{{ track }}"></span></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 18px 12px">
+        <span style="font-size:16px;font-weight:800;color:{{ tTitle }}">{{ drawerTitle }}</span>
+        <span style="display:inline-flex;align-items:center;border-radius:999px;background:{{ cntChipBg }};color:{{ cntChipTx }};padding:3px 10px;font-size:11.5px;font-weight:700">8</span>
+        <span class="ms" style="margin-left:auto;font-size:21px;color:{{ muted }}">close</span>
+      </div>
+      <div style="display:flex;border-bottom:1px solid {{ divider }};padding:0 18px;gap:22px">
+        <span style="padding:0 0 11px;font-size:13px;font-weight:800;letter-spacing:0.04em;color:{{ prim }};border-bottom:2px solid {{ prim }}">{{ tabPlants }}</span>
+        <span style="padding:0 0 11px;font-size:13px;font-weight:700;letter-spacing:0.04em;color:{{ muted }}">{{ tabSoils }}</span>
+        <span style="padding:0 0 11px;font-size:13px;font-weight:700;letter-spacing:0.04em;color:{{ muted }}">{{ tabInfra }}</span>
+      </div>
+      <div style="padding:12px 16px 8px">
+        <div style="display:flex;align-items:center;gap:9px;height:44px;border:1px solid {{ inputBd }};border-radius:9px;padding:0 12px;background:{{ searchBg }}">
+          <span class="ms" style="font-size:19px;color:{{ muted }}">search</span>
+          <span style="font-size:14px;color:{{ ph }}">{{ searchPh }}</span>
+        </div>
+      </div>
+      <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;padding:4px 12px 10px">
+        <sc-for list="{{ plantRows }}" as="p" hint-placeholder-count="6">
+          <div style="display:flex;align-items:center;gap:11px;padding:10px;border-radius:9px;background:{{ p.rowBg }};border:1px solid {{ p.rowBd }};box-shadow:{{ p.lift }};margin-bottom:3px;min-height:52px">
+            <span style="width:36px;height:36px;border-radius:50%;background:{{ p.abg }};color:{{ p.atx }};display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;flex-shrink:0">{{ p.letter }}</span>
+            <span style="flex:1;min-width:0">
+              <span style="display:block;font-size:14.5px;font-weight:700;color:{{ tTitle }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.name }}</span>
+              <span style="display:block;font-size:12px;font-style:italic;color:{{ tSci }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.sci }}</span>
+            </span>
+            <span style="display:inline-flex;align-items:center;border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700;background:{{ p.chipBg }};color:{{ p.chipTx }};white-space:nowrap">{{ p.chip }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="padding:10px 16px 16px;border-top:1px solid {{ divider }}">
+        <span style="display:flex;align-items:center;justify-content:center;gap:8px;height:46px;border-radius:9px;background:{{ prim }};color:#fff;font-size:14px;font-weight:800"><span class="ms" style="font-size:19px">touch_app</span>{{ drawerCta }}</span>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1460,&quot;height&quot;:1200},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;planner&quot;,&quot;dnd&quot;,&quot;collision&quot;,&quot;config&quot;,&quot;config-indoor&quot;,&quot;templates&quot;,&quot;delete&quot;,&quot;delete-garden&quot;,&quot;export&quot;,&quot;mobile&quot;,&quot;mobile-drawer&quot;],&quot;default&quot;:&quot;planner&quot;,&quot;section&quot;:&quot;État&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;day&quot;,&quot;night&quot;],&quot;default&quot;:&quot;day&quot;,&quot;section&quot;:&quot;État&quot;},&quot;lang&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;fr&quot;,&quot;en&quot;],&quot;default&quot;:&quot;fr&quot;,&quot;section&quot;:&quot;État&quot;},&quot;showFooter&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;État&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props || {};
+    const variant = p.variant || 'planner';
+    const theme = p.theme || 'day';
+    const lang = p.lang || 'fr';
+    const showFoot = p.showFooter === true || p.showFooter === 'true';
+    const night = theme === 'night';
+    const en = lang === 'en';
+
+    const isMobile = variant === 'mobile' || variant === 'mobile-drawer';
+    const drawerOpen = variant === 'mobile-drawer';
+    const isDnd = variant === 'dnd';
+    const isCollision = variant === 'collision';
+    const showConfig = variant === 'config' || variant === 'config-indoor';
+    const showIndoor = variant === 'config-indoor';
+    const showTemplates = variant === 'templates';
+    const showDelete = variant === 'delete';
+    const showDeleteG = variant === 'delete-garden';
+    const showExport = variant === 'export';
+    const scrimOn = showConfig || showTemplates || showDelete || showDeleteG;
+
+    // ===== TOKENS (cohérents Library / Finder ; grille nuit = SMA-209) =====
+    const T = night ? {
+      pageBg: '#0D1D34', navBg: '#306D4C', card: '#16294A', cardBd: '#22375C',
+      shadow: '0 2px 10px rgba(0,0,0,0.28)',
+      tTitle: '#F2F6FA', tSci: '#9FACC2', tMeta: '#D6DEEC', muted: '#7E8CA6',
+      prim: '#4CB47C', h1c: '#4CB47C', divider: '#24395F', inputBd: '#2C3F63',
+      searchBg: '#0F2038', ph: '#7E8CA6', track: '#31456B',
+      segBg: '#0F2038', segOnBg: '#4CB47C', segOnTx: '#0D1D34',
+      obtnBd: '#31456B', obtnTx: '#DCE4F0',
+      bannerBg: 'rgba(76,140,220,0.12)', bannerBd: 'rgba(96,160,235,0.35)', bannerTx: '#A8C6EE',
+      cntChipBg: 'rgba(76,180,124,0.16)', cntChipTx: '#7ED0A4',
+      dangBg: 'rgba(229,90,90,0.13)', dangBd: 'rgba(229,90,90,0.45)', dangTx: '#F08A8A', dangSolid: '#C64545',
+      zoneABg: 'rgba(76,180,124,0.10)', zoneABd: 'rgba(76,180,124,0.32)',
+      cellOn: '#132740', cellOnBd: '#1F3556', cellOff: '#0B1830', cellOffBd: '#152742',
+      expoFull: 'rgba(255,203,84,0.36)', expoFullBd: 'rgba(255,203,84,0.55)',
+      expoAm: 'rgba(196,214,100,0.30)', expoAmBd: 'rgba(196,214,100,0.48)',
+      expoPm: 'rgba(255,148,92,0.34)', expoPmBd: 'rgba(255,148,92,0.52)',
+      expoSh: 'rgba(124,152,190,0.22)', expoShBd: 'rgba(124,152,190,0.42)',
+      hatch: 'repeating-linear-gradient(45deg, rgba(142,170,206,0.30) 0px, rgba(142,170,206,0.30) 3px, transparent 3px, transparent 8px)',
+      redHatch: 'repeating-linear-gradient(45deg, rgba(229,90,90,0.40) 0px, rgba(229,90,90,0.40) 4px, rgba(229,90,90,0.10) 4px, rgba(229,90,90,0.10) 9px)',
+      compTx: '#F2F6FA', compMut: '#7E8CA6', compRing: '#31456B', compSTail: '#31456B',
+      hintBg: 'rgba(242,246,250,0.92)', hintTx: '#16294A', expoIcc: '#FFCB54', expSelBg: 'rgba(76,180,124,0.10)'
+    } : {
+      pageBg: '#FAFDF7', navBg: '#1B5E3A', card: '#FFFFFF', cardBd: '#F0F4EE',
+      shadow: '0 2px 10px rgba(27,94,58,0.07)',
+      tTitle: '#22302A', tSci: '#75827A', tMeta: '#3C4A42', muted: '#7A8781',
+      prim: '#2E8B57', h1c: '#2E8B57', divider: '#EDF2EC', inputBd: '#D8E0D8',
+      searchBg: '#FBFDFA', ph: '#9AA69E', track: '#E2EADF',
+      segBg: '#EFF3EE', segOnBg: '#FFFFFF', segOnTx: '#1B5E3A',
+      obtnBd: '#D8E0D8', obtnTx: '#3C4A42',
+      bannerBg: '#EFF6FD', bannerBd: '#BBD8F2', bannerTx: '#2C5A8A',
+      cntChipBg: '#E4F3E9', cntChipTx: '#20713F',
+      dangBg: '#FDEDED', dangBd: '#F2B8B5', dangTx: '#B3261E', dangSolid: '#C62828',
+      zoneABg: '#EEF7F0', zoneABd: '#CDE6D6',
+      cellOn: '#F1F7EE', cellOnBd: '#DEE9DA', cellOff: '#ECEEEA', cellOffBd: '#E3E6E1',
+      expoFull: '#FFE7A3', expoFullBd: '#EFD27E',
+      expoAm: '#EDF3B4', expoAmBd: '#D9E38C',
+      expoPm: '#FFD6A6', expoPmBd: '#EFBD7F',
+      expoSh: '#CBD8E4', expoShBd: '#B4C5D6',
+      hatch: 'repeating-linear-gradient(45deg, rgba(71,94,120,0.18) 0px, rgba(71,94,120,0.18) 3px, transparent 3px, transparent 8px)',
+      redHatch: 'repeating-linear-gradient(45deg, rgba(198,40,40,0.30) 0px, rgba(198,40,40,0.30) 4px, rgba(198,40,40,0.08) 4px, rgba(198,40,40,0.08) 9px)',
+      compTx: '#22302A', compMut: '#9AA69E', compRing: '#D8E0D8', compSTail: '#D3DAD2',
+      hintBg: 'rgba(34,48,42,0.88)', hintTx: '#fff', expoIcc: '#E8890C', expSelBg: '#F4FAF6'
+    };
+
+    // ===== LIBELLÉS =====
+    const L = en ? {
+      nav1: 'Library', nav2: 'My Gardens', nav3: 'Shop', navSoon: 'Coming Soon',
+      back: 'Back to my gardens',
+      meta: '10 × 8 — 5.0m × 4.0m (50cm/cell) — 76/80 active cells (19.0 m²) · Terrace · Facing S',
+      banner: "Click a plant in the sidebar, then click cells to place it. The Exposure layer shows per-cell sunlight — set the time and season in the toolbar.",
+      exportLab: 'Export', settingsLab: 'Settings', saveLab: 'Save',
+      editShape: 'Edit shape', tabPlants: 'PLANTS', tabSoils: 'SOILS', tabInfra: 'INFRA.',
+      searchPh: 'Search plants...',
+      infraHint: 'Place infrastructure on the grid. Blocking elements cast shadows in the Exposure layer.',
+      blocks: 'Blocks light', free: 'No shadow',
+      modes: ['Select', 'Place', 'Infrastructure'], expo: 'Exposure',
+      moments: ['Morning', 'Noon', 'Evening'], seasons: ['Summer', 'Winter'],
+      legendTitle: 'Exposure — summer · noon',
+      legend: ['Full sun', 'Morning sun', 'Afternoon sun', 'Shade', 'Cast shadow (wall, trellis)'],
+      validLab: 'Valid target', invalidLab: 'Collision',
+      panelTitle: 'Selected placement', selName: 'Zucchini',
+      selPos: 'Cells F3–G4 · footprint 2×2 (1.0 × 1.0 m)',
+      selExpo: 'Full sun — morning, noon and evening',
+      footprintLab: 'Footprint', footprintSrcKnown: 'From Perenual spacing (90–120 cm)', footprintSrcUnknown: 'Unknown spacing — manual setting',
+      fpUnit: 'cells', moveLab: 'Move', delLab: 'Remove',
+      warn: 'Overlaps Strawberry (H3). Adjust the footprint or move the plant.',
+      toast: 'Collision — overlaps Strawberry (H3)',
+      dropHint: 'Release to place · Esc to cancel', ghostLab: '2×2',
+      gardenPlantsTitle: 'Plants in this garden (7)', savedNote: 'All changes saved',
+      compE: 'E', compW: 'W',
+      cfgTitle: 'Garden settings', cfgSub: 'Layout, orientation and garden type',
+      cfgDims: 'DIMENSIONS', cfgCols: 'COLUMNS', cfgRows: 'ROWS', cfgCell: 'CELL SIZE',
+      cfgOrient: 'ORIENTATION', cfgOrientSub: 'Which way does the garden face?',
+      cfgOrientNote: 'Drives the per-cell Exposure layer: morning = east lit, noon = south, evening = west, never = north.',
+      cfgType: 'GARDEN TYPE',
+      types: ['Balcony', 'Terrace', 'In-ground', 'Greenhouse', 'Indoor'],
+      schedTitle: 'Automated lighting (lightSchedule)', schedSub: 'Indoor garden: these time slots replace natural exposure in the layer.',
+      schedAdd: 'Add a slot', schedTotal: '10 h of light / day · uniform across the grid',
+      cancelLab: 'Cancel', applyLab: 'Save',
+      tplTitle: 'Garden templates', tplSub: 'Start from a ready-made layout — available at setup and any time after',
+      tplUse: 'Use this template', tplNote: 'Applying a template replaces the current layout. Your plant list is kept.',
+      tpl: [
+        { name: 'Vegetable patch', desc: 'Rows of vegetables, a central path, water point in the corner.', meta: '10 × 6 · 50 cm · 14 plants' },
+        { name: 'Japanese garden', desc: 'Moss, gravel path, stones and a water basin.', meta: '10 × 6 · 50 cm · 8 plants' },
+        { name: 'Mediterranean', desc: 'Terracotta pots, lavender, olive tree and gravel.', meta: '10 × 6 · 50 cm · 10 plants' }
+      ],
+      delPTitle: 'Remove this placement?', delPBody: 'Zucchini (2×2, cells F3–G4) will be removed from the grid. The plant stays in your garden list — you can place it again from the sidebar.',
+      delConfirm: 'Remove',
+      delGTitle: 'Delete this garden?', delGBody: '“Test Garden” — its grid, 7 placements and 6 infrastructure items will be permanently deleted. This cannot be undone.',
+      delGFieldLab: 'Type the garden name to confirm', delGConfirm: 'Delete garden',
+      expTitle: 'Export the plan', expPdf: 'PDF (A4 landscape)', expPdfSub: 'Plan + legend + plant list',
+      expPng: 'Image (PNG, 2×)', expPngSub: 'Grid only, transparent background',
+      expLayer: 'Include the Exposure layer and legend',
+      placeBannerTx: 'Zucchini (2×2) — tap a cell to place it. Tap a placement to select it.',
+      drawerBtnLab: 'Plants & infrastructure', drawerTitle: 'Place in the garden', drawerCta: 'Tap-to-place: choose then tap the grid'
+    } : {
+      nav1: 'Bibliothèque', nav2: 'Mes Jardins', nav3: 'Boutique', navSoon: 'Bientôt disponible',
+      back: 'Retour à mes jardins',
+      meta: '10 × 8 — 5.0m × 4.0m (50cm/cellule) — 76/80 parcelles actives (19.0 m²) · Terrasse · Orienté S',
+      banner: "Cliquez sur une plante dans le menu, puis sur les parcelles pour la placer. Le calque Exposition montre le soleil case par case — réglez le moment et la saison dans la barre d'outils.",
+      exportLab: 'Exporter', settingsLab: 'Réglages', saveLab: 'Enregistrer',
+      editShape: 'Modifier la forme', tabPlants: 'PLANTES', tabSoils: 'SOLS', tabInfra: 'INFRAS.',
+      searchPh: 'Rechercher des plantes...',
+      infraHint: "Posez des infrastructures sur la grille. Les éléments bloquants portent une ombre dans le calque Exposition.",
+      blocks: 'Bloque la lumière', free: "Pas d'ombre",
+      modes: ['Sélection', 'Placer', 'Infrastructures'], expo: 'Exposition',
+      moments: ['Matin', 'Midi', 'Soir'], seasons: ['Été', 'Hiver'],
+      legendTitle: 'Exposition — été · midi',
+      legend: ['Plein soleil', 'Soleil du matin', "Soleil d'après-midi", 'Ombre', 'Ombre portée (mur, treillis)'],
+      validLab: 'Cible valide', invalidLab: 'Collision',
+      panelTitle: 'Placement sélectionné', selName: 'Courgette',
+      selPos: 'Cases F3–G4 · empreinte 2×2 (1,0 × 1,0 m)',
+      selExpo: 'Plein soleil — matin, midi et soir',
+      footprintLab: 'Empreinte', footprintSrcKnown: 'Issue de l\'espacement Perenual (90–120 cm)', footprintSrcUnknown: 'Espacement inconnu — réglage manuel',
+      fpUnit: 'cases', moveLab: 'Déplacer', delLab: 'Retirer',
+      warn: 'Chevauche Fraisier (H3). Ajustez l\'empreinte ou déplacez la plante.',
+      toast: 'Collision — chevauche Fraisier (H3)',
+      dropHint: 'Relâchez pour poser · Échap pour annuler', ghostLab: '2×2',
+      gardenPlantsTitle: 'Plantes dans ce jardin (7)', savedNote: 'Toutes les modifications sont enregistrées',
+      compE: 'E', compW: 'O',
+      cfgTitle: 'Configurer le jardin', cfgSub: 'Dimensions, orientation et type de jardin',
+      cfgDims: 'DIMENSIONS', cfgCols: 'COLONNES', cfgRows: 'LIGNES', cfgCell: 'TAILLE DE CASE',
+      cfgOrient: 'ORIENTATION', cfgOrientSub: 'Vers où le jardin est-il tourné ?',
+      cfgOrientNote: "Alimente le calque d'exposition par case : matin = Est éclairé, midi = Sud, soir = Ouest, jamais = Nord.",
+      cfgType: 'TYPE DE JARDIN',
+      types: ['Balcon', 'Terrasse', 'Pleine terre', 'Serre', 'Intérieur'],
+      schedTitle: 'Éclairage automatisé (lightSchedule)', schedSub: "Jardin intérieur : ces plages horaires remplacent l'exposition naturelle dans le calque.",
+      schedAdd: 'Ajouter une plage', schedTotal: '10 h de lumière / jour · uniforme sur la grille',
+      cancelLab: 'Annuler', applyLab: 'Enregistrer',
+      tplTitle: 'Modèles de jardin', tplSub: 'Partez d\'une disposition prête à l\'emploi — au setup comme à tout moment',
+      tplUse: 'Utiliser ce modèle', tplNote: 'Appliquer un modèle remplace la disposition actuelle. Votre liste de plantes est conservée.',
+      tpl: [
+        { name: 'Potager', desc: 'Rangs de légumes, allée centrale, point d\'eau dans l\'angle.', meta: '10 × 6 · 50 cm · 14 plantes' },
+        { name: 'Jardin japonais', desc: 'Mousse, allée de graviers, pierres et bassin.', meta: '10 × 6 · 50 cm · 8 plantes' },
+        { name: 'Méditerranéen', desc: 'Pots en terre cuite, lavande, olivier et gravier.', meta: '10 × 6 · 50 cm · 10 plantes' }
+      ],
+      delPTitle: 'Retirer ce placement ?', delPBody: 'Courgette (2×2, cases F3–G4) sera retirée de la grille. La plante reste dans la liste du jardin — vous pourrez la replacer depuis la barre latérale.',
+      delConfirm: 'Retirer',
+      delGTitle: 'Supprimer ce jardin ?', delGBody: '« Test Garden » — sa grille, ses 7 placements et ses 6 infrastructures seront supprimés définitivement. Cette action est irréversible.',
+      delGFieldLab: 'Tapez le nom du jardin pour confirmer', delGConfirm: 'Supprimer le jardin',
+      expTitle: 'Exporter le plan', expPdf: 'PDF (A4 paysage)', expPdfSub: 'Plan + légende + liste des plantes',
+      expPng: 'Image (PNG, 2×)', expPngSub: 'Grille seule, fond transparent',
+      expLayer: "Inclure le calque d'exposition et la légende",
+      placeBannerTx: 'Courgette (2×2) — touchez une case pour la placer. Touchez un placement pour le sélectionner.',
+      drawerBtnLab: 'Plantes & infrastructures', drawerTitle: 'Placer dans le jardin', drawerCta: 'Tap-to-place : choisissez puis touchez la grille'
+    };
+
+    // ===== GÉOMÉTRIE =====
+    const artW = isMobile ? 390 : 1460;
+    const padX = isMobile ? 14 : 56;
+    const CELL = isMobile ? 30 : 58;
+    const GAP = isMobile ? 2 : 3;
+    const STEP = CELL + GAP;
+    const COLS = 10, ROWS = 8;
+    const axisL = isMobile ? 16 : 24;
+    const axisT = isMobile ? 15 : 21;
+    const gx = (c) => axisL + c * STEP;
+    const gy = (r) => axisT + r * STEP;
+    const gw = (n) => n * STEP - GAP;
+    const gridBoxW = axisL + COLS * STEP - GAP;
+    const gridBoxH = axisT + ROWS * STEP - GAP;
+
+    // ===== MODÈLE DU JARDIN =====
+    // exposition : 0 plein soleil · 1 matin · 2 après-midi · 3 ombre (portée)
+    const inactive = { '0,7': 1, '1,7': 1, '9,6': 1, '9,7': 1 };
+    const infraDef = [
+      { id: 'mur', c: 3, r: 7, w: 6, h: 1 },
+      { id: 'treillis', c: 9, r: 1, w: 1, h: 4 },
+      { id: 'chemin', c: 2, r: 5, w: 5, h: 1 },
+      { id: 'eau', c: 7, r: 5, w: 1, h: 1 },
+      { id: 'pot', c: 1, r: 6, w: 1, h: 1 }
+    ];
+    const infraAt = {};
+    infraDef.forEach((f) => { for (let i = 0; i < f.w; i++) for (let j = 0; j < f.h; j++) infraAt[(f.c + i) + ',' + (f.r + j)] = f.id; });
+
+    function expoOf(c, r) {
+      if (r === 6 && c >= 3 && c <= 8) return 3;            // ombre portée du mur (sud)
+      if (c === 8 && r >= 1 && r <= 4) return 2;            // treillis à l'est → après-midi
+      if (c <= 1) return 1;                                  // bâtiment à l'ouest → matin
+      return 0;
+    }
+    const expoBg = [T.expoFull, T.expoAm, T.expoPm, T.expoSh];
+    const expoBd = [T.expoFullBd, T.expoAmBd, T.expoPmBd, T.expoShBd];
+
+    const cells = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const key = c + ',' + r;
+      const off = inactive[key];
+      const e = expoOf(c, r);
+      const cell = { x: gx(c), y: gy(r), bg: off ? T.cellOff : expoBg[e], bd: off ? T.cellOffBd : expoBd[e], bgi: 'none', bgs: 'auto' };
+      if (!off && e === 3) { cell.bgi = T.hatch; }
+      if (off) { cell.bg = T.cellOff; }
+      cells.push(cell);
+    }
+
+    // ===== INFRASTRUCTURES POSÉES =====
+    const infraStyle = {
+      mur: night
+        ? { bg: '#3A4556', bd: '1px solid #4A5568', bgi: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.10) 0px, rgba(255,255,255,0.10) 1.5px, transparent 1.5px, transparent 13px), repeating-linear-gradient(90deg, rgba(255,255,255,0.10) 0px, rgba(255,255,255,0.10) 1.5px, transparent 1.5px, transparent 24px)', icc: '#B9C4D6', labc: '#D6DEEC', ic: 'foundation' }
+        : { bg: '#8A919C', bd: '1px solid #767E8A', bgi: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.28) 0px, rgba(255,255,255,0.28) 1.5px, transparent 1.5px, transparent 13px), repeating-linear-gradient(90deg, rgba(255,255,255,0.28) 0px, rgba(255,255,255,0.28) 1.5px, transparent 1.5px, transparent 24px)', icc: '#fff', labc: '#fff', ic: 'foundation' },
+      treillis: night
+        ? { bg: 'rgba(76,180,124,0.10)', bd: '1.5px dashed #4CB47C', bgi: 'repeating-linear-gradient(45deg, rgba(76,180,124,0.35) 0px, rgba(76,180,124,0.35) 1.5px, transparent 1.5px, transparent 8px), repeating-linear-gradient(-45deg, rgba(76,180,124,0.35) 0px, rgba(76,180,124,0.35) 1.5px, transparent 1.5px, transparent 8px)', icc: '#7ED0A4', labc: '#7ED0A4', ic: 'grid_on' }
+        : { bg: 'rgba(46,139,87,0.08)', bd: '1.5px dashed #2E8B57', bgi: 'repeating-linear-gradient(45deg, rgba(46,139,87,0.30) 0px, rgba(46,139,87,0.30) 1.5px, transparent 1.5px, transparent 8px), repeating-linear-gradient(-45deg, rgba(46,139,87,0.30) 0px, rgba(46,139,87,0.30) 1.5px, transparent 1.5px, transparent 8px)', icc: '#2E8B57', labc: '#20713F', ic: 'grid_on' },
+      chemin: night
+        ? { bg: '#2E3A50', bd: '1px solid #3C4A63', bgi: 'radial-gradient(circle at 4px 4px, rgba(214,222,236,0.28) 1.4px, transparent 2px)', bgs: '9px 9px', icc: '#9FACC2', labc: '#B4C0D4', ic: 'route' }
+        : { bg: '#EDE4D3', bd: '1px solid #DCCFB8', bgi: 'radial-gradient(circle at 4px 4px, rgba(120,100,70,0.30) 1.4px, transparent 2px)', bgs: '9px 9px', icc: '#8A7351', labc: '#6E5B40', ic: 'route' },
+      eau: night
+        ? { bg: 'rgba(100,181,246,0.22)', bd: '1px solid rgba(100,181,246,0.5)', bgi: 'none', icc: '#90CAF9', labc: '#90CAF9', ic: 'water_drop', rad: 999 }
+        : { bg: '#CCE7FA', bd: '1px solid #9FCDEE', bgi: 'none', icc: '#1565C0', labc: '#1565C0', ic: 'water_drop', rad: 999 },
+      pot: night
+        ? { bg: 'rgba(200,120,70,0.26)', bd: '1px solid rgba(220,140,90,0.5)', bgi: 'none', icc: '#E9A06B', labc: '#E9A06B', ic: 'potted_plant', rad: 999 }
+        : { bg: '#EFD7C3', bd: '1px solid #DDB894', bgi: 'none', icc: '#A0522D', labc: '#A0522D', ic: 'potted_plant', rad: 999 }
+    };
+    const infraLabels = en
+      ? { mur: 'Wall', treillis: 'Trellis', chemin: 'Path', eau: 'Water', pot: 'Pot' }
+      : { mur: 'Mur', treillis: 'Treillis', chemin: 'Chemin', eau: 'Eau', pot: 'Pot' };
+
+    const infras = infraDef.map((f) => {
+      const s = infraStyle[f.id];
+      const wpx = gw(f.w), hpx = gw(f.h);
+      const showLab = !isMobile && f.w >= 4;
+      return {
+        x: gx(f.c), y: gy(f.r), w: wpx, h: hpx,
+        bg: s.bg, bd: s.bd, bgi: s.bgi || 'none', bgs: s.bgs || 'auto',
+        ic: s.ic, icc: s.icc, ics: isMobile ? 14 : 18,
+        lab: infraLabels[f.id], labc: s.labc, labDisp: showLab ? 'inline' : 'none',
+        rad: s.rad ? (isMobile ? 15 : 29) : 5
+      };
+    });
+
+    // ===== PLANTES POSÉES =====
+    const plantPal = {
+      tomate: night ? ['rgba(232,117,107,0.30)', '#F5B8B2', 'rgba(232,117,107,0.55)'] : ['#F6C9C4', '#8C2F27', '#EBA9A1'],
+      basilic: night ? ['rgba(129,199,132,0.28)', '#B8E6BA', 'rgba(129,199,132,0.55)'] : ['#CDE8CE', '#1F5E23', '#A8D4AA'],
+      courgette: night ? ['rgba(76,180,124,0.32)', '#A8E6C4', '#4CB47C'] : ['#BFE3CB', '#14532D', '#2E8B57'],
+      laitue: night ? ['rgba(174,213,129,0.28)', '#D4EDB0', 'rgba(174,213,129,0.55)'] : ['#DFEFC2', '#4A6B12', '#C4DE97'],
+      fraisier: night ? ['rgba(244,143,177,0.28)', '#F8C6D8', 'rgba(244,143,177,0.55)'] : ['#F8D3E0', '#96285C', '#EDAFC6'],
+      fougere: night ? ['rgba(149,117,205,0.30)', '#CDBBE8', 'rgba(149,117,205,0.55)'] : ['#DFD4F0', '#4B2E83', '#C4B2E2'],
+      lierre: night ? ['rgba(255,171,145,0.28)', '#FFCDBC', 'rgba(255,171,145,0.55)'] : ['#FCDACC', '#8C4A2F', '#F0BBA5']
+    };
+    const N = en
+      ? { tomate: ['Tomato', 'Solanum lycopersicum'], basilic: ['Basil', 'Ocimum basilicum'], courgette: ['Zucchini', 'Cucurbita pepo'], laitue: ['Lettuce', 'Lactuca sativa'], fraisier: ['Strawberry', 'Fragaria × ananassa'], fougere: ['Athyrium vidalii', 'Athyrium vidalii'], lierre: ['Hedera helix', 'Hedera helix'], achillee: ['Achillea ptarmica', 'Achillea ptarmica'] }
+      : { tomate: ['Tomate', 'Solanum lycopersicum'], basilic: ['Basilic', 'Ocimum basilicum'], courgette: ['Courgette', 'Cucurbita pepo'], laitue: ['Laitue', 'Lactuca sativa'], fraisier: ['Fraisier', 'Fragaria × ananassa'], fougere: ['Athyrium vidalii', 'Athyrium vidalii'], lierre: ['Hedera helix', 'Hedera helix'], achillee: ['Achillea ptarmica', 'Achillea ptarmica'] };
+
+    const courgetteW = isCollision ? 3 : 2;
+    const placeDef = [
+      { id: 'tomate', letter: 'T', c: 3, r: 2, w: 1, h: 1 },
+      { id: 'basilic', letter: 'B', c: 4, r: 2, w: 1, h: 1 },
+      { id: 'courgette', letter: 'C', c: 5, r: 2, w: courgetteW, h: 2, sel: !isDnd, lab: courgetteW + '×2' },
+      { id: 'laitue', letter: 'L', c: 2, r: 3, w: 1, h: 1 },
+      { id: 'fraisier', letter: 'F', c: 7, r: 2, w: 1, h: 1 },
+      { id: 'fougere', letter: 'A', c: 4, r: 6, w: 1, h: 1 },
+      { id: 'lierre', letter: 'H', c: 8, r: 3, w: 1, h: 1 }
+    ];
+    const places = placeDef.map((q) => {
+      const pal = plantPal[q.id];
+      const multi = q.w > 1 || q.h > 1;
+      const sel = !!q.sel;
+      return {
+        x: gx(q.c) + 2, y: gy(q.r) + 2, w: gw(q.w) - 4, h: gw(q.h) - 4,
+        bg: pal[0], tx: pal[1],
+        bd: sel ? ('2px solid ' + T.prim) : ('1.5px solid ' + pal[2]),
+        sh: sel ? ('0 0 0 3px ' + (night ? 'rgba(76,180,124,0.25)' : 'rgba(46,139,87,0.18)')) : 'none',
+        letter: q.letter, fs: isMobile ? (multi ? 13 : 11.5) : (multi ? 17 : 14),
+        lab: q.lab || '', labDisp: (multi && !isMobile) ? 'inline' : 'none',
+        labBg: night ? 'rgba(13,29,52,0.45)' : 'rgba(255,255,255,0.65)'
+      };
+    });
+
+    // poignées de redimensionnement (courgette sélectionnée)
+    const selDef = placeDef[2];
+    const selX = gx(selDef.c) + 2, selY = gy(selDef.r) + 2, selW = gw(selDef.w) - 4, selH = gw(selDef.h) - 4;
+    const handles = (!isDnd && !isMobile && (variant === 'planner' || isCollision)) ? [
+      { x: selX - 5, y: selY - 5 }, { x: selX + selW - 5, y: selY - 5 },
+      { x: selX - 5, y: selY + selH - 5 }, { x: selX + selW - 5, y: selY + selH - 5 }
+    ] : [];
+
+    // ===== CIBLES DND / COLLISION =====
+    let targetCells = [];
+    const validBg = night ? 'rgba(76,180,124,0.30)' : 'rgba(46,139,87,0.22)';
+    const invalidBg = night ? 'rgba(229,90,90,0.16)' : 'rgba(198,40,40,0.10)';
+    if (isDnd) {
+      [[3, 3], [4, 3], [3, 4], [4, 4]].forEach((t) => {
+        targetCells.push({ x: gx(t[0]), y: gy(t[1]), bg: validBg, bd: T.prim, bgi: 'none', bgs: 'auto' });
+      });
+      [[6, 6], [7, 6], [6, 7], [7, 7]].forEach((t) => {
+        targetCells.push({ x: gx(t[0]), y: gy(t[1]), bg: invalidBg, bd: T.dangTx, bgi: T.redHatch, bgs: 'auto' });
+      });
+    }
+    if (isCollision) {
+      targetCells.push({ x: gx(7), y: gy(2), bg: invalidBg, bd: T.dangTx, bgi: T.redHatch, bgs: 'auto' });
+      targetCells.push({ x: gx(7), y: gy(3), bg: validBg, bd: T.prim, bgi: 'none', bgs: 'auto' });
+    }
+
+    const ghostOn = isDnd;
+    const ghostW = gw(2), ghostH = gw(2);
+    const ghostX = gx(3) + 26, ghostY = gy(3) + 20;
+
+    // ===== SIDEBAR =====
+    const fpKnown = { bg: T.cntChipBg, tx: T.cntChipTx };
+    const fpUnk = { bg: night ? 'rgba(126,140,166,0.18)' : '#EFF1EE', tx: T.muted };
+    const rowsDef = [
+      { id: 'tomate', letter: 'T', chip: '1×1', k: 1 },
+      { id: 'basilic', letter: 'B', chip: '1×1', k: 1 },
+      { id: 'courgette', letter: 'C', chip: '2×2', k: 1, lift: isDnd || variant === 'mobile' || drawerOpen },
+      { id: 'laitue', letter: 'L', chip: '1×1', k: 1 },
+      { id: 'fraisier', letter: 'F', chip: '1×1', k: 1 },
+      { id: 'fougere', letter: 'A', chip: '1×1', k: 1 },
+      { id: 'lierre', letter: 'H', chip: '1×1', k: 1 },
+      { id: 'achillee', letter: 'A', chip: '1×1 ?', k: 0 }
+    ];
+    const plantRows = rowsDef.map((q) => {
+      const pal = plantPal[q.id] || (night ? ['rgba(142,153,243,0.28)', '#C3CBF7', ''] : ['#DDE1FB', '#3A46A8', '']);
+      const lift = !!q.lift;
+      return {
+        letter: q.letter, abg: pal[0], atx: pal[1],
+        name: N[q.id][0], sci: N[q.id][1],
+        chip: q.chip, chipBg: q.k ? fpKnown.bg : fpUnk.bg, chipTx: q.k ? fpKnown.tx : fpUnk.tx,
+        rowBg: lift ? (night ? 'rgba(76,180,124,0.12)' : '#F0F9F3') : 'transparent',
+        rowBd: lift ? T.prim : 'transparent',
+        lift: lift ? '0 6px 18px rgba(20,60,35,0.18)' : 'none'
+      };
+    });
+
+    const infraRows = [
+      { ic: 'foundation', id: 'mur', b: 1 }, { ic: 'fence', id: 'cloture', b: 0 },
+      { ic: 'route', id: 'chemin', b: 0 }, { ic: 'water_drop', id: 'eau', b: 0 },
+      { ic: 'potted_plant', id: 'pot', b: 0 }, { ic: 'grid_on', id: 'treillis', b: 1 }
+    ].map((q) => {
+      const names = en
+        ? { mur: 'Wall', cloture: 'Fence', chemin: 'Path', eau: 'Water point', pot: 'Pot', treillis: 'Trellis (planted)' }
+        : { mur: 'Mur', cloture: 'Clôture', chemin: 'Chemin', eau: "Point d'eau", pot: 'Pot', treillis: 'Treillis (garni)' };
+      const active = false;
+      return {
+        ic: q.ic, icc: q.b ? (night ? '#FFCB54' : '#B45309') : T.muted,
+        ibg: q.b ? (night ? 'rgba(255,203,84,0.14)' : '#FEF3D8') : (night ? 'rgba(126,140,166,0.14)' : '#F2F4F1'),
+        name: names[q.id],
+        badge: q.b ? L.blocks : L.free, bIc: q.b ? 'wb_shade' : 'check',
+        bBg: q.b ? (night ? 'rgba(255,203,84,0.14)' : '#FEF3D8') : (night ? 'rgba(126,140,166,0.14)' : '#F2F4F1'),
+        bTx: q.b ? (night ? '#FFD98A' : '#92400E') : T.muted,
+        rowBg: active ? (night ? 'rgba(76,180,124,0.12)' : '#F0F9F3') : 'transparent',
+        rowBd: active ? T.prim : 'transparent'
+      };
+    });
+
+    const sideInfra = variant === 'planner' || variant === 'export';
+    const sidePlants = !sideInfra;
+
+    // ===== BARRE D'OUTILS =====
+    const modeIcons = ['arrow_selector_tool', 'potted_plant', 'fence'];
+    const modeBtns = L.modes.map((m, i) => {
+      const on = i === (isDnd ? 1 : 0);
+      return { ic: modeIcons[i], lab: m, bg: on ? T.prim : 'transparent', tx: on ? '#fff' : T.tMeta, bd: on ? T.prim : T.obtnBd };
+    });
+    const seg = (labs, onIdx) => labs.map((m, i) => ({
+      lab: m, bg: i === onIdx ? T.segOnBg : 'transparent', tx: i === onIdx ? T.segOnTx : T.tMeta,
+      sh: i === onIdx ? '0 1px 4px rgba(0,0,0,0.18)' : 'none'
+    }));
+    const momentBtns = seg(L.moments, 1);
+    const seasonBtns = seg(L.seasons, 0);
+
+    // ===== LÉGENDE =====
+    const legend = [
+      { sw: T.expoFull, bd: T.expoFullBd, bgi: 'none', bgs: 'auto', lab: L.legend[0] },
+      { sw: T.expoAm, bd: T.expoAmBd, bgi: 'none', bgs: 'auto', lab: L.legend[1] },
+      { sw: T.expoPm, bd: T.expoPmBd, bgi: 'none', bgs: 'auto', lab: L.legend[2] },
+      { sw: T.expoSh, bd: T.expoShBd, bgi: 'none', bgs: 'auto', lab: L.legend[3] },
+      { sw: T.expoSh, bd: T.expoShBd, bgi: T.hatch, bgs: 'auto', lab: L.legend[4] }
+    ];
+
+    // ===== AXES =====
+    const axisCols = [], axisRows = [];
+    const colNames = 'ABCDEFGHIJ';
+    for (let c = 0; c < COLS; c++) axisCols.push({ x: gx(c), lab: colNames[c] });
+    for (let r = 0; r < ROWS; r++) axisRows.push({ y: gy(r), lab: String(r + 1) });
+
+    // ===== TEMPLATES (miniatures) =====
+    const m0 = night ? '#13273F' : '#F1F7EE';
+    const veg = ['#E8756B', '#8BC34A', '#4E9A51', '#C0CA33', '#7CB342'];
+    const potager = [], japonais = [], mediter = [];
+    for (let r = 0; r < 6; r++) for (let c = 0; c < 10; c++) {
+      potager.push(r === 2 ? (night ? '#3C4A63' : '#EDE4D3') : (c === 9 && r === 5 ? '#64B5F6' : veg[r % 5]));
+      const onPath = (r === 1 && c >= 1 && c <= 4) || (r === 2 && c >= 3 && c <= 6) || (r === 3 && c >= 5 && c <= 8);
+      const rock = (r === 4 && c === 2) || (r === 0 && c === 7) || (r === 5 && c === 5);
+      japonais.push(onPath ? (night ? '#5A6residue' : '#D8D3C8') : rock ? '#7B8794' : (r === 5 && c >= 8 ? '#64B5F6' : '#6FA96F'));
+      const potRow = r === 0 || r === 5;
+      mediter.push(potRow ? '#C77B4A' : (r === 2 && c % 2 === 0 ? '#9B8EC4' : (c === 4 || c === 5) && r === 3 ? '#8A9A5B' : '#E7DCC3'));
+    }
+    // fix accidental bad hex in japonais path colour
+    for (let i = 0; i < japonais.length; i++) if (japonais[i] === '#5A6residue') japonais[i] = '#4A5568';
+    const tplCards = L.tpl.map((t, i) => ({
+      name: t.name, desc: t.desc, meta: t.meta,
+      mini: [potager, japonais, mediter][i],
+      miniBg: night ? '#0F2038' : '#FBFDFA',
+      bd: i === 0 ? ('2px solid ' + T.prim) : ('1px solid ' + T.inputBd),
+      btnBg: i === 0 ? T.prim : 'transparent', btnTx: i === 0 ? '#fff' : T.prim,
+      btnBd: i === 0 ? ('1px solid ' + T.prim) : ('1px solid ' + T.prim)
+    }));
+
+    // ===== CONFIG =====
+    const orientBtns = ['N', 'E', 'S', en ? 'W' : 'O'].map((o, i) => ({
+      lab: o, bg: i === 2 ? T.segOnBg : 'transparent', tx: i === 2 ? T.segOnTx : T.tMeta,
+      sh: i === 2 ? '0 1px 4px rgba(0,0,0,0.18)' : 'none'
+    }));
+    const typeIcons = ['balcony', 'deck', 'grass', 'cabin', 'home'];
+    const typeOn = showIndoor ? 4 : 2;
+    const typeCards = L.types.map((t, i) => ({
+      ic: typeIcons[i], lab: t,
+      bg: i === typeOn ? (night ? 'rgba(76,180,124,0.12)' : '#F0F9F3') : 'transparent',
+      bd: i === typeOn ? ('2px solid ' + T.prim) : ('1px solid ' + T.inputBd),
+      tx: i === typeOn ? T.prim : T.tMeta, icc: i === typeOn ? T.prim : T.muted
+    }));
+    const schedRows = [
+      { t1: '06:00', t2: '10:00', hrs: '4 h' },
+      { t1: '16:00', t2: '22:00', hrs: '6 h' }
+    ];
+
+    // ===== JARDIN — CHIPS =====
+    const gardenChips = placeDef.map((q) => {
+      const pal = plantPal[q.id];
+      return { letter: q.letter, abg: pal[0], atx: pal[1], name: N[q.id][0], sci: N[q.id][1] };
+    });
+
+    // ===== FOOTER =====
+    const footCols = en ? [
+      { h: 'EXPLORE', links: [{ lab: 'Library' }, { lab: 'My Gardens' }, { lab: 'Shop', soon: true }] },
+      { h: 'RESOURCES', links: [{ lab: 'About Us' }, { lab: 'Help Center', soon: true }, { lab: 'News', soon: true }, { lab: 'Contact' }] },
+      { h: 'ACCOUNT', links: [{ lab: 'My Account' }, { lab: 'Log out' }] },
+      { h: 'CONNECT', links: [{ lab: 'Follow us', soon: true }] }
+    ] : [
+      { h: 'EXPLORER', links: [{ lab: 'Bibliothèque' }, { lab: 'Mes Jardins' }, { lab: 'Boutique', soon: true }] },
+      { h: 'RESSOURCES', links: [{ lab: 'À propos de nous' }, { lab: "Centre d'aide", soon: true }, { lab: 'Actualités', soon: true }, { lab: 'Contact' }] },
+      { h: 'COMPTE', links: [{ lab: 'Mon compte' }, { lab: 'Déconnexion' }] },
+      { h: 'RESTONS CONNECTÉS', links: [{ lab: 'Suivez-nous', soon: true }] }
+    ];
+
+    return {
+      artW, padX, pageBg: T.pageBg, navBg: T.navBg, card: T.card, cardBd: T.cardBd, shadow: T.shadow,
+      tTitle: T.tTitle, tSci: T.tSci, tMeta: T.tMeta, muted: T.muted, prim: T.prim, h1c: T.h1c,
+      divider: T.divider, inputBd: T.inputBd, searchBg: T.searchBg, ph: T.ph, track: T.track,
+      segBg: T.segBg, segOnBg: T.segOnBg, segOnTx: T.segOnTx, obtnBd: T.obtnBd, obtnTx: T.obtnTx,
+      bannerBg: T.bannerBg, bannerBd: T.bannerBd, bannerTx: T.bannerTx,
+      cntChipBg: T.cntChipBg, cntChipTx: T.cntChipTx,
+      dangBg: T.dangBg, dangBd: T.dangBd, dangTx: T.dangTx, dangSolid: T.dangSolid,
+      zoneABg: T.zoneABg, zoneABd: T.zoneABd,
+      hintBg: T.hintBg, hintTx: T.hintTx, expoIcc: T.expoIcc, expSelBg: T.expSelBg,
+      compTx: T.compTx, compMut: T.compMut, compRing: T.compRing, compSTail: T.compSTail,
+
+      navH: isMobile ? 56 : 64, logoS: isMobile ? 32 : 38, logoFs: isMobile ? 20 : 24, brandFs: isMobile ? 19 : 23,
+      deskNav: !isMobile, isMobile,
+      nav1: L.nav1, nav2: L.nav2, nav3: L.nav3, navSoon: L.navSoon,
+      flagUsDisp: en ? 'block' : 'none', flagFrDisp: en ? 'none' : 'block', langLab: en ? 'EN' : 'FR',
+
+      backLab: L.back, backMargin: isMobile ? '18px 0 10px' : '26px 0 14px',
+      h1Size: isMobile ? 26 : 32, h1c: T.h1c, metaFs: isMobile ? 12.5 : 14.5, metaLine: L.meta,
+      btnH: isMobile ? 40 : 44, btnPx: isMobile ? 13 : 17, btnFs: isMobile ? 13 : 14.5,
+      exportLab: L.exportLab, settingsLab: L.settingsLab, saveLab: L.saveLab,
+
+      showBanner: !isMobile && !scrimOn, bannerCopy: L.banner, bannerFs: isMobile ? 12.5 : 14,
+      placeBanner: isMobile && !drawerOpen, placeBannerTx: L.placeBannerTx,
+
+      mainPadB: isMobile ? 76 : 30,
+      sideOn: !isMobile, sidePlants, sideInfra,
+      editShapeLab: L.editShape, tabPlants: L.tabPlants, tabSoils: L.tabSoils, tabInfra: L.tabInfra,
+      tabPlantsTx: sidePlants ? T.prim : T.muted, tabPlantsBd: sidePlants ? T.prim : 'transparent',
+      tabInfraTx: sideInfra ? T.prim : T.muted, tabInfraBd: sideInfra ? T.prim : 'transparent',
+      searchPh: L.searchPh, infraHint: L.infraHint,
+      plantRows, infraRows,
+
+      tbPad: isMobile ? '10px 12px' : '12px 16px', tbBtnH: isMobile ? 34 : 38, tbBtnPx: isMobile ? 10 : 14,
+      tbFs: isMobile ? 12 : 13.5, tbLabDisp: isMobile ? 'none' : 'inline', tbDivM: isMobile ? '10px -12px' : '12px -16px',
+      tbRow2Gap: isMobile ? 8 : 14, segPy: isMobile ? 6 : 8, segPx: isMobile ? 9 : 14, segFs: isMobile ? 11.5 : 13,
+      modeBtns, momentBtns, seasonBtns, expoLab: L.expo,
+
+      gridCardPad: isMobile ? 12 : 20, gridBoxW, gridBoxH, cellW: CELL, axisL, axisFs: isMobile ? 8.5 : 10.5,
+      cells, infras, infraLabFs: isMobile ? 9 : 12, places, placeLabFs: isMobile ? 9 : 11, handles, targetCells,
+      compS: isMobile ? 40 : 56, compSvg: isMobile ? 30 : 42, compE: L.compE, compW: L.compW,
+      ghostOn, ghostX, ghostY, ghostW, ghostH,
+      ghostBg: night ? 'rgba(76,180,124,0.45)' : 'rgba(191,227,203,0.92)', ghostTx: night ? '#EAFBF2' : '#14532D',
+      ghostLab: L.ghostLab, cursorX: ghostX + ghostW - 18, cursorY: ghostY + ghostH - 16,
+      toastOn: isCollision, toastTx: L.toast, dropHint: L.dropHint,
+      dndNote: isDnd, validSw: validBg, invalidSw: invalidBg, validLab: L.validLab, invalidLab: L.invalidLab,
+
+      legendTitle: L.legendTitle, legend, legGap: isMobile ? 10 : 16, legSw: isMobile ? 13 : 16,
+      legFs: isMobile ? 10.5 : 12.5, legTitleFs: isMobile ? 11 : 13,
+
+      panelOpen: !isMobile && (variant === 'planner' || isCollision),
+      panelTitle: L.panelTitle, selName: L.selName,
+      selAbg: plantPal.courgette[0], selAtx: plantPal.courgette[1],
+      selPos: isCollision ? (en ? 'Cells F3–H4 · footprint 3×2 (1.5 × 1.0 m)' : 'Cases F3–H4 · empreinte 3×2 (1,5 × 1,0 m)') : L.selPos,
+      selExpo: L.selExpo,
+      footprintLab: L.footprintLab, footprintSrc: isCollision ? L.footprintSrcUnknown : L.footprintSrcKnown,
+      fpW: String(courgetteW), fpH: '2', fpUnit: L.fpUnit,
+      warnOn: isCollision, warnTx: L.warn, moveLab: L.moveLab, delLab: L.delLab,
+
+      showFoot, gardenPlantsTitle: L.gardenPlantsTitle, gardenChips, savedNote: L.savedNote,
+      footTag: en ? 'Your virtual garden companion — discover, grow, and share plants from around the world.' : 'Votre compagnon de jardin virtuel — découvrez, cultivez et partagez des plantes du monde entier.',
+      footCols,
+      footCopy: en ? '© 2026 SmartCrops. All rights reserved.' : '© 2026 SmartCrops. Tous droits réservés.',
+      footL1: en ? 'Legal Notice' : 'Mentions légales', footL2: en ? 'Terms of Use' : 'CGU', footL3: en ? 'Privacy' : 'Confidentialité',
+      sunBg: night ? 'transparent' : '#fff', sunTx: night ? 'rgba(255,255,255,0.75)' : '#E8890C',
+      moonBg: night ? '#fff' : 'transparent', moonTx: night ? '#1B5E3A' : 'rgba(255,255,255,0.75)',
+
+      showExport, exportPopR: padX, exportPopT: isMobile ? 150 : 158,
+      expTitle: L.expTitle, expPdf: L.expPdf, expPdfSub: L.expPdfSub, expPng: L.expPng, expPngSub: L.expPngSub, expLayer: L.expLayer,
+
+      scrimOn, dlgPadT: showTemplates ? 90 : 64, dlgW: 620,
+      showConfig, showIndoor, cfgTitle: L.cfgTitle, cfgSub: L.cfgSub, cfgDims: L.cfgDims,
+      cfgCols: L.cfgCols, cfgRows: L.cfgRows, cfgCell: L.cfgCell,
+      cfgOrient: L.cfgOrient, cfgOrientSub: L.cfgOrientSub, cfgOrientNote: L.cfgOrientNote,
+      orientBtns, cfgType: L.cfgType, typeCards,
+      schedTitle: L.schedTitle, schedSub: L.schedSub, schedRows, schedAdd: L.schedAdd, schedTotal: L.schedTotal,
+      cancelLab: L.cancelLab, applyLab: L.applyLab,
+
+      showTemplates, tplTitle: L.tplTitle, tplSub: L.tplSub, tplCards, tplUse: L.tplUse, tplNote: L.tplNote,
+
+      showDelete, delPTitle: L.delPTitle, delPBody: L.delPBody, delConfirm: L.delConfirm,
+      showDeleteG, delGTitle: L.delGTitle, delGBody: L.delGBody, delGFieldLab: L.delGFieldLab, delGConfirm: L.delGConfirm,
+
+      drawerBtn: isMobile && !drawerOpen, drawerBtnLab: L.drawerBtnLab,
+      drawerOpen, drawerH: 560, drawerTitle: L.drawerTitle, drawerCta: L.drawerCta
+    };
+  }
+}
+</script>
+</body>
+</html>

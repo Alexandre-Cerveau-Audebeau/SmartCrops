@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="ec77ef89-1672-46c3-ad63-e24025c6d27f"></script>
+
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<style>/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("0403eb5a-dd9f-4490-b2f5-864c5a81bab0") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("c3d85ea0-213a-4031-9c82-2ed729af0ae5") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("61a0a6a7-889c-411b-b98f-db8284a00ca1") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("33f2bce7-8540-471b-ac29-a5b90f0ade5e") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("35a7f084-feff-4f3a-97de-f2e0e6598314") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("e7a50916-af5c-4c8f-bd55-162bdf6954fa") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("39c9a83f-7835-4f98-8fd5-28c09f04b778") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("0403eb5a-dd9f-4490-b2f5-864c5a81bab0") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("c3d85ea0-213a-4031-9c82-2ed729af0ae5") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("61a0a6a7-889c-411b-b98f-db8284a00ca1") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("33f2bce7-8540-471b-ac29-a5b90f0ade5e") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("35a7f084-feff-4f3a-97de-f2e0e6598314") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("e7a50916-af5c-4c8f-bd55-162bdf6954fa") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("39c9a83f-7835-4f98-8fd5-28c09f04b778") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("0403eb5a-dd9f-4490-b2f5-864c5a81bab0") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("c3d85ea0-213a-4031-9c82-2ed729af0ae5") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("61a0a6a7-889c-411b-b98f-db8284a00ca1") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("33f2bce7-8540-471b-ac29-a5b90f0ade5e") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("35a7f084-feff-4f3a-97de-f2e0e6598314") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("e7a50916-af5c-4c8f-bd55-162bdf6954fa") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("39c9a83f-7835-4f98-8fd5-28c09f04b778") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("0403eb5a-dd9f-4490-b2f5-864c5a81bab0") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("c3d85ea0-213a-4031-9c82-2ed729af0ae5") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("61a0a6a7-889c-411b-b98f-db8284a00ca1") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("33f2bce7-8540-471b-ac29-a5b90f0ade5e") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("35a7f084-feff-4f3a-97de-f2e0e6598314") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("e7a50916-af5c-4c8f-bd55-162bdf6954fa") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("39c9a83f-7835-4f98-8fd5-28c09f04b778") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("0403eb5a-dd9f-4490-b2f5-864c5a81bab0") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("c3d85ea0-213a-4031-9c82-2ed729af0ae5") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("61a0a6a7-889c-411b-b98f-db8284a00ca1") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("33f2bce7-8540-471b-ac29-a5b90f0ade5e") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("35a7f084-feff-4f3a-97de-f2e0e6598314") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("e7a50916-af5c-4c8f-bd55-162bdf6954fa") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("39c9a83f-7835-4f98-8fd5-28c09f04b778") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+</style>
+<style>/* fallback */
+@font-face {
+  font-family: 'Material Symbols Outlined';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("47132c72-e817-4581-97ab-6d24ed5a5b22") format('woff2');
+}
+
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+</style>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: #E4E9E2; }
+  a { color: #2E8B57; } a:hover { color: #1B5E3A; }
+  .ms { font-family: 'Material Symbols Outlined'; font-weight: 400; font-style: normal; line-height: 1; white-space: nowrap; }
+</style>
+</helmet>
+
+<div style="width:1120px;background:#FAFDF7;border-radius:2px;padding:30px 34px 34px;font-family:'Inter',system-ui,sans-serif">
+
+  <!-- En-tête compact -->
+  <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:6px">
+    <span style="display:inline-flex;align-items:center;justify-content:center;height:30px;border-radius:8px;background:#1B5E3A;color:#fff;font-size:13.5px;font-weight:800;padding:0 12px;letter-spacing:0.03em">SOLS</span>
+    <div style="flex:1">
+      <div style="font-size:21px;font-weight:800;color:#1B5E3A;letter-spacing:-0.01em">Couche « type de sol » par case — trame + pastille d'angle</div>
+      <div style="font-size:13px;color:#55645B;line-height:1.5;margin-top:4px;max-width:900px">Le fond de case reste la propriété exclusive de l'exposition. Le sol s'exprime par une <b>trame géométrique</b> (encre teintée, sous les plantes) doublée d'une <b>pastille d'angle</b> en teinte pleine (au-dessus de tout). Six géométries distinctes — aucune à 45°, l'ombre portée garde l'exclusivité des hachures diagonales.</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 22px">
+    <span style="display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #D8E0D8;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;color:#2A3630">z0 — fond : exposition</span>
+    <span style="display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #D8E0D8;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;color:#2A3630">z1 — trame sol, sous la plante</span>
+    <span style="display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #D8E0D8;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;color:#2A3630">z2 — plante posée</span>
+    <span style="display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #D8E0D8;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;color:#2A3630">z3 — pastille sol, toujours visible</span>
+    <span style="display:inline-flex;align-items:center;gap:6px;background:#FEF3D8;border:1px solid #EFD27E;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:#92400E">règle : l'infrastructure masque le sol</span>
+  </div>
+
+  <sc-for list="{{ panels }}" as="pn" hint-placeholder-count="2">
+    <div style="background:{{ pn.bg }};border:1px solid {{ pn.bd }};border-radius:12px;padding:20px 22px 22px;margin-bottom:22px;box-shadow:0 2px 10px rgba(27,94,58,0.07)">
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px">
+        <span style="font-size:15px;font-weight:800;color:{{ pn.title }}">{{ pn.modeLab }}</span>
+        <span style="font-size:11.5px;font-weight:600;color:{{ pn.muted }}">{{ pn.modeSub }}</span>
+      </div>
+
+      <!-- Palette : 6 échantillons -->
+      <div style="display:grid;grid-template-columns:repeat(6, 1fr);gap:10px;margin-bottom:18px">
+        <sc-for list="{{ pn.swatches }}" as="s" hint-placeholder-count="6">
+          <div style="background:{{ pn.cardBg }};border:1px solid {{ pn.cardBd }};border-radius:10px;padding:10px">
+            <span style="display:block;position:relative;width:100%;height:46px;border-radius:7px;background:{{ pn.cellBase }};border:1px solid {{ pn.cellBaseBd }};background-image:{{ s.bgi }};background-size:{{ s.bgs }};overflow:hidden">
+              <span style="position:absolute;left:4px;bottom:4px;width:12px;height:12px;border-radius:4px;background:{{ s.hex }};border:1px solid {{ pn.pastBd }}"></span>
+            </span>
+            <span style="display:block;font-size:13px;font-weight:800;color:{{ pn.title }};margin-top:8px">{{ s.name }}</span>
+            <span style="display:block;font-size:10.5px;color:{{ pn.muted }};margin-top:1px">{{ s.desc }}</span>
+            <span style="display:block;font-size:11.5px;font-weight:700;color:{{ pn.hexTx }};margin-top:5px;font-variant-numeric:tabular-nums">{{ s.hex }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- Grille de démonstration + règles -->
+      <div style="display:flex;gap:22px;align-items:flex-start">
+        <div style="background:{{ pn.cardBg }};border:1px solid {{ pn.cardBd }};border-radius:12px;padding:14px 16px 12px;flex-shrink:0;width:554px">
+          <div style="display:grid;grid-template-columns:118px repeat(6, {{ cellPx }}px);gap:3px;align-items:stretch">
+            <sc-for list="{{ pn.colHeads }}" as="ch" hint-placeholder-count="7">
+              <span style="font-size:10px;font-weight:800;letter-spacing:0.04em;color:{{ pn.muted }};text-transform:uppercase;align-self:end;padding:0 2px 3px;text-align:{{ ch.al }}">{{ ch.lab }}</span>
+            </sc-for>
+            <sc-for list="{{ pn.rows }}" as="r" hint-placeholder-count="4">
+              <span style="font-size:11.5px;font-weight:700;color:{{ pn.rowLab }};align-self:center;padding-right:10px;text-align:right;line-height:1.3">{{ r.label }}</span>
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="6">
+                <span style="position:relative;height:{{ cellPx }}px;border-radius:4px;background:{{ c.bg }};border:1px solid {{ c.bd }};background-image:{{ c.hach }};overflow:hidden">
+                  <span style="position:absolute;inset:0;background-image:{{ c.soilBgi }};background-size:{{ c.soilBgs }}"></span>
+                  <span style="position:absolute;inset:2px;border-radius:6px;background:{{ c.pBg }};border:1.5px solid {{ c.pBd }};display:{{ c.pDisp }};align-items:center;justify-content:center;font-size:15px;font-weight:800;color:{{ c.pTx }}">{{ c.pLetter }}</span>
+                  <span style="position:absolute;left:3px;bottom:3px;width:11px;height:11px;border-radius:3.5px;background:{{ c.pastBg }};border:1px solid {{ pn.pastBd }};display:{{ c.pastDisp }};z-index:3"></span>
+                </span>
+              </sc-for>
+            </sc-for>
+            <span style="font-size:11.5px;font-weight:700;color:{{ pn.rowLab }};align-self:center;padding-right:10px;text-align:right;line-height:1.3">{{ pn.infraLabel }}</span>
+            <sc-for list="{{ pn.infra }}" as="f" hint-placeholder-count="4">
+              <span style="position:relative;grid-column:span {{ f.span }};height:{{ cellPx }}px;border-radius:{{ f.rad }}px;background:{{ f.bg }};border:{{ f.bd }};background-image:{{ f.bgi }};background-size:{{ f.bgs }};display:flex;align-items:center;justify-content:center;gap:5px;overflow:hidden">
+                <span class="ms" style="font-size:17px;color:{{ f.icc }}">{{ f.ic }}</span>
+                <span style="display:{{ f.labDisp }};font-size:11px;font-weight:800;color:{{ f.labc }};letter-spacing:0.02em">{{ f.lab }}</span>
+              </span>
+            </sc-for>
+          </div>
+          <div style="font-size:10.5px;color:{{ pn.muted }};margin-top:10px;line-height:1.5;max-width:520px">{{ pn.gridNote }}</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:800;letter-spacing:0.05em;color:{{ pn.muted }};text-transform:uppercase;margin-bottom:10px">{{ pn.rulesTitle }}</div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{ pn.rules }}" as="ru" hint-placeholder-count="5">
+              <div style="display:flex;gap:9px;align-items:flex-start">
+                <span class="ms" style="font-size:16px;color:{{ pn.accent }};margin-top:1px">{{ ru.ic }}</span>
+                <span style="font-size:12.5px;line-height:1.55;color:{{ pn.body }}">{{ ru.tx }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="border:1px solid {{ pn.cardBd }};border-radius:10px;padding:11px 13px;margin-top:14px;background:{{ pn.cardBg }}">
+            <div style="font-size:11px;font-weight:800;color:{{ pn.muted }};letter-spacing:0.04em;margin-bottom:7px">TOKENS</div>
+            <sc-for list="{{ pn.tokens }}" as="tk" hint-placeholder-count="6">
+              <div style="display:flex;justify-content:space-between;gap:10px;font-size:11.5px;line-height:1.8;font-variant-numeric:tabular-nums"><span style="color:{{ pn.body }};font-weight:600">{{ tk.k }}</span><span style="color:{{ pn.hexTx }};font-weight:700">{{ tk.v }}</span></div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:1120,&quot;height&quot;:1560},&quot;trameOp&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.6,&quot;min&quot;:0.2,&quot;max&quot;:0.6,&quot;step&quot;:0.02,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Trame&quot;},&quot;pastille&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Trame&quot;},&quot;cellPx&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:68,&quot;min&quot;:52,&quot;max&quot;:84,&quot;step&quot;:4,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Grille&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props || {};
+    const cellPx = p.cellPx ?? 64;
+    const opDay = p.trameOp ?? 0.38;
+    const opNight = Math.min(0.7, opDay + 0.08);
+    const pastille = p.pastille !== false;
+
+    const rgba = (hex, a) => {
+      const n = parseInt(hex.slice(1), 16);
+      return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+    };
+
+    // 6 sols — hue jour / hue nuit + géométrie de trame (aucune à 45°)
+    const soils = [
+      { id: 'terreau', name: 'Terreau', desc: 'points moyens espacés', day: '#7A5233', night: '#C89B72' },
+      { id: 'sable', name: 'Sable', desc: 'grain fin serré', day: '#A67C1E', night: '#E3C46B' },
+      { id: 'argile', name: 'Argile', desc: 'strates horizontales', day: '#B0583A', night: '#E08A66' },
+      { id: 'gravier', name: 'Gravier', desc: 'moucheture bicalibre', day: '#5F6E7E', night: '#9FB0C2' },
+      { id: 'calcaire', name: 'Calcaire', desc: 'lignes verticales', day: '#948C7B', night: '#CFC8B8' },
+      { id: 'humifere', name: 'Humifère', desc: 'grain dense décalé', day: '#4A3728', night: '#B99B78' }
+    ];
+    const pat = {
+      terreau: (i) => ['radial-gradient(circle at 5px 5px, ' + i + ' 1.8px, transparent 2.4px)', '11px 11px'],
+      sable: (i) => ['radial-gradient(circle at 2.2px 2.2px, ' + i + ' 0.95px, transparent 1.45px)', '4.6px 4.6px'],
+      argile: (i) => ['repeating-linear-gradient(0deg, ' + i + ' 0px, ' + i + ' 1.4px, transparent 1.4px, transparent 6.2px)', 'auto'],
+      gravier: (i) => ['radial-gradient(circle at 3.5px 3.5px, ' + i + ' 2.1px, transparent 2.8px), radial-gradient(circle at 10px 10px, ' + i + ' 1.4px, transparent 2px)', '13px 13px, 13px 13px'],
+      calcaire: (i) => ['repeating-linear-gradient(90deg, ' + i + ' 0px, ' + i + ' 1.4px, transparent 1.4px, transparent 7px)', 'auto'],
+      humifere: (i) => ['radial-gradient(circle at 2px 2px, ' + i + ' 1.5px, transparent 2px), radial-gradient(circle at 5.8px 5.8px, ' + i + ' 1.5px, transparent 2px)', '7.6px 7.6px, 7.6px 7.6px']
+    };
+
+    const mk = (night) => {
+      const op = night ? opNight : opDay;
+      const T = night ? {
+        bg: '#0D1D34', bd: '#22375C', cardBg: '#16294A', cardBd: '#22375C',
+        title: '#F2F6FA', body: '#D6DEEC', muted: '#7E8CA6', rowLab: '#9FACC2',
+        hexTx: '#7ED0A4', accent: '#4CB47C', pastBd: 'rgba(255,255,255,0.35)',
+        cellBase: '#132740', cellBaseBd: '#1F3556',
+        expo: [
+          ['rgba(255,203,84,0.36)', 'rgba(255,203,84,0.55)'],
+          ['rgba(196,214,100,0.30)', 'rgba(196,214,100,0.48)'],
+          ['rgba(255,148,92,0.34)', 'rgba(255,148,92,0.52)'],
+          ['rgba(124,152,190,0.22)', 'rgba(124,152,190,0.42)']
+        ],
+        hach: 'repeating-linear-gradient(45deg, rgba(142,170,206,0.30) 0px, rgba(142,170,206,0.30) 3px, transparent 3px, transparent 8px)',
+        plants: {
+          tomate: ['rgba(232,117,107,0.30)', '#F5B8B2', 'rgba(232,117,107,0.55)'],
+          basilic: ['rgba(129,199,132,0.28)', '#B8E6BA', 'rgba(129,199,132,0.55)'],
+          courgette: ['rgba(76,180,124,0.32)', '#A8E6C4', '#4CB47C'],
+          laitue: ['rgba(174,213,129,0.28)', '#D4EDB0', 'rgba(174,213,129,0.55)'],
+          fraisier: ['rgba(244,143,177,0.28)', '#F8C6D8', 'rgba(244,143,177,0.55)'],
+          fougere: ['rgba(149,117,205,0.30)', '#CDBBE8', 'rgba(149,117,205,0.55)']
+        },
+        infra: {
+          mur: { bg: '#3A4556', bd: '1px solid #4A5568', bgi: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.10) 0px, rgba(255,255,255,0.10) 1.5px, transparent 1.5px, transparent 13px), repeating-linear-gradient(90deg, rgba(255,255,255,0.10) 0px, rgba(255,255,255,0.10) 1.5px, transparent 1.5px, transparent 24px)', bgs: 'auto', ic: 'foundation', icc: '#B9C4D6', labc: '#D6DEEC' },
+          chemin: { bg: '#2E3A50', bd: '1px solid #3C4A63', bgi: 'radial-gradient(circle at 4px 4px, rgba(214,222,236,0.28) 1.4px, transparent 2px)', bgs: '9px 9px', ic: 'route', icc: '#9FACC2' },
+          eau: { bg: 'rgba(100,181,246,0.22)', bd: '1px solid rgba(100,181,246,0.5)', bgi: 'none', bgs: 'auto', ic: 'water_drop', icc: '#90CAF9', rad: 999 },
+          pot: { bg: 'rgba(200,120,70,0.26)', bd: '1px solid rgba(220,140,90,0.5)', bgi: 'none', bgs: 'auto', ic: 'potted_plant', icc: '#E9A06B', rad: 999 }
+        },
+        modeLab: 'MODE NUIT', modeSub: 'fond #0D1D34 · carte #16294A · case #132740 (SMA-209)'
+      } : {
+        bg: '#FFFFFF', bd: '#F0F4EE', cardBg: '#FBFDFA', cardBd: '#E7EDE5',
+        title: '#22302A', body: '#3C4A42', muted: '#7A8781', rowLab: '#55645B',
+        hexTx: '#20713F', accent: '#2E8B57', pastBd: 'rgba(0,0,0,0.25)',
+        cellBase: '#F1F7EE', cellBaseBd: '#DEE9DA',
+        expo: [
+          ['#FFE7A3', '#EFD27E'],
+          ['#EDF3B4', '#D9E38C'],
+          ['#FFD6A6', '#EFBD7F'],
+          ['#CBD8E4', '#B4C5D6']
+        ],
+        hach: 'repeating-linear-gradient(45deg, rgba(71,94,120,0.18) 0px, rgba(71,94,120,0.18) 3px, transparent 3px, transparent 8px)',
+        plants: {
+          tomate: ['#F6C9C4', '#8C2F27', '#EBA9A1'],
+          basilic: ['#CDE8CE', '#1F5E23', '#A8D4AA'],
+          courgette: ['#BFE3CB', '#14532D', '#2E8B57'],
+          laitue: ['#DFEFC2', '#4A6B12', '#C4DE97'],
+          fraisier: ['#F8D3E0', '#96285C', '#EDAFC6'],
+          fougere: ['#DFD4F0', '#4B2E83', '#C4B2E2']
+        },
+        infra: {
+          mur: { bg: '#8A919C', bd: '1px solid #767E8A', bgi: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.28) 0px, rgba(255,255,255,0.28) 1.5px, transparent 1.5px, transparent 13px), repeating-linear-gradient(90deg, rgba(255,255,255,0.28) 0px, rgba(255,255,255,0.28) 1.5px, transparent 1.5px, transparent 24px)', bgs: 'auto', ic: 'foundation', icc: '#fff', labc: '#fff' },
+          chemin: { bg: '#EDE4D3', bd: '1px solid #DCCFB8', bgi: 'radial-gradient(circle at 4px 4px, rgba(120,100,70,0.30) 1.4px, transparent 2px)', bgs: '9px 9px', ic: 'route', icc: '#8A7351' },
+          eau: { bg: '#CCE7FA', bd: '1px solid #9FCDEE', bgi: 'none', bgs: 'auto', ic: 'water_drop', icc: '#1565C0', rad: 999 },
+          pot: { bg: '#EFD7C3', bd: '1px solid #DDB894', bgi: 'none', bgs: 'auto', ic: 'potted_plant', icc: '#A0522D', rad: 999 }
+        },
+        modeLab: 'MODE JOUR', modeSub: 'fond crème #FAFDF7 · carte #FFFFFF · case #F1F7EE'
+      };
+
+      const hue = (s) => night ? s.night : s.day;
+      const soilArr = soils.map((s) => {
+        const ink = rgba(hue(s), op);
+        const [bgi, bgs] = pat[s.id](ink);
+        return { ...s, hex: hue(s), bgi, bgs };
+      });
+
+      // expo par colonne : plein soleil, matin, après-midi, ombre, ombre portée (hachures), plein soleil
+      const expoSeq = [0, 1, 2, 3, 3, 0];
+      const hachSeq = [0, 0, 0, 0, 1, 0];
+      const plantSeq = [
+        ['T', 'tomate'], ['B', 'basilic'], ['C', 'courgette'],
+        ['L', 'laitue'], ['F', 'fraisier'], ['A', 'fougere']
+      ];
+
+      const cell = (i, { expo = false, plant = false }) => {
+        const s = soilArr[i];
+        const e = expoSeq[i];
+        const pl = plantSeq[i];
+        const pal = T.plants[pl[1]];
+        return {
+          bg: expo ? T.expo[e][0] : T.cellBase,
+          bd: expo ? T.expo[e][1] : T.cellBaseBd,
+          hach: expo && hachSeq[i] ? T.hach : 'none',
+          soilBgi: s.bgi, soilBgs: s.bgs,
+          pDisp: plant ? 'flex' : 'none',
+          pBg: plant ? pal[0] : 'transparent', pBd: plant ? pal[2] : 'transparent',
+          pTx: plant ? pal[1] : 'transparent', pLetter: plant ? pl[0] : '',
+          pastBg: s.hex, pastDisp: pastille ? 'block' : 'none'
+        };
+      };
+      const row = (label, opts) => ({ label, cells: soilArr.map((_, i) => cell(i, opts)) });
+
+      const rows = [
+        row('Sol seul', {}),
+        row('+ Exposition', { expo: true }),
+        row('+ Plante', { plant: true }),
+        row('+ Plante + Expo', { expo: true, plant: true })
+      ];
+
+      const infra = [
+        { ...T.infra.mur, span: 3, lab: 'Mur', labDisp: 'inline', rad: 5 },
+        { ...T.infra.chemin, span: 1, lab: '', labDisp: 'none', rad: 5 },
+        { ...T.infra.eau, span: 1, lab: '', labDisp: 'none', rad: T.infra.eau.rad ? Math.round(cellPx / 2) : 5 },
+        { ...T.infra.pot, span: 1, lab: '', labDisp: 'none', rad: T.infra.pot.rad ? Math.round(cellPx / 2) : 5 }
+      ].map((f) => ({ ...f, rad: f.rad === 999 ? Math.round(cellPx / 2) : f.rad }));
+
+      const colHeads = [{ lab: '', al: 'right' }].concat(soilArr.map((s) => ({ lab: s.name, al: 'center' })));
+
+      const opPct = Math.round(op * 100);
+      const rules = [
+        { ic: 'layers', tx: 'Le fond de case n\'est jamais un aplat « sol » : l\'exposition garde sa teinte pleine, la trame se lit par-dessus à ' + opPct + ' % d\'opacité.' },
+        { ic: 'texture', tx: 'Six géométries — points, grain, strates, moucheture, verticales, grain dense — reconnaissables même sur jaune, orange ou bleu-gris, et sans conflit avec les hachures 45° de l\'ombre portée.' },
+        { ic: 'crop_square', tx: 'La trame passe sous les plantes ; la pastille d\'angle (teinte pleine, 11 px, bas-gauche) reste au-dessus : une case plantée garde son sol identifiable.' },
+        { ic: 'fence', tx: 'Les infrastructures masquent le sol : mur, chemin, eau, pot remplacent le terrain — ni trame ni pastille sur ces cases.' },
+        { ic: 'palette', tx: night ? 'En nuit, les encres passent en version claire (mêmes hues, +lumière) sur case #132740 — la pastille garde un liseré blanc 35 %.' : 'En jour, encres foncées sur case #F1F7EE — la pastille garde un liseré noir 25 %.' }
+      ];
+
+      const tokens = soilArr.map((s) => ({ k: 'soil.' + s.id + (night ? '.night' : '.day'), v: s.hex }));
+      tokens.push({ k: 'soil.trame.opacity' + (night ? '.night' : '.day'), v: opPct + '%' });
+
+      return {
+        ...T, swatches: soilArr, rows, infra, colHeads, rules, tokens,
+        infraLabel: 'Infrastructure',
+        rulesTitle: 'Règles de cohabitation',
+        gridNote: 'Colonnes = les 6 sols · rangées = cas de cohabitation. Col. 5 : ombre portée (hachures 45°) + trame « calcaire » verticale — les deux restent dissociables.'
+      };
+    };
+
+    return { panels: [mk(false), mk(true)], cellPx };
+  }
+}
+</script>
+
+
+</body></html>
