@@ -63,11 +63,50 @@ public class DataProtectionPersistenceTests
     }
 
     /// <summary>
+    /// SMA-328 R3 — exercises the WRITE branch of the boot probe specifically:
+    /// an existing directory where CreateDirectory succeeds but the probe
+    /// write fails (r-x permissions). The FILE-as-path sibling test covers the
+    /// CreateDirectory branch; together they make the probe removal-detectable.
+    /// Unix file modes exist only on Linux/macOS, so the enforcing venue is
+    /// the Linux CI runner, which runs on every push — on Windows this fact
+    /// passes vacuously and says so via the early return.
+    /// </summary>
+    [Fact]
+    public void ProbeWrite_FailsFastAtBoot_OnReadOnlyKeysDirectory()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            // Vacuous pass on Windows/macOS dev machines — the Linux CI runner
+            // is the enforcing venue for this branch.
+            return;
+        }
+
+        var roDir = Path.Combine(Path.GetTempPath(), "smartcrops-dp-ro-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(roDir);
+        try
+        {
+            // r-x: CreateDirectory on the existing dir succeeds, the probe
+            // write fails EACCES.
+            File.SetUnixFileMode(roDir, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+
+            using var factory = FactoryFor(roDir);
+            var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+            Assert.Contains("DataProtection:KeysPath", ex.ToString());
+        }
+        finally
+        {
+            // Restore write permission BEFORE Delete, or cleanup itself fails.
+            File.SetUnixFileMode(roDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            Directory.Delete(roDir, recursive: true);
+        }
+    }
+
+    /// <summary>
     /// SMA-328 R2 — an unusable DataProtection:KeysPath must kill the boot
-    /// with a message naming the config key. A temp FILE passed as the path is
-    /// the portable stand-in for an unwritable directory: OS-ACL manipulation
-    /// is not portable on the Linux CI runner, while CreateDirectory over an
-    /// existing file fails everywhere.
+    /// with a message naming the config key. A temp FILE passed as the path
+    /// exercises the CreateDirectory branch of the probe (it fails everywhere,
+    /// portably); the read-only-directory sibling above exercises the WRITE
+    /// branch on the Linux CI runner.
     /// </summary>
     [Fact]
     public void UnusableKeysPath_FailsFastAtBoot_NamingTheConfigKey()

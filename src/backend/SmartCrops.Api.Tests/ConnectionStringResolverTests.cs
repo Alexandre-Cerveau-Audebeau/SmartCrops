@@ -106,4 +106,33 @@ public class ConnectionStringResolverTests
 
         Assert.Equal("Connection string 'DefaultConnection' is not configured.", ex.Message);
     }
+
+    [Fact]
+    public void IsConfigured_DatabaseHostOnly_IsTrue()
+    {
+        // Presence-only: Resolve would throw its named credential errors, but
+        // a source IS selected — the DB-init gate must open.
+        Assert.True(ConnectionStringResolver.IsConfigured(Config(
+            ("Database:Host", "dbhost"))));
+    }
+
+    [Fact]
+    public void IsConfigured_ValidDefaultConnectionOnly_IsTrue()
+    {
+        Assert.True(ConnectionStringResolver.IsConfigured(Config(
+            ("ConnectionStrings:DefaultConnection", "Host=x;Database=y"))));
+    }
+
+    [Fact]
+    public void IsConfigured_BlankDefaultConnectionOnly_IsFalse()
+    {
+        Assert.False(ConnectionStringResolver.IsConfigured(Config(
+            ("ConnectionStrings:DefaultConnection", "   "))));
+    }
+
+    [Fact]
+    public void IsConfigured_NeitherSource_IsFalse()
+    {
+        Assert.False(ConnectionStringResolver.IsConfigured(Config()));
+    }
 }

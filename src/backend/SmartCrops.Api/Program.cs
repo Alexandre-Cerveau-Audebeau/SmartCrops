@@ -17,6 +17,7 @@ using SmartCrops.Api.Configuration;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure;
+using SmartCrops.Infrastructure.Data;
 using SmartCrops.Infrastructure.Email;
 using SmartCrops.Infrastructure.ExternalApis.Gbif;
 using SmartCrops.Infrastructure.ExternalApis.Logging;
@@ -444,11 +445,18 @@ if (Encoding.UTF8.GetByteCount(jwtKeyValue) < 32)
 // framework's ephemeral defaults resolve without touching the filesystem.
 _ = app.Services.GetRequiredService<IOptions<KeyManagementOptions>>().Value;
 
-// Skip DB init when no connection string is configured (e.g. unit test environments)
-// or when running under the "Testing" environment (integration tests apply migrations
-// themselves via PostgresFixture and skip DataSeeder so the test DB stays deterministic).
+// DB init runs when ANY database source is configured — the gate consults the
+// SAME predicate as the resolver (SMA-328 R3), so discrete Database:*
+// deployments now RUN boot-time migrations (the ratified production path)
+// instead of silently skipping them. Absent config keeps the deliberate
+// test-host skip (unit test environments boot no database). An INCOMPLETE
+// discrete config (Host without User/Password) passes this presence-only gate
+// and dies AT BOOT on the resolver's named errors — the fail-fast upgrade
+// comes free. "Testing" keeps its explicit skip: integration tests apply
+// migrations themselves via PostgresFixture and skip DataSeeder so the test
+// DB stays deterministic.
 if (!app.Environment.IsEnvironment("Testing")
-    && !string.IsNullOrEmpty(app.Configuration.GetConnectionString("DefaultConnection")))
+    && ConnectionStringResolver.IsConfigured(app.Configuration))
     await app.Services.InitialiseDatabaseAsync();
 
 // Configure the HTTP request pipeline.

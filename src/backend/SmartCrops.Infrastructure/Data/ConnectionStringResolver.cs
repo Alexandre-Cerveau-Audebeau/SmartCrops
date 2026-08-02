@@ -19,6 +19,18 @@ namespace SmartCrops.Infrastructure.Data;
 /// </summary>
 public static class ConnectionStringResolver
 {
+    /// <summary>
+    /// PRESENCE-only mirror of <see cref="Resolve"/>'s source selection: true
+    /// iff Resolve will pick a source (discrete <c>Database:Host</c> or a
+    /// non-blank <c>ConnectionStrings:DefaultConnection</c>). Resolve still
+    /// VALIDATES that source and may throw its named errors — this predicate
+    /// only answers "is a database configured at all", so the boot-time
+    /// DB-init gate and the resolver can never disagree about the source.
+    /// </summary>
+    public static bool IsConfigured(IConfiguration configuration) =>
+        !string.IsNullOrWhiteSpace(configuration["Database:Host"])
+        || !string.IsNullOrWhiteSpace(configuration.GetConnectionString("DefaultConnection"));
+
     public static string Resolve(IConfiguration configuration)
     {
         var host = configuration["Database:Host"];
