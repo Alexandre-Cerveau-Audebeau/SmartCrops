@@ -43,6 +43,8 @@ public record ChangePasswordRequest([Required] string CurrentPassword, [Required
 public record ConfirmEmailRequest([Required] string UserId, [Required] string Token);
 /// <summary>Payload of <c>POST /api/auth/forgot-password</c> (SMA-323).</summary>
 public record ForgotPasswordRequest([Required, EmailAddress] string Email);
+/// <summary>Payload of <c>POST /api/auth/resend-confirmation</c> (SMA-320).</summary>
+public record ResendConfirmationRequest([Required, EmailAddress] string Email);
 /// <summary>Payload of <c>POST /api/auth/reset-password</c> (SMA-323). UserId/Token come
 /// from the reset link's query string, URL-decoded by the SPA; the new password floor
 /// mirrors <see cref="ChangePasswordRequest"/>.</summary>
@@ -237,6 +239,35 @@ public class AuthController(
     }
 
     /// <summary>
+    /// SMA-320: re-mails the confirmation link for an account whose address was
+    /// never confirmed — the recovery path for the 403 the login gate answers.
+    /// Mirrors <see cref="ForgotPassword"/>'s anti-enumeration shape: the
+    /// response is the identical generic 200 whether the address is unknown,
+    /// already confirmed, or unconfirmed — only the mail itself differs. Shares
+    /// the "passwordReset" rate-limit budget rather than adding a fourth sister
+    /// policy: same anti-enumeration threat class, one throttling door. Like its
+    /// sibling, the send branch pays inline SMTP while a miss returns instantly —
+    /// the same known timing side-channel, owed the same structural fix
+    /// (decoupled delivery, SMA-325), deliberately not papered over here.
+    /// </summary>
+    [HttpPost("resend-confirmation")]
+    [EnableRateLimiting("passwordReset")]
+    public async Task<IActionResult> ResendConfirmation([FromBody] ResendConfirmationRequest request, CancellationToken ct)
+    {
+        var user = await userManager.FindByEmailAsync(request.Email);
+
+        if (user is not null && !user.EmailConfirmed)
+        {
+            // Generates a FRESH confirmation token and reuses the registration
+            // path's escaped-link construction; delivery failures are logged and
+            // swallowed there, so the generic 200 below discloses nothing.
+            await SendConfirmationEmailAsync(user, request.Email, ct);
+        }
+
+        return Ok(new { message = "If an account exists and is unconfirmed, a confirmation email has been sent." });
+    }
+
+    /// <summary>
     /// SMA-323: mails a password-reset link. Always answers 202 with no body — whether
     /// the address exists (and whether mail went out) is deliberately not disclosed.
     /// EmailConfirmed is NOT checked: a user who never confirmed still owns the
@@ -406,6 +437,18 @@ public class AuthController(
         if (!await userManager.CheckPasswordAsync(user, request.Password))
             return Unauthorized();
 
+        // SMA-320: unconfirmed accounts do not sign in. NOT wired through
+        // Identity's SignInOptions.RequireConfirmedEmail — that option only
+        // gates SignInManager's CanSignInAsync chain, which this endpoint never
+        // calls (it authenticates with CheckPasswordAsync), so it would be dead
+        // config here. Deliberately placed AFTER the password check: a wrong
+        // password stays the generic 401, and the distinct machine-readable
+        // status is only ever revealed to a caller holding the correct
+        // password — required for the resend UX without opening an
+        // account-enumeration channel.
+        if (!user.EmailConfirmed)
+            return StatusCode(403, new { error = "email_not_confirmed" });
+
         if (string.IsNullOrEmpty(user.Email))
             return Unauthorized();
 
@@ -488,13 +531,25 @@ public class AuthController(
                 Path = "/api/auth/exchange-code",
             });
 
-            return Redirect($"{frontendUrl}/auth/callback?code={code}");
+            return Redirect(BuildAuthCallbackRedirect(frontendUrl, code));
         }
         finally
         {
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
         }
     }
+
+    /// <summary>
+    /// SMA-321: builds the SPA callback redirect. The code MUST be
+    /// percent-encoded, exactly like the mailed confirmation/reset links above:
+    /// today's codes are hex GUIDs that survive raw interpolation, but the
+    /// construction must not sit one code-format change away from a silently
+    /// broken login — this ends the file showing both practices side by side.
+    /// Static so the encoding contract is unit-testable (MVC never discovers
+    /// static methods as actions).
+    /// </summary>
+    public static string BuildAuthCallbackRedirect(string frontendUrl, string code) =>
+        $"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(code)}";
 
     [HttpPost("exchange-code")]
     public IActionResult ExchangeCode([FromBody] ExchangeCodeRequest request)

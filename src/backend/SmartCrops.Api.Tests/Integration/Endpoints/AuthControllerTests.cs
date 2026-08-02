@@ -18,8 +18,11 @@ namespace SmartCrops.Api.Tests.Integration.Endpoints;
 /// The link is asserted end-to-end: every test that confirms an address pulls the
 /// token out of the captured email body rather than regenerating one, so a link
 /// that would break in a real mail client fails the suite here.
-/// <para>No gating is asserted because none exists — an unconfirmed account keeps
-/// full access by product ruling; SMA-320 tracks turning the block on.</para>
+/// <para>Since SMA-320 (go-live Lot 1b) the gate is ON: login answers a distinct
+/// 403 for an unconfirmed account — only behind the correct password — and
+/// resend-confirmation is the recovery path. The password-reset flow tests
+/// confirm their account first (via <see cref="RegisterAndRequestResetAsync"/>)
+/// because their end-to-end proof is a successful login.</para>
 /// </summary>
 public class AuthControllerTests : IntegrationTestBase
 {
@@ -85,14 +88,18 @@ public class AuthControllerTests : IntegrationTestBase
         await Client.PostAsJsonAsync("/api/auth/reset-password/validate", new { userId, token });
 
     /// <summary>
-    /// Registers an account, drops its registration-confirmation email from the stub
-    /// (so reset assertions see only reset traffic), requests a reset, and returns the
-    /// DECODED userId/token pulled from the mailed link — never regenerated.
+    /// Registers an account, CONFIRMS it through the mailed link (SMA-320: the
+    /// login gate would otherwise 403 the end-to-end login proofs these flows
+    /// end on), drops the registration email from the stub (so reset assertions
+    /// see only reset traffic), requests a reset, and returns the DECODED
+    /// userId/token pulled from the mailed link — never regenerated.
     /// </summary>
     private async Task<(string Email, string UserId, string Token)> RegisterAndRequestResetAsync()
     {
         var email = NewEmail();
         await RegisterAsync(email);
+        var (_, _, userIdFromLink, confirmToken) = CapturedLink();
+        Assert.Equal(HttpStatusCode.NoContent, (await ConfirmAsync(userIdFromLink, confirmToken)).StatusCode);
         Fixture.EmailStub.Reset();
         Assert.Equal(HttpStatusCode.Accepted, (await ForgotAsync(email)).StatusCode);
 
@@ -261,6 +268,123 @@ public class AuthControllerTests : IntegrationTestBase
     public async Task ConfirmEmail_MissingFields_Returns400()
     {
         var response = await Client.PostAsJsonAsync("/api/auth/confirm-email", new { });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_UnconfirmedAccount_CorrectPassword_Returns403WithMachineReadableCode()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+
+        var response = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+
+        // SMA-320: the gate answers a DISTINCT, machine-readable status — never
+        // the generic invalid-credentials 401 — so the SPA can offer the resend.
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("email_not_confirmed", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Login_UnconfirmedAccount_WrongPassword_StaysGeneric401()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+
+        var response = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = "Wr0ng!Pass" });
+
+        // The deliberate ordering of the gate: the distinct 403 is only ever
+        // revealed BEHIND the correct password. A wrong password on an
+        // unconfirmed account must be indistinguishable from any other failed
+        // login — no confirmation-state oracle for password guessers.
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.DoesNotContain("email_not_confirmed", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Login_ConfirmedAccount_Returns204()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+        var (_, _, userId, token) = CapturedLink();
+        Assert.Equal(HttpStatusCode.NoContent, (await ConfirmAsync(userId, token)).StatusCode);
+
+        var response = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    private async Task<HttpResponseMessage> ResendAsync(string email) =>
+        await Client.PostAsJsonAsync("/api/auth/resend-confirmation", new { email });
+
+    [Fact]
+    public async Task ResendConfirmation_UnconfirmedAccount_Returns200AndMailsAFreshWorkingLink()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+        Fixture.EmailStub.Reset();
+
+        var response = await ResendAsync(email);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        // Exactly one send, and the FRESH link works end-to-end: confirm with
+        // it, then the gate lets the login through.
+        var (_, _, userId, token) = CapturedLink();
+        Assert.Equal(HttpStatusCode.NoContent, (await ConfirmAsync(userId, token)).StatusCode);
+        var login = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResendConfirmation_UnknownEmail_Returns200GenericAndSendsNothing()
+    {
+        var known = NewEmail();
+        await RegisterAsync(known);
+        Fixture.EmailStub.Reset();
+        var knownResponse = await ResendAsync(known);
+        var mailedForKnown = Fixture.EmailStub.Sent.Count;
+        Fixture.EmailStub.Reset();
+
+        var unknownResponse = await ResendAsync(NewEmail());
+
+        // The anti-enumeration mirror of ForgotPassword: same status, same body
+        // whether the address exists or not — the only observable difference is
+        // the mail itself.
+        Assert.Equal(1, mailedForKnown);
+        Assert.Empty(Fixture.EmailStub.Sent);
+        Assert.Equal(HttpStatusCode.OK, unknownResponse.StatusCode);
+        Assert.Equal(
+            await knownResponse.Content.ReadAsStringAsync(),
+            await unknownResponse.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ResendConfirmation_AlreadyConfirmed_Returns200GenericAndSendsNothing()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+        var (_, _, userId, token) = CapturedLink();
+        Assert.Equal(HttpStatusCode.NoContent, (await ConfirmAsync(userId, token)).StatusCode);
+        Fixture.EmailStub.Reset();
+        var unknownProbe = await ResendAsync(NewEmail());
+
+        var response = await ResendAsync(email);
+
+        // A confirmed account gets NO mail — nothing useful to resend — and the
+        // exact same generic body as the unknown-address branch (the previous
+        // test ties that one to the unconfirmed branch: all three identical).
+        Assert.Empty(Fixture.EmailStub.Sent);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(
+            await unknownProbe.Content.ReadAsStringAsync(),
+            await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ResendConfirmation_MissingFields_Returns400()
+    {
+        var response = await Client.PostAsJsonAsync("/api/auth/resend-confirmation", new { });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
