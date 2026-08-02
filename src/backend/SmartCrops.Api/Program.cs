@@ -1,8 +1,14 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Net;
+using System.Net.Sockets;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.DataProtection.Repositories;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
@@ -11,6 +17,7 @@ using SmartCrops.Api.Configuration;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure;
+using SmartCrops.Infrastructure.Data;
 using SmartCrops.Infrastructure.Email;
 using SmartCrops.Infrastructure.ExternalApis.Gbif;
 using SmartCrops.Infrastructure.ExternalApis.Logging;
@@ -135,7 +142,7 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.AddPolicy("contact", context =>
         RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            ClientIpPartition.FromContext(context),
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = builder.Configuration.GetValue("RateLimiting:Contact:PermitLimit", 5),
@@ -144,7 +151,7 @@ builder.Services.AddRateLimiter(options =>
             }));
     options.AddPolicy("passwordReset", context =>
         RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            ClientIpPartition.FromContext(context),
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = builder.Configuration.GetValue("RateLimiting:PasswordReset:PermitLimit", 5),
@@ -157,7 +164,7 @@ builder.Services.AddRateLimiter(options =>
     // "unbounded" to one heavy serialization per minute sustained.
     options.AddPolicy("account", context =>
         RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            ClientIpPartition.FromContext(context),
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = builder.Configuration.GetValue("RateLimiting:Account:PermitLimit", 10),
@@ -345,6 +352,60 @@ if (!builder.Environment.IsDevelopment())
         .ValidateOnStart();
 }
 
+// SMA-41 — durable Data Protection ring, config-gated. Without persisted keys
+// every redeploy rotates the ring and silently invalidates every confirmation
+// and reset token in flight; the application discriminator pins the key
+// purpose across container rebuilds. Configured at OPTIONS-RESOLUTION time,
+// not eagerly: the test factory delivers configuration after Program.cs's
+// inline code has run (minimal-hosting caveat), while production env vars are
+// visible either way — the same reason every other config read in this file
+// sits inside a lambda. With no path configured (dev, tests) neither option
+// is touched and the framework's ephemeral defaults stay exactly as before.
+// Lot 2 mounts the named volume and sets the path.
+builder.Services.AddOptions<DataProtectionOptions>().Configure<IConfiguration>((options, config) =>
+{
+    if (!string.IsNullOrWhiteSpace(config["DataProtection:KeysPath"]))
+    {
+        options.ApplicationDiscriminator = "SmartCrops";
+    }
+});
+builder.Services.AddOptions<KeyManagementOptions>().Configure<IConfiguration, ILoggerFactory>((options, config, loggerFactory) =>
+{
+    var keysPath = config["DataProtection:KeysPath"];
+    if (!string.IsNullOrWhiteSpace(keysPath))
+    {
+        // These options resolve AT BOOT (forced resolution after the JWT
+        // guard), so this probe IS the boot gate: CreateDirectory alone
+        // accepts an existing-but-unwritable mounted volume, and Protect can
+        // succeed without writing when a valid key already exists — the
+        // write/delete probe makes a read-only keys path die at startup, not
+        // at the first token write.
+        try
+        {
+            Directory.CreateDirectory(keysPath);
+            var probePath = Path.Combine(keysPath, ".write-probe-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                File.WriteAllText(probePath, "");
+            }
+            finally
+            {
+                if (File.Exists(probePath))
+                {
+                    File.Delete(probePath);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"DataProtection:KeysPath '{keysPath}' is not usable (not creatable or not writable).", ex);
+        }
+
+        options.XmlRepository = new FileSystemXmlRepository(new DirectoryInfo(keysPath), loggerFactory);
+    }
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -378,11 +439,34 @@ if (string.IsNullOrWhiteSpace(jwtKeyValue) || string.IsNullOrWhiteSpace(jwtIssue
 if (Encoding.UTF8.GetByteCount(jwtKeyValue) < 32)
     throw new InvalidOperationException("Jwt:Key must be at least 32 bytes for HS256.");
 
-// Skip DB init when no connection string is configured (e.g. unit test environments)
-// or when running under the "Testing" environment (integration tests apply migrations
-// themselves via PostgresFixture and skip DataSeeder so the test DB stays deterministic).
+// SMA-328 R1 — force the Data Protection key ring options to materialize AT
+// BOOT: an unwritable DataProtection:KeysPath must kill the boot, not the
+// first login that needs a protector. Harmless when KeysPath is blank — the
+// framework's ephemeral defaults resolve without touching the filesystem.
+_ = app.Services.GetRequiredService<IOptions<KeyManagementOptions>>().Value;
+
+// SMA-328 R4 — closes the last lazy-death corner: a Production boot with zero
+// DB configuration no longer waits for the first DbContext resolution to
+// fail. The deliberate test-host skip below is untouched — those hosts are
+// not Production.
+if (app.Environment.IsProduction() && !ConnectionStringResolver.IsConfigured(app.Configuration))
+{
+    throw new InvalidOperationException(
+        "Production requires a database configuration: set Database:Host (discrete) or ConnectionStrings:DefaultConnection.");
+}
+
+// DB init runs when ANY database source is configured — the gate consults the
+// SAME predicate as the resolver (SMA-328 R3), so discrete Database:*
+// deployments now RUN boot-time migrations (the ratified production path)
+// instead of silently skipping them. Absent config keeps the deliberate
+// test-host skip (unit test environments boot no database). An INCOMPLETE
+// discrete config (Host without User/Password) passes this presence-only gate
+// and dies AT BOOT on the resolver's named errors — the fail-fast upgrade
+// comes free. "Testing" keeps its explicit skip: integration tests apply
+// migrations themselves via PostgresFixture and skip DataSeeder so the test
+// DB stays deterministic.
 if (!app.Environment.IsEnvironment("Testing")
-    && !string.IsNullOrEmpty(app.Configuration.GetConnectionString("DefaultConnection")))
+    && ConnectionStringResolver.IsConfigured(app.Configuration))
     await app.Services.InitialiseDatabaseAsync();
 
 // Configure the HTTP request pipeline.
@@ -390,6 +474,72 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+}
+
+// SMA-328 / SMA-41 — trusted proxy boundary, config-gated, FIRST in the
+// pipeline. When any ForwardedHeaders entry is configured, X-Forwarded-For /
+// X-Forwarded-Proto from that proxy are honored: after this middleware,
+// Connection.RemoteIpAddress holds the REAL client (feeding the rate-limit
+// partitions above) and Request.Scheme the real scheme — which also repairs
+// the Google OAuth redirect URI and lets auth cookies be Secure behind TLS
+// termination. With no entries configured (dev, tests), nothing is registered
+// and the direct peer stays authoritative — today's behavior, unchanged.
+var forwardedKnownNetworks = app.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [];
+var forwardedKnownProxies = app.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [];
+if (forwardedKnownNetworks.Length > 0 || forwardedKnownProxies.Length > 0)
+{
+    var forwardedOptions = new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+        // ONE trusted hop (the single Traefik in front of the API) — a longer
+        // proxy chain must be configured consciously, never inherited.
+        ForwardLimit = 1,
+    };
+    // The framework seeds KnownProxies/KnownNetworks with loopback; an
+    // implicit trust anchor is exactly what the deployment gate forbids.
+    // Clearing BOTH lists first is the fix, not an oversight: the ONLY
+    // trusted sources are the explicitly configured ones.
+    forwardedOptions.KnownNetworks.Clear();
+    forwardedOptions.KnownProxies.Clear();
+    foreach (var cidr in forwardedKnownNetworks)
+    {
+        var parts = cidr.Split('/');
+        // Both TryParse calls succeeding is not enough: "172.28.0.0/999"
+        // would die in the IPNetwork ctor as a generic
+        // ArgumentOutOfRangeException naming nothing. Bounding the prefix
+        // here keeps the failure inside OUR exception, which names the entry.
+        if (parts.Length != 2
+            || !IPAddress.TryParse(parts[0], out var networkAddress)
+            || !int.TryParse(parts[1], out var prefixLength)
+            || prefixLength < 0
+            || prefixLength > (networkAddress.AddressFamily == AddressFamily.InterNetwork ? 32 : 128))
+        {
+            // Fail-fast at boot, same philosophy as the JWT guard: a half
+            // -trusted proxy boundary is worse than no boot.
+            throw new InvalidOperationException(
+                $"ForwardedHeaders:KnownNetworks entry '{cidr}' is not a valid CIDR (expected e.g. \"172.28.0.0/16\").");
+        }
+        // /0 is syntactically valid CIDR, which is exactly why it needs a
+        // semantic bound: it would trust EVERY peer on the wire for
+        // X-Forwarded-* headers. ForwardLimit=1 limits hop COUNT, not WHO is
+        // trusted.
+        if (prefixLength == 0)
+        {
+            throw new InvalidOperationException(
+                $"ForwardedHeaders:KnownNetworks entry '{cidr}' is a catch-all network (/0) and would trust every peer for X-Forwarded-* headers; configure the real proxy subnet instead.");
+        }
+        forwardedOptions.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(networkAddress, prefixLength));
+    }
+    foreach (var proxy in forwardedKnownProxies)
+    {
+        if (!IPAddress.TryParse(proxy, out var proxyAddress))
+        {
+            throw new InvalidOperationException(
+                $"ForwardedHeaders:KnownProxies entry '{proxy}' is not a valid IP address.");
+        }
+        forwardedOptions.KnownProxies.Add(proxyAddress);
+    }
+    app.UseForwardedHeaders(forwardedOptions);
 }
 
 app.UseCors();

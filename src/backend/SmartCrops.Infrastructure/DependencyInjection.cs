@@ -25,9 +25,7 @@ public static class DependencyInjection
         // all configuration sources (including test overrides) have been applied.
         services.AddDbContext<SmartCropsDbContext>((sp, options) =>
         {
-            var connectionString = configuration.GetConnectionString("DefaultConnection")
-                ?? throw new InvalidOperationException(
-                    "Connection string 'DefaultConnection' is not configured.");
+            var connectionString = ConnectionStringResolver.Resolve(configuration);
 
             options
                 .UseNpgsql(connectionString)
