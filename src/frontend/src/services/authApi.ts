@@ -18,6 +18,15 @@ export async function register(email: string, password: string): Promise<void> {
   }
 }
 
+/**
+ * Sentinel thrown by login when the backend's SMA-320 gate answered 403 with
+ * the machine-readable "email_not_confirmed" code: the caller holds the CORRECT
+ * password but the address was never confirmed. Exported (like RESET_FAILED)
+ * so the Login page compares against the same value instead of a duplicated
+ * literal.
+ */
+export const EMAIL_NOT_CONFIRMED = 'EMAIL_NOT_CONFIRMED';
+
 export async function login(email: string, password: string): Promise<void> {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
@@ -26,7 +35,35 @@ export async function login(email: string, password: string): Promise<void> {
     body: JSON.stringify({ email, password }),
   });
   if (!res.ok) {
+    // The 403 body carries the gate's code; any other 403 (or a body that
+    // fails to parse) falls through to the generic message.
+    if (res.status === 403) {
+      const body = await res.json().catch(() => null);
+      if (body?.error === 'email_not_confirmed') {
+        throw new Error(EMAIL_NOT_CONFIRMED);
+      }
+    }
     throw new Error(res.status === 401 ? 'Invalid email or password' : 'Login failed');
+  }
+}
+
+/**
+ * Re-requests the account-confirmation email (SMA-320) — the recovery path for
+ * the EMAIL_NOT_CONFIRMED login outcome. The endpoint answers the same generic
+ * 200 whether the address is unknown, already confirmed, or unconfirmed — the
+ * caller learns nothing, and the UI mirrors that silence (same contract as
+ * forgotPassword). Bounded at 10 s.
+ */
+export async function resendConfirmation(email: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/auth/resend-confirmation`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ email }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) {
+    throw new Error('Resend confirmation request failed');
   }
 }
 

@@ -13,6 +13,7 @@ import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useAuth } from '../hooks/useAuth';
+import { EMAIL_NOT_CONFIRMED, resendConfirmation } from '../services/authApi';
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:5000';
 
@@ -24,18 +25,39 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setUnconfirmed(false);
+    setResendSent(false);
     setLoading(true);
     try {
       await login(email, password);
       navigate('/library');
-    } catch {
-      setError(t('auth.loginError'));
+    } catch (err) {
+      // SMA-320: the gate's 403 (correct password, unconfirmed address) gets a
+      // dedicated message with a resend action; everything else stays generic.
+      if (err instanceof Error && err.message === EMAIL_NOT_CONFIRMED) {
+        setUnconfirmed(true);
+      } else {
+        setError(t('auth.loginError'));
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    try {
+      await resendConfirmation(email);
+    } catch {
+      // The endpoint discloses nothing and neither may the UI: an error outcome
+      // is indistinguishable from success (same contract as ForgotPassword).
+    } finally {
+      setResendSent(true);
     }
   };
 
@@ -55,6 +77,26 @@ export default function Login() {
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
+            </Alert>
+          )}
+
+          {unconfirmed && !resendSent && (
+            <Alert
+              severity="warning"
+              sx={{ mb: 2 }}
+              action={
+                <Button color="inherit" size="small" onClick={handleResend}>
+                  {t('auth.resendConfirmation')}
+                </Button>
+              }
+            >
+              {t('auth.emailNotConfirmed')}
+            </Alert>
+          )}
+
+          {unconfirmed && resendSent && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              {t('auth.resendConfirmationSent')}
             </Alert>
           )}
 

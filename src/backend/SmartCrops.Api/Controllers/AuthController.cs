@@ -43,6 +43,8 @@ public record ChangePasswordRequest([Required] string CurrentPassword, [Required
 public record ConfirmEmailRequest([Required] string UserId, [Required] string Token);
 /// <summary>Payload of <c>POST /api/auth/forgot-password</c> (SMA-323).</summary>
 public record ForgotPasswordRequest([Required, EmailAddress] string Email);
+/// <summary>Payload of <c>POST /api/auth/resend-confirmation</c> (SMA-320).</summary>
+public record ResendConfirmationRequest([Required, EmailAddress] string Email);
 /// <summary>Payload of <c>POST /api/auth/reset-password</c> (SMA-323). UserId/Token come
 /// from the reset link's query string, URL-decoded by the SPA; the new password floor
 /// mirrors <see cref="ChangePasswordRequest"/>.</summary>
@@ -132,8 +134,12 @@ public class AuthController(
 
         await SendConfirmationEmailAsync(user, request.Email, ct);
 
-        var tokenResponse = GenerateTokenResponse(user.Id, request.Email, user.SecurityStamp, await userManager.GetRolesAsync(user));
-        SetAuthCookie(tokenResponse.Token);
+        // SMA-320 R1: no session for a fresh account. The account starts
+        // unconfirmed, and both locks (the Login gate and the OnTokenValidated
+        // check) would reject its token anyway — handing out an inert cookie
+        // would only manufacture confusing half-logged-in states. Registration
+        // still succeeds and the confirmation email still goes out; the 201
+        // keeps its empty body (the SPA routes the user toward Login).
         return StatusCode(201);
     }
 
@@ -234,6 +240,35 @@ public class AuthController(
             return BadRequest(new { error = "Invalid or expired confirmation link." });
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// SMA-320: re-mails the confirmation link for an account whose address was
+    /// never confirmed — the recovery path for the 403 the login gate answers.
+    /// Mirrors <see cref="ForgotPassword"/>'s anti-enumeration shape: the
+    /// response is the identical generic 200 whether the address is unknown,
+    /// already confirmed, or unconfirmed — only the mail itself differs. Shares
+    /// the "passwordReset" rate-limit budget rather than adding a fourth sister
+    /// policy: same anti-enumeration threat class, one throttling door. Like its
+    /// sibling, the send branch pays inline SMTP while a miss returns instantly —
+    /// the same known timing side-channel, owed the same structural fix
+    /// (decoupled delivery, SMA-325), deliberately not papered over here.
+    /// </summary>
+    [HttpPost("resend-confirmation")]
+    [EnableRateLimiting("passwordReset")]
+    public async Task<IActionResult> ResendConfirmation([FromBody] ResendConfirmationRequest request, CancellationToken ct)
+    {
+        var user = await userManager.FindByEmailAsync(request.Email);
+
+        if (user is not null && !user.EmailConfirmed)
+        {
+            // Generates a FRESH confirmation token and reuses the registration
+            // path's escaped-link construction; delivery failures are logged and
+            // swallowed there, so the generic 200 below discloses nothing.
+            await SendConfirmationEmailAsync(user, request.Email, ct);
+        }
+
+        return Ok(new { message = "If an account exists and is unconfirmed, a confirmation email has been sent." });
     }
 
     /// <summary>
@@ -406,6 +441,18 @@ public class AuthController(
         if (!await userManager.CheckPasswordAsync(user, request.Password))
             return Unauthorized();
 
+        // SMA-320: unconfirmed accounts do not sign in. NOT wired through
+        // Identity's SignInOptions.RequireConfirmedEmail — that option only
+        // gates SignInManager's CanSignInAsync chain, which this endpoint never
+        // calls (it authenticates with CheckPasswordAsync), so it would be dead
+        // config here. Deliberately placed AFTER the password check: a wrong
+        // password stays the generic 401, and the distinct machine-readable
+        // status is only ever revealed to a caller holding the correct
+        // password — required for the resend UX without opening an
+        // account-enumeration channel.
+        if (!user.EmailConfirmed)
+            return StatusCode(403, new { error = "email_not_confirmed" });
+
         if (string.IsNullOrEmpty(user.Email))
             return Unauthorized();
 
@@ -465,6 +512,13 @@ public class AuthController(
             }
             else
             {
+                // SMA-320 R2: the merge is an OWNERSHIP claim over an existing
+                // account — it must be proven and made safe BEFORE any login is
+                // added or any token minted (the fresh stamp the minting below
+                // reads is the one the neutralization rotates).
+                if (!await EnsureSafeGoogleMergeAsync(userManager, user, info, logger))
+                    return Redirect($"{frontendUrl}/login?error=google-failed");
+
                 var logins = await userManager.GetLoginsAsync(user);
                 if (!logins.Any(l => l.LoginProvider == info.LoginProvider && l.ProviderKey == info.ProviderKey))
                 {
@@ -488,13 +542,113 @@ public class AuthController(
                 Path = "/api/auth/exchange-code",
             });
 
-            return Redirect($"{frontendUrl}/auth/callback?code={code}");
+            return Redirect(BuildAuthCallbackRedirect(frontendUrl, code));
         }
         finally
         {
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
         }
     }
+
+    /// <summary>
+    /// SMA-320 R2 — safe Google linking (the pre-hijacking fix). Merging a
+    /// Google identity into an EXISTING account is an ownership claim, and the
+    /// attack it must survive is: an attacker pre-registers the victim's email
+    /// with a known password; the victim later signs in with Google; the naive
+    /// merge lands the Google login on the attacker's account and the
+    /// attacker's password stays alive as a backdoor.
+    ///
+    /// <para>The trust model: the merge only makes sense for the account this
+    /// Google identity actually NAMES — the email claim must match
+    /// <c>user.Email</c> (the precondition the callback satisfies by resolving
+    /// the user from that very claim; a mismatched caller would neutralize an
+    /// unrelated account's password, so the invariant lives here, R3) — and
+    /// Google's <c>email_verified</c> claim IS the ownership proof this merge
+    /// rests on: absent or false, the merge is refused outright (a). When the
+    /// target account was never confirmed — the pre-hijacking window — its
+    /// pre-existing credentials are neutralized BEFORE linking (b): the latent
+    /// password dies (<c>RemovePasswordAsync</c>, guarded by
+    /// <c>HasPasswordAsync</c>); then ONE persisted write commits the stamp
+    /// rotation AND the confirmation together — <c>UpdateSecurityStampAsync</c>
+    /// persists the whole tracked entity, and <c>EmailConfirmed</c> rides it.
+    /// Recovery contract, precisely: the only intermediate state a process
+    /// death can leave is [password removed, still unconfirmed, unlinked] —
+    /// recoverable BY DESIGN via ForgotPassword, which deliberately accepts
+    /// unconfirmed and passwordless accounts. Every outstanding stamped token
+    /// — the attacker's included — dies at the OnTokenValidated lock; the
+    /// caller links and mints AFTER this method, so the fresh session carries
+    /// the rotated stamp. A confirmed account (c) is the standard
+    /// verified-email linking case: password untouched, nothing to
+    /// neutralize. The R1 lockout UX resolves itself here: the merge confirms
+    /// the account, so the exchanged token works. Refusals are logged
+    /// (R3) — a silent security decision cannot be operated.</para>
+    ///
+    /// <para>Static and store-driven so the contract is provable against the
+    /// real Identity store without a fake-Google harness (none exists — the
+    /// integration tests drive this method plus <c>AddLoginAsync</c>, the
+    /// exact sequence the callback runs). Service extraction: SMA-370.</para>
+    /// </summary>
+    public static async Task<bool> EnsureSafeGoogleMergeAsync(
+        UserManager<ApplicationUser> userManager,
+        ApplicationUser user,
+        ExternalLoginInfo info,
+        ILogger logger)
+    {
+        // The precondition guard (R3): `user` must be the account this Google
+        // identity names. Both sides non-null, case-insensitive — anything
+        // else is a caller bug or a hostile pair, never a linkable state.
+        var claimedEmail = info.Principal.FindFirstValue(ClaimTypes.Email);
+        if (string.IsNullOrEmpty(claimedEmail) || string.IsNullOrEmpty(user.Email)
+            || !string.Equals(claimedEmail, user.Email, StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogWarning("google merge refused: email mismatch");
+            return false;
+        }
+
+        // (a) The verified claim is mapped in Program.cs (MapJsonKey) from the
+        // userinfo boolean — stringified, hence TryParse. Absent or false:
+        // refuse like any invalid callback.
+        var verifiedRaw = info.Principal.FindFirstValue("email_verified");
+        if (!bool.TryParse(verifiedRaw, out var verified) || !verified)
+        {
+            logger.LogWarning("google merge refused: email_verified absent or false");
+            return false;
+        }
+
+        if (!user.EmailConfirmed)
+        {
+            // (b) The pre-hijacking window — neutralize before linking.
+            if (await userManager.HasPasswordAsync(user))
+            {
+                var removeResult = await userManager.RemovePasswordAsync(user);
+                if (!removeResult.Succeeded)
+                    return false;
+            }
+
+            // ONE checked write commits both facts: the manager's rotation is
+            // the contract (never hand-set the stamp), and it persists the
+            // whole tracked entity — EmailConfirmed rides the same write.
+            user.EmailConfirmed = true;
+            var stampResult = await userManager.UpdateSecurityStampAsync(user);
+            if (!stampResult.Succeeded)
+                return false;
+        }
+        // (c) Confirmed account: standard verified-email linking — password untouched.
+
+        return true;
+    }
+
+    /// <summary>
+    /// SMA-321: builds the SPA callback redirect. The code MUST be
+    /// percent-encoded, exactly like the mailed confirmation/reset links above:
+    /// today's codes are hex GUIDs that survive raw interpolation, but the
+    /// construction must not sit one code-format change away from a silently
+    /// broken login — this ends the file showing both practices side by side.
+    /// Static so the encoding contract is unit-testable (MVC never discovers
+    /// static methods as actions).
+    /// </summary>
+    public static string BuildAuthCallbackRedirect(string frontendUrl, string code) =>
+        $"{frontendUrl}/auth/callback?code={Uri.EscapeDataString(code)}";
 
     [HttpPost("exchange-code")]
     public IActionResult ExchangeCode([FromBody] ExchangeCodeRequest request)

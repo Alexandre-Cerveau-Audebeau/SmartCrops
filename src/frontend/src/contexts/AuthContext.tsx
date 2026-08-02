@@ -22,9 +22,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const register = useCallback(async (email: string, password: string) => {
+    // SMA-320 R1: registration no longer establishes a session — the account
+    // starts unconfirmed and every token for it is inert until the email is
+    // confirmed, so there is no session to fetch. The page shows the
+    // check-your-inbox notice and routes the user toward Login instead.
     await authApi.register(email, password);
-    const me = await authApi.fetchMe();
-    setUser(me);
   }, []);
 
   const googleCallback = useCallback(async () => {

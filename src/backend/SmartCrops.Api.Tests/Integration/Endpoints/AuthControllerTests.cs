@@ -1,11 +1,14 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using SmartCrops.Api.Controllers;
 using SmartCrops.Core.Entities;
 using SmartCrops.Infrastructure.Data;
@@ -18,8 +21,11 @@ namespace SmartCrops.Api.Tests.Integration.Endpoints;
 /// The link is asserted end-to-end: every test that confirms an address pulls the
 /// token out of the captured email body rather than regenerating one, so a link
 /// that would break in a real mail client fails the suite here.
-/// <para>No gating is asserted because none exists — an unconfirmed account keeps
-/// full access by product ruling; SMA-320 tracks turning the block on.</para>
+/// <para>Since SMA-320 (go-live Lot 1b) the gate is ON: login answers a distinct
+/// 403 for an unconfirmed account — only behind the correct password — and
+/// resend-confirmation is the recovery path. The password-reset flow tests
+/// confirm their account first (via <see cref="RegisterAndRequestResetAsync"/>)
+/// because their end-to-end proof is a successful login.</para>
 /// </summary>
 public class AuthControllerTests : IntegrationTestBase
 {
@@ -85,14 +91,18 @@ public class AuthControllerTests : IntegrationTestBase
         await Client.PostAsJsonAsync("/api/auth/reset-password/validate", new { userId, token });
 
     /// <summary>
-    /// Registers an account, drops its registration-confirmation email from the stub
-    /// (so reset assertions see only reset traffic), requests a reset, and returns the
-    /// DECODED userId/token pulled from the mailed link — never regenerated.
+    /// Registers an account, CONFIRMS it through the mailed link (SMA-320: the
+    /// login gate would otherwise 403 the end-to-end login proofs these flows
+    /// end on), drops the registration email from the stub (so reset assertions
+    /// see only reset traffic), requests a reset, and returns the DECODED
+    /// userId/token pulled from the mailed link — never regenerated.
     /// </summary>
     private async Task<(string Email, string UserId, string Token)> RegisterAndRequestResetAsync()
     {
         var email = NewEmail();
         await RegisterAsync(email);
+        var (_, _, userIdFromLink, confirmToken) = CapturedLink();
+        Assert.Equal(HttpStatusCode.NoContent, (await ConfirmAsync(userIdFromLink, confirmToken)).StatusCode);
         Fixture.EmailStub.Reset();
         Assert.Equal(HttpStatusCode.Accepted, (await ForgotAsync(email)).StatusCode);
 
@@ -261,6 +271,372 @@ public class AuthControllerTests : IntegrationTestBase
     public async Task ConfirmEmail_MissingFields_Returns400()
     {
         var response = await Client.PostAsJsonAsync("/api/auth/confirm-email", new { });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_UnconfirmedAccount_CorrectPassword_Returns403WithMachineReadableCode()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+
+        var response = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+
+        // SMA-320: the gate answers a DISTINCT, machine-readable status — never
+        // the generic invalid-credentials 401 — so the SPA can offer the resend.
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("email_not_confirmed", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Login_UnconfirmedAccount_WrongPassword_StaysGeneric401()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+
+        var response = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = "Wr0ng!Pass" });
+
+        // The deliberate ordering of the gate: the distinct 403 is only ever
+        // revealed BEHIND the correct password. A wrong password on an
+        // unconfirmed account must be indistinguishable from any other failed
+        // login — no confirmation-state oracle for password guessers.
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.DoesNotContain("email_not_confirmed", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Login_ConfirmedAccount_Returns204()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+        var (_, _, userId, token) = CapturedLink();
+        Assert.Equal(HttpStatusCode.NoContent, (await ConfirmAsync(userId, token)).StatusCode);
+
+        var response = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Register_IssuesNoSession_UntilConfirmedAndLoggedIn()
+    {
+        // R1 (GitHub Major): registration used to hand out a working cookie
+        // while the Login gate was locked — the garage-door hole. One
+        // end-to-end fact: the cookie-enabled client stays anonymous after
+        // register, and only confirm + login open the session.
+        // The client is https-based: outside Development the auth cookie is
+        // Secure, and the CookieContainer only replays it over https — the
+        // default http TestServer client would 401 forever AFTER login too,
+        // which is not the fact under test.
+        using var client = Fixture.Factory.CreateClient(
+            new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+        var email = NewEmail();
+        var register = await client.PostAsJsonAsync("/api/auth/register", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.Created, register.StatusCode);
+
+        var meAfterRegister = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, meAfterRegister.StatusCode);
+
+        var (_, _, userId, token) = CapturedLink();
+        Assert.Equal(HttpStatusCode.NoContent, (await ConfirmAsync(userId, token)).StatusCode);
+        var login = await client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+
+        var meAfterLogin = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.OK, meAfterLogin.StatusCode);
+    }
+
+    [Fact]
+    public async Task StampedToken_ForUnconfirmedAccount_IsInert_UntilConfirmation()
+    {
+        // R1: the OnTokenValidated lock reads LIVE state, not the token — the
+        // SAME stamped token is refused before confirmation and honored after.
+        var email = NewEmail();
+        await RegisterAsync(email);
+        var user = await FindUserAsync(email);
+        Assert.NotNull(user);
+        var stamped = Fixture.GenerateStampedToken(user!.Id, user.SecurityStamp!);
+
+        using var before = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        before.Headers.Authorization = new AuthenticationHeaderValue("Bearer", stamped);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Client.SendAsync(before)).StatusCode);
+
+        var (_, _, userId, token) = CapturedLink();
+        Assert.Equal(HttpStatusCode.NoContent, (await ConfirmAsync(userId, token)).StatusCode);
+
+        using var after = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        after.Headers.Authorization = new AuthenticationHeaderValue("Bearer", stamped);
+        Assert.Equal(HttpStatusCode.OK, (await Client.SendAsync(after)).StatusCode);
+    }
+
+    /// <summary>
+    /// Builds the ExternalLoginInfo the Google middleware would hand the
+    /// callback (no fake-Google harness exists — R2's safe-merge contract is
+    /// proven by driving <see cref="AuthController.EnsureSafeGoogleMergeAsync"/>
+    /// plus <c>AddLoginAsync</c>, the exact sequence the callback runs).
+    /// <paramref name="emailVerified"/> null = claim absent.
+    /// </summary>
+    private static ExternalLoginInfo GoogleInfo(string email, string? emailVerified, string providerKey)
+    {
+        var claims = new List<Claim> { new(ClaimTypes.Email, email) };
+        if (emailVerified is not null)
+            claims.Add(new Claim("email_verified", emailVerified));
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "Google"));
+        return new ExternalLoginInfo(principal, "Google", providerKey, "Google");
+    }
+
+    /// <summary>
+    /// AspNetUserLogins is keyed on (LoginProvider, ProviderKey) and the
+    /// fixture database is shared: keys follow the same unique-by-convention
+    /// rule as NewEmail so no two tests — or runs — can ever collide (R3).
+    /// </summary>
+    private static string NewProviderKey(string label) => $"{label}-{Guid.NewGuid():N}";
+
+    [Fact]
+    public async Task GoogleMerge_PreHijackedUnconfirmedAccount_KillsPasswordAndConfirms()
+    {
+        // The attack: the attacker pre-registers the victim's email with a
+        // known password; the victim later signs in with Google. The merge
+        // must kill the latent password and confirm the account.
+        var email = NewEmail();
+        await RegisterAsync(email);
+
+        using (var scope = CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await users.FindByEmailAsync(email);
+            Assert.NotNull(user);
+
+            var key = NewProviderKey("gkey-hijack");
+            Assert.True(await AuthController.EnsureSafeGoogleMergeAsync(users, user!, GoogleInfo(email, "true", key), NullLogger.Instance));
+            Assert.True((await users.AddLoginAsync(user!, GoogleInfo(email, "true", key))).Succeeded);
+
+            Assert.False(await users.HasPasswordAsync(user!));
+            Assert.True(user!.EmailConfirmed);
+        }
+
+        // The pre-registered password is DEAD — and dead as the generic 401,
+        // not the unconfirmed 403 (the account is confirmed now).
+        var login = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.Unauthorized, login.StatusCode);
+    }
+
+    [Fact]
+    public async Task GoogleMerge_RotatesStamp_KillingPreMergeTokens()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+        string preMergeToken;
+        string postMergeToken;
+        using (var scope = CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await users.FindByEmailAsync(email);
+            Assert.NotNull(user);
+            preMergeToken = Fixture.GenerateStampedToken(user!.Id, user.SecurityStamp!);
+
+            Assert.True(await AuthController.EnsureSafeGoogleMergeAsync(users, user, GoogleInfo(email, "true", NewProviderKey("gkey-rotate")), NullLogger.Instance));
+
+            // The tracked instance carries the rotated stamp — the same read
+            // the callback's token minting performs after the merge.
+            postMergeToken = Fixture.GenerateStampedToken(user.Id, user.SecurityStamp!);
+        }
+
+        // Every pre-merge stamped token — the attacker's included — dies at
+        // the OnTokenValidated lock on the stamp mismatch.
+        using var before = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        before.Headers.Authorization = new AuthenticationHeaderValue("Bearer", preMergeToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Client.SendAsync(before)).StatusCode);
+
+        // A fresh post-merge session works: rotated stamp + confirmed account.
+        using var after = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        after.Headers.Authorization = new AuthenticationHeaderValue("Bearer", postMergeToken);
+        Assert.Equal(HttpStatusCode.OK, (await Client.SendAsync(after)).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("True", true)]
+    [InlineData("TRUE", true)]
+    [InlineData("false", false)]
+    [InlineData(null, false)]
+    [InlineData("garbage", false)]
+    public async Task GoogleMerge_VerifiedClaim_GatesTheMerge(string? verifiedRaw, bool expectMerge)
+    {
+        // Pins OUR TryParse consumption of the mapped claim (R3): MapJsonKey
+        // stringifies the userinfo boolean, and the exact casing must not
+        // matter — while anything unparsable or false refuses the merge and
+        // leaves the account completely untouched.
+        var email = NewEmail();
+        await RegisterAsync(email);
+
+        using var scope = CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await users.FindByEmailAsync(email);
+        Assert.NotNull(user);
+
+        var merged = await AuthController.EnsureSafeGoogleMergeAsync(
+            users, user!, GoogleInfo(email, verifiedRaw, NewProviderKey("gkey-claim")), NullLogger.Instance);
+
+        Assert.Equal(expectMerge, merged);
+        var fresh = await users.FindByEmailAsync(email);
+        Assert.NotNull(fresh);
+        Assert.Equal(expectMerge, fresh!.EmailConfirmed);
+        Assert.Equal(expectMerge, !await users.HasPasswordAsync(fresh));
+        Assert.Empty(await users.GetLoginsAsync(fresh));
+    }
+
+    [Fact]
+    public async Task GoogleMerge_PasswordlessUnconfirmedAccount_ConfirmsWithoutRemovingAnything()
+    {
+        // The HasPasswordAsync guard's FALSE branch (R3): a Google-only
+        // account left behind by a failed AddLoginAsync — no password to
+        // remove, and RemovePasswordAsync must never be called (it fails on
+        // an absent password and would turn every such merge into a refusal).
+        var email = NewEmail();
+
+        using var scope = CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        Assert.True((await users.CreateAsync(new ApplicationUser { UserName = email, Email = email })).Succeeded);
+        var user = await users.FindByEmailAsync(email);
+        Assert.NotNull(user);
+        Assert.False(user!.EmailConfirmed);
+        Assert.False(await users.HasPasswordAsync(user));
+
+        Assert.True(await AuthController.EnsureSafeGoogleMergeAsync(
+            users, user, GoogleInfo(email, "true", NewProviderKey("gkey-passwordless")), NullLogger.Instance));
+
+        Assert.True(user.EmailConfirmed);
+        Assert.False(await users.HasPasswordAsync(user));
+    }
+
+    [Fact]
+    public async Task GoogleMerge_EmailMismatch_RefusedAndAccountUntouched()
+    {
+        // The precondition guard (R3): `user` must be the account the Google
+        // identity NAMES. A mismatched pair — a future caller bug — must
+        // never neutralize an unrelated account's password.
+        var email = NewEmail();
+        await RegisterAsync(email);
+
+        using var scope = CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await users.FindByEmailAsync(email);
+        Assert.NotNull(user);
+
+        var refused = await AuthController.EnsureSafeGoogleMergeAsync(
+            users, user!, GoogleInfo(NewEmail(), "true", NewProviderKey("gkey-mismatch")), NullLogger.Instance);
+
+        Assert.False(refused);
+        var fresh = await users.FindByEmailAsync(email);
+        Assert.NotNull(fresh);
+        Assert.False(fresh!.EmailConfirmed);
+        Assert.True(await users.HasPasswordAsync(fresh));
+        Assert.Empty(await users.GetLoginsAsync(fresh));
+    }
+
+    [Fact]
+    public async Task GoogleMerge_ConfirmedAccount_PreservesPasswordAndLinks()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+        var (_, _, userId, token) = CapturedLink();
+        Assert.Equal(HttpStatusCode.NoContent, (await ConfirmAsync(userId, token)).StatusCode);
+
+        using (var scope = CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await users.FindByEmailAsync(email);
+            Assert.NotNull(user);
+            Assert.True(user!.EmailConfirmed);
+            var stampBefore = user.SecurityStamp;
+
+            var key = NewProviderKey("gkey-confirmed");
+            Assert.True(await AuthController.EnsureSafeGoogleMergeAsync(users, user, GoogleInfo(email, "true", key), NullLogger.Instance));
+            Assert.True((await users.AddLoginAsync(user, GoogleInfo(email, "true", key))).Succeeded);
+
+            // The standard model: verified-email linking into a confirmed
+            // account touches nothing — password kept, stamp kept, link added.
+            Assert.True(await users.HasPasswordAsync(user));
+            Assert.Equal(stampBefore, user.SecurityStamp);
+            Assert.Single(await users.GetLoginsAsync(user));
+        }
+
+        var login = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+    }
+
+    private async Task<HttpResponseMessage> ResendAsync(string email) =>
+        await Client.PostAsJsonAsync("/api/auth/resend-confirmation", new { email });
+
+    [Fact]
+    public async Task ResendConfirmation_UnconfirmedAccount_Returns200AndMailsAFreshWorkingLink()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+        Fixture.EmailStub.Reset();
+
+        var response = await ResendAsync(email);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        // Exactly one send, and the FRESH link works end-to-end: confirm with
+        // it, then the gate lets the login through.
+        var (_, _, userId, token) = CapturedLink();
+        Assert.Equal(HttpStatusCode.NoContent, (await ConfirmAsync(userId, token)).StatusCode);
+        var login = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResendConfirmation_UnknownEmail_Returns200GenericAndSendsNothing()
+    {
+        var known = NewEmail();
+        await RegisterAsync(known);
+        Fixture.EmailStub.Reset();
+        var knownResponse = await ResendAsync(known);
+        var mailedForKnown = Fixture.EmailStub.Sent.Count;
+        Fixture.EmailStub.Reset();
+
+        var unknownResponse = await ResendAsync(NewEmail());
+
+        // The anti-enumeration mirror of ForgotPassword: same status, same body
+        // whether the address exists or not — the only observable difference is
+        // the mail itself.
+        Assert.Equal(1, mailedForKnown);
+        Assert.Empty(Fixture.EmailStub.Sent);
+        Assert.Equal(HttpStatusCode.OK, unknownResponse.StatusCode);
+        Assert.Equal(
+            await knownResponse.Content.ReadAsStringAsync(),
+            await unknownResponse.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ResendConfirmation_AlreadyConfirmed_Returns200GenericAndSendsNothing()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+        var (_, _, userId, token) = CapturedLink();
+        Assert.Equal(HttpStatusCode.NoContent, (await ConfirmAsync(userId, token)).StatusCode);
+        Fixture.EmailStub.Reset();
+        var unknownProbe = await ResendAsync(NewEmail());
+
+        var response = await ResendAsync(email);
+
+        // A confirmed account gets NO mail — nothing useful to resend — and the
+        // exact same generic body as the unknown-address branch (the previous
+        // test ties that one to the unconfirmed branch: all three identical).
+        Assert.Empty(Fixture.EmailStub.Sent);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(
+            await unknownProbe.Content.ReadAsStringAsync(),
+            await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ResendConfirmation_MissingFields_Returns400()
+    {
+        var response = await Client.PostAsJsonAsync("/api/auth/resend-confirmation", new { });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }

@@ -314,4 +314,30 @@ public sealed class PostgresFixture : IAsyncLifetime
             signingCredentials: creds);
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    /// <summary>
+    /// Issues a JWT that ALSO carries the <c>security_stamp</c> claim, mirroring
+    /// the shape the API itself mints (<c>GenerateTokenResponse</c>). Unlike
+    /// <see cref="GenerateToken"/>, these tokens enter the stamp-present branch
+    /// of <c>OnTokenValidated</c> — use them to prove live-state checks there
+    /// (stamp rotation, the SMA-320 R1 unconfirmed-account lock).
+    /// </summary>
+    public string GenerateStampedToken(string userId, string securityStamp, params string[] roles)
+    {
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtKey));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, userId),
+            new("security_stamp", securityStamp),
+        };
+        claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+        var token = new JwtSecurityToken(
+            issuer: TestJwtIssuer,
+            audience: TestJwtAudience,
+            claims: claims,
+            expires: DateTime.UtcNow.AddHours(1),
+            signingCredentials: creds);
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
 }
