@@ -12,8 +12,19 @@ public class SmartCropsDbContextFactory : IDesignTimeDbContextFactory<SmartCrops
 {
     public SmartCropsDbContext CreateDbContext(string[] args)
     {
+        // SMA-355 — no committed password. Model-only commands (dotnet ef
+        // migrations add/remove) never open a connection, so the password-less
+        // fallback is enough for them; migrations are applied at runtime by the
+        // API on boot. Commands that do reach the database (dotnet ef database
+        // update) need the real string exported first:
+        //   $env:ConnectionStrings__DefaultConnection =
+        //     "Host=localhost;Database=smartcrops;Username=smartcrops;Password=<dev password>"
+        var connectionString =
+            Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+            ?? "Host=localhost;Database=smartcrops;Username=smartcrops";
+
         var options = new DbContextOptionsBuilder<SmartCropsDbContext>()
-            .UseNpgsql("Host=localhost;Database=smartcrops;Username=smartcrops;Password=smartcrops_dev")
+            .UseNpgsql(connectionString)
             .Options;
 
         return new SmartCropsDbContext(options);

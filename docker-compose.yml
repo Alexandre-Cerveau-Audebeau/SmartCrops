@@ -5,7 +5,13 @@ services:
     environment:
       POSTGRES_DB: smartcrops
       POSTGRES_USER: smartcrops
-      POSTGRES_PASSWORD: smartcrops_dev
+      # SMA-355 — dev DB password. Set the real value in
+      # docker-compose.override.yml (gitignored); the port is published to the
+      # host, so a committed password here is a public credential on any
+      # untrusted network. Postgres only reads this when the
+      # smartcrops-db-data volume is first initialized — an existing volume
+      # keeps the password it was created with.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     ports:
       - "5432:5432"
     volumes:
@@ -18,8 +24,19 @@ services:
     container_name: smartcrops-api
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=smartcrops;Username=smartcrops;Password=smartcrops_dev"
-      Jwt__Key: "SmartCrops-Dev-Secret-Key-Change-In-Production-Min32Chars!"
+      # SMA-355 — the DB password must match the db service's
+      # POSTGRES_PASSWORD. Set the real string in docker-compose.override.yml
+      # (gitignored), or supply POSTGRES_PASSWORD via .env (gitignored) so the
+      # substitution below fills it in.
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=smartcrops;Username=smartcrops;Password=${POSTGRES_PASSWORD:-}"
+      # SMA-355 — HS256 key signing every API session token. Set the real
+      # value in docker-compose.override.yml (gitignored); an empty value
+      # fails the API boot via the Program.cs JWT guard (same contract as the
+      # Typesense/Smtp keys). The literal that used to sit here passed
+      # gitleaks AND trufflehog — a hand-written readable string falls below
+      # their entropy floor — so no scanner will flag a regression: never
+      # commit a value here.
+      Jwt__Key: ${JWT_KEY:-}
       Google__ClientId: ${GOOGLE_CLIENT_ID:-}
       Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
       # SMA-33/#68 — CSV of emails granted the backend "Admin" role at boot
