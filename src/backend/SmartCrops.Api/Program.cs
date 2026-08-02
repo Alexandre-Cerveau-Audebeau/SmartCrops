@@ -445,6 +445,16 @@ if (Encoding.UTF8.GetByteCount(jwtKeyValue) < 32)
 // framework's ephemeral defaults resolve without touching the filesystem.
 _ = app.Services.GetRequiredService<IOptions<KeyManagementOptions>>().Value;
 
+// SMA-328 R4 — closes the last lazy-death corner: a Production boot with zero
+// DB configuration no longer waits for the first DbContext resolution to
+// fail. The deliberate test-host skip below is untouched — those hosts are
+// not Production.
+if (app.Environment.IsProduction() && !ConnectionStringResolver.IsConfigured(app.Configuration))
+{
+    throw new InvalidOperationException(
+        "Production requires a database configuration: set Database:Host (discrete) or ConnectionStrings:DefaultConnection.");
+}
+
 // DB init runs when ANY database source is configured — the gate consults the
 // SAME predicate as the resolver (SMA-328 R3), so discrete Database:*
 // deployments now RUN boot-time migrations (the ratified production path)
@@ -508,6 +518,15 @@ if (forwardedKnownNetworks.Length > 0 || forwardedKnownProxies.Length > 0)
             // -trusted proxy boundary is worse than no boot.
             throw new InvalidOperationException(
                 $"ForwardedHeaders:KnownNetworks entry '{cidr}' is not a valid CIDR (expected e.g. \"172.28.0.0/16\").");
+        }
+        // /0 is syntactically valid CIDR, which is exactly why it needs a
+        // semantic bound: it would trust EVERY peer on the wire for
+        // X-Forwarded-* headers. ForwardLimit=1 limits hop COUNT, not WHO is
+        // trusted.
+        if (prefixLength == 0)
+        {
+            throw new InvalidOperationException(
+                $"ForwardedHeaders:KnownNetworks entry '{cidr}' is a catch-all network (/0) and would trust every peer for X-Forwarded-* headers; configure the real proxy subnet instead.");
         }
         forwardedOptions.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(networkAddress, prefixLength));
     }

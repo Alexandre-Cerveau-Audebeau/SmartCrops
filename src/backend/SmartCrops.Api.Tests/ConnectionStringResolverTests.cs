@@ -108,6 +108,41 @@ public class ConnectionStringResolverTests
     }
 
     [Fact]
+    public void WhitespaceDatabaseName_FallsBackToDefault()
+    {
+        var parsed = new NpgsqlConnectionStringBuilder(
+            ConnectionStringResolver.Resolve(Config(
+                ("Database:Host", "dbhost"),
+                ("Database:Name", "   "),
+                ("Database:User", "u"),
+                ("Database:Password", "p"))));
+
+        Assert.Equal("smartcrops", parsed.Database);
+    }
+
+    [Fact]
+    public void BothSources_DiscreteSourceTakesPrecedence()
+    {
+        // A stale DefaultConnection must not hijack migrations when the
+        // discrete production source is configured.
+        var configuration = Config(
+            ("Database:Host", "dbhost"),
+            ("Database:Port", "5433"),
+            ("Database:User", "u"),
+            ("Database:Password", "p"),
+            ("ConnectionStrings:DefaultConnection", "Host=x;Database=y"));
+
+        Assert.True(ConnectionStringResolver.IsConfigured(configuration));
+
+        var parsed = new NpgsqlConnectionStringBuilder(
+            ConnectionStringResolver.Resolve(configuration));
+
+        Assert.Equal("dbhost", parsed.Host);
+        Assert.Equal(5433, parsed.Port);
+        Assert.Equal("u", parsed.Username);
+    }
+
+    [Fact]
     public void IsConfigured_DatabaseHostOnly_IsTrue()
     {
         // Presence-only: Resolve would throw its named credential errors, but

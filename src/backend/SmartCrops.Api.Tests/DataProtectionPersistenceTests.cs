@@ -90,8 +90,10 @@ public class DataProtectionPersistenceTests
             File.SetUnixFileMode(roDir, UnixFileMode.UserRead | UnixFileMode.UserExecute);
 
             using var factory = FactoryFor(roDir);
-            var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
-            Assert.Contains("DataProtection:KeysPath", ex.ToString());
+            var ex = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+            // Message, not ToString: the configuration error is the OUTER
+            // exception — base-exception traversal would discard it.
+            Assert.Contains("DataProtection:KeysPath", ex.Message);
         }
         finally
         {
@@ -116,8 +118,10 @@ public class DataProtectionPersistenceTests
         try
         {
             using var factory = FactoryFor(tempFile);
-            var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
-            Assert.Contains("DataProtection:KeysPath", ex.ToString());
+            var ex = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+            // Message, not ToString: the configuration error is the OUTER
+            // exception — base-exception traversal would discard it.
+            Assert.Contains("DataProtection:KeysPath", ex.Message);
         }
         finally
         {

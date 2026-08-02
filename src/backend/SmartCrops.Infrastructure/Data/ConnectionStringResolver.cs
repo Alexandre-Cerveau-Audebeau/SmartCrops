@@ -27,13 +27,22 @@ public static class ConnectionStringResolver
     /// only answers "is a database configured at all", so the boot-time
     /// DB-init gate and the resolver can never disagree about the source.
     /// </summary>
-    public static bool IsConfigured(IConfiguration configuration) =>
-        !string.IsNullOrWhiteSpace(configuration["Database:Host"])
-        || !string.IsNullOrWhiteSpace(configuration.GetConnectionString("DefaultConnection"));
+    // Single reader for the two configuration sources, consumed by BOTH
+    // IsConfigured and Resolve: the boot-time gate and the DbContext
+    // registration structurally cannot diverge anymore — the R3 Major's root
+    // cause, now enforced by shape. Validation stays in Resolve.
+    private static (string? Host, string? Fallback) ReadSources(IConfiguration configuration) =>
+        (configuration["Database:Host"], configuration.GetConnectionString("DefaultConnection"));
+
+    public static bool IsConfigured(IConfiguration configuration)
+    {
+        var (host, fallback) = ReadSources(configuration);
+        return !string.IsNullOrWhiteSpace(host) || !string.IsNullOrWhiteSpace(fallback);
+    }
 
     public static string Resolve(IConfiguration configuration)
     {
-        var host = configuration["Database:Host"];
+        var (host, fallbackSource) = ReadSources(configuration);
         if (!string.IsNullOrWhiteSpace(host))
         {
             var portRaw = configuration["Database:Port"];
@@ -69,11 +78,14 @@ public static class ConnectionStringResolver
                     "Database:Password must be set when Database:Host is configured.");
             }
 
+            // IsNullOrWhiteSpace, not ??: "   " as Database:Name would
+            // otherwise silently become the database name.
+            var name = configuration["Database:Name"];
             var builder = new NpgsqlConnectionStringBuilder
             {
                 Host = host,
                 Port = port,
-                Database = configuration["Database:Name"] is { Length: > 0 } name ? name : "smartcrops",
+                Database = string.IsNullOrWhiteSpace(name) ? "smartcrops" : name,
                 Username = configuration["Database:User"],
                 Password = configuration["Database:Password"],
             };
@@ -84,13 +96,12 @@ public static class ConnectionStringResolver
         // through ?? into UseNpgsql, and Program's deliberate DB-init
         // skip-gate means the failure would otherwise wait for the first
         // request instead of surfacing here with a named cause.
-        var fallback = configuration.GetConnectionString("DefaultConnection");
-        if (string.IsNullOrWhiteSpace(fallback))
+        if (string.IsNullOrWhiteSpace(fallbackSource))
         {
             throw new InvalidOperationException(
                 "Connection string 'DefaultConnection' is not configured.");
         }
 
-        return fallback;
+        return fallbackSource;
     }
 }

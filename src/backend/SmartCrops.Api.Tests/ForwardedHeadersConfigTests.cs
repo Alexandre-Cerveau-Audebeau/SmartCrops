@@ -54,6 +54,18 @@ public class ForwardedHeadersConfigTests
         Assert.Contains("not a valid CIDR", ex.ToString());
     }
 
+    [Theory]
+    [InlineData("0.0.0.0/0")]
+    [InlineData("::/0")]
+    public void CatchAllNetwork_FailsFastAtBoot_NamingTheHazard(string cidr)
+    {
+        // /0 parses as valid CIDR — the rejection is semantic: it would trust
+        // every peer on the wire for X-Forwarded-* headers.
+        using var factory = FactoryWithKnownNetwork(cidr);
+        var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+        Assert.Contains("catch-all", ex.ToString());
+    }
+
     private static WebApplicationFactory<Program> FactoryWithKnownProxy(string proxy) =>
         new TestWebAppBuilder()
             .WithEnvironment("Testing")
