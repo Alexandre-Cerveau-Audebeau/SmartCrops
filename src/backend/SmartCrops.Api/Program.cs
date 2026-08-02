@@ -366,10 +366,10 @@ if (string.IsNullOrWhiteSpace(jwtKeyValue) || string.IsNullOrWhiteSpace(jwtIssue
             ? "Jwt:Key (local dev: set Jwt__Key in docker-compose.override.yml, gitignored — the key is intentionally absent from tracked files)"
             : null,
         string.IsNullOrWhiteSpace(jwtIssuerValue)
-            ? "Jwt:Issuer (ships in appsettings.json — check it was not removed or overridden with an empty value)"
+            ? "Jwt:Issuer (ships in appsettings.json; if an override blanked it, set Jwt__Issuer in the environment)"
             : null,
         string.IsNullOrWhiteSpace(jwtAudienceValue)
-            ? "Jwt:Audience (ships in appsettings.json — check it was not removed or overridden with an empty value)"
+            ? "Jwt:Audience (ships in appsettings.json; if an override blanked it, set Jwt__Audience in the environment)"
             : null,
     }.Where(m => m is not null);
     throw new InvalidOperationException(
