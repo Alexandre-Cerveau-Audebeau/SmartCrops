@@ -844,7 +844,12 @@ public class AuthController(
         // arrive in bursts. The future direction is streaming —
         // JsonSerializer.SerializeAsync against Response.Body with the
         // Content-Disposition header set manually — deliberately NOT done now.
-        return File(JsonSerializer.SerializeToUtf8Bytes(export, ExportJson), "application/json", fileName);
+        // The size is now measured on every export (SMA-41 gate 3).
+        var payload = JsonSerializer.SerializeToUtf8Bytes(export, ExportJson);
+        logger.LogInformation(
+            "Account export for user {UserId}: {PayloadBytes} bytes, {GardenCount} gardens, {SuggestionCount} suggestions",
+            userId, payload.Length, export.Gardens.Count, export.Suggestions.Count);
+        return File(payload, "application/json", fileName);
     }
 
     private string? GetCurrentUserId() =>
