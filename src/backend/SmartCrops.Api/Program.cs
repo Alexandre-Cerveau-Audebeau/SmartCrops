@@ -80,6 +80,20 @@ var authBuilder = builder.Services.AddAuthentication(options =>
             {
                 context.Fail("Security stamp mismatch");
             }
+            // SMA-320 R1: an unconfirmed account's token is inert EVERYWHERE,
+            // regardless of how it was issued — the Login gate refuses to
+            // ISSUE, this refuses to HONOR (complementary locks, not
+            // redundant: Register/Google/exchange paths all mint stamped
+            // tokens, and a pre-gate token must not outlive the rule). Reads
+            // LIVE state, so confirming the address revives existing tokens
+            // without a re-login. Google accounts are confirmed at creation
+            // and pass untouched. Deliberately INSIDE the stamp-present
+            // branch: the test fixtures' stampless tokens return early above
+            // and never reach this check, by design.
+            else if (!user.EmailConfirmed)
+            {
+                context.Fail("Email not confirmed");
+            }
         },
     };
 });

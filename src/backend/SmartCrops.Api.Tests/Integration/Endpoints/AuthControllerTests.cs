@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SmartCrops.Api.Controllers;
@@ -313,6 +314,58 @@ public class AuthControllerTests : IntegrationTestBase
         var response = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Register_IssuesNoSession_UntilConfirmedAndLoggedIn()
+    {
+        // R1 (GitHub Major): registration used to hand out a working cookie
+        // while the Login gate was locked — the garage-door hole. One
+        // end-to-end fact: the cookie-enabled client stays anonymous after
+        // register, and only confirm + login open the session.
+        // The client is https-based: outside Development the auth cookie is
+        // Secure, and the CookieContainer only replays it over https — the
+        // default http TestServer client would 401 forever AFTER login too,
+        // which is not the fact under test.
+        using var client = Fixture.Factory.CreateClient(
+            new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+        var email = NewEmail();
+        var register = await client.PostAsJsonAsync("/api/auth/register", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.Created, register.StatusCode);
+
+        var meAfterRegister = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, meAfterRegister.StatusCode);
+
+        var (_, _, userId, token) = CapturedLink();
+        Assert.Equal(HttpStatusCode.NoContent, (await ConfirmAsync(userId, token)).StatusCode);
+        var login = await client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+
+        var meAfterLogin = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.OK, meAfterLogin.StatusCode);
+    }
+
+    [Fact]
+    public async Task StampedToken_ForUnconfirmedAccount_IsInert_UntilConfirmation()
+    {
+        // R1: the OnTokenValidated lock reads LIVE state, not the token — the
+        // SAME stamped token is refused before confirmation and honored after.
+        var email = NewEmail();
+        await RegisterAsync(email);
+        var user = await FindUserAsync(email);
+        Assert.NotNull(user);
+        var stamped = Fixture.GenerateStampedToken(user!.Id, user.SecurityStamp!);
+
+        using var before = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        before.Headers.Authorization = new AuthenticationHeaderValue("Bearer", stamped);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Client.SendAsync(before)).StatusCode);
+
+        var (_, _, userId, token) = CapturedLink();
+        Assert.Equal(HttpStatusCode.NoContent, (await ConfirmAsync(userId, token)).StatusCode);
+
+        using var after = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        after.Headers.Authorization = new AuthenticationHeaderValue("Bearer", stamped);
+        Assert.Equal(HttpStatusCode.OK, (await Client.SendAsync(after)).StatusCode);
     }
 
     private async Task<HttpResponseMessage> ResendAsync(string email) =>

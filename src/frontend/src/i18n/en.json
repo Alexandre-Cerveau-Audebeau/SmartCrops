@@ -319,6 +319,7 @@
     "resendConfirmation": "Resend the confirmation email",
     "resendConfirmationSent": "If an account exists and is unconfirmed, a confirmation email has been sent. Check your inbox.",
     "registerError": "Registration failed. Please try again.",
+    "registerSuccessNotice": "Your account has been created. Check your inbox to confirm your email address, then sign in.",
     "passwordMismatch": "Passwords do not match.",
     "callbackProcessing": "Completing sign in...",
     "callbackError": "Authentication failed. Please try again.",

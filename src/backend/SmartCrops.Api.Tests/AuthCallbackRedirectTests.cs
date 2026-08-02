@@ -21,7 +21,9 @@ public class AuthCallbackRedirectTests
 
         var redirect = AuthController.BuildAuthCallbackRedirect(frontendUrl, code);
 
-        var query = redirect["http://localhost:3000/auth/callback?code=".Length..];
+        var prefix = $"{frontendUrl}/auth/callback?code=";
+        Assert.StartsWith(prefix, redirect);
+        var query = redirect[prefix.Length..];
         Assert.Equal("a%2Bb%2Fc%3D", query);
         Assert.Equal(code, Uri.UnescapeDataString(query));
     }

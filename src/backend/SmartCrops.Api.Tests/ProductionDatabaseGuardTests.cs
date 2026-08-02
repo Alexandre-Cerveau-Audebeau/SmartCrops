@@ -12,6 +12,16 @@ namespace SmartCrops.Api.Tests;
 /// </summary>
 public class ProductionDatabaseGuardTests
 {
+    /// <summary>
+    /// The blank overrides are the R1 hardening: the in-memory test config only
+    /// overrides keys it SETS, so ambient <c>Database__*</c> /
+    /// <c>ConnectionStrings__*</c> env vars on any machine would otherwise leak
+    /// into these Production boots and flip the guard — or worse, make the boot
+    /// RUN Migrate against a reachable ambient database. Blank reads as absent
+    /// (<c>IsConfigured</c> is IsNullOrWhiteSpace on both sources), and a later
+    /// <c>WithConfig</c> on the same key overwrites the blank (dictionary
+    /// last-write-wins), which is what the incomplete-config test relies on.
+    /// </summary>
     private static TestWebAppBuilder ProductionBuilder() => new TestWebAppBuilder()
         .WithEnvironment("Production")
         .WithJwtAuth()
@@ -20,7 +30,13 @@ public class ProductionDatabaseGuardTests
         .WithTrefle()
         .WithPerenual()
         .WithTypesense()
-        .WithSmtp();
+        .WithSmtp()
+        .WithConfig("ConnectionStrings:DefaultConnection", "")
+        .WithConfig("Database:Host", "")
+        .WithConfig("Database:Port", "")
+        .WithConfig("Database:Name", "")
+        .WithConfig("Database:User", "")
+        .WithConfig("Database:Password", "");
 
     [Fact]
     public void ProductionWithoutAnyDatabaseConfig_FailsFastAtBoot()

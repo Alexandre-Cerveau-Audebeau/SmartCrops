@@ -134,8 +134,12 @@ public class AuthController(
 
         await SendConfirmationEmailAsync(user, request.Email, ct);
 
-        var tokenResponse = GenerateTokenResponse(user.Id, request.Email, user.SecurityStamp, await userManager.GetRolesAsync(user));
-        SetAuthCookie(tokenResponse.Token);
+        // SMA-320 R1: no session for a fresh account. The account starts
+        // unconfirmed, and both locks (the Login gate and the OnTokenValidated
+        // check) would reject its token anyway — handing out an inert cookie
+        // would only manufacture confusing half-logged-in states. Registration
+        // still succeeds and the confirmation email still goes out; the 201
+        // keeps its empty body (the SPA routes the user toward Login).
         return StatusCode(201);
     }
 
