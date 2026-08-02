@@ -37,6 +37,43 @@ public class ConnectionStringResolverTests
         Assert.Equal(hostilePassword, parsed.Password);
     }
 
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("65536")]
+    public void OutOfRangePort_Throws_NamingTheRawValue(string portRaw)
+    {
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => ConnectionStringResolver.Resolve(Config(
+                ("Database:Host", "dbhost"),
+                ("Database:Port", portRaw),
+                ("Database:User", "u"),
+                ("Database:Password", "p"))));
+
+        Assert.Contains(portRaw, ex.Message);
+    }
+
+    [Fact]
+    public void HostWithoutUser_Throws_NamingTheUserKey()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => ConnectionStringResolver.Resolve(Config(
+                ("Database:Host", "dbhost"))));
+
+        Assert.Contains("Database:User", ex.Message);
+    }
+
+    [Fact]
+    public void HostAndUserWithoutPassword_Throws_NamingThePasswordKey()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => ConnectionStringResolver.Resolve(Config(
+                ("Database:Host", "dbhost"),
+                ("Database:User", "u"))));
+
+        Assert.Contains("Database:Password", ex.Message);
+    }
+
     [Fact]
     public void NoDatabaseHost_DefaultConnection_ReturnedVerbatim()
     {

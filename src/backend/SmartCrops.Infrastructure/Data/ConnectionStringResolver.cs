@@ -32,6 +32,31 @@ public static class ConnectionStringResolver
                     $"Database:Port value '{portRaw}' is not a valid integer.");
             }
 
+            // Npgsql's builder rejects <= 0 itself but lets 65536 through to
+            // die unnamed at first connection — this throw names the config key.
+            if (port < 1 || port > 65535)
+            {
+                throw new InvalidOperationException(
+                    $"Database:Port value '{portRaw}' is out of range (1-65535).");
+            }
+
+            // Discrete credentials are REQUIRED as a policy: without these
+            // checks Npgsql would fall back to an OS username, a password
+            // file or integrated authentication — an implicit identity no
+            // production deployment should ever run under. Keys only in the
+            // messages, never values.
+            if (string.IsNullOrWhiteSpace(configuration["Database:User"]))
+            {
+                throw new InvalidOperationException(
+                    "Database:User must be set when Database:Host is configured.");
+            }
+
+            if (string.IsNullOrWhiteSpace(configuration["Database:Password"]))
+            {
+                throw new InvalidOperationException(
+                    "Database:Password must be set when Database:Host is configured.");
+            }
+
             var builder = new NpgsqlConnectionStringBuilder
             {
                 Host = host,

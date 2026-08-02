@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Net.Sockets;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -410,6 +411,12 @@ if (string.IsNullOrWhiteSpace(jwtKeyValue) || string.IsNullOrWhiteSpace(jwtIssue
 if (Encoding.UTF8.GetByteCount(jwtKeyValue) < 32)
     throw new InvalidOperationException("Jwt:Key must be at least 32 bytes for HS256.");
 
+// SMA-328 R1 — force the Data Protection key ring options to materialize AT
+// BOOT: an unwritable DataProtection:KeysPath must kill the boot, not the
+// first login that needs a protector. Harmless when KeysPath is blank — the
+// framework's ephemeral defaults resolve without touching the filesystem.
+_ = app.Services.GetRequiredService<IOptions<KeyManagementOptions>>().Value;
+
 // Skip DB init when no connection string is configured (e.g. unit test environments)
 // or when running under the "Testing" environment (integration tests apply migrations
 // themselves via PostgresFixture and skip DataSeeder so the test DB stays deterministic).
@@ -452,9 +459,15 @@ if (forwardedKnownNetworks.Length > 0 || forwardedKnownProxies.Length > 0)
     foreach (var cidr in forwardedKnownNetworks)
     {
         var parts = cidr.Split('/');
+        // Both TryParse calls succeeding is not enough: "172.28.0.0/999"
+        // would die in the IPNetwork ctor as a generic
+        // ArgumentOutOfRangeException naming nothing. Bounding the prefix
+        // here keeps the failure inside OUR exception, which names the entry.
         if (parts.Length != 2
             || !IPAddress.TryParse(parts[0], out var networkAddress)
-            || !int.TryParse(parts[1], out var prefixLength))
+            || !int.TryParse(parts[1], out var prefixLength)
+            || prefixLength < 0
+            || prefixLength > (networkAddress.AddressFamily == AddressFamily.InterNetwork ? 32 : 128))
         {
             // Fail-fast at boot, same philosophy as the JWT guard: a half
             // -trusted proxy boundary is worse than no boot.

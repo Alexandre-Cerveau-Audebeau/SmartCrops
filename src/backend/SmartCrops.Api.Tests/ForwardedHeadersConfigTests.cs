@@ -41,4 +41,48 @@ public class ForwardedHeadersConfigTests
         var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
         Assert.Contains("not-a-cidr", ex.ToString());
     }
+
+    [Fact]
+    public void OutOfRangePrefixLength_FailsFastAtBoot_NamingTheEntry()
+    {
+        // "172.28.0.0/999" passes both TryParse calls; without the explicit
+        // bound it would die in the IPNetwork ctor as a generic
+        // ArgumentOutOfRangeException naming nothing.
+        using var factory = FactoryWithKnownNetwork("172.28.0.0/999");
+        var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+        Assert.Contains("999", ex.ToString());
+        Assert.Contains("not a valid CIDR", ex.ToString());
+    }
+
+    private static WebApplicationFactory<Program> FactoryWithKnownProxy(string proxy) =>
+        new TestWebAppBuilder()
+            .WithEnvironment("Testing")
+            .WithJwtAuth()
+            .WithGoogleOAuth()
+            .WithFrontendUrl()
+            .WithTrefle()
+            .WithPerenual()
+            .WithTypesense()
+            .WithSmtp()
+            .WithConfig("ForwardedHeaders:KnownProxies:0", proxy)
+            .Build();
+
+    [Fact]
+    public async Task ValidKnownProxy_HostBoots_AndHealthAnswers()
+    {
+        // A single proxy is an IP, not a CIDR.
+        await using var factory = FactoryWithKnownProxy("203.0.113.9");
+        var client = factory.CreateClient();
+        var response = await client.GetAsync("/health");
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("ok", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public void InvalidKnownProxy_FailsFastAtBoot_NamingTheOffendingValue()
+    {
+        using var factory = FactoryWithKnownProxy("not-an-ip");
+        var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+        Assert.Contains("not-an-ip", ex.ToString());
+    }
 }
