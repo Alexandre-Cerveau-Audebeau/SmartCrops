@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
@@ -86,8 +87,10 @@ var authBuilder = builder.Services.AddAuthentication(options =>
             // redundant: Register/Google/exchange paths all mint stamped
             // tokens, and a pre-gate token must not outlive the rule). Reads
             // LIVE state, so confirming the address revives existing tokens
-            // without a re-login. Google accounts are confirmed at creation
-            // and pass untouched. Deliberately INSIDE the stamp-present
+            // without a re-login. Google-created accounts are born confirmed,
+            // and a Google merge into an UNCONFIRMED account confirms it after
+            // neutralizing the pre-existing credential (R2 safe linking) — so
+            // Google users pass here. Deliberately INSIDE the stamp-present
             // branch: the test fixtures' stampless tokens return early above
             // and never reach this check, by design.
             else if (!user.EmailConfirmed)
@@ -106,6 +109,12 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
     {
         options.ClientId = googleClientId;
         options.ClientSecret = googleClientSecret;
+        // SMA-320 R2: the default Google claim mapping drops email_verified,
+        // and the safe-linking contract (AuthController.EnsureSafeGoogleMergeAsync)
+        // REQUIRES it — merging into an existing account rests on Google having
+        // verified the address. The userinfo v3 payload carries it as a boolean;
+        // MapJsonKey stringifies it, hence the bool.TryParse at the consumer.
+        options.ClaimActions.MapJsonKey("email_verified", "email_verified");
     });
 }
 

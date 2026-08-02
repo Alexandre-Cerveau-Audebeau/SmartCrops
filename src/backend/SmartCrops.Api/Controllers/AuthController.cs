@@ -512,6 +512,13 @@ public class AuthController(
             }
             else
             {
+                // SMA-320 R2: the merge is an OWNERSHIP claim over an existing
+                // account — it must be proven and made safe BEFORE any login is
+                // added or any token minted (the fresh stamp the minting below
+                // reads is the one the neutralization rotates).
+                if (!await EnsureSafeGoogleMergeAsync(userManager, user, info))
+                    return Redirect($"{frontendUrl}/login?error=google-failed");
+
                 var logins = await userManager.GetLoginsAsync(user);
                 if (!logins.Any(l => l.LoginProvider == info.LoginProvider && l.ProviderKey == info.ProviderKey))
                 {
@@ -541,6 +548,69 @@ public class AuthController(
         {
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
         }
+    }
+
+    /// <summary>
+    /// SMA-320 R2 — safe Google linking (the pre-hijacking fix). Merging a
+    /// Google identity into an EXISTING account is an ownership claim, and the
+    /// attack it must survive is: an attacker pre-registers the victim's email
+    /// with a known password; the victim later signs in with Google; the naive
+    /// merge lands the Google login on the attacker's account and the
+    /// attacker's password stays alive as a backdoor.
+    ///
+    /// <para>The trust model: Google's <c>email_verified</c> claim IS the
+    /// ownership proof this merge rests on — absent or false, the merge is
+    /// refused outright (a). When the target account was never confirmed —
+    /// the pre-hijacking window — its pre-existing credentials are neutralized
+    /// BEFORE linking, in this order (b): the latent password dies
+    /// (<c>RemovePasswordAsync</c>, guarded by <c>HasPasswordAsync</c> — the
+    /// true owner can set a new one later through the now-working reset flow);
+    /// the security stamp rotates, so every outstanding stamped token for the
+    /// account — the attacker's included — dies at the OnTokenValidated lock;
+    /// only then is the account confirmed and persisted. The caller links and
+    /// mints AFTER this method, so the fresh session carries the rotated
+    /// stamp — minting first would die on its own mismatch. A confirmed
+    /// account (c) is the standard verified-email linking case: password
+    /// untouched, nothing to neutralize. The R1 lockout UX resolves itself
+    /// here: the merge confirms the account, so the exchanged token works.</para>
+    ///
+    /// <para>Static and store-driven so the contract is provable against the
+    /// real Identity store without a fake-Google harness (none exists — the
+    /// integration tests drive this method plus <c>AddLoginAsync</c>, the
+    /// exact sequence the callback runs).</para>
+    /// </summary>
+    public static async Task<bool> EnsureSafeGoogleMergeAsync(
+        UserManager<ApplicationUser> userManager,
+        ApplicationUser user,
+        ExternalLoginInfo info)
+    {
+        // (a) The verified claim is mapped in Program.cs (MapJsonKey) from the
+        // userinfo boolean — stringified, hence TryParse. Absent or false:
+        // refuse like any invalid callback.
+        var verifiedRaw = info.Principal.FindFirstValue("email_verified");
+        if (!bool.TryParse(verifiedRaw, out var verified) || !verified)
+            return false;
+
+        if (!user.EmailConfirmed)
+        {
+            // (b) The pre-hijacking window — neutralize before linking.
+            if (await userManager.HasPasswordAsync(user))
+            {
+                var removeResult = await userManager.RemovePasswordAsync(user);
+                if (!removeResult.Succeeded)
+                    return false;
+            }
+
+            await userManager.UpdateSecurityStampAsync(user);
+
+            user.EmailConfirmed = true;
+            var updateResult = await userManager.UpdateAsync(user);
+            if (!updateResult.Succeeded)
+                return false;
+        }
+        // (c) Confirmed account: standard verified-email linking — password untouched.
+
+        return true;
     }
 
     /// <summary>

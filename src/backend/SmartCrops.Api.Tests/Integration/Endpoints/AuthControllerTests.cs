@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
@@ -366,6 +367,135 @@ public class AuthControllerTests : IntegrationTestBase
         using var after = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
         after.Headers.Authorization = new AuthenticationHeaderValue("Bearer", stamped);
         Assert.Equal(HttpStatusCode.OK, (await Client.SendAsync(after)).StatusCode);
+    }
+
+    /// <summary>
+    /// Builds the ExternalLoginInfo the Google middleware would hand the
+    /// callback (no fake-Google harness exists — R2's safe-merge contract is
+    /// proven by driving <see cref="AuthController.EnsureSafeGoogleMergeAsync"/>
+    /// plus <c>AddLoginAsync</c>, the exact sequence the callback runs).
+    /// <paramref name="emailVerified"/> null = claim absent.
+    /// </summary>
+    private static ExternalLoginInfo GoogleInfo(string email, string? emailVerified, string providerKey)
+    {
+        var claims = new List<Claim> { new(ClaimTypes.Email, email) };
+        if (emailVerified is not null)
+            claims.Add(new Claim("email_verified", emailVerified));
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "Google"));
+        return new ExternalLoginInfo(principal, "Google", providerKey, "Google");
+    }
+
+    [Fact]
+    public async Task GoogleMerge_PreHijackedUnconfirmedAccount_KillsPasswordAndConfirms()
+    {
+        // The attack: the attacker pre-registers the victim's email with a
+        // known password; the victim later signs in with Google. The merge
+        // must kill the latent password and confirm the account.
+        var email = NewEmail();
+        await RegisterAsync(email);
+
+        using (var scope = CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await users.FindByEmailAsync(email);
+            Assert.NotNull(user);
+
+            Assert.True(await AuthController.EnsureSafeGoogleMergeAsync(users, user!, GoogleInfo(email, "true", "gkey-hijack")));
+            Assert.True((await users.AddLoginAsync(user!, GoogleInfo(email, "true", "gkey-hijack"))).Succeeded);
+
+            Assert.False(await users.HasPasswordAsync(user!));
+            Assert.True(user!.EmailConfirmed);
+        }
+
+        // The pre-registered password is DEAD — and dead as the generic 401,
+        // not the unconfirmed 403 (the account is confirmed now).
+        var login = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.Unauthorized, login.StatusCode);
+    }
+
+    [Fact]
+    public async Task GoogleMerge_RotatesStamp_KillingPreMergeTokens()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+        string preMergeToken;
+        string postMergeToken;
+        using (var scope = CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await users.FindByEmailAsync(email);
+            Assert.NotNull(user);
+            preMergeToken = Fixture.GenerateStampedToken(user!.Id, user.SecurityStamp!);
+
+            Assert.True(await AuthController.EnsureSafeGoogleMergeAsync(users, user, GoogleInfo(email, "true", "gkey-rotate")));
+
+            // The tracked instance carries the rotated stamp — the same read
+            // the callback's token minting performs after the merge.
+            postMergeToken = Fixture.GenerateStampedToken(user.Id, user.SecurityStamp!);
+        }
+
+        // Every pre-merge stamped token — the attacker's included — dies at
+        // the OnTokenValidated lock on the stamp mismatch.
+        using var before = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        before.Headers.Authorization = new AuthenticationHeaderValue("Bearer", preMergeToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Client.SendAsync(before)).StatusCode);
+
+        // A fresh post-merge session works: rotated stamp + confirmed account.
+        using var after = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        after.Headers.Authorization = new AuthenticationHeaderValue("Bearer", postMergeToken);
+        Assert.Equal(HttpStatusCode.OK, (await Client.SendAsync(after)).StatusCode);
+    }
+
+    [Fact]
+    public async Task GoogleMerge_UnverifiedEmail_RefusedAndAccountUntouched()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+
+        using var scope = CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await users.FindByEmailAsync(email);
+        Assert.NotNull(user);
+
+        // The verified claim IS the ownership proof: false or absent, no merge.
+        Assert.False(await AuthController.EnsureSafeGoogleMergeAsync(users, user!, GoogleInfo(email, "false", "gkey-unverified")));
+        Assert.False(await AuthController.EnsureSafeGoogleMergeAsync(users, user!, GoogleInfo(email, null, "gkey-unverified")));
+
+        var fresh = await users.FindByEmailAsync(email);
+        Assert.NotNull(fresh);
+        Assert.False(fresh!.EmailConfirmed);
+        Assert.True(await users.HasPasswordAsync(fresh));
+        Assert.Empty(await users.GetLoginsAsync(fresh));
+    }
+
+    [Fact]
+    public async Task GoogleMerge_ConfirmedAccount_PreservesPasswordAndLinks()
+    {
+        var email = NewEmail();
+        await RegisterAsync(email);
+        var (_, _, userId, token) = CapturedLink();
+        Assert.Equal(HttpStatusCode.NoContent, (await ConfirmAsync(userId, token)).StatusCode);
+
+        using (var scope = CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await users.FindByEmailAsync(email);
+            Assert.NotNull(user);
+            Assert.True(user!.EmailConfirmed);
+            var stampBefore = user.SecurityStamp;
+
+            Assert.True(await AuthController.EnsureSafeGoogleMergeAsync(users, user, GoogleInfo(email, "true", "gkey-confirmed")));
+            Assert.True((await users.AddLoginAsync(user, GoogleInfo(email, "true", "gkey-confirmed"))).Succeeded);
+
+            // The standard model: verified-email linking into a confirmed
+            // account touches nothing — password kept, stamp kept, link added.
+            Assert.True(await users.HasPasswordAsync(user));
+            Assert.Equal(stampBefore, user.SecurityStamp);
+            Assert.Single(await users.GetLoginsAsync(user));
+        }
+
+        var login = await Client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
     }
 
     private async Task<HttpResponseMessage> ResendAsync(string email) =>
