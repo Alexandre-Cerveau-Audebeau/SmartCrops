@@ -61,4 +61,28 @@ public class DataProtectionPersistenceTests
             }
         }
     }
+
+    /// <summary>
+    /// SMA-328 R2 — an unusable DataProtection:KeysPath must kill the boot
+    /// with a message naming the config key. A temp FILE passed as the path is
+    /// the portable stand-in for an unwritable directory: OS-ACL manipulation
+    /// is not portable on the Linux CI runner, while CreateDirectory over an
+    /// existing file fails everywhere.
+    /// </summary>
+    [Fact]
+    public void UnusableKeysPath_FailsFastAtBoot_NamingTheConfigKey()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), "smartcrops-dp-probe-" + Guid.NewGuid().ToString("N"));
+        File.WriteAllText(tempFile, "");
+        try
+        {
+            using var factory = FactoryFor(tempFile);
+            var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+            Assert.Contains("DataProtection:KeysPath", ex.ToString());
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
 }

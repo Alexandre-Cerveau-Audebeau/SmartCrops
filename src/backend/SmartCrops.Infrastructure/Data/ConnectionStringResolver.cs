@@ -68,8 +68,17 @@ public static class ConnectionStringResolver
             return builder.ConnectionString;
         }
 
-        return configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException(
+        // "" and "   " come back non-null from configuration, would sail
+        // through ?? into UseNpgsql, and Program's deliberate DB-init
+        // skip-gate means the failure would otherwise wait for the first
+        // request instead of surfacing here with a named cause.
+        var fallback = configuration.GetConnectionString("DefaultConnection");
+        if (string.IsNullOrWhiteSpace(fallback))
+        {
+            throw new InvalidOperationException(
                 "Connection string 'DefaultConnection' is not configured.");
+        }
+
+        return fallback;
     }
 }

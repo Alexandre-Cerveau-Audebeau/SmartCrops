@@ -50,7 +50,7 @@ public class ConnectionStringResolverTests
                 ("Database:User", "u"),
                 ("Database:Password", "p"))));
 
-        Assert.Contains(portRaw, ex.Message);
+        Assert.Equal($"Database:Port value '{portRaw}' is out of range (1-65535).", ex.Message);
     }
 
     [Fact]
@@ -81,6 +81,21 @@ public class ConnectionStringResolverTests
             ("ConnectionStrings:DefaultConnection", "Host=x;Database=y")));
 
         Assert.Equal("Host=x;Database=y", result);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void BlankDefaultConnection_Throws_WithTheExistingMessage(string blank)
+    {
+        // "" and whitespace come back non-null from configuration and would
+        // otherwise sail through into UseNpgsql, deferring the failure to the
+        // first request (Program's DB-init skip-gate).
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => ConnectionStringResolver.Resolve(Config(
+                ("ConnectionStrings:DefaultConnection", blank))));
+
+        Assert.Equal("Connection string 'DefaultConnection' is not configured.", ex.Message);
     }
 
     [Fact]

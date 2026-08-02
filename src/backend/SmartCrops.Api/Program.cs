@@ -373,7 +373,34 @@ builder.Services.AddOptions<KeyManagementOptions>().Configure<IConfiguration, IL
     var keysPath = config["DataProtection:KeysPath"];
     if (!string.IsNullOrWhiteSpace(keysPath))
     {
-        Directory.CreateDirectory(keysPath);
+        // These options resolve AT BOOT (forced resolution after the JWT
+        // guard), so this probe IS the boot gate: CreateDirectory alone
+        // accepts an existing-but-unwritable mounted volume, and Protect can
+        // succeed without writing when a valid key already exists — the
+        // write/delete probe makes a read-only keys path die at startup, not
+        // at the first token write.
+        try
+        {
+            Directory.CreateDirectory(keysPath);
+            var probePath = Path.Combine(keysPath, ".write-probe-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                File.WriteAllText(probePath, "");
+            }
+            finally
+            {
+                if (File.Exists(probePath))
+                {
+                    File.Delete(probePath);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"DataProtection:KeysPath '{keysPath}' is not usable (not creatable or not writable).", ex);
+        }
+
         options.XmlRepository = new FileSystemXmlRepository(new DirectoryInfo(keysPath), loggerFactory);
     }
 });
