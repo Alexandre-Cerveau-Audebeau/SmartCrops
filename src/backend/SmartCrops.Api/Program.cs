@@ -356,7 +356,25 @@ var jwtKeyValue = jwtConfig["Key"];
 var jwtIssuerValue = jwtConfig["Issuer"];
 var jwtAudienceValue = jwtConfig["Audience"];
 if (string.IsNullOrWhiteSpace(jwtKeyValue) || string.IsNullOrWhiteSpace(jwtIssuerValue) || string.IsNullOrWhiteSpace(jwtAudienceValue))
-    throw new InvalidOperationException("Jwt settings (Key, Issuer, Audience) must all be configured.");
+{
+    // SMA-355: name each missing member WITH where it lives, so the failure
+    // explains itself — Jwt:Key deliberately exists in no tracked file, while
+    // Issuer/Audience ship in appsettings.json.
+    var missing = new[]
+    {
+        string.IsNullOrWhiteSpace(jwtKeyValue)
+            ? "Jwt:Key (local dev: set Jwt__Key in docker-compose.override.yml, gitignored — the key is intentionally absent from tracked files)"
+            : null,
+        string.IsNullOrWhiteSpace(jwtIssuerValue)
+            ? "Jwt:Issuer (ships in appsettings.json; if an override blanked it, set Jwt__Issuer in the environment)"
+            : null,
+        string.IsNullOrWhiteSpace(jwtAudienceValue)
+            ? "Jwt:Audience (ships in appsettings.json; if an override blanked it, set Jwt__Audience in the environment)"
+            : null,
+    }.Where(m => m is not null);
+    throw new InvalidOperationException(
+        $"Missing JWT configuration: {string.Join("; ", missing)}.");
+}
 if (Encoding.UTF8.GetByteCount(jwtKeyValue) < 32)
     throw new InvalidOperationException("Jwt:Key must be at least 32 bytes for HS256.");
 
