@@ -172,7 +172,17 @@ jobs:
             # file the grep matches nothing and passes the list through
             # unchanged — harmless. Stated trade: when the source is old,
             # up to 8 files survive one cycle (one protected + keep-7).
-            ls -1t backups/pre-rollback-*.sql.gz 2>/dev/null | grep -vxF "backups/$RESTORE_DUMP" | tail -n +8 | xargs -r rm --
+            # R5 guard (the reviewer's own safe form): grep -v under
+            # pipefail is a classic footgun — status 1 (it filtered
+            # EVERYTHING) passes through; real ls/grep failures still kill
+            # the script. Unreachable in practice: the freshly-created
+            # snapshot always survives the filter (its timestamp name
+            # cannot equal a pre-existing source) — the guard costs
+            # nothing.
+            protected="backups/$RESTORE_DUMP"
+            ls -1t backups/pre-rollback-*.sql.gz 2>/dev/null |
+              { grep -vxF -- "$protected" || test "$?" -eq 1; } |
+              tail -n +8 | xargs -r rm --
             # (4) Terminate lingering connections: the api is stopped, this
             #     catches stragglers — ALTER DATABASE RENAME has no
             #     WITH (FORCE).

@@ -178,8 +178,14 @@ jobs:
           # docker-compose.prod.yml lands as docker-compose.yml so the VPS
           # runs PLAIN `docker compose` — zero -f on the VPS, ever (the
           # project's standing rule; the file rename is how it holds).
-          scp docker-compose.prod.yml vps:/opt/smartcrops/docker-compose.yml
-          scp traefik/dynamic.yml vps:/opt/smartcrops/traefik/dynamic.yml
+          # Atomic landing (R5): an interrupted transfer previously left a
+          # partial LIVE file for later MANUAL compose commands — the
+          # uploads land on dotted temp names, and ONE ssh performs both
+          # mv's only after BOTH uploads succeeded; same atomic discipline
+          # as the dumps.
+          scp docker-compose.prod.yml vps:/opt/smartcrops/.docker-compose.yml.tmp
+          scp traefik/dynamic.yml vps:/opt/smartcrops/traefik/.dynamic.yml.tmp
+          ssh vps 'mv /opt/smartcrops/.docker-compose.yml.tmp /opt/smartcrops/docker-compose.yml && mv /opt/smartcrops/traefik/.dynamic.yml.tmp /opt/smartcrops/traefik/dynamic.yml'
 
       - name: Guarded pre-deploy dump (the ratified rollback floor)
         env:
@@ -213,8 +219,35 @@ jobs:
             # (or by hand) are pulled back to 0600 too. find is
             # no-match-safe under set -e, unlike a bare glob chmod.
             find backups -maxdepth 1 -name '*.sql.gz' -exec chmod 600 {} +
-            running=$(docker compose ps --status running --services)
-            if printf '%s\n' "$running" | grep -qx db; then
+            # The dump trigger is DATA EXISTENCE, not container liveness
+            # (R5): `ps --status running` missed a STOPPED db with live
+            # data — the next deploy would have migrated real state WITHOUT
+            # a rollback floor. The volume name derives from the compose
+            # project name, which is the deployment directory name
+            # (/opt/smartcrops -> project "smartcrops" -> smartcrops_db-data).
+            if docker volume inspect smartcrops_db-data >/dev/null 2>&1; then
+              # Self-healing (start + wait + dump) beats fail-closed here:
+              # the deploy's own `up -d` would have started this db seconds
+              # later anyway. IMAGE_TAG already rides the remote env for
+              # every compose subcommand, including this up.
+              docker compose up -d db
+              # Bounded readiness wait: pg_isready INSIDE the container
+              # (the /dev/tcp probe belongs to the compose healthcheck, not
+              # this script). Loud failure on timeout — no silent
+              # floor-less deploy.
+              ready=0
+              for i in $(seq 1 12); do
+                if docker compose exec -T db pg_isready -U smartcrops -d smartcrops </dev/null >/dev/null 2>&1; then
+                  ready=1
+                  break
+                fi
+                echo "waiting for db readiness ($i/12)"
+                sleep 5
+              done
+              if [ "$ready" -ne 1 ]; then
+                echo "db did not become ready within 60s - cannot take the rollback floor"
+                exit 1
+              fi
               # Stale temps from previous FAILED runs are swept before
               # dumping (R3) — repeated failures would otherwise fill the
               # disk that then blocks deploys AND rollbacks. Scoped to THIS
@@ -240,7 +273,7 @@ jobs:
               echo "pre-deploy dump ${final} took $(( $(date +%s) - dump_start ))s"
               ls -1t backups/pre-deploy-*.sql.gz | tail -n +8 | xargs -r rm
             else
-              echo "db not running - first deploy, nothing to dump"
+              echo "db volume absent - true first deploy, nothing to dump"
             fi
           }
           REMOTE
