@@ -1,0 +1,57 @@
+# Traefik dynamic configuration (Lot 2 R2) — the SINGLE routing truth.
+# File provider instead of Docker labels: the edge process holds ZERO Docker
+# privileges, so a Traefik compromise cannot reach the daemon; container
+# discovery is pointless for a fixed single-app stack anyway.
+http:
+  routers:
+    api-secure:
+      rule: Host(`smartcrops.fr`) && (PathPrefix(`/api`) || Path(`/signin-google`) || Path(`/health`))
+      entryPoints: [websecure]
+      tls:
+        certResolver: le
+      # Priorities are EXPLICIT (api=10, web=1): rule-length tiebreaking is
+      # not a contract.
+      priority: 10
+      middlewares: [hsts]
+      service: api
+    web-secure:
+      rule: Host(`smartcrops.fr`)
+      entryPoints: [websecure]
+      tls:
+        certResolver: le
+      priority: 1
+      middlewares: [hsts]
+      service: web
+    www-secure:
+      rule: Host(`www.smartcrops.fr`)
+      entryPoints: [websecure]
+      tls:
+        certResolver: le
+      # hsts BEFORE redirect-www — RedirectRegex writes the 301/308 response
+      # and skips later middlewares: the order IS the fix (R2).
+      middlewares: [hsts, redirect-www]
+      service: web
+
+  services:
+    # Compose DNS names with the INTERNAL ports (both 8080).
+    api:
+      loadBalancer:
+        servers:
+          - url: http://api:8080
+    web:
+      loadBalancer:
+        servers:
+          - url: http://web:8080
+
+  middlewares:
+    hsts:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+    redirect-www:
+      redirectRegex:
+        regex: ^https://www\.smartcrops\.fr/(.*)
+        # Plain ${1}: this file is read by Traefik, NOT interpolated by
+        # Compose — the label-land $$ doubling does not apply here.
+        replacement: https://smartcrops.fr/${1}
+        permanent: true

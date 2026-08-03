@@ -1,0 +1,221 @@
+# Production compose (Lot 2 of the deployment chantier, SMA-41).
+# Model: same-origin edge — Traefik terminates TLS on 80/443 (the ONLY
+# published ports in this file) and routes /api, /signin-google and /health
+# to the api, everything else to the static web image. Images are PULLED
+# from GHCR by ${IMAGE_TAG} — never built on the 1-vCPU VPS. Secrets come
+# from the VPS-only .env (chmod 600); every required variable fails fast by
+# name via ${VAR:?} — deliberate here (prod reads .env; the dev compose's
+# rejection of :? was about the override-file supply route and stays dev-only).
+# The dev docker-compose.yml is untouched by this file.
+
+# Two-plane model (R3): the edge and the static web never see the data
+# plane; only the api bridges both networks — a compromised internet-facing
+# process finds no route to the stores.
+networks:
+  proxy:
+    ipam:
+      config:
+        # The exact subnet ForwardedHeaders__KnownNetworks__0 trusts below:
+        # pinned so the proxy boundary is a contract, not a Docker default.
+        - subnet: 172.28.0.0/16
+  data:
+    # internal: true means NO published ports, NO data-plane egress, and NO
+    # edge-to-data attachment. Host-originated access (root on the box)
+    # remains possible, as with any bridge — and was always the assumed
+    # game-over of this model (R4: the comment stops overclaiming).
+    internal: true
+
+# SMA-348 (log half): every service gets bounded json-file rotation — the
+# rotation IS the purge the privacy policy's log claim rests on.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  # The edge process holds ZERO Docker privileges (R2): routing lives in the
+  # mounted file, so a Traefik compromise cannot reach the daemon —
+  # discovery is pointless for a fixed single-app stack.
+  traefik:
+    image: traefik:v3.3
+    command:
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.web.http.redirections.entrypoint.permanent=true
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL:?ACME_EMAIL is required (Let's Encrypt account email)}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      # SMA-348: access logs ON, JSON — the privacy policy's "we log
+      # requests" becomes true, and the x-logging rotation bounds them.
+      - --accesslog=true
+      - --accesslog.format=json
+      # /signin-google?code=&state= must never persist in logs (R2):
+      # RequestPath and RequestLine are dropped; RouterName, method, status,
+      # duration and ClientHost keep the operational signal — SMA-348 stays
+      # honored: logs exist, bounded, secret-free.
+      - --accesslog.fields.names.RequestPath=drop
+      - --accesslog.fields.names.RequestLine=drop
+      - --log.level=INFO
+      - --ping=true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Directory mount, not a single file (R4): a deploy that REPLACES the
+      # file would orphan a single-file inotify watch — the directory mount
+      # survives it (Traefik's own file-provider guidance).
+      - ./traefik:/etc/traefik/dynamic:ro
+      - letsencrypt:/letsencrypt
+    networks:
+      proxy:
+        # Reserved by contract (R4): inside the pinned /16, well outside
+        # typical dynamic allocation — this is the ONE address the api
+        # believes for X-Forwarded-* headers.
+        ipv4_address: 172.28.0.10
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    logging: *default-logging
+
+  api:
+    # Lowercase owner — GHCR requires it.
+    image: ghcr.io/alexandre-cerveau-audebeau/smartcrops-api:${IMAGE_TAG:?IMAGE_TAG is required (GHCR image tag to deploy)}
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # The DISCRETE database path the Lot 1 resolver waits for — no
+      # ConnectionStrings entry anywhere in this file: the builder quotes
+      # the generated password, and IsConfigured arms the fail-fast guards.
+      Database__Host: db
+      Database__Port: "5432"
+      Database__Name: smartcrops
+      Database__User: smartcrops
+      Database__Password: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required (database password, VPS .env only)}
+      DataProtection__KeysPath: /keys
+      # R4 — the /16 was NOT enough: web sits on the same proxy bridge as a
+      # DIRECT PEER, not a forwarding hop (ForwardLimit counts hops, not
+      # peers), so subnet-wide trust believed anyone on the plane, forged
+      # X-Forwarded-* included. Only the edge's reserved fixed address is
+      # believed now — the Lot 1 block validates single-IP KnownProxies
+      # natively. Do not "simplify" this back to the subnet.
+      ForwardedHeaders__KnownProxies__0: 172.28.0.10
+      Frontend__BaseUrl: https://smartcrops.fr
+      Cors__AllowedOrigins__0: https://smartcrops.fr
+      # appsettings.json ships a TWO-entry origins array; env overrides merge
+      # BY INDEX, so index 1 (a localhost dev origin) would survive into
+      # production without this line. Duplicate of __0 — harmless.
+      Cors__AllowedOrigins__1: https://smartcrops.fr
+      Jwt__Key: ${JWT_KEY:?JWT_KEY is required (token signing key, VPS .env only)}
+      Google__ClientId: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID is required}
+      Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:?GOOGLE_CLIENT_SECRET is required (VPS .env only)}
+      AdminSeed__Emails: ${ADMIN_SEED_EMAILS:-}
+      Typesense__ApiKey: ${TYPESENSE_API_KEY:?TYPESENSE_API_KEY is required (VPS .env only)}
+      Smtp__Password: ${SMTP_PASSWORD:?SMTP_PASSWORD is required (VPS .env only)}
+    volumes:
+      - dataprotection-keys:/keys
+    # The one service that bridges both planes (R3). gw_priority (R4):
+    # Docker picks the default route among attached networks, and the
+    # alphabetical accident (data < proxy) could route egress into the
+    # INTERNAL plane — killing Google OAuth and SMTP while the DB keeps
+    # answering, the nastiest partial failure to diagnose. Requires Docker
+    # Engine 28+ (the VPS gets a fresh Engine at Lot 4).
+    networks:
+      proxy:
+        gw_priority: 1
+      data: {}
+    healthcheck:
+      # bash /dev/tcp probe: aspnet:8.0 ships neither wget nor curl, and a
+      # derived image would break the pull-only model — bash is the one HTTP
+      # client the official image contains. 127.0.0.1 on purpose (no
+      # IPv6-first resolution surprise); /health answers the literal "ok".
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; grep -q \"ok\" <&3'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      db:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+
+  web:
+    image: ghcr.io/alexandre-cerveau-audebeau/smartcrops-web:${IMAGE_TAG:?IMAGE_TAG is required (GHCR image tag to deploy)}
+    networks: [proxy]
+    healthcheck:
+      # busybox wget exists in the alpine image — no probe gymnastics needed.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    logging: *default-logging
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: smartcrops
+      POSTGRES_USER: smartcrops
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required (database password, VPS .env only)}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    # NO ports: 5432 is never published, and the data network is
+    # internal: true (R3/R4): no published ports, no data-plane egress, no
+    # edge-to-data attachment — host-originated access (root on the box)
+    # remains possible, as with any bridge. The SMA-366 deferral (no SslMode
+    # on the discrete path yet) rests on exactly this scoping.
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartcrops -d smartcrops"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+
+  typesense:
+    image: typesense/typesense:30.2
+    environment:
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:?TYPESENSE_API_KEY is required (VPS .env only)}
+      TYPESENSE_DATA_DIR: /data
+    volumes:
+      - typesense-data:/data
+    networks: [data]
+    healthcheck:
+      # bash /dev/tcp probe: typesense:30.2 (Ubuntu 22.04) ships neither curl
+      # nor wget — a wget/curl test would NEVER pass and service_healthy would
+      # block the api forever; bash is what the official image contains
+      # (pull-only model, no derived image). retries 5: the engine transiently
+      # replays {"ok":false} while opening its store — a known cold-start
+      # artifact, not a failure; the grep token is the tight healthy form.
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8108; printf \"GET /health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; grep -q \"\\\"ok\\\":true\" <&3'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+
+volumes:
+  db-data:
+  typesense-data:
+  letsencrypt:
+  # SMA-367 — the DataProtection key ring is NOT encrypted at rest, as a
+  # DOCUMENTED PLATFORM CONTROL, not an oversight:
+  #   - the ring lives in this single-host named volume only; the host path
+  #     is root-owned (/var/lib/docker/volumes), and the only reader is the
+  #     api container's app user — the volume boundary IS the control;
+  #   - Lot 4 proves the permission posture on the VPS (root-only host dir,
+  #     no other container mounting it) as part of the deployment battery;
+  #   - the TRIGGER that flips this decision: the moment keys leave the
+  #     single root-controlled volume (a second host, an off-site backup of
+  #     the volume, a shared filesystem), at-rest encryption (SMA-367)
+  #     stops being deferrable and must land BEFORE that move ships.
+  dataprotection-keys:
