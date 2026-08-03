@@ -1,0 +1,104 @@
+# Rollback (Lot 3, SMA-41) — this file IS the ratified rollback: written,
+# operator-EXPLICIT, command-by-command, with a paper trail (the workflow
+# run records who rolled back to which tag, when, and whether it went
+# green). A red deploy never triggers this automatically — a human does.
+# Lot 4 runbook: the go-live battery executes this workflow ONCE against a
+# throwaway state before go-live — written-and-blank-tested, not just
+# written.
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "sha-<commit> to redeploy"
+        required: true
+      restore_dump:
+        description: "filename in /opt/smartcrops/backups to restore BEFORE restarting the api"
+        required: false
+        default: ""
+
+# Same group as CD: a rollback QUEUES behind an in-flight deploy instead of
+# racing its `compose up`.
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
+      RESTORE_DUMP_INPUT: ${{ inputs.restore_dump }}
+    steps:
+      - name: Validate operator inputs
+        run: |
+          # Both inputs travel into a remote command line below: constrain
+          # them to exact shapes so a crafted input can never become remote
+          # code.
+          [[ "$IMAGE_TAG_INPUT" =~ ^sha-[0-9a-f]{40}$ ]] \
+            || { echo "image_tag must be sha-<full 40-hex commit> (the tags CD publishes)"; exit 1; }
+          if [ -n "$RESTORE_DUMP_INPUT" ]; then
+            [[ "$RESTORE_DUMP_INPUT" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.sql\.gz$ ]] \
+              || { echo "restore_dump must be a bare .sql.gz filename (no path)"; exit 1; }
+          fi
+
+      - name: Set up SSH (pinned host key)
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          VPS_HOST_KEY: ${{ vars.VPS_HOST_KEY }}
+        run: |
+          # The host key is PINNED from repository configuration — never
+          # ssh-keyscan at run time: trust-on-first-use at rollback time
+          # would trust whoever answers the address.
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_HOST_KEY" >> ~/.ssh/known_hosts
+
+      - name: Redeploy the requested tag
+        run: |
+          # Same inline-IMAGE_TAG contract as cd.yml: the VPS .env is never
+          # rewritten; the operator names the exact image set to run.
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}" \
+            "cd /opt/smartcrops \
+             && IMAGE_TAG=$IMAGE_TAG_INPUT docker compose pull \
+             && IMAGE_TAG=$IMAGE_TAG_INPUT docker compose up -d"
+
+      - name: Restore the requested dump (only when asked)
+        if: inputs.restore_dump != ''
+        run: |
+          # The api STOPS FIRST so no writes race the restore; psql replays
+          # the plain dump transactionally enough for our single-writer
+          # model, then the api comes back up on the restored state.
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}" \
+            "cd /opt/smartcrops \
+             && docker compose stop api \
+             && zcat backups/$RESTORE_DUMP_INPUT | docker compose exec -T db psql -U smartcrops -d smartcrops \
+             && docker compose start api"
+
+      - name: Health gate (DNS-independent)
+        run: |
+          # Identical gate to cd.yml: the rollback is only DONE when the api
+          # container itself reports healthy on the rolled-back state.
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}" '
+            cd /opt/smartcrops
+            for i in $(seq 1 60); do
+              cid=$(docker compose ps -q api)
+              status=$(docker inspect --format "{{.State.Health.Status}}" "$cid" 2>/dev/null || echo unknown)
+              if [ "$status" = "healthy" ]; then
+                echo "api healthy after $((i * 5))s"
+                exit 0
+              fi
+              echo "attempt $i/60: api is ${status:-unknown}"
+              sleep 5
+            done
+            echo "HEALTH GATE FAILED: api never reached healthy"
+            docker compose ps
+            docker compose logs --tail 50 api
+            exit 1
+          '
