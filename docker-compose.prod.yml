@@ -19,8 +19,10 @@ networks:
         # pinned so the proxy boundary is a contract, not a Docker default.
         - subnet: 172.28.0.0/16
   data:
-    # No host access and no egress — nothing on the data plane ever needs
-    # the internet.
+    # internal: true means NO published ports, NO data-plane egress, and NO
+    # edge-to-data attachment. Host-originated access (root on the box)
+    # remains possible, as with any bridge — and was always the assumed
+    # game-over of this model (R4: the comment stops overclaiming).
     internal: true
 
 # SMA-348 (log half): every service gets bounded json-file rotation — the
@@ -38,7 +40,7 @@ services:
   traefik:
     image: traefik:v3.3
     command:
-      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --providers.file.directory=/etc/traefik/dynamic
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
@@ -64,9 +66,17 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      # Directory mount, not a single file (R4): a deploy that REPLACES the
+      # file would orphan a single-file inotify watch — the directory mount
+      # survives it (Traefik's own file-provider guidance).
+      - ./traefik:/etc/traefik/dynamic:ro
       - letsencrypt:/letsencrypt
-    networks: [proxy]
+    networks:
+      proxy:
+        # Reserved by contract (R4): inside the pinned /16, well outside
+        # typical dynamic allocation — this is the ONE address the api
+        # believes for X-Forwarded-* headers.
+        ipv4_address: 172.28.0.10
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 30s
@@ -89,9 +99,13 @@ services:
       Database__User: smartcrops
       Database__Password: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required (database password, VPS .env only)}
       DataProtection__KeysPath: /keys
-      # The proxy network subnet — the only plane where the Traefik→api hop
-      # exists (R3).
-      ForwardedHeaders__KnownNetworks__0: 172.28.0.0/16
+      # R4 — the /16 was NOT enough: web sits on the same proxy bridge as a
+      # DIRECT PEER, not a forwarding hop (ForwardLimit counts hops, not
+      # peers), so subnet-wide trust believed anyone on the plane, forged
+      # X-Forwarded-* included. Only the edge's reserved fixed address is
+      # believed now — the Lot 1 block validates single-IP KnownProxies
+      # natively. Do not "simplify" this back to the subnet.
+      ForwardedHeaders__KnownProxies__0: 172.28.0.10
       Frontend__BaseUrl: https://smartcrops.fr
       Cors__AllowedOrigins__0: https://smartcrops.fr
       # appsettings.json ships a TWO-entry origins array; env overrides merge
@@ -106,8 +120,16 @@ services:
       Smtp__Password: ${SMTP_PASSWORD:?SMTP_PASSWORD is required (VPS .env only)}
     volumes:
       - dataprotection-keys:/keys
-    # The one service that bridges both planes (R3).
-    networks: [proxy, data]
+    # The one service that bridges both planes (R3). gw_priority (R4):
+    # Docker picks the default route among attached networks, and the
+    # alphabetical accident (data < proxy) could route egress into the
+    # INTERNAL plane — killing Google OAuth and SMTP while the DB keeps
+    # answering, the nastiest partial failure to diagnose. Requires Docker
+    # Engine 28+ (the VPS gets a fresh Engine at Lot 4).
+    networks:
+      proxy:
+        gw_priority: 1
+      data: {}
     healthcheck:
       # bash /dev/tcp probe: aspnet:8.0 ships neither wget nor curl, and a
       # derived image would break the pull-only model — bash is the one HTTP
@@ -145,10 +167,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required (database password, VPS .env only)}
     volumes:
       - db-data:/var/lib/postgresql/data
-    # NO ports: 5432 never leaves the bridge network — and the data network
-    # is internal: true (R3): no host port, no egress, no lateral reach from
-    # the edge. The SMA-366 deferral (no SslMode on the discrete path yet)
-    # rests on exactly this.
+    # NO ports: 5432 is never published, and the data network is
+    # internal: true (R3/R4): no published ports, no data-plane egress, no
+    # edge-to-data attachment — host-originated access (root on the box)
+    # remains possible, as with any bridge. The SMA-366 deferral (no SslMode
+    # on the discrete path yet) rests on exactly this scoping.
     networks: [data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartcrops -d smartcrops"]
