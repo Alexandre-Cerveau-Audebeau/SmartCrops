@@ -8,13 +8,20 @@
 # rejection of :? was about the override-file supply route and stays dev-only).
 # The dev docker-compose.yml is untouched by this file.
 
+# Two-plane model (R3): the edge and the static web never see the data
+# plane; only the api bridges both networks — a compromised internet-facing
+# process finds no route to the stores.
 networks:
-  default:
+  proxy:
     ipam:
       config:
         # The exact subnet ForwardedHeaders__KnownNetworks__0 trusts below:
         # pinned so the proxy boundary is a contract, not a Docker default.
         - subnet: 172.28.0.0/16
+  data:
+    # No host access and no egress — nothing on the data plane ever needs
+    # the internet.
+    internal: true
 
 # SMA-348 (log half): every service gets bounded json-file rotation — the
 # rotation IS the purge the privacy policy's log claim rests on.
@@ -59,6 +66,7 @@ services:
     volumes:
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
       - letsencrypt:/letsencrypt
+    networks: [proxy]
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 30s
@@ -81,6 +89,8 @@ services:
       Database__User: smartcrops
       Database__Password: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required (database password, VPS .env only)}
       DataProtection__KeysPath: /keys
+      # The proxy network subnet — the only plane where the Traefik→api hop
+      # exists (R3).
       ForwardedHeaders__KnownNetworks__0: 172.28.0.0/16
       Frontend__BaseUrl: https://smartcrops.fr
       Cors__AllowedOrigins__0: https://smartcrops.fr
@@ -96,6 +106,8 @@ services:
       Smtp__Password: ${SMTP_PASSWORD:?SMTP_PASSWORD is required (VPS .env only)}
     volumes:
       - dataprotection-keys:/keys
+    # The one service that bridges both planes (R3).
+    networks: [proxy, data]
     healthcheck:
       # bash /dev/tcp probe: aspnet:8.0 ships neither wget nor curl, and a
       # derived image would break the pull-only model — bash is the one HTTP
@@ -115,6 +127,7 @@ services:
 
   web:
     image: ghcr.io/alexandre-cerveau-audebeau/smartcrops-web:${IMAGE_TAG:?IMAGE_TAG is required (GHCR image tag to deploy)}
+    networks: [proxy]
     healthcheck:
       # busybox wget exists in the alpine image — no probe gymnastics needed.
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ || exit 1"]
@@ -132,9 +145,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required (database password, VPS .env only)}
     volumes:
       - db-data:/var/lib/postgresql/data
-    # NO ports: 5432 never leaves the bridge network. The SMA-366 deferral
-    # (no SslMode on the discrete path yet) rests on exactly this — the
-    # database is reachable only by containers on this compose network.
+    # NO ports: 5432 never leaves the bridge network — and the data network
+    # is internal: true (R3): no host port, no egress, no lateral reach from
+    # the edge. The SMA-366 deferral (no SslMode on the discrete path yet)
+    # rests on exactly this.
+    networks: [data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartcrops -d smartcrops"]
       interval: 10s
@@ -150,6 +165,7 @@ services:
       TYPESENSE_DATA_DIR: /data
     volumes:
       - typesense-data:/data
+    networks: [data]
     healthcheck:
       # bash /dev/tcp probe: typesense:30.2 (Ubuntu 22.04) ships neither curl
       # nor wget — a wget/curl test would NEVER pass and service_healthy would
