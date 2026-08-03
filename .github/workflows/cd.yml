@@ -166,10 +166,12 @@ jobs:
         run: |
           # /opt/smartcrops is the canonical deployment dir: the compose file
           # under its canonical name, the traefik/ routing dir beside it, and
-          # backups/ for the pre-deploy dumps. backups/ is chmod 700
-          # (idempotent, R3): the dumps are a full-database export — no
-          # local user but the deploy user may list or read them.
-          ssh vps 'mkdir -p /opt/smartcrops/traefik /opt/smartcrops/backups && chmod 700 /opt/smartcrops/backups'
+          # backups/ for the pre-deploy dumps. mkdir -p obeys the remote
+          # umask — under the default 022 a fresh backups directory is born
+          # 0755, and if the step dies between mkdir and chmod, that window
+          # PERSISTS (R4). umask-before-mkdir makes the directory born
+          # private; the chmod keeps healing pre-existing ones.
+          ssh vps 'mkdir -p /opt/smartcrops/traefik && umask 077 && mkdir -p /opt/smartcrops/backups && chmod 700 /opt/smartcrops/backups'
 
       - name: Ship the compose and routing files
         run: |

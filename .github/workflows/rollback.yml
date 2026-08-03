@@ -118,6 +118,13 @@ jobs:
             # 0644, readable by ANY local user.
             umask 077
             cd /opt/smartcrops
+            # Normalize what we find (R4): umask only shapes files born
+            # LATER in this shell — a rollback can run without any recent
+            # deploy, so legacy 0644 snapshots would stay world-readable if
+            # only cd.yml healed them. Both workflows now self-correct
+            # independently.
+            chmod 700 backups
+            find backups -maxdepth 1 -type f -name '*.sql.gz' -exec chmod 600 -- {} +
             # (1) A typo'd filename fails LOUDLY before anything destructive.
             test -f "backups/$RESTORE_DUMP"
             # (2) The api stops first: no writes race anything below.
@@ -150,7 +157,22 @@ jobs:
             # never touches pre-deploy-* nor the dotted .tmp names, and the
             # incident's escape hatch is by construction the NEWEST
             # snapshot, which keep-7 always retains.
-            ls -1t backups/pre-rollback-*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm --
+            # R4 — the retention cannot eat the selected SOURCE: restoring
+            # FROM a pre-rollback snapshot is legitimate (the input regex
+            # allows it), and ranked 8th+ by date the R3 retention would
+            # have deleted it between the test -f and the zcat — by which
+            # point the database is already renamed and recreated: a
+            # self-inflicted red rollback. The exact-match exclusion
+            # (grep -vxF on the same constructed "backups/<name>" string
+            # the ls emits) protects the source while the pruning still
+            # runs on EVERY path, including failed replays — moving the
+            # retention after the replay would have reopened the
+            # unbounded-growth window on exactly the repeated-failure
+            # incidents it exists for. When RESTORE_DUMP is a pre-deploy-*
+            # file the grep matches nothing and passes the list through
+            # unchanged — harmless. Stated trade: when the source is old,
+            # up to 8 files survive one cycle (one protected + keep-7).
+            ls -1t backups/pre-rollback-*.sql.gz 2>/dev/null | grep -vxF "backups/$RESTORE_DUMP" | tail -n +8 | xargs -r rm --
             # (4) Terminate lingering connections: the api is stopped, this
             #     catches stragglers — ALTER DATABASE RENAME has no
             #     WITH (FORCE).
