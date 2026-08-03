@@ -4,6 +4,11 @@
 # Images are PULLED by the VPS, never built there (1 vCPU). A red deploy
 # NEVER rolls back automatically — rollback.yml is the operator's button.
 #
+# Template-injection hygiene (R1): no ${{ }} is ever inlined inside run:
+# shell text in this file — the expansion happens BEFORE the shell parses
+# anything, so every dynamic value routes through step-level env: and is
+# referenced as "$VAR", making the substitution boundary explicit.
+#
 # FIRST-RUN REALITIES — documented, deliberately NOT solved here:
 #   - Lot 4 runbook: the deploy public key must be installed in the VPS
 #     authorized_keys before the first run, or every SSH step below fails.
@@ -30,34 +35,86 @@ concurrency:
   group: cd-production
   cancel-in-progress: false
 
+# Token hygiene (R1): the workflow default is read-only; packages: write
+# lives ONLY on the build-and-push job — the deploy job opens an SSH
+# session and never touches GHCR.
 permissions:
   contents: read
-  packages: write
 
 jobs:
   build-and-push:
-    # workflow_run fires on failure and cancellation too: only a GREEN CI
-    # publishes anything.
-    if: github.event.workflow_run.conclusion == 'success'
+    # Trusted-push gate (R1): `conclusion == success` alone is NOT enough —
+    # ci.yml also runs on pull_request, and a fork PR can complete CI with
+    # head_branch 'develop'. Without the event + repository identity
+    # checks, this privileged workflow would check out untrusted code while
+    # holding deploy credentials and packages: write.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'develop'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      is_latest: ${{ steps.stale.outputs.is_latest }}
     steps:
+      - name: Reject stale runs (newest green CI wins)
+        id: stale
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # The cd-production concurrency group queues by COMPLETION time,
+          # not commit order: CI for old commit A finishing after newer
+          # commit B would otherwise regress production to A — silently and
+          # successfully. Only the newest green push run on develop deploys;
+          # every later step in this job and the whole deploy job gate on
+          # this output.
+          latest=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow CI \
+            --branch develop --event push --status success --limit 1 \
+            --json headSha --jq '.[0].headSha')
+          # An empty/null answer is an API anomaly, not a verdict: fail RED
+          # (re-runnable) instead of silently stranding a genuine deploy
+          # behind is_latest=false.
+          if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+            echo "could not determine the newest green CI run - failing loudly rather than guessing"
+            exit 1
+          fi
+          echo "newest green CI push run on develop: $latest"
+          echo "this run:                            $HEAD_SHA"
+          if [ "$latest" = "$HEAD_SHA" ]; then
+            echo "is_latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_latest=false" >> "$GITHUB_OUTPUT"
+            echo "stale run - a newer green commit exists; skipping every later step"
+          fi
+
       - name: Checkout the CI-validated commit
-        uses: actions/checkout@v4
+        if: steps.stale.outputs.is_latest == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # Pinned to the commit CI actually validated — checking out the
           # branch here would let a LATER push smuggle unvalidated code into
           # this deploy.
           ref: ${{ github.event.workflow_run.head_sha }}
+          # Nothing in this job pushes commits: do not leave the scoped
+          # token sitting in .git/config for later steps to read.
+          persist-credentials: false
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        if: steps.stale.outputs.is_latest == 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push the api image
-        uses: docker/build-push-action@v6
+        if: steps.stale.outputs.is_latest == 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: src/backend
           file: src/backend/SmartCrops.Api/Dockerfile
@@ -65,7 +122,8 @@ jobs:
           tags: ghcr.io/alexandre-cerveau-audebeau/smartcrops-api:sha-${{ github.event.workflow_run.head_sha }}
 
       - name: Build and push the web image
-        uses: docker/build-push-action@v6
+        if: steps.stale.outputs.is_latest == 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: src/frontend
           file: src/frontend/Dockerfile.prod
@@ -73,97 +131,97 @@ jobs:
           tags: ghcr.io/alexandre-cerveau-audebeau/smartcrops-web:sha-${{ github.event.workflow_run.head_sha }}
 
   deploy:
-    # Skipped transitively when build-and-push is skipped (red CI).
+    # Skipped transitively on red/untrusted CI (build-and-push guard) and
+    # explicitly on stale runs (the is_latest output).
     needs: build-and-push
+    if: needs.build-and-push.outputs.is_latest == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout the CI-validated commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # Same pin as build-and-push: the compose and routing files shipped
           # below come from the exact commit whose images were just built.
           ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
 
-      - name: Set up SSH (pinned host key)
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          VPS_HOST_KEY: ${{ vars.VPS_HOST_KEY }}
-        run: |
-          # The host key is PINNED from repository configuration — never
-          # ssh-keyscan at run time: trust-on-first-use at deploy time would
-          # trust whoever answers the address.
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          printf '%s\n' "$VPS_HOST_KEY" >> ~/.ssh/known_hosts
+      - name: Bootstrap SSH (shared action, pinned host key)
+        uses: ./.github/actions/ssh-health-gate
+        with:
+          mode: bootstrap
+          ssh_key: ${{ secrets.DEPLOY_SSH_KEY }}
+          host_key: ${{ vars.VPS_HOST_KEY }}
+          vps_user: ${{ vars.VPS_USER }}
+          vps_host: ${{ vars.VPS_HOST }}
 
       - name: Ensure the deployment layout exists
         run: |
           # /opt/smartcrops is the canonical deployment dir: the compose file
           # under its canonical name, the traefik/ routing dir beside it, and
           # backups/ for the pre-deploy dumps.
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}" \
-            'mkdir -p /opt/smartcrops/traefik /opt/smartcrops/backups'
+          ssh vps 'mkdir -p /opt/smartcrops/traefik /opt/smartcrops/backups'
 
       - name: Ship the compose and routing files
         run: |
           # docker-compose.prod.yml lands as docker-compose.yml so the VPS
           # runs PLAIN `docker compose` — zero -f on the VPS, ever (the
           # project's standing rule; the file rename is how it holds).
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
-            docker-compose.prod.yml "${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}:/opt/smartcrops/docker-compose.yml"
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
-            traefik/dynamic.yml "${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}:/opt/smartcrops/traefik/dynamic.yml"
+          scp docker-compose.prod.yml vps:/opt/smartcrops/docker-compose.yml
+          scp traefik/dynamic.yml vps:/opt/smartcrops/traefik/dynamic.yml
 
       - name: Guarded pre-deploy dump (the ratified rollback floor)
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          # Dump ONLY when the db container is already running: the guard is
-          # what makes the FIRST deploy (no db yet) pass cleanly. This dump
-          # is the rollback floor rollback.yml restores from. Retention:
-          # newest 7 kept, older deleted.
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}" '
+          # pipefail (R1): without it the pipe reports gzip's status — a
+          # failed pg_dump would masquerade as the newest "good" backup and
+          # the retention line would eat real ones. The dump is written to a
+          # dotted .tmp name and only renamed (atomic mv) to a restorable
+          # name after success — a half-written dump never bears one; the
+          # retention runs AFTER the rename. The db-running guard keeps the
+          # FIRST deploy (no db yet) green.
+          # Remote-script discipline (R1): the body is ONE brace group so
+          # bash parses it fully before executing — `docker compose exec`
+          # pumps stdin by default (-T only drops the TTY) and would
+          # otherwise drain the yet-unread script lines into the container;
+          # </dev/null on the exec states the same intent explicitly.
+          # IMAGE_TAG rides the remote env because compose interpolates the
+          # prod file's ${IMAGE_TAG:?} on EVERY subcommand (`ps` and `exec`
+          # included) — any non-empty value satisfies it; exec targets the
+          # RUNNING containers by label, not by the image: field.
+          ssh vps "HEAD_SHA=$HEAD_SHA IMAGE_TAG=sha-$HEAD_SHA bash -s" <<'REMOTE'
+          {
+            set -euo pipefail
             cd /opt/smartcrops
-            if docker compose ps --status running --services | grep -qx db; then
-              docker compose exec -T db pg_dump -U smartcrops smartcrops | gzip \
-                > "backups/pre-deploy-${{ github.event.workflow_run.head_sha }}-$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
+            running=$(docker compose ps --status running --services)
+            if printf '%s\n' "$running" | grep -qx db; then
+              ts=$(date -u +%Y%m%dT%H%M%SZ)
+              tmp="backups/.pre-deploy-${HEAD_SHA}-${ts}.sql.gz.tmp"
+              final="backups/pre-deploy-${HEAD_SHA}-${ts}.sql.gz"
+              docker compose exec -T db pg_dump -U smartcrops smartcrops </dev/null | gzip > "$tmp"
+              mv "$tmp" "$final"
               ls -1t backups/pre-deploy-*.sql.gz | tail -n +8 | xargs -r rm
             else
               echo "db not running - first deploy, nothing to dump"
             fi
-          '
+          }
+          REMOTE
 
       - name: Deploy the freshly built images
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           # IMAGE_TAG is supplied INLINE: shell env beats .env in compose
           # precedence, so the VPS .env keeps holding ONLY its secret values
-          # and is never rewritten by a deploy.
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}" \
-            'cd /opt/smartcrops \
-             && IMAGE_TAG=sha-${{ github.event.workflow_run.head_sha }} docker compose pull \
-             && IMAGE_TAG=sha-${{ github.event.workflow_run.head_sha }} docker compose up -d --remove-orphans'
+          # and is never rewritten by a deploy. The flip side of that
+          # contract: EVERY remote compose invocation in this pipeline must
+          # carry IMAGE_TAG itself — interpolation of ${IMAGE_TAG:?} runs
+          # for ps/stop/exec too, not just pull/up.
+          ssh vps "cd /opt/smartcrops && IMAGE_TAG=sha-$HEAD_SHA docker compose pull && IMAGE_TAG=sha-$HEAD_SHA docker compose up -d --remove-orphans"
 
-      - name: Health gate (DNS-independent)
-        run: |
-          # Wait for the api CONTAINER to report healthy — up to 60 x 5 s.
-          # Deliberately DNS-independent: the public URL is not assumed to
-          # resolve yet. On timeout the run goes RED with the evidence
-          # printed; rollback stays a HUMAN decision (rollback.yml), never
-          # an automatic one.
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}" '
-            cd /opt/smartcrops
-            for i in $(seq 1 60); do
-              cid=$(docker compose ps -q api)
-              status=$(docker inspect --format "{{.State.Health.Status}}" "$cid" 2>/dev/null || echo unknown)
-              if [ "$status" = "healthy" ]; then
-                echo "api healthy after $((i * 5))s"
-                exit 0
-              fi
-              echo "attempt $i/60: api is ${status:-unknown}"
-              sleep 5
-            done
-            echo "HEALTH GATE FAILED: api never reached healthy"
-            docker compose ps
-            docker compose logs --tail 50 api
-            exit 1
-          '
+      - name: Health gate (shared action, DNS-independent)
+        uses: ./.github/actions/ssh-health-gate
+        with:
+          mode: health-gate
+          image_tag: sha-${{ github.event.workflow_run.head_sha }}

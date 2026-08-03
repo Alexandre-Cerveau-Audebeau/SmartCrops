@@ -5,6 +5,11 @@
 # Lot 4 runbook: the go-live battery executes this workflow ONCE against a
 # throwaway state before go-live — written-and-blank-tested, not just
 # written.
+#
+# Template-injection hygiene (R1): no ${{ }} is ever inlined inside run:
+# shell text in this file — the expansion happens BEFORE the shell parses
+# anything, so every dynamic value routes through env: and is referenced
+# as "$VAR", making the substitution boundary explicit.
 name: Rollback
 
 on:
@@ -18,8 +23,12 @@ on:
         required: false
         default: ""
 
-# Same group as CD: a rollback QUEUES behind an in-flight deploy instead of
-# racing its `compose up`.
+# Same group as CD: a rollback never RACES an in-flight deploy's
+# `compose up`. Honest limit (GitHub semantics): a concurrency group keeps
+# at most ONE pending run — cancel-in-progress only protects the RUNNING
+# run, so a newer CD run entering the queue CANCELS a still-pending
+# rollback. Operator reality: watch the dispatched run until it actually
+# runs; re-dispatch if it was displaced.
 concurrency:
   group: cd-production
   cancel-in-progress: false
@@ -30,6 +39,11 @@ permissions:
 jobs:
   rollback:
     runs-on: ubuntu-latest
+    # This job shares the cd-production queue: a hung rollback would block
+    # future deploys exactly when something is already broken — so the job
+    # is bounded here and every SSH call carries liveness options via the
+    # shared bootstrap's ~/.ssh/config.
+    timeout-minutes: 20
     env:
       IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
       RESTORE_DUMP_INPUT: ${{ inputs.restore_dump }}
@@ -46,59 +60,67 @@ jobs:
               || { echo "restore_dump must be a bare .sql.gz filename (no path)"; exit 1; }
           fi
 
-      - name: Set up SSH (pinned host key)
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          VPS_HOST_KEY: ${{ vars.VPS_HOST_KEY }}
-        run: |
-          # The host key is PINNED from repository configuration — never
-          # ssh-keyscan at run time: trust-on-first-use at rollback time
-          # would trust whoever answers the address.
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          printf '%s\n' "$VPS_HOST_KEY" >> ~/.ssh/known_hosts
+      - name: Checkout (loads the shared SSH action)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # The composite action lives in this repository — the rollback
+          # needs a checkout only to load it. Nothing here pushes commits.
+          persist-credentials: false
 
-      - name: Redeploy the requested tag
-        run: |
-          # Same inline-IMAGE_TAG contract as cd.yml: the VPS .env is never
-          # rewritten; the operator names the exact image set to run.
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}" \
-            "cd /opt/smartcrops \
-             && IMAGE_TAG=$IMAGE_TAG_INPUT docker compose pull \
-             && IMAGE_TAG=$IMAGE_TAG_INPUT docker compose up -d"
+      - name: Bootstrap SSH (shared action, pinned host key)
+        uses: ./.github/actions/ssh-health-gate
+        with:
+          mode: bootstrap
+          ssh_key: ${{ secrets.DEPLOY_SSH_KEY }}
+          host_key: ${{ vars.VPS_HOST_KEY }}
+          vps_user: ${{ vars.VPS_USER }}
+          vps_host: ${{ vars.VPS_HOST }}
 
-      - name: Restore the requested dump (only when asked)
+      - name: Restore the requested dump (BEFORE the api ever starts)
         if: inputs.restore_dump != ''
         run: |
-          # The api STOPS FIRST so no writes race the restore; psql replays
-          # the plain dump transactionally enough for our single-writer
-          # model, then the api comes back up on the restored state.
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}" \
-            "cd /opt/smartcrops \
-             && docker compose stop api \
-             && zcat backups/$RESTORE_DUMP_INPUT | docker compose exec -T db psql -U smartcrops -d smartcrops \
-             && docker compose start api"
-
-      - name: Health gate (DNS-independent)
-        run: |
-          # Identical gate to cd.yml: the rollback is only DONE when the api
-          # container itself reports healthy on the rolled-back state.
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}" '
+          # The restore REPLACES state, in the right order (R1): a plain-SQL
+          # dump replayed into a POPULATED database is conflict soup, so the
+          # database is recreated empty first. The DROP runs against the
+          # postgres maintenance database — you cannot drop the database you
+          # are connected to. WITH (FORCE) kills lingering connections
+          # (PG16). ON_ERROR_STOP makes psql die on the FIRST error instead
+          # of green-washing a broken replay, and pipefail + test -f make a
+          # typo'd filename fail LOUDLY, never a silent no-op.
+          # Remote-script discipline (R1): the body is ONE brace group so
+          # bash parses it fully before executing — `docker compose exec`
+          # pumps stdin by default (-T only drops the TTY); as sequential
+          # simple commands, the DROP exec would drain the yet-unread
+          # CREATE and zcat lines into the container: database dropped,
+          # never recreated, step GREEN. </dev/null on both -c execs states
+          # the same intent explicitly (the zcat exec's stdin IS the pipe).
+          # IMAGE_TAG rides the remote env because compose interpolates the
+          # prod file's ${IMAGE_TAG:?} on EVERY subcommand (`stop` and
+          # `exec` included).
+          ssh vps "RESTORE_DUMP=$RESTORE_DUMP_INPUT IMAGE_TAG=$IMAGE_TAG_INPUT bash -s" <<'REMOTE'
+          {
+            set -euo pipefail
             cd /opt/smartcrops
-            for i in $(seq 1 60); do
-              cid=$(docker compose ps -q api)
-              status=$(docker inspect --format "{{.State.Health.Status}}" "$cid" 2>/dev/null || echo unknown)
-              if [ "$status" = "healthy" ]; then
-                echo "api healthy after $((i * 5))s"
-                exit 0
-              fi
-              echo "attempt $i/60: api is ${status:-unknown}"
-              sleep 5
-            done
-            echo "HEALTH GATE FAILED: api never reached healthy"
-            docker compose ps
-            docker compose logs --tail 50 api
-            exit 1
-          '
+            test -f "backups/$RESTORE_DUMP"
+            docker compose stop api
+            docker compose exec -T db psql -v ON_ERROR_STOP=1 -U smartcrops -d postgres -c 'DROP DATABASE smartcrops WITH (FORCE);' </dev/null
+            docker compose exec -T db psql -v ON_ERROR_STOP=1 -U smartcrops -d postgres -c 'CREATE DATABASE smartcrops OWNER smartcrops;' </dev/null
+            zcat "backups/$RESTORE_DUMP" | docker compose exec -T db psql -v ON_ERROR_STOP=1 -U smartcrops -d smartcrops
+          }
+          REMOTE
+
+      - name: Deploy the requested tag
+        run: |
+          # Runs AFTER the restore: the api starts ONCE, on the restored
+          # state (the previous order started it against the unrecovered
+          # database). When no restore was requested this is the straight
+          # pull+up path, unchanged. Same inline-IMAGE_TAG contract as
+          # cd.yml: the VPS .env is never rewritten; the operator names the
+          # exact image set to run.
+          ssh vps "cd /opt/smartcrops && IMAGE_TAG=$IMAGE_TAG_INPUT docker compose pull && IMAGE_TAG=$IMAGE_TAG_INPUT docker compose up -d"
+
+      - name: Health gate (shared action, DNS-independent)
+        uses: ./.github/actions/ssh-health-gate
+        with:
+          mode: health-gate
+          image_tag: ${{ inputs.image_tag }}

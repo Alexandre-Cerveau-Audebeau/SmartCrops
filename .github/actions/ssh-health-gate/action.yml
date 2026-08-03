@@ -1,0 +1,131 @@
+# One SSH truth (Lot 3 R1): cd.yml and rollback.yml carried byte-identical
+# copies of the SSH bootstrap and the health-gate loop — one forgotten fix
+# away from drifting (this very round's fixes would have had to land twice).
+# Both behaviors live here now, selected by `mode`.
+name: SSH bootstrap and health gate
+description: >-
+  Pinned-host-key SSH bootstrap (liveness defaults centralised in
+  ~/.ssh/config so every later ssh/scp call inherits them) and the
+  api-container health gate shared by cd.yml and rollback.yml.
+inputs:
+  mode:
+    description: "'bootstrap' installs the key, pinned host key and config; 'health-gate' waits for the api container"
+    required: true
+  image_tag:
+    description: >-
+      IMAGE_TAG for remote compose invocations (health-gate mode only) —
+      compose interpolates the prod file's ${IMAGE_TAG:?} on EVERY
+      subcommand (ps included), so even a read-only call needs a value
+    required: false
+    default: ""
+  ssh_key:
+    description: Private deploy key (bootstrap mode only)
+    required: false
+    default: ""
+  host_key:
+    description: Pinned known_hosts line for the VPS (bootstrap mode only)
+    required: false
+    default: ""
+  vps_user:
+    description: SSH user on the VPS (bootstrap mode only)
+    required: false
+    default: ""
+  vps_host:
+    description: VPS address (bootstrap mode only)
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Validate mode
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+      run: |
+        # Both behavior steps are gated on the mode value: a typo'd mode
+        # would otherwise skip BOTH and conclude GREEN — a deploy would then
+        # run with no health verification at all. Fail loudly instead.
+        case "$MODE" in
+          bootstrap|health-gate) ;;
+          *) echo "unknown mode '$MODE' (expected 'bootstrap' or 'health-gate')"; exit 1 ;;
+        esac
+
+    - name: Bootstrap SSH (pinned host key, liveness defaults)
+      if: inputs.mode == 'bootstrap'
+      shell: bash
+      env:
+        SSH_KEY: ${{ inputs.ssh_key }}
+        HOST_KEY: ${{ inputs.host_key }}
+        VPS_USER: ${{ inputs.vps_user }}
+        VPS_HOST: ${{ inputs.vps_host }}
+      run: |
+        # The host key is PINNED from repository configuration — never
+        # ssh-keyscan at run time: trust-on-first-use at deploy time would
+        # trust whoever answers the address. The liveness options live in
+        # ~/.ssh/config so EVERY later ssh/scp call inherits them — a hung
+        # session cannot silently block the shared cd-production queue.
+        if [ -z "$SSH_KEY" ] || [ -z "$HOST_KEY" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_HOST" ]; then
+          echo "bootstrap mode requires ssh_key, host_key, vps_user and vps_host"
+          exit 1
+        fi
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        printf '%s\n' "$HOST_KEY" >> ~/.ssh/known_hosts
+        {
+          echo "Host vps"
+          echo "  HostName $VPS_HOST"
+          echo "  User $VPS_USER"
+          echo "  IdentityFile ~/.ssh/deploy_key"
+          echo "  IdentitiesOnly yes"
+          echo "  StrictHostKeyChecking yes"
+          echo "  ConnectTimeout 10"
+          echo "  ServerAliveInterval 15"
+          echo "  ServerAliveCountMax 3"
+        } >> ~/.ssh/config
+        chmod 600 ~/.ssh/config
+
+    - name: Health gate (DNS-independent)
+      if: inputs.mode == 'health-gate'
+      shell: bash
+      env:
+        IMAGE_TAG: ${{ inputs.image_tag }}
+      run: |
+        # Wait for the api CONTAINER to report healthy — up to 60 x 5 s.
+        # Deliberately DNS-independent: the public URL is not assumed to
+        # resolve yet. On timeout this exits 1 with the evidence printed;
+        # rolling back stays a HUMAN decision, never an automatic one.
+        # IMAGE_TAG rides the remote env because compose interpolates the
+        # prod file's ${IMAGE_TAG:?} on EVERY subcommand — `ps` and `logs`
+        # would fail without a value, whatever tag the containers run.
+        # The whole remote body is a brace group: bash parses it fully
+        # before executing, so no later line can be drained by a command
+        # that pumps stdin.
+        if [ -z "$IMAGE_TAG" ]; then
+          echo "health-gate mode requires image_tag"
+          exit 1
+        fi
+        ssh vps "IMAGE_TAG=$IMAGE_TAG bash -s" <<'REMOTE'
+        {
+          # No set -e here ON PURPOSE: the loop is failure-tolerant per
+          # attempt (a transient compose error counts as one unhealthy
+          # attempt and is retried); the explicit exit 0 / exit 1 below are
+          # the only outcomes.
+          cd /opt/smartcrops || exit 1
+          for i in $(seq 1 60); do
+            cid=$(docker compose ps -q api 2>/dev/null || true)
+            status=$(docker inspect --format "{{.State.Health.Status}}" "$cid" 2>/dev/null || echo unknown)
+            if [ "$status" = "healthy" ]; then
+              echo "api healthy after $((i * 5))s"
+              exit 0
+            fi
+            echo "attempt $i/60: api is ${status:-unknown}"
+            sleep 5
+          done
+          echo "HEALTH GATE FAILED: api never reached healthy"
+          docker compose ps
+          docker compose logs --tail 50 api
+          exit 1
+        }
+        REMOTE
