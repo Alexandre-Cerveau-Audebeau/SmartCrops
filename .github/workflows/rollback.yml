@@ -134,14 +134,25 @@ jobs:
             #     kills the rollback BEFORE anything destructive, and the
             #     file outlives even a "successful restore of the wrong
             #     dump".
+            #     The collision corner is named and CLOSED (R6): a
+            #     same-second name collision would have made the mv
+            #     OVERWRITE the selected restore source and turned the
+            #     restore into a silent no-op — the PID suffix makes the
+            #     name unique per run (same second AND same PID cannot
+            #     happen across runs), and the loud existence guard removes
+            #     the CLASS, not the instance.
             # Stale temps from previous FAILED rollbacks are swept before
             # dumping (R3) — scoped to THIS site's dotted prefix; never the
             # deploy site's, never final files.
             rm -f -- backups/.pre-rollback-*.sql.gz.tmp
             snap_start=$(date +%s)
-            ts=$(date -u +%Y%m%dT%H%M%SZ)
+            ts="$(date -u +%Y%m%dT%H%M%SZ)-$$"
             snap_tmp="backups/.pre-rollback-${ts}.sql.gz.tmp"
             snap="backups/pre-rollback-${ts}.sql.gz"
+            if [[ -e "$snap" ]]; then
+              echo "pre-rollback snapshot already exists: $snap" >&2
+              exit 1
+            fi
             # EXIT-trap lifecycle (R3): registered AFTER snap_tmp is set.
             # Single quotes are correct — "$snap_tmp" resolves at FIRE
             # time, and the value never changes afterwards.
