@@ -72,6 +72,9 @@ runs:
         chmod 700 ~/.ssh
         printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
         chmod 600 ~/.ssh/deploy_key
+        # The >> appends assume an EPHEMERAL runner (always true on
+        # ubuntu-latest, where these files start absent); a self-hosted
+        # reuse would want idempotence here instead (R2 honesty note).
         printf '%s\n' "$HOST_KEY" >> ~/.ssh/known_hosts
         {
           echo "Host vps"
@@ -80,6 +83,10 @@ runs:
           echo "  IdentityFile ~/.ssh/deploy_key"
           echo "  IdentitiesOnly yes"
           echo "  StrictHostKeyChecking yes"
+          # BatchMode: a failed key auth fails INSTANTLY instead of idling
+          # on a prompt no runner will ever answer until timeout-minutes
+          # eats the budget (R2).
+          echo "  BatchMode yes"
           echo "  ConnectTimeout 10"
           echo "  ServerAliveInterval 15"
           echo "  ServerAliveCountMax 3"
@@ -102,10 +109,19 @@ runs:
         # The whole remote body is a brace group: bash parses it fully
         # before executing, so no later line can be drained by a command
         # that pumps stdin.
+        # The gate assumes the bootstrap already ran in this job — make the
+        # implicit contract a LOUD error instead of a cryptic "Could not
+        # resolve hostname vps" ssh failure (R2).
+        grep -qx "Host vps" ~/.ssh/config 2>/dev/null \
+          || { echo "health-gate called without a prior bootstrap (no 'Host vps' in ~/.ssh/config)"; exit 1; }
         if [ -z "$IMAGE_TAG" ]; then
           echo "health-gate mode requires image_tag"
           exit 1
         fi
+        # Today's two callers pre-validate their tag, but this action is
+        # the reusable surface — future callers inherit the guard (R2).
+        [[ "$IMAGE_TAG" =~ ^sha-[0-9a-f]{40}$ ]] \
+          || { echo "image_tag must be sha-<full 40-hex commit> (got '$IMAGE_TAG')"; exit 1; }
         ssh vps "IMAGE_TAG=$IMAGE_TAG bash -s" <<'REMOTE'
         {
           # No set -e here ON PURPOSE: the loop is failure-tolerant per

@@ -42,8 +42,11 @@ jobs:
     # This job shares the cd-production queue: a hung rollback would block
     # future deploys exactly when something is already broken — so the job
     # is bounded here and every SSH call carries liveness options via the
-    # shared bootstrap's ~/.ssh/config.
-    timeout-minutes: 20
+    # shared bootstrap's ~/.ssh/config. Budget honesty (R2): at today's
+    # data size the snapshot + restore are seconds, so 30 minutes is
+    # headroom, not hope — and a mid-restore death is recoverable BY
+    # DESIGN since R2 (smartcrops_old + the pre-rollback snapshot file).
+    timeout-minutes: 30
     env:
       IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
       RESTORE_DUMP_INPUT: ${{ inputs.restore_dump }}
@@ -79,33 +82,67 @@ jobs:
       - name: Restore the requested dump (BEFORE the api ever starts)
         if: inputs.restore_dump != ''
         run: |
-          # The restore REPLACES state, in the right order (R1): a plain-SQL
-          # dump replayed into a POPULATED database is conflict soup, so the
-          # database is recreated empty first. The DROP runs against the
-          # postgres maintenance database — you cannot drop the database you
-          # are connected to. WITH (FORCE) kills lingering connections
-          # (PG16). ON_ERROR_STOP makes psql die on the FIRST error instead
-          # of green-washing a broken replay, and pipefail + test -f make a
-          # typo'd filename fail LOUDLY, never a silent no-op.
+          # The restore keeps an ESCAPE HATCH (R2, both reviewers' layers
+          # combined): a plain-SQL dump replayed into a POPULATED database
+          # is conflict soup, so the replay targets a FRESH database — but
+          # the old state is never destroyed until the replay fully
+          # succeeded. Order: snapshot → terminate → rename away → create
+          # fresh → single-transaction replay → only then drop the old.
+          # ON_ERROR_STOP makes psql die on the FIRST error instead of
+          # green-washing; pipefail + test -f make a typo'd filename fail
+          # LOUDLY, never a silent no-op.
+          # Maintenance-db rule: every administrative statement (terminate,
+          # rename, create, drop) runs against the postgres maintenance
+          # database — you cannot rename or drop the database you are
+          # connected to; only the replay itself connects to smartcrops.
+          # RECOVERY PATH (explicit): if the job dies between the rename
+          # and the final drop, smartcrops_old holds the pre-rollback state
+          # — manual recovery is ONE statement from the maintenance db:
+          #   ALTER DATABASE smartcrops_old RENAME TO smartcrops;
+          # (drop the half-restored smartcrops first if it exists). A
+          # leftover smartcrops_old from a previous failed rollback blocks
+          # the rename LOUDLY — inspect it, then drop it manually; never
+          # auto-delete an escape hatch.
           # Remote-script discipline (R1): the body is ONE brace group so
           # bash parses it fully before executing — `docker compose exec`
-          # pumps stdin by default (-T only drops the TTY); as sequential
-          # simple commands, the DROP exec would drain the yet-unread
-          # CREATE and zcat lines into the container: database dropped,
-          # never recreated, step GREEN. </dev/null on both -c execs states
-          # the same intent explicitly (the zcat exec's stdin IS the pipe).
-          # IMAGE_TAG rides the remote env because compose interpolates the
-          # prod file's ${IMAGE_TAG:?} on EVERY subcommand (`stop` and
-          # `exec` included).
+          # pumps stdin by default (-T only drops the TTY) and would drain
+          # the yet-unread lines into the container. </dev/null on every
+          # -c exec states the same intent (the zcat exec's stdin IS the
+          # pipe). IMAGE_TAG rides the remote env because compose
+          # interpolates ${IMAGE_TAG:?} on EVERY subcommand.
           ssh vps "RESTORE_DUMP=$RESTORE_DUMP_INPUT IMAGE_TAG=$IMAGE_TAG_INPUT bash -s" <<'REMOTE'
           {
             set -euo pipefail
             cd /opt/smartcrops
+            # (1) A typo'd filename fails LOUDLY before anything destructive.
             test -f "backups/$RESTORE_DUMP"
+            # (2) The api stops first: no writes race anything below.
             docker compose stop api
-            docker compose exec -T db psql -v ON_ERROR_STOP=1 -U smartcrops -d postgres -c 'DROP DATABASE smartcrops WITH (FORCE);' </dev/null
+            # (3) PRE-ROLLBACK SNAPSHOT — same discipline as the pre-deploy
+            #     dump (pipefail + dotted .tmp + atomic mv): a failed dump
+            #     kills the rollback BEFORE anything destructive, and the
+            #     file outlives even a "successful restore of the wrong
+            #     dump".
+            snap_start=$(date +%s)
+            ts=$(date -u +%Y%m%dT%H%M%SZ)
+            snap_tmp="backups/.pre-rollback-${ts}.sql.gz.tmp"
+            snap="backups/pre-rollback-${ts}.sql.gz"
+            docker compose exec -T db pg_dump -U smartcrops smartcrops </dev/null | gzip > "$snap_tmp"
+            mv "$snap_tmp" "$snap"
+            echo "pre-rollback snapshot ${snap} took $(( $(date +%s) - snap_start ))s"
+            # (4) Terminate lingering connections: the api is stopped, this
+            #     catches stragglers — ALTER DATABASE RENAME has no
+            #     WITH (FORCE).
+            docker compose exec -T db psql -v ON_ERROR_STOP=1 -U smartcrops -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='smartcrops';" </dev/null
+            # (5) The old state SURVIVES every mid-failure from here on.
+            docker compose exec -T db psql -v ON_ERROR_STOP=1 -U smartcrops -d postgres -c 'ALTER DATABASE smartcrops RENAME TO smartcrops_old;' </dev/null
+            # (6) Fresh empty database for the replay.
             docker compose exec -T db psql -v ON_ERROR_STOP=1 -U smartcrops -d postgres -c 'CREATE DATABASE smartcrops OWNER smartcrops;' </dev/null
-            zcat "backups/$RESTORE_DUMP" | docker compose exec -T db psql -v ON_ERROR_STOP=1 -U smartcrops -d smartcrops
+            # (7) -1 = single transaction: a failed replay rolls back
+            #     WHOLESALE, never partial data.
+            zcat "backups/$RESTORE_DUMP" | docker compose exec -T db psql -1 -v ON_ERROR_STOP=1 -U smartcrops -d smartcrops
+            # (8) Only after a fully successful replay does the old state go.
+            docker compose exec -T db psql -v ON_ERROR_STOP=1 -U smartcrops -d postgres -c 'DROP DATABASE smartcrops_old;' </dev/null
           }
           REMOTE
 
@@ -123,4 +160,6 @@ jobs:
         uses: ./.github/actions/ssh-health-gate
         with:
           mode: health-gate
-          image_tag: ${{ inputs.image_tag }}
+          # The VALIDATED env var, not the raw input expression: it is
+          # visually traceable to the validation step above (R2).
+          image_tag: ${{ env.IMAGE_TAG_INPUT }}

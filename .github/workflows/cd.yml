@@ -55,9 +55,16 @@ jobs:
       github.event.workflow_run.head_branch == 'develop'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # This explicit block REPLACES the default set — every unlisted scope
+    # drops to none. R2: R1's least-privilege scoping silently starved its
+    # own sibling fix (`gh run list` 403'd without actions: read, and every
+    # deploy died red at the stale gate). Scopes: contents for the
+    # checkout, packages to push GHCR, actions so the stale gate can query
+    # workflow runs.
     permissions:
       contents: read
       packages: write
+      actions: read
     outputs:
       is_latest: ${{ steps.stale.outputs.is_latest }}
     steps:
@@ -196,11 +203,15 @@ jobs:
             cd /opt/smartcrops
             running=$(docker compose ps --status running --services)
             if printf '%s\n' "$running" | grep -qx db; then
+              dump_start=$(date +%s)
               ts=$(date -u +%Y%m%dT%H%M%SZ)
               tmp="backups/.pre-deploy-${HEAD_SHA}-${ts}.sql.gz.tmp"
               final="backups/pre-deploy-${HEAD_SHA}-${ts}.sql.gz"
               docker compose exec -T db pg_dump -U smartcrops smartcrops </dev/null | gzip > "$tmp"
               mv "$tmp" "$final"
+              # Duration on the record: a future dump-approaching-the-job-
+              # timeout diagnosis should read one log line, not re-derive it.
+              echo "pre-deploy dump ${final} took $(( $(date +%s) - dump_start ))s"
               ls -1t backups/pre-deploy-*.sql.gz | tail -n +8 | xargs -r rm
             else
               echo "db not running - first deploy, nothing to dump"
