@@ -166,8 +166,10 @@ jobs:
         run: |
           # /opt/smartcrops is the canonical deployment dir: the compose file
           # under its canonical name, the traefik/ routing dir beside it, and
-          # backups/ for the pre-deploy dumps.
-          ssh vps 'mkdir -p /opt/smartcrops/traefik /opt/smartcrops/backups'
+          # backups/ for the pre-deploy dumps. backups/ is chmod 700
+          # (idempotent, R3): the dumps are a full-database export — no
+          # local user but the deploy user may list or read them.
+          ssh vps 'mkdir -p /opt/smartcrops/traefik /opt/smartcrops/backups && chmod 700 /opt/smartcrops/backups'
 
       - name: Ship the compose and routing files
         run: |
@@ -200,15 +202,37 @@ jobs:
           ssh vps "HEAD_SHA=$HEAD_SHA IMAGE_TAG=sha-$HEAD_SHA bash -s" <<'REMOTE'
           {
             set -euo pipefail
+            # umask 077 (R3): every file born below is 0600. The default
+            # 022 births 0644 dumps — a full-database export readable by
+            # ANY local user.
+            umask 077
             cd /opt/smartcrops
+            # Self-healing normalize (R3): files created BEFORE this fix
+            # (or by hand) are pulled back to 0600 too. find is
+            # no-match-safe under set -e, unlike a bare glob chmod.
+            find backups -maxdepth 1 -name '*.sql.gz' -exec chmod 600 {} +
             running=$(docker compose ps --status running --services)
             if printf '%s\n' "$running" | grep -qx db; then
+              # Stale temps from previous FAILED runs are swept before
+              # dumping (R3) — repeated failures would otherwise fill the
+              # disk that then blocks deploys AND rollbacks. Scoped to THIS
+              # site's dotted prefix; never the rollback site's, never
+              # final files.
+              rm -f -- backups/.pre-deploy-*.sql.gz.tmp
               dump_start=$(date +%s)
               ts=$(date -u +%Y%m%dT%H%M%SZ)
               tmp="backups/.pre-deploy-${HEAD_SHA}-${ts}.sql.gz.tmp"
               final="backups/pre-deploy-${HEAD_SHA}-${ts}.sql.gz"
+              # EXIT-trap lifecycle (R3): registered AFTER tmp is set.
+              # Single quotes are correct — "$tmp" resolves at FIRE time,
+              # and tmp never changes afterwards. Any failure below removes
+              # its own temp.
+              trap 'rm -f -- "$tmp"' EXIT
               docker compose exec -T db pg_dump -U smartcrops smartcrops </dev/null | gzip > "$tmp"
               mv "$tmp" "$final"
+              # Cleared IMMEDIATELY after the mv: a later failure in this
+              # script can never delete the now-final dump.
+              trap - EXIT
               # Duration on the record: a future dump-approaching-the-job-
               # timeout diagnosis should read one log line, not re-derive it.
               echo "pre-deploy dump ${final} took $(( $(date +%s) - dump_start ))s"

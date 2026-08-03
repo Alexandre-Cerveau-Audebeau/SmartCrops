@@ -113,6 +113,10 @@ jobs:
           ssh vps "RESTORE_DUMP=$RESTORE_DUMP_INPUT IMAGE_TAG=$IMAGE_TAG_INPUT bash -s" <<'REMOTE'
           {
             set -euo pipefail
+            # umask 077 (R3): every file born below is 0600 — the snapshot
+            # is a full-database export; the default 022 would birth it
+            # 0644, readable by ANY local user.
+            umask 077
             cd /opt/smartcrops
             # (1) A typo'd filename fails LOUDLY before anything destructive.
             test -f "backups/$RESTORE_DUMP"
@@ -123,13 +127,30 @@ jobs:
             #     kills the rollback BEFORE anything destructive, and the
             #     file outlives even a "successful restore of the wrong
             #     dump".
+            # Stale temps from previous FAILED rollbacks are swept before
+            # dumping (R3) — scoped to THIS site's dotted prefix; never the
+            # deploy site's, never final files.
+            rm -f -- backups/.pre-rollback-*.sql.gz.tmp
             snap_start=$(date +%s)
             ts=$(date -u +%Y%m%dT%H%M%SZ)
             snap_tmp="backups/.pre-rollback-${ts}.sql.gz.tmp"
             snap="backups/pre-rollback-${ts}.sql.gz"
+            # EXIT-trap lifecycle (R3): registered AFTER snap_tmp is set.
+            # Single quotes are correct — "$snap_tmp" resolves at FIRE
+            # time, and the value never changes afterwards.
+            trap 'rm -f -- "$snap_tmp"' EXIT
             docker compose exec -T db pg_dump -U smartcrops smartcrops </dev/null | gzip > "$snap_tmp"
             mv "$snap_tmp" "$snap"
+            # Cleared IMMEDIATELY after the mv: a later failure in this
+            # script (the replay, for instance) can never delete the
+            # now-final snapshot.
+            trap - EXIT
             echo "pre-rollback snapshot ${snap} took $(( $(date +%s) - snap_start ))s"
+            # Same keep-7 discipline as the pre-deploy dumps (R3, scoped):
+            # never touches pre-deploy-* nor the dotted .tmp names, and the
+            # incident's escape hatch is by construction the NEWEST
+            # snapshot, which keep-7 always retains.
+            ls -1t backups/pre-rollback-*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm --
             # (4) Terminate lingering connections: the api is stopped, this
             #     catches stragglers — ALTER DATABASE RENAME has no
             #     WITH (FORCE).
