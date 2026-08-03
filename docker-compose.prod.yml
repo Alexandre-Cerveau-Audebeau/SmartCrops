@@ -25,11 +25,13 @@ x-logging: &default-logging
     max-file: "5"
 
 services:
+  # The edge process holds ZERO Docker privileges (R2): routing lives in the
+  # mounted file, so a Traefik compromise cannot reach the daemon —
+  # discovery is pointless for a fixed single-app stack.
   traefik:
     image: traefik:v3.3
     command:
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
+      - --providers.file.filename=/etc/traefik/dynamic.yml
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
@@ -43,13 +45,19 @@ services:
       # requests" becomes true, and the x-logging rotation bounds them.
       - --accesslog=true
       - --accesslog.format=json
+      # /signin-google?code=&state= must never persist in logs (R2):
+      # RequestPath and RequestLine are dropped; RouterName, method, status,
+      # duration and ClientHost keep the operational signal — SMA-348 stays
+      # honored: logs exist, bounded, secret-free.
+      - --accesslog.fields.names.RequestPath=drop
+      - --accesslog.fields.names.RequestLine=drop
       - --log.level=INFO
       - --ping=true
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
       - letsencrypt:/letsencrypt
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
@@ -76,6 +84,10 @@ services:
       ForwardedHeaders__KnownNetworks__0: 172.28.0.0/16
       Frontend__BaseUrl: https://smartcrops.fr
       Cors__AllowedOrigins__0: https://smartcrops.fr
+      # appsettings.json ships a TWO-entry origins array; env overrides merge
+      # BY INDEX, so index 1 (a localhost dev origin) would survive into
+      # production without this line. Duplicate of __0 — harmless.
+      Cors__AllowedOrigins__1: https://smartcrops.fr
       Jwt__Key: ${JWT_KEY:?JWT_KEY is required (token signing key, VPS .env only)}
       Google__ClientId: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID is required}
       Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:?GOOGLE_CLIENT_SECRET is required (VPS .env only)}
@@ -84,19 +96,6 @@ services:
       Smtp__Password: ${SMTP_PASSWORD:?SMTP_PASSWORD is required (VPS .env only)}
     volumes:
       - dataprotection-keys:/keys
-    labels:
-      - traefik.enable=true
-      # Priorities are EXPLICIT (api=10, web=1): rule-length tiebreaking is
-      # not a contract.
-      - traefik.http.routers.api-secure.rule=Host(`smartcrops.fr`) && (PathPrefix(`/api`) || Path(`/signin-google`) || Path(`/health`))
-      - traefik.http.routers.api-secure.entrypoints=websecure
-      - traefik.http.routers.api-secure.tls.certresolver=le
-      - traefik.http.routers.api-secure.priority=10
-      - traefik.http.routers.api-secure.middlewares=hsts
-      - traefik.http.services.api.loadbalancer.server.port=8080
-      # Declared once, referenced by every router.
-      - traefik.http.middlewares.hsts.headers.stsSeconds=31536000
-      - traefik.http.middlewares.hsts.headers.stsIncludeSubdomains=true
     healthcheck:
       # bash /dev/tcp probe: aspnet:8.0 ships neither wget nor curl, and a
       # derived image would break the pull-only model — bash is the one HTTP
@@ -116,24 +115,6 @@ services:
 
   web:
     image: ghcr.io/alexandre-cerveau-audebeau/smartcrops-web:${IMAGE_TAG:?IMAGE_TAG is required (GHCR image tag to deploy)}
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.web-secure.rule=Host(`smartcrops.fr`)
-      - traefik.http.routers.web-secure.entrypoints=websecure
-      - traefik.http.routers.web-secure.tls.certresolver=le
-      - traefik.http.routers.web-secure.priority=1
-      - traefik.http.routers.web-secure.middlewares=hsts
-      # www is answered with a real certificate, then permanently redirected
-      # to the apex ($$ escapes compose interpolation).
-      - traefik.http.routers.www-secure.rule=Host(`www.smartcrops.fr`)
-      - traefik.http.routers.www-secure.entrypoints=websecure
-      - traefik.http.routers.www-secure.tls.certresolver=le
-      - traefik.http.routers.www-secure.middlewares=redirect-www,hsts
-      - traefik.http.middlewares.redirect-www.redirectregex.regex=^https://www\.smartcrops\.fr/(.*)
-      - traefik.http.middlewares.redirect-www.redirectregex.replacement=https://smartcrops.fr/$${1}
-      - traefik.http.middlewares.redirect-www.redirectregex.permanent=true
-      # 8080: the unprivileged nginx image binds a non-root port.
-      - traefik.http.services.web.loadbalancer.server.port=8080
     healthcheck:
       # busybox wget exists in the alpine image — no probe gymnastics needed.
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ || exit 1"]
