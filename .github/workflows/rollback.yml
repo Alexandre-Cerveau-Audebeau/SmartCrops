@@ -1,0 +1,229 @@
+# Rollback (Lot 3, SMA-41) — this file IS the ratified rollback: written,
+# operator-EXPLICIT, command-by-command, with a paper trail (the workflow
+# run records who rolled back to which tag, when, and whether it went
+# green). A red deploy never triggers this automatically — a human does.
+# Lot 4 runbook: the go-live battery executes this workflow ONCE against a
+# throwaway state before go-live — written-and-blank-tested, not just
+# written.
+#
+# Template-injection hygiene (R1): no ${{ }} is ever inlined inside run:
+# shell text in this file — the expansion happens BEFORE the shell parses
+# anything, so every dynamic value routes through env: and is referenced
+# as "$VAR", making the substitution boundary explicit.
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "sha-<commit> to redeploy"
+        required: true
+      restore_dump:
+        description: "filename in /opt/smartcrops/backups to restore BEFORE restarting the api"
+        required: false
+        default: ""
+
+# Same group as CD: a rollback never RACES an in-flight deploy's
+# `compose up`. Honest limit (GitHub semantics): a concurrency group keeps
+# at most ONE pending run — cancel-in-progress only protects the RUNNING
+# run, so a newer CD run entering the queue CANCELS a still-pending
+# rollback. Operator reality: watch the dispatched run until it actually
+# runs; re-dispatch if it was displaced.
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    # This job shares the cd-production queue: a hung rollback would block
+    # future deploys exactly when something is already broken — so the job
+    # is bounded here and every SSH call carries liveness options via the
+    # shared bootstrap's ~/.ssh/config. Budget honesty (R2): at today's
+    # data size the snapshot + restore are seconds, so 30 minutes is
+    # headroom, not hope — and a mid-restore death is recoverable BY
+    # DESIGN since R2 (smartcrops_old + the pre-rollback snapshot file).
+    timeout-minutes: 30
+    env:
+      IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
+      RESTORE_DUMP_INPUT: ${{ inputs.restore_dump }}
+    steps:
+      - name: Validate operator inputs
+        run: |
+          # Both inputs travel into a remote command line below: constrain
+          # them to exact shapes so a crafted input can never become remote
+          # code.
+          [[ "$IMAGE_TAG_INPUT" =~ ^sha-[0-9a-f]{40}$ ]] \
+            || { echo "image_tag must be sha-<full 40-hex commit> (the tags CD publishes)"; exit 1; }
+          if [ -n "$RESTORE_DUMP_INPUT" ]; then
+            [[ "$RESTORE_DUMP_INPUT" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.sql\.gz$ ]] \
+              || { echo "restore_dump must be a bare .sql.gz filename (no path)"; exit 1; }
+          fi
+
+      - name: Checkout (loads the shared SSH action)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # The composite action lives in this repository — the rollback
+          # needs a checkout only to load it. Nothing here pushes commits.
+          persist-credentials: false
+
+      - name: Bootstrap SSH (shared action, pinned host key)
+        uses: ./.github/actions/ssh-health-gate
+        with:
+          mode: bootstrap
+          ssh_key: ${{ secrets.DEPLOY_SSH_KEY }}
+          host_key: ${{ vars.VPS_HOST_KEY }}
+          vps_user: ${{ vars.VPS_USER }}
+          vps_host: ${{ vars.VPS_HOST }}
+
+      - name: Restore the requested dump (BEFORE the api ever starts)
+        if: inputs.restore_dump != ''
+        run: |
+          # The restore keeps an ESCAPE HATCH (R2, both reviewers' layers
+          # combined): a plain-SQL dump replayed into a POPULATED database
+          # is conflict soup, so the replay targets a FRESH database — but
+          # the old state is never destroyed until the replay fully
+          # succeeded. Order: snapshot → terminate → rename away → create
+          # fresh → single-transaction replay → only then drop the old.
+          # ON_ERROR_STOP makes psql die on the FIRST error instead of
+          # green-washing; pipefail + test -f make a typo'd filename fail
+          # LOUDLY, never a silent no-op.
+          # Maintenance-db rule: every administrative statement (terminate,
+          # rename, create, drop) runs against the postgres maintenance
+          # database — you cannot rename or drop the database you are
+          # connected to; only the replay itself connects to smartcrops.
+          # RECOVERY PATH (explicit): if the job dies between the rename
+          # and the final drop, smartcrops_old holds the pre-rollback state
+          # — manual recovery is ONE statement from the maintenance db:
+          #   ALTER DATABASE smartcrops_old RENAME TO smartcrops;
+          # (drop the half-restored smartcrops first if it exists). A
+          # leftover smartcrops_old from a previous failed rollback blocks
+          # the rename LOUDLY — inspect it, then drop it manually; never
+          # auto-delete an escape hatch.
+          # Remote-script discipline (R1): the body is ONE brace group so
+          # bash parses it fully before executing — `docker compose exec`
+          # pumps stdin by default (-T only drops the TTY) and would drain
+          # the yet-unread lines into the container. </dev/null on every
+          # -c exec states the same intent (the zcat exec's stdin IS the
+          # pipe). IMAGE_TAG rides the remote env because compose
+          # interpolates ${IMAGE_TAG:?} on EVERY subcommand.
+          ssh vps "RESTORE_DUMP=$RESTORE_DUMP_INPUT IMAGE_TAG=$IMAGE_TAG_INPUT bash -s" <<'REMOTE'
+          {
+            set -euo pipefail
+            # umask 077 (R3): every file born below is 0600 — the snapshot
+            # is a full-database export; the default 022 would birth it
+            # 0644, readable by ANY local user.
+            umask 077
+            cd /opt/smartcrops
+            # Normalize what we find (R4): umask only shapes files born
+            # LATER in this shell — a rollback can run without any recent
+            # deploy, so legacy 0644 snapshots would stay world-readable if
+            # only cd.yml healed them. Both workflows now self-correct
+            # independently.
+            chmod 700 backups
+            find backups -maxdepth 1 -type f -name '*.sql.gz' -exec chmod 600 -- {} +
+            # (1) A typo'd filename fails LOUDLY before anything destructive.
+            test -f "backups/$RESTORE_DUMP"
+            # (2) The api stops first: no writes race anything below.
+            docker compose stop api
+            # (3) PRE-ROLLBACK SNAPSHOT — same discipline as the pre-deploy
+            #     dump (pipefail + dotted .tmp + atomic mv): a failed dump
+            #     kills the rollback BEFORE anything destructive, and the
+            #     file outlives even a "successful restore of the wrong
+            #     dump".
+            #     The collision corner is named and CLOSED (R6): a
+            #     same-second name collision would have made the mv
+            #     OVERWRITE the selected restore source and turned the
+            #     restore into a silent no-op — the PID suffix makes the
+            #     name unique per run (same second AND same PID cannot
+            #     happen across runs), and the loud existence guard removes
+            #     the CLASS, not the instance.
+            # Stale temps from previous FAILED rollbacks are swept before
+            # dumping (R3) — scoped to THIS site's dotted prefix; never the
+            # deploy site's, never final files.
+            rm -f -- backups/.pre-rollback-*.sql.gz.tmp
+            snap_start=$(date +%s)
+            ts="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+            snap_tmp="backups/.pre-rollback-${ts}.sql.gz.tmp"
+            snap="backups/pre-rollback-${ts}.sql.gz"
+            if [[ -e "$snap" ]]; then
+              echo "pre-rollback snapshot already exists: $snap" >&2
+              exit 1
+            fi
+            # EXIT-trap lifecycle (R3): registered AFTER snap_tmp is set.
+            # Single quotes are correct — "$snap_tmp" resolves at FIRE
+            # time, and the value never changes afterwards.
+            trap 'rm -f -- "$snap_tmp"' EXIT
+            docker compose exec -T db pg_dump -U smartcrops smartcrops </dev/null | gzip > "$snap_tmp"
+            mv "$snap_tmp" "$snap"
+            # Cleared IMMEDIATELY after the mv: a later failure in this
+            # script (the replay, for instance) can never delete the
+            # now-final snapshot.
+            trap - EXIT
+            echo "pre-rollback snapshot ${snap} took $(( $(date +%s) - snap_start ))s"
+            # Same keep-7 discipline as the pre-deploy dumps (R3, scoped):
+            # never touches pre-deploy-* nor the dotted .tmp names, and the
+            # incident's escape hatch is by construction the NEWEST
+            # snapshot, which keep-7 always retains.
+            # R4 — the retention cannot eat the selected SOURCE: restoring
+            # FROM a pre-rollback snapshot is legitimate (the input regex
+            # allows it), and ranked 8th+ by date the R3 retention would
+            # have deleted it between the test -f and the zcat — by which
+            # point the database is already renamed and recreated: a
+            # self-inflicted red rollback. The exact-match exclusion
+            # (grep -vxF on the same constructed "backups/<name>" string
+            # the ls emits) protects the source while the pruning still
+            # runs on EVERY path, including failed replays — moving the
+            # retention after the replay would have reopened the
+            # unbounded-growth window on exactly the repeated-failure
+            # incidents it exists for. When RESTORE_DUMP is a pre-deploy-*
+            # file the grep matches nothing and passes the list through
+            # unchanged — harmless. Stated trade: when the source is old,
+            # up to 8 files survive one cycle (one protected + keep-7).
+            # R5 guard (the reviewer's own safe form): grep -v under
+            # pipefail is a classic footgun — status 1 (it filtered
+            # EVERYTHING) passes through; real ls/grep failures still kill
+            # the script. Unreachable in practice: the freshly-created
+            # snapshot always survives the filter (its timestamp name
+            # cannot equal a pre-existing source) — the guard costs
+            # nothing.
+            protected="backups/$RESTORE_DUMP"
+            ls -1t backups/pre-rollback-*.sql.gz 2>/dev/null |
+              { grep -vxF -- "$protected" || test "$?" -eq 1; } |
+              tail -n +8 | xargs -r rm --
+            # (4) Terminate lingering connections: the api is stopped, this
+            #     catches stragglers — ALTER DATABASE RENAME has no
+            #     WITH (FORCE).
+            docker compose exec -T db psql -v ON_ERROR_STOP=1 -U smartcrops -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='smartcrops';" </dev/null
+            # (5) The old state SURVIVES every mid-failure from here on.
+            docker compose exec -T db psql -v ON_ERROR_STOP=1 -U smartcrops -d postgres -c 'ALTER DATABASE smartcrops RENAME TO smartcrops_old;' </dev/null
+            # (6) Fresh empty database for the replay.
+            docker compose exec -T db psql -v ON_ERROR_STOP=1 -U smartcrops -d postgres -c 'CREATE DATABASE smartcrops OWNER smartcrops;' </dev/null
+            # (7) -1 = single transaction: a failed replay rolls back
+            #     WHOLESALE, never partial data.
+            zcat "backups/$RESTORE_DUMP" | docker compose exec -T db psql -1 -v ON_ERROR_STOP=1 -U smartcrops -d smartcrops
+            # (8) Only after a fully successful replay does the old state go.
+            docker compose exec -T db psql -v ON_ERROR_STOP=1 -U smartcrops -d postgres -c 'DROP DATABASE smartcrops_old;' </dev/null
+          }
+          REMOTE
+
+      - name: Deploy the requested tag
+        run: |
+          # Runs AFTER the restore: the api starts ONCE, on the restored
+          # state (the previous order started it against the unrecovered
+          # database). When no restore was requested this is the straight
+          # pull+up path, unchanged. Same inline-IMAGE_TAG contract as
+          # cd.yml: the VPS .env is never rewritten; the operator names the
+          # exact image set to run.
+          ssh vps "cd /opt/smartcrops && IMAGE_TAG=$IMAGE_TAG_INPUT docker compose pull && IMAGE_TAG=$IMAGE_TAG_INPUT docker compose up -d"
+
+      - name: Health gate (shared action, DNS-independent)
+        uses: ./.github/actions/ssh-health-gate
+        with:
+          mode: health-gate
+          # The VALIDATED env var, not the raw input expression: it is
+          # visually traceable to the validation step above (R2).
+          image_tag: ${{ env.IMAGE_TAG_INPUT }}
