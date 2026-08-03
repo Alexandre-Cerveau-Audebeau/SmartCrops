@@ -98,7 +98,11 @@ services:
       - traefik.http.middlewares.hsts.headers.stsSeconds=31536000
       - traefik.http.middlewares.hsts.headers.stsIncludeSubdomains=true
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      # bash /dev/tcp probe: aspnet:8.0 ships neither wget nor curl, and a
+      # derived image would break the pull-only model — bash is the one HTTP
+      # client the official image contains. 127.0.0.1 on purpose (no
+      # IPv6-first resolution surprise); /health answers the literal "ok".
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; grep -q \"ok\" <&3'"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -124,13 +128,15 @@ services:
       - traefik.http.routers.www-secure.rule=Host(`www.smartcrops.fr`)
       - traefik.http.routers.www-secure.entrypoints=websecure
       - traefik.http.routers.www-secure.tls.certresolver=le
-      - traefik.http.routers.www-secure.middlewares=redirect-www
+      - traefik.http.routers.www-secure.middlewares=redirect-www,hsts
       - traefik.http.middlewares.redirect-www.redirectregex.regex=^https://www\.smartcrops\.fr/(.*)
       - traefik.http.middlewares.redirect-www.redirectregex.replacement=https://smartcrops.fr/$${1}
       - traefik.http.middlewares.redirect-www.redirectregex.permanent=true
-      - traefik.http.services.web.loadbalancer.server.port=80
+      # 8080: the unprivileged nginx image binds a non-root port.
+      - traefik.http.services.web.loadbalancer.server.port=8080
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1"]
+      # busybox wget exists in the alpine image — no probe gymnastics needed.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -164,9 +170,13 @@ services:
     volumes:
       - typesense-data:/data
     healthcheck:
-      # retries 5: the engine transiently replays {"ok":false} while opening
-      # its store — a known cold-start artifact, not a failure.
-      test: ["CMD-SHELL", "curl -f http://localhost:8108/health || exit 1"]
+      # bash /dev/tcp probe: typesense:30.2 (Ubuntu 22.04) ships neither curl
+      # nor wget — a wget/curl test would NEVER pass and service_healthy would
+      # block the api forever; bash is what the official image contains
+      # (pull-only model, no derived image). retries 5: the engine transiently
+      # replays {"ok":false} while opening its store — a known cold-start
+      # artifact, not a failure; the grep token is the tight healthy form.
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8108; printf \"GET /health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; grep -q \"\\\"ok\\\":true\" <&3'"]
       interval: 10s
       timeout: 5s
       retries: 5

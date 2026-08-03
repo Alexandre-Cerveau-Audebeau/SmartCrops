@@ -26,7 +26,10 @@ ENV VITE_AUTH_API_URL=${VITE_AUTH_API_URL}
 
 RUN npm run build
 
-FROM nginx:1.27-alpine
+# Unprivileged variant (R1): nginx runs as its non-root user and binds 8080
+# — a container escape lands in an unprivileged process, and Traefik does
+# not care which internal port it targets.
+FROM nginxinc/nginx-unprivileged:1.27-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
+EXPOSE 8080
