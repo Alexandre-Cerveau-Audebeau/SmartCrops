@@ -5,15 +5,19 @@ namespace SmartCrops.Infrastructure.ExternalApis.Perenual;
 /// <summary>
 /// Options binding for the <c>"Perenual"</c> section of <c>appsettings.json</c>.
 /// Validated at startup via <c>AddOptionsWithValidateOnStart</c> so misconfig
-/// (notably a missing API key) fails the host boot rather than the first
+/// of the shape-level members (<see cref="BaseUrl"/>, <see cref="UserAgent"/>,
+/// <see cref="TimeoutSeconds"/>) fails the host boot rather than the first
 /// enrichment call.
 ///
-/// <para>The <see cref="ApiKey"/> is intentionally <see cref="RequiredAttribute"/>
-/// with an empty default so the host refuses to start until it is set via
-/// <c>dotnet user-secrets</c> locally or the <c>Perenual__ApiKey</c> env var in
-/// containerised environments. The key is <b>never</b> in <c>appsettings.json</c>
-/// — Perenual's API requires it on every request as a query string parameter
-/// (<c>?key=...</c>) and it must not leak into source control.</para>
+/// <para>The <see cref="ApiKey"/> is deliberately <b>not</b> required at boot
+/// (SMA-377): the Perenual subscription is retired (June 2026, cache-only
+/// forever — runtime reads <c>PerenualRawCache</c>/<c>PlantPerenualData</c>)
+/// and Production must start without the credential. When set, it comes from
+/// <c>dotnet user-secrets</c> locally or the <c>Perenual__ApiKey</c> env var
+/// in containerised environments; it is <b>never</b> in
+/// <c>appsettings.json</c> — Perenual's API requires it on every request as a
+/// query string parameter (<c>?key=...</c>) and it must not leak into source
+/// control.</para>
 /// </summary>
 public class PerenualOptions
 {
@@ -24,11 +28,12 @@ public class PerenualOptions
     public string BaseUrl { get; set; } = "https://perenual.com/api/v2/";
 
     /// <summary>
-    /// Perenual API access key. Required on every request as <c>?key=...</c>.
-    /// Populated from user-secrets (dev) or environment variable (containers);
-    /// never committed to source control.
+    /// Perenual API access key, sent on every request as <c>?key=...</c>.
+    /// Optional in Production (SMA-377): the upstream is retired/cache-only
+    /// and <see cref="PerenualClient"/> fails meaningfully at call time if
+    /// ever invoked without it. Populated from user-secrets (dev) or
+    /// environment variable (containers); never committed to source control.
     /// </summary>
-    [Required]
     public string ApiKey { get; set; } = string.Empty;
 
     /// <summary>

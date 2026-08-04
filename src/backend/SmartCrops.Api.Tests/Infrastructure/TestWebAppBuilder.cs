@@ -90,11 +90,11 @@ public sealed class TestWebAppBuilder
     }
 
     /// <summary>
-    /// Registers <c>Trefle:Token</c>. <c>TrefleOptions.Token</c> is
-    /// <c>[Required]</c> with an empty default and validated at host boot via
-    /// <c>ValidateOnStart</c>; any non-empty placeholder keeps the host alive.
-    /// Tests that mock <c>IPlantTrefleEnrichmentService</c> never actually read
-    /// the token but still need this method called so the host boots.
+    /// Registers <c>Trefle:Token</c>. Optional at boot since SMA-377: the
+    /// <c>[Required]</c> on <c>TrefleOptions.Token</c> fell — Production runs
+    /// without the section — so no factory needs this method for the host to
+    /// start. It remains for tests that exercise the Trefle CLIENT and want a
+    /// non-empty credential bound.
     /// </summary>
     public TestWebAppBuilder WithTrefle(string token = "test-token")
     {
@@ -113,11 +113,11 @@ public sealed class TestWebAppBuilder
     public TestWebAppBuilder WithGbif() => this;
 
     /// <summary>
-    /// Registers <c>Perenual:ApiKey</c>. <c>PerenualOptions.ApiKey</c> is
-    /// <c>[Required]</c> with an empty default and validated at host boot via
-    /// <c>ValidateOnStart</c>; any non-empty placeholder keeps the host alive.
-    /// Tests that mock <c>IPlantPerenualEnrichmentService</c> never actually
-    /// read the key but still need this method called so the host boots.
+    /// Registers <c>Perenual:ApiKey</c>. Optional at boot since SMA-377: the
+    /// <c>[Required]</c> on <c>PerenualOptions.ApiKey</c> fell — Production
+    /// runs without the section — so no factory needs this method for the host
+    /// to start. It remains for tests that exercise the Perenual CLIENT and
+    /// want a non-empty credential bound.
     /// </summary>
     public TestWebAppBuilder WithPerenual(string apiKey = "test-perenual-key")
     {
