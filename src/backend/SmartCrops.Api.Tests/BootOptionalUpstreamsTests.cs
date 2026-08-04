@@ -22,7 +22,11 @@ public class BootOptionalUpstreamsTests
     {
         // Deliberately no WithTrefle()/WithPerenual(): the sections are absent,
         // exactly like the Production environment file. Everything else is the
-        // standard otherwise-valid config the boot-guard family uses.
+        // standard otherwise-valid config the boot-guard family uses. The two
+        // blanks: an inherited Trefle__Token / Perenual__ApiKey environment
+        // variable on the runner would otherwise silently turn this into a
+        // CREDENTIALED boot; the blanks pin the uncredentialed scenario
+        // (mirrors the boot-guard family's anti-ambient blanks).
         using WebApplicationFactory<Program> factory = new TestWebAppBuilder()
             .WithEnvironment("Testing")
             .WithJwtAuth()
@@ -30,6 +34,8 @@ public class BootOptionalUpstreamsTests
             .WithFrontendUrl()
             .WithTypesense()
             .WithSmtp()
+            .WithConfig("Trefle:Token", "")
+            .WithConfig("Perenual:ApiKey", "")
             .WithInMemoryDatabase("BootOptionalUpstreamsTests")
             .Build();
 
