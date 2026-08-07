@@ -5,7 +5,6 @@ import App from './App';
 vi.mock('./services/plantApi', () => ({
   fetchPlants: vi.fn().mockResolvedValue([]),
   fetchPlantTypes: vi.fn().mockResolvedValue([]),
-  searchPlants: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('./services/authApi', () => ({

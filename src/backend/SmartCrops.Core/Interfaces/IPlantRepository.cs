@@ -20,13 +20,6 @@ public interface IPlantRepository
     Task<IEnumerable<Plant>> GetByTypeAsync(int plantTypeId, string language = "en");
 
     /// <summary>
-    /// Full-text search against <see cref="PlantTranslation.CommonName"/> and
-    /// <see cref="PlantTranslation.Description"/> for a specific language,
-    /// falling back to <see cref="Plant.ScientificName"/>.
-    /// </summary>
-    Task<IEnumerable<Plant>> SearchAsync(string query, string language);
-
-    /// <summary>
     /// Batch lean-list fetch for the finder hydration path (SMA-255): loads
     /// the given plants with the same includes as <see cref="GetAllAsync"/>
     /// and returns them in the ORDER OF <paramref name="ids"/> (the search
