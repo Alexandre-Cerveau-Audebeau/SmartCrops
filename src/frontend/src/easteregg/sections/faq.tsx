@@ -1,45 +1,27 @@
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
-import { useUnitSystem } from '../../hooks/useUnitSystem';
-import type { Plant } from '../../types/Plant';
-import { buildFaqItems } from '../../utils/plantDetailFaq';
-import SectionHeader from './SectionHeader';
-import { Sym } from '../Sym';
+import { useTranslation } from 'react-i18next';
+import SectionHeader from '../../components/plantDetail/SectionHeader';
+import { Sym } from '../../components/Sym';
+import type { EasterEggEntry } from '../types';
 
 const F = 'plantDetail.faq';
 
 /**
- * Auto-generated FAQ section for Plant Detail v2 (SMA-78, PR C). Accordions built
- * from {@link buildFaqItems}; one open at a time, the first open by default. The
- * parent mounts it only when at least one item exists (TOC entry 14 = live).
+ * Section 14 for an easter egg: FaqSection's accordions, verbatim, one open at
+ * a time with the first open by default. The catalogue's caption says the
+ * questions are auto-generated from the plant's data fields; these are written,
+ * so the caption would be a false claim and is not rendered.
  */
-export default function FaqSection({ plant }: { plant: Plant }) {
+export function EggFaq({ egg }: { egg: EasterEggEntry }) {
   const { t } = useTranslation();
-  const { system } = useUnitSystem();
-  const items = buildFaqItems(plant, t, system);
   const [open, setOpen] = useState<number | null>(0);
-
-  if (items.length === 0) return null;
+  const items = egg.faq;
 
   return (
     <Box id="faq" sx={{ scrollMarginTop: '80px', mb: 3 }}>
-      {/* Header (outside the cards). */}
-      <SectionHeader title={t(`${F}.sectionTitle`)} mb="4px" />
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          mb: '14px',
-          fontSize: 13,
-          color: 'text.secondary',
-        }}
-      >
-        <Sym name="bolt" size={15} color="inherit" />
-        {t(`${F}.caption`)}
-      </Box>
+      <SectionHeader title={t(`${F}.sectionTitle`)} mb="14px" />
 
       <Stack spacing="10px">
         {items.map((item, i) => {

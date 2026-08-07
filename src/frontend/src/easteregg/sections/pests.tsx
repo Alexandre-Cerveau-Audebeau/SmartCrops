@@ -1,35 +1,28 @@
-import { memo, useState } from 'react';
+import { useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Dialog from '@mui/material/Dialog';
 import IconButton from '@mui/material/IconButton';
 import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
-import SectionHeader from './SectionHeader';
-import StatusBadge from './StatusBadge';
-import { Sym } from '../Sym';
+import SectionHeader from '../../components/plantDetail/SectionHeader';
+import StatusBadge from '../../components/plantDetail/StatusBadge';
+import { Sym } from '../../components/Sym';
 import type { PlantPest } from '../../types/Plant';
-
-interface PestsSectionProps {
-  pests: readonly PlantPest[];
-}
+import type { EasterEggEntry } from '../types';
 
 /**
- * Pests & diseases for Plant Detail v2 (SMA-227, section 08). A responsive grid
- * of pest cards (real name + type, hatched placeholder) opening a detail modal.
- * The grid is LIVE (real `name`/`type`); the modal is an honest TEASER — the
- * rich fields (symptoms/solutions/photo) are 0%-filled in the DB today (raw in
- * PerenualPestCatalog, not yet linked — SMA-143 follow-up), so the modal shows
- * a "coming soon" state instead of invented content. BUILD NOW badge. Mounted
- * only when >0 pests (gating preserved). Colours are mode-aware.
+ * Section 08 for an easter egg: PestsSection's two-row carousel of hatched
+ * cards and its detail modal, verbatim. The catalogue holds no description for
+ * any pest, so its modal is an honest "coming soon" teaser; this entry writes
+ * one per pest, so the modal shows it.
  */
-export const PestsSection = memo(function PestsSection({
-  pests,
-}: PestsSectionProps) {
+export function EggPests({ egg }: { egg: EasterEggEntry }) {
   const { t } = useTranslation();
   const { palette } = useTheme();
   const dark = palette.mode === 'dark';
   const [activePest, setActivePest] = useState<PlantPest | null>(null);
+  const pests = egg.plant.pests;
 
   const typeLabel = (ty: string) => t(`plantDetail.pests.types.${ty}`, ty);
 
@@ -48,10 +41,6 @@ export const PestsSection = memo(function PestsSection({
         mb="16px"
       />
 
-      {/* Two-row horizontal carousel: cards fill column-by-column over two rows,
-          beyond what fits the row scrolls horizontally (height-bounded, no cap).
-          Scroll mechanics + scrollbar match the gallery filmstrip; card width is
-          210px (richer content than the gallery's 150px image-only tiles). */}
       <Box
         sx={{
           display: 'grid',
@@ -154,7 +143,7 @@ export const PestsSection = memo(function PestsSection({
         ))}
       </Box>
 
-      {/* Detail modal — honest TEASER (MUI Dialog, a11y) */}
+      {/* Detail modal (MUI Dialog, a11y) */}
       <Dialog
         open={!!activePest}
         onClose={() => setActivePest(null)}
@@ -225,53 +214,16 @@ export const PestsSection = memo(function PestsSection({
               >
                 {activePest.name}
               </Typography>
-              {/* Honest empty state (symptoms/solutions = 0% in DB, unblocked by SMA-143) */}
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 1.25,
-                  py: 4,
-                  textAlign: 'center',
-                }}
+              <Typography
+                sx={{ fontSize: 15, lineHeight: 1.65, pb: 1 }}
+                data-testid="pest-detail"
               >
-                <Sym
-                  name="schedule"
-                  size={30}
-                  color={dark ? 'rgba(255,255,255,0.30)' : '#b0bbb2'}
-                />
-                <Typography
-                  sx={{ fontSize: 14, color: 'text.secondary', maxWidth: 380 }}
-                >
-                  {t('plantDetail.pests.modalTeaser')}
-                </Typography>
-                <Box
-                  component="span"
-                  sx={{
-                    mt: 0.5,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                    bgcolor: dark ? 'rgba(160,82,45,0.18)' : '#FBEEE6',
-                    color: '#A0522D',
-                    fontSize: 10,
-                    fontWeight: 800,
-                    letterSpacing: '0.04em',
-                    textTransform: 'uppercase',
-                    borderRadius: '6px',
-                    px: 1.25,
-                    py: 0.5,
-                  }}
-                >
-                  <Sym name="schedule" size={13} />
-                  {t('plantDetail.pests.modalTeaserBadge')}
-                </Box>
-              </Box>
+                {activePest.description}
+              </Typography>
             </Box>
           </>
         )}
       </Dialog>
     </Box>
   );
-});
+}

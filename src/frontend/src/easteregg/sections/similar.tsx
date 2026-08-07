@@ -1,25 +1,21 @@
-import { memo } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
-import SectionHeader from './SectionHeader';
-import StatusBadge from './StatusBadge';
-import { Sym } from '../Sym';
+import SectionHeader from '../../components/plantDetail/SectionHeader';
+import StatusBadge from '../../components/plantDetail/StatusBadge';
+import { Sym } from '../../components/Sym';
+import type { EasterEggEntry } from '../types';
 
 const S = 'plantDetail.similar';
 const SKELETON_COUNT = 3;
 
 /**
- * Similar plants teaser for Plant Detail v2 (SMA-78, section 13). Empty-state
- * panel carrying the "COMING SOON · BACKEND" badge: a row of dimmed skeleton
- * cards (hatched placeholder + plant glyph + skeleton text bars) shows the
- * shape of the future carousel, with a centered "engine coming soon" pill on
- * top — no invented recommendations. Always mounted (teaser, not gated); the
- * matching TOC entry (`similar`) stays `coming-backend` (non-clickable).
- * Colours are mode-aware. Real recommendations are wired later (SMA-78 follow-up).
+ * Section 13 for an easter egg: SimilarPlantsSection's ghost cards and its
+ * centred overlay pill, verbatim. The catalogue's pill says the recommendation
+ * engine is coming; this entry's says there is nothing to recommend.
  */
-export const SimilarPlantsSection = memo(function SimilarPlantsSection() {
+export function EggSimilar({ egg }: { egg: EasterEggEntry }) {
   const { t } = useTranslation();
   const { palette } = useTheme();
   const dark = palette.mode === 'dark';
@@ -45,7 +41,7 @@ export const SimilarPlantsSection = memo(function SimilarPlantsSection() {
         {t(`${S}.caption`)}
       </Typography>
 
-      {/* Skeleton carousel (decorative) + centered "coming soon" overlay */}
+      {/* Skeleton carousel (decorative) + centered overlay */}
       <Box sx={{ position: 'relative' }}>
         <Box aria-hidden sx={{ display: 'flex', gap: 2, opacity: 0.55 }}>
           {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
@@ -126,18 +122,28 @@ export const SimilarPlantsSection = memo(function SimilarPlantsSection() {
               borderRadius: 5,
               px: 2,
               py: 1,
+              maxWidth: 520,
               boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
             }}
           >
-            <Sym name="schedule" size={18} color={overlayIcon} />
-            <Typography
-              sx={{ fontSize: 13, fontWeight: 600, color: 'text.secondary' }}
-            >
-              {t(`${S}.emptyMessage`)}
-            </Typography>
+            <Sym name="favorite" size={18} color={overlayIcon} />
+            <Box>
+              {egg.similar.map((line) => (
+                <Typography
+                  key={line}
+                  sx={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: 'text.secondary',
+                  }}
+                >
+                  {line}
+                </Typography>
+              ))}
+            </Box>
           </Box>
         </Box>
       </Box>
     </Box>
   );
-});
+}

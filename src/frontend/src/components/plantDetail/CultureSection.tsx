@@ -10,10 +10,6 @@ import { Sym } from '../Sym';
 
 interface CultureSectionProps {
   perenualData: PlantPerenualData | null;
-  // --- SMA-394 easter eggs — delete these two lines to remove ---
-  /** Written rows, for an entry whose culture facts are not Perenual's. */
-  rows?: readonly { icon: string; label: string; value: string }[];
-  // --- end SMA-394 ---
 }
 
 const MONTH_ORDER = [
@@ -41,9 +37,6 @@ const MONTH_ORDER = [
  */
 export const CultureSection = memo(function CultureSection({
   perenualData,
-  // --- SMA-394 easter eggs — delete this line to remove ---
-  rows: writtenRows,
-  // --- end SMA-394 ---
 }: CultureSectionProps) {
   const { t } = useTranslation();
   const pd = perenualData;
@@ -76,7 +69,7 @@ export const CultureSection = memo(function CultureSection({
       }`.trim()
     : '';
 
-  const rows = writtenRows ?? [
+  const rows = [
     {
       icon: 'eco',
       label: t('plantDetail.culture.propagationLabel'),

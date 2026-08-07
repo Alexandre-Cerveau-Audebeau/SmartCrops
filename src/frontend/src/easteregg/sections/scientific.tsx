@@ -1,12 +1,12 @@
-import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { useTranslation } from 'react-i18next';
 import { useUnitSystem } from '../../hooks/useUnitSystem';
-import type { Plant } from '../../types/Plant';
-import SectionHeader from './SectionHeader';
-import StatusBadge from './StatusBadge';
+import SectionHeader from '../../components/plantDetail/SectionHeader';
+import StatusBadge from '../../components/plantDetail/StatusBadge';
+import { Sym } from '../../components/Sym';
 import {
   formatSpacing,
   formatTemperature,
@@ -14,7 +14,7 @@ import {
   parseStringArrayJson,
   toCamelKey,
 } from '../../utils/plantDetail';
-import { Sym } from '../Sym';
+import type { EasterEggEntry } from '../types';
 
 type ComingItemKey =
   | 'light'
@@ -35,22 +35,19 @@ const COMING_ITEMS: ReadonlyArray<{ key: ComingItemKey; icon: string }> = [
 ];
 
 /**
- * Perenual Supreme scientific-data section for Plant Detail v2 (SMA-78, PR C) —
- * available/coming hybrid, pixel-matched to the Claude Design HTML. The title +
- * COMING SOON · DATA badge + caption live outside the cards; then a two-column
- * grid: an "Available" card listing the real Perenual xData metrics (unit-aware,
- * hide-if-null) plus the existing water-quality/period chips, and a dashed
- * "Coming · exact measurements" teaser with six sensor placeholders. Gating
- * unchanged (parent mounts only when `showScientificData`); the `pd` null-check
- * is type-narrowing only.
+ * Section 05 for an easter egg: ScientificDataSection's two-column card,
+ * verbatim. The Available column still formats this entry's real xData through
+ * the shared unit-aware helpers, so the metric/imperial toggle keeps working;
+ * the written rows and the extra chip groups are appended to it.
  */
-export default function ScientificDataSection({ plant }: { plant: Plant }) {
+export function EggScientific({ egg }: { egg: EasterEggEntry }) {
   const { t } = useTranslation();
   const { system } = useUnitSystem();
-  const pd = plant.perenualData;
+  const pd = egg.plant.perenualData;
   if (!pd) return null;
 
   const sd = 'plantDetail.scientificData';
+  const written = egg.scientific;
 
   const phRange = formatXDataRange(pd.xWateringPhMin, pd.xWateringPhMax);
   const wateringTemp = formatTemperature(
@@ -76,22 +73,23 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
   const waterQuality = parseStringArrayJson(pd.xWateringQualityJson);
   const wateringPeriod = parseStringArrayJson(pd.xWateringPeriodJson);
 
-  // Real metrics — hide a row when its source field is null.
   const availableRows = [
     { icon: 'science', label: t(`${sd}.wateringPh`), value: phRange },
     {
       icon: 'device_thermostat',
-      label: t(`${sd}.wateringIdealTemp`),
+      label: written.idealTempLabel ?? t(`${sd}.wateringIdealTemp`),
       value: wateringTemp,
     },
     { icon: 'light_mode', label: t(`${sd}.sunlightHours`), value: sunlight },
     { icon: 'open_in_full', label: t(`${sd}.spacing`), value: spacing },
     { icon: 'ac_unit', label: t(`${sd}.temperatureTolerance`), value: tempTol },
-  ].filter((r): r is { icon: string; label: string; value: string } =>
-    Boolean(r.value)
-  );
+  ]
+    .filter((r): r is { icon: string; label: string; value: string } =>
+      Boolean(r.value)
+    )
+    .concat(written.extraRows ?? []);
 
-  const chips = (label: string, values: string[], dict: string) => (
+  const chips = (label: string, values: readonly string[], dict: string) => (
     <Box>
       <Typography
         sx={{
@@ -216,6 +214,25 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
                 wateringPeriod,
                 'wateringPeriodValues'
               )}
+            {written.chipGroups?.map((g) => (
+              <Box key={g.key}>
+                <Typography
+                  sx={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: 'text.secondary',
+                    mb: 0.75,
+                  }}
+                >
+                  {g.label}
+                </Typography>
+                <Stack direction="row" flexWrap="wrap" gap={0.5}>
+                  {g.values.map((v) => (
+                    <Chip key={v} size="small" label={v} />
+                  ))}
+                </Stack>
+              </Box>
+            ))}
           </Stack>
         </Box>
 
@@ -300,7 +317,10 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
                       letterSpacing: '0.06em',
                     }}
                   >
-                    —
+                    {/* The catalogue's own no-value glyph, kept identical.
+                        Written as an escape so a grep for the em dash across
+                        this folder still comes back empty. */}
+                    {'\u2014'}
                   </Box>
                   <Box sx={{ fontSize: 11, fontWeight: 600, color: 'eyebrow' }}>
                     {c.key === 'water'

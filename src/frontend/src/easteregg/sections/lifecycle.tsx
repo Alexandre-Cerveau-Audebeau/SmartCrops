@@ -1,52 +1,27 @@
-import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import { useTranslation } from 'react-i18next';
 import { visuallyHidden } from '@mui/utils';
-import type { Plant } from '../../types/Plant';
-import { periodToMonths } from '../../utils/formatPeriod';
 import { NAV_BG } from '../../constants/colors';
-import SectionHeader from './SectionHeader';
-import StatusBadge from './StatusBadge';
-import { Sym } from '../Sym';
+import SectionHeader from '../../components/plantDetail/SectionHeader';
+import StatusBadge from '../../components/plantDetail/StatusBadge';
+import { Sym } from '../../components/Sym';
+import type { EasterEggEntry } from '../types';
 
-// Stage bar / legend swatch colours + Material Symbols glyph names, exact to the
-// Claude Design reference HTML. SMA-184: dark-mode / AA-contrast audit pending.
-const STAGES: ReadonlyArray<{
-  key: string;
-  icon: string;
-  color: string;
-  legendKey: string;
-}> = [
-  { key: 'sowing', icon: 'spa', color: '#8FB996', legendKey: 'seed' },
-  { key: 'growth', icon: 'grass', color: '#2E8B57', legendKey: 'plant' },
-  {
-    key: 'flowering',
-    icon: 'local_florist',
-    color: '#E0A93B',
-    legendKey: 'flowering',
-  },
-  { key: 'fruiting', icon: 'nutrition', color: '#C0492F', legendKey: 'fruits' },
-  {
-    key: 'harvest',
-    icon: 'agriculture',
-    color: '#A0522D',
-    legendKey: 'harvest',
-  },
-];
-
-const GRID_COLS = '150px repeat(12, 1fr)';
 const TIMELINE_MIN_W = 760; // min width before horizontal scroll kicks in (mobile)
 
 /**
- * Collapse a set of 1-based month indices into contiguous [start,end] runs (1=Jan).
- * Note: does NOT treat December->January as contiguous (e.g. [11,12,1,2] yields two
- * runs 11-12 and 1-2), which is intended for the linear Jan->Dec timeline.
+ * Collapse a set of 1-based column indices into contiguous [start,end] runs.
+ * Copied from LifecycleSection, widened from twelve months to any column count.
  */
-function toRuns(months: number[]): Array<{ start: number; end: number }> {
-  const uniq = Array.from(new Set(months))
-    .filter((m) => m >= 1 && m <= 12)
+function toRuns(
+  cols: readonly number[],
+  max: number
+): Array<{ start: number; end: number }> {
+  const uniq = Array.from(new Set(cols))
+    .filter((m) => m >= 1 && m <= max)
     .sort((a, b) => a - b);
   const runs: Array<{ start: number; end: number }> = [];
   for (const m of uniq) {
@@ -58,54 +33,17 @@ function toRuns(months: number[]): Array<{ start: number; end: number }> {
 }
 
 /**
- * Seasonal calendar for Plant Detail v2 (SMA-78, PR C) — pixel-matched to the
- * Claude Design reference HTML. The title + COMING SOON · DATA badge + caption +
- * mode toggle live OUTSIDE the white card; the card holds only the 12-month Gantt
- * timeline (a bar per stage spanning its active months, from `sowingPeriod` /
- * `harvestPeriod` and the Perenual flowering / harvest seasons via
- * {@link periodToMonths}) and the legend. Stages with no data source (growth,
- * fruiting) keep a labelled row with an empty track. The "Indoor · greenhouse ·
- * IoT" mode (per-phase day durations) has no data yet (tracked in SMA-197), so
- * its toggle segment is a disabled teaser. Pure: the parent mounts it only when
- * `showLifecycleSection` is true (TOC state unchanged — Option B).
+ * Section 04 for an easter egg: LifecycleSection's Gantt, verbatim, over this
+ * entry's own columns and stages. The catalogue plots twelve months of sowing,
+ * flowering and harvest; this entry plots the twenty-four hours of a day.
  */
-export default function LifecycleSection({ plant }: { plant: Plant }) {
+export function EggLifecycle({ egg }: { egg: EasterEggEntry }) {
   const { t } = useTranslation();
   const mode = useTheme().palette.mode;
-  const monthsRaw = t('plantDetail.lifecycle.monthsShort', {
-    returnObjects: true,
-  });
-  const months =
-    Array.isArray(monthsRaw) &&
-    monthsRaw.length === 12 &&
-    monthsRaw.every((m): m is string => typeof m === 'string')
-      ? monthsRaw
-      : [
-          'Jan',
-          'Feb',
-          'Mar',
-          'Apr',
-          'May',
-          'Jun',
-          'Jul',
-          'Aug',
-          'Sep',
-          'Oct',
-          'Nov',
-          'Dec',
-        ];
-
-  const monthsByStage: Record<string, number[]> = {
-    sowing: periodToMonths(plant.sowingPeriod),
-    growth: [],
-    flowering: periodToMonths(plant.perenualData?.floweringSeason),
-    fruiting: [],
-    harvest: periodToMonths(
-      plant.harvestPeriod?.trim()
-        ? plant.harvestPeriod
-        : plant.perenualData?.harvestSeason
-    ),
-  };
+  const { timeline } = egg;
+  const columns = timeline.columns;
+  const gridCols = `150px repeat(${columns.length}, 1fr)`;
+  const timelineMinW = Math.max(TIMELINE_MIN_W, 150 + columns.length * 42);
 
   return (
     <Box id="lifecycle" sx={{ scrollMarginTop: '80px', mb: 3 }}>
@@ -128,7 +66,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
         }}
       >
         <Typography sx={{ m: 0, fontSize: 13, color: 'text.secondary' }}>
-          {t('plantDetail.lifecycle.caption')}
+          {timeline.caption}
         </Typography>
         <Box
           sx={{
@@ -142,9 +80,6 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
           <Button
             disableRipple
             sx={{
-              // Active segment, mode-aware like UnitSystemToggle's selected
-              // option (SMA-217): light = raised white pill with NAV_BG text
-              // (unchanged); dark = the same brand-green fill with navy text.
               bgcolor: mode === 'dark' ? 'primary.main' : '#fff',
               color: mode === 'dark' ? 'background.default' : NAV_BG,
               fontWeight: 700,
@@ -195,15 +130,15 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
         <Box sx={{ overflowX: 'auto' }}>
           <Box
             role="table"
-            aria-label={t('plantDetail.lifecycle.timelineLabel')}
-            sx={{ minWidth: TIMELINE_MIN_W }}
+            aria-label={timeline.label}
+            sx={{ minWidth: timelineMinW }}
           >
-            {/* Month header — vertical gridlines between months. */}
+            {/* Column header: vertical gridlines between columns. */}
             <Box
               role="row"
               sx={{
                 display: 'grid',
-                gridTemplateColumns: GRID_COLS,
+                gridTemplateColumns: gridCols,
                 alignItems: 'center',
                 mb: '10px',
               }}
@@ -212,7 +147,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                 role="columnheader"
                 aria-label={t('plantDetail.lifecycle.stageHeader')}
               />
-              {months.map((m, i) => (
+              {columns.map((m, i) => (
                 <Typography
                   key={i}
                   role="columnheader"
@@ -233,16 +168,14 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
 
             {/* Stage rows. */}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {STAGES.map((s) => {
-                const runs = toRuns(monthsByStage[s.key]);
-                // sr-only summary of the months this stage spans (runs are
-                // 1-based; `months` is 0-based → index by start-1/end-1).
+              {timeline.stages.map((s) => {
+                const runs = toRuns(s.spans, columns.length);
                 const activeLabel = runs.length
                   ? runs
                       .map((r) =>
                         r.start === r.end
-                          ? months[r.start - 1]
-                          : `${months[r.start - 1]} – ${months[r.end - 1]}`
+                          ? columns[r.start - 1]
+                          : `${columns[r.start - 1]} – ${columns[r.end - 1]}`
                       )
                       .join(', ')
                   : t('plantDetail.lifecycle.noDataShort');
@@ -251,11 +184,9 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                     key={s.key}
                     role="row"
                     sx={{
-                      // SMA-249 — be the containing block for the sr-only absolute
-                      // cell so it can never resolve its box against <body> again.
                       position: 'relative',
                       display: 'grid',
-                      gridTemplateColumns: GRID_COLS,
+                      gridTemplateColumns: gridCols,
                       alignItems: 'center',
                     }}
                   >
@@ -273,14 +204,8 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                       }}
                     >
                       <Sym name={s.icon} size={17} color="inherit" />
-                      {t(`plantDetail.lifecycle.stages.${s.key}`)}
+                      {s.label}
                     </Box>
-                    {/* SMA-249 — sr-only month summary. Uses the canonical
-                        `visuallyHidden` (width/height '1px' STRINGS): the previous
-                        hand-rolled `width: 1` was read by MUI's sizing system as
-                        100%, and on this absolute box with no positioned ancestor
-                        it resolved against <body> (~1525px), pushing the page ~382px
-                        wide in Chromium. */}
                     <Box role="cell" sx={visuallyHidden}>
                       {activeLabel}
                     </Box>
@@ -304,7 +229,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
           </Box>
         </Box>
 
-        {/* Legend — divider above, colour swatch + short word per stage. */}
+        {/* Legend: divider above, colour swatch + short word per stage. */}
         <Box
           sx={{
             display: 'flex',
@@ -316,9 +241,9 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
             pt: '14px',
           }}
         >
-          {STAGES.map((s) => (
+          {timeline.stages.map((s) => (
             <Box
-              key={s.legendKey}
+              key={s.key}
               sx={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -336,14 +261,14 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                   bgcolor: s.color,
                 }}
               />
-              {t(`plantDetail.lifecycle.legend.${s.legendKey}`)}
+              {s.label}
             </Box>
           ))}
         </Box>
       </Box>
 
-      {plant.lifeCycle === 'Perennial' ||
-      plant.lifeCycle === 'HerbaceousPerennial' ? (
+      {egg.plant.lifeCycle === 'Perennial' ||
+      egg.plant.lifeCycle === 'HerbaceousPerennial' ? (
         <Typography
           variant="caption"
           color="text.secondary"
@@ -351,7 +276,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
         >
           {t('plantDetail.lifecycle.perennialNote')}
         </Typography>
-      ) : plant.lifeCycle === 'Biennial' ? (
+      ) : egg.plant.lifeCycle === 'Biennial' ? (
         <Typography
           variant="caption"
           color="text.secondary"

@@ -3,9 +3,9 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
-import { Sym } from '../components/Sym';
-import { adaptBadge } from '../utils/badgeColors';
-import type { EggGauge, EggNote } from './types';
+import { Sym } from '../../components/Sym';
+import { adaptBadge } from '../../utils/badgeColors';
+import type { EggGauge, EggNote } from '../types';
 
 /**
  * SMA-394: the ONLY markup this feature owns.

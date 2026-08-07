@@ -1,43 +1,17 @@
-import { memo } from 'react';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
-import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
-import SectionHeader from './SectionHeader';
-import StatusBadge from './StatusBadge';
-import { Sym } from '../Sym';
+import SectionHeader from '../../components/plantDetail/SectionHeader';
+import StatusBadge from '../../components/plantDetail/StatusBadge';
 import { adaptBadge } from '../../utils/badgeColors';
-import {
-  isUserFacingUrl,
-  toUserFacingUrl,
-} from '../../utils/externalSourceUrl';
-import {
-  buildExternalResourceLinks,
-  type ExternalResourceKey,
-  type ExternalResourceLink,
-} from '../../utils/externalResources';
-import type { Plant } from '../../types/Plant';
+import type { EasterEggEntry } from '../types';
 
 const ER = 'plantDetail.externalResources';
 
-// Two-letter pill abbreviations, keyed by resource (matches the mockup). Typed on
-// the closed key union so a new resource forces an abbreviation here (compile-time).
-const ABBREV: Readonly<Record<ExternalResourceKey, string>> = {
-  gbif: 'GB',
-  wfo: 'WF',
-  perenual: 'PE',
-  powo: 'PO',
-  ipni: 'IP',
-  eppo: 'EP',
-  plantuse: 'PU',
-  wikipedia: 'WP',
-};
-
-// Light-mode mockup palette (dark mode reads theme tokens). Named to satisfy the
-// no-inline-hex rule (SMA-226).
+// Light-mode mockup palette (dark mode reads theme tokens), copied verbatim.
 const LIGHT = {
   rowBg: '#FFFFFF',
   rowBorder: '#E2EADF',
@@ -63,42 +37,17 @@ function sourceTypeColors(source: string): { bg: string; fg: string } {
 }
 
 /**
- * External resources for Plant Detail v2 (SMA-246, section 12). A curated list of
- * authoritative catalogue links (GBIF, WFO, Perenual, POWO, IPNI, EPPO, PlantUse,
- * Wikipedia) built by the pure {@link buildExternalResourceLinks} helper: direct
- * id-addressed pages when we have the id, name-search links otherwise. Below the
- * list, the enrichment-provenance banner (source chips + last-enriched date) is
- * kept from the previous inline "sources" card. Real data only, BUILD NOW badge,
- * always mounted (scientific name is always present). Mode-aware; the `id="sources"`
- * TOC anchor is preserved.
+ * Section 12 for an easter egg: ExternalResourcesSection's cards and its
+ * enrichment-provenance banner, verbatim. The catalogue builds its rows from a
+ * binomial; this entry writes them, and none carries a link because no public
+ * page for them could be verified, so no card promises navigation it cannot do.
  */
-export const ExternalResourcesSection = memo(function ExternalResourcesSection({
-  plant,
-}: {
-  plant: Plant;
-}) {
-  const { t, i18n } = useTranslation();
+export function EggResources({ egg }: { egg: EasterEggEntry }) {
+  const { t } = useTranslation();
   const { palette } = useTheme();
   const mode = palette.mode;
   const dark = mode === 'dark';
-
-  // Perenual public page derived from the persisted API source URL
-  // (requestedPerenualId-aware), kept only if it isn't an API endpoint.
-  const perenualSource = plant.sources.find((s) => s.sourceType === 'Perenual');
-  const perenualUserUrl = perenualSource
-    ? toUserFacingUrl(
-        perenualSource.url,
-        plant.perenualData?.requestedPerenualId
-      )
-    : null;
-
-  const links = buildExternalResourceLinks({
-    scientificName: plant.scientificName,
-    gbifTaxonKey: plant.gbifTaxonKey,
-    wfoId: plant.wfoId,
-    perenualUserUrl: isUserFacingUrl(perenualUserUrl) ? perenualUserUrl : null,
-    lang: i18n.language,
-  });
+  const plant = egg.plant;
 
   const fullyEnriched =
     plant.enrichmentSources.includes('Manual') &&
@@ -106,8 +55,8 @@ export const ExternalResourcesSection = memo(function ExternalResourcesSection({
     plant.enrichmentSources.includes('Trefle') &&
     plant.enrichmentSources.includes('Perenual');
 
-  const rowBg = dark ? 'rgba(255,255,255,0.03)' : LIGHT.rowBg;
   const rowBorder = dark ? 'rgba(255,255,255,0.10)' : LIGHT.rowBorder;
+  const rowBg = dark ? 'rgba(255,255,255,0.03)' : LIGHT.rowBg;
   const rowBorderHover = dark ? palette.primary.main : LIGHT.rowBorderHover;
   const pillBg = dark ? palette.primary.main : LIGHT.pillBg;
   const pillFg = dark ? palette.primary.contrastText : LIGHT.pillFg;
@@ -121,13 +70,9 @@ export const ExternalResourcesSection = memo(function ExternalResourcesSection({
       />
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {links.map((l: ExternalResourceLink) => (
-          <Link
-            key={l.key}
-            href={l.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            underline="none"
+        {egg.resources.map((r) => (
+          <Box
+            key={r.key}
             sx={{
               display: 'flex',
               alignItems: 'center',
@@ -158,7 +103,7 @@ export const ExternalResourcesSection = memo(function ExternalResourcesSection({
                 letterSpacing: '0.02em',
               }}
             >
-              {ABBREV[l.key]}
+              {r.abbrev}
             </Box>
 
             <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -166,50 +111,20 @@ export const ExternalResourcesSection = memo(function ExternalResourcesSection({
                 <Typography
                   sx={{ fontSize: 14, fontWeight: 700, color: 'heading' }}
                 >
-                  {t(l.labelKey)}
+                  {r.label}
                 </Typography>
-                {l.isNew && (
-                  <Box
-                    component="span"
-                    sx={{
-                      fontSize: 10,
-                      fontWeight: 800,
-                      letterSpacing: '0.04em',
-                      textTransform: 'uppercase',
-                      px: '6px',
-                      py: '2px',
-                      borderRadius: '6px',
-                      bgcolor: dark ? 'rgba(46,139,87,0.25)' : LIGHT.pillBg,
-                      color: dark ? palette.primary.main : LIGHT.pillFg,
-                    }}
-                  >
-                    {t(`${ER}.badgeNew`)}
-                  </Box>
-                )}
               </Box>
               <Typography
                 sx={{ fontSize: 12, color: 'text.secondary', mt: '1px' }}
               >
-                {t(l.descriptionKey)}
+                {r.description}
               </Typography>
             </Box>
-
-            <Box
-              component="span"
-              sx={{
-                flexShrink: 0,
-                display: 'inline-flex',
-                color: 'text.secondary',
-              }}
-            >
-              <Sym name="open_in_new" size={16} color="inherit" />
-            </Box>
-          </Link>
+          </Box>
         ))}
       </Box>
 
-      {/* Enrichment-provenance banner (source chips + last-enriched date), kept
-          from the previous inline "sources" card. */}
+      {/* Enrichment-provenance banner (source chips + last-enriched date). */}
       <Box
         sx={{
           mt: '16px',
@@ -253,18 +168,7 @@ export const ExternalResourcesSection = memo(function ExternalResourcesSection({
             />
           )}
         </Stack>
-        {plant.lastEnrichmentAt && (
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            display="block"
-            sx={{ mt: 0.75 }}
-          >
-            {t('plantDetail.labels.lastEnriched')}:{' '}
-            {new Date(plant.lastEnrichmentAt).toLocaleDateString(i18n.language)}
-          </Typography>
-        )}
       </Box>
     </Box>
   );
-});
+}

@@ -1,8 +1,5 @@
 import type { Plant } from '../types/Plant';
 import type { FaqItem } from '../utils/plantDetailFaq';
-import type { ExternalResourceCard } from '../components/plantDetail/ExternalResourcesSection';
-import type { WrittenTimeline } from '../components/plantDetail/LifecycleSection';
-import type { WrittenScientificData } from '../components/plantDetail/ScientificDataSection';
 
 /**
  * SMA-394: the shape of one easter egg.
@@ -41,17 +38,52 @@ export interface EggNote {
   readonly tone?: 'lead' | 'quote' | 'closing';
 }
 
-/** Bar-set adjustments handed to the real CharacteristicsSection. */
-export interface EggBars {
-  readonly omit?: readonly string[];
-  readonly extra?: readonly {
+/** One written characteristic bar, beside the two derived from the entry. */
+export interface EggBar {
+  readonly key: string;
+  readonly label: string;
+  readonly level: string;
+  readonly pct: number;
+  readonly color: string;
+}
+
+/** One column-spanning stage of the day timeline. */
+export interface EggTimeline {
+  readonly columns: readonly string[];
+  readonly caption: string;
+  readonly label: string;
+  readonly stages: readonly {
+    readonly key: string;
+    readonly icon: string;
+    readonly color: string;
+    readonly label: string;
+    /** 1-based column indices. */
+    readonly spans: readonly number[];
+  }[];
+}
+
+/** Additions to the scientific "Available" column. */
+export interface EggScientificData {
+  readonly idealTempLabel: string;
+  readonly extraRows: readonly {
+    readonly icon: string;
+    readonly label: string;
+    readonly value: string;
+  }[];
+  readonly chipGroups: readonly {
     readonly key: string;
     readonly label: string;
-    readonly level: string;
-    readonly pct: number;
-    readonly color: string;
+    readonly values: readonly string[];
   }[];
-  readonly tooltips?: Readonly<Record<string, string>>;
+}
+
+/** One card of the external-resources section. */
+export interface EggResourceCard {
+  readonly key: string;
+  /** The two-letter pill. */
+  readonly abbrev: string;
+  readonly label: string;
+  readonly description: string;
 }
 
 export interface EasterEggEntry {
@@ -74,11 +106,13 @@ export interface EasterEggEntry {
   /** Centred lines laid over the distribution map. */
   readonly mapOverlay: readonly string[];
   /** Her day, hour by hour, in place of the twelve-month calendar. */
-  readonly timeline: WrittenTimeline;
+  readonly timeline: EggTimeline;
   /** Extra rows and chip groups for the scientific "Available" column. */
-  readonly scientific: WrittenScientificData;
-  /** Bars kept, dropped, added and annotated in the characteristics panel. */
-  readonly bars: EggBars;
+  readonly scientific: EggScientificData;
+  /** The written bars, beside the two derived from this entry's own fields. */
+  readonly bars: readonly EggBar[];
+  /** Hover note per bar key, derived bars included. */
+  readonly barTooltips: Readonly<Record<string, string>>;
   /**
    * Region pill text, written rather than coded: the TDWG mapping would
    * flatten "Japan" to "Asia".
@@ -105,8 +139,8 @@ export interface EasterEggEntry {
   readonly similar: readonly string[];
   /** Written questions for FaqSection, replacing the derived ones. */
   readonly faq: readonly FaqItem[];
-  /** Written cards for ExternalResourcesSection, replacing the catalogue links. */
-  readonly resources: readonly ExternalResourceCard[];
+  /** Written cards for the resources section, replacing the catalogue links. */
+  readonly resources: readonly EggResourceCard[];
 
   /** Prose attached under each section whose component takes no prose. */
   readonly notes: {

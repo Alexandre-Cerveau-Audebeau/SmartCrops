@@ -1,15 +1,15 @@
-import { memo } from 'react';
 import Box from '@mui/material/Box';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
-import SectionHeader from './SectionHeader';
-import StatusBadge from './StatusBadge';
+import SectionHeader from '../../components/plantDetail/SectionHeader';
+import StatusBadge from '../../components/plantDetail/StatusBadge';
+import type { EasterEggEntry } from '../types';
 
 const O = 'plantDetail.observations';
 
-// Decorative continent blobs for the mini observation map — purely visual
-// teaser (no real geo/observation data yet).
+// Decorative continent blobs for the mini observation map, copied verbatim.
 const MAP_BLOBS = [
   { left: '14%', top: '32%', w: 110, h: 60 },
   { left: '52%', top: '28%', w: 150, h: 70 },
@@ -30,15 +30,13 @@ const MONTH_KEYS = [
 ] as const;
 
 /**
- * Observations & phenology teaser for Plant Detail v2 (SMA-78, section 11).
- * Empty-state panel carrying the "COMING SOON · DATA" badge: the structure
- * (per-year chart card, top-contributors card, decorative mini observation
- * map, 12-month phenology band) is shown with honest empty states — no
- * invented values — until the section is wired to real PlantNet/GBIF data.
- * Always mounted (teaser, not gated); the matching TOC entry (`plantnet`)
- * stays `coming-data` (non-clickable). Colours are mode-aware.
+ * Section 11 for an easter egg: ObservationsSection's layout, verbatim. The
+ * catalogue has no observation data yet, so its chart and contributor panel are
+ * honest empty states; this entry has a travel log, so the chart plots it and
+ * the panel names its single observer. The mini map and the phenology band are
+ * decorative and stay exactly as the catalogue renders them.
  */
-export const ObservationsSection = memo(function ObservationsSection() {
+export function EggObservations({ egg }: { egg: EasterEggEntry }) {
   const { t } = useTranslation();
   const { palette } = useTheme();
   const dark = palette.mode === 'dark';
@@ -51,8 +49,6 @@ export const ObservationsSection = memo(function ObservationsSection() {
   const legendFlowering = dark ? '#E0B14E' : '#E0A82E';
   const legendFruiting = dark ? '#D06A4A' : '#C0512E';
 
-  // Reuse the already-localized short month labels (Jan…Dec / Jan…Déc); fall
-  // back to the static keys if the i18n value isn't a string array.
   const monthsRaw = t('plantDetail.lifecycle.monthsShort', {
     returnObjects: true,
   });
@@ -77,11 +73,9 @@ export const ObservationsSection = memo(function ObservationsSection() {
     textTransform: 'uppercase',
     color: 'text.secondary',
   } as const;
-  const emptyMsgSx = {
-    fontSize: 13,
-    color: 'text.secondary',
-    textAlign: 'center',
-  } as const;
+
+  const series = egg.observations;
+  const peak = Math.max(...series.map((x) => x.value));
 
   return (
     <Box id="plantnet" sx={{ mb: 3, scrollMarginTop: '80px' }}>
@@ -96,7 +90,7 @@ export const ObservationsSection = memo(function ObservationsSection() {
         {t(`${O}.caption`)}
       </Typography>
 
-      {/* Top row: per-year chart (left, wide) + contributors & mini-map (right) */}
+      {/* Top row: chart (left, wide) + contributors & mini-map (right) */}
       <Box
         sx={{
           display: 'grid',
@@ -105,20 +99,61 @@ export const ObservationsSection = memo(function ObservationsSection() {
           mb: 2,
         }}
       >
-        {/* ── Per-year chart card — empty state ── */}
+        {/* ── Chart card ── */}
         <Box sx={cardSx}>
           <Typography sx={{ ...cardTitleSx, mb: 2 }}>
-            {t(`${O}.perYearTitle`)}
+            {egg.observationsTitle}
           </Typography>
           <Box
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              display: 'grid',
+              gridTemplateColumns: `repeat(${series.length}, 1fr)`,
+              alignItems: 'end',
+              gap: 1,
               minHeight: 200,
             }}
           >
-            <Typography sx={emptyMsgSx}>{t(`${O}.emptyChart`)}</Typography>
+            {series.map((s) => (
+              <Tooltip key={s.label} title={s.note} arrow placement="top">
+                <Box>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'flex-end',
+                      gap: 0.75,
+                      height: 200,
+                    }}
+                  >
+                    <Typography
+                      sx={{ fontSize: 11, fontWeight: 700, color: 'heading' }}
+                    >
+                      {s.value}
+                    </Typography>
+                    <Box
+                      sx={{
+                        width: '100%',
+                        height: `${Math.round((s.value / peak) * 74)}%`,
+                        minHeight: 8,
+                        borderRadius: '6px 6px 0 0',
+                        bgcolor: legendGrowth,
+                      }}
+                    />
+                    <Typography
+                      sx={{
+                        fontSize: 11,
+                        color: 'text.secondary',
+                        textAlign: 'center',
+                        lineHeight: 1.25,
+                      }}
+                    >
+                      {s.label}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Tooltip>
+            ))}
           </Box>
         </Box>
 
@@ -131,18 +166,36 @@ export const ObservationsSection = memo(function ObservationsSection() {
             <Box
               sx={{
                 display: 'flex',
-                alignItems: 'center',
+                flexDirection: 'column',
                 justifyContent: 'center',
+                gap: 1,
                 minHeight: 96,
               }}
             >
-              <Typography sx={emptyMsgSx}>
-                {t(`${O}.emptyContributors`)}
-              </Typography>
+              {egg.contributors.map((c) => (
+                <Box
+                  key={c.name}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 1.5,
+                  }}
+                >
+                  <Typography
+                    sx={{ fontSize: 14, fontWeight: 700, color: 'heading' }}
+                  >
+                    {c.name}
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
+                    {c.count}
+                  </Typography>
+                </Box>
+              ))}
             </Box>
           </Box>
 
-          {/* Mini observation map — decorative (blue canvas + green blobs), no data dots */}
+          {/* Mini observation map: decorative (blue canvas + green blobs) */}
           <Box
             aria-hidden
             sx={{
@@ -193,7 +246,7 @@ export const ObservationsSection = memo(function ObservationsSection() {
         </Box>
       </Box>
 
-      {/* Full-width phenology band — empty state (all months grey) */}
+      {/* Full-width phenology band: empty state (all months grey) */}
       <Box sx={cardSx}>
         <Box
           sx={{
@@ -265,4 +318,4 @@ export const ObservationsSection = memo(function ObservationsSection() {
       </Box>
     </Box>
   );
-});
+}

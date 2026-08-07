@@ -434,64 +434,62 @@ export const HIKARI: EasterEggEntry = {
     ],
   },
 
-  // ── §06 characteristics ──────────────────────────────────────────────────
-  bars: {
-    // The four the catalogue can never fill for this entry go away entirely
-    // rather than sitting there empty.
-    omit: ['soilMoisture', 'atmoHumidity', 'soilTexture', 'soilPh'],
-    extra: [
-      {
-        key: 'intelligence',
-        label: 'Intelligence',
-        level: 'Max',
-        pct: 100,
-        color: HUE.navy,
-      },
-      {
-        key: 'kindness',
-        label: 'Kindness',
-        level: 'Max',
-        pct: 100,
-        color: HUE.green,
-      },
-      {
-        key: 'dogs',
-        label: 'Love for dogs',
-        level: 'Max',
-        pct: 100,
-        color: HUE.brown,
-      },
-      {
-        key: 'sleepAnywhere',
-        label: 'Ability to sleep anywhere',
-        level: 'Max',
-        pct: 100,
-        color: HUE.violet,
-      },
-      {
-        key: 'screenTime',
-        label: 'Screen time',
-        level: 'High',
-        pct: 88,
-        color: HUE.amber,
-      },
-      {
-        key: 'cockroaches',
-        label: 'Patience for cockroaches',
-        level: 'Zero',
-        pct: 0,
-        color: HUE.red,
-      },
-    ],
-    tooltips: {
-      frostTolerance: 'さむい！',
-      screenTime: 'Mostly Instagram',
-      dogs: 'Woof woof',
-      sleepAnywhere: 'Anywhere. Truly anywhere.',
-      kindness: 'Shares her food. Occasionally.',
-      intelligence: 'Knows exactly what she wants.',
-      cockroaches: `Ask ${ALEX}.`,
+  // ── §06 characteristics. Light and frost tolerance are still derived from
+  // this entry's own fields by the section; these are the axes that actually
+  // matter here, and the four the catalogue could never fill are simply not
+  // rendered rather than shown empty.
+  bars: [
+    {
+      key: 'intelligence',
+      label: 'Intelligence',
+      level: 'Max',
+      pct: 100,
+      color: HUE.navy,
     },
+    {
+      key: 'kindness',
+      label: 'Kindness',
+      level: 'Max',
+      pct: 100,
+      color: HUE.green,
+    },
+    {
+      key: 'dogs',
+      label: 'Love for dogs',
+      level: 'Max',
+      pct: 100,
+      color: HUE.brown,
+    },
+    {
+      key: 'sleepAnywhere',
+      label: 'Ability to sleep anywhere',
+      level: 'Max',
+      pct: 100,
+      color: HUE.violet,
+    },
+    {
+      key: 'screenTime',
+      label: 'Screen time',
+      level: 'High',
+      pct: 88,
+      color: HUE.amber,
+    },
+    {
+      key: 'cockroaches',
+      label: 'Patience for cockroaches',
+      level: 'Zero',
+      pct: 0,
+      color: HUE.red,
+    },
+  ],
+  barTooltips: {
+    frostTolerance: 'さむい！',
+    screenTime: 'Mostly Instagram',
+    dogs: 'Woof woof',
+    sleepAnywhere: 'Anywhere. Truly anywhere.',
+    kindness: 'Shares her food. Occasionally.',
+    intelligence: 'Knows exactly what she wants.',
+    cockroaches: `Ask ${ALEX}.`,
   },
   regions: {
     native: 'Japan',

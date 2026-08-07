@@ -82,9 +82,9 @@ import {
   pickLongDescription,
   sortGalleryImages,
 } from '../utils/plantDetail';
-// --- SMA-394 easter eggs — delete this block to remove ---
+// --- SMA-394 easter eggs — delete these two lines and the easteregg folder to remove ---
 import { getEasterEggBySlug } from '../easteregg';
-import { EggFinalLine, EggGauges, EggNotes } from '../easteregg/sections';
+import EasterEggDetail from '../easteregg/EasterEggDetail';
 // --- end SMA-394 ---
 
 type PlantDetailNavState = {
@@ -103,6 +103,19 @@ const SECTION_SCROLL_MARGIN = {
   scrollMarginTop: { xs: '104px', md: '80px' },
 } as const;
 
+// --- SMA-394 easter eggs — delete this block and the easteregg folder to remove ---
+/**
+ * One lookup, one branch, and nothing else: a slug in the local registry is
+ * served by its own page, which owns every line of markup it needs. `null` for
+ * all 536 catalogue plants, which render below exactly as they did before.
+ */
+export default function PlantDetail() {
+  const { id } = useParams<{ id: string }>();
+  const egg = getEasterEggBySlug(id);
+  return egg ? <EasterEggDetail egg={egg} /> : <CataloguePlantDetail />;
+}
+// --- end SMA-394 ---
+
 /**
  * `GET /library/:id` detail page. Renders the full `PlantDetailResponse`
  * payload across 12 conditional sections (hero + gallery + about +
@@ -110,7 +123,7 @@ const SECTION_SCROLL_MARGIN = {
  * + scientific-data placeholder + pests + common names + synonyms + sources +
  * admin), with graceful degradation when enrichments are absent (cf. Basil seed).
  */
-export default function PlantDetail() {
+function CataloguePlantDetail() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -131,12 +144,6 @@ export default function PlantDetail() {
   // VITE_ADMIN_EMAILS front whitelist). UX only — the real barrier is the
   // backend [Authorize(Roles = "Admin")] on the admin endpoints.
   const isAdmin = user?.isAdmin ?? false;
-
-  // --- SMA-394 easter eggs — delete this block to remove ---
-  // One lookup drives every override below. `null` for every real plant, so
-  // the page behaves exactly as it did before for the whole catalogue.
-  const egg = getEasterEggBySlug(id);
-  // --- end SMA-394 ---
 
   const [plant, setPlant] = useState<Plant | null>(null);
   const [loading, setLoading] = useState(true);
@@ -198,15 +205,6 @@ export default function PlantDetail() {
       setLoading(false);
       return;
     }
-    // --- SMA-394 easter eggs — delete this block to remove ---
-    // Served from the local registry instead of the API: there is no such row,
-    // and the key must never reach the network.
-    if (egg) {
-      setPlant(egg.plant);
-      setLoading(false);
-      return;
-    }
-    // --- end SMA-394 ---
     setLoading(true);
 
     const controller = new AbortController();
@@ -502,9 +500,7 @@ export default function PlantDetail() {
       num: '07',
       id: 'edible',
       labelKey: 'plantDetail.sections.edibleAndPropagation',
-      // --- SMA-394 easter eggs — delete `!!egg ||` to remove ---
-      state: !!egg || showCulture ? 'live' : 'empty',
-      // --- end SMA-394 ---
+      state: showCulture ? 'live' : 'empty',
     },
     {
       num: '08',
@@ -546,9 +542,7 @@ export default function PlantDetail() {
       num: '14',
       id: 'faq',
       labelKey: 'plantDetail.sections.faq',
-      // --- SMA-394 easter eggs — delete `egg ? egg.faq.length :` to remove ---
-      state: (egg ? egg.faq.length : faqItems.length) > 0 ? 'live' : 'empty',
-      // --- end SMA-394 ---
+      state: faqItems.length > 0 ? 'live' : 'empty',
     },
     {
       num: '15',
@@ -567,19 +561,7 @@ export default function PlantDetail() {
       disableGutters
       // SMA-247 — the horizontal-scroll guard now lives once on the Layout shell
       // Box (covers every page); no per-page overflow override needed here.
-      sx={{
-        pt: 4,
-        pb: 6,
-        px: { xs: 2, md: 4 },
-        // --- SMA-394 easter eggs — delete this block to remove ---
-        // Inter's subsets carry no kana or kanji. Scoped to this page only, and
-        // excluding the icon font, whose own rule would otherwise be outranked
-        // and every glyph would render as its ligature name.
-        ...(egg && {
-          '& :not(.material-symbols-outlined)': { fontFamily: egg.fontStack },
-        }),
-        // --- end SMA-394 ---
-      }}
+      sx={{ pt: 4, pb: 6, px: { xs: 2, md: 4 } }}
     >
       {/* SMA-246 — hierarchical breadcrumb (Library › Type › Plant) at the top of
           the loaded page. It replaces the redundant "back to library" button; the
@@ -968,18 +950,14 @@ export default function PlantDetail() {
                       alignItems="center"
                       sx={{ mt: 2.5 }}
                     >
-                      {/* --- SMA-394 easter eggs — delete this block to remove --- */}
-                      {!egg && (
-                        <Button
-                          variant="contained"
-                          color="primary"
-                          component={RouterLink}
-                          to="/gardens"
-                        >
-                          {t('gardens.planMyGarden')}
-                        </Button>
-                      )}
-                      {/* --- end SMA-394 --- */}
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        component={RouterLink}
+                        to="/gardens"
+                      >
+                        {t('gardens.planMyGarden')}
+                      </Button>
                       {isAdmin && (
                         <>
                           <Tooltip title={t('plantDetail.actions.adminMenu')}>
@@ -1027,13 +1005,7 @@ export default function PlantDetail() {
                   </Box>
                 </Box>
               </Box>
-              {/* --- SMA-394 easter eggs — delete this block to remove --- */}
-              {egg ? (
-                <EggGauges gauges={egg.gauges} />
-              ) : (
-                <PlantHeroGauges plant={plant} />
-              )}
-              {/* --- end SMA-394 --- */}
+              <PlantHeroGauges plant={plant} />
               {(longDescription || shortDescription) && (
                 <AboutSection key={plant.id} plant={plant} />
               )}
@@ -1050,61 +1022,29 @@ export default function PlantDetail() {
               images={galleryImages}
               onSelect={openLightbox}
             />
-            {/* --- SMA-394 easter eggs — delete this line to remove --- */}
-            {egg && <EggNotes notes={egg.notes.gallery} />}
-            {/* --- end SMA-394 --- */}
           </Box>
 
           {/* ── Section 03: Distribution map teaser (SMA-78). Decorative blob
               map, always mounted; TOC entry stays coming-data (non-clickable). */}
-          <DistributionSection overlay={egg?.mapOverlay} />
+          <DistributionSection />
 
           {/* ── SMA-178: lifecycle + scientific data hoisted to mockup order
               (after the gallery, before characteristics). The "about" content is
               folded into the Overview card above. ─────────────────────────── */}
-          {showLifecycleSection && (
-            <LifecycleSection plant={plant} timeline={egg?.timeline} />
-          )}
-          {/* --- SMA-394 easter eggs — delete this line to remove --- */}
-          {egg && <EggNotes notes={egg.notes.lifecycle} />}
-          {/* --- end SMA-394 --- */}
-
-          {showScientificData && (
-            <ScientificDataSection plant={plant} written={egg?.scientific} />
-          )}
-          {/* --- SMA-394 easter eggs — delete this line to remove --- */}
-          {egg && <EggNotes notes={egg.notes.scientific} />}
-          {/* --- end SMA-394 --- */}
+          {showLifecycleSection && <LifecycleSection plant={plant} />}
+          {showScientificData && <ScientificDataSection plant={plant} />}
 
           {/* ── Section 06: Characteristics — bar-gauge panel (SMA-39). ── */}
-          <CharacteristicsSection
-            plant={plant}
-            regions={egg?.regions}
-            bars={egg?.bars}
-          />
-          {/* --- SMA-394 easter eggs — delete this line to remove --- */}
-          {egg && <EggNotes notes={egg.notes.characteristics} />}
-          {/* --- end SMA-394 --- */}
+          <CharacteristicsSection plant={plant} />
 
           {/* ── Section 07: Growing & propagation (SMA-231). Factual rows
               (propagation methods, pruning months, watering) on the section-05
               card format; mounted only when ≥1 value (gating preserved). */}
-          {(showCulture || !!egg) && (
-            <CultureSection
-              perenualData={plant.perenualData}
-              rows={egg?.culture}
-            />
-          )}
-          {/* --- SMA-394 easter eggs — delete this line to remove --- */}
-          {egg && <EggNotes notes={egg.notes.culture} />}
-          {/* --- end SMA-394 --- */}
+          {showCulture && <CultureSection perenualData={plant.perenualData} />}
 
           {/* ── Section 08: Pests & diseases (SMA-227). Card grid + teaser detail
               modal; mounted only when >0 pests (gating preserved). */}
           {plant.pests.length > 0 && <PestsSection pests={plant.pests} />}
-          {/* --- SMA-394 easter eggs — delete this line to remove --- */}
-          {egg && <EggNotes notes={egg.notes.pests} />}
-          {/* --- end SMA-394 --- */}
 
           {/* ── Section 09: Common names (SMA-223). Language-card carousel with
               search + pin; mounted only when >1 name (gating preserved). */}
@@ -1127,99 +1067,85 @@ export default function PlantDetail() {
 
           {/* ── Section 11: Observations & phenology teaser (SMA-78). Decorative
               sample data; always mounted; TOC entry (plantnet) stays coming-data. */}
-          <ObservationsSection
-            series={egg?.observations}
-            seriesTitle={egg?.observationsTitle}
-            contributors={egg?.contributors}
-          />
+          <ObservationsSection />
 
           {/* ── Section 12: External resources + enrichment provenance (SMA-246) ── */}
-          <ExternalResourcesSection plant={plant} cards={egg?.resources} />
+          <ExternalResourcesSection plant={plant} />
 
           {/* ── Section 13: Similar plants teaser (SMA-78). Decorative sample
               recommendations; always mounted; TOC entry (similar) stays
               coming-backend. */}
-          <SimilarPlantsSection message={egg?.similar} />
+          <SimilarPlantsSection />
 
-          {(egg ? egg.faq.length : faqItems.length) > 0 && (
-            <FaqSection plant={plant} items={egg?.faq} />
-          )}
+          {faqItems.length > 0 && <FaqSection plant={plant} />}
 
           {/* ── Section 15: Community teaser (SMA-78). Empty-state corrections
               & comments; always mounted; TOC entry (community) stays
               coming-backend. */}
           <CommunitySection />
 
-          {/* --- SMA-394 easter eggs — delete this block to remove --- */}
-          {egg ? (
-            <EggFinalLine text={egg.finalLine} />
-          ) : (
-            <>
-              {/* ── Bottom CTA: reuse the hero add-to-garden action ─────────────── */}
-              <Box
+          {/* ── Bottom CTA: reuse the hero add-to-garden action ─────────────── */}
+          <Box
+            sx={{
+              bgcolor: '#1B5E3A',
+              borderRadius: '16px',
+              p: { xs: 3, sm: '32px 36px' },
+              display: 'flex',
+              // SMA-247 — stack on narrow screens (text above the button) so the
+              // title gets the full width and never overflows; row from sm up.
+              flexDirection: { xs: 'column', sm: 'row' },
+              alignItems: { xs: 'flex-start', sm: 'center' },
+              gap: 3,
+              flexWrap: 'wrap',
+            }}
+          >
+            <Box sx={{ flex: 1, minWidth: { xs: 0, sm: 240 } }}>
+              <Typography
+                component="h3"
                 sx={{
-                  bgcolor: '#1B5E3A',
-                  borderRadius: '16px',
-                  p: { xs: 3, sm: '32px 36px' },
-                  display: 'flex',
-                  // SMA-247 — stack on narrow screens (text above the button) so the
-                  // title gets the full width and never overflows; row from sm up.
-                  flexDirection: { xs: 'column', sm: 'row' },
-                  alignItems: { xs: 'flex-start', sm: 'center' },
-                  gap: 3,
-                  flexWrap: 'wrap',
+                  mb: '6px',
+                  fontSize: 22,
+                  fontWeight: 800,
+                  color: '#fff',
+                  // Let a long title/plant-name break instead of overflowing the
+                  // squeezed flex item (SMA-247).
+                  overflowWrap: 'anywhere',
                 }}
               >
-                <Box sx={{ flex: 1, minWidth: { xs: 0, sm: 240 } }}>
-                  <Typography
-                    component="h3"
-                    sx={{
-                      mb: '6px',
-                      fontSize: 22,
-                      fontWeight: 800,
-                      color: '#fff',
-                      // Let a long title/plant-name break instead of overflowing the
-                      // squeezed flex item (SMA-247).
-                      overflowWrap: 'anywhere',
-                    }}
-                  >
-                    {t('plantDetail.cta.title', { name: displayName })}
-                  </Typography>
-                  <Typography
-                    sx={{
-                      fontSize: 14,
-                      color: 'rgba(255,255,255,0.78)',
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    {t('plantDetail.cta.subtitle')}
-                  </Typography>
-                </Box>
-                <Button
-                  variant="contained"
-                  component={RouterLink}
-                  to="/gardens"
-                  sx={{
-                    bgcolor: '#fff',
-                    color: '#1B5E3A',
-                    borderRadius: '8px',
-                    px: '26px',
-                    py: '14px',
-                    fontSize: 15,
-                    fontWeight: 800,
-                    boxShadow: 'none',
-                    '&:hover': {
-                      bgcolor: 'rgba(255,255,255,0.9)',
-                      boxShadow: 'none',
-                    },
-                  }}
-                >
-                  {t('gardens.planMyGarden')}
-                </Button>
-              </Box>
-            </>
-          )}
-          {/* --- end SMA-394 --- */}
+                {t('plantDetail.cta.title', { name: displayName })}
+              </Typography>
+              <Typography
+                sx={{
+                  fontSize: 14,
+                  color: 'rgba(255,255,255,0.78)',
+                  lineHeight: 1.5,
+                }}
+              >
+                {t('plantDetail.cta.subtitle')}
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              component={RouterLink}
+              to="/gardens"
+              sx={{
+                bgcolor: '#fff',
+                color: '#1B5E3A',
+                borderRadius: '8px',
+                px: '26px',
+                py: '14px',
+                fontSize: 15,
+                fontWeight: 800,
+                boxShadow: 'none',
+                '&:hover': {
+                  bgcolor: 'rgba(255,255,255,0.9)',
+                  boxShadow: 'none',
+                },
+              }}
+            >
+              {t('gardens.planMyGarden')}
+            </Button>
+          </Box>
         </Box>
       </Box>
 

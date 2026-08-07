@@ -1,22 +1,22 @@
-import { memo } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
-import SectionHeader from './SectionHeader';
-import StatusBadge from './StatusBadge';
-import { Sym } from '../Sym';
+import { visuallyHidden } from '@mui/utils';
+import SectionHeader from '../../components/plantDetail/SectionHeader';
+import StatusBadge from '../../components/plantDetail/StatusBadge';
+import { Sym } from '../../components/Sym';
+import type { EasterEggEntry } from '../types';
 
 const D = 'plantDetail.distribution';
 
-// Decorative continent blobs — purely visual teaser (no real geo data).
-// Coordinates: left/top = % of the map container (0–100); w/h = intrinsic
-// blob size in px.
+// Decorative continent blobs, copied verbatim from DistributionSection so the
+// map is the same map.
 type DecorativeBlobPosition = {
-  left: string; // % of container width
-  top: string; // % of container height
-  w: number; // width in px
-  h: number; // height in px
+  left: string;
+  top: string;
+  w: number;
+  h: number;
 };
 
 const BLOBS: DecorativeBlobPosition[] = [
@@ -36,14 +36,12 @@ const CORES: DecorativeBlobPosition[] = [
 ];
 
 /**
- * Distribution map teaser for Plant Detail v2 (SMA-78, section 03). A purely
- * decorative blob map (no real geo data yet) carrying the "COMING SOON · DATA"
- * badge: a gridded blue canvas, soft green climate blobs, a decorative zoom
- * control and a legend. Always mounted (teaser, not gated); the matching TOC
- * entry stays `coming-data` (non-clickable). Colours are mode-aware estimates,
- * refined against the mockup at rasterize-compare.
+ * Section 03 for an easter egg: the catalogue's decorative blob map, unchanged,
+ * with a centred message over it in the legend chips' own styling. The map box
+ * is aria-hidden, so the words are repeated in a visually hidden sibling rather
+ * than being swallowed by assistive technology.
  */
-export const DistributionSection = memo(function DistributionSection() {
+export function EggDistribution({ egg }: { egg: EasterEggEntry }) {
   const { t } = useTranslation();
   const { palette } = useTheme();
   const dark = palette.mode === 'dark';
@@ -70,6 +68,8 @@ export const DistributionSection = memo(function DistributionSection() {
       >
         {t(`${D}.caption`)}
       </Typography>
+
+      <Box sx={visuallyHidden}>{egg.mapOverlay.join(' ')}</Box>
 
       <Box
         aria-hidden
@@ -115,6 +115,38 @@ export const DistributionSection = memo(function DistributionSection() {
             }}
           />
         ))}
+
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            px: 2,
+          }}
+        >
+          <Box
+            sx={{
+              maxWidth: 520,
+              textAlign: 'center',
+              bgcolor: chipBg,
+              borderRadius: 5,
+              px: 2.25,
+              py: 1.25,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            }}
+          >
+            {egg.mapOverlay.map((line) => (
+              <Typography
+                key={line}
+                sx={{ fontSize: 13, fontWeight: 600, color: chipText }}
+              >
+                {line}
+              </Typography>
+            ))}
+          </Box>
+        </Box>
 
         <Box
           sx={{
@@ -215,4 +247,4 @@ export const DistributionSection = memo(function DistributionSection() {
       </Box>
     </Box>
   );
-});
+}
