@@ -107,33 +107,4 @@ describe('PlantGallerySection (SMA-154)', () => {
 
     expect(screen.getByText('Trefle · CC-BY-SA')).toBeInTheDocument();
   });
-
-  // SMA-394 — the hidden plant page carries no image by design (the gallery
-  // only accepts Trefle/PlantNet sources, so any picture would ship a
-  // fabricated credit), and needs to say so in its own words. Only the message
-  // swaps: the icon and the surrounding layout are untouched in both branches.
-  it('renders a bespoke emptyMessage in place of the default line (SMA-394)', () => {
-    render(
-      <PlantGallerySection
-        images={[]}
-        onSelect={vi.fn()}
-        emptyMessage={<span>No photographs on record.</span>}
-      />
-    );
-
-    expect(screen.getByText('No photographs on record.')).toBeInTheDocument();
-    expect(
-      screen.queryByText('No photos yet for this plant.')
-    ).not.toBeInTheDocument();
-    expect(screen.getByTestId('HideImageIcon')).toBeInTheDocument();
-  });
-
-  it('keeps the default empty line and the icon when emptyMessage is omitted (SMA-394)', () => {
-    render(<PlantGallerySection images={[]} onSelect={vi.fn()} />);
-
-    expect(
-      screen.getByText('No photos yet for this plant.')
-    ).toBeInTheDocument();
-    expect(screen.getByTestId('HideImageIcon')).toBeInTheDocument();
-  });
 });

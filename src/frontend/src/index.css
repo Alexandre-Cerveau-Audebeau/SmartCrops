@@ -8,30 +8,6 @@ body {
   margin: 0;
 }
 
-/* SMA-394 — Japanese fallback, scoped to the one plant page that carries kana
-   and kanji (PlantDetail sets `.erina-jp` on its Container for that slug).
-   Inter's self-hosted subsets cover latin, latin-ext, cyrillic, greek and
-   vietnamese only, so without this every Japanese run falls back to whatever
-   the operating system happens to pick.
-
-   The `:not(pre)` is there for specificity, not for `pre`: MUI's emotion
-   classes score (0,1,0) and are injected after this stylesheet, so a bare
-   `.erina-jp *` would lose the cascade. Latin text is unaffected — Inter still
-   comes first, the CJK faces are only appended as fallbacks.
-
-   `.material-symbols-outlined` MUST be excluded: that rule also scores (0,1,0),
-   so without the exclusion this one would win and every icon on the page would
-   render as its ligature name instead of a glyph.
-
-   The plant page's three monospace regions (hero attribution, gallery tile
-   credit, lightbox caption) all render only when the plant HAS images; this one
-   has none, so none of them exist in this subtree. */
-.erina-jp,
-.erina-jp :not(pre):not(.material-symbols-outlined) {
-  font-family:
-    Inter, 'Hiragino Sans', 'Yu Gothic UI', Meiryo, 'Noto Sans JP', sans-serif;
-}
-
 /* Material Symbols Outlined (self-hosted via material-symbols, imported in
    main.tsx) — used via the <Sym> helper. */
 .material-symbols-outlined {

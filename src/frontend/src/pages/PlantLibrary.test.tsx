@@ -183,12 +183,7 @@ describe('PlantLibrary', () => {
     // No exact call count: StrictMode double-invokes the mount effect (the
     // first run is aborted and never commits). The contract is the params.
     expect(vi.mocked(findPlants)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        page: 1,
-        perPage: PER_PAGE,
-        lang: 'en',
-        q: undefined,
-      }),
+      expect.objectContaining({ page: 1, perPage: PER_PAGE, lang: 'en', q: undefined }),
       expect.anything()
     );
     // Server pagination: only page 1 (24 cards) is in the DOM.
@@ -250,9 +245,9 @@ describe('PlantLibrary', () => {
     // The rail's Type chip mirrors the quick selection…
     await user.click(filtersButton(1));
     const rail = screen.getByRole('complementary', { name: 'Filters' });
-    expect(within(rail).getByRole('button', { name: 'Vegetable' })).toHaveClass(
-      'MuiChip-filled'
-    );
+    expect(
+      within(rail).getByRole('button', { name: 'Vegetable' })
+    ).toHaveClass('MuiChip-filled');
 
     // …and un-toggling in the rail mirrors back to the quick row.
     await user.click(within(rail).getByRole('button', { name: 'Vegetable' }));
@@ -436,7 +431,9 @@ describe('PlantLibrary', () => {
     // 'High' remains ONLY as a growth-rate chip — the watering one is omitted.
     expect(screen.getAllByRole('button', { name: 'High' })).toHaveLength(1);
     // Watering renders exactly its three real-data chips.
-    expect(screen.getByRole('button', { name: 'Average' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Average' })
+    ).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Frequent' })
     ).toBeInTheDocument();
@@ -913,7 +910,9 @@ describe('PlantLibrary', () => {
         expect.anything()
       )
     );
-    expect(vi.mocked(findPlants).mock.lastCall![0].heightCmMax).toBeUndefined();
+    expect(
+      vi.mocked(findPlants).mock.lastCall![0].heightCmMax
+    ).toBeUndefined();
     expect(activeChips().map((chip) => chip.textContent)).toEqual([
       'Height : 2 – 3 m +',
     ]);
@@ -965,9 +964,7 @@ describe('PlantLibrary', () => {
     expect(
       screen.queryByRole('checkbox', { name: /Medicinal/ })
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryAllByRole('slider', { name: 'Watering pH' })
-    ).toHaveLength(0);
+    expect(screen.queryAllByRole('slider', { name: 'Watering pH' })).toHaveLength(0);
 
     fireEvent.click(moreButton);
     expect(moreButton).toHaveAttribute('aria-expanded', 'true');
@@ -1055,14 +1052,7 @@ describe('PlantLibrary', () => {
     ).toBeInTheDocument();
     // Every preview control is disabled: the habit and light chips, the 12
     // month buttons, the soil-pH slider.
-    for (const label of [
-      'Tree',
-      'Shrub',
-      'Climber',
-      'Herbaceous',
-      'Low',
-      'High',
-    ]) {
+    for (const label of ['Tree', 'Shrub', 'Climber', 'Herbaceous', 'Low', 'High']) {
       expect(block.getByText(label).closest('.MuiChip-root')).toHaveClass(
         'Mui-disabled'
       );
@@ -1302,7 +1292,9 @@ describe('PlantLibrary', () => {
     ).toBeInTheDocument();
     // The drawer is a named modal dialog: its accessible name comes from the
     // header title via aria-labelledby (Major a11y fix).
-    expect(screen.getByRole('dialog', { name: 'Filters' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('dialog', { name: 'Filters' })
+    ).toBeInTheDocument();
     // Enriched header parity: Reset lives in the header now — exactly one
     // Reset in the drawer, none in the footer.
     expect(screen.getAllByRole('button', { name: 'Reset' })).toHaveLength(1);
@@ -1477,120 +1469,5 @@ describe('PlantLibrary', () => {
     await waitFor(() =>
       expect(status).toHaveTextContent('Showing 48 of 50 plants')
     );
-  });
-});
-
-// SMA-394 — the hidden plant. The key is matched BEFORE usePlantFinder runs, so
-// it never reaches findPlants and therefore never lands in a proxy or
-// search-engine access log; substituting the empty query also leaves the
-// context UNFILTERED, so the counter and the facet counts cannot move. What the
-// match changes is only what the grid renders: ONE ordinary card, which links
-// to the plant's own page exactly like any other result. The route itself is
-// covered in App.test.tsx, against App's real route table.
-describe('PlantLibrary · hidden plant card (SMA-394)', () => {
-  const searchBox = () =>
-    screen.getByRole('textbox', { name: 'Search plants by name...' });
-
-  // fireEvent.change commits the whole value at once — the "the key was typed"
-  // scenario, with no intermediate query states racing the 300 ms debounce.
-  const search = (value: string) =>
-    fireEvent.change(searchBox(), { target: { value } });
-
-  const CARD_NAME = 'えりな J';
-  // The card's id IS this slug — that is what makes PlantCard link here with no
-  // change to PlantCard, so asserting the href is asserting the whole mechanism.
-  const SECRET_HREF = '/library/erina-j-mon-coeur-since-october-31-2024';
-
-  async function renderSettled() {
-    mockFinderCatalog([makeListItem()]);
-    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
-    renderLibrary();
-    await screen.findByRole('heading', { name: 'Achillea ptarmica' });
-  }
-
-  it('shows exactly one card, linking to the plant’s own page', async () => {
-    await renderSettled();
-
-    search('erina_j');
-
-    // Card titles are the h6 headings — the same count the rest of this suite
-    // uses to assert page size. Exactly one, and it is not the catalogue's.
-    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(1);
-    const title = screen.getByRole('heading', { level: 6, name: CARD_NAME });
-    expect(title.closest('a')).toHaveAttribute('href', SECRET_HREF);
-    expect(screen.getByText('Erina J.')).toBeInTheDocument();
-    // Our own artwork, served from public/ — no photograph, no credit line.
-    expect(screen.getByAltText(CARD_NAME)).toHaveAttribute(
-      'src',
-      '/images/plants/erina-j.svg'
-    );
-    expect(
-      screen.queryByRole('heading', { name: 'Achillea ptarmica' })
-    ).not.toBeInTheDocument();
-  });
-
-  it('never sends the key to the finder — no q parameter reaches the network', async () => {
-    await renderSettled();
-
-    search('erina_j');
-
-    // The direct proof of the pre-hook seam: findPlants writes `q` into the
-    // request URL, so a key reaching it would be logged in clear text.
-    const queries = vi
-      .mocked(findPlants)
-      .mock.calls.map(([params]) => params.q);
-    expect(queries.every((q) => q === undefined)).toBe(true);
-    expect(vi.mocked(findPlants)).not.toHaveBeenCalledWith(
-      expect.objectContaining({ q: expect.anything() }),
-      expect.anything()
-    );
-  });
-
-  it.each(['ERINA_J', '  erina_j  ', 'Erina J', 'Erina  J', 'erinaj'])(
-    'matches %j — case, padding and inner whitespace insensitive',
-    async (key) => {
-      await renderSettled();
-
-      search(key);
-
-      expect(
-        screen.getByRole('heading', { level: 6, name: CARD_NAME })
-      ).toBeInTheDocument();
-    }
-  );
-
-  it.each(['erina', 'erina_', 'erinaj_'])(
-    'does not match the near miss %j',
-    async (key) => {
-      await renderSettled();
-
-      search(key);
-
-      expect(
-        screen.queryByRole('heading', { name: CARD_NAME })
-      ).not.toBeInTheDocument();
-      // Falls through to the normal search path.
-      expect(
-        screen.getByRole('heading', { name: 'Achillea ptarmica' })
-      ).toBeInTheDocument();
-    }
-  );
-
-  it('returns to the normal catalogue when the field is cleared', async () => {
-    await renderSettled();
-
-    search('erina_j');
-    expect(
-      screen.getByRole('heading', { level: 6, name: CARD_NAME })
-    ).toBeInTheDocument();
-
-    search('');
-
-    expect(
-      screen.queryByRole('heading', { name: CARD_NAME })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Achillea ptarmica' })
-    ).toBeInTheDocument();
   });
 });

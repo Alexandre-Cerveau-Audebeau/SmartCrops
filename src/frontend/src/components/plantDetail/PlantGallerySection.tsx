@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -15,12 +14,6 @@ interface PlantGallerySectionProps {
    * prev/next arrows navigate exactly what the grid is showing.
    */
   onSelect: (images: PlantImage[], index: number) => void;
-  /**
-   * Replaces the default "no photos yet" line in the empty state (SMA-394).
-   * Icon, layout, spacing and colours are unchanged — only the message swaps.
-   * Omit it and the empty state is byte-identical to before.
-   */
-  emptyMessage?: ReactNode;
 }
 
 const ALL = 'all';
@@ -61,7 +54,6 @@ function creditLine(img: PlantImage): string {
 export default function PlantGallerySection({
   images,
   onSelect,
-  emptyMessage,
 }: PlantGallerySectionProps) {
   const { t } = useTranslation();
   const [filter, setFilter] = useState<string>(ALL);
@@ -90,9 +82,7 @@ export default function PlantGallerySection({
     return (
       <Box sx={{ textAlign: 'center', py: 5, color: 'text.secondary' }}>
         <HideImageIcon sx={{ fontSize: 40, opacity: 0.5, mb: 1 }} />
-        {emptyMessage ?? (
-          <Typography>{t('plantDetail.gallery.empty')}</Typography>
-        )}
+        <Typography>{t('plantDetail.gallery.empty')}</Typography>
       </Box>
     );
   }

@@ -41,7 +41,9 @@ import {
   rangeChipLabel,
 } from '../constants/facetVocabularies';
 import PlantCard from '../components/PlantCard';
-import { ERINA_CARD, JP_FONT_STACK, isSecretKey } from '../constants/erina';
+// --- SMA-394 easter eggs — delete this block to remove ---
+import { getEasterEggCards } from '../easteregg';
+// --- end SMA-394 ---
 
 // SMA-255 T4 put the Library on the faceted finder endpoint (real server
 // pagination); SMA-9 T1 moved that fetch orchestration wholesale into
@@ -84,14 +86,13 @@ export default function PlantLibrary() {
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // SMA-394 — the hidden plant. Matched HERE, before the hook, on purpose:
-  // findPlants writes the query into the request URL, so a key reaching the
-  // hook would be logged in clear text by the proxy and by the search engine.
-  // Substituting the empty query also keeps the context UNFILTERED, so the
-  // result counter, the facet counts and the pagination are untouched. The
-  // match only swaps what the grid renders — one ordinary card, which links to
-  // the plant's own page like every other result.
-  const isSecret = isSecretKey(searchQuery);
+  // --- SMA-394 easter eggs — delete this block to remove ---
+  // Matched BEFORE the hook: findPlants writes the query into the request URL,
+  // so a key reaching it would be logged in clear text by the proxy and by the
+  // search engine. The empty substituted query also leaves the finder context
+  // unfiltered, so the counter and the facet counts cannot move.
+  const eggCards = getEasterEggCards(searchQuery);
+  // --- end SMA-394 ---
 
   const {
     items,
@@ -107,7 +108,15 @@ export default function PlantLibrary() {
     loadMore,
     resetToFirstPage,
     refetch,
-  } = usePlantFinder({ query: isSecret ? '' : searchQuery, filters, language });
+  } = usePlantFinder({
+    query: eggCards.length ? '' : searchQuery,
+    filters,
+    language,
+  });
+
+  // --- SMA-394 easter eggs — delete this block to remove ---
+  const displayItems = eggCards.length ? eggCards : items;
+  // --- end SMA-394 ---
 
   // Single guarded path for mount AND Retry — a slow initial response must
   // never overwrite a fresher Retry commit, and vice versa. Every load
@@ -509,116 +518,86 @@ export default function PlantLibrary() {
               absent until a Retry succeeds. */}
           {filterPanel}
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            {/* SMA-394 — the hidden plant surfaces as ONE ordinary card in the
-                results grid: same Grid container, same cell sizing, same
-                PlantCard as every real result, so nothing about it reads as a
-                special case. It links to its own page with no change to
-                PlantCard, because ERINA_CARD.id IS the page's slug. The card
-                title is Japanese and PlantCard sets no font, so the JP stack is
-                applied from here via a descendant selector.
-                The blocks in the other branch are unchanged, only bracketed. */}
-            {isSecret ? (
-              <Grid container spacing={3}>
-                <Grid
-                  size={{ xs: 12, sm: 6, md: 4 }}
-                  sx={{ '& h6': { fontFamily: JP_FONT_STACK } }}
+            {/* found === 0 with no active filter = genuinely empty catalogue;
+                with a query or facet active it's a no-match state. Gating uses
+                the hook's isFiltered so it can't drift from the fetch's own
+                match-all rule. */}
+            {!error && found === 0 && !isFiltered && (
+              <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
+                <SpaIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
+                <Typography>{t('library.noPlants')}</Typography>
+              </Box>
+            )}
+
+            {!error && found === 0 && isFiltered && (
+              <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
+                <Typography>{t('library.noResults')}</Typography>
+                {/* Same reset as the header/"Tout effacer": facets only, the
+                    search text stays (it may be the only active narrowing —
+                    then the button is a no-op by design; the mockup's reset
+                    affordance is unconditional). */}
+                <Button
+                  variant="outlined"
+                  onClick={handleReset}
+                  sx={{ mt: 2, borderRadius: 999, textTransform: 'none' }}
                 >
-                  <PlantCard plant={ERINA_CARD} />
-                </Grid>
-              </Grid>
-            ) : (
+                  {t('library.resetFilters')}
+                </Button>
+              </Box>
+            )}
+
+            {displayItems.length > 0 && (
               <>
-                {/* found === 0 with no active filter = genuinely empty
-                    catalogue; with a query or facet active it's a no-match
-                    state. Gating uses the hook's isFiltered so it can't drift
-                    from the fetch's own match-all rule. */}
-                {!error && found === 0 && !isFiltered && (
-                  <Box
-                    sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}
-                  >
-                    <SpaIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
-                    <Typography>{t('library.noPlants')}</Typography>
-                  </Box>
-                )}
+                <Grid container spacing={3}>
+                  {displayItems.map((plant) => {
+                    const typeName = plantTypes.find(
+                      (pt) => pt.id === plant.plantTypeId
+                    )?.name;
+                    return (
+                      <Grid key={plant.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                        <PlantCard plant={plant} typeName={typeName} />
+                      </Grid>
+                    );
+                  })}
+                </Grid>
 
-                {!error && found === 0 && isFiltered && (
-                  <Box
-                    sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}
-                  >
-                    <Typography>{t('library.noResults')}</Typography>
-                    {/* Same reset as the header/"Tout effacer": facets only, the
-                        search text stays (it may be the only active narrowing —
-                        then the button is a no-op by design; the mockup's reset
-                        affordance is unconditional). */}
-                    <Button
-                      variant="outlined"
-                      onClick={handleReset}
-                      sx={{ mt: 2, borderRadius: 999, textTransform: 'none' }}
-                    >
-                      {t('library.resetFilters')}
-                    </Button>
-                  </Box>
-                )}
+                {/* Polite, visually-hidden live region rendered once the list
+                    has loaded (gated by !initialLoading && items.length > 0).
+                    It announces the loaded/total count as pages append (Load
+                    more / scroll); some screen readers may also announce the
+                    initial count when it appears. */}
+                <Box
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                  sx={visuallyHidden}
+                >
+                  {t('library.showing', {
+                    shown: displayItems.length,
+                    total: found,
+                  })}
+                </Box>
 
-                {items.length > 0 && (
+                {hasMore && (
                   <>
-                    <Grid container spacing={3}>
-                      {items.map((plant) => {
-                        const typeName = plantTypes.find(
-                          (pt) => pt.id === plant.plantTypeId
-                        )?.name;
-                        return (
-                          <Grid key={plant.id} size={{ xs: 12, sm: 6, md: 4 }}>
-                            <PlantCard plant={plant} typeName={typeName} />
-                          </Grid>
-                        );
-                      })}
-                    </Grid>
-
-                    {/* Polite, visually-hidden live region rendered once the
-                        list has loaded (gated by !initialLoading &&
-                        items.length > 0). It announces the loaded/total count
-                        as pages append (Load more / scroll); some screen
-                        readers may also announce the initial count when it
-                        appears. */}
+                    {/* Decorative scroll sentinel — entering the viewport
+                        auto-loads the next page. height:10 (vs 1px) is a
+                        slightly larger intersection target for reliable
+                        triggering; with rootMargin:'100px' the exact height
+                        matters little. The button is the keyboard /
+                        no-observer fallback. */}
                     <Box
-                      role="status"
-                      aria-live="polite"
-                      aria-atomic="true"
-                      sx={visuallyHidden}
+                      ref={sentinelRef}
+                      aria-hidden="true"
+                      sx={{ height: 10 }}
+                    />
+                    <Box
+                      sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}
                     >
-                      {t('library.showing', {
-                        shown: items.length,
-                        total: found,
-                      })}
+                      <Button variant="outlined" onClick={loadMore}>
+                        {t('library.loadMore')}
+                      </Button>
                     </Box>
-
-                    {hasMore && (
-                      <>
-                        {/* Decorative scroll sentinel — entering the viewport
-                            auto-loads the next page. height:10 (vs 1px) is a
-                            slightly larger intersection target for reliable
-                            triggering; with rootMargin:'100px' the exact height
-                            matters little. The button is the keyboard /
-                            no-observer fallback. */}
-                        <Box
-                          ref={sentinelRef}
-                          aria-hidden="true"
-                          sx={{ height: 10 }}
-                        />
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            justifyContent: 'center',
-                            mt: 3,
-                          }}
-                        >
-                          <Button variant="outlined" onClick={loadMore}>
-                            {t('library.loadMore')}
-                          </Button>
-                        </Box>
-                      </>
-                    )}
                   </>
                 )}
               </>

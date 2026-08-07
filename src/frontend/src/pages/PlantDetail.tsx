@@ -82,24 +82,23 @@ import {
   pickLongDescription,
   sortGalleryImages,
 } from '../utils/plantDetail';
+// --- SMA-394 easter eggs — delete this block to remove ---
+import { getEasterEggBySlug } from '../easteregg';
 import {
-  ERINA_GALLERY_EMPTY,
-  ERINA_JP_CLASS,
-  ERINA_PLANT,
-  ERINA_SLUG,
-} from '../constants/erina';
-
-// SMA-394 — the hidden plant's gallery is empty by design (its only image would
-// have to carry a fabricated credit), so it says so in its own words.
-const ERINA_EMPTY_GALLERY = (
-  <>
-    {ERINA_GALLERY_EMPTY.map((line) => (
-      <Typography key={line} sx={{ fontStyle: 'italic' }}>
-        {line}
-      </Typography>
-    ))}
-  </>
-);
+  EggCalendar,
+  EggCharacteristics,
+  EggCultivation,
+  EggFaq,
+  EggFinalLine,
+  EggGauges,
+  EggObservations,
+  EggPests,
+  EggResources,
+  EggScientific,
+  EggSimilar,
+  EggSynonyms,
+} from '../easteregg/sections';
+// --- end SMA-394 ---
 
 type PlantDetailNavState = {
   from?: string;
@@ -141,13 +140,16 @@ export default function PlantDetail() {
   const { system } = useUnitSystem();
   const mode = useTheme().palette.mode;
   const { user } = useAuth();
-  // SMA-394 — keys the two cosmetic opt-ins below: the Japanese font scope and
-  // the gallery's bespoke empty message.
-  const isErina = id === ERINA_SLUG;
   // SMA-33: admin UI gated on the backend role surfaced via /me (was the
   // VITE_ADMIN_EMAILS front whitelist). UX only — the real barrier is the
   // backend [Authorize(Roles = "Admin")] on the admin endpoints.
   const isAdmin = user?.isAdmin ?? false;
+
+  // --- SMA-394 easter eggs — delete this block to remove ---
+  // One lookup drives every override below. `null` for every real plant, so
+  // the page behaves exactly as it did before for the whole catalogue.
+  const egg = getEasterEggBySlug(id);
+  // --- end SMA-394 ---
 
   const [plant, setPlant] = useState<Plant | null>(null);
   const [loading, setLoading] = useState(true);
@@ -209,15 +211,15 @@ export default function PlantDetail() {
       setLoading(false);
       return;
     }
-    // SMA-394 — one slug is served from a local object instead of the API.
-    // There is no such row, so a fetch would 404; and the whole point is that
-    // the key never reaches the network. Everything below is the real page,
-    // unchanged: the same sections, gates, gauges and responsive rules apply.
-    if (id === ERINA_SLUG) {
-      setPlant(ERINA_PLANT);
+    // --- SMA-394 easter eggs — delete this block to remove ---
+    // Served from the local registry instead of the API: there is no such row,
+    // and the key must never reach the network.
+    if (egg) {
+      setPlant(egg.plant);
       setLoading(false);
       return;
     }
+    // --- end SMA-394 ---
     setLoading(true);
 
     const controller = new AbortController();
@@ -572,11 +574,21 @@ export default function PlantDetail() {
     <Container
       maxWidth={false}
       disableGutters
-      // SMA-394 — scopes the Japanese font fallback to this one page.
-      className={isErina ? ERINA_JP_CLASS : undefined}
       // SMA-247 — the horizontal-scroll guard now lives once on the Layout shell
       // Box (covers every page); no per-page overflow override needed here.
-      sx={{ pt: 4, pb: 6, px: { xs: 2, md: 4 } }}
+      sx={{
+        pt: 4,
+        pb: 6,
+        px: { xs: 2, md: 4 },
+        // --- SMA-394 easter eggs — delete this block to remove ---
+        // Inter's subsets carry no kana or kanji. Scoped to this page only, and
+        // excluding the icon font, whose own rule would otherwise be outranked
+        // and every glyph would render as its ligature name.
+        ...(egg && {
+          '& :not(.material-symbols-outlined)': { fontFamily: egg.fontStack },
+        }),
+        // --- end SMA-394 ---
+      }}
     >
       {/* SMA-246 — hierarchical breadcrumb (Library › Type › Plant) at the top of
           the loaded page. It replaces the redundant "back to library" button; the
@@ -965,14 +977,18 @@ export default function PlantDetail() {
                       alignItems="center"
                       sx={{ mt: 2.5 }}
                     >
-                      <Button
-                        variant="contained"
-                        color="primary"
-                        component={RouterLink}
-                        to="/gardens"
-                      >
-                        {t('gardens.planMyGarden')}
-                      </Button>
+                      {/* --- SMA-394 easter eggs — delete this block to remove --- */}
+                      {!egg && (
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          component={RouterLink}
+                          to="/gardens"
+                        >
+                          {t('gardens.planMyGarden')}
+                        </Button>
+                      )}
+                      {/* --- end SMA-394 --- */}
                       {isAdmin && (
                         <>
                           <Tooltip title={t('plantDetail.actions.adminMenu')}>
@@ -1020,7 +1036,13 @@ export default function PlantDetail() {
                   </Box>
                 </Box>
               </Box>
-              <PlantHeroGauges plant={plant} />
+              {/* --- SMA-394 easter eggs — delete this block to remove --- */}
+              {egg ? (
+                <EggGauges gauges={egg.gauges} />
+              ) : (
+                <PlantHeroGauges plant={plant} />
+              )}
+              {/* --- end SMA-394 --- */}
               {(longDescription || shortDescription) && (
                 <AboutSection key={plant.id} plant={plant} />
               )}
@@ -1036,31 +1058,54 @@ export default function PlantDetail() {
               key={plant.id}
               images={galleryImages}
               onSelect={openLightbox}
-              emptyMessage={isErina ? ERINA_EMPTY_GALLERY : undefined}
             />
           </Box>
 
           {/* ── Section 03: Distribution map teaser (SMA-78). Decorative blob
               map, always mounted; TOC entry stays coming-data (non-clickable). */}
-          <DistributionSection />
+          {/* --- SMA-394 easter eggs — delete this block to remove --- */}
+          {!egg && <DistributionSection />}
+          {/* --- end SMA-394 --- */}
 
           {/* ── SMA-178: lifecycle + scientific data hoisted to mockup order
               (after the gallery, before characteristics). The "about" content is
               folded into the Overview card above. ─────────────────────────── */}
-          {showLifecycleSection && <LifecycleSection plant={plant} />}
-          {showScientificData && <ScientificDataSection plant={plant} />}
+          {/* --- SMA-394 easter eggs — delete this block to remove --- */}
+          {egg ? (
+            <EggCalendar egg={egg} />
+          ) : (
+            showLifecycleSection && <LifecycleSection plant={plant} />
+          )}
+          {egg ? (
+            <EggScientific egg={egg} />
+          ) : (
+            showScientificData && <ScientificDataSection plant={plant} />
+          )}
+          {/* --- end SMA-394 --- */}
 
           {/* ── Section 06: Characteristics — bar-gauge panel (SMA-39). ── */}
-          <CharacteristicsSection plant={plant} />
+          {egg ? (
+            <EggCharacteristics egg={egg} />
+          ) : (
+            <CharacteristicsSection plant={plant} />
+          )}
 
           {/* ── Section 07: Growing & propagation (SMA-231). Factual rows
               (propagation methods, pruning months, watering) on the section-05
               card format; mounted only when ≥1 value (gating preserved). */}
-          {showCulture && <CultureSection perenualData={plant.perenualData} />}
+          {egg ? (
+            <EggCultivation egg={egg} />
+          ) : (
+            showCulture && <CultureSection perenualData={plant.perenualData} />
+          )}
 
           {/* ── Section 08: Pests & diseases (SMA-227). Card grid + teaser detail
               modal; mounted only when >0 pests (gating preserved). */}
-          {plant.pests.length > 0 && <PestsSection pests={plant.pests} />}
+          {egg ? (
+            <EggPests egg={egg} />
+          ) : (
+            plant.pests.length > 0 && <PestsSection pests={plant.pests} />
+          )}
 
           {/* ── Section 09: Common names (SMA-223). Language-card carousel with
               search + pin; mounted only when >1 name (gating preserved). */}
@@ -1074,94 +1119,114 @@ export default function PlantDetail() {
           {/* ── Section 10: Botanical synonyms (SMA-223). Italic synonym chips
               with authority tooltip + "+N more" toggle; mounted only when >0
               synonyms (gating preserved). */}
-          {plant.synonyms.length > 0 && (
-            <BotanicalSynonymsSection
-              key={`botanical-synonyms-${plant.id}`}
-              synonyms={plant.synonyms}
-            />
+          {egg ? (
+            <EggSynonyms egg={egg} />
+          ) : (
+            plant.synonyms.length > 0 && (
+              <BotanicalSynonymsSection
+                key={`botanical-synonyms-${plant.id}`}
+                synonyms={plant.synonyms}
+              />
+            )
           )}
 
           {/* ── Section 11: Observations & phenology teaser (SMA-78). Decorative
               sample data; always mounted; TOC entry (plantnet) stays coming-data. */}
-          <ObservationsSection />
+          {egg ? <EggObservations egg={egg} /> : <ObservationsSection />}
 
           {/* ── Section 12: External resources + enrichment provenance (SMA-246) ── */}
-          <ExternalResourcesSection plant={plant} />
+          {egg ? (
+            <EggResources egg={egg} />
+          ) : (
+            <ExternalResourcesSection plant={plant} />
+          )}
 
           {/* ── Section 13: Similar plants teaser (SMA-78). Decorative sample
               recommendations; always mounted; TOC entry (similar) stays
               coming-backend. */}
-          <SimilarPlantsSection />
+          {egg ? <EggSimilar egg={egg} /> : <SimilarPlantsSection />}
 
-          {faqItems.length > 0 && <FaqSection plant={plant} />}
+          {egg ? (
+            <EggFaq items={egg.faq} />
+          ) : (
+            faqItems.length > 0 && <FaqSection plant={plant} />
+          )}
 
           {/* ── Section 15: Community teaser (SMA-78). Empty-state corrections
               & comments; always mounted; TOC entry (community) stays
               coming-backend. */}
-          <CommunitySection />
+          {!egg && <CommunitySection />}
 
-          {/* ── Bottom CTA: reuse the hero add-to-garden action ─────────────── */}
-          <Box
-            sx={{
-              bgcolor: '#1B5E3A',
-              borderRadius: '16px',
-              p: { xs: 3, sm: '32px 36px' },
-              display: 'flex',
-              // SMA-247 — stack on narrow screens (text above the button) so the
-              // title gets the full width and never overflows; row from sm up.
-              flexDirection: { xs: 'column', sm: 'row' },
-              alignItems: { xs: 'flex-start', sm: 'center' },
-              gap: 3,
-              flexWrap: 'wrap',
-            }}
-          >
-            <Box sx={{ flex: 1, minWidth: { xs: 0, sm: 240 } }}>
-              <Typography
-                component="h3"
+          {/* --- SMA-394 easter eggs — delete this block to remove --- */}
+          {egg ? (
+            <EggFinalLine text={egg.finalLine} />
+          ) : (
+            <>
+              {/* ── Bottom CTA: reuse the hero add-to-garden action ─────────────── */}
+              <Box
                 sx={{
-                  mb: '6px',
-                  fontSize: 22,
-                  fontWeight: 800,
-                  color: '#fff',
-                  // Let a long title/plant-name break instead of overflowing the
-                  // squeezed flex item (SMA-247).
-                  overflowWrap: 'anywhere',
+                  bgcolor: '#1B5E3A',
+                  borderRadius: '16px',
+                  p: { xs: 3, sm: '32px 36px' },
+                  display: 'flex',
+                  // SMA-247 — stack on narrow screens (text above the button) so the
+                  // title gets the full width and never overflows; row from sm up.
+                  flexDirection: { xs: 'column', sm: 'row' },
+                  alignItems: { xs: 'flex-start', sm: 'center' },
+                  gap: 3,
+                  flexWrap: 'wrap',
                 }}
               >
-                {t('plantDetail.cta.title', { name: displayName })}
-              </Typography>
-              <Typography
-                sx={{
-                  fontSize: 14,
-                  color: 'rgba(255,255,255,0.78)',
-                  lineHeight: 1.5,
-                }}
-              >
-                {t('plantDetail.cta.subtitle')}
-              </Typography>
-            </Box>
-            <Button
-              variant="contained"
-              component={RouterLink}
-              to="/gardens"
-              sx={{
-                bgcolor: '#fff',
-                color: '#1B5E3A',
-                borderRadius: '8px',
-                px: '26px',
-                py: '14px',
-                fontSize: 15,
-                fontWeight: 800,
-                boxShadow: 'none',
-                '&:hover': {
-                  bgcolor: 'rgba(255,255,255,0.9)',
-                  boxShadow: 'none',
-                },
-              }}
-            >
-              {t('gardens.planMyGarden')}
-            </Button>
-          </Box>
+                <Box sx={{ flex: 1, minWidth: { xs: 0, sm: 240 } }}>
+                  <Typography
+                    component="h3"
+                    sx={{
+                      mb: '6px',
+                      fontSize: 22,
+                      fontWeight: 800,
+                      color: '#fff',
+                      // Let a long title/plant-name break instead of overflowing the
+                      // squeezed flex item (SMA-247).
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {t('plantDetail.cta.title', { name: displayName })}
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontSize: 14,
+                      color: 'rgba(255,255,255,0.78)',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {t('plantDetail.cta.subtitle')}
+                  </Typography>
+                </Box>
+                <Button
+                  variant="contained"
+                  component={RouterLink}
+                  to="/gardens"
+                  sx={{
+                    bgcolor: '#fff',
+                    color: '#1B5E3A',
+                    borderRadius: '8px',
+                    px: '26px',
+                    py: '14px',
+                    fontSize: 15,
+                    fontWeight: 800,
+                    boxShadow: 'none',
+                    '&:hover': {
+                      bgcolor: 'rgba(255,255,255,0.9)',
+                      boxShadow: 'none',
+                    },
+                  }}
+                >
+                  {t('gardens.planMyGarden')}
+                </Button>
+              </Box>
+            </>
+          )}
+          {/* --- end SMA-394 --- */}
         </Box>
       </Box>
 
