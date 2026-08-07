@@ -225,49 +225,63 @@ export const PestsSection = memo(function PestsSection({
               >
                 {activePest.name}
               </Typography>
-              {/* Honest empty state (symptoms/solutions = 0% in DB, unblocked by SMA-143) */}
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 1.25,
-                  py: 4,
-                  textAlign: 'center',
-                }}
-              >
-                <Sym
-                  name="schedule"
-                  size={30}
-                  color={dark ? 'rgba(255,255,255,0.30)' : '#b0bbb2'}
-                />
+              {/* --- SMA-394 easter eggs — delete the description branch to
+                  restore the unconditional teaser ---
+                  A pest we hold a description for shows it; otherwise the
+                  honest empty state (symptoms/solutions = 0% in DB, unblocked
+                  by SMA-143). No catalogue pest carries one today, so every
+                  real plant still opens onto the teaser. */}
+              {activePest.description ? (
                 <Typography
-                  sx={{ fontSize: 14, color: 'text.secondary', maxWidth: 380 }}
+                  sx={{ fontSize: 15, lineHeight: 1.65, pb: 1 }}
+                  data-testid="pest-detail"
                 >
-                  {t('plantDetail.pests.modalTeaser')}
+                  {activePest.description}
                 </Typography>
+              ) : (
                 <Box
-                  component="span"
                   sx={{
-                    mt: 0.5,
-                    display: 'inline-flex',
+                    display: 'flex',
+                    flexDirection: 'column',
                     alignItems: 'center',
-                    gap: 0.5,
-                    bgcolor: dark ? 'rgba(160,82,45,0.18)' : '#FBEEE6',
-                    color: '#A0522D',
-                    fontSize: 10,
-                    fontWeight: 800,
-                    letterSpacing: '0.04em',
-                    textTransform: 'uppercase',
-                    borderRadius: '6px',
-                    px: 1.25,
-                    py: 0.5,
+                    gap: 1.25,
+                    py: 4,
+                    textAlign: 'center',
                   }}
                 >
-                  <Sym name="schedule" size={13} />
-                  {t('plantDetail.pests.modalTeaserBadge')}
+                  <Sym
+                    name="schedule"
+                    size={30}
+                    color={dark ? 'rgba(255,255,255,0.30)' : '#b0bbb2'}
+                  />
+                  <Typography
+                    sx={{ fontSize: 14, color: 'text.secondary', maxWidth: 380 }}
+                  >
+                    {t('plantDetail.pests.modalTeaser')}
+                  </Typography>
+                  <Box
+                    component="span"
+                    sx={{
+                      mt: 0.5,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      bgcolor: dark ? 'rgba(160,82,45,0.18)' : '#FBEEE6',
+                      color: '#A0522D',
+                      fontSize: 10,
+                      fontWeight: 800,
+                      letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                      borderRadius: '6px',
+                      px: 1.25,
+                      py: 0.5,
+                    }}
+                  >
+                    <Sym name="schedule" size={13} />
+                    {t('plantDetail.pests.modalTeaserBadge')}
+                  </Box>
                 </Box>
-              </Box>
+              )}
             </Box>
           </>
         )}

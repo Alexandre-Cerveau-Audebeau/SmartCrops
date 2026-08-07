@@ -84,12 +84,7 @@ import {
 } from '../utils/plantDetail';
 // --- SMA-394 easter eggs — delete this block to remove ---
 import { getEasterEggBySlug } from '../easteregg';
-import {
-  EggFinalLine,
-  EggGauges,
-  EggNotes,
-  EggTravelLog,
-} from '../easteregg/sections';
+import { EggFinalLine, EggGauges, EggNotes } from '../easteregg/sections';
 // --- end SMA-394 ---
 
 type PlantDetailNavState = {
@@ -507,7 +502,9 @@ export default function PlantDetail() {
       num: '07',
       id: 'edible',
       labelKey: 'plantDetail.sections.edibleAndPropagation',
-      state: showCulture ? 'live' : 'empty',
+      // --- SMA-394 easter eggs — delete `!!egg ||` to remove ---
+      state: !!egg || showCulture ? 'live' : 'empty',
+      // --- end SMA-394 ---
     },
     {
       num: '08',
@@ -1053,27 +1050,38 @@ export default function PlantDetail() {
               images={galleryImages}
               onSelect={openLightbox}
             />
+            {/* --- SMA-394 easter eggs — delete this line to remove --- */}
+            {egg && <EggNotes notes={egg.notes.gallery} />}
+            {/* --- end SMA-394 --- */}
           </Box>
 
           {/* ── Section 03: Distribution map teaser (SMA-78). Decorative blob
               map, always mounted; TOC entry stays coming-data (non-clickable). */}
-          <DistributionSection />
+          <DistributionSection overlay={egg?.mapOverlay} />
 
           {/* ── SMA-178: lifecycle + scientific data hoisted to mockup order
               (after the gallery, before characteristics). The "about" content is
               folded into the Overview card above. ─────────────────────────── */}
-          {showLifecycleSection && <LifecycleSection plant={plant} />}
+          {showLifecycleSection && (
+            <LifecycleSection plant={plant} timeline={egg?.timeline} />
+          )}
           {/* --- SMA-394 easter eggs — delete this line to remove --- */}
           {egg && <EggNotes notes={egg.notes.lifecycle} />}
           {/* --- end SMA-394 --- */}
 
-          {showScientificData && <ScientificDataSection plant={plant} />}
+          {showScientificData && (
+            <ScientificDataSection plant={plant} written={egg?.scientific} />
+          )}
           {/* --- SMA-394 easter eggs — delete this line to remove --- */}
           {egg && <EggNotes notes={egg.notes.scientific} />}
           {/* --- end SMA-394 --- */}
 
           {/* ── Section 06: Characteristics — bar-gauge panel (SMA-39). ── */}
-          <CharacteristicsSection plant={plant} regions={egg?.regions} />
+          <CharacteristicsSection
+            plant={plant}
+            regions={egg?.regions}
+            bars={egg?.bars}
+          />
           {/* --- SMA-394 easter eggs — delete this line to remove --- */}
           {egg && <EggNotes notes={egg.notes.characteristics} />}
           {/* --- end SMA-394 --- */}
@@ -1081,7 +1089,12 @@ export default function PlantDetail() {
           {/* ── Section 07: Growing & propagation (SMA-231). Factual rows
               (propagation methods, pruning months, watering) on the section-05
               card format; mounted only when ≥1 value (gating preserved). */}
-          {showCulture && <CultureSection perenualData={plant.perenualData} />}
+          {(showCulture || !!egg) && (
+            <CultureSection
+              perenualData={plant.perenualData}
+              rows={egg?.culture}
+            />
+          )}
           {/* --- SMA-394 easter eggs — delete this line to remove --- */}
           {egg && <EggNotes notes={egg.notes.culture} />}
           {/* --- end SMA-394 --- */}
@@ -1114,10 +1127,11 @@ export default function PlantDetail() {
 
           {/* ── Section 11: Observations & phenology teaser (SMA-78). Decorative
               sample data; always mounted; TOC entry (plantnet) stays coming-data. */}
-          <ObservationsSection />
-          {/* --- SMA-394 easter eggs — delete this line to remove --- */}
-          {egg && <EggTravelLog observations={egg.observations} />}
-          {/* --- end SMA-394 --- */}
+          <ObservationsSection
+            series={egg?.observations}
+            seriesTitle={egg?.observationsTitle}
+            contributors={egg?.contributors}
+          />
 
           {/* ── Section 12: External resources + enrichment provenance (SMA-246) ── */}
           <ExternalResourcesSection plant={plant} cards={egg?.resources} />
@@ -1125,10 +1139,7 @@ export default function PlantDetail() {
           {/* ── Section 13: Similar plants teaser (SMA-78). Decorative sample
               recommendations; always mounted; TOC entry (similar) stays
               coming-backend. */}
-          <SimilarPlantsSection />
-          {/* --- SMA-394 easter eggs — delete this line to remove --- */}
-          {egg && <EggNotes notes={egg.notes.similar} />}
-          {/* --- end SMA-394 --- */}
+          <SimilarPlantsSection message={egg?.similar} />
 
           {(egg ? egg.faq.length : faqItems.length) > 0 && (
             <FaqSection plant={plant} items={egg?.faq} />

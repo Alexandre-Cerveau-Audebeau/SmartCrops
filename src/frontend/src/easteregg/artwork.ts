@@ -1,14 +1,14 @@
 /**
- * SMA-394 — the hidden plant's card artwork, inlined as a data URI.
+ * SMA-394: the hidden plant's card artwork, inlined as a data URI.
  *
  * Our own drawing: no photograph, no third-party asset, so the card carries no
  * credit and no licence line. Same 400×400 box as PLANT_HERO_PLACEHOLDER
  * (`utils/plantDetail.ts`) so the card grid cannot shift.
  *
- * White ground, a translucent red heart sitting as a watermark — legible as a
- * heart at card size, still clearly behind the text — and the name over it in a
- * light translucent blue. Nothing on the page explains the palette; it simply
- * sits there.
+ * White ground, a translucent red heart sitting as a watermark, legible as a
+ * heart at card size and still clearly behind the text, with the name over it
+ * in a light translucent blue. Nothing on the page explains the palette; it
+ * simply sits there.
  *
  * The source below holds the REAL code points (verifiable with a byte-level
  * check); `encodeURIComponent` is what carries them safely through the data

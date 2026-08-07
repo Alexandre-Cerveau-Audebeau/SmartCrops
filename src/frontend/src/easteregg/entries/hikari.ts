@@ -4,28 +4,31 @@ import type {
   PlantPest,
   PlantSynonym,
 } from '../../types/Plant';
-import type { EasterEggEntry, EggNote } from '../types';
+import type { EasterEggEntry } from '../types';
 import { buildCardArtwork } from '../artwork';
 
 /**
- * SMA-394 — the hidden plant, as data.
+ * SMA-394: the hidden plant, as data.
  *
- * Every string here is taken verbatim from the validated copy. Almost all of it
- * travels through `PLANT` into the page's REAL section components — the hero,
- * the gauges' neighbours, the seasonal timeline, the scientific two-column card,
- * the characteristic bars and region pills, the culture rows, the pest cards,
- * the synonym chips, the resource cards, the FAQ accordions — so the page is the
- * product's own page with this entry's data in it. The `notes` below carry only
+ * Every string here is taken from the validated copy. Almost all of it travels
+ * through `PLANT` or through a written-content prop into the page's REAL
+ * section components: the hero, the day timeline, the scientific two-column
+ * card, the characteristic bars and region pills, the culture rows, the pest
+ * cards and their detail box, the synonym chips, the resource cards, the
+ * observation chart, the FAQ accordions. The `notes` at the bottom carry only
  * the prose those components have no slot for.
+ *
+ * 🔴 No em dash (U+2014) appears anywhere in this folder, by request.
  */
 
 const SLUG = 'erina-j-mon-coeur-since-october-31-2024';
 const DISPLAY_NAME = 'えりな J';
 const SCIENTIFIC_NAME = 'Erina J.';
+const ALEX = 'アレックス';
 
 /**
  * Inter's self-hosted subsets cover latin, latin-ext, cyrillic, greek and
- * vietnamese — no kana, no kanji. Without this stack every Japanese run falls
+ * vietnamese: no kana, no kanji. Without this stack every Japanese run falls
  * back to whatever the operating system picks.
  */
 const FONT_STACK =
@@ -33,41 +36,66 @@ const FONT_STACK =
 
 const CARD_IMAGE = buildCardArtwork(DISPLAY_NAME);
 
-// ── §02 About — these EIGHT paragraphs, and nothing else ───────────────────
+/**
+ * Named fills for the day timeline and the written characteristic bars: the
+ * first four are the design's own bar palette, the rest extend it in the same
+ * register (SMA-226 forbids magic inline hex).
+ */
+const HUE = {
+  green: '#2E8B57',
+  navy: '#2C3E6B',
+  brown: '#A0522D',
+  red: '#C0492F',
+  amber: '#E0A93B',
+  sage: '#8FB996',
+  rose: '#C1698C',
+  violet: '#7B5EA7',
+} as const;
+
+// ── §02 About: these EIGHT paragraphs, and nothing else ────────────────────
 
 const ABOUT: readonly string[] = [
-  'The most beautiful plant on this site, and — the author is prepared to defend this — the most beautiful plant in the world.',
+  'The most beautiful plant on this site and, the author is prepared to defend this, the most beautiful plant in the world.',
   'Native to Japan, and a remarkably successful export. First recorded travelling through Dubai, then Boston, then San Francisco, then Los Angeles. Reliable reports place a Paris appearance in the near future.',
-  'Known to charm absolutely anyone within range, with no effort on her part. Observers in San Francisco noted that the 月 has looked unusually beautiful ever since she was found there — and considerably more so after an evening at the White Rabbit.',
+  'Known to charm absolutely anyone within range, with no effort on her part. Observers in San Francisco noted that the 月 has looked unusually beautiful ever since she was found there, and considerably more so after an evening at the White Rabbit.',
   'Elegant. Radiant. Sensitive to changes in temperature, in both directions.',
-  'She is fond of ice — not the kind you would assume, and essentially only the kind made by アレックス.',
+  'She is fond of ice, not the kind you would assume, and essentially only the kind made by ' +
+    ALEX +
+    '.',
   'Requires a great deal of water. Not boring tap water: mostly sparkling water, the sort you find at Daiso. A matcha will brighten her whole day.',
   'She loves dogs. Unreasonably. Immediately. Every single one.',
-  'A bit messy, yet somehow always very clean — a combination botanists have not managed to explain.',
+  'A bit messy, yet somehow always very clean, a combination botanists have not managed to explain.',
 ];
 
-// ── §08 pests — one source for the cards and for the prose under them ──────
+// ── §08 pests: nine cards, each with the text its detail box opens onto ────
 
-const THREATS: ReadonlyArray<{ name: string; response: string }> = [
-  {
-    name: 'Cockroaches',
-    response:
-      'The single greatest documented threat. Presence triggers an immediate and total defensive response.',
-  },
-  {
-    name: 'Grasshoppers',
-    response: 'Not welcome. Unpredictable trajectory considered aggravating.',
-  },
-  { name: 'Flies', response: 'Persistent, and therefore unforgivable.' },
+const INSECT_ANSWER = `Just ask ${ALEX}, or buy a spray.`;
+const FOOD_ANSWER = `Give it to her flatmate, or to ${ALEX}, or to her father.`;
+
+const THREATS: ReadonlyArray<{
+  name: string;
+  type: string;
+  detail: string;
+}> = [
+  { name: 'Cockroaches', type: 'Insect', detail: INSECT_ANSWER },
+  { name: 'Flies', type: 'Insect', detail: INSECT_ANSWER },
+  { name: 'Grasshoppers', type: 'Insect', detail: INSECT_ANSWER },
+  { name: 'Spiders', type: 'Insect', detail: INSECT_ANSWER },
+  { name: 'Ants', type: 'Insect', detail: INSECT_ANSWER },
+  { name: 'Coriander', type: 'Dislike · food', detail: FOOD_ANSWER },
+  { name: 'Natto', type: 'Dislike · food', detail: FOOD_ANSWER },
+  { name: 'Broken nails', type: 'Hazard · daily', detail: 'いたい！' },
+  { name: 'Anime', type: 'Hazard · media', detail: 'やめて' },
 ];
 
-// `type` is a real catalogue value: the copy names insects as the primary
-// threat, so the cards carry the product's own "Pest · insect" category line.
+// `type: 'Insect'` is a real catalogue value, so those five cards carry the
+// product's own "Pest · insect" category line; the other four fall back to the
+// written label, which is what the component does with any unmapped type.
 const PESTS: readonly PlantPest[] = THREATS.map((p, i) => ({
   id: i + 1,
   name: p.name,
-  type: 'Insect',
-  description: p.response,
+  type: p.type,
+  description: p.detail,
   symptoms: null,
   solutions: null,
   imageUrl: null,
@@ -75,7 +103,7 @@ const PESTS: readonly PlantPest[] = THREATS.map((p, i) => ({
   sourceExternalId: null,
 }));
 
-// ── §10 synonyms — the chip carries the name, its gloss rides the authority ─
+// ── §10 synonyms: the chip carries the name, its gloss rides the authority ─
 
 const SYNONYMS: readonly PlantSynonym[] = [
   { id: 1, synonym: 'Erina japonica', authority: 'syn. えりちゃん' },
@@ -98,18 +126,15 @@ const PERENUAL: PlantPerenualData = {
   cultivar: null,
   perenualType: null,
   originCountries: null,
-  // No propagation method and no pruning month appear in the copy, so those two
-  // culture rows stay absent — exactly as they do for a catalogue plant that
-  // lacks them. Inventing either would be inventing content.
+  // The culture card is written in full below, so none of the Perenual culture
+  // fields is filled just to open a gate.
   propagationMethods: null,
   pruningMonths: null,
   wateringBenchmark: 'Frequent & particular',
   wateringBenchmarkUnit: null,
   sunlightPreferences: null,
   maintenance: null,
-  // "Flowering — on sight of a dog. Immediate, involuntary." Dogs occur all
-  // year, so the timeline's flowering bar spans the year.
-  floweringSeason: 'year-round',
+  floweringSeason: null,
   harvestSeason: null,
   hasEdibleFruit: null,
   hasEdibleLeaves: null,
@@ -118,19 +143,20 @@ const PERENUAL: PlantPerenualData = {
   apiVersion: null,
   hasSupremeData: true,
   lastSyncAt: '2024-10-31T00:00:00Z',
-  // "Temperature — 20-30 °C".
+  // "Temperature: 20-30 °C".
   xWateringBasedTempMinC: 20,
   xWateringBasedTempMaxC: 30,
-  // No pH figure appears in the copy; the row and the bar stay unfilled.
+  // No pH figure appears in the copy; the row stays unfilled and the bar is
+  // dropped from the panel entirely (see `bars.omit`).
   xWateringPhMin: null,
   xWateringPhMax: null,
-  // "Sun — 12+ h": min only, which the range formatter renders half-open.
+  // "Sun: 12+ h", min only, which the range formatter renders half-open.
   xSunlightHoursMin: 12,
   xSunlightHoursMax: null,
   xTemperatureToleranceMinC: null,
   xTemperatureToleranceMaxC: null,
   // 🔴 A PROPORTION, not a size. The unit is not a length, so the formatter's
-  // "unrecognised unit" path prints it verbatim — "80 % of the bed" — and no
+  // "unrecognised unit" path prints it verbatim, "80 % of the bed", and no
   // centimetre or inch is ever derived from it, in either unit system.
   xPlantSpacingValue: 80,
   xPlantSpacingUnit: '% of the bed',
@@ -138,7 +164,7 @@ const PERENUAL: PlantPerenualData = {
     'Japanese water',
     'Sparkling MTN WTR',
     'ほうじ茶 (hojicha)',
-    'Matcha latte — whole milk, lactose-free, unsweetened',
+    'Matcha latte: whole milk, lactose-free, unsweetened',
     'Strawberry jam',
     'Tiramisu, and matcha tiramisu above all',
   ]),
@@ -196,7 +222,7 @@ const PLANT: Plant = {
   maxTempC: null,
 
   // Only the flags that are FACTS in the copy. "Thorny only when insufficiently
-  // rested" is a joke, so it is not stated as a flat attribute — it stays in the
+  // rested" is a joke, so it is not stated as a flat attribute: it stays in the
   // characteristics prose instead.
   isEdible: null,
   isVegetable: null,
@@ -209,7 +235,7 @@ const PLANT: Plant = {
   isTropical: null,
   isToxicToHumans: null,
   isToxicToPets: null,
-  // "Attracts pollinators — Yes, one. Exclusively."
+  // "Attracts pollinators: yes, one. Exclusively."
   attractsPollinators: true,
 
   flowerColors: null,
@@ -244,7 +270,7 @@ const PLANT: Plant = {
 
   images: [],
 
-  // §09 — the real CommonNamesSection renders these as language cards.
+  // §09: the real CommonNamesSection renders these as language cards.
   commonNames: [
     { id: 1, languageCode: 'fr', name: 'Mon Cœur', isPrimary: true },
     { id: 2, languageCode: 'fr', name: 'Mon Amour', isPrimary: false },
@@ -255,7 +281,7 @@ const PLANT: Plant = {
     { id: 7, languageCode: 'en', name: 'My Love', isPrimary: false },
   ],
 
-  // §08 and §10 — read by the real PestsSection / BotanicalSynonymsSection.
+  // §08 and §10: read by the real PestsSection / BotanicalSynonymsSection.
   pests: PESTS,
   synonyms: SYNONYMS,
   // No upstream record, so no source row: the resource cards are supplied
@@ -266,25 +292,10 @@ const PLANT: Plant = {
   perenualData: PERENUAL,
 };
 
-// ── The six phases of §05, as the section's prose under the timeline ───────
-// The timeline's five stages are the product's own (seed, growth, flowering,
-// fruits, harvest); only flowering has a written counterpart here, so the rest
-// of the copy's phases read as prose rather than being forced onto a bar.
+// ── §04 her day, hour by hour, in place of the twelve months ───────────────
+// Spans are 1-based column indices, so hour H sits in column H + 1.
 
-const PHASE_NOTES: readonly EggNote[] = [
-  { text: 'Dormancy — the defining trait of the species.', tone: 'lead' },
-  {
-    text: 'This plant sleeps. Substantially, and with real conviction. Field observations confirm successful dormancy achieved while eating, while riding in a car, and — documented, verified — during a live classical concert.',
-  },
-  {
-    text: 'Dormancy is year-round and opportunistic: it can occur anywhere, without warning. Do not disturb. Morning emergence is delayed, peak radiance arrives late morning onward and requires prior completion of dormancy, feeding is continuous, travel season is whenever possible, and flowering is immediate and involuntary on sight of a dog.',
-  },
-  { text: 'Morning contact protocol.', tone: 'lead' },
-  {
-    text: 'The specimen’s recorded response to an early call is, reliably and almost without variation:',
-  },
-  { text: 'ごろごろベッド', tone: 'quote' },
-];
+const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'));
 
 export const HIKARI: EasterEggEntry = {
   keys: ['erina_j', 'erina j', 'erinaj', 'えりな j'],
@@ -292,7 +303,7 @@ export const HIKARI: EasterEggEntry = {
   card: { ...PLANT, translations: undefined },
   plant: PLANT,
 
-  // ── §01 hero gauges — the eight that matter here ─────────────────────────
+  // ── §01 hero gauges: the eight that matter here ──────────────────────────
   gauges: [
     { key: 'sun', icon: 'wb_sunny', label: 'Sun', value: '12+ h' },
     {
@@ -324,23 +335,231 @@ export const HIKARI: EasterEggEntry = {
     },
   ],
 
-  // ── §06 region pills — written as the copy writes them ───────────────────
+  // ── §03 over the map ─────────────────────────────────────────────────────
+  mapOverlay: [
+    'There is only one Erina in the world.',
+    'She is genuinely hard to find.',
+    `The easiest place to look is in ${ALEX}'s heart.`,
+  ],
+
+  // ── §04 the timeline ─────────────────────────────────────────────────────
+  timeline: {
+    columns: HOURS,
+    caption: 'Her day, hour by hour, from midnight to midnight.',
+    label: 'Daily timeline (activity by hour)',
+    stages: [
+      {
+        key: 'sleep',
+        icon: 'bedtime',
+        color: HUE.navy,
+        label: 'Sleep time',
+        spans: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      },
+      {
+        key: 'makeup',
+        icon: 'brush',
+        color: HUE.rose,
+        label: 'Make up time',
+        spans: [11],
+      },
+      {
+        key: 'eating',
+        icon: 'restaurant',
+        color: HUE.red,
+        label: 'Eating time',
+        spans: [13, 20],
+      },
+      {
+        key: 'sun',
+        icon: 'wb_sunny',
+        color: HUE.amber,
+        label: 'Time to enjoy the sun',
+        spans: [14, 15, 16, 17],
+      },
+      {
+        key: 'job',
+        icon: 'work',
+        color: HUE.green,
+        label: 'Job hunting in Paris',
+        spans: [18, 19],
+      },
+      {
+        key: 'costume',
+        icon: 'checkroom',
+        color: HUE.violet,
+        label: 'Costume time',
+        spans: [22, 23],
+      },
+      {
+        key: 'planning',
+        icon: 'map',
+        color: HUE.sage,
+        label: 'Planning life in Paris',
+        spans: [24],
+      },
+    ],
+  },
+
+  // ── §05 scientific data ──────────────────────────────────────────────────
+  scientific: {
+    idealTempLabel: 'Ideal temperature',
+    extraRows: [
+      {
+        icon: 'bedtime',
+        label: 'Sleeping time',
+        value: 'Extensive, see the calendar',
+      },
+      {
+        icon: 'auto_awesome',
+        label: 'Make up',
+        value: 'Only high quality, good for the skin',
+      },
+      {
+        icon: 'hot_tub',
+        label: 'Monthly 温泉',
+        value: 'Once a month, and twice when the week has been long',
+      },
+    ],
+    chipGroups: [
+      {
+        key: 'food',
+        label: 'Preferred food',
+        values: ['High quality', 'Sushi', `${ALEX} cooking`],
+      },
+      {
+        key: 'cooking',
+        label: `${ALEX} cooking`,
+        values: ['Ratatouille', 'Crêpes', 'Ice cream', 'Quiches'],
+      },
+    ],
+  },
+
+  // ── §06 characteristics ──────────────────────────────────────────────────
+  bars: {
+    // The four the catalogue can never fill for this entry go away entirely
+    // rather than sitting there empty.
+    omit: ['soilMoisture', 'atmoHumidity', 'soilTexture', 'soilPh'],
+    extra: [
+      {
+        key: 'intelligence',
+        label: 'Intelligence',
+        level: 'Max',
+        pct: 100,
+        color: HUE.navy,
+      },
+      {
+        key: 'kindness',
+        label: 'Kindness',
+        level: 'Max',
+        pct: 100,
+        color: HUE.green,
+      },
+      {
+        key: 'dogs',
+        label: 'Love for dogs',
+        level: 'Max',
+        pct: 100,
+        color: HUE.brown,
+      },
+      {
+        key: 'sleepAnywhere',
+        label: 'Ability to sleep anywhere',
+        level: 'Max',
+        pct: 100,
+        color: HUE.violet,
+      },
+      {
+        key: 'screenTime',
+        label: 'Screen time',
+        level: 'High',
+        pct: 88,
+        color: HUE.amber,
+      },
+      {
+        key: 'cockroaches',
+        label: 'Patience for cockroaches',
+        level: 'Zero',
+        pct: 0,
+        color: HUE.red,
+      },
+    ],
+    tooltips: {
+      frostTolerance: 'さむい！',
+      screenTime: 'Mostly Instagram',
+      dogs: 'Woof woof',
+      sleepAnywhere: 'Anywhere. Truly anywhere.',
+      kindness: 'Shares her food. Occasionally.',
+      intelligence: 'Knows exactly what she wants.',
+      cockroaches: `Ask ${ALEX}.`,
+    },
+  },
   regions: {
     native: 'Japan',
     distribution: 'Japan · California · France (soon)',
   },
 
-  // ── §14 FAQ — her nine questions, answered from the copy's own lines ─────
+  // ── §07 cultivation & propagation ────────────────────────────────────────
+  culture: [
+    {
+      icon: 'eco',
+      label: 'Propagation methods',
+      value: 'Still thinking about it',
+    },
+    {
+      icon: 'schedule',
+      label: 'Timing',
+      value:
+        'Not looking to propagate yet, needs a better situation, and it does not work with costumes on',
+    },
+    {
+      icon: 'restaurant',
+      label: 'Feeding',
+      value: 'Needs high quality food',
+    },
+    {
+      icon: 'favorite',
+      label: 'Affection',
+      value: `Requires a lot of kisses and hugs from ${ALEX}`,
+    },
+  ],
+
+  // ── §11 observations, fed into the chart instead of listed beneath ───────
+  observationsTitle: 'Observations per city',
+  observations: [
+    { label: 'Japan', value: 1, note: 'Type locality.' },
+    { label: 'Dubai', value: 1, note: 'In transit. Thrived.' },
+    { label: 'Boston', value: 1, note: 'Summer only.' },
+    {
+      label: 'San Francisco',
+      value: 2,
+      note: `Key observation. The 月 recorded as unusually beautiful from this date onward, and more so after an evening at the White Rabbit.`,
+    },
+    {
+      label: 'Los Angeles',
+      value: 1,
+      note: 'Optimal conditions. Specimen at peak.',
+    },
+    { label: 'Paris', value: 1, note: 'Anticipated. Preparations under way.' },
+  ],
+  contributors: [{ name: ALEX, count: '7 observations' }],
+
+  // ── §13 similar plants, over the ghost cards ─────────────────────────────
+  similar: [
+    'There are no similar plants in the world. This one is entirely unique, only one like her exists.',
+    'And someone very happy knows it.',
+  ],
+
+  // ── §14 FAQ: her nine questions, answered from the copy's own lines ──────
   faq: [
     {
       q: 'Can you make some crêpes, or ratatouille, or ice cream?',
-      a: 'Yes. And the ice, essentially only the kind made by アレックス.',
+      a: `Yes. And the ice, essentially only the kind made by ${ALEX}.`,
     },
     {
       q: 'Did you sleep well?',
       a: 'Extensive. Substantially, and with real conviction.',
     },
-    { q: 'Do you love me?', a: 'Nobody loves her more than アレックス.' },
+    { q: 'Do you love me?', a: `Nobody loves her more than ${ALEX}.` },
     { q: 'Did you wash your hands?', a: 'Yes.' },
     { q: 'げんき？', a: 'げんき！' },
     {
@@ -355,7 +574,7 @@ export const HIKARI: EasterEggEntry = {
     { q: 'Can we share?', a: 'Always.' },
   ],
 
-  // ── §12 external resources — things she loves. No URL is guessed: none of
+  // ── §12 external resources: things she loves. No URL is guessed: none of
   // these has a public page this entry can point at with certainty, so each
   // card renders without a link rather than sending her somewhere wrong.
   resources: [
@@ -391,94 +610,93 @@ export const HIKARI: EasterEggEntry = {
     },
   ],
 
-  // ── §11 observations & phenology ─────────────────────────────────────────
-  observations: [
-    { date: 'Origin', location: 'Japan', note: 'Type locality' },
-    { date: '—', location: 'Dubai', note: 'In transit. Thrived.' },
-    { date: '—', location: 'Boston', note: 'Summer only.' },
-    {
-      date: '—',
-      location: 'San Francisco',
-      note: 'Key observation. The 月 recorded as unusually beautiful from this date onward.',
-      starred: true,
-    },
-    {
-      date: '—',
-      location: 'San Francisco — White Rabbit',
-      note: 'Effect intensified. Considered decisive by the observer.',
-    },
-    {
-      date: '—',
-      location: 'Los Angeles',
-      note: 'Optimal conditions. Specimen at peak.',
-    },
-    {
-      date: 'Soon',
-      location: 'Paris',
-      note: 'Anticipated. Preparations under way.',
-    },
-  ],
-
   // ── The prose the real components have no slot for ───────────────────────
   notes: {
-    lifecycle: PHASE_NOTES,
+    gallery: [
+      { text: 'No photographs on record.', tone: 'lead' },
+      {
+        text: 'Some specimens are better seen in person, and this one is worth the trip.',
+      },
+    ],
+    lifecycle: [
+      {
+        badge: 'Dormancy',
+        text: 'The defining trait of the species.',
+        tone: 'lead',
+      },
+      {
+        text: 'This plant sleeps. Substantially, and with real conviction. Field observations confirm successful dormancy achieved while eating, while riding in a car, and, documented and verified, during a live classical concert.',
+      },
+      {
+        badge: 'Morning',
+        text: 'Contact protocol.',
+        tone: 'lead',
+      },
+      {
+        text: 'The specimen’s recorded response to an early call is, reliably and almost without variation:',
+      },
+      { text: 'ごろごろベッド', tone: 'quote' },
+    ],
     scientific: [
       {
         text: '80 % of the bed, minimum. Non-negotiable. Any attempt to reduce this allocation will fail.',
         tone: 'lead',
       },
       {
-        text: 'Feeding — Enthusiastic and continuous. A genuinely serious food enthusiast, with excellent taste and firm opinions.',
+        badge: 'Feeding',
+        text: 'Enthusiastic and continuous. A genuinely serious food enthusiast, with excellent taste and firm opinions.',
       },
       {
-        text: 'Topical care — Responds exceptionally well to skincare. Shiseido and La Roche-Posay give documented results.',
+        badge: 'Topical care',
+        text: 'Responds exceptionally well to skincare. Shiseido and La Roche-Posay give documented results.',
       },
       {
-        text: 'Greenhouse conditions — Mild and stable. Bright light, low humidity, no draughts, and absolutely no frost.',
+        badge: 'Greenhouse conditions',
+        text: 'Mild and stable. Bright light, low humidity, no draughts, and absolutely no frost.',
       },
     ],
     characteristics: [
-      { text: 'Humidity — Low.' },
+      { badge: 'Humidity', text: 'Low.' },
       {
-        text: 'Preferred climate — Los Angeles: never too hot, and never, ever cold.',
+        badge: 'Preferred climate',
+        text: 'Los Angeles. Never too hot, and never, ever cold.',
       },
-      { text: 'Habit — A bit messy, yet very clean.' },
-      { text: 'Toxic to humans — No.' },
-      { text: 'Toxic to pets — No, actively adores them, dogs above all.' },
-      { text: 'Thorny — Only when insufficiently rested.' },
-      { text: 'Edible — No. Fond of eating, though.' },
+      { badge: 'Habit', text: 'A bit messy, yet very clean.' },
+      { badge: 'Toxic to humans', text: 'No.' },
+      {
+        badge: 'Toxic to pets',
+        text: 'No, actively adores them, dogs above all.',
+      },
+      { badge: 'Thorny', text: 'Only when insufficiently rested.' },
+      { badge: 'Edible', text: 'No. Fond of eating, though.' },
     ],
     culture: [
       {
-        text: 'Propagation by division is not possible and has never been attempted. This specimen does not divide.',
+        text: 'Best results are consistently reported when grown together, in the same place, over a long period. Light, warmth, matcha, dogs, and sleep. A job she genuinely loves, with generous leave, five weeks minimum, French standard. Nothing else is required.',
       },
-      {
-        text: 'Best results are consistently reported when grown together, in the same place, over a long period. Light, warmth, matcha, dogs, and sleep. A job she genuinely loves, with generous leave — five weeks minimum, French standard. Nothing else is required.',
-      },
-      { text: 'Nobody loves her more than アレックス.', tone: 'closing' },
+      { text: `Nobody loves her more than ${ALEX}.`, tone: 'closing' },
     ],
     pests: [
       { text: 'Primary threat: insects. Tolerance: zero.', tone: 'lead' },
-      ...THREATS.map((p) => ({ text: `${p.name} — ${p.response}` })),
       {
-        text: 'Recommended treatment in all three cases: complete removal of the pest by another party, ideally アレックス, ideally before she sees it.',
+        badge: 'Cockroaches',
+        text: 'The single greatest documented threat. Presence triggers an immediate and total defensive response.',
+      },
+      {
+        badge: 'Grasshoppers',
+        text: 'Not welcome. Unpredictable trajectory considered aggravating.',
+      },
+      { badge: 'Flies', text: 'Persistent, and therefore unforgivable.' },
+      {
+        text: `Recommended treatment in every case: complete removal of the pest by another party, ideally ${ALEX}, ideally before she sees it.`,
       },
       {
         text: 'No known diseases. Remarkably robust, provided she has slept.',
-        tone: 'closing' as const,
+        tone: 'closing',
       },
-    ],
-    // ── §13 similar plants ─────────────────────────────────────────────────
-    similar: [
-      { text: 'None.', tone: 'lead' },
-      {
-        text: 'There are no similar plants in the world. This one is entirely unique — only one like her exists.',
-      },
-      { text: 'And someone very happy knows it.', tone: 'closing' },
     ],
   },
 
-  hiddenSections: ['cta', 'planMyGarden'],
   finalLine: 'Would you like to live with me?',
   fontStack: FONT_STACK,
 };

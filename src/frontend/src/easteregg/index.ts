@@ -4,17 +4,17 @@ import { HIKARI } from './entries/hikari';
 import { EASTER_EGGS_ENABLED } from './enabled';
 
 /**
- * SMA-394 — the easter-egg registry.
+ * SMA-394: the easter-egg registry.
  *
  * 🔴 ONE SWITCH: set EASTER_EGGS_ENABLED (in `enabled.ts`) to false and every
  * helper below returns its empty value, so no card appears in the library, no
- * slug resolves on the detail page and no override fires — without deleting a
+ * slug resolves on the detail page and no override fires, without deleting a
  * single line.
  * Deleting the whole feature is: remove this folder, and remove the two marked
  * blocks in PlantDetail.tsx and PlantLibrary.tsx.
  *
  * ADDING A SECOND EASTER EGG: write one more file in `entries/` exporting an
- * EasterEggEntry, add it to EASTER_EGGS below. Nothing else changes — not the
+ * EasterEggEntry, add it to EASTER_EGGS below. Nothing else changes: not the
  * pages, not the routes, not the tests of the real application.
  */
 const EASTER_EGGS: readonly EasterEggEntry[] = [HIKARI];
@@ -25,7 +25,7 @@ function normalise(raw: string): string {
 }
 
 /**
- * The entry whose key the typed text matches EXACTLY — never fuzzy, never
+ * The entry whose key the typed text matches EXACTLY: never fuzzy, never
  * prefix, which is why an easter egg can't be stumbled upon by browsing.
  * Called BEFORE the search hook runs, so a key never reaches the network.
  */

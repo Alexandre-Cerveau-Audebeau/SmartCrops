@@ -59,7 +59,7 @@ const SECTION_IDS = [
 ] as const;
 
 /**
- * SMA-394 — every test for the easter-egg feature lives here, so the suites of
+ * SMA-394: every test for the easter-egg feature lives here, so the suites of
  * the real application stay exactly as they were on develop and deleting this
  * folder deletes the tests with it.
  */
@@ -167,7 +167,7 @@ describe('easter-egg registry', () => {
   });
 
   it.each(['ERINA_J', '  erina_j  ', 'Erina J', 'Erina  J', 'erinaj'])(
-    'matches %j — case, padding and inner whitespace insensitive',
+    'matches %j, case, padding and inner whitespace insensitive',
     (key) => {
       expect(matchEasterEggKey(key)?.slug).toBe(SLUG);
     }
@@ -252,7 +252,7 @@ describe('the library card', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('never sends the key to the finder — no q parameter reaches the network', async () => {
+  it('never sends the key to the finder, no q parameter reaches the network', async () => {
     await renderLibrarySettled();
 
     search('erina_j');
@@ -306,7 +306,7 @@ describe('the detail page', () => {
     expect(vi.mocked(fetchPlantById)).not.toHaveBeenCalled();
   });
 
-  it('still fetches a normal plant exactly once — the injection is inert elsewhere', async () => {
+  it('still fetches a normal plant exactly once, the injection is inert elsewhere', async () => {
     const plant = {
       ...HIKARI.plant,
       id: 'b9eb0675-9872-4b1b-9f5d-417195e98f03',
@@ -364,7 +364,7 @@ describe('the detail page', () => {
     // Scientific data.
     expect(screen.getByText('ほうじ茶 (hojicha)')).toBeInTheDocument();
     // Characteristics: the written wording, and the ranges as the copy writes
-    // them — not bucketed into continents.
+    // them, not bucketed into continents.
     expect(
       screen.getByText(/Only when insufficiently rested/)
     ).toBeInTheDocument();
@@ -377,19 +377,31 @@ describe('the detail page', () => {
       screen.getByText(/The single greatest documented threat/)
     ).toBeInTheDocument();
     expect(screen.getByText(/ideally アレックス/)).toBeInTheDocument();
-    // Synonyms keep their glosses — the real chip carries them as its
+    // Synonyms keep their glosses: the real chip carries them as its
     // authority, announced through the accessible name.
     expect(
       screen.getByLabelText('Erina japonica (syn. えりちゃん)')
     ).toBeInTheDocument();
-    // Observations.
-    expect(screen.getByText(/Type locality/)).toBeInTheDocument();
-    // Resources — the things she loves, not dead botanical searches.
+    // Observations: the cities are IN the chart, not listed beneath it.
+    expect(screen.getByText('Observations per city')).toBeInTheDocument();
+    expect(screen.getByText('アレックス')).toBeInTheDocument();
+    // Resources: the things she loves, not dead botanical searches.
     expect(screen.getByText('Daiso')).toBeInTheDocument();
     expect(screen.queryByText('POWO')).not.toBeInTheDocument();
-    // Similar plants.
-    expect(screen.getByText('None.')).toBeInTheDocument();
-    // FAQ — the written questions, not the generated ones.
+    // Similar plants, over the ghost cards.
+    expect(
+      screen.getByText(/There are no similar plants in the world/)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Recommendation engine coming soon')
+    ).not.toBeInTheDocument();
+    // The distribution map keeps its map and gains its message.
+    expect(
+      screen.getByText('There is only one Erina in the world.')
+    ).toBeInTheDocument();
+    // The gallery says why there is nothing to show.
+    expect(screen.getByText('No photographs on record.')).toBeInTheDocument();
+    // FAQ: the written questions, not the generated ones.
     expect(screen.getByText('げんき？')).toBeInTheDocument();
     expect(screen.queryByText('Is this plant edible?')).not.toBeInTheDocument();
   });
@@ -398,49 +410,91 @@ describe('the detail page', () => {
     renderDetailAt(HREF);
     await screen.findByRole('heading', { name: NAME });
 
-    // 04 — the twelve-month timeline table and its legend (LifecycleSection).
+    // 04: her day, hour by hour, in the real timeline (LifecycleSection).
+    // Twenty-four hour columns plus the stage header, seven written stages.
     const timeline = screen.getByRole('table', {
-      name: 'Seasonal timeline (sowing, flowering, harvest by month)',
+      name: 'Daily timeline (activity by hour)',
     });
-    expect(timeline).toBeInTheDocument();
-    expect(within(timeline).getAllByRole('columnheader')).toHaveLength(13);
-    expect(within(timeline).getByText('Flowering')).toBeInTheDocument();
+    const headers = within(timeline).getAllByRole('columnheader');
+    expect(headers).toHaveLength(25);
+    expect(headers.map((h) => h.textContent)).toEqual([
+      '',
+      ...Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0')),
+    ]);
+    expect(within(timeline).getAllByRole('row')).toHaveLength(8);
+    for (const stage of [
+      'Sleep time',
+      'Make up time',
+      'Eating time',
+      'Time to enjoy the sun',
+      'Job hunting in Paris',
+      'Costume time',
+      'Planning life in Paris',
+    ]) {
+      // Once in the stage row, once in the legend below the timeline.
+      expect(screen.getAllByText(stage)).toHaveLength(2);
+    }
+    // The sleep block spans 00 to 09 inclusive; the screen-reader summary of
+    // each row states its own span.
+    expect(within(timeline).getByText('00 – 09')).toBeInTheDocument();
+    expect(within(timeline).getByText('12, 19')).toBeInTheDocument();
 
-    // 05 — the two-column Available / Coming card (ScientificDataSection),
+    // 05: the two-column Available / Coming card (ScientificDataSection),
     // fed so the left column actually fills, chips included.
     expect(screen.getByText('Available')).toBeInTheDocument();
     expect(screen.getByText(/Coming .* exact measurements/)).toBeInTheDocument();
     expect(screen.getByText('Daily sunlight')).toBeInTheDocument();
     expect(screen.getByText('Recommended spacing')).toBeInTheDocument();
     expect(screen.getByText('80 % of the bed')).toBeInTheDocument();
+    // The row is renamed, and the written rows and chips join the column.
+    expect(screen.getByText('Ideal temperature')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Ideal watering temperature')
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('Monthly 温泉')).toBeInTheDocument();
+    expect(screen.getByText('Sushi')).toBeInTheDocument();
+    expect(screen.getByText('Ratatouille')).toBeInTheDocument();
 
-    // 06 — the progress bars, driven by this entry's values.
+    // 06: the progress bars, driven by this entry's values.
     expect(screen.getByText('Full sun')).toBeInTheDocument();
     expect(screen.getByText('Low (frost-tender)')).toBeInTheDocument();
-    // …and the three the site shows as "Not provided" for every plant.
-    expect(screen.getAllByText('Not provided').length).toBeGreaterThanOrEqual(3);
+    // The four bars the catalogue could never fill here are gone, not empty.
+    expect(screen.queryByText('Not provided')).not.toBeInTheDocument();
+    expect(screen.getByText('Patience for cockroaches')).toBeInTheDocument();
+    expect(screen.getAllByText('Max')).toHaveLength(4);
 
-    // 07 — the icon row of CultureSection.
-    expect(screen.getByText('Watering rhythm')).toBeInTheDocument();
-    // Twice: the hero gauge and the culture row read the same written value.
-    expect(screen.getAllByText('Frequent & particular')).toHaveLength(2);
+    // 07: the icon rows of CultureSection.
+    expect(screen.getByText('Propagation methods')).toBeInTheDocument();
+    expect(screen.getByText('Still thinking about it')).toBeInTheDocument();
+    expect(screen.getByText(/kisses and hugs from アレックス/)).toBeInTheDocument();
 
-    // 08 — three real pest CARDS with the "view details" affordance.
-    for (const name of ['Cockroaches', 'Grasshoppers', 'Flies']) {
+    // 08: nine real pest CARDS with the "view details" affordance.
+    for (const name of [
+      'Cockroaches',
+      'Flies',
+      'Grasshoppers',
+      'Spiders',
+      'Ants',
+      'Coriander',
+      'Natto',
+      'Broken nails',
+      'Anime',
+    ]) {
       expect(
         screen.getByRole('button', { name: `View details for ${name}` })
       ).toBeInTheDocument();
     }
-    expect(screen.getAllByText('Pest · insect')).toHaveLength(3);
+    expect(screen.getAllByText('Pest · insect')).toHaveLength(5);
+    expect(screen.getAllByText('Dislike · food')).toHaveLength(2);
 
-    // 12 — the resource CARDS, with their two-letter pill. No URL is guessed,
+    // 12: the resource CARDS, with their two-letter pill. No URL is guessed,
     // so none of them is a link.
     expect(screen.getByText('SG')).toBeInTheDocument();
     expect(
       screen.queryByRole('link', { name: /Studio Ghibli/ })
     ).not.toBeInTheDocument();
 
-    // 14 — real accordions: one open at a time, first open by default.
+    // 14: real accordions: one open at a time, first open by default.
     const q = screen.getByRole('button', { name: /Do you love me\?/ });
     expect(q).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(q);
@@ -465,6 +519,56 @@ describe('the detail page', () => {
     expect(
       screen.getByRole('heading', { name: 'Community · corrections & comments' })
     ).toBeInTheDocument();
+  });
+
+  it('opens a pest card onto its own answer, not the coming-soon teaser', async () => {
+    renderDetailAt(HREF);
+    await screen.findByRole('heading', { name: NAME });
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'View details for Cockroaches' })
+    );
+    expect(await screen.findByTestId('pest-detail')).toHaveTextContent(
+      'Just ask アレックス, or buy a spray.'
+    );
+  });
+
+  it('answers a non-insect pest in its own words', async () => {
+    renderDetailAt(HREF);
+    await screen.findByRole('heading', { name: NAME });
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'View details for Broken nails' })
+    );
+    expect(await screen.findByTestId('pest-detail')).toHaveTextContent('いたい！');
+  });
+
+  it('annotates the written bars with hover tooltips', async () => {
+    renderDetailAt(HREF);
+    await screen.findByRole('heading', { name: NAME });
+
+    fireEvent.mouseOver(screen.getByText('Love for dogs'));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Woof woof');
+  });
+
+  it('carries no em dash in any string this entry owns', () => {
+    // U+2014 reads as machine-written, so it is banned from everything this
+    // folder writes. Walks the whole entry, strings and nested objects alike.
+    // Written as an escape on purpose: a grep for the character itself must
+    // come back empty across this folder, test included.
+    const EM_DASH = '\u2014';
+    const offenders: string[] = [];
+    const walk = (node: unknown) => {
+      if (typeof node === 'string') {
+        if (node.includes(EM_DASH)) offenders.push(node);
+      } else if (Array.isArray(node)) {
+        node.forEach(walk);
+      } else if (node && typeof node === 'object') {
+        Object.values(node).forEach(walk);
+      }
+    };
+    walk(HIKARI);
+    expect(offenders).toEqual([]);
   });
 
   it('makes no planner promise, and closes on the final line', async () => {

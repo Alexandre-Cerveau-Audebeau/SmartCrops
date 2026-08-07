@@ -44,7 +44,37 @@ const COMING_ITEMS: ReadonlyArray<{ key: ComingItemKey; icon: string }> = [
  * unchanged (parent mounts only when `showScientificData`); the `pd` null-check
  * is type-narrowing only.
  */
-export default function ScientificDataSection({ plant }: { plant: Plant }) {
+// --- SMA-394 easter eggs — delete this block to remove ---
+/**
+ * Additions for an entry whose parameters are written rather than measured:
+ * `idealTempLabel` renames the watering-temperature row, `extraRows` appends to
+ * the Available column in its own row grammar, and `chipGroups` adds chip
+ * blocks beside the water-quality chips (values are verbatim, not i18n keys).
+ */
+export interface WrittenScientificData {
+  readonly idealTempLabel?: string;
+  readonly extraRows?: readonly {
+    readonly icon: string;
+    readonly label: string;
+    readonly value: string;
+  }[];
+  readonly chipGroups?: readonly {
+    readonly key: string;
+    readonly label: string;
+    readonly values: readonly string[];
+  }[];
+}
+// --- end SMA-394 ---
+
+export default function ScientificDataSection({
+  plant,
+  // --- SMA-394 easter eggs — delete this line to remove ---
+  written,
+  // --- end SMA-394 ---
+}: {
+  plant: Plant;
+  written?: WrittenScientificData;
+}) {
   const { t } = useTranslation();
   const { system } = useUnitSystem();
   const pd = plant.perenualData;
@@ -81,17 +111,21 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
     { icon: 'science', label: t(`${sd}.wateringPh`), value: phRange },
     {
       icon: 'device_thermostat',
-      label: t(`${sd}.wateringIdealTemp`),
+      label: written?.idealTempLabel ?? t(`${sd}.wateringIdealTemp`),
       value: wateringTemp,
     },
     { icon: 'light_mode', label: t(`${sd}.sunlightHours`), value: sunlight },
     { icon: 'open_in_full', label: t(`${sd}.spacing`), value: spacing },
     { icon: 'ac_unit', label: t(`${sd}.temperatureTolerance`), value: tempTol },
-  ].filter((r): r is { icon: string; label: string; value: string } =>
-    Boolean(r.value)
-  );
+  ]
+    .filter((r): r is { icon: string; label: string; value: string } =>
+      Boolean(r.value)
+    )
+    // --- SMA-394 easter eggs — delete this line to remove ---
+    .concat(written?.extraRows ?? []);
+  // --- end SMA-394 ---
 
-  const chips = (label: string, values: string[], dict: string) => (
+  const chips = (label: string, values: readonly string[], dict: string) => (
     <Box>
       <Typography
         sx={{
@@ -216,6 +250,27 @@ export default function ScientificDataSection({ plant }: { plant: Plant }) {
                 wateringPeriod,
                 'wateringPeriodValues'
               )}
+            {/* --- SMA-394 easter eggs — delete this block to remove --- */}
+            {written?.chipGroups?.map((g) => (
+              <Box key={g.key}>
+                <Typography
+                  sx={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: 'text.secondary',
+                    mb: 0.75,
+                  }}
+                >
+                  {g.label}
+                </Typography>
+                <Stack direction="row" flexWrap="wrap" gap={0.5}>
+                  {g.values.map((v) => (
+                    <Chip key={v} size="small" label={v} />
+                  ))}
+                </Stack>
+              </Box>
+            ))}
+            {/* --- end SMA-394 --- */}
           </Stack>
         </Box>
 

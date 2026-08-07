@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import Box from '@mui/material/Box';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
@@ -38,7 +39,24 @@ const MONTH_KEYS = [
  * Always mounted (teaser, not gated); the matching TOC entry (`plantnet`)
  * stays `coming-data` (non-clickable). Colours are mode-aware.
  */
-export const ObservationsSection = memo(function ObservationsSection() {
+export const ObservationsSection = memo(function ObservationsSection({
+  // --- SMA-394 easter eggs — delete these three lines to remove ---
+  series,
+  seriesTitle,
+  contributors,
+}: {
+  /** Bars for the left-hand chart, replacing its empty state. */
+  series?: readonly {
+    readonly label: string;
+    readonly value: number;
+    readonly note?: string;
+  }[];
+  /** Title of that chart when the series is not per-year. */
+  seriesTitle?: string;
+  /** Rows for the contributors panel, replacing its empty state. */
+  contributors?: readonly { readonly name: string; readonly count: string }[];
+  // --- end SMA-394 ---
+} = {}) {
   const { t } = useTranslation();
   const { palette } = useTheme();
   const dark = palette.mode === 'dark';
@@ -105,21 +123,83 @@ export const ObservationsSection = memo(function ObservationsSection() {
           mb: 2,
         }}
       >
-        {/* ── Per-year chart card — empty state ── */}
+        {/* ── Per-year chart card — empty state, or a written series ── */}
         <Box sx={cardSx}>
           <Typography sx={{ ...cardTitleSx, mb: 2 }}>
-            {t(`${O}.perYearTitle`)}
+            {seriesTitle ?? t(`${O}.perYearTitle`)}
           </Typography>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minHeight: 200,
-            }}
-          >
-            <Typography sx={emptyMsgSx}>{t(`${O}.emptyChart`)}</Typography>
-          </Box>
+          {series && series.length > 0 ? (
+            /* --- SMA-394 easter eggs — delete this branch to remove --- */
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${series.length}, 1fr)`,
+                alignItems: 'end',
+                gap: 1,
+                minHeight: 200,
+              }}
+            >
+              {series.map((s) => {
+                const peak = Math.max(...series.map((x) => x.value));
+                const bar = (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'flex-end',
+                      gap: 0.75,
+                      height: 200,
+                    }}
+                  >
+                    <Typography
+                      sx={{ fontSize: 11, fontWeight: 700, color: 'heading' }}
+                    >
+                      {s.value}
+                    </Typography>
+                    <Box
+                      sx={{
+                        width: '100%',
+                        height: `${Math.round((s.value / peak) * 74)}%`,
+                        minHeight: 8,
+                        borderRadius: '6px 6px 0 0',
+                        bgcolor: legendGrowth,
+                      }}
+                    />
+                    <Typography
+                      sx={{
+                        fontSize: 11,
+                        color: 'text.secondary',
+                        textAlign: 'center',
+                        lineHeight: 1.25,
+                      }}
+                    >
+                      {s.label}
+                    </Typography>
+                  </Box>
+                );
+                return s.note ? (
+                  <Tooltip key={s.label} title={s.note} arrow placement="top">
+                    <Box>{bar}</Box>
+                  </Tooltip>
+                ) : (
+                  <Box key={s.label}>{bar}</Box>
+                );
+              })}
+            </Box>
+          ) : (
+            /* --- end SMA-394 --- */
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: 200,
+              }}
+            >
+              <Typography sx={emptyMsgSx}>{t(`${O}.emptyChart`)}</Typography>
+            </Box>
+          )}
         </Box>
 
         {/* ── Right column: contributors + mini observation map ── */}
@@ -128,18 +208,55 @@ export const ObservationsSection = memo(function ObservationsSection() {
             <Typography sx={{ ...cardTitleSx, mb: 1.5 }}>
               {t(`${O}.topContributors`)}
             </Typography>
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: 96,
-              }}
-            >
-              <Typography sx={emptyMsgSx}>
-                {t(`${O}.emptyContributors`)}
-              </Typography>
-            </Box>
+            {contributors && contributors.length > 0 ? (
+              /* --- SMA-394 easter eggs — delete this branch to remove --- */
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  gap: 1,
+                  minHeight: 96,
+                }}
+              >
+                {contributors.map((c) => (
+                  <Box
+                    key={c.name}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 1.5,
+                    }}
+                  >
+                    <Typography
+                      sx={{ fontSize: 14, fontWeight: 700, color: 'heading' }}
+                    >
+                      {c.name}
+                    </Typography>
+                    <Typography
+                      sx={{ fontSize: 12, color: 'text.secondary' }}
+                    >
+                      {c.count}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+            ) : (
+              /* --- end SMA-394 --- */
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 96,
+                }}
+              >
+                <Typography sx={emptyMsgSx}>
+                  {t(`${O}.emptyContributors`)}
+                </Typography>
+              </Box>
+            )}
           </Box>
 
           {/* Mini observation map — decorative (blue canvas + green blobs), no data dots */}

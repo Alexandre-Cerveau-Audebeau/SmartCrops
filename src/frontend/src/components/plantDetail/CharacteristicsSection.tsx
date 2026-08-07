@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import Box from '@mui/material/Box';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +25,22 @@ interface CharacteristicsSectionProps {
    * which the mapping would otherwise flatten to its continent ("Asia").
    */
   regions?: { native: string | null; distribution: string | null };
+  /**
+   * Bar-set adjustments for an entry whose interesting axes are not the
+   * catalogue's: `omit` drops derived bars by key, `extra` appends written ones,
+   * `tooltips` attaches a hover note to any bar, derived or written.
+   */
+  bars?: {
+    readonly omit?: readonly string[];
+    readonly extra?: readonly {
+      readonly key: string;
+      readonly label: string;
+      readonly level: string;
+      readonly pct: number;
+      readonly color: string;
+    }[];
+    readonly tooltips?: Readonly<Record<string, string>>;
+  };
   // --- end SMA-394 ---
 }
 
@@ -318,8 +335,9 @@ function RegionPill({
  */
 export const CharacteristicsSection = memo(function CharacteristicsSection({
   plant,
-  // --- SMA-394 easter eggs — delete this line to remove ---
+  // --- SMA-394 easter eggs — delete these two lines to remove ---
   regions: writtenRegions,
+  bars: writtenBars,
   // --- end SMA-394 ---
 }: CharacteristicsSectionProps) {
   const { t } = useTranslation();
@@ -334,7 +352,13 @@ export const CharacteristicsSection = memo(function CharacteristicsSection({
     soil: BAR_COLOR.soil,
     frost: BAR_COLOR.frost,
   };
-  const bars = buildBars(plant, t, barColors);
+  // --- SMA-394 easter eggs — delete the two chained calls to remove ---
+  const bars = buildBars(plant, t, barColors)
+    .filter((b) => !writtenBars?.omit?.includes(b.key))
+    .concat(
+      (writtenBars?.extra ?? []).map((b) => ({ ...b, rawValue: null }))
+    );
+  // --- end SMA-394 ---
   // --- SMA-394 easter eggs — delete the ternary, keep buildRegions(plant, t) ---
   const regions = writtenRegions
     ? {
@@ -379,9 +403,17 @@ export const CharacteristicsSection = memo(function CharacteristicsSection({
           gap: '16px',
         }}
       >
-        {bars.map((bar) => (
-          <BarRow key={bar.key} bar={bar} t={t} />
-        ))}
+        {bars.map((bar) => {
+          const row = <BarRow bar={bar} t={t} />;
+          const tip = writtenBars?.tooltips?.[bar.key];
+          return tip ? (
+            <Tooltip key={bar.key} title={tip} arrow placement="top">
+              <Box>{row}</Box>
+            </Tooltip>
+          ) : (
+            <Box key={bar.key}>{row}</Box>
+          );
+        })}
 
         {showRegions && (
           <Box

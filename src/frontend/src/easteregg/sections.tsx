@@ -1,27 +1,28 @@
 import type { ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
 import { Sym } from '../components/Sym';
-import type { EggGauge, EggNote, EggObservation } from './types';
+import { adaptBadge } from '../utils/badgeColors';
+import type { EggGauge, EggNote } from './types';
 
 /**
- * SMA-394 — the ONLY markup this feature owns.
+ * SMA-394: the ONLY markup this feature owns.
  *
  * Every section of the page is rendered by the product's own component, fed
- * with the entry's data. What is left over is here, and only because the real
+ * with this entry's data. What is left over is here, and only because the real
  * components have no slot for it:
  *
- * - `EggGauges`   — the hero gauge row, whose real version reads eight fixed
- *                   DTO fields; this entry's eight conditions are not those.
- * - `EggNotes`    — written paragraphs attached under a section whose component
- *                   renders facts, never prose.
- * - `EggTravelLog`— one more card under section 11, in the same card grammar.
- * - `EggCard`     — the shared card shell those two sit in.
- * - `EggFinalLine`— the closing line, alone at the foot of the page.
+ * - `EggGauges`: the hero gauge row, whose real version reads eight fixed DTO
+ *   fields; this entry's eight conditions are not those.
+ * - `EggNotes`: written paragraphs attached under a section whose component
+ *   renders facts, never prose.
+ * - `EggCard`: the shared card shell those sit in.
+ * - `EggFinalLine`: the closing line, alone at the foot of the page.
  *
  * Markup follows the real components it sits beside (`PlantHeroGauges`,
- * `ObservationsSection`) so nothing here reads as a foreign block.
+ * `StatusBadge`) so nothing here reads as a foreign block.
  */
 
 /** The bordered content card the page uses for every fact panel. */
@@ -33,6 +34,9 @@ const cardSx = {
   p: '22px 24px',
   boxShadow: '0 1px 3px rgba(27,94,58,0.05)',
 } as const;
+
+/** StatusBadge's own light palette, reused so the note pills match it exactly. */
+const NOTE_BADGE = { bg: '#E6F4EC', fg: '#1B5E3A' } as const;
 
 /** Card shell, spaced like the section it follows. */
 export function EggCard({ children }: { children: ReactNode }) {
@@ -46,7 +50,7 @@ export function EggCard({ children }: { children: ReactNode }) {
 }
 
 /**
- * Hero "growing conditions" row — same grid, same tinted icon tile, same label
+ * Hero "growing conditions" row: same grid, same tinted icon tile, same label
  * and value type scale as {@link PlantHeroGauges}, driven by written values
  * instead of the eight DTO fields the real one formats.
  */
@@ -136,6 +140,41 @@ export function EggGauges({ gauges }: { gauges: readonly EggGauge[] }) {
   );
 }
 
+/**
+ * The pill that names a note's subject, in StatusBadge's grammar: same padding,
+ * radius, weight, tracking and adaptBadge round trip, so light and dark match
+ * the badges already on the page.
+ */
+function NoteBadge({ label }: { label: string }) {
+  const mode = useTheme().palette.mode;
+  const c = adaptBadge({ bg: NOTE_BADGE.bg, fg: NOTE_BADGE.fg }, mode);
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        px: '9px',
+        py: '4px',
+        mr: '8px',
+        bgcolor: c.bg,
+        color: c.fg,
+        border: '1px solid',
+        borderColor: c.border,
+        borderRadius: '6px',
+        fontSize: 10,
+        fontWeight: 800,
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+        verticalAlign: '2px',
+      }}
+    >
+      {label}
+    </Box>
+  );
+}
+
 /** One written paragraph, in the page's own body type scale. */
 function Note({ note }: { note: EggNote }) {
   if (note.tone === 'quote') {
@@ -166,6 +205,7 @@ function Note({ note }: { note: EggNote }) {
         lineHeight: 1.65,
       }}
     >
+      {note.badge && <NoteBadge label={note.badge} />}
       {note.text}
     </Typography>
   );
@@ -173,7 +213,7 @@ function Note({ note }: { note: EggNote }) {
 
 /**
  * The written prose of a section, in the same card the section's own facts sit
- * in — never a label/value grid, which is what the real components are for.
+ * in, never a label/value grid, which is what the real components are for.
  */
 export function EggNotes({ notes }: { notes: readonly EggNote[] }) {
   if (notes.length === 0) return null;
@@ -181,51 +221,6 @@ export function EggNotes({ notes }: { notes: readonly EggNote[] }) {
     <EggCard>
       {notes.map((n) => (
         <Note key={n.text} note={n} />
-      ))}
-    </EggCard>
-  );
-}
-
-/**
- * The travel log under section 11 — additional content in the observation
- * section's card grammar, sitting beside its charts rather than replacing them.
- */
-export function EggTravelLog({
-  observations,
-}: {
-  observations: readonly EggObservation[];
-}) {
-  if (observations.length === 0) return null;
-  return (
-    <EggCard>
-      {observations.map((o) => (
-        <Box
-          key={`${o.date}-${o.location}`}
-          sx={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}
-        >
-          <Typography
-            sx={{
-              flexShrink: 0,
-              width: 64,
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-              color: 'text.secondary',
-            }}
-          >
-            {o.date}
-          </Typography>
-          <Typography sx={{ fontSize: 14.5, lineHeight: 1.6 }}>
-            <Box
-              component="span"
-              sx={{ fontWeight: 700, color: 'heading', mr: '6px' }}
-            >
-              {o.starred ? `★ ${o.location}` : o.location}
-            </Box>
-            {o.note}
-          </Typography>
-        </Box>
       ))}
     </EggCard>
   );

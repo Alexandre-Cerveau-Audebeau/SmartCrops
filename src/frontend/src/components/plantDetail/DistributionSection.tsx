@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
+import { visuallyHidden } from '@mui/utils';
 import SectionHeader from './SectionHeader';
 import StatusBadge from './StatusBadge';
 import { Sym } from '../Sym';
@@ -43,7 +44,14 @@ const CORES: DecorativeBlobPosition[] = [
  * entry stays `coming-data` (non-clickable). Colours are mode-aware estimates,
  * refined against the mockup at rasterize-compare.
  */
-export const DistributionSection = memo(function DistributionSection() {
+export const DistributionSection = memo(function DistributionSection({
+  // --- SMA-394 easter eggs — delete this line to remove ---
+  overlay,
+}: {
+  /** Centred lines laid over the map, in the legend chips' own styling. */
+  overlay?: readonly string[];
+  // --- end SMA-394 ---
+} = {}) {
   const { t } = useTranslation();
   const { palette } = useTheme();
   const dark = palette.mode === 'dark';
@@ -70,6 +78,12 @@ export const DistributionSection = memo(function DistributionSection() {
       >
         {t(`${D}.caption`)}
       </Typography>
+
+      {/* --- SMA-394 easter eggs — delete this block to remove ---
+          The map itself is aria-hidden (decorative), so the overlay's words are
+          repeated here for assistive technology rather than being swallowed. */}
+      {overlay && <Box sx={visuallyHidden}>{overlay.join(' ')}</Box>}
+      {/* --- end SMA-394 --- */}
 
       <Box
         aria-hidden
@@ -115,6 +129,42 @@ export const DistributionSection = memo(function DistributionSection() {
             }}
           />
         ))}
+
+        {/* --- SMA-394 easter eggs — delete this block to remove --- */}
+        {overlay && (
+          <Box
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              px: 2,
+            }}
+          >
+            <Box
+              sx={{
+                maxWidth: 520,
+                textAlign: 'center',
+                bgcolor: chipBg,
+                borderRadius: 5,
+                px: 2.25,
+                py: 1.25,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+              }}
+            >
+              {overlay.map((line) => (
+                <Typography
+                  key={line}
+                  sx={{ fontSize: 13, fontWeight: 600, color: chipText }}
+                >
+                  {line}
+                </Typography>
+              ))}
+            </Box>
+          </Box>
+        )}
+        {/* --- end SMA-394 --- */}
 
         <Box
           sx={{

@@ -19,7 +19,14 @@ const SKELETON_COUNT = 3;
  * matching TOC entry (`similar`) stays `coming-backend` (non-clickable).
  * Colours are mode-aware. Real recommendations are wired later (SMA-78 follow-up).
  */
-export const SimilarPlantsSection = memo(function SimilarPlantsSection() {
+export const SimilarPlantsSection = memo(function SimilarPlantsSection({
+  // --- SMA-394 easter eggs — delete this line to remove ---
+  message,
+}: {
+  /** Overlay lines replacing the "engine coming soon" pill's text. */
+  message?: readonly string[];
+  // --- end SMA-394 ---
+} = {}) {
   const { t } = useTranslation();
   const { palette } = useTheme();
   const dark = palette.mode === 'dark';
@@ -126,15 +133,29 @@ export const SimilarPlantsSection = memo(function SimilarPlantsSection() {
               borderRadius: 5,
               px: 2,
               py: 1,
+              maxWidth: 520,
               boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
             }}
           >
-            <Sym name="schedule" size={18} color={overlayIcon} />
-            <Typography
-              sx={{ fontSize: 13, fontWeight: 600, color: 'text.secondary' }}
-            >
-              {t(`${S}.emptyMessage`)}
-            </Typography>
+            <Sym
+              name={message ? 'favorite' : 'schedule'}
+              size={18}
+              color={overlayIcon}
+            />
+            <Box>
+              {(message ?? [t(`${S}.emptyMessage`)]).map((line) => (
+                <Typography
+                  key={line}
+                  sx={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: 'text.secondary',
+                  }}
+                >
+                  {line}
+                </Typography>
+              ))}
+            </Box>
           </Box>
         </Box>
       </Box>

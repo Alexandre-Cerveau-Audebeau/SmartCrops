@@ -36,17 +36,39 @@ const STAGES: ReadonlyArray<{
   },
 ];
 
-const GRID_COLS = '150px repeat(12, 1fr)';
 const TIMELINE_MIN_W = 760; // min width before horizontal scroll kicks in (mobile)
+
+// --- SMA-394 easter eggs — delete this block to remove ---
+/**
+ * A timeline written by the caller instead of derived from sowing/harvest
+ * periods: its own columns (an entry whose cycle is a DAY, not a year), its own
+ * stages, and each stage's spans as 1-based column indices.
+ */
+export interface WrittenTimeline {
+  readonly columns: readonly string[];
+  readonly caption: string;
+  readonly label: string;
+  readonly stages: readonly {
+    readonly key: string;
+    readonly icon: string;
+    readonly color: string;
+    readonly label: string;
+    readonly spans: readonly number[];
+  }[];
+}
+// --- end SMA-394 ---
 
 /**
  * Collapse a set of 1-based month indices into contiguous [start,end] runs (1=Jan).
  * Note: does NOT treat December->January as contiguous (e.g. [11,12,1,2] yields two
  * runs 11-12 and 1-2), which is intended for the linear Jan->Dec timeline.
  */
-function toRuns(months: number[]): Array<{ start: number; end: number }> {
+function toRuns(
+  months: readonly number[],
+  max = 12
+): Array<{ start: number; end: number }> {
   const uniq = Array.from(new Set(months))
-    .filter((m) => m >= 1 && m <= 12)
+    .filter((m) => m >= 1 && m <= max)
     .sort((a, b) => a - b);
   const runs: Array<{ start: number; end: number }> = [];
   for (const m of uniq) {
@@ -69,7 +91,15 @@ function toRuns(months: number[]): Array<{ start: number; end: number }> {
  * its toggle segment is a disabled teaser. Pure: the parent mounts it only when
  * `showLifecycleSection` is true (TOC state unchanged — Option B).
  */
-export default function LifecycleSection({ plant }: { plant: Plant }) {
+export default function LifecycleSection({
+  plant,
+  // --- SMA-394 easter eggs — delete this line to remove ---
+  timeline,
+  // --- end SMA-394 ---
+}: {
+  plant: Plant;
+  timeline?: WrittenTimeline;
+}) {
   const { t } = useTranslation();
   const mode = useTheme().palette.mode;
   const monthsRaw = t('plantDetail.lifecycle.monthsShort', {
@@ -107,6 +137,29 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
     ),
   };
 
+  // A written timeline supplies columns, stages and spans; everything below
+  // renders from these two, so the markup is the same either way.
+  const columns = timeline?.columns ?? months;
+  const stages = timeline
+    ? timeline.stages.map((s) => ({
+        key: s.key,
+        icon: s.icon,
+        color: s.color,
+        label: s.label,
+        legendLabel: s.label,
+        active: s.spans,
+      }))
+    : STAGES.map((s) => ({
+        key: s.key,
+        icon: s.icon,
+        color: s.color,
+        label: t(`plantDetail.lifecycle.stages.${s.key}`),
+        legendLabel: t(`plantDetail.lifecycle.legend.${s.legendKey}`),
+        active: monthsByStage[s.key],
+      }));
+  const gridCols = `150px repeat(${columns.length}, 1fr)`;
+  const timelineMinW = Math.max(TIMELINE_MIN_W, 150 + columns.length * 42);
+
   return (
     <Box id="lifecycle" sx={{ scrollMarginTop: '80px', mb: 3 }}>
       {/* ── Title + COMING SOON · DATA badge (OUTSIDE the card) ───────────── */}
@@ -128,7 +181,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
         }}
       >
         <Typography sx={{ m: 0, fontSize: 13, color: 'text.secondary' }}>
-          {t('plantDetail.lifecycle.caption')}
+          {timeline?.caption ?? t('plantDetail.lifecycle.caption')}
         </Typography>
         <Box
           sx={{
@@ -195,15 +248,15 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
         <Box sx={{ overflowX: 'auto' }}>
           <Box
             role="table"
-            aria-label={t('plantDetail.lifecycle.timelineLabel')}
-            sx={{ minWidth: TIMELINE_MIN_W }}
+            aria-label={timeline?.label ?? t('plantDetail.lifecycle.timelineLabel')}
+            sx={{ minWidth: timelineMinW }}
           >
-            {/* Month header — vertical gridlines between months. */}
+            {/* Column header — vertical gridlines between columns. */}
             <Box
               role="row"
               sx={{
                 display: 'grid',
-                gridTemplateColumns: GRID_COLS,
+                gridTemplateColumns: gridCols,
                 alignItems: 'center',
                 mb: '10px',
               }}
@@ -212,7 +265,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                 role="columnheader"
                 aria-label={t('plantDetail.lifecycle.stageHeader')}
               />
-              {months.map((m, i) => (
+              {columns.map((m, i) => (
                 <Typography
                   key={i}
                   role="columnheader"
@@ -233,16 +286,16 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
 
             {/* Stage rows. */}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {STAGES.map((s) => {
-                const runs = toRuns(monthsByStage[s.key]);
-                // sr-only summary of the months this stage spans (runs are
-                // 1-based; `months` is 0-based → index by start-1/end-1).
+              {stages.map((s) => {
+                const runs = toRuns(s.active, columns.length);
+                // sr-only summary of the columns this stage spans (runs are
+                // 1-based; `columns` is 0-based → index by start-1/end-1).
                 const activeLabel = runs.length
                   ? runs
                       .map((r) =>
                         r.start === r.end
-                          ? months[r.start - 1]
-                          : `${months[r.start - 1]} – ${months[r.end - 1]}`
+                          ? columns[r.start - 1]
+                          : `${columns[r.start - 1]} – ${columns[r.end - 1]}`
                       )
                       .join(', ')
                   : t('plantDetail.lifecycle.noDataShort');
@@ -255,7 +308,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                       // cell so it can never resolve its box against <body> again.
                       position: 'relative',
                       display: 'grid',
-                      gridTemplateColumns: GRID_COLS,
+                      gridTemplateColumns: gridCols,
                       alignItems: 'center',
                     }}
                   >
@@ -273,7 +326,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                       }}
                     >
                       <Sym name={s.icon} size={17} color="inherit" />
-                      {t(`plantDetail.lifecycle.stages.${s.key}`)}
+                      {s.label}
                     </Box>
                     {/* SMA-249 — sr-only month summary. Uses the canonical
                         `visuallyHidden` (width/height '1px' STRINGS): the previous
@@ -316,9 +369,9 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
             pt: '14px',
           }}
         >
-          {STAGES.map((s) => (
+          {stages.map((s) => (
             <Box
-              key={s.legendKey}
+              key={s.key}
               sx={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -336,7 +389,7 @@ export default function LifecycleSection({ plant }: { plant: Plant }) {
                   bgcolor: s.color,
                 }}
               />
-              {t(`plantDetail.lifecycle.legend.${s.legendKey}`)}
+              {s.legendLabel}
             </Box>
           ))}
         </Box>
