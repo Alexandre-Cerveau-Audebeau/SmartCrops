@@ -1,10 +1,13 @@
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
+import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
 import SectionHeader from './SectionHeader';
 import PlantGallerySection from './PlantGallerySection';
+import { PlantBreadcrumb } from './PlantBreadcrumb';
 import {
   ERINA_ABOUT,
   ERINA_CHARACTERISTICS,
@@ -45,10 +48,16 @@ import type { ErinaRich, ErinaRow } from '../../constants/erina';
 /**
  * SMA-394 — the hidden plant page, rendered entirely from `constants/erina.ts`.
  *
+ * A real routed page, not an inline block: App.tsx mounts it at the static
+ * `/library/{ERINA_SLUG}` route, and the library card reaches it by having that
+ * same slug as its `id` (PlantCard links to `/library/${plant.id}`). It takes
+ * no props and makes no request — the whole page is local content.
+ *
  * Deliberately NOT a variant of PlantDetail: that page is 1547 lines, serves
  * the site's busiest route and fetches its plant by id. This composes the same
- * visual grammar (SectionHeader + the bordered card used by Characteristics /
- * Culture) from local content, so the real page is untouched.
+ * visual grammar (the Container shell, PlantBreadcrumb, SectionHeader and the
+ * bordered card used by Characteristics / Culture) from local content, so the
+ * real page is untouched.
  *
  * Three sections of the real page are absent on purpose: no image (the gallery
  * only accepts Trefle/PlantNet sources and would ship a fabricated credit), no
@@ -143,8 +152,31 @@ function FactTable({ rows }: { rows: readonly ErinaRow[] }) {
 }
 
 export const ErinaDetail = memo(function ErinaDetail() {
+  const { t } = useTranslation();
+
   return (
-    <Box sx={{ pb: 4 }}>
+    // Same outer shell as PlantDetail (full-bleed Container, fixed symmetric
+    // horizontal padding), minus its TOC rail — this page has no sommaire.
+    <Container
+      maxWidth={false}
+      disableGutters
+      sx={{ pt: 4, pb: 6, px: { xs: 2, md: 4 } }}
+    >
+      {/* The same breadcrumb component the real page uses. PlantBreadcrumb
+          types its labels as plain strings, so the Japanese current crumb gets
+          the JP stack from here, through a descendant selector — the idiom
+          PlantDetail already uses for its per-section scroll margins. The Type
+          segment is omitted: this plant has no PlantType row, and inventing one
+          would be the kind of fiction the rest of the page avoids. */}
+      <Box sx={{ '& [aria-current="page"]': { fontFamily: JP_FONT_STACK } }}>
+        <PlantBreadcrumb
+          libraryLabel={t('plantDetail.breadcrumb.library')}
+          libraryHref="/library"
+          typeLabel={null}
+          currentLabel={ERINA_DISPLAY_NAME}
+        />
+      </Box>
+
       {/* ── 01 · Hero — title, binomial, trait table, about ───────────────── */}
       <Card variant="outlined" sx={{ mb: 3, borderRadius: 3 }}>
         <CardContent>
@@ -558,6 +590,6 @@ export const ErinaDetail = memo(function ErinaDetail() {
           <Rich line={ERINA_CLOSING} />
         </Typography>
       </Box>
-    </Box>
+    </Container>
   );
 });

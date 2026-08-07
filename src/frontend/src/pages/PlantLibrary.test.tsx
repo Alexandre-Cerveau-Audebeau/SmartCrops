@@ -1480,11 +1480,14 @@ describe('PlantLibrary', () => {
   });
 });
 
-// SMA-394 — the hidden plant page. The key is matched BEFORE usePlantFinder
-// runs, so it never reaches findPlants and therefore never lands in a proxy or
+// SMA-394 — the hidden plant. The key is matched BEFORE usePlantFinder runs, so
+// it never reaches findPlants and therefore never lands in a proxy or
 // search-engine access log; substituting the empty query also leaves the
-// context UNFILTERED, so the counter and the facet counts cannot move.
-describe('PlantLibrary · hidden plant page (SMA-394)', () => {
+// context UNFILTERED, so the counter and the facet counts cannot move. What the
+// match changes is only what the grid renders: ONE ordinary card, which links
+// to the plant's own page exactly like any other result. The route itself is
+// covered in App.test.tsx, against App's real route table.
+describe('PlantLibrary · hidden plant card (SMA-394)', () => {
   const searchBox = () =>
     screen.getByRole('textbox', { name: 'Search plants by name...' });
 
@@ -1493,9 +1496,10 @@ describe('PlantLibrary · hidden plant page (SMA-394)', () => {
   const search = (value: string) =>
     fireEvent.change(searchBox(), { target: { value } });
 
-  // A distinctive line from the local content module; it exists nowhere in the
-  // catalogue path, so its presence proves the hidden page rendered.
-  const CLOSING_LINE = 'Would you like to live with me?';
+  const CARD_NAME = 'えりな J';
+  // The card's id IS this slug — that is what makes PlantCard link here with no
+  // change to PlantCard, so asserting the href is asserting the whole mechanism.
+  const SECRET_HREF = '/library/erina-j-mon-coeur-since-october-31-2024';
 
   async function renderSettled() {
     mockFinderCatalog([makeListItem()]);
@@ -1504,34 +1508,25 @@ describe('PlantLibrary · hidden plant page (SMA-394)', () => {
     await screen.findByRole('heading', { name: 'Achillea ptarmica' });
   }
 
-  // jsdom has no window.scrollTo; stub it for the whole block (the project's
-  // BackToTop suite uses the same idiom) so the guarded effect stays silent.
-  let scrollSpy: ReturnType<typeof vi.fn>;
-
-  beforeEach(() => {
-    scrollSpy = vi.fn();
-    vi.stubGlobal('scrollTo', scrollSpy);
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('renders the hidden page on an exact key and scrolls back to the top', async () => {
+  it('shows exactly one card, linking to the plant’s own page', async () => {
     await renderSettled();
 
     search('erina_j');
 
-    expect(screen.getByText('えりな J')).toBeInTheDocument();
+    // Card titles are the h6 headings — the same count the rest of this suite
+    // uses to assert page size. Exactly one, and it is not the catalogue's.
+    expect(screen.getAllByRole('heading', { level: 6 })).toHaveLength(1);
+    const title = screen.getByRole('heading', { level: 6, name: CARD_NAME });
+    expect(title.closest('a')).toHaveAttribute('href', SECRET_HREF);
     expect(screen.getByText('Erina J.')).toBeInTheDocument();
-    expect(screen.getByText(CLOSING_LINE)).toBeInTheDocument();
-    // Exactly one of the three results states renders: the grid is gone.
+    // Our own artwork, served from public/ — no photograph, no credit line.
+    expect(screen.getByAltText(CARD_NAME)).toHaveAttribute(
+      'src',
+      '/images/plants/erina-j.svg'
+    );
     expect(
       screen.queryByRole('heading', { name: 'Achillea ptarmica' })
     ).not.toBeInTheDocument();
-    // ScrollToTop is keyed on `pathname` and this stays on /library, so the
-    // page would otherwise open wherever the visitor was scrolled.
-    expect(scrollSpy).toHaveBeenCalledWith({ top: 0 });
   });
 
   it('never sends the key to the finder — no q parameter reaches the network', async () => {
@@ -1558,7 +1553,9 @@ describe('PlantLibrary · hidden plant page (SMA-394)', () => {
 
       search(key);
 
-      expect(screen.getByText(CLOSING_LINE)).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 6, name: CARD_NAME })
+      ).toBeInTheDocument();
     }
   );
 
@@ -1569,7 +1566,9 @@ describe('PlantLibrary · hidden plant page (SMA-394)', () => {
 
       search(key);
 
-      expect(screen.queryByText(CLOSING_LINE)).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('heading', { name: CARD_NAME })
+      ).not.toBeInTheDocument();
       // Falls through to the normal search path.
       expect(
         screen.getByRole('heading', { name: 'Achillea ptarmica' })
@@ -1581,11 +1580,15 @@ describe('PlantLibrary · hidden plant page (SMA-394)', () => {
     await renderSettled();
 
     search('erina_j');
-    expect(screen.getByText(CLOSING_LINE)).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 6, name: CARD_NAME })
+    ).toBeInTheDocument();
 
     search('');
 
-    expect(screen.queryByText(CLOSING_LINE)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: CARD_NAME })
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Achillea ptarmica' })
     ).toBeInTheDocument();

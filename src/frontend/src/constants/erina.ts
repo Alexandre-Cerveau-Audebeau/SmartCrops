@@ -18,6 +18,24 @@
  * an arbitrary system font.
  */
 
+import type { Plant } from '../types/Plant';
+
+/**
+ * The hidden page's URL slug — and, deliberately, the CARD object's `id`.
+ * PlantCard renders `to={`/library/${plant.id}`}`, so making the id BE the slug
+ * is what links the card to the page with zero change to PlantCard, and what
+ * lets App.tsx carry a plain static route. Load-bearing: changing one without
+ * the other breaks the link silently.
+ */
+export const ERINA_SLUG = 'erina-j-mon-coeur-since-october-31-2024';
+
+/**
+ * Our own artwork (`public/images/plants/erina-j.svg`) — same 400×400 box as
+ * PLANT_HERO_PLACEHOLDER so the card grid cannot shift. No photograph, no
+ * third-party asset, therefore no credit and no licence line.
+ */
+export const ERINA_CARD_IMAGE = '/images/plants/erina-j.svg';
+
 /**
  * Accepted search keys, already normalised (trimmed, lower-cased, internal
  * whitespace collapsed). Matching is EXACT against this set — never fuzzy,
@@ -87,6 +105,11 @@ export const ERINA_DISPLAY_NAME = 'えりな J';
 /** Binomial shown under the title, in italics like a real plant page. */
 export const ERINA_SCIENTIFIC_NAME = 'Erina J.';
 
+// Two hero values the library CARD also shows (PlantCard reads `sunExposure`
+// and `waterNeeds`). Named constants so the card and the page cannot drift.
+const SUN_EXPOSURE = 'Full sun · 8+ hours';
+const WATER_NEEDS = 'Frequent, and particular';
+
 /**
  * Hero trait table. Height and spread are deliberately absent, so the page
  * renders no size gauges at all.
@@ -96,8 +119,8 @@ export const ERINA_HERO_ROWS: readonly ErinaRow[] = [
     label: 'Plant type',
     value: [s('Ornamental — though the label undersells it')],
   },
-  { label: 'Sun exposure', value: [s('Full sun · 8+ hours')] },
-  { label: 'Water needs', value: [s('Frequent, and particular')] },
+  { label: 'Sun exposure', value: [s(SUN_EXPOSURE)] },
+  { label: 'Water needs', value: [s(WATER_NEEDS)] },
   {
     label: 'Care level',
     value: [s("Easy, if you pay attention. Impossible, if you don't.")],
@@ -167,6 +190,113 @@ export const ERINA_ABOUT: readonly ErinaRich[] = [
     ),
   ],
 ];
+
+/** Flatten a rich line to plain text, for the places that need a bare string. */
+export const flattenRich = (line: ErinaRich): string =>
+  line.map((seg) => seg.text).join('');
+
+// ── 02b · The library card ─────────────────────────────────────────────────
+
+/**
+ * The object handed to PlantCard when the key is typed, so the hidden plant
+ * appears as an ordinary result in the grid and links to its own page.
+ *
+ * Typed as a full `Plant` on purpose: the compiler then guarantees the shape
+ * stays valid if the DTO changes. Only the fields PlantCard actually reads
+ * carry content —
+ *   `id`               → `to={`/library/${plant.id}`}`   ⭐ the link
+ *   `commonName`       → the card title (via capitalizeFirst)
+ *   `scientificName`   → the italic subtitle, and the title's fallback
+ *   `imageUrl`         → CardMedia
+ *   `description`      → the 2-line clamped blurb
+ *   `sunExposure`      → the "Sun: …" footer half
+ *   `waterNeeds`       → the "Water: …" footer half
+ *   `imageAttribution` → LEFT NULL: our own artwork carries no credit line
+ * — everything else is the neutral empty value.
+ *
+ * `plantTypeId` is 0 deliberately: it matches no row of `/api/planttypes`, so
+ * the type chip simply does not render and the card never depends on a
+ * database primary key. Hard-coding a real id here would silently mislabel the
+ * card if plant types were ever reseeded.
+ */
+export const ERINA_CARD: Plant = {
+  id: ERINA_SLUG,
+  scientificName: ERINA_SCIENTIFIC_NAME,
+  plantTypeId: 0,
+  plantType: null,
+
+  sunExposure: SUN_EXPOSURE,
+  waterNeeds: WATER_NEEDS,
+  sowingPeriod: null,
+  harvestPeriod: null,
+  imageUrl: ERINA_CARD_IMAGE,
+  imageAttribution: null,
+  commonName: ERINA_DISPLAY_NAME,
+  description: flattenRich(ERINA_ABOUT[0]),
+
+  gbifTaxonKey: null,
+  family: null,
+  genus: null,
+  speciesEpithet: null,
+  author: null,
+  wfoId: null,
+  year: null,
+
+  lifeCycle: null,
+  growthRate: null,
+  wateringNeedLevel: null,
+  careLevel: null,
+  growthHabit: null,
+
+  hardinessZoneMin: null,
+  hardinessZoneMax: null,
+  minHeightCm: null,
+  maxHeightCm: null,
+  minSpreadCm: null,
+  maxSpreadCm: null,
+  soilPhMin: null,
+  soilPhMax: null,
+  lightLevel: null,
+  soilNutriments: null,
+  minTempC: null,
+  maxTempC: null,
+
+  isEdible: null,
+  isVegetable: null,
+  isMedicinal: null,
+  isIndoor: null,
+  isDroughtTolerant: null,
+  isSaltTolerant: null,
+  isThorny: null,
+  isInvasive: null,
+  isTropical: null,
+  isToxicToHumans: null,
+  isToxicToPets: null,
+  attractsPollinators: null,
+
+  flowerColors: null,
+  nativeRegions: null,
+  introducedRegions: null,
+  edibleParts: null,
+  sowingInstructions: null,
+  propagationInstructions: null,
+
+  enrichmentSources: [],
+  lastEnrichmentAt: null,
+
+  createdAt: '',
+  updatedAt: '',
+
+  images: [],
+  longDescriptions: [],
+  commonNames: [],
+  pests: [],
+  synonyms: [],
+  sources: [],
+
+  trefleData: null,
+  perenualData: null,
+};
 
 // ── 03 · Photo gallery ─────────────────────────────────────────────────────
 

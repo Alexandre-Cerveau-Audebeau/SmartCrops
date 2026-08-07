@@ -41,8 +41,7 @@ import {
   rangeChipLabel,
 } from '../constants/facetVocabularies';
 import PlantCard from '../components/PlantCard';
-import { ErinaDetail } from '../components/plantDetail/ErinaDetail';
-import { isSecretKey } from '../constants/erina';
+import { ERINA_CARD, JP_FONT_STACK, isSecretKey } from '../constants/erina';
 
 // SMA-255 T4 put the Library on the faceted finder endpoint (real server
 // pagination); SMA-9 T1 moved that fetch orchestration wholesale into
@@ -85,11 +84,13 @@ export default function PlantLibrary() {
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // SMA-394 — the hidden plant page. Matched HERE, before the hook, on purpose:
+  // SMA-394 — the hidden plant. Matched HERE, before the hook, on purpose:
   // findPlants writes the query into the request URL, so a key reaching the
   // hook would be logged in clear text by the proxy and by the search engine.
   // Substituting the empty query also keeps the context UNFILTERED, so the
-  // result counter, the facet counts and the pagination are untouched.
+  // result counter, the facet counts and the pagination are untouched. The
+  // match only swaps what the grid renders — one ordinary card, which links to
+  // the plant's own page like every other result.
   const isSecret = isSecretKey(searchQuery);
 
   const {
@@ -107,13 +108,6 @@ export default function PlantLibrary() {
     resetToFirstPage,
     refetch,
   } = usePlantFinder({ query: isSecret ? '' : searchQuery, filters, language });
-
-  // ScrollToTop is keyed on `pathname` and this stays on /library, so nothing
-  // else resets the offset — without this the hidden page would open wherever
-  // the visitor happened to be scrolled. Same `window.scrollTo` idiom.
-  useEffect(() => {
-    if (isSecret) window.scrollTo({ top: 0 });
-  }, [isSecret]);
 
   // Single guarded path for mount AND Retry — a slow initial response must
   // never overwrite a fresher Retry commit, and vice versa. Every load
@@ -515,11 +509,23 @@ export default function PlantLibrary() {
               absent until a Retry succeeds. */}
           {filterPanel}
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            {/* SMA-394 — three mutually-exclusive results states: the hidden
-                page, or the normal catalogue path (empty states + grid). The
-                blocks below are unchanged, only bracketed. */}
+            {/* SMA-394 — the hidden plant surfaces as ONE ordinary card in the
+                results grid: same Grid container, same cell sizing, same
+                PlantCard as every real result, so nothing about it reads as a
+                special case. It links to its own page with no change to
+                PlantCard, because ERINA_CARD.id IS the page's slug. The card
+                title is Japanese and PlantCard sets no font, so the JP stack is
+                applied from here via a descendant selector.
+                The blocks in the other branch are unchanged, only bracketed. */}
             {isSecret ? (
-              <ErinaDetail />
+              <Grid container spacing={3}>
+                <Grid
+                  size={{ xs: 12, sm: 6, md: 4 }}
+                  sx={{ '& h6': { fontFamily: JP_FONT_STACK } }}
+                >
+                  <PlantCard plant={ERINA_CARD} />
+                </Grid>
+              </Grid>
             ) : (
               <>
                 {/* found === 0 with no active filter = genuinely empty

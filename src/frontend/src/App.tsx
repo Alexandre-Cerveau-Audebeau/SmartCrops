@@ -29,6 +29,7 @@ import ResetPassword from './pages/ResetPassword';
 import Shop from './pages/Shop';
 import Terms from './pages/Terms';
 import { ColorModeProvider } from './contexts/ColorModeContext';
+import { ErinaDetail } from './components/plantDetail/ErinaDetail';
 
 export default function App() {
   return (
@@ -57,8 +58,20 @@ export default function App() {
                     <Route element={<GuestRoute />}>
                       <Route path="/login" element={<Login />} />
                       <Route path="/register" element={<Register />} />
-                      <Route path="/forgot-password" element={<ForgotPassword />} />
+                      <Route
+                        path="/forgot-password"
+                        element={<ForgotPassword />}
+                      />
                     </Route>
+                    {/* SMA-394 — the hidden plant. A STATIC route placed
+                        immediately before the dynamic one so the precedence is
+                        readable at a glance: this slug never reaches
+                        PlantDetail's fetch-by-id, because there is no such row
+                        in the database. */}
+                    <Route
+                      path="/library/erina-j-mon-coeur-since-october-31-2024"
+                      element={<ErinaDetail />}
+                    />
                     <Route path="/library/:id" element={<PlantDetail />} />
                     <Route path="/library" element={<PlantLibrary />} />
                     <Route path="/legal-notice" element={<LegalNotice />} />
