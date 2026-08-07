@@ -41,6 +41,8 @@ import {
   rangeChipLabel,
 } from '../constants/facetVocabularies';
 import PlantCard from '../components/PlantCard';
+import { ErinaDetail } from '../components/plantDetail/ErinaDetail';
+import { isSecretKey } from '../constants/erina';
 
 // SMA-255 T4 put the Library on the faceted finder endpoint (real server
 // pagination); SMA-9 T1 moved that fetch orchestration wholesale into
@@ -83,6 +85,13 @@ export default function PlantLibrary() {
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
+  // SMA-394 — the hidden plant page. Matched HERE, before the hook, on purpose:
+  // findPlants writes the query into the request URL, so a key reaching the
+  // hook would be logged in clear text by the proxy and by the search engine.
+  // Substituting the empty query also keeps the context UNFILTERED, so the
+  // result counter, the facet counts and the pagination are untouched.
+  const isSecret = isSecretKey(searchQuery);
+
   const {
     items,
     found,
@@ -97,7 +106,14 @@ export default function PlantLibrary() {
     loadMore,
     resetToFirstPage,
     refetch,
-  } = usePlantFinder({ query: searchQuery, filters, language });
+  } = usePlantFinder({ query: isSecret ? '' : searchQuery, filters, language });
+
+  // ScrollToTop is keyed on `pathname` and this stays on /library, so nothing
+  // else resets the offset — without this the hidden page would open wherever
+  // the visitor happened to be scrolled. Same `window.scrollTo` idiom.
+  useEffect(() => {
+    if (isSecret) window.scrollTo({ top: 0 });
+  }, [isSecret]);
 
   // Single guarded path for mount AND Retry — a slow initial response must
   // never overwrite a fresher Retry commit, and vice versa. Every load
@@ -499,86 +515,104 @@ export default function PlantLibrary() {
               absent until a Retry succeeds. */}
           {filterPanel}
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            {/* found === 0 with no active filter = genuinely empty catalogue;
-                with a query or facet active it's a no-match state. Gating uses
-                the hook's isFiltered so it can't drift from the fetch's own
-                match-all rule. */}
-            {!error && found === 0 && !isFiltered && (
-              <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
-                <SpaIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
-                <Typography>{t('library.noPlants')}</Typography>
-              </Box>
-            )}
-
-            {!error && found === 0 && isFiltered && (
-              <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
-                <Typography>{t('library.noResults')}</Typography>
-                {/* Same reset as the header/"Tout effacer": facets only, the
-                    search text stays (it may be the only active narrowing —
-                    then the button is a no-op by design; the mockup's reset
-                    affordance is unconditional). */}
-                <Button
-                  variant="outlined"
-                  onClick={handleReset}
-                  sx={{ mt: 2, borderRadius: 999, textTransform: 'none' }}
-                >
-                  {t('library.resetFilters')}
-                </Button>
-              </Box>
-            )}
-
-            {items.length > 0 && (
+            {/* SMA-394 — three mutually-exclusive results states: the hidden
+                page, or the normal catalogue path (empty states + grid). The
+                blocks below are unchanged, only bracketed. */}
+            {isSecret ? (
+              <ErinaDetail />
+            ) : (
               <>
-                <Grid container spacing={3}>
-                  {items.map((plant) => {
-                    const typeName = plantTypes.find(
-                      (pt) => pt.id === plant.plantTypeId
-                    )?.name;
-                    return (
-                      <Grid key={plant.id} size={{ xs: 12, sm: 6, md: 4 }}>
-                        <PlantCard plant={plant} typeName={typeName} />
-                      </Grid>
-                    );
-                  })}
-                </Grid>
+                {/* found === 0 with no active filter = genuinely empty
+                    catalogue; with a query or facet active it's a no-match
+                    state. Gating uses the hook's isFiltered so it can't drift
+                    from the fetch's own match-all rule. */}
+                {!error && found === 0 && !isFiltered && (
+                  <Box
+                    sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}
+                  >
+                    <SpaIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
+                    <Typography>{t('library.noPlants')}</Typography>
+                  </Box>
+                )}
 
-                {/* Polite, visually-hidden live region rendered once the list
-                    has loaded (gated by !initialLoading && items.length > 0).
-                    It announces the loaded/total count as pages append (Load
-                    more / scroll); some screen readers may also announce the
-                    initial count when it appears. */}
-                <Box
-                  role="status"
-                  aria-live="polite"
-                  aria-atomic="true"
-                  sx={visuallyHidden}
-                >
-                  {t('library.showing', {
-                    shown: items.length,
-                    total: found,
-                  })}
-                </Box>
-
-                {hasMore && (
-                  <>
-                    {/* Decorative scroll sentinel — entering the viewport
-                        auto-loads the next page. height:10 (vs 1px) is a
-                        slightly larger intersection target for reliable
-                        triggering; with rootMargin:'100px' the exact height
-                        matters little. The button is the keyboard /
-                        no-observer fallback. */}
-                    <Box
-                      ref={sentinelRef}
-                      aria-hidden="true"
-                      sx={{ height: 10 }}
-                    />
-                    <Box
-                      sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}
+                {!error && found === 0 && isFiltered && (
+                  <Box
+                    sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}
+                  >
+                    <Typography>{t('library.noResults')}</Typography>
+                    {/* Same reset as the header/"Tout effacer": facets only, the
+                        search text stays (it may be the only active narrowing —
+                        then the button is a no-op by design; the mockup's reset
+                        affordance is unconditional). */}
+                    <Button
+                      variant="outlined"
+                      onClick={handleReset}
+                      sx={{ mt: 2, borderRadius: 999, textTransform: 'none' }}
                     >
-                      <Button variant="outlined" onClick={loadMore}>
-                        {t('library.loadMore')}
-                      </Button>
+                      {t('library.resetFilters')}
+                    </Button>
+                  </Box>
+                )}
+
+                {items.length > 0 && (
+                  <>
+                    <Grid container spacing={3}>
+                      {items.map((plant) => {
+                        const typeName = plantTypes.find(
+                          (pt) => pt.id === plant.plantTypeId
+                        )?.name;
+                        return (
+                          <Grid key={plant.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                            <PlantCard plant={plant} typeName={typeName} />
+                          </Grid>
+                        );
+                      })}
+                    </Grid>
+
+                    {/* Polite, visually-hidden live region rendered once the
+                        list has loaded (gated by !initialLoading &&
+                        items.length > 0). It announces the loaded/total count
+                        as pages append (Load more / scroll); some screen
+                        readers may also announce the initial count when it
+                        appears. */}
+                    <Box
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true"
+                      sx={visuallyHidden}
+                    >
+                      {t('library.showing', {
+                        shown: items.length,
+                        total: found,
+                      })}
                     </Box>
+
+                    {hasMore && (
+                      <>
+                        {/* Decorative scroll sentinel — entering the viewport
+                            auto-loads the next page. height:10 (vs 1px) is a
+                            slightly larger intersection target for reliable
+                            triggering; with rootMargin:'100px' the exact height
+                            matters little. The button is the keyboard /
+                            no-observer fallback. */}
+                        <Box
+                          ref={sentinelRef}
+                          aria-hidden="true"
+                          sx={{ height: 10 }}
+                        />
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'center',
+                            mt: 3,
+                          }}
+                        >
+                          <Button variant="outlined" onClick={loadMore}>
+                            {t('library.loadMore')}
+                          </Button>
+                        </Box>
+                      </>
+                    )}
                   </>
                 )}
               </>
