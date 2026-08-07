@@ -177,27 +177,4 @@ public class PlantRepository(SmartCropsDbContext context) : IPlantRepository
             .Where(p => p.PlantTypeId == plantTypeId)
             .ToListAsync();
     }
-
-    /// <summary>
-    /// Case-insensitive substring match against the localised
-    /// <see cref="PlantTranslation.CommonName"/> /
-    /// <see cref="PlantTranslation.Description"/> for <paramref name="language"/>,
-    /// with <see cref="Plant.ScientificName"/> as a language-neutral fallback.
-    /// </summary>
-    public async Task<IEnumerable<Plant>> SearchAsync(string query, string language)
-    {
-        var normalised = query.Trim().ToLower();
-
-        // Shared lean-list includes (type + localised translation for display + stable
-        // images). The translation Include below is for DISPLAY; the search predicate is
-        // a separate navigation-EXISTS over Translations (no materialisation needed).
-        return await ApplyListIncludes(context.Plants, language)
-            .Where(p =>
-                p.ScientificName.ToLower().Contains(normalised) ||
-                p.Translations.Any(t =>
-                    t.Language == language &&
-                    (t.CommonName.ToLower().Contains(normalised) ||
-                     (t.Description != null && t.Description.ToLower().Contains(normalised)))))
-            .ToListAsync();
-    }
 }

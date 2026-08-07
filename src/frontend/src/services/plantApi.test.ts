@@ -4,7 +4,6 @@ import {
   fetchPlants,
   fetchPlantTypes,
   findPlants,
-  searchPlants,
 } from './plantApi';
 import { HttpStatusError } from './httpStatusError';
 
@@ -192,31 +191,6 @@ describe('plantApi error/credentials contract (SMA-280)', () => {
     const pending = fetchPlantTypes();
     await expect(pending).rejects.toBeInstanceOf(HttpStatusError);
     await expect(pending).rejects.toMatchObject({ status: 500 });
-  });
-
-  it('searchPlants sends credentials: omit with the query/lang pair', async () => {
-    const spy = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([]),
-    });
-    vi.stubGlobal('fetch', spy);
-
-    await expect(searchPlants('rose', 'fr')).resolves.toEqual([]);
-
-    const [url, init] = spy.mock.calls[0]! as [string, RequestInit];
-    expect(url).toBe('/api/plants/search?query=rose&lang=fr');
-    expect(init.credentials).toBe('omit');
-  });
-
-  it('searchPlants rejects with HttpStatusError carrying status 502', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({ ok: false, status: 502 })
-    );
-
-    const pending = searchPlants('rose', 'fr');
-    await expect(pending).rejects.toBeInstanceOf(HttpStatusError);
-    await expect(pending).rejects.toMatchObject({ status: 502 });
   });
 
   it('findPlants sends credentials: omit', async () => {

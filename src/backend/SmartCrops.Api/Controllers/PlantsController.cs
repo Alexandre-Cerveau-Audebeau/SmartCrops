@@ -13,8 +13,8 @@ namespace SmartCrops.Api.Controllers;
 /// <summary>
 /// Public plant catalogue endpoints. Every read endpoint projects through a
 /// curated DTO: <c>GetById</c> returns <see cref="PlantDetailResponse"/> via
-/// <see cref="PlantDetailMapper"/>, while the list endpoints (GetAll, GetByType,
-/// Search) return the neutral <see cref="PlantListItemResponse"/> via
+/// <see cref="PlantDetailMapper"/>, while the list endpoints (GetAll, GetByType)
+/// return the neutral <see cref="PlantListItemResponse"/> via
 /// <see cref="PlantListItemMapper"/> so licensed source text never leaves the
 /// detail surface (SMA-70).
 /// </summary>
@@ -59,24 +59,6 @@ public class PlantsController(
     {
         var language = LanguageCodes.Normalize(lang);
         var plants = await repository.GetByTypeAsync(plantTypeId, language);
-        return Ok(plants.Select(p => PlantListItemMapper.ToListItem(p, language)));
-    }
-
-    /// <summary>
-    /// Substring search against the localised common name / description, with
-    /// the scientific name as a language-neutral fallback. <c>query</c> is
-    /// required; <c>lang</c> defaults to <c>"en"</c> (same query key as the list
-    /// endpoints — CodeRabbit). Empty queries return 400 to keep the result page
-    /// from showing the entire catalogue.
-    /// </summary>
-    [HttpGet("search")]
-    public async Task<IActionResult> Search([FromQuery] string query, [FromQuery] string lang = "en")
-    {
-        if (string.IsNullOrWhiteSpace(query))
-            return BadRequest("query parameter is required.");
-
-        var language = LanguageCodes.Normalize(lang);
-        var plants = await repository.SearchAsync(query, language);
         return Ok(plants.Select(p => PlantListItemMapper.ToListItem(p, language)));
     }
 

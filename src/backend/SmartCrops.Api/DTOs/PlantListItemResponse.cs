@@ -4,8 +4,9 @@ using SmartCrops.Core.Enums;
 namespace SmartCrops.Api.DTOs;
 
 /// <summary>
-/// Neutral list/grid projection for <c>GET /api/plants</c>, <c>/type/{id}</c> and
-/// <c>/search</c>. Replaces the previous raw-<see cref="Plant"/>-entity response,
+/// Neutral list/grid projection for <c>GET /api/plants</c> and <c>/type/{id}</c>,
+/// and for the finder's hydrated items. Replaces the previous
+/// raw-<see cref="Plant"/>-entity response,
 /// which leaked licensed Perenual source text (sowing/propagation instructions,
 /// edible parts) and serialised every empty navigation — including
 /// <c>GardenPlants</c>/<c>Suggestions</c> (SMA-70).

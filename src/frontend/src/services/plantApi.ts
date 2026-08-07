@@ -35,19 +35,10 @@ export async function fetchPlantById(id: string, signal?: AbortSignal): Promise<
   return res.json();
 }
 
-export async function searchPlants(query: string, language: string, signal?: AbortSignal): Promise<Plant[]> {
-  // Query key is `lang` to match the list endpoints (CodeRabbit — unified locale key).
-  const params = new URLSearchParams({ query, lang: language });
-  const res = await fetch(`${API_BASE}/plants/search?${params}`, { credentials: 'omit', signal });
-  if (!res.ok) throw new HttpStatusError(`Failed to search plants: ${res.status}`, res.status);
-  return res.json();
-}
-
 // ── SMA-255 T4 — faceted finder ────────────────────────────────────────────
 // The Library's single data path since T4: text search + structured filters +
 // facet counts + REAL server pagination over the Typesense index, hydrated
 // server-side into the same PlantListItemResponse items as /api/plants.
-// fetchPlants/searchPlants above stay in place for now (cleanup ticket).
 
 export interface FindPlantsParams {
   q?: string;

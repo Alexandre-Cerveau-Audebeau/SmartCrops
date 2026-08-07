@@ -9,9 +9,8 @@ namespace SmartCrops.Api.Controllers;
 /// <summary>
 /// Public faceted plant finder (SMA-255 T3): text search + structured facet
 /// filters + facet counts + pagination, served by the Typesense index and
-/// hydrated from Postgres. Anonymous like the Library list endpoints. The
-/// legacy <c>GET /api/plants/search</c> is untouched — this is a parallel
-/// read path the v2 Library (T4) will consume.
+/// hydrated from Postgres. Anonymous like the Library list endpoints. This is
+/// the catalogue's only search path — the v2 Library consumes it directly.
 ///
 /// Query-string contract (ASP.NET default binding): scalars as
 /// <c>?q=...&amp;lang=fr&amp;page=2&amp;perPage=24</c>, multi-selects as
