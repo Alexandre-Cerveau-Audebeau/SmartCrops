@@ -82,6 +82,24 @@ import {
   pickLongDescription,
   sortGalleryImages,
 } from '../utils/plantDetail';
+import {
+  ERINA_GALLERY_EMPTY,
+  ERINA_JP_CLASS,
+  ERINA_PLANT,
+  ERINA_SLUG,
+} from '../constants/erina';
+
+// SMA-394 — the hidden plant's gallery is empty by design (its only image would
+// have to carry a fabricated credit), so it says so in its own words.
+const ERINA_EMPTY_GALLERY = (
+  <>
+    {ERINA_GALLERY_EMPTY.map((line) => (
+      <Typography key={line} sx={{ fontStyle: 'italic' }}>
+        {line}
+      </Typography>
+    ))}
+  </>
+);
 
 type PlantDetailNavState = {
   from?: string;
@@ -123,6 +141,9 @@ export default function PlantDetail() {
   const { system } = useUnitSystem();
   const mode = useTheme().palette.mode;
   const { user } = useAuth();
+  // SMA-394 — keys the two cosmetic opt-ins below: the Japanese font scope and
+  // the gallery's bespoke empty message.
+  const isErina = id === ERINA_SLUG;
   // SMA-33: admin UI gated on the backend role surfaced via /me (was the
   // VITE_ADMIN_EMAILS front whitelist). UX only — the real barrier is the
   // backend [Authorize(Roles = "Admin")] on the admin endpoints.
@@ -185,6 +206,15 @@ export default function PlantDetail() {
     setPlant(null);
     setError(null);
     if (!id) {
+      setLoading(false);
+      return;
+    }
+    // SMA-394 — one slug is served from a local object instead of the API.
+    // There is no such row, so a fetch would 404; and the whole point is that
+    // the key never reaches the network. Everything below is the real page,
+    // unchanged: the same sections, gates, gauges and responsive rules apply.
+    if (id === ERINA_SLUG) {
+      setPlant(ERINA_PLANT);
       setLoading(false);
       return;
     }
@@ -542,6 +572,8 @@ export default function PlantDetail() {
     <Container
       maxWidth={false}
       disableGutters
+      // SMA-394 — scopes the Japanese font fallback to this one page.
+      className={isErina ? ERINA_JP_CLASS : undefined}
       // SMA-247 — the horizontal-scroll guard now lives once on the Layout shell
       // Box (covers every page); no per-page overflow override needed here.
       sx={{ pt: 4, pb: 6, px: { xs: 2, md: 4 } }}
@@ -1004,6 +1036,7 @@ export default function PlantDetail() {
               key={plant.id}
               images={galleryImages}
               onSelect={openLightbox}
+              emptyMessage={isErina ? ERINA_EMPTY_GALLERY : undefined}
             />
           </Box>
 

@@ -1,31 +1,27 @@
+import type { Plant, PlantPerenualData } from '../types/Plant';
+
 /**
- * SMA-394 — content module for the hidden plant page.
+ * SMA-394 — the hidden plant, as DATA.
  *
- * Everything the easter-egg page renders lives here as typed constants: there
- * is NO database row, NO seed entry and NO Typesense document, so the
- * catalogue count, the facet counts, the planner catalogue and the home
- * statistics are structurally untouched (they all derive from the server).
- * Deleting this file and its two call sites removes the feature entirely.
+ * There is no bespoke page: `PlantDetail` recognises {@link ERINA_SLUG} and
+ * serves {@link ERINA_PLANT} instead of fetching, so the table of contents, the
+ * growing-condition gauges, the section gates, the accordions and every
+ * responsive rule apply to it unchanged. The job of this file is therefore to
+ * FILL a data structure, not to compose markup.
  *
- * Placed in `constants/` rather than a new `data/` folder because that is the
- * existing convention for local content modules (`techStack.ts` is the same
- * shape: literal project content, `as const`, consumed by one or two pages).
+ * Nothing here touches the server: no database row, no seed entry, no Typesense
+ * document. The catalogue count, the facet counts, the planner catalogue and the
+ * home statistics all derive from the API, which knows nothing about this plant.
  *
- * Copy is ENGLISH. Japanese appears only where it carries meaning, and every
- * Japanese run is flagged `jp` so the renderer can give it JP_FONT_STACK —
- * the self-hosted Inter subsets carry no kana or kanji (latin, latin-ext,
- * cyrillic, greek, vietnamese only), so unflagged Japanese would fall back to
- * an arbitrary system font.
+ * Placed in `constants/` following `techStack.ts`, the existing convention for
+ * local content modules.
  */
 
-import type { Plant } from '../types/Plant';
-
 /**
- * The hidden page's URL slug — and, deliberately, the CARD object's `id`.
- * PlantCard renders `to={`/library/${plant.id}`}`, so making the id BE the slug
- * is what links the card to the page with zero change to PlantCard, and what
- * lets App.tsx carry a plain static route. Load-bearing: changing one without
- * the other breaks the link silently.
+ * The page's URL slug — and, deliberately, the CARD object's `id`. PlantCard
+ * renders `to={`/library/${plant.id}`}`, so making the id BE the slug is what
+ * links card to page with zero change to PlantCard, and what lets the EXISTING
+ * dynamic `/library/:id` route serve it with no new route at all.
  */
 export const ERINA_SLUG = 'erina-j-mon-coeur-since-october-31-2024';
 
@@ -39,7 +35,7 @@ export const ERINA_CARD_IMAGE = '/images/plants/erina-j.svg';
 /**
  * Accepted search keys, already normalised (trimmed, lower-cased, internal
  * whitespace collapsed). Matching is EXACT against this set — never fuzzy,
- * never prefix — which is why the page can never be reached by browsing.
+ * never prefix — which is why the plant can never be reached by browsing.
  */
 export const SECRET_KEYS: ReadonlySet<string> = new Set([
   'erina_j',
@@ -58,550 +54,348 @@ export function isSecretKey(raw: string): boolean {
 }
 
 /**
- * Font stack for Japanese runs. Inter first so latin characters inside a mixed
- * run keep the page's typeface, then the platform CJK faces, then the
- * self-hostable Noto fallback, then the generic.
+ * Font stack for the Japanese runs. Applied through ONE scoped CSS rule
+ * (`.erina-jp` in index.css, set by PlantDetail on its Container for this slug)
+ * rather than by editing each section component: the self-hosted Inter subsets
+ * carry no kana or kanji, so without it every Japanese string falls back to
+ * whatever the operating system happens to pick.
  */
 export const JP_FONT_STACK =
   'Inter, "Hiragino Sans", "Yu Gothic UI", Meiryo, "Noto Sans JP", sans-serif';
 
-/** One run of text. `jp` marks a run that must render with JP_FONT_STACK. */
-export interface ErinaSegment {
-  readonly text: string;
-  readonly jp?: boolean;
-  readonly strong?: boolean;
-  readonly italic?: boolean;
-}
-
-/** A line of copy, split into runs so inline Japanese can be styled. */
-export type ErinaRich = readonly ErinaSegment[];
-
-/** A labelled row of a definition-style table. */
-export interface ErinaRow {
-  readonly label: string;
-  readonly value: ErinaRich;
-}
-
-/** A three-column observation row. */
-export interface ErinaObservation {
-  readonly date: string;
-  readonly location: string;
-  readonly note: ErinaRich;
-  /** Marks the row the content calls out as the key observation. */
-  readonly key?: boolean;
-}
-
-// Segment builders — keep the literals below readable.
-const s = (text: string): ErinaSegment => ({ text });
-const jp = (text: string): ErinaSegment => ({ text, jp: true });
-const b = (text: string): ErinaSegment => ({ text, strong: true });
-const i = (text: string): ErinaSegment => ({ text, italic: true });
-
-// ── 01 · Hero ──────────────────────────────────────────────────────────────
-
-/** Displayed common name. Japanese — needs JP_FONT_STACK. */
-export const ERINA_DISPLAY_NAME = 'えりな J';
-
-/** Binomial shown under the title, in italics like a real plant page. */
-export const ERINA_SCIENTIFIC_NAME = 'Erina J.';
-
-// Two hero values the library CARD also shows (PlantCard reads `sunExposure`
-// and `waterNeeds`). Named constants so the card and the page cannot drift.
-const SUN_EXPOSURE = 'Full sun · 8+ hours';
-const WATER_NEEDS = 'Frequent, and particular';
+/** Class name carrying {@link JP_FONT_STACK}; see `index.css`. */
+export const ERINA_JP_CLASS = 'erina-jp';
 
 /**
- * Hero trait table. Height and spread are deliberately absent, so the page
- * renders no size gauges at all.
- */
-export const ERINA_HERO_ROWS: readonly ErinaRow[] = [
-  {
-    label: 'Plant type',
-    value: [s('Ornamental — though the label undersells it')],
-  },
-  { label: 'Sun exposure', value: [s(SUN_EXPOSURE)] },
-  { label: 'Water needs', value: [s(WATER_NEEDS)] },
-  {
-    label: 'Care level',
-    value: [s("Easy, if you pay attention. Impossible, if you don't.")],
-  },
-  { label: 'Life cycle', value: [s('Perennial')] },
-  { label: 'Growth rate', value: [s('Radiant')] },
-  { label: 'Hardiness zone', value: [s('10b – 11a')] },
-  { label: 'Min / max temperature', value: [s('16 °C / 27 °C')] },
-  {
-    label: 'Soil pH',
-    value: [s('6.8 – 7.2 (perfectly balanced, like everything about her)')],
-  },
-  {
-    label: 'Attracts pollinators',
-    value: [
-      b('Yes — one. Exclusively.'),
-      s(
-        ' A blond, blue-eyed French specimen. Highly territorial. Shows no interest in any other plant.'
-      ),
-    ],
-  },
-];
-
-// ── 02 · About (folded into the hero card, as on the real page) ────────────
-
-export const ERINA_ABOUT: readonly ErinaRich[] = [
-  [
-    s(
-      'The most beautiful plant on this site, and — the author is prepared to defend this — the most beautiful plant in the world.'
-    ),
-  ],
-  [
-    s(
-      'Native to Japan, and a remarkably successful export. First recorded travelling through Dubai, then Boston, then San Francisco, then Los Angeles. Reliable reports place a Paris appearance in the near future.'
-    ),
-  ],
-  [
-    s(
-      'Known to charm absolutely anyone within range, with no effort on her part. Observers in San Francisco noted that the '
-    ),
-    jp('月'),
-    s(
-      ' has looked unusually beautiful ever since she was found there — and considerably more so after an evening at the White Rabbit.'
-    ),
-  ],
-  [
-    s(
-      'Elegant. Radiant. Sensitive to changes in temperature, in both directions.'
-    ),
-  ],
-  [
-    s(
-      'She is fond of ice — not the kind you would assume, and essentially only the kind made by '
-    ),
-    jp('アレックス'),
-    s('.'),
-  ],
-  [
-    s(
-      'Requires a great deal of water. Not boring tap water: mostly sparkling water, the sort you find at Daiso. A matcha will brighten her whole day.'
-    ),
-  ],
-  [s('She loves dogs. Unreasonably. Immediately. Every single one.')],
-  [
-    s(
-      'A bit messy, yet somehow always very clean — a combination botanists have not managed to explain.'
-    ),
-  ],
-];
-
-/** Flatten a rich line to plain text, for the places that need a bare string. */
-export const flattenRich = (line: ErinaRich): string =>
-  line.map((seg) => seg.text).join('');
-
-// ── 02b · The library card ─────────────────────────────────────────────────
-
-/**
- * The object handed to PlantCard when the key is typed, so the hidden plant
- * appears as an ordinary result in the grid and links to its own page.
- *
- * Typed as a full `Plant` on purpose: the compiler then guarantees the shape
- * stays valid if the DTO changes. Only the fields PlantCard actually reads
- * carry content —
- *   `id`               → `to={`/library/${plant.id}`}`   ⭐ the link
- *   `commonName`       → the card title (via capitalizeFirst)
- *   `scientificName`   → the italic subtitle, and the title's fallback
- *   `imageUrl`         → CardMedia
- *   `description`      → the 2-line clamped blurb
- *   `sunExposure`      → the "Sun: …" footer half
- *   `waterNeeds`       → the "Water: …" footer half
- *   `imageAttribution` → LEFT NULL: our own artwork carries no credit line
- * — everything else is the neutral empty value.
- *
- * `plantTypeId` is 0 deliberately: it matches no row of `/api/planttypes`, so
- * the type chip simply does not render and the card never depends on a
- * database primary key. Hard-coding a real id here would silently mislabel the
- * card if plant types were ever reseeded.
- */
-export const ERINA_CARD: Plant = {
-  id: ERINA_SLUG,
-  scientificName: ERINA_SCIENTIFIC_NAME,
-  plantTypeId: 0,
-  plantType: null,
-
-  sunExposure: SUN_EXPOSURE,
-  waterNeeds: WATER_NEEDS,
-  sowingPeriod: null,
-  harvestPeriod: null,
-  imageUrl: ERINA_CARD_IMAGE,
-  imageAttribution: null,
-  commonName: ERINA_DISPLAY_NAME,
-  description: flattenRich(ERINA_ABOUT[0]),
-
-  gbifTaxonKey: null,
-  family: null,
-  genus: null,
-  speciesEpithet: null,
-  author: null,
-  wfoId: null,
-  year: null,
-
-  lifeCycle: null,
-  growthRate: null,
-  wateringNeedLevel: null,
-  careLevel: null,
-  growthHabit: null,
-
-  hardinessZoneMin: null,
-  hardinessZoneMax: null,
-  minHeightCm: null,
-  maxHeightCm: null,
-  minSpreadCm: null,
-  maxSpreadCm: null,
-  soilPhMin: null,
-  soilPhMax: null,
-  lightLevel: null,
-  soilNutriments: null,
-  minTempC: null,
-  maxTempC: null,
-
-  isEdible: null,
-  isVegetable: null,
-  isMedicinal: null,
-  isIndoor: null,
-  isDroughtTolerant: null,
-  isSaltTolerant: null,
-  isThorny: null,
-  isInvasive: null,
-  isTropical: null,
-  isToxicToHumans: null,
-  isToxicToPets: null,
-  attractsPollinators: null,
-
-  flowerColors: null,
-  nativeRegions: null,
-  introducedRegions: null,
-  edibleParts: null,
-  sowingInstructions: null,
-  propagationInstructions: null,
-
-  enrichmentSources: [],
-  lastEnrichmentAt: null,
-
-  createdAt: '',
-  updatedAt: '',
-
-  images: [],
-  longDescriptions: [],
-  commonNames: [],
-  pests: [],
-  synonyms: [],
-  sources: [],
-
-  trefleData: null,
-  perenualData: null,
-};
-
-// ── 03 · Photo gallery ─────────────────────────────────────────────────────
-
-/**
- * The gallery is empty BY DESIGN. The page carries no image: the gallery only
- * keeps images sourced from Trefle or PlantNet, and `creditLine()` falls back
- * to a hard-coded 'Trefle · CC-BY-SA' — so any picture here would ship a
- * fabricated credit and licence.
+ * The gallery is empty BY DESIGN and says so in its own words. The page carries
+ * no image: the gallery only keeps images sourced from Trefle or PlantNet, and
+ * `creditLine()` falls back to a hard-coded 'Trefle · CC-BY-SA', so any picture
+ * here would ship a fabricated credit and licence.
  */
 export const ERINA_GALLERY_EMPTY: readonly string[] = [
   'No photographs on record.',
   'Some specimens are better seen in person, and this one is worth the trip.',
 ];
 
-// ── 04 · World distribution ────────────────────────────────────────────────
+const DISPLAY_NAME = 'えりな J';
+const SCIENTIFIC_NAME = 'Erina J.';
 
-export const ERINA_NATIVE_RANGE = 'Japan';
-export const ERINA_DISTRIBUTION = 'Japan · California · France (soon)';
-export const ERINA_ROUTE_CAPTION = 'Recorded migration path, in order:';
+// Two values the library CARD also shows (PlantCard reads `sunExposure` and
+// `waterNeeds`), named so the card and the page cannot drift apart.
+const SUN_EXPOSURE = 'Full sun · 8+ hours';
+const WATER_NEEDS = 'Frequent, and particular';
 
-/** Six labelled stops. The last one has not happened yet. */
-export const ERINA_ROUTE: readonly { name: string; pending?: boolean }[] = [
-  { name: 'Japan' },
-  { name: 'Dubai' },
-  { name: 'Boston' },
-  { name: 'San Francisco' },
-  { name: 'Los Angeles' },
-  { name: 'Paris', pending: true },
+// ── The About prose ────────────────────────────────────────────────────────
+// Rendered by AboutSection inside the hero card (long description preferred,
+// truncated at 360 chars behind a read-more toggle).
+
+const ABOUT: readonly string[] = [
+  'The most beautiful plant on this site, and — the author is prepared to defend this — the most beautiful plant in the world.',
+  'Native to Japan, and a remarkably successful export. First recorded travelling through Dubai, then Boston, then San Francisco, then Los Angeles. Reliable reports place a Paris appearance in the near future.',
+  'Known to charm absolutely anyone within range, with no effort on her part. Observers in San Francisco noted that the 月 has looked unusually beautiful ever since she was found there — and considerably more so after an evening at the White Rabbit.',
+  'Elegant. Radiant. Sensitive to changes in temperature, in both directions.',
+  'She is fond of ice — not the kind you would assume, and essentially only the kind made by アレックス.',
+  'Requires a great deal of water. Not boring tap water: mostly sparkling water, the sort you find at Daiso. A matcha will brighten her whole day.',
+  'She loves dogs. Unreasonably. Immediately. Every single one.',
+  'A bit messy, yet somehow always very clean — a combination botanists have not managed to explain.',
 ];
-
-// ── 05 · Calendar & dormancy ───────────────────────────────────────────────
-
-export const ERINA_DORMANCY_TITLE =
-  'Dormancy — the defining trait of the species.';
-
-export const ERINA_DORMANCY_BODY: ErinaRich = [
-  s(
-    'This plant sleeps. Substantially, and with real conviction. Field observations confirm successful dormancy achieved while eating, while riding in a car, and — documented, verified — during a live classical concert.'
-  ),
-];
-
-export const ERINA_PROTOCOL_TITLE = 'Morning contact protocol.';
-export const ERINA_PROTOCOL_BODY =
-  "The specimen's recorded response to an early call is, reliably and almost without variation:";
-/** Japanese — needs JP_FONT_STACK. */
-export const ERINA_PROTOCOL_RESPONSE = 'ごろごろベッド';
-
-export interface ErinaPhase {
-  readonly phase: string;
-  readonly period: string;
-  readonly notes: string;
-}
-
-export const ERINA_PHASES: readonly ErinaPhase[] = [
-  {
-    phase: 'Dormancy',
-    period: 'Year-round, opportunistic',
-    notes: 'Can occur anywhere, without warning. Do not disturb.',
-  },
-  {
-    phase: 'Morning emergence',
-    period: 'Delayed',
-    notes: 'See contact protocol above. Patience required.',
-  },
-  {
-    phase: 'Peak radiance',
-    period: 'Late morning onward',
-    notes: 'Requires prior completion of dormancy',
-  },
-  { phase: 'Feeding', period: 'Continuous', notes: 'Extensive.' },
-  {
-    phase: 'Travel season',
-    period: 'Whenever possible',
-    notes: 'See distribution',
-  },
-  {
-    phase: 'Flowering',
-    period: 'On sight of a dog',
-    notes: 'Immediate, involuntary',
-  },
-];
-
-// ── 06 · Characteristics ───────────────────────────────────────────────────
-
-export const ERINA_CHARACTERISTICS: readonly ErinaRow[] = [
-  { label: 'Humidity', value: [b('Low')] },
-  { label: 'Light', value: [b('High'), s(' — a great deal of it')] },
-  {
-    label: 'Frost tolerance',
-    value: [b('Very low.'), s(' Gets cold easily. Keep her warm.')],
-  },
-  {
-    label: 'Preferred climate',
-    value: [s('Los Angeles: never too hot, and never, ever cold')],
-  },
-  { label: 'Habit', value: [s('A bit messy, yet very clean')] },
-  { label: 'Toxic to humans', value: [s('No')] },
-  {
-    label: 'Toxic to pets',
-    value: [s('No — actively adores them, dogs above all')],
-  },
-  { label: 'Thorny', value: [s('Only when insufficiently rested')] },
-  { label: 'Edible', value: [s('No. Fond of eating, though.')] },
-];
-
-// ── 07 · Cultivation & greenhouse ──────────────────────────────────────────
-
-export const ERINA_SPACING: ErinaRich = [
-  s(
-    '80 % of the bed, minimum. Non-negotiable. Any attempt to reduce this allocation will fail.'
-  ),
-];
-
-/** Preferred water quality. The third entry is Japanese. */
-export const ERINA_WATER: readonly ErinaRich[] = [
-  [s('Japanese water')],
-  [s('Sparkling MTN WTR')],
-  [jp('ほうじ茶'), s(' (hojicha)')],
-  [s('Matcha latte — whole milk, lactose-free, unsweetened')],
-  [s('Strawberry jam')],
-  [s('Tiramisu, and matcha tiramisu above all')],
-];
-
-export const ERINA_CULTIVATION_ROWS: readonly ErinaRow[] = [
-  {
-    label: 'Feeding',
-    value: [
-      s(
-        'Enthusiastic and continuous. A genuinely serious food enthusiast, with excellent taste and firm opinions.'
-      ),
-    ],
-  },
-  {
-    label: 'Topical care',
-    value: [
-      s(
-        'Responds exceptionally well to skincare. Shiseido and La Roche-Posay give documented results.'
-      ),
-    ],
-  },
-  {
-    label: 'Greenhouse conditions',
-    value: [
-      s(
-        'Mild and stable. Bright light, low humidity, no draughts, and absolutely no frost.'
-      ),
-    ],
-  },
-];
-
-// ── 08 · Diseases & pests ──────────────────────────────────────────────────
-
-export const ERINA_PEST_INTRO = 'Primary threat: insects. Tolerance: zero.';
-
-export const ERINA_PESTS: readonly ErinaRow[] = [
-  {
-    label: 'Cockroaches',
-    value: [
-      s(
-        'The single greatest documented threat. Presence triggers an immediate and total defensive response.'
-      ),
-    ],
-  },
-  {
-    label: 'Grasshoppers',
-    value: [s('Not welcome. Unpredictable trajectory considered aggravating.')],
-  },
-  { label: 'Flies', value: [s('Persistent, and therefore unforgivable.')] },
-];
-
-export const ERINA_PEST_TREATMENT: ErinaRich = [
-  s(
-    'Recommended treatment in all three cases: complete removal of the pest by another party, ideally '
-  ),
-  jp('アレックス'),
-  s(', ideally before she sees it.'),
-];
-
-export const ERINA_PEST_OUTRO =
-  'No known diseases. Remarkably robust, provided she has slept.';
-
-// ── 09 · Common names ──────────────────────────────────────────────────────
-
-export interface ErinaCommonName {
-  readonly language: string;
-  readonly names: ErinaRich;
-}
-
-export const ERINA_COMMON_NAMES: readonly ErinaCommonName[] = [
-  { language: 'French', names: [s('Mon Cœur · Mon Amour · Ma Chérie')] },
-  { language: 'Japanese', names: [jp('えりちゃん')] },
-  { language: 'English', names: [s('Honey · Lovely Thing · My Love')] },
-];
-
-// ── 10 · Botanical synonyms ────────────────────────────────────────────────
-
-export interface ErinaSynonym {
-  readonly name: string;
-  readonly gloss: ErinaRich;
-}
-
-export const ERINA_SYNONYMS: readonly ErinaSynonym[] = [
-  { name: 'Erina japonica', gloss: [s('syn. '), jp('えりちゃん')] },
-  { name: 'Cordis mei', gloss: [s('syn. Mon Cœur')] },
-  { name: 'Amor meus', gloss: [s('syn. Mon Amour')] },
-  { name: 'Cara mea', gloss: [s('syn. Ma Chérie')] },
-  {
-    name: 'Erina j. var. hikari',
-    gloss: [s('the radiant variety; the only one ever recorded')],
-  },
-];
-
-// ── 11 · Observations & phenology ──────────────────────────────────────────
-
-export const ERINA_OBSERVATIONS: readonly ErinaObservation[] = [
-  { date: 'Origin', location: 'Japan', note: [s('Type locality')] },
-  { date: '—', location: 'Dubai', note: [s('In transit. Thrived.')] },
-  { date: '—', location: 'Boston', note: [s('Summer only.')] },
-  {
-    date: '—',
-    location: 'San Francisco',
-    note: [
-      s('Key observation. The '),
-      jp('月'),
-      s(' recorded as unusually beautiful from this date onward.'),
-    ],
-    key: true,
-  },
-  {
-    date: '—',
-    location: 'San Francisco — White Rabbit',
-    note: [s('Effect intensified. Considered decisive by the observer.')],
-  },
-  {
-    date: '—',
-    location: 'Los Angeles',
-    note: [s('Optimal conditions. Specimen at peak.')],
-  },
-  {
-    date: 'Soon',
-    location: 'Paris',
-    note: [s('Anticipated. Preparations under way.')],
-  },
-];
-
-// ── 12 · Resources ─────────────────────────────────────────────────────────
 
 /**
- * Things she loves — never routes to her. Deliberately label-only: this page
- * and this repository are public, the specimen is a real person, and no URL
- * here has been verified, so none is invented.
+ * Everything in the validated copy that the plant DTO has no dedicated field
+ * for. It is appended to the long description rather than dropped, so nothing
+ * from the frozen content is lost: the migration path, the dormancy trait, the
+ * morning protocol, the phase table, the greenhouse notes, the observation
+ * log, the resources, the "no similar plants" verdict, the questions the
+ * auto-generated FAQ cannot carry, and the closing line.
  */
-export const ERINA_RESOURCES: readonly ErinaRow[] = [
-  { label: 'Studio Ghibli', value: [s('essential viewing, repeatedly')] },
-  { label: 'Shiseido', value: [s('see cultivation — topical care')] },
-  { label: 'La Roche-Posay', value: [s('idem')] },
-  { label: 'Daiso', value: [s('primary sparkling-water source')] },
-  {
-    label: 'The White Rabbit, San Francisco',
-    value: [s('see observations')],
-  },
+const UNPLACED: readonly string[] = [
+  'Recorded migration path, in order: Japan → Dubai → Boston → San Francisco → Los Angeles → Paris (pending).',
+  'Dormancy — the defining trait of the species. This plant sleeps. Substantially, and with real conviction. Field observations confirm successful dormancy achieved while eating, while riding in a car, and — documented, verified — during a live classical concert.',
+  'Morning contact protocol. The specimen’s recorded response to an early call is, reliably and almost without variation: ごろごろベッド.',
+  'Phases. Dormancy: year-round, opportunistic — can occur anywhere, without warning; do not disturb. Morning emergence: delayed — see the contact protocol above, patience required. Peak radiance: late morning onward, requires prior completion of dormancy. Feeding: continuous, extensive. Travel season: whenever possible. Flowering: on sight of a dog, immediate and involuntary.',
+  'Preferred climate: Los Angeles — never too hot, and never, ever cold. Habit: a bit messy, yet very clean. Thorny only when insufficiently rested. Not edible; fond of eating, though.',
+  'Recommended spacing: 80 % of the bed, minimum. Non-negotiable. Any attempt to reduce this allocation will fail.',
+  'Feeding: enthusiastic and continuous. A genuinely serious food enthusiast, with excellent taste and firm opinions. Topical care: responds exceptionally well to skincare; Shiseido and La Roche-Posay give documented results. Greenhouse conditions: mild and stable — bright light, low humidity, no draughts, and absolutely no frost.',
+  'Primary threat: insects. Tolerance: zero. Recommended treatment in all three cases: complete removal of the pest by another party, ideally アレックス, ideally before she sees it. No known diseases. Remarkably robust, provided she has slept.',
+  'Observations and phenology. Japan: type locality. Dubai: in transit, thrived. Boston: summer only. San Francisco: key observation — the 月 recorded as unusually beautiful from this date onward. San Francisco, White Rabbit: effect intensified, considered decisive by the observer. Los Angeles: optimal conditions, specimen at peak. Paris: anticipated, preparations under way.',
+  'Things she loves — never routes to her. Studio Ghibli: essential viewing, repeatedly. Shiseido and La Roche-Posay: see topical care. Daiso: primary sparkling-water source. The White Rabbit, San Francisco: see observations.',
+  'Similar plants: none. There are no similar plants in the world. This one is entirely unique — only one like her exists. And someone very happy knows it.',
+  'Frequently asked. Can you make some crêpes, or ratatouille, or ice cream? Did you sleep well? Do you love me? Did you wash your hands? げんき？ Where do you want to go? Do you like my nails? What did you eaaaat? Can we share?',
+  'Propagation by division is not possible and has never been attempted. This specimen does not divide. Best results are consistently reported when grown together, in the same place, over a long period. Light, warmth, matcha, dogs, and sleep. A job she genuinely loves, with generous leave — five weeks minimum, French standard. Nothing else is required.',
+  'Nobody loves her more than アレックス.',
+  'Would you like to live with me?',
 ];
 
-// ── 13 · Similar plants ────────────────────────────────────────────────────
+/** The full validated copy, in reading order. Paragraph-separated. */
+const LONG_DESCRIPTION = [...ABOUT, ...UNPLACED].join('\n\n');
 
-export const ERINA_SIMILAR_TITLE = 'None.';
-export const ERINA_SIMILAR_BODY: readonly ErinaRich[] = [
-  [
-    s(
-      'There are no similar plants in the world. This one is entirely unique — only one like her exists.'
-    ),
+// ── Perenual-shaped data ───────────────────────────────────────────────────
+// Drives the hero gauges, section 05 (Scientific data) and section 07 (Culture).
+
+const ERINA_PERENUAL: PlantPerenualData = {
+  id: 'erina-pd',
+  perenualId: 0,
+  requestedPerenualId: null,
+  cultivar: null,
+  perenualType: null,
+  originCountries: null,
+  // Section 07 — "Best results are reported when grown together, in the same
+  // place, over a long period", and the plant does not divide.
+  propagationMethods: 'Grown together',
+  pruningMonths: null,
+  // Section 07 — "Requires a great deal of water."
+  wateringBenchmark: 'Frequent, and particular',
+  wateringBenchmarkUnit: null,
+  sunlightPreferences: null,
+  maintenance: null,
+  // Section 04 — "Flowering: on sight of a dog, immediate and involuntary" has
+  // no month token, so the calendar's flowering track stays empty by design.
+  floweringSeason: null,
+  harvestSeason: null,
+  hasEdibleFruit: null,
+  hasEdibleLeaves: null,
+  isCulinary: null,
+  plantAnatomyJson: null,
+  apiVersion: null,
+  // Gate for section 05, together with at least one x* field below.
+  hasSupremeData: true,
+  lastSyncAt: '2024-10-31T00:00:00Z',
+  // "Full sun · 8+ hours" → an open-ended 8+ range, which also drives the
+  // Characteristics light bar (avg ≥ 6 → "Full sun").
+  xSunlightHoursMin: 8,
+  xSunlightHoursMax: null,
+  // "Soil pH 6.8 – 7.2 (perfectly balanced, like everything about her)"
+  xWateringPhMin: 6.8,
+  xWateringPhMax: 7.2,
+  // "Min / max temperature 16 °C / 27 °C"
+  xWateringBasedTempMinC: 16,
+  xWateringBasedTempMaxC: 27,
+  // "Frost tolerance: very low. Gets cold easily. Keep her warm."
+  xTemperatureToleranceMinC: 16,
+  xTemperatureToleranceMaxC: 27,
+  // Spacing is "80 % of the bed, minimum" — a proportion, not a length. Left
+  // null rather than inventing a centimetre figure: no size number appears
+  // anywhere on this page, and the frozen copy contains none.
+  xPlantSpacingValue: null,
+  xPlantSpacingUnit: null,
+  // Section 05 — the preferred-water list.
+  xWateringQualityJson: JSON.stringify([
+    'Japanese water',
+    'Sparkling MTN WTR',
+    'ほうじ茶 (hojicha)',
+    'Matcha latte — whole milk, lactose-free, unsweetened',
+    'Strawberry jam',
+    'Tiramisu, and matcha tiramisu above all',
+  ]),
+  xWateringPeriodJson: null,
+};
+
+// ── The plant ──────────────────────────────────────────────────────────────
+
+/**
+ * The object PlantDetail renders for {@link ERINA_SLUG}. Same shape as the
+ * `makePlant` factory that PlantDetail.test.tsx already builds by hand and
+ * renders the whole page with — which is the existing proof that a
+ * locally-constructed Plant drives every section.
+ *
+ * Height and spread are ALL null on purpose: no size figure appears anywhere on
+ * this page, so the height gauge is deliberately dark. Nothing is filled merely
+ * to light a gauge up.
+ */
+export const ERINA_PLANT: Plant = {
+  id: ERINA_SLUG,
+  scientificName: SCIENTIFIC_NAME,
+  // Ornamental — the type the frozen copy names ("Ornamental — though the label
+  // undersells it"), and one of the five types the app knows. The id is 0 on
+  // purpose: the detail page reads `plantType.name`, never the id, so nothing
+  // here depends on a database primary key.
+  plantTypeId: 0,
+  plantType: { id: 0, name: 'Ornamental', description: null },
+
+  sunExposure: SUN_EXPOSURE,
+  waterNeeds: WATER_NEEDS,
+  // Section 04 — "Dormancy: year-round, opportunistic" and "Travel season:
+  // whenever possible" are the only two phases the copy states in calendar
+  // terms; both map to the full year.
+  sowingPeriod: 'year-round',
+  harvestPeriod: 'year-round',
+  imageUrl: ERINA_CARD_IMAGE,
+  imageAttribution: null,
+  commonName: DISPLAY_NAME,
+  description: ABOUT[0],
+
+  // Null on purpose: a taxon key would imply a GBIF record that does not exist.
+  gbifTaxonKey: null,
+  family: 'Erinaceae',
+  genus: 'Erina',
+  speciesEpithet: 'J.',
+  author: 'A.C.-A.',
+  wfoId: null,
+  year: 2024,
+
+  lifeCycle: 'Perennial',
+  growthRate: 'High',
+  wateringNeedLevel: 'Frequent',
+  careLevel: 'Easy',
+  growthHabit: null,
+
+  hardinessZoneMin: 10,
+  hardinessZoneMax: 11,
+  // 🔴 Deliberately null — no size figure appears anywhere on this page.
+  minHeightCm: null,
+  maxHeightCm: null,
+  minSpreadCm: null,
+  maxSpreadCm: null,
+  soilPhMin: 6.8,
+  soilPhMax: 7.2,
+  lightLevel: 9,
+  soilNutriments: null,
+  minTempC: 16,
+  maxTempC: 27,
+
+  isEdible: false,
+  isVegetable: false,
+  isMedicinal: null,
+  // "Greenhouse conditions: mild and stable … absolutely no frost."
+  isIndoor: true,
+  // "Requires a great deal of water."
+  isDroughtTolerant: false,
+  isSaltTolerant: null,
+  // "Thorny: only when insufficiently rested."
+  isThorny: true,
+  isInvasive: false,
+  isTropical: false,
+  isToxicToHumans: false,
+  // "Toxic to pets: no — actively adores them, dogs above all."
+  isToxicToPets: false,
+  // "Attracts pollinators: yes — one. Exclusively."
+  attractsPollinators: true,
+
+  flowerColors: null,
+  // TDWG level-3 tokens, so section 06's region pills resolve to continents.
+  // "Boston" has no Massachusetts token in the vocabulary; North America is
+  // already carried by California, so the pills are unaffected.
+  nativeRegions: JSON.stringify(['Japan']),
+  introducedRegions: JSON.stringify(['Gulf States', 'California', 'France']),
+  edibleParts: null,
+  sowingInstructions: null,
+  propagationInstructions: null,
+
+  // Honest provenance: this entry was written by hand. It is NOT enriched from
+  // GBIF, Trefle or Perenual, and claiming otherwise would be a false source.
+  enrichmentSources: ['Manual'],
+  lastEnrichmentAt: null,
+
+  createdAt: '2024-10-31T00:00:00Z',
+  updatedAt: '2024-10-31T00:00:00Z',
+
+  translations: [
+    {
+      id: 1,
+      language: 'en',
+      commonName: DISPLAY_NAME,
+      description: ABOUT[0],
+    },
+    {
+      id: 2,
+      language: 'fr',
+      commonName: DISPLAY_NAME,
+      description: ABOUT[0],
+    },
   ],
-  [s('And someone very happy knows it.')],
-];
 
-// ── 14 · FAQ ───────────────────────────────────────────────────────────────
-
-/** Nine questions. The fifth is Japanese. */
-export const ERINA_FAQ: readonly ErinaRich[] = [
-  [s('Can you make some crêpes, or ratatouille, or ice cream?')],
-  [s('Did you sleep well?')],
-  [s('Do you love me?')],
-  [s('Did you wash your hands?')],
-  [jp('げんき？')],
-  [s('Where do you want to go?')],
-  [s('Do you like my nails?')],
-  [s('What did you eaaaat?')],
-  [s('Can we share?')],
-];
-
-// ── 15 · Propagation notes ─────────────────────────────────────────────────
-
-export const ERINA_PROPAGATION: readonly ErinaRich[] = [
-  [
-    s(
-      'Propagation by division is not possible and has never been attempted. This specimen does not divide.'
-    ),
+  longDescriptions: [
+    {
+      id: 1,
+      language: 'en',
+      longDescription: LONG_DESCRIPTION,
+      sourceMethod: null,
+    },
   ],
-  [
-    s(
-      'Best results are consistently reported when grown together, in the same place, over a long period. Light, warmth, matcha, dogs, and sleep. A job she genuinely loves, with generous leave — five weeks minimum, French standard. Nothing else is required.'
-    ),
-  ],
-  [s('Nobody loves her more than '), jp('アレックス'), s('.')],
-];
 
-/** The last line on the page, standing alone. */
-export const ERINA_CLOSING: ErinaRich = [i('Would you like to live with me?')];
+  // Deliberately empty — see ERINA_GALLERY_EMPTY.
+  images: [],
+
+  commonNames: [
+    { id: 1, languageCode: 'fr', name: 'Mon Cœur', isPrimary: true },
+    { id: 2, languageCode: 'fr', name: 'Mon Amour', isPrimary: false },
+    { id: 3, languageCode: 'fr', name: 'Ma Chérie', isPrimary: false },
+    { id: 4, languageCode: 'ja', name: 'えりちゃん', isPrimary: true },
+    { id: 5, languageCode: 'en', name: 'Honey', isPrimary: true },
+    { id: 6, languageCode: 'en', name: 'Lovely Thing', isPrimary: false },
+    { id: 7, languageCode: 'en', name: 'My Love', isPrimary: false },
+  ],
+
+  pests: [
+    {
+      id: 1,
+      name: 'Cockroaches',
+      type: 'Insect',
+      description:
+        'The single greatest documented threat. Presence triggers an immediate and total defensive response.',
+      symptoms: null,
+      solutions: null,
+      imageUrl: null,
+      source: 'Manual',
+      sourceExternalId: null,
+    },
+    {
+      id: 2,
+      name: 'Grasshoppers',
+      type: 'Insect',
+      description:
+        'Not welcome. Unpredictable trajectory considered aggravating.',
+      symptoms: null,
+      solutions: null,
+      imageUrl: null,
+      source: 'Manual',
+      sourceExternalId: null,
+    },
+    {
+      id: 3,
+      name: 'Flies',
+      type: 'Insect',
+      description: 'Persistent, and therefore unforgivable.',
+      symptoms: null,
+      solutions: null,
+      imageUrl: null,
+      source: 'Manual',
+      sourceExternalId: null,
+    },
+  ],
+
+  synonyms: [
+    { id: 1, synonym: 'Erina japonica', authority: 'syn. えりちゃん' },
+    { id: 2, synonym: 'Cordis mei', authority: 'syn. Mon Cœur' },
+    { id: 3, synonym: 'Amor meus', authority: 'syn. Mon Amour' },
+    { id: 4, synonym: 'Cara mea', authority: 'syn. Ma Chérie' },
+    {
+      id: 5,
+      synonym: 'Erina j. var. hikari',
+      authority: 'the radiant variety; the only one ever recorded',
+    },
+  ],
+
+  // No external cross-references: there is no upstream record to point at.
+  sources: [],
+
+  trefleData: null,
+  perenualData: ERINA_PERENUAL,
+};
+
+// ── The library card ───────────────────────────────────────────────────────
+
+/**
+ * The object handed to PlantCard when the key is typed, so the hidden plant
+ * appears as an ordinary result in the grid and links to its own page.
+ *
+ * Derived from {@link ERINA_PLANT} so the card and the page can never drift:
+ * only the flat list-DTO fields PlantCard reads are overridden. `plantTypeId`
+ * is 0, which matches no row of `/api/planttypes`, so the type chip does not
+ * render and the card never depends on a database primary key.
+ * `imageAttribution` stays null — our own artwork carries no credit line.
+ */
+export const ERINA_CARD: Plant = {
+  ...ERINA_PLANT,
+  translations: undefined,
+};

@@ -223,7 +223,9 @@ describe('PlantDetail', () => {
     expect(screen.queryByText('Add to my garden')).not.toBeInTheDocument();
     const planLinks = screen.getAllByRole('link', { name: 'Plan my garden' });
     expect(planLinks.length).toBeGreaterThan(0);
-    planLinks.forEach((link) => expect(link).toHaveAttribute('href', '/gardens'));
+    planLinks.forEach((link) =>
+      expect(link).toHaveAttribute('href', '/gardens')
+    );
   });
 
   it('renders the rich (tomato-shaped) plant with images and pests', async () => {
@@ -610,5 +612,83 @@ describe('PlantDetail back-to-garden affordance (SMA-309 R2)', () => {
     renderAtPlant(makePlant());
     await screen.findByRole('heading', { name: 'Basil' });
     expect(screen.queryByRole('button', { name: /Back to/ })).toBeNull();
+  });
+});
+
+// SMA-394 — the hidden plant is served by THIS page from a local object. There
+// is no such row, so a fetch would 404; and the whole point of the feature is
+// that the key never reaches the network. The second test is the guard that
+// this injection did not change the real page's behaviour for every other id.
+describe('PlantDetail · the hidden plant (SMA-394)', () => {
+  const ERINA_SLUG = 'erina-j-mon-coeur-since-october-31-2024';
+
+  function renderAtPath(pathname: string) {
+    return render(
+      <LanguageProvider>
+        <UnitSystemProvider>
+          <AuthProvider>
+            <MemoryRouter initialEntries={[{ pathname, state: null }]}>
+              <Routes>
+                <Route path="/library/:id" element={<PlantDetail />} />
+              </Routes>
+            </MemoryRouter>
+          </AuthProvider>
+        </UnitSystemProvider>
+      </LanguageProvider>
+    );
+  }
+
+  it('serves the hidden plant from local data, without calling the API', async () => {
+    renderAtPath(`/library/${ERINA_SLUG}`);
+
+    // The real page's own hero heading, fed by the local object.
+    expect(
+      await screen.findByRole('heading', { name: 'えりな J' })
+    ).toBeInTheDocument();
+    expect(screen.getByText('Erina J.')).toBeInTheDocument();
+    // The proof the key stays local: no request was ever made for it.
+    expect(vi.mocked(fetchPlantById)).not.toHaveBeenCalled();
+  });
+
+  // The whole point of round 2: the DATA-gated sections of the real page must
+  // light up for this plant exactly as they do for a real one. Each heading
+  // below is behind a gate that only a filled field opens.
+  it('mounts the real page’s data-gated sections', async () => {
+    renderAtPath(`/library/${ERINA_SLUG}`);
+    await screen.findByRole('heading', { name: 'えりな J' });
+
+    for (const heading of [
+      'Growing conditions', // PlantHeroGauges — ≥1 gauge has a value
+      'About', // AboutSection — a long description exists
+      'Seasonal calendar & timeline', // lifeCycle / sowing / harvest
+      'Scientific data · cultivation / greenhouse', // hasSupremeData + xData
+      'Characteristics', // always, but its region pills need TDWG tokens
+      'Cultivation & propagation', // propagationMethods / wateringBenchmark
+      'Diseases & pests', // pests.length > 0
+      'Common names', // commonNames.length > 1
+      'Botanical synonyms', // synonyms.length > 0
+      'Frequently asked questions', // buildFaqItems returned items
+    ]) {
+      expect(
+        screen.getByRole('heading', { name: heading })
+      ).toBeInTheDocument();
+    }
+
+    // The gallery is empty by design and says so in its own words.
+    expect(screen.getByText('No photographs on record.')).toBeInTheDocument();
+    // No size figure anywhere: the height gauge stays deliberately dark.
+    expect(screen.queryByText('Height')).not.toBeInTheDocument();
+  });
+
+  it('still fetches a normal plant exactly once — the injection is inert elsewhere', async () => {
+    const plant = makePlant();
+    renderAtPlant(plant);
+
+    await screen.findByRole('heading', { name: 'Basil' });
+    expect(vi.mocked(fetchPlantById)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(fetchPlantById)).toHaveBeenCalledWith(
+      plant.id,
+      expect.anything()
+    );
   });
 });
