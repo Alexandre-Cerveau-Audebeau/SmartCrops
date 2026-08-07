@@ -46,6 +46,25 @@ const LIGHT = {
   pillFg: '#1B5E3A',
 } as const;
 
+// --- SMA-394 easter eggs — delete this block to remove ---
+/**
+ * One resource card supplied verbatim by the caller, for an entry whose
+ * resources are WRITTEN rather than derived from a binomial. `href` is optional:
+ * a card with no verifiable public page renders as a plain card rather than a
+ * link to a guessed URL (and then carries no external-link affordance, which
+ * would promise navigation it cannot do).
+ */
+export interface ExternalResourceCard {
+  readonly key: string;
+  /** The two-letter pill, same slot as ABBREV. */
+  readonly abbrev: string;
+  readonly label: string;
+  readonly description: string;
+  readonly href?: string;
+  readonly isNew?: boolean;
+}
+// --- end SMA-394 ---
+
 /** Map an enrichment source label to its provenance-chip palette. */
 function sourceTypeColors(source: string): { bg: string; fg: string } {
   switch (source) {
@@ -74,8 +93,12 @@ function sourceTypeColors(source: string): { bg: string; fg: string } {
  */
 export const ExternalResourcesSection = memo(function ExternalResourcesSection({
   plant,
+  // --- SMA-394 easter eggs — delete this line to remove ---
+  cards,
+  // --- end SMA-394 ---
 }: {
   plant: Plant;
+  cards?: readonly ExternalResourceCard[];
 }) {
   const { t, i18n } = useTranslation();
   const { palette } = useTheme();
@@ -112,6 +135,98 @@ export const ExternalResourcesSection = memo(function ExternalResourcesSection({
   const pillBg = dark ? palette.primary.main : LIGHT.pillBg;
   const pillFg = dark ? palette.primary.contrastText : LIGHT.pillFg;
 
+  // The catalogue links, flattened to the card shape so both sources render
+  // through exactly one piece of markup.
+  const rows: readonly ExternalResourceCard[] =
+    cards ??
+    links.map((l: ExternalResourceLink) => ({
+      key: l.key,
+      abbrev: ABBREV[l.key],
+      label: t(l.labelKey),
+      description: t(l.descriptionKey),
+      href: l.href,
+      isNew: l.isNew,
+    }));
+
+  const rowSx = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    p: '12px 14px',
+    borderRadius: '10px',
+    border: '1px solid',
+    borderColor: rowBorder,
+    bgcolor: rowBg,
+    color: 'inherit',
+    transition: 'border-color 0.15s ease',
+    '&:hover': { borderColor: rowBorderHover },
+  } as const;
+
+  const rowInner = (r: ExternalResourceCard) => (
+    <>
+      <Box
+        sx={{
+          flexShrink: 0,
+          width: 34,
+          height: 34,
+          borderRadius: '8px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: pillBg,
+          color: pillFg,
+          fontSize: 12,
+          fontWeight: 800,
+          letterSpacing: '0.02em',
+        }}
+      >
+        {r.abbrev}
+      </Box>
+
+      <Box sx={{ minWidth: 0, flex: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Typography sx={{ fontSize: 14, fontWeight: 700, color: 'heading' }}>
+            {r.label}
+          </Typography>
+          {r.isNew && (
+            <Box
+              component="span"
+              sx={{
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                px: '6px',
+                py: '2px',
+                borderRadius: '6px',
+                bgcolor: dark ? 'rgba(46,139,87,0.25)' : LIGHT.pillBg,
+                color: dark ? palette.primary.main : LIGHT.pillFg,
+              }}
+            >
+              {t(`${ER}.badgeNew`)}
+            </Box>
+          )}
+        </Box>
+        <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: '1px' }}>
+          {r.description}
+        </Typography>
+      </Box>
+
+      {r.href && (
+        <Box
+          component="span"
+          sx={{
+            flexShrink: 0,
+            display: 'inline-flex',
+            color: 'text.secondary',
+          }}
+        >
+          <Sym name="open_in_new" size={16} color="inherit" />
+        </Box>
+      )}
+    </>
+  );
+
   return (
     <Box id="sources" sx={{ mb: 3, scrollMarginTop: '80px' }}>
       <SectionHeader
@@ -121,91 +236,24 @@ export const ExternalResourcesSection = memo(function ExternalResourcesSection({
       />
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {links.map((l: ExternalResourceLink) => (
-          <Link
-            key={l.key}
-            href={l.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            underline="none"
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              p: '12px 14px',
-              borderRadius: '10px',
-              border: '1px solid',
-              borderColor: rowBorder,
-              bgcolor: rowBg,
-              color: 'inherit',
-              transition: 'border-color 0.15s ease',
-              '&:hover': { borderColor: rowBorderHover },
-            }}
-          >
-            <Box
-              sx={{
-                flexShrink: 0,
-                width: 34,
-                height: 34,
-                borderRadius: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                bgcolor: pillBg,
-                color: pillFg,
-                fontSize: 12,
-                fontWeight: 800,
-                letterSpacing: '0.02em',
-              }}
+        {rows.map((r) =>
+          r.href ? (
+            <Link
+              key={r.key}
+              href={r.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              underline="none"
+              sx={rowSx}
             >
-              {ABBREV[l.key]}
+              {rowInner(r)}
+            </Link>
+          ) : (
+            <Box key={r.key} sx={rowSx}>
+              {rowInner(r)}
             </Box>
-
-            <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Typography
-                  sx={{ fontSize: 14, fontWeight: 700, color: 'heading' }}
-                >
-                  {t(l.labelKey)}
-                </Typography>
-                {l.isNew && (
-                  <Box
-                    component="span"
-                    sx={{
-                      fontSize: 10,
-                      fontWeight: 800,
-                      letterSpacing: '0.04em',
-                      textTransform: 'uppercase',
-                      px: '6px',
-                      py: '2px',
-                      borderRadius: '6px',
-                      bgcolor: dark ? 'rgba(46,139,87,0.25)' : LIGHT.pillBg,
-                      color: dark ? palette.primary.main : LIGHT.pillFg,
-                    }}
-                  >
-                    {t(`${ER}.badgeNew`)}
-                  </Box>
-                )}
-              </Box>
-              <Typography
-                sx={{ fontSize: 12, color: 'text.secondary', mt: '1px' }}
-              >
-                {t(l.descriptionKey)}
-              </Typography>
-            </Box>
-
-            <Box
-              component="span"
-              sx={{
-                flexShrink: 0,
-                display: 'inline-flex',
-                color: 'text.secondary',
-              }}
-            >
-              <Sym name="open_in_new" size={16} color="inherit" />
-            </Box>
-          </Link>
-        ))}
+          )
+        )}
       </Box>
 
       {/* Enrichment-provenance banner (source chips + last-enriched date), kept

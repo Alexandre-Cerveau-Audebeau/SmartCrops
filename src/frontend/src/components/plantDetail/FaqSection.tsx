@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import { useUnitSystem } from '../../hooks/useUnitSystem';
 import type { Plant } from '../../types/Plant';
-import { buildFaqItems } from '../../utils/plantDetailFaq';
+import { buildFaqItems, type FaqItem } from '../../utils/plantDetailFaq';
 import SectionHeader from './SectionHeader';
 import { Sym } from '../Sym';
 
@@ -15,10 +15,19 @@ const F = 'plantDetail.faq';
  * from {@link buildFaqItems}; one open at a time, the first open by default. The
  * parent mounts it only when at least one item exists (TOC entry 14 = live).
  */
-export default function FaqSection({ plant }: { plant: Plant }) {
+export default function FaqSection({
+  plant,
+  // --- SMA-394 easter eggs — delete this line to remove ---
+  items: writtenItems,
+  // --- end SMA-394 ---
+}: {
+  plant: Plant;
+  /** Written questions, replacing the ones derived from the plant's fields. */
+  items?: readonly FaqItem[];
+}) {
   const { t } = useTranslation();
   const { system } = useUnitSystem();
-  const items = buildFaqItems(plant, t, system);
+  const items = writtenItems ?? buildFaqItems(plant, t, system);
   const [open, setOpen] = useState<number | null>(0);
 
   if (items.length === 0) return null;
@@ -26,20 +35,29 @@ export default function FaqSection({ plant }: { plant: Plant }) {
   return (
     <Box id="faq" sx={{ scrollMarginTop: '80px', mb: 3 }}>
       {/* Header (outside the cards). */}
-      <SectionHeader title={t(`${F}.sectionTitle`)} mb="4px" />
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          mb: '14px',
-          fontSize: 13,
-          color: 'text.secondary',
-        }}
-      >
-        <Sym name="bolt" size={15} color="inherit" />
-        {t(`${F}.caption`)}
-      </Box>
+      <SectionHeader
+        title={t(`${F}.sectionTitle`)}
+        mb={writtenItems ? '14px' : '4px'}
+      />
+      {/* --- SMA-394 easter eggs — delete `!writtenItems && ` to remove ---
+          The caption says the questions are auto-generated from the plant's
+          data fields; written questions are not, so it would be a false claim. */}
+      {!writtenItems && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            mb: '14px',
+            fontSize: 13,
+            color: 'text.secondary',
+          }}
+        >
+          <Sym name="bolt" size={15} color="inherit" />
+          {t(`${F}.caption`)}
+        </Box>
+      )}
+      {/* --- end SMA-394 --- */}
 
       <Stack spacing="10px">
         {items.map((item, i) => {

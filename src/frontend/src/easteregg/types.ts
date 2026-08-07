@@ -1,11 +1,17 @@
 import type { Plant } from '../types/Plant';
+import type { FaqItem } from '../utils/plantDetailFaq';
+import type { ExternalResourceCard } from '../components/plantDetail/ExternalResourcesSection';
 
 /**
  * SMA-394 — the shape of one easter egg.
  *
- * Everything an entry needs lives in this one object, so adding a SECOND easter
- * egg later is: write one more file next to `erina.ts`, add it to the registry
- * array in `index.ts`, done. No application file changes again.
+ * An entry is DATA, not markup. Almost everything it carries travels through
+ * `plant` into the page's real section components, which render it with the
+ * same markup and the same classes as any catalogue plant; the fields below
+ * cover only what those components have no slot for.
+ *
+ * Adding a SECOND easter egg later is: write one more file next to
+ * `entries/hikari.ts`, add it to the registry array in `index.ts`, done.
  */
 
 /** One icon-card of the hero "Growing conditions" row. */
@@ -17,22 +23,19 @@ export interface EggGauge {
   readonly value: string;
 }
 
-/** A label / value row of a definition-style card. */
-export interface EggRow {
-  readonly label: string;
-  readonly value: string;
+/**
+ * A written paragraph attached to a section, rendered under the section's own
+ * component in the page's card treatment.
+ * - `lead` — the opening line of a block (heading weight, brand colour).
+ * - `quote` — a short call-out, centred and larger (used for the JP response).
+ * - `closing` — the last line of a block (italic, brand colour).
+ */
+export interface EggNote {
+  readonly text: string;
+  readonly tone?: 'lead' | 'quote' | 'closing';
 }
 
-export interface EggFaqItem {
-  readonly q: string;
-  /**
-   * Optional. An entry whose copy supplies no answer renders the question card
-   * without the expand affordance rather than opening onto an empty panel —
-   * inventing an answer would be writing copy that was never validated.
-   */
-  readonly a?: string;
-}
-
+/** One observation row of the travel log shown under section 11. */
 export interface EggObservation {
   readonly date: string;
   readonly location: string;
@@ -41,28 +44,8 @@ export interface EggObservation {
   readonly starred?: boolean;
 }
 
-export interface EggResource {
-  readonly label: string;
-  readonly note: string;
-}
-
-export interface EggPest {
-  readonly name: string;
-  readonly response: string;
-}
-
-export interface EggPhase {
-  readonly phase: string;
-  readonly period: string;
-  readonly notes: string;
-}
-
 /** Sections of the real page an entry may switch off entirely. */
-export type EggHideableSection =
-  | 'distribution'
-  | 'community'
-  | 'cta'
-  | 'planMyGarden';
+export type EggHideableSection = 'cta' | 'planMyGarden';
 
 export interface EasterEggEntry {
   /** Accepted search keys, ALREADY normalised (trimmed, lower-case, single spaces). */
@@ -71,43 +54,36 @@ export interface EasterEggEntry {
   readonly slug: string;
   /** What the library grid renders. */
   readonly card: Plant;
-  /** What PlantDetail renders instead of fetching. */
+  /**
+   * What PlantDetail renders instead of fetching. Its fields drive the real
+   * gauges, bars, chips, rows, timeline and cards — see `entries/hikari.ts`.
+   */
   readonly plant: Plant;
 
-  // ── Section overrides. Each replaces one block of the real page. ──────────
+  // ── What the real components have no slot for ────────────────────────────
+
+  /** Replaces PlantHeroGauges: this entry's own eight conditions. */
   readonly gauges: readonly EggGauge[];
-  readonly calendar: {
-    readonly title: string;
-    readonly body: string;
-    readonly protocolTitle: string;
-    readonly protocolBody: string;
-    /** Japanese — gets the JP font stack. */
-    readonly protocolResponse: string;
-    readonly phases: readonly EggPhase[];
-  };
-  readonly scientific: {
-    readonly spacingLabel: string;
-    readonly spacing: string;
-    readonly waterTitle: string;
-    readonly water: readonly string[];
-    readonly rows: readonly EggRow[];
-  };
-  readonly characteristics: readonly EggRow[];
-  readonly nativeRange: string;
-  readonly distribution: string;
-  readonly cultivation: readonly string[];
-  readonly pestIntro: string;
-  readonly pests: readonly EggPest[];
-  readonly pestTreatment: string;
-  readonly pestOutro: string;
-  readonly synonyms: readonly EggRow[];
+  /**
+   * Region pill text for CharacteristicsSection, written rather than coded —
+   * the TDWG mapping would flatten "Japan" to "Asia".
+   */
+  readonly regions: { readonly native: string; readonly distribution: string };
+  /** Written questions for FaqSection, replacing the derived ones. */
+  readonly faq: readonly FaqItem[];
+  /** Written cards for ExternalResourcesSection, replacing the catalogue links. */
+  readonly resources: readonly ExternalResourceCard[];
+  /** The travel log, rendered as one more card under ObservationsSection. */
   readonly observations: readonly EggObservation[];
-  readonly resources: readonly EggResource[];
-  readonly similar: {
-    readonly title: string;
-    readonly body: readonly string[];
+  /** Prose attached under each section whose component takes no prose. */
+  readonly notes: {
+    readonly lifecycle: readonly EggNote[];
+    readonly scientific: readonly EggNote[];
+    readonly characteristics: readonly EggNote[];
+    readonly culture: readonly EggNote[];
+    readonly pests: readonly EggNote[];
+    readonly similar: readonly EggNote[];
   };
-  readonly faq: readonly EggFaqItem[];
 
   readonly hiddenSections: readonly EggHideableSection[];
   /** The last thing on the page, alone and centred. */

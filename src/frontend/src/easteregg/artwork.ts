@@ -5,9 +5,10 @@
  * credit and no licence line. Same 400×400 box as PLANT_HERO_PLACEHOLDER
  * (`utils/plantDetail.ts`) so the card grid cannot shift.
  *
- * White ground, a pale translucent red heart sitting as a watermark, and the
- * name over it in a light translucent blue. Nothing on the page explains the
- * palette; it simply sits there.
+ * White ground, a translucent red heart sitting as a watermark — legible as a
+ * heart at card size, still clearly behind the text — and the name over it in a
+ * light translucent blue. Nothing on the page explains the palette; it simply
+ * sits there.
  *
  * The source below holds the REAL code points (verifiable with a byte-level
  * check); `encodeURIComponent` is what carries them safely through the data
@@ -31,7 +32,7 @@ export function buildCardArtwork(label: string): string {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400"',
     ` role="img" aria-label="${label}">`,
     '<rect width="400" height="400" fill="#ffffff"/>',
-    `<path transform="translate(50 44) scale(12.5)" d="${HEART}" fill="#e03131" opacity="0.13"/>`,
+    `<path transform="translate(50 44) scale(12.5)" d="${HEART}" fill="#e03131" opacity="0.3"/>`,
     `<text x="200" y="208" text-anchor="middle" dominant-baseline="central"`,
     ` font-family="${SVG_FONT}" font-size="74" font-weight="600"`,
     ` fill="#4c7fd6" fill-opacity="0.8">${label}</text>`,

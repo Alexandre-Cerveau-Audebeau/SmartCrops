@@ -1,6 +1,6 @@
 import type { Plant } from '../types/Plant';
 import type { EasterEggEntry } from './types';
-import { ERINA } from './erina';
+import { HIKARI } from './entries/hikari';
 import { EASTER_EGGS_ENABLED } from './enabled';
 
 /**
@@ -13,11 +13,11 @@ import { EASTER_EGGS_ENABLED } from './enabled';
  * Deleting the whole feature is: remove this folder, and remove the two marked
  * blocks in PlantDetail.tsx and PlantLibrary.tsx.
  *
- * ADDING A SECOND EASTER EGG: write one more file next to `erina.ts` exporting
- * an EasterEggEntry, add it to EASTER_EGGS below. Nothing else changes — not
- * the pages, not the routes, not the tests of the real application.
+ * ADDING A SECOND EASTER EGG: write one more file in `entries/` exporting an
+ * EasterEggEntry, add it to EASTER_EGGS below. Nothing else changes — not the
+ * pages, not the routes, not the tests of the real application.
  */
-const EASTER_EGGS: readonly EasterEggEntry[] = [ERINA];
+const EASTER_EGGS: readonly EasterEggEntry[] = [HIKARI];
 
 /** Normalise a typed query the way the registry's keys are written. */
 function normalise(raw: string): string {

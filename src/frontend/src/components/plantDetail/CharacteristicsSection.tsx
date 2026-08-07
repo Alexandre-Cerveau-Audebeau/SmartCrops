@@ -17,6 +17,14 @@ import { Sym } from '../Sym';
 
 interface CharacteristicsSectionProps {
   plant: Plant;
+  // --- SMA-394 easter eggs — delete these three lines to remove ---
+  /**
+   * Region pill text supplied verbatim, bypassing the TDWG → continent mapping.
+   * For an entry whose range is WRITTEN ("Japan") rather than coded ("JAP"),
+   * which the mapping would otherwise flatten to its continent ("Asia").
+   */
+  regions?: { native: string | null; distribution: string | null };
+  // --- end SMA-394 ---
 }
 
 type TFn = ReturnType<typeof useTranslation>['t'];
@@ -310,6 +318,9 @@ function RegionPill({
  */
 export const CharacteristicsSection = memo(function CharacteristicsSection({
   plant,
+  // --- SMA-394 easter eggs — delete this line to remove ---
+  regions: writtenRegions,
+  // --- end SMA-394 ---
 }: CharacteristicsSectionProps) {
   const { t } = useTranslation();
   const { palette } = useTheme();
@@ -324,8 +335,29 @@ export const CharacteristicsSection = memo(function CharacteristicsSection({
     frost: BAR_COLOR.frost,
   };
   const bars = buildBars(plant, t, barColors);
-  const regions = buildRegions(plant, t);
+  // --- SMA-394 easter eggs — delete the ternary, keep buildRegions(plant, t) ---
+  const regions = writtenRegions
+    ? {
+        native: {
+          present: !!writtenRegions.native,
+          label: writtenRegions.native ?? '',
+        },
+        distribution: {
+          present: !!writtenRegions.distribution,
+          label: writtenRegions.distribution ?? '',
+        },
+      }
+    : buildRegions(plant, t);
+  // --- end SMA-394 ---
   const showRegions = regions.native.present || regions.distribution.present;
+  // Written ranges are already complete sentences; only derived continent lists
+  // take the "Native · " / "Introduced · " prefix.
+  const nativeText = writtenRegions
+    ? regions.native.label
+    : `${t('plantDetail.characteristics.nativePrefix')} · ${regions.native.label}`;
+  const distributionText = writtenRegions
+    ? regions.distribution.label
+    : `${t('plantDetail.characteristics.introducedPrefix')} · ${regions.distribution.label}`;
 
   return (
     <Box id="characteristics" sx={{ mb: 3, scrollMarginTop: '80px' }}>
@@ -365,7 +397,7 @@ export const CharacteristicsSection = memo(function CharacteristicsSection({
             {regions.native.present && (
               <RegionPill
                 label={t('plantDetail.characteristics.nativeRange')}
-                text={`${t('plantDetail.characteristics.nativePrefix')} · ${regions.native.label}`}
+                text={nativeText}
                 bg={dark ? palette.primary.main : PILL.originBg}
                 fg={dark ? palette.primary.contrastText : PILL.originText}
                 icon="public"
@@ -374,7 +406,7 @@ export const CharacteristicsSection = memo(function CharacteristicsSection({
             {regions.distribution.present && (
               <RegionPill
                 label={t('plantDetail.characteristics.distribution')}
-                text={`${t('plantDetail.characteristics.introducedPrefix')} · ${regions.distribution.label}`}
+                text={distributionText}
                 bg={dark ? palette.primary.main : PILL.distBg}
                 fg={dark ? palette.primary.contrastText : PILL.distText}
                 icon="travel_explore"

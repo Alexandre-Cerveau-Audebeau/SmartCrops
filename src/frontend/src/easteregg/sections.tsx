@@ -1,24 +1,30 @@
-import { useState } from 'react';
+import type { ReactNode } from 'react';
 import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import SectionHeader from '../components/plantDetail/SectionHeader';
+import { useTranslation } from 'react-i18next';
 import { Sym } from '../components/Sym';
-import type { EasterEggEntry, EggFaqItem, EggGauge, EggRow } from './types';
+import type { EggGauge, EggNote, EggObservation } from './types';
 
 /**
- * SMA-394 — the section bodies an easter-egg entry supplies.
+ * SMA-394 — the ONLY markup this feature owns.
  *
- * These reuse the real page's shared primitives (`SectionHeader`, `Sym`) and
- * copy its card grammar verbatim, but they are OWNED BY THIS FOLDER: the real
- * section components compute their content from the plant DTO and cannot be
- * handed a written block, so overriding them from outside would have meant
- * threading override props through nine live components on the site's busiest
- * page. Keeping the markup here means the application files carry only the
- * switch, and deleting this folder removes every trace.
+ * Every section of the page is rendered by the product's own component, fed
+ * with the entry's data. What is left over is here, and only because the real
+ * components have no slot for it:
+ *
+ * - `EggGauges`   — the hero gauge row, whose real version reads eight fixed
+ *                   DTO fields; this entry's eight conditions are not those.
+ * - `EggNotes`    — written paragraphs attached under a section whose component
+ *                   renders facts, never prose.
+ * - `EggTravelLog`— one more card under section 11, in the same card grammar.
+ * - `EggCard`     — the shared card shell those two sit in.
+ * - `EggFinalLine`— the closing line, alone at the foot of the page.
+ *
+ * Markup follows the real components it sits beside (`PlantHeroGauges`,
+ * `ObservationsSection`) so nothing here reads as a foreign block.
  */
 
-/** The bordered content card used by Characteristics / Culture / Scientific. */
+/** The bordered content card the page uses for every fact panel. */
 const cardSx = {
   bgcolor: 'background.paper',
   border: '1px solid',
@@ -28,63 +34,24 @@ const cardSx = {
   boxShadow: '0 1px 3px rgba(27,94,58,0.05)',
 } as const;
 
-const sectionSx = { mb: 3, scrollMarginTop: '80px' } as const;
-
-/** Label / value row, the definition-list grammar of the real fact cards. */
-function FactRow({ row }: { row: EggRow }) {
+/** Card shell, spaced like the section it follows. */
+export function EggCard({ children }: { children: ReactNode }) {
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: { xs: 'column', sm: 'row' },
-        gap: { xs: '2px', sm: '16px' },
-        py: '10px',
-        borderBottom: '1px solid',
-        borderColor: 'borderSubtle',
-        '&:last-of-type': { borderBottom: 'none', pb: 0 },
-        '&:first-of-type': { pt: 0 },
-      }}
-    >
-      <Typography
-        component="dt"
-        sx={{
-          flexShrink: 0,
-          width: { sm: 210 },
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: '0.05em',
-          textTransform: 'uppercase',
-          color: 'text.secondary',
-          pt: { sm: '2px' },
-        }}
-      >
-        {row.label}
-      </Typography>
-      <Typography
-        component="dd"
-        sx={{ m: 0, flex: 1, fontSize: 14.5, lineHeight: 1.6 }}
-      >
-        {row.value}
-      </Typography>
-    </Box>
-  );
-}
-
-function FactList({ rows }: { rows: readonly EggRow[] }) {
-  return (
-    <Box component="dl" sx={{ m: 0 }}>
-      {rows.map((row) => (
-        <FactRow key={row.label} row={row} />
-      ))}
+    <Box sx={{ ...cardSx, mt: -1, mb: 3 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {children}
+      </Box>
     </Box>
   );
 }
 
 /**
- * The hero gauge row. Markup and styling are the real PlantHeroGauges', so the
- * cards are visually the same object; only where the values come from differs.
+ * Hero "growing conditions" row — same grid, same tinted icon tile, same label
+ * and value type scale as {@link PlantHeroGauges}, driven by written values
+ * instead of the eight DTO fields the real one formats.
  */
 export function EggGauges({ gauges }: { gauges: readonly EggGauge[] }) {
+  const { t } = useTranslation();
   if (gauges.length === 0) return null;
   return (
     <Box sx={{ mt: 2.5 }}>
@@ -99,7 +66,7 @@ export function EggGauges({ gauges }: { gauges: readonly EggGauge[] }) {
           mb: '10px',
         }}
       >
-        Growing conditions
+        {t('plantDetail.gauges.title')}
       </Typography>
       <Box
         sx={{
@@ -169,421 +136,111 @@ export function EggGauges({ gauges }: { gauges: readonly EggGauge[] }) {
   );
 }
 
-export function EggCalendar({ egg }: { egg: EasterEggEntry }) {
-  const c = egg.calendar;
-  return (
-    <Box id="lifecycle" sx={sectionSx}>
-      <SectionHeader title="Seasonal calendar & timeline" />
-      <Box sx={cardSx}>
-        <Typography
-          sx={{ fontSize: 15, fontWeight: 700, color: 'heading', mb: '8px' }}
-        >
-          {c.title}
-        </Typography>
-        <Typography sx={{ lineHeight: 1.7, mb: '20px' }}>{c.body}</Typography>
-
-        <Typography
-          sx={{ fontSize: 15, fontWeight: 700, color: 'heading', mb: '8px' }}
-        >
-          {c.protocolTitle}
-        </Typography>
-        <Typography sx={{ lineHeight: 1.7, mb: '12px' }}>
-          {c.protocolBody}
-        </Typography>
-        <Box
-          sx={{
-            bgcolor: 'surfaceSubtle',
-            border: '1px solid',
-            borderColor: 'borderSubtle',
-            borderRadius: '10px',
-            px: '18px',
-            py: '14px',
-            mb: '22px',
-            fontSize: 22,
-            fontWeight: 700,
-            color: 'heading',
-            textAlign: 'center',
-          }}
-        >
-          {c.protocolResponse}
-        </Box>
-
-        <FactList
-          rows={c.phases.map((p) => ({
-            label: p.phase,
-            value: p.notes ? `${p.period} — ${p.notes}` : p.period,
-          }))}
-        />
-      </Box>
-    </Box>
-  );
-}
-
-export function EggScientific({ egg }: { egg: EasterEggEntry }) {
-  const s = egg.scientific;
-  return (
-    <Box id="scientific-data" sx={sectionSx}>
-      <SectionHeader title="Scientific data · cultivation / greenhouse" />
-      <Box sx={cardSx}>
-        <Box component="dl" sx={{ m: 0, mb: '18px' }}>
-          <FactRow row={{ label: s.spacingLabel, value: s.spacing }} />
-        </Box>
-
-        <Typography
-          sx={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: '0.05em',
-            textTransform: 'uppercase',
-            color: 'text.secondary',
-            mb: '10px',
-          }}
-        >
-          {s.waterTitle}
-        </Typography>
-        <Box
-          component="ul"
-          sx={{ m: 0, mb: '18px', pl: '20px', lineHeight: 1.9 }}
-        >
-          {s.water.map((w) => (
-            <Box component="li" key={w} sx={{ fontSize: 14.5 }}>
-              {w}
-            </Box>
-          ))}
-        </Box>
-
-        <FactList rows={s.rows} />
-      </Box>
-    </Box>
-  );
-}
-
-export function EggCharacteristics({ egg }: { egg: EasterEggEntry }) {
-  return (
-    <Box id="characteristics" sx={sectionSx}>
-      <SectionHeader title="Characteristics" />
-      <Box sx={cardSx}>
-        <FactList rows={egg.characteristics} />
-        <Box
-          sx={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '20px',
-            borderTop: '1px solid',
-            borderColor: 'borderSubtle',
-            pt: '16px',
-            mt: '16px',
-          }}
-        >
-          <RegionPill
-            label="Native range"
-            text={egg.nativeRange}
-            icon="public"
-          />
-          <RegionPill
-            label="Distribution"
-            text={egg.distribution}
-            icon="travel_explore"
-          />
-        </Box>
-      </Box>
-    </Box>
-  );
-}
-
-function RegionPill({
-  label,
-  text,
-  icon,
-}: {
-  label: string;
-  text: string;
-  icon: string;
-}) {
-  return (
-    <Box>
+/** One written paragraph, in the page's own body type scale. */
+function Note({ note }: { note: EggNote }) {
+  if (note.tone === 'quote') {
+    return (
       <Typography
         sx={{
-          fontSize: 10,
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-          color: 'text.secondary',
+          textAlign: 'center',
+          fontSize: 20,
           fontWeight: 700,
-          mb: '6px',
-        }}
-      >
-        {label}
-      </Typography>
-      <Box
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-          bgcolor: 'brandTintBg',
           color: 'heading',
-          borderRadius: '999px',
-          px: '12px',
           py: '6px',
-          fontSize: 13,
-          fontWeight: 700,
         }}
       >
-        <Sym name={icon} size={16} color="inherit" />
-        {text}
-      </Box>
-    </Box>
-  );
-}
-
-export function EggCultivation({ egg }: { egg: EasterEggEntry }) {
+        {note.text}
+      </Typography>
+    );
+  }
   return (
-    <Box id="edible" sx={sectionSx}>
-      <SectionHeader title="Cultivation & propagation" />
-      <Box sx={cardSx}>
-        {egg.cultivation.map((para, i) => (
-          <Typography
-            key={para}
-            sx={{
-              lineHeight: 1.8,
-              mb: i === egg.cultivation.length - 1 ? 0 : 2,
-            }}
-          >
-            {para}
-          </Typography>
-        ))}
-      </Box>
-    </Box>
-  );
-}
-
-export function EggPests({ egg }: { egg: EasterEggEntry }) {
-  return (
-    <Box id="pests" sx={sectionSx}>
-      <SectionHeader title="Diseases & pests" />
-      <Box sx={cardSx}>
-        <Typography
-          sx={{ fontSize: 15, fontWeight: 700, color: 'heading', mb: '14px' }}
-        >
-          {egg.pestIntro}
-        </Typography>
-        <Box component="dl" sx={{ m: 0, mb: '18px' }}>
-          {egg.pests.map((p) => (
-            <FactRow key={p.name} row={{ label: p.name, value: p.response }} />
-          ))}
-        </Box>
-        <Typography sx={{ lineHeight: 1.7, mb: '10px' }}>
-          {egg.pestTreatment}
-        </Typography>
-        <Typography sx={{ lineHeight: 1.7, color: 'text.secondary' }}>
-          {egg.pestOutro}
-        </Typography>
-      </Box>
-    </Box>
-  );
-}
-
-export function EggSynonyms({ egg }: { egg: EasterEggEntry }) {
-  return (
-    <Box id="synonyms" sx={sectionSx}>
-      <SectionHeader title="Botanical synonyms" />
-      <Box sx={cardSx}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {egg.synonyms.map((s) => (
-            <Box
-              key={s.label}
-              sx={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'baseline',
-                gap: '10px',
-              }}
-            >
-              <Box
-                sx={{
-                  px: '14px',
-                  py: '7px',
-                  borderRadius: '999px',
-                  border: '1px solid',
-                  borderColor: 'borderSubtle',
-                  bgcolor: 'surfaceSubtle',
-                  fontSize: 13,
-                  fontStyle: 'italic',
-                  fontWeight: 500,
-                }}
-              >
-                {s.label}
-              </Box>
-              <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
-                {s.value}
-              </Typography>
-            </Box>
-          ))}
-        </Box>
-      </Box>
-    </Box>
-  );
-}
-
-export function EggObservations({ egg }: { egg: EasterEggEntry }) {
-  return (
-    <Box id="plantnet" sx={sectionSx}>
-      <SectionHeader title="Observations & phenology" />
-      <Box sx={cardSx}>
-        <FactList
-          rows={egg.observations.map((o) => ({
-            label: `${o.date} · ${o.location}`,
-            value: o.starred ? `★ ${o.note}` : o.note,
-          }))}
-        />
-      </Box>
-    </Box>
-  );
-}
-
-export function EggResources({ egg }: { egg: EasterEggEntry }) {
-  return (
-    <Box id="sources" sx={sectionSx}>
-      <SectionHeader title="External resources" />
-      <Box sx={cardSx}>
-        <FactList
-          rows={egg.resources.map((r) => ({
-            label: r.label,
-            value: r.note,
-          }))}
-        />
-      </Box>
-    </Box>
-  );
-}
-
-export function EggSimilar({ egg }: { egg: EasterEggEntry }) {
-  return (
-    <Box id="similar" sx={sectionSx}>
-      <SectionHeader title="Similar plants" />
-      <Box sx={cardSx}>
-        <Typography
-          sx={{ fontSize: 20, fontWeight: 800, color: 'heading', mb: '10px' }}
-        >
-          {egg.similar.title}
-        </Typography>
-        {egg.similar.body.map((para, i) => (
-          <Typography
-            key={para}
-            sx={{
-              lineHeight: 1.7,
-              mb: i === egg.similar.body.length - 1 ? 0 : 1,
-            }}
-          >
-            {para}
-          </Typography>
-        ))}
-      </Box>
-    </Box>
+    <Typography
+      sx={{
+        fontSize: note.tone === 'lead' ? 15 : 14.5,
+        fontWeight: note.tone === 'lead' ? 700 : 400,
+        fontStyle: note.tone === 'closing' ? 'italic' : 'normal',
+        color:
+          note.tone === 'lead' || note.tone === 'closing'
+            ? 'heading'
+            : 'text.primary',
+        lineHeight: 1.65,
+      }}
+    >
+      {note.text}
+    </Typography>
   );
 }
 
 /**
- * The FAQ. Card grammar and open/close behaviour are the real FaqSection's; a
- * question whose entry supplies no answer renders without the chevron and
- * cannot be opened, rather than expanding onto an empty panel.
+ * The written prose of a section, in the same card the section's own facts sit
+ * in — never a label/value grid, which is what the real components are for.
  */
-export function EggFaq({ items }: { items: readonly EggFaqItem[] }) {
-  const [open, setOpen] = useState<number | null>(null);
-  if (items.length === 0) return null;
-
+export function EggNotes({ notes }: { notes: readonly EggNote[] }) {
+  if (notes.length === 0) return null;
   return (
-    <Box id="faq" sx={sectionSx}>
-      <SectionHeader title="Frequently asked questions" mb="14px" />
-      <Stack spacing="10px">
-        {items.map((item, i) => {
-          const isOpen = open === i;
-          const answerable = Boolean(item.a);
-          return (
+    <EggCard>
+      {notes.map((n) => (
+        <Note key={n.text} note={n} />
+      ))}
+    </EggCard>
+  );
+}
+
+/**
+ * The travel log under section 11 — additional content in the observation
+ * section's card grammar, sitting beside its charts rather than replacing them.
+ */
+export function EggTravelLog({
+  observations,
+}: {
+  observations: readonly EggObservation[];
+}) {
+  if (observations.length === 0) return null;
+  return (
+    <EggCard>
+      {observations.map((o) => (
+        <Box
+          key={`${o.date}-${o.location}`}
+          sx={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}
+        >
+          <Typography
+            sx={{
+              flexShrink: 0,
+              width: 64,
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              color: 'text.secondary',
+            }}
+          >
+            {o.date}
+          </Typography>
+          <Typography sx={{ fontSize: 14.5, lineHeight: 1.6 }}>
             <Box
-              key={item.q}
-              sx={{
-                bgcolor: 'background.paper',
-                border: '1px solid',
-                borderColor: 'borderSubtle',
-                borderRadius: '12px',
-                boxShadow: '0 1px 3px rgba(27,94,58,0.05)',
-                overflow: 'hidden',
-              }}
+              component="span"
+              sx={{ fontWeight: 700, color: 'heading', mr: '6px' }}
             >
-              <Box
-                component={answerable ? 'button' : 'div'}
-                type={answerable ? 'button' : undefined}
-                onClick={
-                  answerable ? () => setOpen(isOpen ? null : i) : undefined
-                }
-                aria-expanded={answerable ? isOpen : undefined}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  p: '16px 18px',
-                  width: '100%',
-                  background: 'none',
-                  border: 'none',
-                  cursor: answerable ? 'pointer' : 'default',
-                  textAlign: 'left',
-                  font: 'inherit',
-                }}
-              >
-                <Box
-                  sx={{
-                    flex: 1,
-                    fontSize: 15,
-                    fontWeight: 700,
-                    color: 'heading',
-                  }}
-                >
-                  {item.q}
-                </Box>
-                {answerable && (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      color: 'text.secondary',
-                      transition: 'transform 0.2s',
-                      transform: isOpen ? 'rotate(180deg)' : 'none',
-                    }}
-                  >
-                    <Sym name="expand_more" size={22} color="inherit" />
-                  </Box>
-                )}
-              </Box>
-              {answerable && isOpen && (
-                <Box
-                  sx={{
-                    p: '0 18px 18px',
-                    fontSize: 14,
-                    lineHeight: 1.6,
-                    color: 'text.primary',
-                  }}
-                >
-                  {item.a}
-                </Box>
-              )}
+              {o.starred ? `★ ${o.location}` : o.location}
             </Box>
-          );
-        })}
-      </Stack>
-    </Box>
+            {o.note}
+          </Typography>
+        </Box>
+      ))}
+    </EggCard>
   );
 }
 
 /** The last thing on the page, alone and centred. */
 export function EggFinalLine({ text }: { text: string }) {
   return (
-    <Box sx={{ textAlign: 'center', py: 6 }}>
+    <Box sx={{ textAlign: 'center', py: '48px' }}>
       <Typography
-        component="p"
         sx={{
-          fontSize: { xs: 22, md: 28 },
-          fontWeight: 700,
-          fontStyle: 'italic',
+          fontSize: { xs: 22, sm: 26 },
+          fontWeight: 800,
           color: 'heading',
+          letterSpacing: '-0.01em',
         }}
       >
         {text}

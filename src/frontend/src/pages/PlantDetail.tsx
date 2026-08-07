@@ -85,18 +85,10 @@ import {
 // --- SMA-394 easter eggs — delete this block to remove ---
 import { getEasterEggBySlug } from '../easteregg';
 import {
-  EggCalendar,
-  EggCharacteristics,
-  EggCultivation,
-  EggFaq,
   EggFinalLine,
   EggGauges,
-  EggObservations,
-  EggPests,
-  EggResources,
-  EggScientific,
-  EggSimilar,
-  EggSynonyms,
+  EggNotes,
+  EggTravelLog,
 } from '../easteregg/sections';
 // --- end SMA-394 ---
 
@@ -557,7 +549,9 @@ export default function PlantDetail() {
       num: '14',
       id: 'faq',
       labelKey: 'plantDetail.sections.faq',
-      state: faqItems.length > 0 ? 'live' : 'empty',
+      // --- SMA-394 easter eggs — delete `egg ? egg.faq.length :` to remove ---
+      state: (egg ? egg.faq.length : faqItems.length) > 0 ? 'live' : 'empty',
+      // --- end SMA-394 ---
     },
     {
       num: '15',
@@ -1063,49 +1057,41 @@ export default function PlantDetail() {
 
           {/* ── Section 03: Distribution map teaser (SMA-78). Decorative blob
               map, always mounted; TOC entry stays coming-data (non-clickable). */}
-          {/* --- SMA-394 easter eggs — delete this block to remove --- */}
-          {!egg && <DistributionSection />}
-          {/* --- end SMA-394 --- */}
+          <DistributionSection />
 
           {/* ── SMA-178: lifecycle + scientific data hoisted to mockup order
               (after the gallery, before characteristics). The "about" content is
               folded into the Overview card above. ─────────────────────────── */}
-          {/* --- SMA-394 easter eggs — delete this block to remove --- */}
-          {egg ? (
-            <EggCalendar egg={egg} />
-          ) : (
-            showLifecycleSection && <LifecycleSection plant={plant} />
-          )}
-          {egg ? (
-            <EggScientific egg={egg} />
-          ) : (
-            showScientificData && <ScientificDataSection plant={plant} />
-          )}
+          {showLifecycleSection && <LifecycleSection plant={plant} />}
+          {/* --- SMA-394 easter eggs — delete this line to remove --- */}
+          {egg && <EggNotes notes={egg.notes.lifecycle} />}
+          {/* --- end SMA-394 --- */}
+
+          {showScientificData && <ScientificDataSection plant={plant} />}
+          {/* --- SMA-394 easter eggs — delete this line to remove --- */}
+          {egg && <EggNotes notes={egg.notes.scientific} />}
           {/* --- end SMA-394 --- */}
 
           {/* ── Section 06: Characteristics — bar-gauge panel (SMA-39). ── */}
-          {egg ? (
-            <EggCharacteristics egg={egg} />
-          ) : (
-            <CharacteristicsSection plant={plant} />
-          )}
+          <CharacteristicsSection plant={plant} regions={egg?.regions} />
+          {/* --- SMA-394 easter eggs — delete this line to remove --- */}
+          {egg && <EggNotes notes={egg.notes.characteristics} />}
+          {/* --- end SMA-394 --- */}
 
           {/* ── Section 07: Growing & propagation (SMA-231). Factual rows
               (propagation methods, pruning months, watering) on the section-05
               card format; mounted only when ≥1 value (gating preserved). */}
-          {egg ? (
-            <EggCultivation egg={egg} />
-          ) : (
-            showCulture && <CultureSection perenualData={plant.perenualData} />
-          )}
+          {showCulture && <CultureSection perenualData={plant.perenualData} />}
+          {/* --- SMA-394 easter eggs — delete this line to remove --- */}
+          {egg && <EggNotes notes={egg.notes.culture} />}
+          {/* --- end SMA-394 --- */}
 
           {/* ── Section 08: Pests & diseases (SMA-227). Card grid + teaser detail
               modal; mounted only when >0 pests (gating preserved). */}
-          {egg ? (
-            <EggPests egg={egg} />
-          ) : (
-            plant.pests.length > 0 && <PestsSection pests={plant.pests} />
-          )}
+          {plant.pests.length > 0 && <PestsSection pests={plant.pests} />}
+          {/* --- SMA-394 easter eggs — delete this line to remove --- */}
+          {egg && <EggNotes notes={egg.notes.pests} />}
+          {/* --- end SMA-394 --- */}
 
           {/* ── Section 09: Common names (SMA-223). Language-card carousel with
               search + pin; mounted only when >1 name (gating preserved). */}
@@ -1119,43 +1105,39 @@ export default function PlantDetail() {
           {/* ── Section 10: Botanical synonyms (SMA-223). Italic synonym chips
               with authority tooltip + "+N more" toggle; mounted only when >0
               synonyms (gating preserved). */}
-          {egg ? (
-            <EggSynonyms egg={egg} />
-          ) : (
-            plant.synonyms.length > 0 && (
-              <BotanicalSynonymsSection
-                key={`botanical-synonyms-${plant.id}`}
-                synonyms={plant.synonyms}
-              />
-            )
+          {plant.synonyms.length > 0 && (
+            <BotanicalSynonymsSection
+              key={`botanical-synonyms-${plant.id}`}
+              synonyms={plant.synonyms}
+            />
           )}
 
           {/* ── Section 11: Observations & phenology teaser (SMA-78). Decorative
               sample data; always mounted; TOC entry (plantnet) stays coming-data. */}
-          {egg ? <EggObservations egg={egg} /> : <ObservationsSection />}
+          <ObservationsSection />
+          {/* --- SMA-394 easter eggs — delete this line to remove --- */}
+          {egg && <EggTravelLog observations={egg.observations} />}
+          {/* --- end SMA-394 --- */}
 
           {/* ── Section 12: External resources + enrichment provenance (SMA-246) ── */}
-          {egg ? (
-            <EggResources egg={egg} />
-          ) : (
-            <ExternalResourcesSection plant={plant} />
-          )}
+          <ExternalResourcesSection plant={plant} cards={egg?.resources} />
 
           {/* ── Section 13: Similar plants teaser (SMA-78). Decorative sample
               recommendations; always mounted; TOC entry (similar) stays
               coming-backend. */}
-          {egg ? <EggSimilar egg={egg} /> : <SimilarPlantsSection />}
+          <SimilarPlantsSection />
+          {/* --- SMA-394 easter eggs — delete this line to remove --- */}
+          {egg && <EggNotes notes={egg.notes.similar} />}
+          {/* --- end SMA-394 --- */}
 
-          {egg ? (
-            <EggFaq items={egg.faq} />
-          ) : (
-            faqItems.length > 0 && <FaqSection plant={plant} />
+          {(egg ? egg.faq.length : faqItems.length) > 0 && (
+            <FaqSection plant={plant} items={egg?.faq} />
           )}
 
           {/* ── Section 15: Community teaser (SMA-78). Empty-state corrections
               & comments; always mounted; TOC entry (community) stays
               coming-backend. */}
-          {!egg && <CommunitySection />}
+          <CommunitySection />
 
           {/* --- SMA-394 easter eggs — delete this block to remove --- */}
           {egg ? (

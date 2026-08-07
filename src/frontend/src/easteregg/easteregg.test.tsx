@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -36,7 +36,27 @@ import {
   getEasterEggCards,
   matchEasterEggKey,
 } from './index';
-import { ERINA } from './erina';
+import { HIKARI } from './entries/hikari';
+import { spacingToCm } from '../utils/plantDetail';
+
+/** The frozen 15-entry skeleton: every one of these must exist in the DOM. */
+const SECTION_IDS = [
+  'overview',
+  'gallery',
+  'distribution',
+  'lifecycle',
+  'scientific-data',
+  'characteristics',
+  'edible',
+  'pests',
+  'common-names',
+  'synonyms',
+  'plantnet',
+  'sources',
+  'similar',
+  'faq',
+  'community',
+] as const;
 
 /**
  * SMA-394 — every test for the easter-egg feature lives here, so the suites of
@@ -169,7 +189,7 @@ describe('easter-egg registry', () => {
   });
 
   it('carries the artwork as a decodable data URI, Japanese intact', () => {
-    const url = ERINA.card.imageUrl ?? '';
+    const url = HIKARI.card.imageUrl ?? '';
     expect(url.startsWith('data:image/svg+xml,')).toBe(true);
     const svg = decodeURIComponent(url.slice('data:image/svg+xml,'.length));
     // The name survives the round trip, code point for code point.
@@ -177,12 +197,13 @@ describe('easter-egg registry', () => {
     expect([...NAME].map((c) => c.codePointAt(0))).toEqual([
       0x3048, 0x308a, 0x306a, 0x0020, 0x004a,
     ]);
-    // Our own drawing: white ground, translucent red heart, blue name.
+    // Our own drawing: white ground, translucent red heart, blue name. The
+    // heart reads as a heart at card size while staying behind the text.
     expect(svg).toContain('fill="#ffffff"');
-    expect(svg).toContain('fill="#e03131"');
+    expect(svg).toContain('fill="#e03131" opacity="0.3"');
     expect(svg).toContain('fill="#4c7fd6"');
     // No photograph, therefore no credit line anywhere.
-    expect(ERINA.card.imageAttribution).toBeNull();
+    expect(HIKARI.card.imageAttribution).toBeNull();
   });
 
   it('goes completely silent when the switch is off', async () => {
@@ -203,12 +224,15 @@ describe('easter-egg registry', () => {
   });
 
   it('states no size figure anywhere in the entry', () => {
-    const p = ERINA.plant;
+    const p = HIKARI.plant;
     expect(p.minHeightCm).toBeNull();
     expect(p.maxHeightCm).toBeNull();
     expect(p.minSpreadCm).toBeNull();
     expect(p.maxSpreadCm).toBeNull();
-    expect(p.perenualData?.xPlantSpacingValue).toBeNull();
+    // Spacing is a PROPORTION, not a length: the unit is unconvertible, so the
+    // formatter prints it verbatim and never derives a cm/in figure from it.
+    const unit = p.perenualData?.xPlantSpacingUnit ?? '';
+    expect(spacingToCm(p.perenualData?.xPlantSpacingValue ?? 0, unit)).toBeNull();
   });
 });
 
@@ -284,7 +308,7 @@ describe('the detail page', () => {
 
   it('still fetches a normal plant exactly once — the injection is inert elsewhere', async () => {
     const plant = {
-      ...ERINA.plant,
+      ...HIKARI.plant,
       id: 'b9eb0675-9872-4b1b-9f5d-417195e98f03',
       translations: [
         { id: 1, language: 'en', commonName: 'Pea', description: 'A pea.' },
@@ -332,7 +356,7 @@ describe('the detail page', () => {
     await screen.findByRole('heading', { name: NAME });
 
     // Gauges: the eight that matter here, and NOT hardiness or soil pH.
-    expect(screen.getByText('12+ h')).toBeInTheDocument();
+    expect(screen.getAllByText('12+ h').length).toBeGreaterThan(0);
     expect(screen.getByText('Immediate flowering')).toBeInTheDocument();
     expect(screen.queryByText('Hardiness')).not.toBeInTheDocument();
     // Calendar, with the morning protocol.
@@ -342,21 +366,24 @@ describe('the detail page', () => {
     // Characteristics: the written wording, and the ranges as the copy writes
     // them — not bucketed into continents.
     expect(
-      screen.getByText('Only when insufficiently rested')
+      screen.getByText(/Only when insufficiently rested/)
     ).toBeInTheDocument();
-    expect(screen.getByText('Japan')).toBeInTheDocument();
+    expect(screen.getAllByText('Japan').length).toBeGreaterThan(0);
     expect(
       screen.getByText('Japan · California · France (soon)')
     ).toBeInTheDocument();
-    // Pests show their descriptions, not just their type.
+    // Pests keep their descriptions.
     expect(
       screen.getByText(/The single greatest documented threat/)
     ).toBeInTheDocument();
     expect(screen.getByText(/ideally アレックス/)).toBeInTheDocument();
-    // Synonyms keep their glosses.
-    expect(screen.getByText('syn. えりちゃん')).toBeInTheDocument();
+    // Synonyms keep their glosses — the real chip carries them as its
+    // authority, announced through the accessible name.
+    expect(
+      screen.getByLabelText('Erina japonica (syn. えりちゃん)')
+    ).toBeInTheDocument();
     // Observations.
-    expect(screen.getByText('Type locality')).toBeInTheDocument();
+    expect(screen.getByText(/Type locality/)).toBeInTheDocument();
     // Resources — the things she loves, not dead botanical searches.
     expect(screen.getByText('Daiso')).toBeInTheDocument();
     expect(screen.queryByText('POWO')).not.toBeInTheDocument();
@@ -367,17 +394,84 @@ describe('the detail page', () => {
     expect(screen.queryByText('Is this plant edible?')).not.toBeInTheDocument();
   });
 
-  it('hides the sections that add nothing, and closes on the final line', async () => {
+  it('renders through the REAL section components, not stand-ins', async () => {
     renderDetailAt(HREF);
     await screen.findByRole('heading', { name: NAME });
 
+    // 04 — the twelve-month timeline table and its legend (LifecycleSection).
+    const timeline = screen.getByRole('table', {
+      name: 'Seasonal timeline (sowing, flowering, harvest by month)',
+    });
+    expect(timeline).toBeInTheDocument();
+    expect(within(timeline).getAllByRole('columnheader')).toHaveLength(13);
+    expect(within(timeline).getByText('Flowering')).toBeInTheDocument();
+
+    // 05 — the two-column Available / Coming card (ScientificDataSection),
+    // fed so the left column actually fills, chips included.
+    expect(screen.getByText('Available')).toBeInTheDocument();
+    expect(screen.getByText(/Coming .* exact measurements/)).toBeInTheDocument();
+    expect(screen.getByText('Daily sunlight')).toBeInTheDocument();
+    expect(screen.getByText('Recommended spacing')).toBeInTheDocument();
+    expect(screen.getByText('80 % of the bed')).toBeInTheDocument();
+
+    // 06 — the progress bars, driven by this entry's values.
+    expect(screen.getByText('Full sun')).toBeInTheDocument();
+    expect(screen.getByText('Low (frost-tender)')).toBeInTheDocument();
+    // …and the three the site shows as "Not provided" for every plant.
+    expect(screen.getAllByText('Not provided').length).toBeGreaterThanOrEqual(3);
+
+    // 07 — the icon row of CultureSection.
+    expect(screen.getByText('Watering rhythm')).toBeInTheDocument();
+    // Twice: the hero gauge and the culture row read the same written value.
+    expect(screen.getAllByText('Frequent & particular')).toHaveLength(2);
+
+    // 08 — three real pest CARDS with the "view details" affordance.
+    for (const name of ['Cockroaches', 'Grasshoppers', 'Flies']) {
+      expect(
+        screen.getByRole('button', { name: `View details for ${name}` })
+      ).toBeInTheDocument();
+    }
+    expect(screen.getAllByText('Pest · insect')).toHaveLength(3);
+
+    // 12 — the resource CARDS, with their two-letter pill. No URL is guessed,
+    // so none of them is a link.
+    expect(screen.getByText('SG')).toBeInTheDocument();
     expect(
-      screen.queryByRole('heading', { name: 'Distribution map' })
+      screen.queryByRole('link', { name: /Studio Ghibli/ })
     ).not.toBeInTheDocument();
+
+    // 14 — real accordions: one open at a time, first open by default.
+    const q = screen.getByRole('button', { name: /Do you love me\?/ });
+    expect(q).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(q);
+    expect(q).toHaveAttribute('aria-expanded', 'true');
+    // Twice once open: the cultivation closing line, and this answer quoting it.
     expect(
-      screen.queryByRole('heading', { name: 'Community' })
-    ).not.toBeInTheDocument();
-    // No planner promise: this plant can never be placed in a garden.
+      screen.getAllByText('Nobody loves her more than アレックス.')
+    ).toHaveLength(2);
+  });
+
+  it('renders all fifteen sections, each resolving to its own anchor', async () => {
+    const { container } = renderDetailAt(HREF);
+    await screen.findByRole('heading', { name: NAME });
+
+    for (const id of SECTION_IDS) {
+      expect(container.querySelector(`[id="${id}"]`)).not.toBeNull();
+    }
+    // The two the previous round hid are back, badges and all.
+    expect(
+      screen.getByRole('heading', { name: 'Worldwide distribution map' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Community · corrections & comments' })
+    ).toBeInTheDocument();
+  });
+
+  it('makes no planner promise, and closes on the final line', async () => {
+    renderDetailAt(HREF);
+    await screen.findByRole('heading', { name: NAME });
+
+    // This plant can never be placed in a garden.
     expect(
       screen.queryByRole('link', { name: 'Plan my garden' })
     ).not.toBeInTheDocument();
