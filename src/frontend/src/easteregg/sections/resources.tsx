@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
@@ -10,6 +11,9 @@ import { adaptBadge } from '../../utils/badgeColors';
 import type { EasterEggEntry } from '../types';
 
 const ER = 'plantDetail.externalResources';
+
+/** The four sources a plant must carry to count as fully enriched. */
+const REQUIRED_SOURCES = ['Manual', 'GBIF', 'Trefle', 'Perenual'] as const;
 
 // Light-mode mockup palette (dark mode reads theme tokens), copied verbatim.
 const LIGHT = {
@@ -42,18 +46,20 @@ function sourceTypeColors(source: string): { bg: string; fg: string } {
  * binomial; this entry writes them, and none carries a link because no public
  * page for them could be verified, so no card promises navigation it cannot do.
  */
-export function EggResources({ egg }: { egg: EasterEggEntry }) {
+export const EggResources = memo(function EggResources({
+  egg,
+}: {
+  egg: EasterEggEntry;
+}) {
   const { t } = useTranslation();
   const { palette } = useTheme();
   const mode = palette.mode;
   const dark = mode === 'dark';
   const plant = egg.plant;
 
-  const fullyEnriched =
-    plant.enrichmentSources.includes('Manual') &&
-    plant.enrichmentSources.includes('GBIF') &&
-    plant.enrichmentSources.includes('Trefle') &&
-    plant.enrichmentSources.includes('Perenual');
+  const fullyEnriched = REQUIRED_SOURCES.every((s) =>
+    plant.enrichmentSources.includes(s)
+  );
 
   const rowBorder = dark ? 'rgba(255,255,255,0.10)' : LIGHT.rowBorder;
   const rowBg = dark ? 'rgba(255,255,255,0.03)' : LIGHT.rowBg;
@@ -171,4 +177,4 @@ export function EggResources({ egg }: { egg: EasterEggEntry }) {
       </Box>
     </Box>
   );
-}
+});

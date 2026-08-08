@@ -27,15 +27,36 @@ const HEART =
 const SVG_FONT =
   "Inter, 'Hiragino Sans', 'Yu Gothic UI', Meiryo, 'Noto Sans JP', sans-serif";
 
+/**
+ * XML-escape a value that lands in both an attribute and a text node.
+ * `encodeURIComponent` further down makes the document transport-safe, not
+ * well-formed: a label carrying `&`, `<`, `>` or `"` would still produce
+ * malformed XML and a blank card. No current entry does, and this builder's
+ * whole point is that the next one is a single file.
+ */
+const escapeXml = (s: string): string =>
+  s.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&apos;',
+      })[c] as string
+  );
+
 export function buildCardArtwork(label: string): string {
+  const safe = escapeXml(label);
   const svg = [
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400"',
-    ` role="img" aria-label="${label}">`,
+    ` role="img" aria-label="${safe}">`,
     '<rect width="400" height="400" fill="#ffffff"/>',
     `<path transform="translate(50 44) scale(12.5)" d="${HEART}" fill="#e03131" opacity="0.3"/>`,
     `<text x="200" y="208" text-anchor="middle" dominant-baseline="central"`,
     ` font-family="${SVG_FONT}" font-size="74" font-weight="600"`,
-    ` fill="#4c7fd6" fill-opacity="0.8">${label}</text>`,
+    ` fill="#4c7fd6" fill-opacity="0.8">${safe}</text>`,
     '</svg>',
   ].join('');
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;

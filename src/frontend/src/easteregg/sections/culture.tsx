@@ -1,5 +1,7 @@
+import { memo } from 'react';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
+import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
 import SectionHeader from '../../components/plantDetail/SectionHeader';
 import StatusBadge from '../../components/plantDetail/StatusBadge';
@@ -10,8 +12,13 @@ import type { EasterEggEntry } from '../types';
  * Section 07 for an easter egg: CultureSection's icon rows, verbatim, over this
  * entry's written facts instead of the Perenual propagation fields.
  */
-export function EggCulture({ egg }: { egg: EasterEggEntry }) {
+export const EggCulture = memo(function EggCulture({
+  egg,
+}: {
+  egg: EasterEggEntry;
+}) {
   const { t } = useTranslation();
+  const dark = useTheme().palette.mode === 'dark';
   return (
     <Box id="edible" sx={{ mb: 3, scrollMarginTop: '80px' }}>
       <SectionHeader
@@ -26,13 +33,15 @@ export function EggCulture({ egg }: { egg: EasterEggEntry }) {
           borderColor: 'borderSubtle',
           borderRadius: '12px',
           p: '18px 20px',
-          boxShadow: '0 1px 3px rgba(27,94,58,0.05)',
+          boxShadow: dark ? 'none' : '0 1px 3px rgba(27,94,58,0.05)',
         }}
       >
         <Stack spacing="10px">
           {egg.culture.map((r) => (
             <Box
-              key={r.icon}
+              // The label is the row's identity; the icon is a presentation
+              // choice two rows may legitimately share.
+              key={r.label}
               sx={{
                 display: 'flex',
                 alignItems: 'center',
@@ -63,4 +72,4 @@ export function EggCulture({ egg }: { egg: EasterEggEntry }) {
       </Box>
     </Box>
   );
-}
+});

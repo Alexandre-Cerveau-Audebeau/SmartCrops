@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
@@ -41,7 +42,11 @@ const CORES: DecorativeBlobPosition[] = [
  * is aria-hidden, so the words are repeated in a visually hidden sibling rather
  * than being swallowed by assistive technology.
  */
-export function EggDistribution({ egg }: { egg: EasterEggEntry }) {
+export const EggDistribution = memo(function EggDistribution({
+  egg,
+}: {
+  egg: EasterEggEntry;
+}) {
   const { t } = useTranslation();
   const { palette } = useTheme();
   const dark = palette.mode === 'dark';
@@ -247,4 +252,4 @@ export function EggDistribution({ egg }: { egg: EasterEggEntry }) {
       </Box>
     </Box>
   );
-}
+});

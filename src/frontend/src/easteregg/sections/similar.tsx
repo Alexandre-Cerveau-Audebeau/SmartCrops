@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
@@ -15,7 +16,11 @@ const SKELETON_COUNT = 3;
  * centred overlay pill, verbatim. The catalogue's pill says the recommendation
  * engine is coming; this entry's says there is nothing to recommend.
  */
-export function EggSimilar({ egg }: { egg: EasterEggEntry }) {
+export const EggSimilar = memo(function EggSimilar({
+  egg,
+}: {
+  egg: EasterEggEntry;
+}) {
   const { t } = useTranslation();
   const { palette } = useTheme();
   const dark = palette.mode === 'dark';
@@ -146,4 +151,4 @@ export function EggSimilar({ egg }: { egg: EasterEggEntry }) {
       </Box>
     </Box>
   );
-}
+});

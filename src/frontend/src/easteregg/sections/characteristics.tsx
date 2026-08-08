@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Box from '@mui/material/Box';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -8,12 +9,16 @@ import { formatXDataRange } from '../../utils/plantDetail';
 import SectionHeader from '../../components/plantDetail/SectionHeader';
 import StatusBadge from '../../components/plantDetail/StatusBadge';
 import { Sym } from '../../components/Sym';
+import { eggFontSx } from '../fontSx';
 import type { EasterEggEntry } from '../types';
 
 type TFn = ReturnType<typeof useTranslation>['t'];
 
 interface Bar {
+  /** React list identity. Unique by construction, see `bars` below. */
   key: string;
+  /** The name this bar's hover note is filed under in `egg.barTooltips`. */
+  tipKey: string;
   label: string;
   level: string | null;
   pct: number | null;
@@ -168,7 +173,11 @@ function RegionPill({
  * with a hover note each. The pills take written text, because the TDWG mapping
  * would flatten "Japan" to its continent.
  */
-export function EggCharacteristics({ egg }: { egg: EasterEggEntry }) {
+export const EggCharacteristics = memo(function EggCharacteristics({
+  egg,
+}: {
+  egg: EasterEggEntry;
+}) {
   const { t } = useTranslation();
   const { palette } = useTheme();
   const dark = palette.mode === 'dark';
@@ -190,9 +199,14 @@ export function EggCharacteristics({ egg }: { egg: EasterEggEntry }) {
     plant.hardinessZoneMax
   );
 
+  // The two catalogue bars keep their own names; the entry's own bars are
+  // namespaced, so an entry that declares a `light` or `frostTolerance` bar
+  // cannot collide with them and hand React two rows with the same key. The
+  // hover note is still filed under the unprefixed name.
   const bars: Bar[] = [
     {
       key: 'light',
+      tipKey: 'light',
       label: t(`${C}.light`),
       level: light ? t(light.levelKey) : null,
       pct: light?.pct ?? null,
@@ -201,6 +215,7 @@ export function EggCharacteristics({ egg }: { egg: EasterEggEntry }) {
     },
     {
       key: 'frostTolerance',
+      tipKey: 'frostTolerance',
       label: t(`${C}.frostTolerance`),
       level: frost ? t(frost.levelKey) : null,
       pct: frost?.pct ?? null,
@@ -209,7 +224,12 @@ export function EggCharacteristics({ egg }: { egg: EasterEggEntry }) {
         : null,
       color: BAR_COLOR.frost,
     },
-    ...egg.bars.map((b) => ({ ...b, rawValue: null })),
+    ...egg.bars.map((b) => ({
+      ...b,
+      key: `egg-${b.key}`,
+      tipKey: b.key,
+      rawValue: null,
+    })),
   ];
 
   return (
@@ -234,9 +254,17 @@ export function EggCharacteristics({ egg }: { egg: EasterEggEntry }) {
       >
         {bars.map((bar) => {
           const row = <BarRow bar={bar} t={t} />;
-          const tip = egg.barTooltips[bar.key];
+          const tip = egg.barTooltips[bar.tipKey];
           return tip ? (
-            <Tooltip key={bar.key} title={tip} arrow placement="top">
+            <Tooltip
+              key={bar.key}
+              title={tip}
+              arrow
+              placement="top"
+              // Tooltips portal out of the page container, so the Japanese
+              // notes (さむい！) need the stack re-applied on the popper itself.
+              slotProps={{ tooltip: { sx: eggFontSx(egg.fontStack) } }}
+            >
               <Box>{row}</Box>
             </Tooltip>
           ) : (
@@ -272,4 +300,4 @@ export function EggCharacteristics({ egg }: { egg: EasterEggEntry }) {
       </Box>
     </Box>
   );
-}
+});

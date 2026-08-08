@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
@@ -40,7 +41,11 @@ const COMING_ITEMS: ReadonlyArray<{ key: ComingItemKey; icon: string }> = [
  * the shared unit-aware helpers, so the metric/imperial toggle keeps working;
  * the written rows and the extra chip groups are appended to it.
  */
-export function EggScientific({ egg }: { egg: EasterEggEntry }) {
+export const EggScientific = memo(function EggScientific({
+  egg,
+}: {
+  egg: EasterEggEntry;
+}) {
   const { t } = useTranslation();
   const { system } = useUnitSystem();
   const pd = egg.plant.perenualData;
@@ -175,7 +180,10 @@ export function EggScientific({ egg }: { egg: EasterEggEntry }) {
           <Stack spacing="10px">
             {availableRows.map((r) => (
               <Box
-                key={r.icon}
+                // The label is the row's identity. An icon is a presentation
+                // choice this entry already reuses across rows, and `extraRows`
+                // invites more of the same.
+                key={r.label}
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
@@ -335,4 +343,4 @@ export function EggScientific({ egg }: { egg: EasterEggEntry }) {
       </Box>
     </Box>
   );
-}
+});

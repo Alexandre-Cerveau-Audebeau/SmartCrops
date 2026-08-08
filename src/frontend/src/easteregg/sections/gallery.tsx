@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Box from '@mui/material/Box';
 import { useTranslation } from 'react-i18next';
 import SectionHeader from '../../components/plantDetail/SectionHeader';
@@ -10,7 +11,11 @@ import { EggNotes } from './shared';
  * photograph and says so in its own words instead, so the shared component is
  * not involved at all.
  */
-export function EggGallery({ egg }: { egg: EasterEggEntry }) {
+export const EggGallery = memo(function EggGallery({
+  egg,
+}: {
+  egg: EasterEggEntry;
+}) {
   const { t } = useTranslation();
   return (
     <Box id="gallery" sx={{ mb: 3 }}>
@@ -18,4 +23,4 @@ export function EggGallery({ egg }: { egg: EasterEggEntry }) {
       <EggNotes notes={egg.notes.gallery} />
     </Box>
   );
-}
+});

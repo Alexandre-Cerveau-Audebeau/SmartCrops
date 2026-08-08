@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
+import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
 import SectionHeader from '../../components/plantDetail/SectionHeader';
 import { Sym } from '../../components/Sym';
@@ -14,8 +15,9 @@ const F = 'plantDetail.faq';
  * questions are auto-generated from the plant's data fields; these are written,
  * so the caption would be a false claim and is not rendered.
  */
-export function EggFaq({ egg }: { egg: EasterEggEntry }) {
+export const EggFaq = memo(function EggFaq({ egg }: { egg: EasterEggEntry }) {
   const { t } = useTranslation();
+  const dark = useTheme().palette.mode === 'dark';
   const [open, setOpen] = useState<number | null>(0);
   const items = egg.faq;
 
@@ -34,7 +36,7 @@ export function EggFaq({ egg }: { egg: EasterEggEntry }) {
                 border: '1px solid',
                 borderColor: 'borderSubtle',
                 borderRadius: '12px',
-                boxShadow: '0 1px 3px rgba(27,94,58,0.05)',
+                boxShadow: dark ? 'none' : '0 1px 3px rgba(27,94,58,0.05)',
                 overflow: 'hidden',
               }}
             >
@@ -79,25 +81,30 @@ export function EggFaq({ egg }: { egg: EasterEggEntry }) {
                   <Sym name="expand_more" size={22} color="inherit" />
                 </Box>
               </Box>
-              {isOpen && (
-                <Box
-                  id={`faq-panel-${i}`}
-                  role="region"
-                  aria-labelledby={`faq-q-${i}`}
-                  sx={{
-                    p: '0 18px 18px',
-                    fontSize: 14,
-                    lineHeight: 1.6,
-                    color: 'text.primary',
-                  }}
-                >
-                  {item.a}
-                </Box>
-              )}
+              {/* Always mounted: the button's `aria-controls` must resolve to a
+                  real element even while collapsed, or a screen reader
+                  announces a control that points at nothing. `hidden` keeps the
+                  collapsed answer out of the accessibility tree and out of the
+                  tab order, and the display rule keeps it off screen. */}
+              <Box
+                id={`faq-panel-${i}`}
+                role="region"
+                aria-labelledby={`faq-q-${i}`}
+                hidden={!isOpen}
+                sx={{
+                  display: isOpen ? 'block' : 'none',
+                  p: '0 18px 18px',
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  color: 'text.primary',
+                }}
+              >
+                {item.a}
+              </Box>
             </Box>
           );
         })}
       </Stack>
     </Box>
   );
-}
+});

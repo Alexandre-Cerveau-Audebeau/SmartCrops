@@ -103,18 +103,25 @@ const SECTION_SCROLL_MARGIN = {
   scrollMarginTop: { xs: '104px', md: '80px' },
 } as const;
 
-// --- SMA-394 easter eggs — delete this block and the easteregg folder to remove ---
 /**
- * One lookup, one branch, and nothing else: a slug in the local registry is
- * served by its own page, which owns every line of markup it needs. `null` for
- * all 536 catalogue plants, which render below exactly as they did before.
+ * `GET /library/:id`. The route's entry point, and the module's default export.
+ * Its body is a single line; anything above that line is an easter-egg lookup
+ * fenced by its own markers, so removing the feature leaves this function
+ * exporting the catalogue page and the module still valid.
  */
 export default function PlantDetail() {
-  const { id } = useParams<{ id: string }>();
-  const egg = getEasterEggBySlug(id);
-  return egg ? <EasterEggDetail egg={egg} /> : <CataloguePlantDetail />;
+  // --- SMA-394 easter eggs — delete this block and the easteregg folder to remove ---
+  // One lookup, one branch, and nothing else: a slug in the local registry is
+  // served by its own page, which owns every line of markup it needs. `null`
+  // for all 536 catalogue plants, which fall through to the line below and
+  // render exactly as they did before.
+  const eggParams = useParams<{ id: string }>();
+  const egg = getEasterEggBySlug(eggParams.id);
+  if (egg) return <EasterEggDetail egg={egg} />;
+  // --- end SMA-394 ---
+
+  return <CataloguePlantDetail />;
 }
-// --- end SMA-394 ---
 
 /**
  * `GET /library/:id` detail page. Renders the full `PlantDetailResponse`

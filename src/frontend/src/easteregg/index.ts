@@ -19,20 +19,34 @@ import { EASTER_EGGS_ENABLED } from './enabled';
  */
 const EASTER_EGGS: readonly EasterEggEntry[] = [HIKARI];
 
-/** Normalise a typed query the way the registry's keys are written. */
+/**
+ * Normalise a typed query the way the registry's keys are written.
+ *
+ * NFKC first, because the recipient types on a Japanese IME: it emits the
+ * ideographic space U+3000 between えりな and J, and full-width latin
+ * (Ｅｒｉｎａ＿Ｊ) whenever the input mode is kana-width. NFKC folds both to
+ * their ASCII counterparts, so both of those forms reach the same key as the
+ * plainly typed ones. Trim, lowercase and collapse runs of whitespace
+ * afterwards, in that order.
+ */
 function normalise(raw: string): string {
-  return raw.trim().toLowerCase().replace(/\s+/g, ' ');
+  return raw.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 /**
  * The entry whose key the typed text matches EXACTLY: never fuzzy, never
  * prefix, which is why an easter egg can't be stumbled upon by browsing.
  * Called BEFORE the search hook runs, so a key never reaches the network.
+ *
+ * Both sides go through `normalise`, so a key written in the entry can never
+ * drift out of reach of the same string typed by hand.
  */
 export function matchEasterEggKey(raw: string): EasterEggEntry | null {
   if (!EASTER_EGGS_ENABLED) return null;
   const key = normalise(raw);
-  return EASTER_EGGS.find((egg) => egg.keys.includes(key)) ?? null;
+  return (
+    EASTER_EGGS.find((egg) => egg.keys.some((k) => normalise(k) === key)) ?? null
+  );
 }
 
 /** The entry a detail-page id belongs to, if any. */

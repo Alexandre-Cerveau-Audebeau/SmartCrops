@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -36,6 +36,8 @@ import {
   getEasterEggCards,
   matchEasterEggKey,
 } from './index';
+import type { EasterEggEntry } from './types';
+import { EggPests } from './sections';
 import { HIKARI } from './entries/hikari';
 import { spacingToCm } from '../utils/plantDetail';
 
@@ -64,9 +66,14 @@ const SECTION_IDS = [
  * folder deletes the tests with it.
  */
 
-const SLUG = 'erina-j-mon-coeur-since-october-31-2024';
+// Sourced from the entry, never re-typed: a slug edited in `hikari.ts` must
+// move the tests with it rather than leave them asserting a dead route.
+const SLUG = HIKARI.slug;
 const HREF = `/library/${SLUG}`;
 const NAME = 'えりな J';
+
+/** usePlantFinder's typed-query debounce, in ms. */
+const DEBOUNCE_MS = 300;
 
 function mockMatchMedia(matches: boolean) {
   window.matchMedia = ((query: string) => ({
@@ -173,6 +180,25 @@ describe('easter-egg registry', () => {
     }
   );
 
+  // A Japanese IME emits full-width forms: U+3000 IDEOGRAPHIC SPACE between
+  // えりな and J, and full-width latin (U+FF21..U+FF5A, U+FF3F) whenever the
+  // input mode is kana-width. Typing the invitation on her own keyboard has to
+  // work, so NFKC folds both to the ASCII the keys are written in. The
+  // ideographic spaces below are real characters and look like ordinary
+  // spacing here; each case names what it carries.
+  it.each([
+    ['えりな　J', 'ideographic space'],
+    ['えりな　j', 'ideographic space, lower case'],
+    ['Ｅｒｉｎａ＿Ｊ', 'full-width latin and underscore'],
+    ['ｅｒｉｎａ＿ｊ', 'full-width latin, lower case'],
+    ['Ｅｒｉｎａ　Ｊ', 'full-width latin with an ideographic space'],
+    ['えりな　Ｊ', 'kana with a full-width J'],
+    ['　Ｅｒｉｎａ＿Ｊ　', 'full-width, padded with ideographic spaces'],
+  ])('matches %j typed on a Japanese IME (%s)', (key) => {
+    expect(matchEasterEggKey(key)?.slug).toBe(SLUG);
+    expect(getEasterEggCards(key)).toHaveLength(1);
+  });
+
   it.each(['erina', 'erina_', 'erinaj_', '', 'j'])(
     'does not match the near miss %j',
     (key) => {
@@ -180,6 +206,15 @@ describe('easter-egg registry', () => {
       expect(getEasterEggCards(key)).toHaveLength(0);
     }
   );
+
+  it('normalises the registered keys too, so both sides agree', () => {
+    // The guarantee is symmetric: every key in the entry must be reachable by
+    // typing it, whatever width or case the keyboard produces.
+    for (const key of HIKARI.keys) {
+      expect(matchEasterEggKey(key)?.slug).toBe(SLUG);
+      expect(matchEasterEggKey(key.toUpperCase())?.slug).toBe(SLUG);
+    }
+  });
 
   it('resolves nothing for an ordinary plant id', () => {
     expect(
@@ -211,16 +246,20 @@ describe('easter-egg registry', () => {
     // exercised: mock it false, re-import the registry, assert every helper.
     vi.resetModules();
     vi.doMock('./enabled', () => ({ EASTER_EGGS_ENABLED: false }));
-    const off = await import('./index');
+    // try/finally, so a failed expectation cannot leave the mocked module and
+    // the reset registry in place for every test that follows in this file.
+    try {
+      const off = await import('./index');
 
-    expect(off.EASTER_EGGS_ENABLED).toBe(false);
-    expect(off.matchEasterEggKey('erina_j')).toBeNull();
-    expect(off.matchEasterEggKey('えりな j')).toBeNull();
-    expect(off.getEasterEggBySlug(SLUG)).toBeNull();
-    expect(off.getEasterEggCards('erina_j')).toHaveLength(0);
-
-    vi.doUnmock('./enabled');
-    vi.resetModules();
+      expect(off.EASTER_EGGS_ENABLED).toBe(false);
+      expect(off.matchEasterEggKey('erina_j')).toBeNull();
+      expect(off.matchEasterEggKey('えりな j')).toBeNull();
+      expect(off.getEasterEggBySlug(SLUG)).toBeNull();
+      expect(off.getEasterEggCards('erina_j')).toHaveLength(0);
+    } finally {
+      vi.doUnmock('./enabled');
+      vi.resetModules();
+    }
   });
 
   it('states no size figure anywhere in the entry', () => {
@@ -231,8 +270,14 @@ describe('easter-egg registry', () => {
     expect(p.maxSpreadCm).toBeNull();
     // Spacing is a PROPORTION, not a length: the unit is unconvertible, so the
     // formatter prints it verbatim and never derives a cm/in figure from it.
-    const unit = p.perenualData?.xPlantSpacingUnit ?? '';
-    expect(spacingToCm(p.perenualData?.xPlantSpacingValue ?? 0, unit)).toBeNull();
+    // Assert both fields are really there first — with `?? 0` / `?? ''`
+    // fallbacks a null field would make spacingToCm(0, '') return null and the
+    // test would pass without the declared unit ever being exercised.
+    const value = p.perenualData?.xPlantSpacingValue;
+    const unit = p.perenualData?.xPlantSpacingUnit;
+    expect(typeof value).toBe('number');
+    expect(typeof unit).toBe('string');
+    expect(spacingToCm(value as number, unit as string)).toBeNull();
   });
 });
 
@@ -254,8 +299,24 @@ describe('the library card', () => {
 
   it('never sends the key to the finder, no q parameter reaches the network', async () => {
     await renderLibrarySettled();
+    // Forget the initial catalogue load: only what the keystroke causes counts.
+    vi.mocked(findPlants).mockClear();
 
-    search('erina_j');
+    // usePlantFinder DEBOUNCES a typed query by 300 ms before it fetches, so
+    // asserting straight after the keystroke would pass even if the key were
+    // handed to the hook — the request simply would not have been made yet.
+    // Advance past the debounce and flush the effects it schedules, so a leak
+    // has every opportunity to reach the mock before the assertion runs.
+    vi.useFakeTimers();
+    try {
+      search('erina_j');
+      await act(async () => {
+        vi.advanceTimersByTime(DEBOUNCE_MS * 4);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    await act(async () => {});
 
     // findPlants writes `q` into the request URL, so a key reaching it would
     // be logged in clear text by the proxy and by the search engine.
@@ -503,6 +564,29 @@ describe('the detail page', () => {
     expect(
       screen.getAllByText('Nobody loves her more than アレックス.')
     ).toHaveLength(2);
+  });
+
+  it('drops the #pests anchor entirely for an entry with no pests', () => {
+    // The skeleton makes #pests conditional on pests.length > 0. HIKARI carries
+    // nine, so the test above passes whether the rule is honoured or not; only
+    // an empty entry can tell the difference.
+    const bare = {
+      ...HIKARI,
+      plant: { ...HIKARI.plant, pests: [] },
+    } as EasterEggEntry;
+
+    const { container } = render(
+      <LanguageProvider>
+        <UnitSystemProvider>
+          <MemoryRouter>
+            <EggPests egg={bare} />
+          </MemoryRouter>
+        </UnitSystemProvider>
+      </LanguageProvider>
+    );
+
+    expect(container.querySelector('[id="pests"]')).toBeNull();
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('renders all fifteen sections, each resolving to its own anchor', async () => {

@@ -109,13 +109,31 @@ export default function PlantLibrary() {
     resetToFirstPage,
     refetch,
   } = usePlantFinder({
+    // SMA-394: `eggCards.length ? '' : searchQuery` reverts to `searchQuery`
     query: eggCards.length ? '' : searchQuery,
     filters,
     language,
   });
 
   // --- SMA-394 easter eggs — delete this block to remove ---
-  const displayItems = eggCards.length ? eggCards : items;
+  // The finder ran against an EMPTY query, so everything it reports describes
+  // the whole catalogue rather than the single card on screen: `found` would
+  // announce 536 to a screen reader, and `hasMore` would arm both Load more and
+  // the scroll sentinel, which fetch catalogue pages that can never be shown.
+  //
+  // Substituting into `let` bindings would have kept every consumer below
+  // written exactly as develop has it, but `prefer-const` rejects that on the
+  // nine siblings of this destructuring that are never reassigned. So the four
+  // substitutes are named instead, and each consumer carries a one-line marker
+  // naming the expression it reverts to. REMOVAL = delete the three marked
+  // blocks in this file, then follow those five markers.
+  const eggActive = eggCards.length > 0;
+  const displayItems = eggActive ? eggCards : items;
+  const displayTotal = eggActive ? eggCards.length : found;
+  const displayHasMore = hasMore && !eggActive;
+  // A typed key IS a filter, so the counter reads the substituted total rather
+  // than announcing the whole catalogue above a single card.
+  const displayFiltered = eggActive || isFiltered;
   // --- end SMA-394 ---
 
   // Single guarded path for mount AND Retry — a slow initial response must
@@ -469,11 +487,12 @@ export default function PlantLibrary() {
                 component="span"
                 sx={{ fontWeight: 700, color: 'primary.main' }}
               >
+                {/* SMA-394: `displayFiltered` reverts to `isFiltered`, `displayTotal` to `found` */}
                 {t('library.filters.resultCount', {
-                  count: isFiltered ? found : catalogTotal,
+                  count: displayFiltered ? displayTotal : catalogTotal,
                 })}
               </Box>
-              {isFiltered
+              {displayFiltered
                 ? t('library.filters.counterFilteredTail', {
                     total: catalogTotal,
                   })
@@ -546,6 +565,7 @@ export default function PlantLibrary() {
               </Box>
             )}
 
+            {/* SMA-394: `displayItems` reverts to `items` (both uses below) */}
             {displayItems.length > 0 && (
               <>
                 <Grid container spacing={3}>
@@ -572,13 +592,15 @@ export default function PlantLibrary() {
                   aria-atomic="true"
                   sx={visuallyHidden}
                 >
+                  {/* SMA-394: `displayItems` reverts to `items`, `displayTotal` to `found` */}
                   {t('library.showing', {
                     shown: displayItems.length,
-                    total: found,
+                    total: displayTotal,
                   })}
                 </Box>
 
-                {hasMore && (
+                {/* SMA-394: `displayHasMore` reverts to `hasMore` */}
+                {displayHasMore && (
                   <>
                     {/* Decorative scroll sentinel — entering the viewport
                         auto-loads the next page. height:10 (vs 1px) is a

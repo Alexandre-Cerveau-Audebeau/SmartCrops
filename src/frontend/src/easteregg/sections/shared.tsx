@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
@@ -54,7 +54,11 @@ export function EggCard({ children }: { children: ReactNode }) {
  * and value type scale as {@link PlantHeroGauges}, driven by written values
  * instead of the eight DTO fields the real one formats.
  */
-export function EggGauges({ gauges }: { gauges: readonly EggGauge[] }) {
+export const EggGauges = memo(function EggGauges({
+  gauges,
+}: {
+  gauges: readonly EggGauge[];
+}) {
   const { t } = useTranslation();
   if (gauges.length === 0) return null;
   return (
@@ -138,7 +142,7 @@ export function EggGauges({ gauges }: { gauges: readonly EggGauge[] }) {
       </Box>
     </Box>
   );
-}
+});
 
 /**
  * The pill that names a note's subject, in StatusBadge's grammar: same padding,
@@ -215,19 +219,30 @@ function Note({ note }: { note: EggNote }) {
  * The written prose of a section, in the same card the section's own facts sit
  * in, never a label/value grid, which is what the real components are for.
  */
-export function EggNotes({ notes }: { notes: readonly EggNote[] }) {
+export const EggNotes = memo(function EggNotes({
+  notes,
+}: {
+  notes: readonly EggNote[];
+}) {
   if (notes.length === 0) return null;
   return (
     <EggCard>
-      {notes.map((n) => (
-        <Note key={n.text} note={n} />
+      {notes.map((n, i) => (
+        // Keyed on the declared `key` when the entry gives one, and on the
+        // position otherwise: prose is the one field a content author may
+        // legitimately repeat inside a group, and the list never reorders.
+        <Note key={n.key ?? `${i}-${n.text}`} note={n} />
       ))}
     </EggCard>
   );
-}
+});
 
 /** The last thing on the page, alone and centred. */
-export function EggFinalLine({ text }: { text: string }) {
+export const EggFinalLine = memo(function EggFinalLine({
+  text,
+}: {
+  text: string;
+}) {
   return (
     <Box sx={{ textAlign: 'center', py: '48px' }}>
       <Typography
@@ -242,4 +257,4 @@ export function EggFinalLine({ text }: { text: string }) {
       </Typography>
     </Box>
   );
-}
+});

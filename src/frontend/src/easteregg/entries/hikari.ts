@@ -146,8 +146,10 @@ const PERENUAL: PlantPerenualData = {
   // "Temperature: 20-30 °C".
   xWateringBasedTempMinC: 20,
   xWateringBasedTempMaxC: 30,
-  // No pH figure appears in the copy; the row stays unfilled and the bar is
-  // dropped from the panel entirely (see `bars.omit`).
+  // No pH figure appears in the copy; the row stays unfilled, and no pH bar is
+  // declared in `bars` below, so the panel simply never renders one. (There is
+  // no opt-out mechanism: EggCharacteristics builds its list from light, frost
+  // and whatever `bars` declares.)
   xWateringPhMin: null,
   xWateringPhMax: null,
   // "Sun: 12+ h", min only, which the range formatter renders half-open.

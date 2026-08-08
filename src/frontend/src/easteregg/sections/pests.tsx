@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Dialog from '@mui/material/Dialog';
@@ -9,6 +9,7 @@ import SectionHeader from '../../components/plantDetail/SectionHeader';
 import StatusBadge from '../../components/plantDetail/StatusBadge';
 import { Sym } from '../../components/Sym';
 import type { PlantPest } from '../../types/Plant';
+import { eggFontSx } from '../fontSx';
 import type { EasterEggEntry } from '../types';
 
 /**
@@ -17,7 +18,11 @@ import type { EasterEggEntry } from '../types';
  * any pest, so its modal is an honest "coming soon" teaser; this entry writes
  * one per pest, so the modal shows it.
  */
-export function EggPests({ egg }: { egg: EasterEggEntry }) {
+export const EggPests = memo(function EggPests({
+  egg,
+}: {
+  egg: EasterEggEntry;
+}) {
   const { t } = useTranslation();
   const { palette } = useTheme();
   const dark = palette.mode === 'dark';
@@ -32,6 +37,11 @@ export function EggPests({ egg }: { egg: EasterEggEntry }) {
     'repeating-linear-gradient(45deg,rgba(255,255,255,0.04),rgba(255,255,255,0.04) 9px,rgba(255,255,255,0.07) 9px,rgba(255,255,255,0.07) 18px)';
   const brique = dark ? briqueDark : briqueLight;
   const pestIconColor = dark ? 'rgba(255,255,255,0.30)' : '#bda79d';
+
+  // The frozen skeleton makes #pests conditional: no pests, no anchor, so the
+  // sommaire can never link to an empty heading. This entry carries nine, which
+  // is exactly why the rule needs its own test rather than this page's output.
+  if (pests.length === 0) return null;
 
   return (
     <Box id="pests" sx={{ mb: 3, scrollMarginTop: '80px' }}>
@@ -152,6 +162,9 @@ export function EggPests({ egg }: { egg: EasterEggEntry }) {
         aria-labelledby="pest-modal-title"
         PaperProps={{
           sx: {
+            // The Dialog portals out of the page container, so the scoped
+            // Japanese stack has to be re-applied here or さむい！ renders as tofu.
+            ...eggFontSx(egg.fontStack),
             width: '100%',
             maxWidth: '620px',
             borderRadius: '16px',
@@ -218,7 +231,10 @@ export function EggPests({ egg }: { egg: EasterEggEntry }) {
                 sx={{ fontSize: 15, lineHeight: 1.65, pb: 1 }}
                 data-testid="pest-detail"
               >
-                {activePest.description}
+                {/* `description` is nullable on PlantPest, and null is the
+                    normal shape everywhere except this entry, so fall back to
+                    the catalogue's teaser rather than open onto blank space. */}
+                {activePest.description ?? t('plantDetail.pests.comingSoon')}
               </Typography>
             </Box>
           </>
@@ -226,4 +242,4 @@ export function EggPests({ egg }: { egg: EasterEggEntry }) {
       </Dialog>
     </Box>
   );
-}
+});

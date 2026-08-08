@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
@@ -37,7 +38,11 @@ function toRuns(
  * entry's own columns and stages. The catalogue plots twelve months of sowing,
  * flowering and harvest; this entry plots the twenty-four hours of a day.
  */
-export function EggLifecycle({ egg }: { egg: EasterEggEntry }) {
+export const EggLifecycle = memo(function EggLifecycle({
+  egg,
+}: {
+  egg: EasterEggEntry;
+}) {
   const { t } = useTranslation();
   const mode = useTheme().palette.mode;
   const { timeline } = egg;
@@ -77,8 +82,15 @@ export function EggLifecycle({ egg }: { egg: EasterEggEntry }) {
             gap: '3px',
           }}
         >
+          {/* A display of the current mode, not an action: it has no handler
+              and nothing to toggle to, so it must not be reachable by keyboard
+              or announced as an operable control. Its sibling is genuinely
+              `disabled`; this one is presentational. */}
           <Button
             disableRipple
+            component="span"
+            role="presentation"
+            tabIndex={-1}
             sx={{
               bgcolor: mode === 'dark' ? 'primary.main' : '#fff',
               color: mode === 'dark' ? 'background.default' : NAV_BG,
@@ -287,4 +299,4 @@ export function EggLifecycle({ egg }: { egg: EasterEggEntry }) {
       ) : null}
     </Box>
   );
-}
+});

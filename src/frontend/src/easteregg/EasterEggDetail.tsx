@@ -1,28 +1,11 @@
-import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
-import IconButton from '@mui/material/IconButton';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
-import Snackbar from '@mui/material/Snackbar';
-import Alert from '@mui/material/Alert';
 import Stack from '@mui/material/Stack';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import SettingsIcon from '@mui/icons-material/Settings';
-import { useAuth } from '../hooks/useAuth';
-import {
-  classifyReEnrich,
-  reEnrichPerenual,
-  reEnrichTrefle,
-  type ReEnrichResponse,
-} from '../services/adminApi';
 import PlantDetailToc from '../components/plantDetail/PlantDetailToc';
 import type { TocSection } from '../components/plantDetail/PlantDetailToc';
 import UnitSystemToggle from '../components/plantDetail/UnitSystemToggle';
@@ -120,57 +103,23 @@ function TaxonomyPill({ label, value }: { label: string; value: string }) {
   );
 }
 
-type ToastSeverity = 'success' | 'info' | 'warning' | 'error';
-type Toast = { message: string; severity: ToastSeverity };
-
 export default function EasterEggDetail({ egg }: { egg: EasterEggEntry }) {
   const { t } = useTranslation();
   const mode = useTheme().palette.mode;
-  const { user } = useAuth();
-  const isAdmin = user?.isAdmin ?? false;
-  const [adminMenuAnchor, setAdminMenuAnchor] = useState<null | HTMLElement>(
-    null
-  );
-  const [adminRunning, setAdminRunning] = useState<
-    null | 'trefle' | 'perenual'
-  >(null);
-  const [toast, setToast] = useState<Toast | null>(null);
 
   const plant = egg.plant;
   const displayName = plant.commonName ?? plant.scientificName;
-  const heroEyebrow = [
-    t(`plantTypes.${plant.plantType!.name}`, plant.plantType!.name),
-    t(`plantDetail.enumValues.lifeCycle.${plant.lifeCycle}`, plant.lifeCycle!),
-  ].join(' · ');
+  // `plantType` and `lifeCycle` are nullable on Plant. This entry fills both,
+  // but the registry is meant to grow, so read them through guards rather than
+  // through `!`: a second entry that omits one must not white-screen the route.
+  const typeName = plant.plantType?.name ?? null;
+  const typeLabel = typeName ? t(`plantTypes.${typeName}`, typeName) : null;
+  const cycleLabel = plant.lifeCycle
+    ? t(`plantDetail.enumValues.lifeCycle.${plant.lifeCycle}`, plant.lifeCycle)
+    : null;
+  const heroEyebrow = [typeLabel, cycleLabel].filter(Boolean).join(' · ');
   // The only trait this entry states as a fact, in the hero's chip palette.
   const pollinatorChip = adaptBadge({ bg: '#F3E5F5', fg: '#4A148C' }, mode);
-
-  const handleReEnrich = async (kind: 'trefle' | 'perenual') => {
-    setAdminMenuAnchor(null);
-    setAdminRunning(kind);
-    try {
-      const response: ReEnrichResponse =
-        kind === 'trefle'
-          ? await reEnrichTrefle(plant.id)
-          : await reEnrichPerenual(plant.id);
-      const outcome = classifyReEnrich(response);
-      setToast(
-        outcome === 'matched'
-          ? { severity: 'info', message: t('plantDetail.toasts.skipped') }
-          : outcome === 'skipped'
-            ? { severity: 'info', message: t('plantDetail.toasts.skipped') }
-            : { severity: 'warning', message: t('plantDetail.toasts.notMatched') }
-      );
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      setToast({
-        severity: 'error',
-        message: t('plantDetail.toasts.error', { reason }),
-      });
-    } finally {
-      setAdminRunning(null);
-    }
-  };
 
   return (
     <Container
@@ -189,10 +138,7 @@ export default function EasterEggDetail({ egg }: { egg: EasterEggEntry }) {
       <PlantBreadcrumb
         libraryLabel={t('plantDetail.breadcrumb.library')}
         libraryHref="/library"
-        typeLabel={t(
-          `plantTypes.${plant.plantType!.name}`,
-          plant.plantType!.name
-        )}
+        typeLabel={typeLabel}
         currentLabel={displayName}
       />
 
@@ -368,58 +314,14 @@ export default function EasterEggDetail({ egg }: { egg: EasterEggEntry }) {
                       </Box>
                     </Stack>
                   </Box>
-                  <Box sx={{ mt: 'auto' }}>
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      alignItems="center"
-                      sx={{ mt: 2.5 }}
-                    >
-                      {isAdmin && (
-                        <>
-                          <Tooltip title={t('plantDetail.actions.adminMenu')}>
-                            <span>
-                              <IconButton
-                                color="default"
-                                onClick={(e) =>
-                                  setAdminMenuAnchor(e.currentTarget)
-                                }
-                                disabled={adminRunning !== null}
-                                aria-label={t('plantDetail.actions.adminMenu')}
-                              >
-                                {adminRunning ? (
-                                  <CircularProgress size={20} />
-                                ) : (
-                                  <SettingsIcon />
-                                )}
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                          <Menu
-                            anchorEl={adminMenuAnchor}
-                            open={Boolean(adminMenuAnchor)}
-                            onClose={() => setAdminMenuAnchor(null)}
-                            disableScrollLock
-                          >
-                            <MenuItem
-                              onClick={() => handleReEnrich('trefle')}
-                              disabled={adminRunning !== null}
-                            >
-                              <RefreshIcon fontSize="small" sx={{ mr: 1 }} />
-                              {t('plantDetail.actions.reEnrichTrefle')}
-                            </MenuItem>
-                            <MenuItem
-                              onClick={() => handleReEnrich('perenual')}
-                              disabled={adminRunning !== null}
-                            >
-                              <RefreshIcon fontSize="small" sx={{ mr: 1 }} />
-                              {t('plantDetail.actions.reEnrichPerenual')}
-                            </MenuItem>
-                          </Menu>
-                        </>
-                      )}
-                    </Stack>
-                  </Box>
+                  {/*
+                    The catalogue's admin re-enrich menu is deliberately NOT
+                    copied here. It would post this entry's synthetic id to the
+                    privileged Trefle / Perenual endpoints, which can only ever
+                    answer "not found" for a plant that has no database row, so
+                    the only outcomes were a warning toast and a confusing line
+                    in the admin audit trail.
+                  */}
                 </Box>
               </Box>
               <EggGauges gauges={egg.gauges} />
@@ -455,25 +357,6 @@ export default function EasterEggDetail({ egg }: { egg: EasterEggEntry }) {
           <EggFinalLine text={egg.finalLine} />
         </Box>
       </Box>
-
-      {/* Admin toast */}
-      <Snackbar
-        open={toast !== null}
-        autoHideDuration={6000}
-        onClose={() => setToast(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        {toast ? (
-          <Alert
-            onClose={() => setToast(null)}
-            severity={toast.severity}
-            variant="filled"
-            sx={{ width: '100%' }}
-          >
-            {toast.message}
-          </Alert>
-        ) : undefined}
-      </Snackbar>
 
       <AiAssistantFab />
     </Container>

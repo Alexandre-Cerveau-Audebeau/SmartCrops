@@ -33,6 +33,13 @@ export interface EggGauge {
  * - `closing` is the last line of a block (italic, brand colour).
  */
 export interface EggNote {
+  /**
+   * Optional list identity. Every other contract here carries one (EggGauge,
+   * EggBar, EggResourceCard, each timeline stage); a note's natural identity
+   * would be its prose, which an author may legitimately repeat inside a group.
+   * Omitted, the renderer falls back to the position in the array.
+   */
+  readonly key?: string;
   readonly text: string;
   readonly badge?: string;
   readonly tone?: 'lead' | 'quote' | 'closing';

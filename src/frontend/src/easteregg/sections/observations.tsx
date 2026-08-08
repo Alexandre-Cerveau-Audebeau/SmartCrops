@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Box from '@mui/material/Box';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -5,6 +6,7 @@ import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
 import SectionHeader from '../../components/plantDetail/SectionHeader';
 import StatusBadge from '../../components/plantDetail/StatusBadge';
+import { eggFontSx } from '../fontSx';
 import type { EasterEggEntry } from '../types';
 
 const O = 'plantDetail.observations';
@@ -36,7 +38,11 @@ const MONTH_KEYS = [
  * the panel names its single observer. The mini map and the phenology band are
  * decorative and stay exactly as the catalogue renders them.
  */
-export function EggObservations({ egg }: { egg: EasterEggEntry }) {
+export const EggObservations = memo(function EggObservations({
+  egg,
+}: {
+  egg: EasterEggEntry;
+}) {
   const { t } = useTranslation();
   const { palette } = useTheme();
   const dark = palette.mode === 'dark';
@@ -75,7 +81,11 @@ export function EggObservations({ egg }: { egg: EasterEggEntry }) {
   } as const;
 
   const series = egg.observations;
-  const peak = Math.max(...series.map((x) => x.value));
+  // An empty series would make `Math.max()` return -Infinity and emit an
+  // invalid `repeat(0, 1fr)`; an all-zero series would compute 0/0 and set the
+  // bar height to the string "NaN%". Both are unreachable for this entry and
+  // both are reachable for the next one, so the guard lives here, not in data.
+  const peak = series.reduce((max, x) => Math.max(max, x.value), 0) || 1;
 
   return (
     <Box id="plantnet" sx={{ mb: 3, scrollMarginTop: '80px' }}>
@@ -107,14 +117,22 @@ export function EggObservations({ egg }: { egg: EasterEggEntry }) {
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${series.length}, 1fr)`,
+              gridTemplateColumns: `repeat(${Math.max(series.length, 1)}, 1fr)`,
               alignItems: 'end',
               gap: 1,
               minHeight: 200,
             }}
           >
             {series.map((s) => (
-              <Tooltip key={s.label} title={s.note} arrow placement="top">
+              <Tooltip
+                key={s.label}
+                title={s.note}
+                arrow
+                placement="top"
+                // Portalled out of the page container: re-apply the stack so
+                // the written notes keep their kana.
+                slotProps={{ tooltip: { sx: eggFontSx(egg.fontStack) } }}
+              >
                 <Box>
                   <Box
                     sx={{
@@ -318,4 +336,4 @@ export function EggObservations({ egg }: { egg: EasterEggEntry }) {
       </Box>
     </Box>
   );
-}
+});
