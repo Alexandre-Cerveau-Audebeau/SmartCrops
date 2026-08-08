@@ -589,6 +589,64 @@ describe('the detail page', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  // The rail renders one of two layouts, and SMA-394 changed the anchor branch
+  // in BOTH, so both are exercised. mockMatchMedia(true) is the beforeEach
+  // default (mobile pill bar); false selects the desktop sidebar.
+  it.each([
+    ['mobile pill bar', true],
+    ['desktop rail', false],
+  ])(
+    'reaches every one of the fifteen sections from the %s',
+    async (_layout, mobile) => {
+      mockMatchMedia(mobile);
+      const { container } = renderDetailAt(HREF);
+      await screen.findByRole('heading', { name: NAME });
+
+      const anchors = Array.from(
+        container.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')
+      );
+      // Every entry is an anchor, none is an inert div: the four teasers used
+      // to render as `component="div"` with no href, so four sections that DO
+      // render content could not be reached from the rail.
+      expect(anchors.map((a) => a.getAttribute('href'))).toEqual(
+        SECTION_IDS.map((id) => `#${id}`)
+      );
+      // ...and every one of those hrefs lands on an element that exists.
+      for (const a of anchors) {
+        const id = a.getAttribute('href')!.slice(1);
+        expect(container.querySelector(`[id="${id}"]`)).not.toBeNull();
+      }
+    }
+  );
+
+  it('leaves the four teasers inert on a REAL plant page', async () => {
+    // The guard on the 536: `distribution`, `plantnet`, `similar` and
+    // `community` are hard-coded teasers in PlantDetail's own tocSections, and
+    // those sections genuinely do not render there. They must stay non-anchors.
+    vi.mocked(fetchPlantById).mockResolvedValue({
+      ...HIKARI.plant,
+      id: 'b9eb0675-9872-4b1b-9f5d-417195e98f03',
+      translations: [
+        { id: 1, language: 'en', commonName: 'Pea', description: 'A pea.' },
+      ],
+    } as Plant);
+
+    const { container } = renderDetailAt(
+      '/library/b9eb0675-9872-4b1b-9f5d-417195e98f03'
+    );
+    await screen.findByRole('heading', { name: 'Pea' });
+
+    const hrefs = Array.from(
+      container.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')
+    ).map((a) => a.getAttribute('href'));
+    for (const id of ['distribution', 'plantnet', 'similar', 'community']) {
+      expect(hrefs).not.toContain(`#${id}`);
+    }
+    // The live entries on that page are still anchors, so the assertion above
+    // cannot pass merely because the rail failed to render.
+    expect(hrefs).toContain('#overview');
+  });
+
   it('renders all fifteen sections, each resolving to its own anchor', async () => {
     const { container } = renderDetailAt(HREF);
     await screen.findByRole('heading', { name: NAME });

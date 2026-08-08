@@ -6,8 +6,8 @@ import Container from '@mui/material/Container';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import PlantDetailToc from '../components/plantDetail/PlantDetailToc';
 import type { TocSection } from '../components/plantDetail/PlantDetailToc';
+import EggToc from './EggToc';
 import UnitSystemToggle from '../components/plantDetail/UnitSystemToggle';
 import AboutSection from '../components/plantDetail/AboutSection';
 import { PlantBreadcrumb } from '../components/plantDetail/PlantBreadcrumb';
@@ -55,9 +55,12 @@ const SECTION_SCROLL_MARGIN = {
 } as const;
 
 /**
- * The frozen 15-entry sommaire. Every state is constant for an easter egg: the
- * four teasers keep the catalogue's non-clickable treatment, everything else is
- * live because every section renders.
+ * The frozen 15-entry sommaire. Every state is constant for an easter egg.
+ *
+ * The four teaser states are kept deliberately: those features really are still
+ * coming, so the badge is honest and the dot keeps its colour. They are still
+ * reachable, because `EggToc` renders every entry as an anchor — all fifteen
+ * sections exist on this page, unlike on a real plant page.
  */
 const TOC_SECTIONS: TocSection[] = [
   { num: '01', id: 'overview', labelKey: 'plantDetail.sections.overview', state: 'live' },
@@ -169,7 +172,7 @@ export default function EasterEggDetail({ egg }: { egg: EasterEggEntry }) {
           >
             <UnitSystemToggle />
           </Box>
-          <PlantDetailToc sections={TOC_SECTIONS} disableSticky />
+          <EggToc sections={TOC_SECTIONS} disableSticky />
         </Box>
         <Box
           sx={{
