@@ -265,7 +265,13 @@ export const EggCharacteristics = memo(function EggCharacteristics({
               // notes (さむい！) need the stack re-applied on the popper itself.
               slotProps={{ tooltip: { sx: eggFontSx(egg.fontStack) } }}
             >
-              <Box>{row}</Box>
+              {/* tabIndex + aria-label, as BotanicalSynonymsSection and
+                  PlantHeroGauges already do it: hover is not an affordance a
+                  keyboard user has, and the note is the only place this bar's
+                  meaning is written. */}
+              <Box tabIndex={0} aria-label={`${bar.label}: ${tip}`}>
+                {row}
+              </Box>
             </Tooltip>
           ) : (
             <Box key={bar.key}>{row}</Box>

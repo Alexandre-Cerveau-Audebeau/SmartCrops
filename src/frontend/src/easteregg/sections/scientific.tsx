@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
 import { useUnitSystem } from '../../hooks/useUnitSystem';
 import SectionHeader from '../../components/plantDetail/SectionHeader';
@@ -16,6 +17,7 @@ import {
   toCamelKey,
 } from '../../utils/plantDetail';
 import type { EasterEggEntry } from '../types';
+import { scientificData } from '../visibility';
 
 type ComingItemKey =
   | 'light'
@@ -48,8 +50,12 @@ export const EggScientific = memo(function EggScientific({
 }) {
   const { t } = useTranslation();
   const { system } = useUnitSystem();
-  const pd = egg.plant.perenualData;
-  if (!pd) return null;
+  const dark = useTheme().palette.mode === 'dark';
+  // `scientificData` is the one expression; `scientificVisible` is defined in
+  // terms of it, so the guard here and the gates in EasterEggDetail cannot
+  // disagree. Reading it this way also lets TypeScript narrow `pd` below.
+  const pd = scientificData(egg);
+  if (pd === null) return null;
 
   const sd = 'plantDetail.scientificData';
   const written = egg.scientific;
@@ -156,7 +162,9 @@ export const EggScientific = memo(function EggScientific({
             borderColor: 'borderSubtle',
             borderRadius: '12px',
             p: '18px 20px',
-            boxShadow: '0 1px 3px rgba(27,94,58,0.05)',
+            // A light-mode green shadow, as PestsSection branches it: on the
+            // dark canvas it reads as a green halo instead of a lift.
+            boxShadow: dark ? 'none' : '0 1px 3px rgba(27,94,58,0.05)',
           }}
         >
           <Box

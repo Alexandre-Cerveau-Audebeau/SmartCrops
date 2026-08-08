@@ -126,7 +126,7 @@ export default function PlantLibrary() {
   // nine siblings of this destructuring that are never reassigned. So the four
   // substitutes are named instead, and each consumer carries a one-line marker
   // naming the expression it reverts to. REMOVAL = delete the three marked
-  // blocks in this file, then follow those five markers.
+  // blocks in this file, then follow those seven markers.
   const eggActive = eggCards.length > 0;
   const displayItems = eggActive ? eggCards : items;
   const displayTotal = eggActive ? eggCards.length : found;
@@ -176,7 +176,8 @@ export default function PlantLibrary() {
   // view (the pre-T4 behavior).
   useEffect(() => {
     if (typeof IntersectionObserver === 'undefined') return;
-    if (!hasMore) return;
+    // SMA-394: `displayHasMore` reverts to `hasMore` (here and in the dep array)
+    if (!displayHasMore) return;
     const el = sentinelRef.current;
     if (!el) return;
     const observer = new IntersectionObserver(
@@ -191,7 +192,7 @@ export default function PlantLibrary() {
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasMore, items.length, loadMore]);
+  }, [displayHasMore, items.length, loadMore]);
 
   // Reset to page 1 on the inputs that change the displayed SET — the search
   // text and the facet toggles. NOT language: the hook's language branch
@@ -541,14 +542,18 @@ export default function PlantLibrary() {
                 with a query or facet active it's a no-match state. Gating uses
                 the hook's isFiltered so it can't drift from the fetch's own
                 match-all rule. */}
-            {!error && found === 0 && !isFiltered && (
+            {/* SMA-394: `displayTotal` reverts to `found`, `displayFiltered` to
+                `isFiltered` (both empty states below). Without this an egg card
+                shows beside a "no results" panel whenever the active facets
+                match nothing in the catalogue. */}
+            {!error && displayTotal === 0 && !displayFiltered && (
               <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
                 <SpaIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
                 <Typography>{t('library.noPlants')}</Typography>
               </Box>
             )}
 
-            {!error && found === 0 && isFiltered && (
+            {!error && displayTotal === 0 && displayFiltered && (
               <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
                 <Typography>{t('library.noResults')}</Typography>
                 {/* Same reset as the header/"Tout effacer": facets only, the

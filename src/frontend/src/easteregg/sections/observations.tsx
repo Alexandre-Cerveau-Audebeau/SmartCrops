@@ -133,7 +133,10 @@ export const EggObservations = memo(function EggObservations({
                 // the written notes keep their kana.
                 slotProps={{ tooltip: { sx: eggFontSx(egg.fontStack) } }}
               >
-                <Box>
+                {/* Focusable and named, the shared pattern: the note is the
+                    only place this column's meaning is written, and hover
+                    reaches no keyboard user. */}
+                <Box tabIndex={0} aria-label={`${s.label}: ${s.note}`}>
                   <Box
                     sx={{
                       display: 'flex',

@@ -11,6 +11,7 @@ import { Sym } from '../../components/Sym';
 import type { PlantPest } from '../../types/Plant';
 import { eggFontSx } from '../fontSx';
 import type { EasterEggEntry } from '../types';
+import { pestsVisible } from '../visibility';
 
 /**
  * Section 08 for an easter egg: PestsSection's two-row carousel of hatched
@@ -41,7 +42,7 @@ export const EggPests = memo(function EggPests({
   // The frozen skeleton makes #pests conditional: no pests, no anchor, so the
   // sommaire can never link to an empty heading. This entry carries nine, which
   // is exactly why the rule needs its own test rather than this page's output.
-  if (pests.length === 0) return null;
+  if (!pestsVisible(egg)) return null;
 
   return (
     <Box id="pests" sx={{ mb: 3, scrollMarginTop: '80px' }}>

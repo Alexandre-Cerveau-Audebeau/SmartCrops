@@ -11,6 +11,14 @@ import { EggNotes } from './shared';
  * photograph and says so in its own words instead, so the shared component is
  * not involved at all.
  */
+/*
+ * EXEMPTION from the mode-aware half of the section-component guideline, on
+ * purpose: this section owns no colour at all. It renders a SectionHeader and
+ * an EggNotes card, both of which read theme tokens themselves, and it declares
+ * no hex literal, no rgba() and no palette lookup — verified by grep. Reading
+ * `palette.mode` here would add a subscription to a value nothing consumes.
+ * Add a colour to this file and the rule applies again.
+ */
 export const EggGallery = memo(function EggGallery({
   egg,
 }: {

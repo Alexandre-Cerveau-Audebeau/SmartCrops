@@ -34,6 +34,7 @@ import {
   EggScientific,
   EggSimilar,
 } from './sections';
+import { pestsVisible, scientificVisible } from './visibility';
 
 /**
  * SMA-394: the whole hidden page, in one file, in this folder.
@@ -59,10 +60,15 @@ const SECTION_SCROLL_MARGIN = {
  *
  * The four teaser states are kept deliberately: those features really are still
  * coming, so the badge is honest and the dot keeps its colour. They are still
- * reachable, because `EggToc` renders every entry as an anchor — all fifteen
- * sections exist on this page, unlike on a real plant page.
+ * reachable, because `EggToc` renders every supplied entry as an anchor — and
+ * an entry is only supplied when its section actually renders (see
+ * `sectionVisibility`).
+ *
+ * `as const satisfies` is load-bearing: it narrows `id` to a union of literals,
+ * which is what makes the visibility map below exhaustive at COMPILE time. Add
+ * a sixteenth section without a map entry and the build fails.
  */
-const TOC_SECTIONS: TocSection[] = [
+const TOC_SECTIONS = [
   { num: '01', id: 'overview', labelKey: 'plantDetail.sections.overview', state: 'live' },
   { num: '02', id: 'gallery', labelKey: 'plantDetail.sections.gallery', state: 'live' },
   { num: '03', id: 'distribution', labelKey: 'plantDetail.sections.distribution', state: 'coming-data' },
@@ -78,7 +84,41 @@ const TOC_SECTIONS: TocSection[] = [
   { num: '13', id: 'similar', labelKey: 'plantDetail.sections.similar', state: 'coming-backend' },
   { num: '14', id: 'faq', labelKey: 'plantDetail.sections.faq', state: 'live' },
   { num: '15', id: 'community', labelKey: 'plantDetail.sections.community', state: 'coming-backend' },
-];
+] as const satisfies readonly TocSection[];
+
+type SectionId = (typeof TOC_SECTIONS)[number]['id'];
+
+/**
+ * Whether each of the fifteen sections renders, decided ONCE per entry.
+ *
+ * Three things read this map — the section, its notes card, and its TOC entry —
+ * so none of them can disagree with the others. Before this existed, `EggPests`
+ * suppressed itself while its notes and its sommaire entry rendered anyway; the
+ * entry on this page has nine pests, so nothing showed it.
+ *
+ * The two dynamic values come from `./visibility`, which the sections' own
+ * guards call — see that module for how the list was enumerated rather than
+ * guessed. Thirteen sections always render their anchor and are constant here.
+ */
+function sectionVisibility(egg: EasterEggEntry): Record<SectionId, boolean> {
+  return {
+    overview: true,
+    gallery: true,
+    distribution: true,
+    lifecycle: true,
+    'scientific-data': scientificVisible(egg),
+    characteristics: true,
+    edible: true,
+    pests: pestsVisible(egg),
+    'common-names': true,
+    synonyms: true,
+    plantnet: true,
+    sources: true,
+    similar: true,
+    faq: true,
+    community: true,
+  };
+}
 
 /** The taxonomy pill of the hero row (family / genus), copied from PlantDetail. */
 function TaxonomyPill({ label, value }: { label: string; value: string }) {
@@ -121,6 +161,9 @@ export default function EasterEggDetail({ egg }: { egg: EasterEggEntry }) {
     ? t(`plantDetail.enumValues.lifeCycle.${plant.lifeCycle}`, plant.lifeCycle)
     : null;
   const heroEyebrow = [typeLabel, cycleLabel].filter(Boolean).join(' · ');
+  // Decided once, read three times: by the sommaire below, by each section, and
+  // by each section's notes card.
+  const visible = sectionVisibility(egg);
   // The only trait this entry states as a fact, in the hero's chip palette.
   const pollinatorChip = adaptBadge({ bg: '#F3E5F5', fg: '#4A148C' }, mode);
 
@@ -172,7 +215,12 @@ export default function EasterEggDetail({ egg }: { egg: EasterEggEntry }) {
           >
             <UnitSystemToggle />
           </Box>
-          <EggToc sections={TOC_SECTIONS} disableSticky />
+          {/* A suppressed section gets no entry at all, so the rail can never
+              offer an anchor that resolves to nothing. */}
+          <EggToc
+            sections={TOC_SECTIONS.filter((s) => visible[s.id])}
+            disableSticky
+          />
         </Box>
         <Box
           sx={{
@@ -297,24 +345,30 @@ export default function EasterEggDetail({ egg }: { egg: EasterEggEntry }) {
                       useFlexGap
                       sx={{ mt: 1.5 }}
                     >
-                      <Box
-                        sx={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          bgcolor: pollinatorChip.bg,
-                          color: pollinatorChip.fg,
-                          border: '1px solid',
-                          borderColor: pollinatorChip.border,
-                          borderRadius: '8px',
-                          padding: '7px 12px',
-                          fontSize: 13,
-                          fontWeight: 700,
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {t('plantDetail.flags.attractsPollinators')}
-                      </Box>
+                      {/* Gated on the entry's own flag, as
+                          PlantDetail.buildFeatureChips does for real plants: a
+                          chip that states a fact must not render for an entry
+                          that does not claim it. */}
+                      {plant.attractsPollinators && (
+                        <Box
+                          sx={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            bgcolor: pollinatorChip.bg,
+                            color: pollinatorChip.fg,
+                            border: '1px solid',
+                            borderColor: pollinatorChip.border,
+                            borderRadius: '8px',
+                            padding: '7px 12px',
+                            fontSize: 13,
+                            fontWeight: 700,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {t('plantDetail.flags.attractsPollinators')}
+                        </Box>
+                      )}
                     </Stack>
                   </Box>
                   {/*
@@ -337,13 +391,15 @@ export default function EasterEggDetail({ egg }: { egg: EasterEggEntry }) {
           <EggLifecycle egg={egg} />
           <EggNotes notes={egg.notes.lifecycle} />
           <EggScientific egg={egg} />
-          <EggNotes notes={egg.notes.scientific} />
+          {visible['scientific-data'] && (
+            <EggNotes notes={egg.notes.scientific} />
+          )}
           <EggCharacteristics egg={egg} />
           <EggNotes notes={egg.notes.characteristics} />
           <EggCulture egg={egg} />
           <EggNotes notes={egg.notes.culture} />
           <EggPests egg={egg} />
-          <EggNotes notes={egg.notes.pests} />
+          {visible.pests && <EggNotes notes={egg.notes.pests} />}
           <CommonNamesSection
             key={`common-names-${plant.id}`}
             commonNames={plant.commonNames}

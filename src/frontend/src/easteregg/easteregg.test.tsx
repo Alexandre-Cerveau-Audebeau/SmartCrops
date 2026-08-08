@@ -37,6 +37,7 @@ import {
   matchEasterEggKey,
 } from './index';
 import type { EasterEggEntry } from './types';
+import EasterEggDetail from './EasterEggDetail';
 import { EggPests } from './sections';
 import { HIKARI } from './entries/hikari';
 import { spacingToCm } from '../utils/plantDetail';
@@ -144,6 +145,22 @@ const search = (value: string) =>
     screen.getByRole('textbox', { name: 'Search plants by name...' }),
     { target: { value } }
   );
+
+/**
+ * The hidden page rendered from an ARBITRARY entry, bypassing the registry, so
+ * a fixture can exercise the entry-shape branches HIKARI cannot reach.
+ */
+function renderEgg(egg: EasterEggEntry) {
+  return render(
+    <LanguageProvider>
+      <UnitSystemProvider>
+        <MemoryRouter>
+          <EasterEggDetail egg={egg} />
+        </MemoryRouter>
+      </UnitSystemProvider>
+    </LanguageProvider>
+  );
+}
 
 function renderDetailAt(pathname: string) {
   return render(
@@ -618,6 +635,58 @@ describe('the detail page', () => {
       }
     }
   );
+
+  // ── One gate per section: the section, its notes and its TOC entry all read
+  // the same derived value, so an entry that suppresses a section suppresses
+  // all three. HIKARI has pests AND perenualData, so only a fixture without
+  // them can tell whether the three agree. These two tests are the guard on
+  // easter egg number two.
+  it('drops #pests everywhere at once for an entry with no pests', () => {
+    const bare = {
+      ...HIKARI,
+      plant: { ...HIKARI.plant, pests: [] },
+    } as EasterEggEntry;
+
+    const { container } = renderEgg(bare);
+
+    // ...no section,
+    expect(container.querySelector('[id="pests"]')).toBeNull();
+    // ...no table-of-contents entry pointing at it,
+    const hrefs = Array.from(
+      container.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')
+    ).map((a) => a.getAttribute('href'));
+    expect(hrefs).not.toContain('#pests');
+    // ...and no orphaned prose card left floating where the section was.
+    expect(
+      screen.queryByText('Primary threat: insects. Tolerance: zero.')
+    ).not.toBeInTheDocument();
+    // The rest of the rail is untouched, so this cannot pass by rendering
+    // nothing at all.
+    expect(hrefs).toContain('#overview');
+    expect(hrefs).toHaveLength(SECTION_IDS.length - 1);
+  });
+
+  it('drops #scientific-data everywhere at once for an entry with no xData', () => {
+    const bare = {
+      ...HIKARI,
+      plant: { ...HIKARI.plant, perenualData: null },
+    } as EasterEggEntry;
+
+    const { container } = renderEgg(bare);
+
+    expect(container.querySelector('[id="scientific-data"]')).toBeNull();
+    const hrefs = Array.from(
+      container.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')
+    ).map((a) => a.getAttribute('href'));
+    expect(hrefs).not.toContain('#scientific-data');
+    expect(
+      screen.queryByText(
+        '80 % of the bed, minimum. Non-negotiable. Any attempt to reduce this allocation will fail.'
+      )
+    ).not.toBeInTheDocument();
+    expect(hrefs).toContain('#overview');
+    expect(hrefs).toHaveLength(SECTION_IDS.length - 1);
+  });
 
   it('leaves the four teasers inert on a REAL plant page', async () => {
     // The guard on the 536: `distribution`, `plantnet`, `similar` and
