@@ -41,6 +41,9 @@ import {
   rangeChipLabel,
 } from '../constants/facetVocabularies';
 import PlantCard from '../components/PlantCard';
+// --- SMA-394 easter eggs — delete this block to remove ---
+import { getEasterEggCards } from '../easteregg';
+// --- end SMA-394 ---
 
 // SMA-255 T4 put the Library on the faceted finder endpoint (real server
 // pagination); SMA-9 T1 moved that fetch orchestration wholesale into
@@ -83,6 +86,14 @@ export default function PlantLibrary() {
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
+  // --- SMA-394 easter eggs — delete this block to remove ---
+  // Matched BEFORE the hook: findPlants writes the query into the request URL,
+  // so a key reaching it would be logged in clear text by the proxy and by the
+  // search engine. The empty substituted query also leaves the finder context
+  // unfiltered, so the counter and the facet counts cannot move.
+  const eggCards = getEasterEggCards(searchQuery);
+  // --- end SMA-394 ---
+
   const {
     items,
     found,
@@ -97,7 +108,40 @@ export default function PlantLibrary() {
     loadMore,
     resetToFirstPage,
     refetch,
-  } = usePlantFinder({ query: searchQuery, filters, language });
+  } = usePlantFinder({
+    // SMA-394: `eggCards.length ? '' : searchQuery` reverts to `searchQuery`
+    query: eggCards.length ? '' : searchQuery,
+    filters,
+    language,
+  });
+
+  // --- SMA-394 easter eggs — delete this block to remove ---
+  // The finder ran against an EMPTY query, so everything it reports describes
+  // the whole catalogue rather than the single card on screen: `found` would
+  // announce 536 to a screen reader, and `hasMore` would arm both Load more and
+  // the scroll sentinel, which fetch catalogue pages that can never be shown.
+  //
+  // Substituting into `let` bindings would have kept every consumer below
+  // written exactly as develop has it, but `prefer-const` rejects that on the
+  // nine siblings of this destructuring that are never reassigned. So the four
+  // substitutes are named instead, and each consumer carries a one-line marker
+  // naming the expression it reverts to. REMOVAL = delete the three marked
+  // blocks in this file, then follow those seven markers.
+  const eggActive = eggCards.length > 0;
+  const displayItems = eggActive ? eggCards : items;
+  const displayTotal = eggActive ? eggCards.length : found;
+  const displayHasMore = hasMore && !eggActive;
+  // A typed key IS a filter, so the counter reads the substituted total rather
+  // than announcing the whole catalogue above a single card.
+  const displayFiltered = eggActive || isFiltered;
+  // The query the HOOK will see for a given raw input. A key is substituted to
+  // '' before it reaches the finder, so typing or clearing one leaves the
+  // hook's effective query untouched — and a page reset there would desync the
+  // local page from the hook's committed snapshot, stranding Load more on a
+  // page already fetched. `handleSearchChange` compares through this rather
+  // than through the raw text.
+  const eggQuery = (raw: string) => (getEasterEggCards(raw).length ? '' : raw);
+  // --- end SMA-394 ---
 
   // Single guarded path for mount AND Retry — a slow initial response must
   // never overwrite a fresher Retry commit, and vice versa. Every load
@@ -139,7 +183,8 @@ export default function PlantLibrary() {
   // view (the pre-T4 behavior).
   useEffect(() => {
     if (typeof IntersectionObserver === 'undefined') return;
-    if (!hasMore) return;
+    // SMA-394: `displayHasMore` reverts to `hasMore` (here and in the dep array)
+    if (!displayHasMore) return;
     const el = sentinelRef.current;
     if (!el) return;
     const observer = new IntersectionObserver(
@@ -154,7 +199,7 @@ export default function PlantLibrary() {
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasMore, items.length, loadMore]);
+  }, [displayHasMore, items.length, loadMore]);
 
   // Reset to page 1 on the inputs that change the displayed SET — the search
   // text and the facet toggles. NOT language: the hook's language branch
@@ -168,9 +213,10 @@ export default function PlantLibrary() {
     // state from the hook's fetched context — the next Load more became a
     // silent no-op (advance 1→2 = a page already fetched). Pre-existing T4
     // bug surfaced in review; not a refactor drift.
+    // SMA-394: `eggQuery(searchQuery)` reverts to `searchQuery`, `eggQuery(value)` to `value`
     const effectiveQueryChanged =
-      searchQuery.length >= MIN_QUERY_LENGTH ||
-      value.length >= MIN_QUERY_LENGTH;
+      eggQuery(searchQuery).length >= MIN_QUERY_LENGTH ||
+      eggQuery(value).length >= MIN_QUERY_LENGTH;
     setSearchQuery(value);
     if (effectiveQueryChanged) resetToFirstPage();
   };
@@ -450,11 +496,12 @@ export default function PlantLibrary() {
                 component="span"
                 sx={{ fontWeight: 700, color: 'primary.main' }}
               >
+                {/* SMA-394: `displayFiltered` reverts to `isFiltered`, `displayTotal` to `found` */}
                 {t('library.filters.resultCount', {
-                  count: isFiltered ? found : catalogTotal,
+                  count: displayFiltered ? displayTotal : catalogTotal,
                 })}
               </Box>
-              {isFiltered
+              {displayFiltered
                 ? t('library.filters.counterFilteredTail', {
                     total: catalogTotal,
                   })
@@ -503,14 +550,18 @@ export default function PlantLibrary() {
                 with a query or facet active it's a no-match state. Gating uses
                 the hook's isFiltered so it can't drift from the fetch's own
                 match-all rule. */}
-            {!error && found === 0 && !isFiltered && (
+            {/* SMA-394: `displayTotal` reverts to `found`, `displayFiltered` to
+                `isFiltered` (both empty states below). Without this an egg card
+                shows beside a "no results" panel whenever the active facets
+                match nothing in the catalogue. */}
+            {!error && displayTotal === 0 && !displayFiltered && (
               <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
                 <SpaIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
                 <Typography>{t('library.noPlants')}</Typography>
               </Box>
             )}
 
-            {!error && found === 0 && isFiltered && (
+            {!error && displayTotal === 0 && displayFiltered && (
               <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
                 <Typography>{t('library.noResults')}</Typography>
                 {/* Same reset as the header/"Tout effacer": facets only, the
@@ -527,10 +578,11 @@ export default function PlantLibrary() {
               </Box>
             )}
 
-            {items.length > 0 && (
+            {/* SMA-394: `displayItems` reverts to `items` (both uses below) */}
+            {displayItems.length > 0 && (
               <>
                 <Grid container spacing={3}>
-                  {items.map((plant) => {
+                  {displayItems.map((plant) => {
                     const typeName = plantTypes.find(
                       (pt) => pt.id === plant.plantTypeId
                     )?.name;
@@ -553,13 +605,15 @@ export default function PlantLibrary() {
                   aria-atomic="true"
                   sx={visuallyHidden}
                 >
+                  {/* SMA-394: `displayItems` reverts to `items`, `displayTotal` to `found` */}
                   {t('library.showing', {
-                    shown: items.length,
-                    total: found,
+                    shown: displayItems.length,
+                    total: displayTotal,
                   })}
                 </Box>
 
-                {hasMore && (
+                {/* SMA-394: `displayHasMore` reverts to `hasMore` */}
+                {displayHasMore && (
                   <>
                     {/* Decorative scroll sentinel — entering the viewport
                         auto-loads the next page. height:10 (vs 1px) is a

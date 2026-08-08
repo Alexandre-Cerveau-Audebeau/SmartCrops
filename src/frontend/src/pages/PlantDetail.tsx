@@ -82,6 +82,10 @@ import {
   pickLongDescription,
   sortGalleryImages,
 } from '../utils/plantDetail';
+// --- SMA-394 easter eggs — delete these two lines and the easteregg folder to remove ---
+import { getEasterEggBySlug } from '../easteregg';
+import EasterEggDetail from '../easteregg/EasterEggDetail';
+// --- end SMA-394 ---
 
 type PlantDetailNavState = {
   from?: string;
@@ -100,13 +104,33 @@ const SECTION_SCROLL_MARGIN = {
 } as const;
 
 /**
+ * `GET /library/:id`. The route's entry point, and the module's default export.
+ * Its body is a single line; anything above that line is an easter-egg lookup
+ * fenced by its own markers, so removing the feature leaves this function
+ * exporting the catalogue page and the module still valid.
+ */
+export default function PlantDetail() {
+  // --- SMA-394 easter eggs — delete this block and the easteregg folder to remove ---
+  // One lookup, one branch, and nothing else: a slug in the local registry is
+  // served by its own page, which owns every line of markup it needs. `null`
+  // for all 536 catalogue plants, which fall through to the line below and
+  // render exactly as they did before.
+  const eggParams = useParams<{ id: string }>();
+  const egg = getEasterEggBySlug(eggParams.id);
+  if (egg) return <EasterEggDetail egg={egg} />;
+  // --- end SMA-394 ---
+
+  return <CataloguePlantDetail />;
+}
+
+/**
  * `GET /library/:id` detail page. Renders the full `PlantDetailResponse`
  * payload across 12 conditional sections (hero + gallery + about +
  * characteristics + lifecycle + cultivation/propagation (factual culture card)
  * + scientific-data placeholder + pests + common names + synonyms + sources +
  * admin), with graceful degradation when enrichments are absent (cf. Basil seed).
  */
-export default function PlantDetail() {
+function CataloguePlantDetail() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
