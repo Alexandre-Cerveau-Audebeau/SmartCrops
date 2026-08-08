@@ -106,7 +106,7 @@ function sectionVisibility(egg: EasterEggEntry): Record<SectionId, boolean> {
     gallery: true,
     distribution: true,
     lifecycle: true,
-    'scientific-data': scientificVisible(egg),
+    'scientific-data': scientificVisible(),
     characteristics: true,
     edible: true,
     pests: pestsVisible(egg),

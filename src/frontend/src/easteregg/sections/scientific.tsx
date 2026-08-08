@@ -51,38 +51,44 @@ export const EggScientific = memo(function EggScientific({
   const { t } = useTranslation();
   const { system } = useUnitSystem();
   const dark = useTheme().palette.mode === 'dark';
-  // `scientificData` is the one expression; `scientificVisible` is defined in
-  // terms of it, so the guard here and the gates in EasterEggDetail cannot
-  // disagree. Reading it this way also lets TypeScript narrow `pd` below.
+  // `#scientific-data` is a REQUIRED anchor, so there is no early return here:
+  // the heading and the anchor render whether or not the entry carries xData,
+  // and a missing `pd` simply leaves every Perenual-derived row unavailable.
+  // Nothing below reads a legacy `Plants` column as a substitute — those are
+  // ~6% filled and would print a wrong number in place of an honest gap.
   const pd = scientificData(egg);
-  if (pd === null) return null;
 
   const sd = 'plantDetail.scientificData';
   const written = egg.scientific;
 
-  const phRange = formatXDataRange(pd.xWateringPhMin, pd.xWateringPhMax);
+  const phRange = formatXDataRange(
+    pd?.xWateringPhMin ?? null,
+    pd?.xWateringPhMax ?? null
+  );
   const wateringTemp = formatTemperature(
-    pd.xWateringBasedTempMinC,
-    pd.xWateringBasedTempMaxC,
+    pd?.xWateringBasedTempMinC,
+    pd?.xWateringBasedTempMaxC,
     system
   );
   const sunlight = formatXDataRange(
-    pd.xSunlightHoursMin,
-    pd.xSunlightHoursMax,
+    pd?.xSunlightHoursMin ?? null,
+    pd?.xSunlightHoursMax ?? null,
     ' h'
   );
   const tempTol = formatTemperature(
-    pd.xTemperatureToleranceMinC,
-    pd.xTemperatureToleranceMaxC,
+    pd?.xTemperatureToleranceMinC,
+    pd?.xTemperatureToleranceMaxC,
     system
   );
   const spacing = formatSpacing(
-    pd.xPlantSpacingValue,
-    pd.xPlantSpacingUnit,
+    pd?.xPlantSpacingValue ?? null,
+    pd?.xPlantSpacingUnit ?? null,
     system
   );
-  const waterQuality = parseStringArrayJson(pd.xWateringQualityJson);
-  const wateringPeriod = parseStringArrayJson(pd.xWateringPeriodJson);
+  const waterQuality = pd ? parseStringArrayJson(pd.xWateringQualityJson) : null;
+  const wateringPeriod = pd
+    ? parseStringArrayJson(pd.xWateringPeriodJson)
+    : null;
 
   const availableRows = [
     { icon: 'science', label: t(`${sd}.wateringPh`), value: phRange },
@@ -186,6 +192,24 @@ export const EggScientific = memo(function EggScientific({
             {t(`${sd}.availableTitle`)}
           </Box>
           <Stack spacing="10px">
+            {/* The unavailable state. It fires only when the entry carries no
+                xData AND declares no extra rows, so for an entry that has
+                either, the card renders exactly as it did before. */}
+            {availableRows.length === 0 && (
+              <Box
+                data-testid="scientific-unavailable"
+                sx={{
+                  p: '10px 12px',
+                  bgcolor: 'surfaceSubtle',
+                  borderRadius: '9px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: 'text.secondary',
+                }}
+              >
+                {t('plantDetail.characteristics.notProvided')}
+              </Box>
+            )}
             {availableRows.map((r) => (
               <Box
                 // The label is the row's identity. An icon is a presentation

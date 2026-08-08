@@ -147,6 +147,40 @@ const search = (value: string) =>
   );
 
 /**
+ * A library backed by a catalogue big enough to page through, so Load more is
+ * live and the page number the finder receives can be asserted.
+ */
+async function renderLibraryWithPages(pages: number) {
+  const catalog = Array.from({ length: PER_PAGE * pages }, (_, i) =>
+    makeListItem({
+      id: `cat-${i}`,
+      scientificName: i === 0 ? 'Achillea ptarmica' : `Plantus ${i}`,
+    } as Partial<Plant>)
+  );
+  vi.mocked(findPlants).mockImplementation((params: FindPlantsParams) =>
+    Promise.resolve(pageOf(catalog, params.page ?? 1))
+  );
+  vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+  render(
+    <LanguageProvider>
+      <UnitSystemProvider>
+        <MemoryRouter initialEntries={['/library']}>
+          <PlantLibrary />
+        </MemoryRouter>
+      </UnitSystemProvider>
+    </LanguageProvider>
+  );
+  await screen.findByRole('heading', { name: 'Achillea ptarmica' });
+}
+
+const loadMore = () =>
+  fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+
+/** The `page` of every findPlants call so far, in order. */
+const pagesRequested = () =>
+  vi.mocked(findPlants).mock.calls.map(([p]) => p.page ?? 1);
+
+/**
  * The hidden page rendered from an ARBITRARY entry, bypassing the registry, so
  * a fixture can exercise the entry-shape branches HIKARI cannot reach.
  */
@@ -345,6 +379,33 @@ describe('the library card', () => {
       expect.objectContaining({ q: expect.anything() }),
       expect.anything()
     );
+  });
+
+  it('leaves the catalogue able to load more after the key is entered and cleared', async () => {
+    // The regression: typing the key resets the page to 1 locally, but the key
+    // is substituted to '' before it reaches the finder, so the hook never
+    // refetches and keeps its page-2 snapshot. Clearing changes nothing for the
+    // hook either. The next Load more then re-requests page 2, which the hook
+    // already holds, and nothing is fetched — the visitor is stranded.
+    await renderLibraryWithPages(3);
+    expect(pagesRequested()).toEqual([1]);
+
+    loadMore();
+    await screen.findByRole('heading', { name: 'Plantus 20' });
+    expect(pagesRequested()).toEqual([1, 2]);
+
+    search('erina_j');
+    expect(screen.getByRole('heading', { name: NAME })).toBeInTheDocument();
+
+    search('');
+    await screen.findByRole('heading', { name: 'Achillea ptarmica' });
+    // The key never reached the finder, in either direction.
+    expect(pagesRequested()).toEqual([1, 2]);
+
+    loadMore();
+    await screen.findByRole('heading', { name: 'Plantus 40' });
+    // Page THREE, not a second request for page 2.
+    expect(pagesRequested()).toEqual([1, 2, 3]);
   });
 
   it('falls through to the normal catalogue on a near miss, and on clearing', async () => {
@@ -666,26 +727,37 @@ describe('the detail page', () => {
     expect(hrefs).toHaveLength(SECTION_IDS.length - 1);
   });
 
-  it('drops #scientific-data everywhere at once for an entry with no xData', () => {
+  it('KEEPS #scientific-data for an entry with no xData, showing it unavailable', () => {
+    // #scientific-data is a REQUIRED anchor of the frozen skeleton — unlike
+    // #pests, it may not be dropped. Round 9 made it conditional and this test
+    // asserted the disappearance; that was the wrong behaviour, and the shape
+    // of the assertions is inverted here rather than the test deleted.
     const bare = {
       ...HIKARI,
       plant: { ...HIKARI.plant, perenualData: null },
-    } as EasterEggEntry;
+      // The written extras would otherwise fill the card and hide the very
+      // state under test.
+      scientific: { ...HIKARI.scientific, extraRows: [], chipGroups: [] },
+    } as unknown as EasterEggEntry;
 
     const { container } = renderEgg(bare);
 
-    expect(container.querySelector('[id="scientific-data"]')).toBeNull();
+    // The anchor and its heading are present...
+    expect(container.querySelector('[id="scientific-data"]')).not.toBeNull();
+    // ...so is the sommaire entry, and all fifteen still resolve.
     const hrefs = Array.from(
       container.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')
     ).map((a) => a.getAttribute('href'));
-    expect(hrefs).not.toContain('#scientific-data');
-    expect(
-      screen.queryByText(
-        '80 % of the bed, minimum. Non-negotiable. Any attempt to reduce this allocation will fail.'
-      )
-    ).not.toBeInTheDocument();
-    expect(hrefs).toContain('#overview');
-    expect(hrefs).toHaveLength(SECTION_IDS.length - 1);
+    expect(hrefs).toContain('#scientific-data');
+    expect(hrefs).toHaveLength(SECTION_IDS.length);
+    // ...and the Perenual-derived values read as unavailable.
+    expect(screen.getByTestId('scientific-unavailable')).toHaveTextContent(
+      'Not provided'
+    );
+    // No legacy `Plants` column is substituted for a missing xData value: the
+    // entry's own hardiness and height fields must not surface here.
+    const card = screen.getByTestId('scientific-unavailable').parentElement!;
+    expect(card.textContent).not.toMatch(/\d/);
   });
 
   it('leaves the four teasers inert on a REAL plant page', async () => {

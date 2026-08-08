@@ -134,6 +134,13 @@ export default function PlantLibrary() {
   // A typed key IS a filter, so the counter reads the substituted total rather
   // than announcing the whole catalogue above a single card.
   const displayFiltered = eggActive || isFiltered;
+  // The query the HOOK will see for a given raw input. A key is substituted to
+  // '' before it reaches the finder, so typing or clearing one leaves the
+  // hook's effective query untouched — and a page reset there would desync the
+  // local page from the hook's committed snapshot, stranding Load more on a
+  // page already fetched. `handleSearchChange` compares through this rather
+  // than through the raw text.
+  const eggQuery = (raw: string) => (getEasterEggCards(raw).length ? '' : raw);
   // --- end SMA-394 ---
 
   // Single guarded path for mount AND Retry — a slow initial response must
@@ -206,9 +213,10 @@ export default function PlantLibrary() {
     // state from the hook's fetched context — the next Load more became a
     // silent no-op (advance 1→2 = a page already fetched). Pre-existing T4
     // bug surfaced in review; not a refactor drift.
+    // SMA-394: `eggQuery(searchQuery)` reverts to `searchQuery`, `eggQuery(value)` to `value`
     const effectiveQueryChanged =
-      searchQuery.length >= MIN_QUERY_LENGTH ||
-      value.length >= MIN_QUERY_LENGTH;
+      eggQuery(searchQuery).length >= MIN_QUERY_LENGTH ||
+      eggQuery(value).length >= MIN_QUERY_LENGTH;
     setSearchQuery(value);
     if (effectiveQueryChanged) resetToFirstPage();
   };
