@@ -13,7 +13,15 @@ public class StubSearchIndexingService : ISearchIndexingService
 {
     public int Calls { get; private set; }
 
+    /// <summary>Invocations of the boot-only <see cref="ReindexIfEmptyAsync"/> (SMA-389).
+    /// The Testing environment skips the boot indexing step, so this stays 0 in the
+    /// shared fixture — the member exists for interface compliance and for any
+    /// dedicated factory that drives the conditional path against the stub.</summary>
+    public int EnsureCalls { get; private set; }
+
     public SearchReindexResult Next { get; set; } = new(false, 0, 0, []);
+
+    public SearchIndexEnsureResult NextEnsure { get; set; } = new(false, 0, null);
 
     /// <summary>
     /// When set, <see cref="ReindexAllAsync"/> throws this instead of
@@ -30,10 +38,20 @@ public class StubSearchIndexingService : ISearchIndexingService
         return Task.FromResult(Next);
     }
 
+    public Task<SearchIndexEnsureResult> ReindexIfEmptyAsync(CancellationToken ct = default)
+    {
+        EnsureCalls++;
+        if (NextException is not null)
+            throw NextException;
+        return Task.FromResult(NextEnsure);
+    }
+
     public void Reset()
     {
         Calls = 0;
+        EnsureCalls = 0;
         Next = new(false, 0, 0, []);
+        NextEnsure = new(false, 0, null);
         NextException = null;
     }
 }

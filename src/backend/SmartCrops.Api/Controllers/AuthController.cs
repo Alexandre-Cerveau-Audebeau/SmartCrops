@@ -104,6 +104,7 @@ public record AccountExportResponse(DateTime ExportedAt, int SchemaVersion, Acco
 public class AuthController(
     UserManager<ApplicationUser> userManager,
     SignInManager<ApplicationUser> signInManager,
+    RoleManager<IdentityRole> roleManager,
     IConfiguration configuration,
     IAuthenticationSchemeProvider schemeProvider,
     IHostEnvironment hostEnvironment,
@@ -131,6 +132,22 @@ public class AuthController(
 
         if (!result.Succeeded)
             return BadRequest(result.Errors);
+
+        // SMA-390: grant at creation so the FIRST token ever minted for this
+        // account carries the role (Login re-reads roles from the store at
+        // issuance) — no restart, no security-stamp work. The account is
+        // deliberately NOT auto-confirmed here: register is a public
+        // unauthenticated endpoint, so listing an email vouches for its
+        // OWNER, not for whoever posts it first — a born-confirmed listed
+        // account would let a squatter bypass the SMA-320 R2 pre-hijacking
+        // neutralization forever (EnsureSafeGoogleMergeAsync only neutralizes
+        // UNCONFIRMED accounts) and hold a live password backdoor into an
+        // admin account. The mailed confirmation link is the mailbox proof;
+        // the role is inert until it lands (the Login gate and the
+        // OnTokenValidated lock both refuse unconfirmed accounts), and the
+        // boot seeder's SMA-80 auto-confirm remains the operator-timed
+        // catch-up it always was.
+        await EnsureAdminRoleIfListedAsync(userManager, roleManager, configuration, user, logger);
 
         await SendConfirmationEmailAsync(user, request.Email, ct);
 
@@ -509,6 +526,13 @@ public class AuthController(
                     await userManager.DeleteAsync(user);
                     return Redirect($"{frontendUrl}/login?error=link-failed");
                 }
+
+                // SMA-390: creation-time grant for an operator-listed email —
+                // the mint below re-reads roles from the store, so the very
+                // first JWT already carries the role. Unlisted emails no-op;
+                // Google-created accounts are born confirmed, so no SMA-80
+                // auto-confirm is needed on this path.
+                await EnsureAdminRoleIfListedAsync(userManager, roleManager, configuration, user, logger);
             }
             else
             {
@@ -636,6 +660,95 @@ public class AuthController(
         // (c) Confirmed account: standard verified-email linking — password untouched.
 
         return true;
+    }
+
+    /// <summary>
+    /// SMA-390 — creation-time admin grant. <c>AdminSeed:Emails</c> names the
+    /// operator-designated admins; historically the role was granted only by
+    /// the boot-time <c>AdminRoleSeeder</c>, so an account created while the
+    /// app was running stayed role-less until the next restart — which on
+    /// go-live day locked the admin-only search reindex, the cure for the
+    /// dead index (SMA-389). Both creation paths (Register and the Google
+    /// callback) call this right after the account exists. The role row is
+    /// ensured idempotently HERE (the seeder is skipped in the Testing
+    /// environment and the grant must not depend on a boot having run), with
+    /// the seeder's TOCTOU contract: a lost creation race is success. Grant
+    /// failures are logged and never fail the registration — the boot seeder
+    /// remains the catch-up path (same soft-fail doctrine). Deliberately NO
+    /// security-stamp work: no token exists for a freshly created account,
+    /// and both mint sites re-read roles from the store at issuance, so the
+    /// first JWT already carries the role. Static and store-driven for the
+    /// same reason as <see cref="EnsureSafeGoogleMergeAsync"/>: provable
+    /// against the real Identity store without an OAuth harness.
+    /// </summary>
+    public static async Task EnsureAdminRoleIfListedAsync(
+        UserManager<ApplicationUser> userManager,
+        RoleManager<IdentityRole> roleManager,
+        IConfiguration configuration,
+        ApplicationUser user,
+        ILogger logger)
+    {
+        // Catch-all for the same reason as SendConfirmationEmailAsync: by the
+        // time this runs the account is COMMITTED, so a transient store
+        // failure here must cost the grant (the boot seeder catches up), never
+        // turn a successful registration into a 500 the user retries into a
+        // confusing duplicate-email 400.
+        try
+        {
+            if (string.IsNullOrEmpty(user.Email) || !IsListedAdminEmail(configuration, user.Email))
+                return;
+
+            if (!await roleManager.RoleExistsAsync(Roles.Admin))
+            {
+                var created = await roleManager.CreateAsync(new IdentityRole(Roles.Admin));
+                if (!created.Succeeded && !await roleManager.RoleExistsAsync(Roles.Admin))
+                {
+                    logger.LogError(
+                        "Creation-time admin grant: failed to create role '{Role}': {Errors} — the account registers role-less; the boot seeder picks it up.",
+                        Roles.Admin, string.Join("; ", created.Errors.Select(e => e.Description)));
+                    return;
+                }
+            }
+
+            if (await userManager.IsInRoleAsync(user, Roles.Admin))
+                return; // Already granted — idempotent no-op, no duplicate.
+
+            var granted = await userManager.AddToRoleAsync(user, Roles.Admin);
+            if (granted.Succeeded)
+            {
+                logger.LogInformation(
+                    "Creation-time admin grant: granted role '{Role}' to a listed account at creation (SMA-390).",
+                    Roles.Admin);
+            }
+            else
+            {
+                logger.LogError(
+                    "Creation-time admin grant: failed to grant role '{Role}': {Errors} — the boot seeder picks it up.",
+                    Roles.Admin, string.Join("; ", granted.Errors.Select(e => e.Description)));
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Creation-time admin grant: unexpected failure — the account stands role-less; the boot seeder picks it up.");
+        }
+    }
+
+    /// <summary>
+    /// SMA-390 — same list, same semantics as the boot seeder's CSV parsing:
+    /// <c>AdminSeed:Emails</c> entries are trimmed, blank-stripped, and
+    /// matched case-insensitively. No email is ever logged from here (PII
+    /// minimisation, the seeder's MaskEmail doctrine).
+    /// </summary>
+    public static bool IsListedAdminEmail(IConfiguration configuration, string email)
+    {
+        var csv = configuration["AdminSeed:Emails"];
+        if (string.IsNullOrWhiteSpace(csv))
+            return false;
+
+        return csv
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(listed => string.Equals(listed, email, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

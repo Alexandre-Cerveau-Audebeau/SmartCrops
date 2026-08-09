@@ -59,8 +59,10 @@ public class TypesenseSearchIndexingService : ISearchIndexingService
         var failures = new List<string>();
         if (documents.Count > 0)
         {
-            // typesense-dotnet 8.5.0 exposes no CancellationToken overloads, so
-            // explicit checkpoints before each engine call are the cancellation
+            // typesense-dotnet 8.5.0 takes a CancellationToken only on the
+            // retrieve calls (RetrieveCollection/RetrieveCollections) —
+            // ImportDocuments and CreateCollection expose none — so explicit
+            // checkpoints before each engine call are the cancellation
             // contract on this path (the EF query above honors ct natively).
             ct.ThrowIfCancellationRequested();
             var responses = await _typesense.ImportDocuments(
@@ -85,6 +87,31 @@ public class TypesenseSearchIndexingService : ISearchIndexingService
             collectionExisted, indexed, failures.Count, stopwatch.ElapsedMilliseconds);
 
         return new SearchReindexResult(collectionExisted, indexed, stopwatch.ElapsedMilliseconds, failures);
+    }
+
+    public async Task<SearchIndexEnsureResult> ReindexIfEmptyAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        try
+        {
+            var collection = await _typesense.RetrieveCollection(PlantsSearchCollection.Name, ct);
+            if (collection.NumberOfDocuments > 0)
+            {
+                // Strict no-op (SMA-389 ruling): a populated index is never
+                // reindexed at boot — total cost one GET; ongoing freshness
+                // stays with the admin reindex endpoint.
+                return new SearchIndexEnsureResult(false, collection.NumberOfDocuments, null);
+            }
+        }
+        catch (TypesenseApiNotFoundException)
+        {
+            // Absent collection — fall through to the fill: ReindexAllAsync
+            // bootstraps the schema via EnsureCollectionAsync, including the
+            // benign lost-create race with a concurrent admin reindex.
+        }
+
+        var reindex = await ReindexAllAsync(ct);
+        return new SearchIndexEnsureResult(true, 0, reindex);
     }
 
     /// <summary>
