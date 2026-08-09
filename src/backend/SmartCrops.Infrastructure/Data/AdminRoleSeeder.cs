@@ -12,23 +12,34 @@ namespace SmartCrops.Infrastructure.Data;
 /// (<c>AdminSeed:Emails</c>, CSV) — never hard-coded.
 ///
 /// <para>Idempotent and ADDITIVE ONLY: it creates the role if missing and grants
-/// it to each configured, already-registered account that lacks it — auto-confirming
-/// a listed-but-unconfirmed account first (SMA-80) so password-registered admins are
-/// not blocked. It deliberately NEVER revokes the role for an account whose email is
-/// absent from the list, NEVER creates an account, and NEVER confirms an unlisted one
-/// — a misconfigured/empty list must not silently strip admin access; revocation stays
-/// an explicit operator action (a future SMA-34 endpoint).</para>
+/// it to each configured, already-registered account that lacks it. It deliberately
+/// NEVER revokes the role for an account whose email is absent from the list and
+/// NEVER creates an account — a misconfigured/empty list must not silently strip
+/// admin access; revocation stays an explicit operator action (a future SMA-34
+/// endpoint).</para>
+///
+/// <para>Uniform ownership contract (SMA-390 R1, PR #206): the seeder GRANTS but
+/// never CONFIRMS — <c>EmailConfirmed</c> is left exactly as found. The previous
+/// SMA-80 auto-confirm was door (c) of the squatter family: an attacker who
+/// registered a listed address became confirmed AND admin on the next boot, with
+/// the SMA-320 R2 Google-merge neutralization bypassed. Now a squatter-created
+/// account stays unconfirmed — inert on both gates (the /login 403 and the
+/// OnTokenValidated lock) and still neutralizable by R2 — while the legitimate
+/// owner activates the role through the mailed confirmation link, which they
+/// can, because they own the mailbox.</para>
 /// </summary>
 public static class AdminRoleSeeder
 {
     /// <summary>
     /// Ensures the <see cref="Roles.Admin"/> role exists and grants it to every
-    /// configured, already-registered account that lacks it, auto-confirming a
-    /// listed-but-unconfirmed account first (SMA-80). Idempotent and additive-only
-    /// (never revokes; never creates/confirms an unlisted account). Safe to run on
-    /// every boot and across concurrent app instances: a lost role-creation race is
-    /// treated as success (the role exists either way) so the grant pass still runs.
-    /// Email addresses are masked before logging (PII minimisation).
+    /// configured, already-registered account that lacks it — regardless of
+    /// confirmation state, and WITHOUT confirming (the role stays inert until
+    /// the address is proven through the mailbox flow; see the class doc).
+    /// Idempotent and additive-only (never revokes; never creates or confirms
+    /// an account). Safe to run on every boot and across concurrent app
+    /// instances: a lost role-creation race is treated as success (the role
+    /// exists either way) so the grant pass still runs. Email addresses are
+    /// masked before logging (PII minimisation).
     /// </summary>
     /// <param name="roleManager">Identity role manager used to create the role.</param>
     /// <param name="userManager">Identity user manager used to resolve and grant roles.</param>
@@ -40,39 +51,19 @@ public static class AdminRoleSeeder
         IEnumerable<string> adminEmails,
         ILogger logger)
     {
-        // 1. Ensure the Admin role exists (idempotent — RoleExistsAsync guard).
-        if (!await roleManager.RoleExistsAsync(Roles.Admin))
+        // 1. Ensure the Admin role exists — shared primitive (SMA-389/390 R1),
+        //    carrying the TOCTOU contract: a lost creation race is success and
+        //    the grant pass below still runs.
+        if (!await AdminRolePrimitives.EnsureRoleExistsAsync(roleManager, Roles.Admin, logger))
         {
-            var created = await roleManager.CreateAsync(new IdentityRole(Roles.Admin));
-            if (!created.Succeeded)
-            {
-                // TOCTOU: a concurrent instance may have created the role between
-                // our RoleExistsAsync check and CreateAsync. Re-check — if the role
-                // now exists, the race was benign and we MUST still run the grant
-                // pass (returning here would skip every assignment for this boot).
-                if (await roleManager.RoleExistsAsync(Roles.Admin))
-                {
-                    logger.LogInformation(
-                        "Admin seed: role '{Role}' was created concurrently by another instance — continuing with grants.",
-                        Roles.Admin);
-                }
-                else
-                {
-                    logger.LogError(
-                        "Admin seed: failed to create role '{Role}': {Errors}",
-                        Roles.Admin, string.Join("; ", created.Errors.Select(e => e.Description)));
-                    return;
-                }
-            }
-            else
-            {
-                logger.LogInformation("Admin seed: created Identity role '{Role}'.", Roles.Admin);
-            }
+            return;
         }
 
-        // 2. For each configured email with a registered account: auto-confirm it
-        //    if needed (SMA-80 — listed accounts are confirmed, not skipped) then
-        //    grant the role if it's missing. De-dup the input case-insensitively.
+        // 2. For each configured email with a registered account: grant the role
+        //    if it's missing — and NOTHING else. EmailConfirmed is left exactly
+        //    as found (uniform ownership contract, see the class doc): a granted
+        //    role on an unconfirmed account is inert until the mailbox proof
+        //    lands. De-dup the input case-insensitively.
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var rawEmail in adminEmails)
         {
@@ -93,29 +84,6 @@ public static class AdminRoleSeeder
                 continue;
             }
 
-            // SMA-80: auto-confirm a listed-but-unconfirmed account. The email is
-            // an EXPLICITLY operator-listed admin (AdminSeed:Emails) — a designated
-            // trusted account — so password registration leaving EmailConfirmed=false
-            // (only Google OAuth sets it true) must not block the grant. STRICTLY
-            // scoped to listed emails (this loop only iterates AdminSeed:Emails): the
-            // seeder never creates an account and never confirms an unlisted one. Use
-            // the Identity confirmation-token flow rather than flipping the flag by
-            // hand. On a confirmation failure, skip the grant (don't grant unconfirmed).
-            if (!user.EmailConfirmed)
-            {
-                var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
-                var confirm = await userManager.ConfirmEmailAsync(user, token);
-                if (!confirm.Succeeded)
-                {
-                    logger.LogError(
-                        "Admin seed: failed to auto-confirm listed admin '{Email}': {Errors} — skipping grant.",
-                        MaskEmail(email), string.Join("; ", confirm.Errors.Select(e => e.Description)));
-                    continue;
-                }
-                logger.LogInformation(
-                    "Admin seed: auto-confirmed listed admin account '{Email}' (SMA-80).", MaskEmail(email));
-            }
-
             if (await userManager.IsInRoleAsync(user, Roles.Admin))
             {
                 continue; // Already an admin — idempotent no-op.
@@ -124,13 +92,15 @@ public static class AdminRoleSeeder
             var result = await userManager.AddToRoleAsync(user, Roles.Admin);
             if (result.Succeeded)
             {
-                logger.LogInformation("Admin seed: granted role '{Role}' to '{Email}'.", Roles.Admin, MaskEmail(email));
+                logger.LogInformation(
+                    "Admin seed: granted role '{Role}' to user '{UserId}' ('{Email}').",
+                    Roles.Admin, user.Id, MaskEmail(email));
             }
             else
             {
                 logger.LogError(
-                    "Admin seed: failed to grant role '{Role}' to '{Email}': {Errors}",
-                    Roles.Admin, MaskEmail(email), string.Join("; ", result.Errors.Select(e => e.Description)));
+                    "Admin seed: failed to grant role '{Role}' to user '{UserId}' ('{Email}'): {Errors}",
+                    Roles.Admin, user.Id, MaskEmail(email), string.Join("; ", result.Errors.Select(e => e.Description)));
             }
         }
     }

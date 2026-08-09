@@ -5,9 +5,12 @@ using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SmartCrops.Api.Tests.Infrastructure;
+using SmartCrops.Api.Tests.Integration.Stubs;
+using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure.ExternalApis.SearchIndex;
 using Testcontainers.PostgreSql;
 using Typesense;
@@ -32,8 +35,10 @@ public sealed class SearchIndexBootFixture : IAsyncLifetime
 {
     public const string TypesenseApiKey = "boot-test-typesense-key";
 
+    // Database name per the coding guideline ("Use the smartcrops database"):
+    // the container is isolated, so the canonical name costs nothing (R1).
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")
-        .WithDatabase("smartcrops_boot_test")
+        .WithDatabase("smartcrops")
         .WithUsername("test")
         .WithPassword("test")
         .WithCleanUp(true)
@@ -105,7 +110,8 @@ public sealed class SearchIndexBootTests : IClassFixture<SearchIndexBootFixture>
     /// </summary>
     private WebApplicationFactory<Program> BuildBootingFactory(
         int typesensePort,
-        CapturingLoggerProvider? logCapture = null)
+        CapturingLoggerProvider? logCapture = null,
+        Action<IServiceCollection>? extraServices = null)
     {
         var builder = new TestWebAppBuilder()
             .WithEnvironment("Development")
@@ -134,6 +140,11 @@ public sealed class SearchIndexBootTests : IClassFixture<SearchIndexBootFixture>
         if (logCapture is not null)
         {
             builder = builder.WithServices(services => services.AddSingleton<ILoggerProvider>(logCapture));
+        }
+
+        if (extraServices is not null)
+        {
+            builder = builder.WithServices(extraServices);
         }
 
         return builder.Build();
@@ -184,6 +195,34 @@ public sealed class SearchIndexBootTests : IClassFixture<SearchIndexBootFixture>
         Assert.DoesNotContain(secondBootLog.Lines, line => line.Contains("Search index boot: FILLED"));
         var afterSecond = await RetrieveCollectionAsync();
         Assert.Equal(30, afterSecond.NumberOfDocuments);
+    }
+
+    [Fact]
+    public async Task PartialFill_LogsErrorLevelPartialLine()
+    {
+        // R1: per-document rejections come back in-band (Failures) without an
+        // exception — the boot must log ERROR-level PARTIAL, never a green
+        // FILLED (a real engine cannot be made to reject documents on demand,
+        // so the indexer is stubbed; the Program.cs branch under test is real).
+        var log = new CapturingLoggerProvider();
+        await using var factory = BuildBootingFactory(
+            _fixture.TypesensePort,
+            log,
+            services =>
+            {
+                services.RemoveAll<ISearchIndexingService>();
+                services.AddSingleton<ISearchIndexingService>(new StubSearchIndexingService
+                {
+                    NextEnsure = new SearchIndexEnsureResult(
+                        true, 0, new SearchReindexResult(false, 5, 10, ["doc-1 (Solanum): rejected"])),
+                });
+            });
+        using var client = factory.CreateClient();
+
+        Assert.Equal("ok", await client.GetStringAsync("/health"));
+        var partial = Assert.Single(log.Lines, line => line.Contains("Search index boot: PARTIAL"));
+        Assert.StartsWith("Error|", partial);
+        Assert.DoesNotContain(log.Lines, line => line.Contains("Search index boot: FILLED"));
     }
 
     [Fact]

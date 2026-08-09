@@ -77,21 +77,20 @@ public class CreationTimeAdminGrantTests
             .Build();
 
     /// <summary>
-    /// Deterministic precondition: the shared collection database may carry an
-    /// Admin role row from earlier tests in the (sequential) collection —
-    /// deleting it first makes "the hook created the role itself" provable,
-    /// not incidental. Membership rows cascade with the role; any test that
-    /// needs the role recreates it (the MeEndpointRoleTests pattern).
+    /// R1 non-mutating precondition capture (replaces the former role
+    /// deletion, which cascaded membership off every other class in the
+    /// sequential collection): record whether the shared Admin role row
+    /// already exists. The test asserts the POST-state unconditionally; the
+    /// "the hook created the role itself" attribution is only claimed when
+    /// the captured value is false — the collection is sequential, so nothing
+    /// can create it between this capture and the register call except the
+    /// hook under test.
     /// </summary>
-    private async Task EnsureAdminRoleAbsentAsync()
+    private async Task<bool> AdminRolePreExistsAsync()
     {
         using var scope = _fixture.Factory.Services.CreateScope();
         var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-        var role = await roles.FindByNameAsync(Roles.Admin);
-        if (role is not null)
-        {
-            Assert.True((await roles.DeleteAsync(role)).Succeeded);
-        }
+        return await roles.RoleExistsAsync(Roles.Admin);
     }
 
     /// <summary>Local copy of the AuthControllerTests seam helper: the
@@ -110,7 +109,7 @@ public class CreationTimeAdminGrantTests
     [Fact]
     public async Task Register_ListedEmail_GrantedAtCreation_AndFirstJwtCarriesRole()
     {
-        await EnsureAdminRoleAbsentAsync();
+        var rolePreExisted = await AdminRolePreExistsAsync();
         var email = $"listed-{Guid.NewGuid():N}@example.com";
         await using var factory = BuildFactory(email);
         // https base: outside Development the auth cookie is Secure and the
@@ -122,18 +121,28 @@ public class CreationTimeAdminGrantTests
             "/api/auth/register", new { email, password = ValidPassword });
         Assert.Equal(HttpStatusCode.Created, register.StatusCode);
 
-        // Granted WITHOUT any restart, in a host whose boot seeder never ran —
-        // the hook ensured the role row itself. Deliberately NOT auto-confirmed
+        // Granted WITHOUT any restart, in a host whose boot seeder never ran.
+        // When rolePreExisted is false, the sequential collection makes the
+        // attribution exact: the hook's ensure-role step created the row (the
+        // regression proof that the grant depends on no boot); when true, the
+        // grant path is still fully exercised — only the creation attribution
+        // is out of scope for this run. Deliberately NOT auto-confirmed
         // (register proves nothing about mailbox ownership; a born-confirmed
         // listed account would bypass the SMA-320 R2 squatter neutralization),
         // so the standard confirmation email must go out.
         using (var scope = factory.Services.CreateScope())
         {
             var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
             var user = await users.FindByEmailAsync(email);
             Assert.NotNull(user);
             Assert.False(user!.EmailConfirmed);
             Assert.True(await users.IsInRoleAsync(user, Roles.Admin));
+            Assert.True(
+                await roles.RoleExistsAsync(Roles.Admin),
+                rolePreExisted
+                    ? "Admin role must still exist after the grant."
+                    : "The hook must have created the Admin role itself — the boot seeder never ran in this host.");
         }
 
         // Confirm through the mailed link (mailbox proof), then login: the
@@ -214,5 +223,41 @@ public class CreationTimeAdminGrantTests
         // Listed account already holding the role → strict no-op, no duplicate.
         await AuthController.EnsureAdminRoleIfListedAsync(users, roles, config, user, NullLogger.Instance);
         Assert.Single(await users.GetRolesAsync(user), Roles.Admin);
+
+        // R1 hygiene: the shared collection database must not inherit this
+        // account — the membership row cascades with the user.
+        Assert.True((await users.DeleteAsync(user)).Succeeded);
+    }
+
+    [Fact]
+    public async Task GrantThatCannotSucceed_NeverEscapes_TheSoftFailContract()
+    {
+        // R1 (the review's soft-fail coverage ask): the doctrine is that a
+        // grant failure never fails account creation — Register answers 201
+        // with the account committed even when the role write cannot land.
+        // The simplest faithful form (there is no seam to make AddToRoleAsync
+        // fail under the real host over HTTP without fake stores): invoke the
+        // catch-all-wrapped helper for a DELETED user — the store rejects the
+        // membership write (a failed IdentityResult or a thrown store
+        // exception, depending on provider flush order), and the helper must
+        // swallow either. That swallow IS what protects Register's 201.
+        var email = $"ghost-{Guid.NewGuid():N}@example.com";
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["AdminSeed:Emails"] = email,
+            })
+            .Build();
+        using var scope = _fixture.Factory.Services.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var user = new ApplicationUser { UserName = email, Email = email };
+        Assert.True((await users.CreateAsync(user)).Succeeded);
+        Assert.True((await users.DeleteAsync(user)).Succeeded);
+
+        var escaped = await Record.ExceptionAsync(() =>
+            AuthController.EnsureAdminRoleIfListedAsync(users, roles, config, user, NullLogger.Instance));
+
+        Assert.Null(escaped);
     }
 }

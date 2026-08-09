@@ -46,14 +46,14 @@ services:
       Google__ClientId: ${GOOGLE_CLIENT_ID:-}
       Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
       # SMA-33/#68 — CSV of emails granted the backend "Admin" role (idempotent,
-      # additive-only; never auto-revokes). Since SMA-390 a listed email is granted
-      # the moment its account is created, on both the register and Google paths —
-      # the role stays inert until the address is confirmed through the normal
-      # mailbox flow (auto-confirming at creation would let a squatter bypass the
-      # SMA-320 R2 neutralization). The boot-time seeder stays as the catch-up for
-      # emails listed AFTER their account registered (auto-confirming those, SMA-80).
-      # Set the real value in docker-compose.override.yml (gitignored); empty
-      # default = no admin seeded.
+      # additive-only; never auto-revokes). Uniform ownership contract (SMA-390 R1):
+      # the role may be GRANTED at account creation (register, Google) or at boot
+      # (the seeder, catch-up for emails listed after their account registered),
+      # but it only becomes USABLE once ownership of the address is proven — the
+      # mailbox confirmation flow for register AND for the seeder, the
+      # email_verified claim for Google. No path confirms an account it did not
+      # verify. Set the real value in docker-compose.override.yml (gitignored);
+      # empty default = no admin seeded.
       AdminSeed__Emails: ${ADMIN_SEED_EMAILS:-}
       # SMA-255 — Typesense admin API key for indexing/search. Set the real
       # value in docker-compose.override.yml (gitignored); an empty value fails

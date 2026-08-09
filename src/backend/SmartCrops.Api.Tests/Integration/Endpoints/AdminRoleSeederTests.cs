@@ -64,10 +64,14 @@ public class AdminRoleSeederTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task Seed_AutoConfirmsListedUnconfirmedUser_AndGrants()
+    public async Task Seed_GrantsListedUnconfirmedUser_WithoutConfirming()
     {
-        // SMA-80: a listed account that is NOT email-confirmed (e.g. password
-        // registration) is auto-confirmed and then granted — no longer skipped.
+        // SMA-390 R1 (uniform ownership contract — inverts the former SMA-80
+        // behavior): a listed unconfirmed account is GRANTED the role but the
+        // seeder never confirms — EmailConfirmed stays exactly as found. The
+        // granted role is inert on both gates until the mailbox proof lands,
+        // and a squatter-created listed account stays neutralizable by the
+        // SMA-320 R2 Google merge.
         using var scope = CreateScope();
         var (roles, users) = await ManagersAsync(scope);
         var email = $"unconfirmed-{Guid.NewGuid():N}@example.com";
@@ -76,10 +80,9 @@ public class AdminRoleSeederTests : IntegrationTestBase
 
         await AdminRoleSeeder.SeedAsync(roles, users, [email], NullLogger.Instance);
 
-        // Re-fetch: ConfirmEmailAsync persisted the flag inside the seeder.
         var refreshed = await users.FindByIdAsync(user.Id);
         Assert.NotNull(refreshed);
-        Assert.True(refreshed!.EmailConfirmed);
+        Assert.False(refreshed!.EmailConfirmed);
         Assert.True(await users.IsInRoleAsync(refreshed, Roles.Admin));
     }
 
@@ -87,7 +90,8 @@ public class AdminRoleSeederTests : IntegrationTestBase
     public async Task Seed_DoesNotConfirmOrGrant_UnlistedUnconfirmedUser()
     {
         // Security guard: an account NOT in AdminSeed:Emails must never be
-        // confirmed nor granted — the seeder only ever touches listed emails.
+        // granted — and since R1 the seeder confirms NOTHING at all, listed
+        // or not; this fact pins the unlisted half.
         using var scope = CreateScope();
         var (roles, users) = await ManagersAsync(scope);
         var listed = $"listed-{Guid.NewGuid():N}@example.com";

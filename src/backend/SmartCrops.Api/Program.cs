@@ -512,9 +512,9 @@ if (!app.Environment.IsEnvironment("Testing")
     // wrapper is the SMA-377 doctrine extended: a dead engine must not kill
     // a boot that can otherwise serve. On failure the API degrades to the
     // pre-SMA-389 behavior (healthy process, finder 503, admin reindex as
-    // the cure), and the three greppable "Search index boot:" lines below
-    // are the ONLY operational signal — the CD health gate polls /health,
-    // which cannot see the index.
+    // the cure), and the four greppable "Search index boot:" lines below
+    // (NO-OP / FILLED / PARTIAL / FAILED) are the ONLY operational signal —
+    // the CD health gate polls /health, which cannot see the index.
     using (var searchIndexScope = app.Services.CreateScope())
     {
         var bootIndexLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("SearchIndexBoot");
@@ -525,14 +525,22 @@ if (!app.Environment.IsEnvironment("Testing")
             if (ensure.Indexed)
             {
                 // Per-document rejections come back IN-BAND (Failures), not as
-                // an exception — a fill that rejected documents must surface
-                // at error-grep severity or a schema/mapper drift would emit
-                // three green-looking lines while shipping a partial (or
-                // empty) index.
-                var fillLevel = ensure.Reindex!.Failures.Count > 0 ? LogLevel.Warning : LogLevel.Information;
-                bootIndexLogger.Log(fillLevel,
-                    "Search index boot: FILLED — collection '{Collection}' was absent or empty; imported {Indexed} document(s), {Failures} failure(s), {DurationMs} ms.",
-                    PlantsSearchCollection.Name, ensure.Reindex.DocumentsIndexed, ensure.Reindex.Failures.Count, ensure.Reindex.DurationMs);
+                // an exception — a fill that rejected documents leaves search
+                // results incomplete and must surface at ERROR level (R1:
+                // Warning bypasses error-level deployment monitoring). FILLED
+                // is reserved for zero-failure fills.
+                if (ensure.Reindex!.Failures.Count > 0)
+                {
+                    bootIndexLogger.LogError(
+                        "Search index boot: PARTIAL — collection '{Collection}' was absent or empty; imported {Indexed} document(s), {Failures} failed, {DurationMs} ms.",
+                        PlantsSearchCollection.Name, ensure.Reindex.DocumentsIndexed, ensure.Reindex.Failures.Count, ensure.Reindex.DurationMs);
+                }
+                else
+                {
+                    bootIndexLogger.LogInformation(
+                        "Search index boot: FILLED — collection '{Collection}' was absent or empty; imported {Indexed} document(s), 0 failures, {DurationMs} ms.",
+                        PlantsSearchCollection.Name, ensure.Reindex.DocumentsIndexed, ensure.Reindex.DurationMs);
+                }
             }
             else
             {
