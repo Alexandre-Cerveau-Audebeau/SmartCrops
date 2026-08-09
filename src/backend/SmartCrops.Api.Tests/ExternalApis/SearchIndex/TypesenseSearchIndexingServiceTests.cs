@@ -84,9 +84,10 @@ public class TypesenseSearchIndexingServiceTests
     [Fact]
     public async Task ReindexAll_AlreadyCanceled_ThrowsBeforeAnyEngineCall()
     {
-        // typesense-dotnet 8.5.0 has no CancellationToken overloads, so the
-        // service's explicit checkpoints are the cancellation contract: a
-        // pre-canceled token must abort before any HTTP traffic.
+        // typesense-dotnet 8.5.0 takes a CancellationToken only on the
+        // retrieve calls (import/create expose none), so the service's
+        // explicit checkpoints are the cancellation contract: a pre-canceled
+        // token must abort before any HTTP traffic.
         var handler = new StubTypesenseHttpHandler
         {
             OnSend = _ => Json(HttpStatusCode.OK, "{}"),
@@ -99,6 +100,85 @@ public class TypesenseSearchIndexingServiceTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => service.ReindexAllAsync(cts.Token));
         Assert.Empty(handler.Received);
+    }
+
+    [Fact]
+    public async Task ReindexIfEmpty_PopulatedCollection_NoOpsAfterExactlyOneGet()
+    {
+        // SMA-389 ruling, pinned at WIRE level: a populated index is NEVER
+        // reindexed at boot — the whole call is exactly one collection GET,
+        // zero writes.
+        var handler = new StubTypesenseHttpHandler
+        {
+            OnSend = request => request.Method == HttpMethod.Get
+                ? Json(HttpStatusCode.OK, """{"name":"plants","num_documents":30,"fields":[]}""")
+                : throw new InvalidOperationException("The boot no-op must not write to the engine."),
+        };
+        await using var db = InMemoryDb();
+        var service = ServiceOver(handler, db);
+
+        var result = await service.ReindexIfEmptyAsync();
+
+        Assert.False(result.Indexed);
+        Assert.Equal(30, result.ExistingDocuments);
+        Assert.Null(result.Reindex);
+        Assert.Equal([(HttpMethod.Get, "/collections/plants")], handler.Received);
+    }
+
+    [Fact]
+    public async Task ReindexIfEmpty_AbsentCollection_FallsIntoBootstrapFill()
+    {
+        // GET 404 → the fill path runs: ReindexAllAsync bootstraps the schema
+        // (its own GET + POST /collections). The InMemory plant set is empty,
+        // so no import request follows — the outcome still reports
+        // Indexed=true carrying the run's summary.
+        var handler = new StubTypesenseHttpHandler
+        {
+            OnSend = request => request.Method == HttpMethod.Get
+                ? Json(HttpStatusCode.NotFound, """{"message":"Not Found"}""")
+                : Json(HttpStatusCode.Created, """{"name":"plants","num_documents":0,"fields":[]}"""),
+        };
+        await using var db = InMemoryDb();
+        var service = ServiceOver(handler, db);
+
+        var result = await service.ReindexIfEmptyAsync();
+
+        Assert.True(result.Indexed);
+        Assert.NotNull(result.Reindex);
+        Assert.False(result.Reindex!.CollectionExisted);
+        Assert.Equal(0, result.Reindex.DocumentsIndexed);
+        Assert.Equal(
+            [
+                (HttpMethod.Get, "/collections/plants"),
+                (HttpMethod.Get, "/collections/plants"),
+                (HttpMethod.Post, "/collections"),
+            ],
+            handler.Received);
+    }
+
+    [Fact]
+    public async Task ReindexIfEmpty_EmptyCollection_FallsIntoFill()
+    {
+        // Present-but-empty is the second half of the ruled absent-or-empty
+        // trigger: num_documents=0 must NOT be treated as the no-op.
+        var handler = new StubTypesenseHttpHandler
+        {
+            OnSend = _ => Json(HttpStatusCode.OK, """{"name":"plants","num_documents":0,"fields":[]}"""),
+        };
+        await using var db = InMemoryDb();
+        var service = ServiceOver(handler, db);
+
+        var result = await service.ReindexIfEmptyAsync();
+
+        Assert.True(result.Indexed);
+        Assert.NotNull(result.Reindex);
+        Assert.True(result.Reindex!.CollectionExisted);
+        Assert.Equal(
+            [
+                (HttpMethod.Get, "/collections/plants"),
+                (HttpMethod.Get, "/collections/plants"),
+            ],
+            handler.Received);
     }
 
     /// <summary>

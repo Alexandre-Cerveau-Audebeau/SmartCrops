@@ -104,6 +104,7 @@ public record AccountExportResponse(DateTime ExportedAt, int SchemaVersion, Acco
 public class AuthController(
     UserManager<ApplicationUser> userManager,
     SignInManager<ApplicationUser> signInManager,
+    RoleManager<IdentityRole> roleManager,
     IConfiguration configuration,
     IAuthenticationSchemeProvider schemeProvider,
     IHostEnvironment hostEnvironment,
@@ -131,6 +132,23 @@ public class AuthController(
 
         if (!result.Succeeded)
             return BadRequest(result.Errors);
+
+        // SMA-390: grant at creation so the FIRST token ever minted for this
+        // account carries the role (Login re-reads roles from the store at
+        // issuance) — no restart, no security-stamp work. The account is
+        // deliberately NOT auto-confirmed here: register is a public
+        // unauthenticated endpoint, so listing an email vouches for its
+        // OWNER, not for whoever posts it first — a born-confirmed listed
+        // account would let a squatter bypass the SMA-320 R2 pre-hijacking
+        // neutralization forever (EnsureSafeGoogleMergeAsync only neutralizes
+        // UNCONFIRMED accounts) and hold a live password backdoor into an
+        // admin account. The mailed confirmation link is the mailbox proof;
+        // the role is inert until it lands (the Login gate and the
+        // OnTokenValidated lock both refuse unconfirmed accounts). Since R1
+        // the boot seeder follows the SAME contract — it grants without
+        // confirming (the SMA-80 auto-confirm fell as door (c) of the
+        // squatter family) — so no path confirms an address it did not verify.
+        await EnsureAdminRoleIfListedAsync(userManager, roleManager, configuration, user, logger);
 
         await SendConfirmationEmailAsync(user, request.Email, ct);
 
@@ -495,6 +513,24 @@ public class AuthController(
             if (string.IsNullOrEmpty(email))
                 return Redirect($"{frontendUrl}/login?error=no-email");
 
+            // SMA-390 R1 (uniform ownership contract, closes the GitHub
+            // Critical): the email_verified claim is the ownership proof for
+            // EVERY Google path — hoisted ABOVE the user-null split so ONE
+            // gate covers the creation branch (which used to mint a
+            // born-confirmed, possibly admin-granted account without the
+            // proof) and the merge branch alike. Absent or false → refuse
+            // before any account is created, merged, granted or minted.
+            // Deliberate consequence: an EXISTING Google-provisioned user
+            // whose IdP presents email_verified=false is refused at login
+            // too — that IS the contract, and it matches what the merge
+            // branch's own doc already calls "the ownership proof this
+            // merge rests on".
+            if (!IsGoogleEmailUsable(info))
+            {
+                logger.LogWarning("google sign-in refused: email_verified absent or false");
+                return Redirect($"{frontendUrl}/login?error=google-failed");
+            }
+
             var user = await userManager.FindByEmailAsync(email);
             if (user is null)
             {
@@ -509,6 +545,14 @@ public class AuthController(
                     await userManager.DeleteAsync(user);
                     return Redirect($"{frontendUrl}/login?error=link-failed");
                 }
+
+                // SMA-390: creation-time grant for an operator-listed email —
+                // the mint below re-reads roles from the store, so the very
+                // first JWT already carries the role. Unlisted emails no-op.
+                // Google-created accounts are born confirmed because the
+                // hoisted email_verified gate above IS this path's ownership
+                // proof (R1 uniform contract).
+                await EnsureAdminRoleIfListedAsync(userManager, roleManager, configuration, user, logger);
             }
             else
             {
@@ -548,6 +592,21 @@ public class AuthController(
         {
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
         }
+    }
+
+    /// <summary>
+    /// SMA-390 R1 — the single Google ownership-proof policy: the
+    /// email_verified claim (mapped in Program.cs via MapJsonKey, stringified
+    /// by the claim pipeline) must be present and true. Consulted by the
+    /// callback ABOVE the create/merge split so no Google path can create,
+    /// merge, grant or mint without the proof. Static and pure so the policy
+    /// is provable without an OAuth harness (the BuildAuthCallbackRedirect
+    /// pattern).
+    /// </summary>
+    public static bool IsGoogleEmailUsable(ExternalLoginInfo info)
+    {
+        var verifiedRaw = info.Principal.FindFirstValue("email_verified");
+        return bool.TryParse(verifiedRaw, out var verified) && verified;
     }
 
     /// <summary>
@@ -607,9 +666,11 @@ public class AuthController(
 
         // (a) The verified claim is mapped in Program.cs (MapJsonKey) from the
         // userinfo boolean — stringified, hence TryParse. Absent or false:
-        // refuse like any invalid callback.
-        var verifiedRaw = info.Principal.FindFirstValue("email_verified");
-        if (!bool.TryParse(verifiedRaw, out var verified) || !verified)
+        // refuse like any invalid callback. Since R1 the callback pre-gates
+        // every path via IsGoogleEmailUsable BEFORE the create/merge split —
+        // this check is kept as defense-in-depth so the primitive stays safe
+        // for any future caller.
+        if (!IsGoogleEmailUsable(info))
         {
             logger.LogWarning("google merge refused: email_verified absent or false");
             return false;
@@ -636,6 +697,79 @@ public class AuthController(
         // (c) Confirmed account: standard verified-email linking — password untouched.
 
         return true;
+    }
+
+    /// <summary>
+    /// SMA-390 — creation-time admin grant. <c>AdminSeed:Emails</c> names the
+    /// operator-designated admins; historically the role was granted only by
+    /// the boot-time <c>AdminRoleSeeder</c>, so an account created while the
+    /// app was running stayed role-less until the next restart — which on
+    /// go-live day locked the admin-only search reindex, the cure for the
+    /// dead index (SMA-389). Both creation paths (Register and the Google
+    /// callback) call this right after the account exists. The listing
+    /// semantics and the role-ensure (with its TOCTOU contract: a lost
+    /// creation race is success) live in the shared
+    /// <see cref="AdminRolePrimitives"/> (R1) — one definition for this hook
+    /// and the seeder. Grant failures are logged and never fail the
+    /// registration — the boot seeder remains the catch-up path (same
+    /// soft-fail doctrine). The audit lines name their subject with the
+    /// non-PII <c>user.Id</c> join key and the MASKED address (R1 — a
+    /// privilege grant an operator cannot attribute is not auditable).
+    /// Deliberately NO security-stamp work: no token exists for a freshly
+    /// created account, and both mint sites re-read roles from the store at
+    /// issuance, so the first JWT already carries the role. Static and
+    /// store-driven for the same reason as
+    /// <see cref="EnsureSafeGoogleMergeAsync"/>: provable against the real
+    /// Identity store without an OAuth harness.
+    /// </summary>
+    public static async Task EnsureAdminRoleIfListedAsync(
+        UserManager<ApplicationUser> userManager,
+        RoleManager<IdentityRole> roleManager,
+        IConfiguration configuration,
+        ApplicationUser user,
+        ILogger logger)
+    {
+        // Catch-all for the same reason as SendConfirmationEmailAsync: by the
+        // time this runs the account is COMMITTED, so a transient store
+        // failure here must cost the grant (the boot seeder catches up), never
+        // turn a successful registration into a 500 the user retries into a
+        // confusing duplicate-email 400.
+        try
+        {
+            if (string.IsNullOrEmpty(user.Email)
+                || !AdminRolePrimitives.IsListedEmail(configuration["AdminSeed:Emails"], user.Email))
+                return;
+
+            if (!await AdminRolePrimitives.EnsureRoleExistsAsync(roleManager, Roles.Admin, logger))
+            {
+                logger.LogError(
+                    "Creation-time admin grant: role '{Role}' unavailable — user '{UserId}' ('{Email}') registers role-less; the boot seeder picks it up.",
+                    Roles.Admin, user.Id, MaskEmail(user.Email!));
+                return;
+            }
+
+            if (await userManager.IsInRoleAsync(user, Roles.Admin))
+                return; // Already granted — idempotent no-op, no duplicate.
+
+            var granted = await userManager.AddToRoleAsync(user, Roles.Admin);
+            if (granted.Succeeded)
+            {
+                logger.LogInformation(
+                    "Creation-time admin grant: granted role '{Role}' to user '{UserId}' ('{Email}') at creation (SMA-390).",
+                    Roles.Admin, user.Id, MaskEmail(user.Email!));
+            }
+            else
+            {
+                logger.LogError(
+                    "Creation-time admin grant: failed to grant role '{Role}' to user '{UserId}' ('{Email}'): {Errors} — the boot seeder picks it up.",
+                    Roles.Admin, user.Id, MaskEmail(user.Email!), string.Join("; ", granted.Errors.Select(e => e.Description)));
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Creation-time admin grant: unexpected failure — the account stands role-less; the boot seeder picks it up.");
+        }
     }
 
     /// <summary>

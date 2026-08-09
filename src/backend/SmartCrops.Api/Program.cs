@@ -25,6 +25,7 @@ using SmartCrops.Infrastructure.ExternalApis.Logging;
 using SmartCrops.Infrastructure.ExternalApis.Perenual;
 using SmartCrops.Infrastructure.ExternalApis.Trefle;
 using SmartCrops.Infrastructure.ExternalApis.SearchIndex;
+using Typesense;
 using Typesense.Setup;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -240,10 +241,12 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddScoped<IPlantTaxonomyService, GbifPlantTaxonomyService>();
 
 // ── External enrichment API: Trefle ──────────────────────────────────────
-// Same shape as the GBIF block above: options validated at startup (a missing
-// token fails the host boot, not the first call), typed HttpClient with the
-// standard resilience handler, Singleton resolver (pure logic), Scoped
-// service following the EF Core request scope.
+// Same shape as the GBIF block above: options SHAPE validated at startup, but
+// the Token itself is optional since SMA-377 — the upstream is ingestion-only
+// and a missing credential fails at call time as the client's documented null
+// return, never the boot. Typed HttpClient with the standard resilience
+// handler, Singleton resolver (pure logic), Scoped service following the EF
+// Core request scope.
 builder.Services.AddOptions<TrefleOptions>()
     .Bind(builder.Configuration.GetSection(TrefleOptions.SectionName))
     .ValidateDataAnnotations()
@@ -264,11 +267,13 @@ builder.Services.AddSingleton<TrefleResolver>();
 builder.Services.AddScoped<IPlantTrefleEnrichmentService, TreflePlantEnrichmentService>();
 
 // ── External enrichment API: Perenual ────────────────────────────────────
-// Third external source, same shape as Trefle: options validated at startup
-// (missing API key fails the host boot), typed HttpClient with the standard
-// resilience handler, Singleton resolver (pure logic), Scoped enrichment
-// service following the EF Core request scope. The ApiKey lands in URL
-// query strings on every request (Perenual mandates ?key=...); operator
+// Third external source, same shape as Trefle: options SHAPE validated at
+// startup, but the ApiKey is optional since SMA-377 — the upstream is retired
+// (cache-only; runtime reads PerenualRawCache/PlantPerenualData) and a missing
+// credential fails at call time, never the boot. Typed HttpClient with the
+// standard resilience handler, Singleton resolver (pure logic), Scoped
+// enrichment service following the EF Core request scope. The ApiKey lands in
+// URL query strings on every request (Perenual mandates ?key=...); operator
 // must scrub HTTP access logs in non-dev environments.
 builder.Services.AddOptions<PerenualOptions>()
     .Bind(builder.Configuration.GetSection(PerenualOptions.SectionName))
@@ -307,12 +312,14 @@ builder.Services.AddScoped<IPerenualPestCatalogService, PerenualPestCatalogServi
 
 // ── Search engine: Typesense (SMA-255) ───────────────────────────────────
 // Options validated at startup (missing API key fails the host boot), same
-// contract as Trefle/Perenual above. AddTypesenseClient consumes its Config at
+// contract as Smtp below. AddTypesenseClient consumes its Config at
 // registration time and has no IServiceProvider overload, so the section is
 // also bound manually here to feed the client; ValidateOnStart still guards
-// the final configuration. The client is HTTP-lazy — nothing dials Typesense
-// until an admin reindex call — so the API boots fine when the search
-// container is down.
+// the final configuration. The client is HTTP-lazy at registration; the ONE
+// boot-time touch is the SMA-389 idempotent index step after the DB init
+// below, which runs under a tolerant wrapper (absent-or-empty → create and
+// fill; failure logged, boot continues) — so the API still boots fine when
+// the search container is down.
 builder.Services.AddOptions<TypesenseOptions>()
     .Bind(builder.Configuration.GetSection(TypesenseOptions.SectionName))
     .ValidateDataAnnotations()
@@ -490,7 +497,77 @@ if (app.Environment.IsProduction() && !ConnectionStringResolver.IsConfigured(app
 // DB stays deterministic.
 if (!app.Environment.IsEnvironment("Testing")
     && ConnectionStringResolver.IsConfigured(app.Configuration))
+{
     await app.Services.InitialiseDatabaseAsync();
+
+    // SMA-389 — idempotent search index at boot, under the SAME gate as the
+    // DB init above but NEVER inside it: the DB chain's fail-fast (no
+    // try/catch, a throw kills the process) is right for the database — the
+    // sole ratified boot-reachability dependency — and wrong for Typesense.
+    // A fresh or lost search volume used to ship a dead library (no
+    // collection, finder 503) until an admin called the reindex endpoint;
+    // this step creates and fills the collection when it is absent or empty
+    // and costs exactly one GET otherwise (a full reindex on every boot is
+    // forbidden — ongoing freshness stays with the admin reindex). The
+    // wrapper is the SMA-377 doctrine extended: a dead engine must not kill
+    // a boot that can otherwise serve. On failure the API degrades to the
+    // pre-SMA-389 behavior (healthy process, finder 503, admin reindex as
+    // the cure), and the four greppable "Search index boot:" lines below
+    // (NO-OP / FILLED / PARTIAL / FAILED) are the ONLY operational signal —
+    // the CD health gate polls /health, which cannot see the index.
+    using (var searchIndexScope = app.Services.CreateScope())
+    {
+        var bootIndexLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("SearchIndexBoot");
+        try
+        {
+            var indexer = searchIndexScope.ServiceProvider.GetRequiredService<ISearchIndexingService>();
+            var ensure = await indexer.ReindexIfEmptyAsync();
+            if (ensure.Indexed)
+            {
+                // Per-document rejections come back IN-BAND (Failures), not as
+                // an exception — a fill that rejected documents leaves search
+                // results incomplete and must surface at ERROR level (R1:
+                // Warning bypasses error-level deployment monitoring). FILLED
+                // is reserved for zero-failure fills.
+                if (ensure.Reindex!.Failures.Count > 0)
+                {
+                    bootIndexLogger.LogError(
+                        "Search index boot: PARTIAL — collection '{Collection}' was absent or empty; imported {Indexed} document(s), {Failures} failed, {DurationMs} ms.",
+                        PlantsSearchCollection.Name, ensure.Reindex.DocumentsIndexed, ensure.Reindex.Failures.Count, ensure.Reindex.DurationMs);
+                }
+                else
+                {
+                    bootIndexLogger.LogInformation(
+                        "Search index boot: FILLED — collection '{Collection}' was absent or empty; imported {Indexed} document(s), 0 failures, {DurationMs} ms.",
+                        PlantsSearchCollection.Name, ensure.Reindex.DocumentsIndexed, ensure.Reindex.DurationMs);
+                }
+            }
+            else
+            {
+                bootIndexLogger.LogInformation(
+                    "Search index boot: NO-OP — collection '{Collection}' already holds {Documents} document(s); cost one GET.",
+                    PlantsSearchCollection.Name, ensure.ExistingDocuments);
+            }
+        }
+        catch (Exception ex) when (ex is TypesenseApiException or HttpRequestException or TaskCanceledException)
+        {
+            // The exception pair SearchIndexController and PlantFinderController
+            // already catch — every engine rejection plus the container being
+            // unreachable — EXTENDED with TaskCanceledException: this client
+            // rides the default 100 s HttpClient timeout (no resilience
+            // handler), and a listening-but-unresponsive engine surfaces that
+            // timeout as TaskCanceledException (the TrefleClient-documented
+            // shape). No CancellationToken is passed on this path, so here it
+            // can ONLY mean transport timeout — exactly the dead-engine case
+            // this wrapper exists to absorb; per-request callers keep the
+            // narrow pair (an escape there costs a 500, not the process).
+            // Anything else is a bug and still kills the boot, as it should.
+            bootIndexLogger.LogError(ex,
+                "Search index boot: FAILED — {Message}. The API continues to boot; the Library finder will answer 503 until Typesense is reachable and the index is filled (next boot, or POST /api/admin/search/reindex).",
+                ex.Message);
+        }
+    }
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

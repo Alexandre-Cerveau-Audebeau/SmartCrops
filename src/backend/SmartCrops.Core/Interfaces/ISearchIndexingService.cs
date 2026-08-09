@@ -13,6 +13,16 @@ public interface ISearchIndexingService
     /// the same document count with no duplicates.
     /// </summary>
     Task<SearchReindexResult> ReindexAllAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Boot-time conditional variant (SMA-389): when the collection exists AND
+    /// holds at least one document, this is a strict no-op costing a single
+    /// collection GET; when the collection is absent or empty, it runs
+    /// <see cref="ReindexAllAsync"/> (which bootstraps the schema when needed).
+    /// A full reindex on every boot is deliberately impossible through this
+    /// method — ongoing freshness stays with the admin reindex endpoint.
+    /// </summary>
+    Task<SearchIndexEnsureResult> ReindexIfEmptyAsync(CancellationToken ct = default);
 }
 
 /// <summary>
@@ -26,3 +36,16 @@ public record SearchReindexResult(
     int DocumentsIndexed,
     long DurationMs,
     IReadOnlyList<string> Failures);
+
+/// <summary>
+/// Outcome of the boot-time conditional reindex (SMA-389).
+/// <see cref="Indexed"/> is <c>false</c> for the strict no-op — the collection
+/// already existed with <see cref="ExistingDocuments"/> documents and the call
+/// cost one GET; it is <c>true</c> when the absent-or-empty gate tripped and
+/// the full reindex ran, in which case <see cref="Reindex"/> carries that
+/// run's summary (<c>null</c> on the no-op path).
+/// </summary>
+public record SearchIndexEnsureResult(
+    bool Indexed,
+    int ExistingDocuments,
+    SearchReindexResult? Reindex);
