@@ -40,6 +40,15 @@ describe('Footer v2 (SMA-151)', () => {
     await i18next.changeLanguage('en');
   });
 
+  it('carries the language selector beside the theme switch (SMA-56)', () => {
+    renderFooter();
+    // Mounted AS-IS at the end of the copyright row; the white-on-green
+    // trigger fits the dark footer natively.
+    expect(
+      screen.getByRole('button', { name: 'Change language' })
+    ).toHaveTextContent('EN');
+  });
+
   it('points every functional link to its route (signed out)', () => {
     renderFooter();
     const expected: [string, string][] = [

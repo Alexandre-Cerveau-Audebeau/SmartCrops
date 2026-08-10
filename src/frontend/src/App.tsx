@@ -8,6 +8,7 @@ import GuestRoute from './components/GuestRoute';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { MeasurementPageProvider } from './contexts/MeasurementPageContext';
 import { UnitSystemProvider } from './contexts/UnitSystemContext';
 import About from './pages/About';
 import AuthCallback from './pages/AuthCallback';
@@ -37,46 +38,54 @@ export default function App() {
         <ErrorBoundary>
           <AuthProvider>
             <UnitSystemProvider>
-              <BrowserRouter>
-                <ScrollToTop />
-                <Layout>
-                  <Routes>
-                    <Route path="/" element={<Home />} />
-                    <Route path="/about" element={<About />} />
-                    <Route path="/contact" element={<Contact />} />
-                    <Route path="/shop" element={<Shop />} />
-                    <Route path="/auth/callback" element={<AuthCallback />} />
-                    {/* Outside GuestRoute on purpose (SMA-31): registration leaves
+              <MeasurementPageProvider>
+                <BrowserRouter>
+                  <ScrollToTop />
+                  <Layout>
+                    <Routes>
+                      <Route path="/" element={<Home />} />
+                      <Route path="/about" element={<About />} />
+                      <Route path="/contact" element={<Contact />} />
+                      <Route path="/shop" element={<Shop />} />
+                      <Route path="/auth/callback" element={<AuthCallback />} />
+                      {/* Outside GuestRoute on purpose (SMA-31): registration leaves
                         the visitor signed in, so a GuestRoute child would bounce
                         the user who just clicked the link in their mail. */}
-                    <Route path="/confirm-email" element={<ConfirmEmail />} />
-                    {/* Outside GuestRoute like /confirm-email (SMA-323): reached
+                      <Route path="/confirm-email" element={<ConfirmEmail />} />
+                      {/* Outside GuestRoute like /confirm-email (SMA-323): reached
                         from an email link, and a still-signed-in visitor must not
                         be bounced to "/". */}
-                    <Route path="/reset-password" element={<ResetPassword />} />
-                    <Route element={<GuestRoute />}>
-                      <Route path="/login" element={<Login />} />
-                      <Route path="/register" element={<Register />} />
-                      <Route path="/forgot-password" element={<ForgotPassword />} />
-                    </Route>
-                    <Route path="/library/:id" element={<PlantDetail />} />
-                    <Route path="/library" element={<PlantLibrary />} />
-                    <Route path="/legal-notice" element={<LegalNotice />} />
-                    <Route path="/privacy" element={<Privacy />} />
-                    <Route path="/terms" element={<Terms />} />
-                    <Route element={<ProtectedRoute />}>
-                      <Route path="/gardens" element={<MyGardens />} />
                       <Route
-                        path="/gardens/:id/planner"
-                        element={<GardenPlanner />}
+                        path="/reset-password"
+                        element={<ResetPassword />}
                       />
-                      <Route path="/profile" element={<Profile />} />
-                    </Route>
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
-                </Layout>
-                <CookieBanner />
-              </BrowserRouter>
+                      <Route element={<GuestRoute />}>
+                        <Route path="/login" element={<Login />} />
+                        <Route path="/register" element={<Register />} />
+                        <Route
+                          path="/forgot-password"
+                          element={<ForgotPassword />}
+                        />
+                      </Route>
+                      <Route path="/library/:id" element={<PlantDetail />} />
+                      <Route path="/library" element={<PlantLibrary />} />
+                      <Route path="/legal-notice" element={<LegalNotice />} />
+                      <Route path="/privacy" element={<Privacy />} />
+                      <Route path="/terms" element={<Terms />} />
+                      <Route element={<ProtectedRoute />}>
+                        <Route path="/gardens" element={<MyGardens />} />
+                        <Route
+                          path="/gardens/:id/planner"
+                          element={<GardenPlanner />}
+                        />
+                        <Route path="/profile" element={<Profile />} />
+                      </Route>
+                      <Route path="*" element={<NotFound />} />
+                    </Routes>
+                  </Layout>
+                  <CookieBanner />
+                </BrowserRouter>
+              </MeasurementPageProvider>
             </UnitSystemProvider>
           </AuthProvider>
         </ErrorBoundary>

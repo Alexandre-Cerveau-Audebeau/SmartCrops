@@ -11,7 +11,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import { MeasurementPageProvider } from '../contexts/MeasurementPageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
+import { useIsMeasurementPage } from '../hooks/useMeasurementPage';
 import { useLanguage } from '../hooks/useLanguage';
 import type { Plant } from '../types/Plant';
 import type { PlantType } from '../types/PlantType';
@@ -134,14 +136,25 @@ function mockFinderCatalog(
   );
 }
 
+// SMA-352: reads the declaration the page must make — pins the end-to-end
+// wiring (page → context → chrome) that the Navbar suite can only stub.
+function MeasurementFlagProbe() {
+  return (
+    <div data-testid="measurement-flag">{String(useIsMeasurementPage())}</div>
+  );
+}
+
 function renderLibrary() {
   return render(
     <LanguageProvider>
       {/* T4: the temperature slider reads the metric/imperial preference. */}
       <UnitSystemProvider>
-        <MemoryRouter initialEntries={['/library']}>
-          <PlantLibrary />
-        </MemoryRouter>
+        <MeasurementPageProvider>
+          <MeasurementFlagProbe />
+          <MemoryRouter initialEntries={['/library']}>
+            <PlantLibrary />
+          </MemoryRouter>
+        </MeasurementPageProvider>
       </UnitSystemProvider>
     </LanguageProvider>
   );
@@ -160,6 +173,16 @@ const activeChips = () =>
     .map((icon) => icon.closest('.MuiChip-root') as HTMLElement);
 
 describe('PlantLibrary', () => {
+  it('declares itself a measurement page, driving the bar unit switch (SMA-352)', async () => {
+    mockFinderCatalog([makeListItem()]);
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Achillea ptarmica' });
+
+    expect(screen.getByTestId('measurement-flag')).toHaveTextContent('true');
+  });
+
   it('renders cards from the neutral list DTO (no translations) without crashing (SMA-73)', async () => {
     mockFinderCatalog([makeListItem()]);
     vi.mocked(fetchPlantTypes).mockResolvedValue([]);
@@ -1355,10 +1378,12 @@ describe('PlantLibrary', () => {
     render(
       <LanguageProvider>
         <UnitSystemProvider>
-          <MemoryRouter initialEntries={['/library']}>
-            <LangSwitch />
-            <PlantLibrary />
-          </MemoryRouter>
+          <MeasurementPageProvider>
+            <MemoryRouter initialEntries={['/library']}>
+              <LangSwitch />
+              <PlantLibrary />
+            </MemoryRouter>
+          </MeasurementPageProvider>
         </UnitSystemProvider>
       </LanguageProvider>
     );

@@ -14,6 +14,7 @@ import YouTubeIcon from '@mui/icons-material/YouTube';
 import { NAV_BG } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
 import ComingSoonChip from '../ComingSoonChip';
+import LanguageMenu from '../LanguageMenu';
 import LogoButton from '../LogoButton';
 import ThemeModeSwitch from '../ThemeModeSwitch';
 
@@ -279,6 +280,9 @@ export default function Footer() {
           <Box sx={{ ml: 0.5 }}>
             <ThemeModeSwitch />
           </Box>
+          {/* SMA-56: language selector beside the theme switch — the trigger
+              is styled white-on-green, which the dark footer fits natively. */}
+          <LanguageMenu />
         </Box>
       </Container>
     </Box>

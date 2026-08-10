@@ -31,7 +31,7 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import TuneIcon from '@mui/icons-material/Tune';
 import { NAV_BG } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
-import { useLanguage } from '../../hooks/useLanguage';
+import { useIsMeasurementPage } from '../../hooks/useMeasurementPage';
 import ComingSoonChip from '../ComingSoonChip';
 import LanguageMenu from '../LanguageMenu';
 import ThemeModeSwitch from '../ThemeModeSwitch';
@@ -83,10 +83,11 @@ export default function Navbar() {
   const theme = useTheme();
   const mode = theme.palette.mode;
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const { language, setLanguage } = useLanguage();
   const location = useLocation();
   const { isAuthenticated, user, logout } = useAuth();
-  const toggleLanguage = () => setLanguage(language === 'en' ? 'fr' : 'en');
+  // SMA-352 — the page-carried declaration: true while the mounted page says
+  // it displays measurements; decides bar-vs-drawer placement of the switch.
+  const isMeasurementPage = useIsMeasurementPage();
 
   const toggleDrawer = (open: boolean) => () => setDrawerOpen(open);
 
@@ -286,26 +287,47 @@ export default function Navbar() {
             <ThemeModeSwitch />
           </Box>
         </Box>
-        <Button
-          variant="outlined"
-          fullWidth
-          onClick={toggleLanguage}
-          aria-label={t('nav.switchLanguage', { lang: language.toUpperCase() })}
+        {/* SMA-352 — on measurement pages the switch lives in the bar itself;
+            everywhere else it folds in here. Same white-on-green pill
+            treatment as the theme switch above. */}
+        {!isMeasurementPage && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 1,
+            }}
+          >
+            <Typography sx={{ fontSize: 14, fontWeight: 500 }}>
+              {t('nav.units')}
+            </Typography>
+            <Box
+              sx={{ bgcolor: NAV_BG, borderRadius: 999, display: 'inline-flex' }}
+            >
+              <UnitSystemSwitch />
+            </Box>
+          </Box>
+        )}
+        {/* SMA-56 — the desktop flag dropdown replaces the legacy FR/EN
+            toggle; white-on-green like the switches, so the same brand pill. */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1,
+          }}
         >
+          <Typography sx={{ fontSize: 14, fontWeight: 500 }}>
+            {t('nav.language')}
+          </Typography>
           <Box
-            component="span"
-            sx={{ fontWeight: language === 'fr' ? 700 : 400 }}
+            sx={{ bgcolor: NAV_BG, borderRadius: 999, display: 'inline-flex' }}
           >
-            FR
+            <LanguageMenu />
           </Box>
-          {' / '}
-          <Box
-            component="span"
-            sx={{ fontWeight: language === 'en' ? 700 : 400 }}
-          >
-            EN
-          </Box>
-        </Button>
+        </Box>
         {isAuthenticated ? (
           <Button
             variant="outlined"
@@ -357,9 +379,11 @@ export default function Navbar() {
           </Box>
 
           {isMobile ? (
-            // SMA-247 — units switch sits to the left of the hamburger on mobile.
+            // SMA-352 — the units switch sits left of the hamburger ONLY on
+            // pages that declare they display measurements; elsewhere it
+            // folds into the drawer (was unconditional since SMA-247).
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <UnitSystemSwitch />
+              {isMeasurementPage && <UnitSystemSwitch />}
               <IconButton
                 onClick={toggleDrawer(true)}
                 sx={{ color: '#fff' }}
@@ -416,9 +440,14 @@ export default function Navbar() {
                 })}
               </Box>
 
-              {/* Right: language + auth */}
+              {/* Right: units (measurement pages only) + auth + language.
+                  SMA-352 — first DESKTOP mount of the bar unit switch.
+                  SMA-56 — the language trigger sits at the ABSOLUTE RIGHT
+                  EDGE: the right-anchored cluster grows leftward, so
+                  auth-label width changes (Login→Connexion, profile names)
+                  can no longer displace it. */}
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <LanguageMenu />
+                {isMeasurementPage && <UnitSystemSwitch />}
                 {isAuthenticated ? (
                   <>
                     <Button
@@ -439,7 +468,21 @@ export default function Navbar() {
                         '&:hover': { color: '#fff' },
                       }}
                     >
-                      {profileLabel}
+                      {/* SMA-56 — displayName/email is unbounded user data;
+                          the ellipsis keeps the bar geometry stable, and the
+                          title recovers the clipped full text on hover. */}
+                      <Box
+                        component="span"
+                        title={profileLabel}
+                        sx={{
+                          maxWidth: 180,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {profileLabel}
+                      </Box>
                     </Button>
                     <Menu
                       id="profile-menu"
@@ -512,6 +555,7 @@ export default function Navbar() {
                     {t('nav.login')}
                   </Button>
                 )}
+                <LanguageMenu />
               </Box>
             </>
           )}
