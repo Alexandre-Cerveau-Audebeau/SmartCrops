@@ -36,7 +36,6 @@ import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import { NAV_BG } from '../constants/colors';
 import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../hooks/useLanguage';
-import { useMeasurementPage } from '../hooks/useMeasurementPage';
 import { useUnitSystem } from '../hooks/useUnitSystem';
 import { HttpStatusError } from '../services/httpStatusError';
 import { fetchPlantById } from '../services/plantApi';
@@ -146,9 +145,6 @@ function CataloguePlantDetail() {
     : t('library.backToLibrary');
   const { language } = useLanguage();
   const { system } = useUnitSystem();
-  // SMA-352 — this page displays measurements: the bar unit switch shows here.
-  // Deliberately in CataloguePlantDetail, NOT the egg branch above.
-  useMeasurementPage();
   const mode = useTheme().palette.mode;
   const { user } = useAuth();
   // SMA-33: admin UI gated on the backend role surfaced via /me (was the

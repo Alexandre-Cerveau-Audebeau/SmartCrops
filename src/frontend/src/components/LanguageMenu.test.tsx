@@ -59,6 +59,37 @@ describe('LanguageMenu (SMA-208 / SMA-56)', () => {
     ).toHaveTextContent('FR');
   });
 
+  it('size="small" shrinks the short-code font and the flag; the default stays the original 14/14', () => {
+    // Default mount (desktop bar / footer): byte-identical to pre-prop.
+    const medium = render(
+      <LanguageProvider>
+        <LanguageMenu />
+      </LanguageProvider>
+    );
+    const mediumTrigger = screen.getByRole('button', {
+      name: 'Change language',
+    });
+    expect(mediumTrigger).toHaveStyle({ fontSize: '14px' });
+    expect(
+      mediumTrigger.querySelector('svg')!.getAttribute('height')
+    ).toBe('14');
+    medium.unmount();
+
+    // Small variant (drawer pill row, SMA-352 R2).
+    render(
+      <LanguageProvider>
+        <LanguageMenu size="small" />
+      </LanguageProvider>
+    );
+    const smallTrigger = screen.getByRole('button', {
+      name: 'Change language',
+    });
+    expect(smallTrigger).toHaveStyle({ fontSize: '12px' });
+    expect(smallTrigger.querySelector('svg')!.getAttribute('height')).toBe(
+      '12'
+    );
+  });
+
   it('Escape closes the menu without changing the language', async () => {
     const user = userEvent.setup();
     renderMenu();

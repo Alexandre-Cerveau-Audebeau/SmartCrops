@@ -5,9 +5,7 @@ import '../i18n/i18n';
 import i18next from '../i18n/i18n';
 import { AuthProvider } from '../contexts/AuthContext';
 import { LanguageProvider } from '../contexts/LanguageContext';
-import { MeasurementPageProvider } from '../contexts/MeasurementPageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
-import { useIsMeasurementPage } from '../hooks/useMeasurementPage';
 import type { Plant } from '../types/Plant';
 import type { FindPlantsParams, PlantFinderResult } from '../services/plantApi';
 
@@ -133,11 +131,9 @@ async function renderLibrarySettled() {
   render(
     <LanguageProvider>
       <UnitSystemProvider>
-        <MeasurementPageProvider>
-          <MemoryRouter initialEntries={['/library']}>
-            <PlantLibrary />
-          </MemoryRouter>
-        </MeasurementPageProvider>
+        <MemoryRouter initialEntries={['/library']}>
+          <PlantLibrary />
+        </MemoryRouter>
       </UnitSystemProvider>
     </LanguageProvider>
   );
@@ -168,11 +164,9 @@ async function renderLibraryWithPages(pages: number) {
   render(
     <LanguageProvider>
       <UnitSystemProvider>
-        <MeasurementPageProvider>
-          <MemoryRouter initialEntries={['/library']}>
-            <PlantLibrary />
-          </MemoryRouter>
-        </MeasurementPageProvider>
+        <MemoryRouter initialEntries={['/library']}>
+          <PlantLibrary />
+        </MemoryRouter>
       </UnitSystemProvider>
     </LanguageProvider>
   );
@@ -202,28 +196,17 @@ function renderEgg(egg: EasterEggEntry) {
   );
 }
 
-// SMA-352: the hidden page must NOT declare itself a measurement page — the
-// ruling keeps the frozen egg page out of the bar-toggle contract.
-function MeasurementFlagProbe() {
-  return (
-    <div data-testid="measurement-flag">{String(useIsMeasurementPage())}</div>
-  );
-}
-
 function renderDetailAt(pathname: string) {
   return render(
     <LanguageProvider>
       <UnitSystemProvider>
-        <MeasurementPageProvider>
-          <MeasurementFlagProbe />
-          <AuthProvider>
-            <MemoryRouter initialEntries={[{ pathname, state: null }]}>
-              <Routes>
-                <Route path="/library/:id" element={<PlantDetail />} />
-              </Routes>
-            </MemoryRouter>
-          </AuthProvider>
-        </MeasurementPageProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={[{ pathname, state: null }]}>
+            <Routes>
+              <Route path="/library/:id" element={<PlantDetail />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
       </UnitSystemProvider>
     </LanguageProvider>
   );
@@ -460,15 +443,6 @@ describe('the detail page', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Erina J.')).toBeInTheDocument();
     expect(vi.mocked(fetchPlantById)).not.toHaveBeenCalled();
-  });
-
-  it('does NOT declare the hidden page a measurement page (SMA-352)', async () => {
-    renderDetailAt(HREF);
-
-    await screen.findByRole('heading', { name: NAME });
-    // The egg branch returns before CataloguePlantDetail (the declarer)
-    // ever mounts — hoisting the declaration above the branch would trip this.
-    expect(screen.getByTestId('measurement-flag')).toHaveTextContent('false');
   });
 
   it('still fetches a normal plant exactly once, the injection is inert elsewhere', async () => {

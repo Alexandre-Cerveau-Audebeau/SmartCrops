@@ -30,7 +30,6 @@ import type {
   RangeBounds,
   RangeFilterKey,
 } from '../hooks/usePlantFinder';
-import { useMeasurementPage } from '../hooks/useMeasurementPage';
 import { useUnitSystem } from '../hooks/useUnitSystem';
 import { fetchPlantTypes } from '../services/plantApi';
 import type { PlantType } from '../types/PlantType';
@@ -83,9 +82,6 @@ export default function PlantLibrary() {
   const [panelOpen, setPanelOpen] = useState(false);
   const { language } = useLanguage();
   const { system } = useUnitSystem();
-  // SMA-352 — the finder's temperature facet renders °C/°F live: this page
-  // displays measurements, so the bar unit switch shows here.
-  useMeasurementPage();
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const sentinelRef = useRef<HTMLDivElement | null>(null);

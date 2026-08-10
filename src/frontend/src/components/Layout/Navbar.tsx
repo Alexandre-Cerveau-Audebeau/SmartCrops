@@ -31,7 +31,6 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import TuneIcon from '@mui/icons-material/Tune';
 import { NAV_BG } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
-import { useIsMeasurementPage } from '../../hooks/useMeasurementPage';
 import ComingSoonChip from '../ComingSoonChip';
 import LanguageMenu from '../LanguageMenu';
 import ThemeModeSwitch from '../ThemeModeSwitch';
@@ -85,9 +84,6 @@ export default function Navbar() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const location = useLocation();
   const { isAuthenticated, user, logout } = useAuth();
-  // SMA-352 — the page-carried declaration: true while the mounted page says
-  // it displays measurements; decides bar-vs-drawer placement of the switch.
-  const isMeasurementPage = useIsMeasurementPage();
 
   const toggleDrawer = (open: boolean) => () => setDrawerOpen(open);
 
@@ -287,30 +283,9 @@ export default function Navbar() {
             <ThemeModeSwitch />
           </Box>
         </Box>
-        {/* SMA-352 — on measurement pages the switch lives in the bar itself;
-            everywhere else it folds in here. Same white-on-green pill
-            treatment as the theme switch above. */}
-        {!isMeasurementPage && (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 1,
-            }}
-          >
-            <Typography sx={{ fontSize: 14, fontWeight: 500 }}>
-              {t('nav.units')}
-            </Typography>
-            <Box
-              sx={{ bgcolor: NAV_BG, borderRadius: 999, display: 'inline-flex' }}
-            >
-              <UnitSystemSwitch />
-            </Box>
-          </Box>
-        )}
         {/* SMA-56 — the desktop flag dropdown replaces the legacy FR/EN
-            toggle; white-on-green like the switches, so the same brand pill. */}
+            toggle; white-on-green like the switches, so the same brand pill.
+            The small variant sizes the trigger for this tight row. */}
         <Box
           sx={{
             display: 'flex',
@@ -325,7 +300,26 @@ export default function Navbar() {
           <Box
             sx={{ bgcolor: NAV_BG, borderRadius: 999, display: 'inline-flex' }}
           >
-            <LanguageMenu />
+            <LanguageMenu size="small" />
+          </Box>
+        </Box>
+        {/* SMA-352 R2 — the unit switch's ONLY home: always in the drawer,
+            below the language row, never in any top bar. */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1,
+          }}
+        >
+          <Typography sx={{ fontSize: 14, fontWeight: 500 }}>
+            {t('nav.units')}
+          </Typography>
+          <Box
+            sx={{ bgcolor: NAV_BG, borderRadius: 999, display: 'inline-flex' }}
+          >
+            <UnitSystemSwitch />
           </Box>
         </Box>
         {isAuthenticated ? (
@@ -379,19 +373,15 @@ export default function Navbar() {
           </Box>
 
           {isMobile ? (
-            // SMA-352 — the units switch sits left of the hamburger ONLY on
-            // pages that declare they display measurements; elsewhere it
-            // folds into the drawer (was unconditional since SMA-247).
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {isMeasurementPage && <UnitSystemSwitch />}
-              <IconButton
-                onClick={toggleDrawer(true)}
-                sx={{ color: '#fff' }}
-                aria-label={t('nav.openMenu')}
-              >
-                <MenuIcon />
-              </IconButton>
-            </Box>
+            // SMA-352 R2 — the bar carries NO unit control on any page; the
+            // switch lives in the drawer below the language row.
+            <IconButton
+              onClick={toggleDrawer(true)}
+              sx={{ color: '#fff' }}
+              aria-label={t('nav.openMenu')}
+            >
+              <MenuIcon />
+            </IconButton>
           ) : (
             <>
               {/* Center: nav links */}
@@ -440,14 +430,14 @@ export default function Navbar() {
                 })}
               </Box>
 
-              {/* Right: units (measurement pages only) + auth + language.
-                  SMA-352 — first DESKTOP mount of the bar unit switch.
-                  SMA-56 — the language trigger sits at the ABSOLUTE RIGHT
-                  EDGE: the right-anchored cluster grows leftward, so
-                  auth-label width changes (Login→Connexion, profile names)
-                  can no longer displace it. */}
+              {/* Right: language + auth (original order, SMA-352 R2 — auth is
+                  the rightmost element). SMA-56 immobility with this order:
+                  the logged-out auth slot reserves the width of its widest
+                  label and the profile label is bounded below, so a language
+                  switch never changes the auth width — LanguageMenu, sitting
+                  left of it in a right-anchored cluster, cannot shift. */}
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                {isMeasurementPage && <UnitSystemSwitch />}
+                <LanguageMenu />
                 {isAuthenticated ? (
                   <>
                     <Button
@@ -551,11 +541,15 @@ export default function Navbar() {
                     size="small"
                     component={RouterLink}
                     to="/login"
+                    // Reserved slot (SMA-56): wide enough for the widest label
+                    // ("CONNEXION" ≈ 97px at the small-button uppercase face),
+                    // so switching language never resizes the button — and
+                    // never shifts the LanguageMenu to its left.
+                    sx={{ minWidth: 104 }}
                   >
                     {t('nav.login')}
                   </Button>
                 )}
-                <LanguageMenu />
               </Box>
             </>
           )}

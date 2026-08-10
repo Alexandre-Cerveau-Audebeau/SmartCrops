@@ -11,9 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { AuthProvider } from '../contexts/AuthContext';
 import { LanguageProvider } from '../contexts/LanguageContext';
-import { MeasurementPageProvider } from '../contexts/MeasurementPageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
-import { useIsMeasurementPage } from '../hooks/useMeasurementPage';
 import type { Plant, PlantPerenualData } from '../types/Plant';
 
 vi.mock('../services/plantApi', () => ({
@@ -174,49 +172,31 @@ function PlannerProbe() {
   return <div data-testid="planner-probe">{id}</div>;
 }
 
-// SMA-352: reads the declaration the page must make — pins the end-to-end
-// wiring (page → context → chrome) that the Navbar suite can only stub.
-function MeasurementFlagProbe() {
-  return (
-    <div data-testid="measurement-flag">{String(useIsMeasurementPage())}</div>
-  );
-}
-
 function renderAtPlant(plant: Plant, entryState?: unknown) {
   vi.mocked(fetchPlantById).mockResolvedValue(plant);
   return render(
     <LanguageProvider>
       <UnitSystemProvider>
-        <MeasurementPageProvider>
-          <MeasurementFlagProbe />
-          <AuthProvider>
-            <MemoryRouter
-              initialEntries={[
-                // A plain visit carries state null — exactly what a pasted or
-                // bookmarked /library URL has (SMA-309 R2).
-                { pathname: `/library/${plant.id}`, state: entryState ?? null },
-              ]}
-            >
-              <Routes>
-                <Route path="/library/:id" element={<PlantDetail />} />
-                <Route path="/gardens/:id/planner" element={<PlannerProbe />} />
-              </Routes>
-            </MemoryRouter>
-          </AuthProvider>
-        </MeasurementPageProvider>
+        <AuthProvider>
+          <MemoryRouter
+            initialEntries={[
+              // A plain visit carries state null — exactly what a pasted or
+              // bookmarked /library URL has (SMA-309 R2).
+              { pathname: `/library/${plant.id}`, state: entryState ?? null },
+            ]}
+          >
+            <Routes>
+              <Route path="/library/:id" element={<PlantDetail />} />
+              <Route path="/gardens/:id/planner" element={<PlannerProbe />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
       </UnitSystemProvider>
     </LanguageProvider>
   );
 }
 
 describe('PlantDetail', () => {
-  it('declares itself a measurement page, driving the bar unit switch (SMA-352)', async () => {
-    renderAtPlant(makePlant());
-    await screen.findByRole('heading', { name: 'Basil' });
-
-    expect(screen.getByTestId('measurement-flag')).toHaveTextContent('true');
-  });
-
   it('renders a minimal (non-enriched) plant without crashing and falls back to the short translation description', async () => {
     renderAtPlant(makePlant());
 
