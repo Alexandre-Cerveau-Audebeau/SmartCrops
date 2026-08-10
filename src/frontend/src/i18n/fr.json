@@ -11,8 +11,9 @@
     "homeAriaLabel": "Accueil SmartCrops",
     "openMenu": "Ouvrir le menu",
     "closeMenu": "Fermer le menu",
-    "switchLanguage": "Changer de langue (actuelle : {{lang}})",
-    "changeLanguage": "Changer de langue"
+    "changeLanguage": "Changer de langue",
+    "language": "Langue",
+    "units": "Unités"
   },
   "errorBoundary": {
     "title": "Une erreur est survenue",

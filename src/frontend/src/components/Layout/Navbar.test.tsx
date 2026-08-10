@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
@@ -13,6 +13,7 @@ import {
 } from 'vitest';
 import i18next from '../../i18n/i18n';
 import { AuthContext } from '../../contexts/authContextValue';
+import { LanguageProvider } from '../../contexts/LanguageContext';
 import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
 import { ColorModeProvider } from '../../contexts/ColorModeContext';
 import type { AuthContextValue } from '../../contexts/authContextValue';
@@ -65,11 +66,13 @@ function renderNavbar(
   return render(
     <AuthContext.Provider value={auth}>
       <ColorModeProvider>
-        <UnitSystemProvider>
-          <MemoryRouter>
-            <Navbar />
-          </MemoryRouter>
-        </UnitSystemProvider>
+        <LanguageProvider>
+          <UnitSystemProvider>
+            <MemoryRouter>
+              <Navbar />
+            </MemoryRouter>
+          </UnitSystemProvider>
+        </LanguageProvider>
       </ColorModeProvider>
     </AuthContext.Provider>
   );
@@ -87,6 +90,10 @@ afterAll(() => {
 
 describe('Navbar v2 (SMA-152 / SMA-150)', () => {
   beforeEach(async () => {
+    // LanguageProvider re-applies its own language on mount (mirrors
+    // Home.test), so the stored key must be cleared, not just i18next.
+    localStorage.removeItem('smartcrops-language');
+    localStorage.removeItem('smartcrops.unitSystem');
     await i18next.changeLanguage('en');
   });
 
@@ -175,10 +182,172 @@ describe('Navbar v2 (SMA-152 / SMA-150)', () => {
   });
 
   it('renders key labels in French', async () => {
-    await i18next.changeLanguage('fr');
+    // LanguageProvider re-applies the STORED language on mount (mirrors
+    // Home.test), so French is set the way a returning visitor sets it —
+    // a direct i18next.changeLanguage would be overridden at render.
+    localStorage.setItem('smartcrops-language', 'fr');
     renderNavbar(makeAuth({ isAuthenticated: true, user: TEST_USER }));
     expect(
       await screen.findByRole('link', { name: 'Boutique' })
     ).toHaveAttribute('href', '/shop');
+  });
+});
+
+describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
+  beforeEach(async () => {
+    localStorage.removeItem('smartcrops-language');
+    localStorage.removeItem('smartcrops.unitSystem');
+    await i18next.changeLanguage('en');
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // Both unit controls share the accessible-name triplet contract, so the
+  // metric segment is the switch's stable signature wherever it renders.
+  const unitButtons = () => screen.queryAllByRole('button', { name: /cm · L/ });
+
+  it('the mobile bar renders no unit switch on any page', () => {
+    renderNavbar(makeAuth(), { mobile: true });
+    // Before the drawer opens nothing is aria-hidden: an empty query proves
+    // the BAR carries no switch (the drawer copy only mounts on open).
+    expect(unitButtons()).toHaveLength(0);
+  });
+
+  it('the desktop bar renders no unit switch', () => {
+    renderNavbar();
+    expect(unitButtons()).toHaveLength(0);
+  });
+
+  it('the drawer always carries the Language row, then the Units row below it', async () => {
+    const user = userEvent.setup();
+    renderNavbar(makeAuth(), { mobile: true });
+
+    await user.click(screen.getByRole('button', { name: 'Open menu' }));
+
+    const language = screen.getByText('Language');
+    const units = screen.getByText('Units');
+    // SMA-352 R2 order: Language first, Units below.
+    expect(
+      language.compareDocumentPosition(units) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    // The dropdown replaced the legacy FR/EN toggle for good.
+    expect(
+      screen.getByRole('button', { name: 'Change language' })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /FR \/ EN/ })).toBeNull();
+  });
+
+  it('the drawer units row drives the shared preference', async () => {
+    const user = userEvent.setup();
+    renderNavbar(makeAuth(), { mobile: true });
+
+    await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    expect(unitButtons()).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: /in · gal/ }));
+    expect(localStorage.getItem('smartcrops.unitSystem')).toBe('imperial');
+  });
+
+  it('desktop cluster: auth is the rightmost element and the login slot reserves its width across languages', () => {
+    renderNavbar();
+
+    const language = screen.getByRole('button', { name: 'Change language' });
+    const login = screen.getByRole('link', { name: 'Login' });
+    const cluster = language.parentElement!;
+    // SMA-352 R2: original order restored — auth last, LanguageMenu before it.
+    expect(cluster.lastElementChild).toBe(login);
+    expect(
+      language.compareDocumentPosition(login) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    // SMA-56 immobility with this order: the slot is wider than the widest
+    // label ("CONNEXION"), so a language switch cannot resize it.
+    expect(login).toHaveStyle({ minWidth: '104px' });
+  });
+
+  it('the reserved login width is identical under French', () => {
+    localStorage.setItem('smartcrops-language', 'fr');
+    renderNavbar();
+
+    const login = screen.getByRole('link', { name: 'Connexion' });
+    const cluster = login.parentElement!;
+    expect(cluster.lastElementChild).toBe(login);
+    expect(login).toHaveStyle({ minWidth: '104px' });
+  });
+
+  it('authenticated cluster: profile label stays bounded and auth stays last', () => {
+    const longName = 'A'.repeat(120);
+    renderNavbar(
+      makeAuth({
+        isAuthenticated: true,
+        user: { ...TEST_USER, displayName: longName },
+      })
+    );
+
+    // SMA-56 (kept from lot 1): unbounded user data is clipped; the title
+    // recovers the full text.
+    const span = screen.getByText(longName);
+    expect(span).toHaveAttribute('title', longName);
+    expect(span).toHaveStyle({
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+    });
+
+    const profile = screen.getByRole('button', { name: /A{20,}/ });
+    const cluster = profile.parentElement!;
+    expect(cluster.lastElementChild).toBe(profile);
+  });
+
+  it('the drawer language trigger renders the small variant; the desktop bar keeps the default', async () => {
+    const user = userEvent.setup();
+
+    // Desktop first: default size — original 14px font, 14-high flag.
+    const desktop = renderNavbar();
+    const desktopTrigger = screen.getByRole('button', {
+      name: 'Change language',
+    });
+    expect(desktopTrigger).toHaveStyle({ fontSize: '14px' });
+    expect(
+      desktopTrigger.querySelector('svg')!.getAttribute('height')
+    ).toBe('14');
+    desktop.unmount();
+
+    // Drawer mount: the small variant — smaller short-code font AND flag.
+    renderNavbar(makeAuth(), { mobile: true });
+    await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    const drawerTrigger = screen.getByRole('button', {
+      name: 'Change language',
+    });
+    expect(drawerTrigger).toHaveStyle({ fontSize: '12px' });
+    expect(
+      drawerTrigger.querySelector('svg')!.getAttribute('height')
+    ).toBe('12');
+  });
+
+  it('drawer language dropdown switches the app language', async () => {
+    const user = userEvent.setup();
+    renderNavbar(makeAuth(), { mobile: true });
+
+    await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    await user.click(screen.getByRole('button', { name: 'Change language' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Français' }));
+
+    await waitFor(() => expect(i18next.language).toBe('fr'));
+    expect(localStorage.getItem('smartcrops-language')).toBe('fr');
+  });
+
+  it('the drawer close button closes the drawer', async () => {
+    const user = userEvent.setup();
+    renderNavbar(makeAuth(), { mobile: true });
+
+    await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    expect(screen.getByText('Units')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Close menu' }));
+    await waitFor(() => expect(screen.queryByText('Units')).toBeNull());
   });
 });

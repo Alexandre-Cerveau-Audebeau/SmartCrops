@@ -57,7 +57,10 @@ export default function App() {
                     <Route element={<GuestRoute />}>
                       <Route path="/login" element={<Login />} />
                       <Route path="/register" element={<Register />} />
-                      <Route path="/forgot-password" element={<ForgotPassword />} />
+                      <Route
+                        path="/forgot-password"
+                        element={<ForgotPassword />}
+                      />
                     </Route>
                     <Route path="/library/:id" element={<PlantDetail />} />
                     <Route path="/library" element={<PlantLibrary />} />

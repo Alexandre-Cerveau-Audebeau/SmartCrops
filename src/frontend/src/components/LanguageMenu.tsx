@@ -16,6 +16,15 @@ const LANGS = [
   { code: 'fr', short: 'FR', label: 'Français', Flag: FlagFr },
 ] as const;
 
+interface LanguageMenuProps {
+  /**
+   * Trigger sizing (SMA-352 R2): 'small' shrinks the short-code font and the
+   * flag for tight rows (the drawer pill); 'medium' — the default — is the
+   * original rendering used by the desktop bar and the footer, unchanged.
+   */
+  size?: 'small' | 'medium';
+}
+
 /**
  * Styled language switcher (SMA-208) — a flag dropdown replacing the plain
  * "FR / EN" toggle. Drives the app's LanguageContext (`setLanguage`), which is
@@ -24,12 +33,13 @@ const LANGS = [
  * (`#fff`, white hover) is tied to the green navbar; `primary`/`paper` come
  * from the theme so the menu is already dark-mode ready.
  */
-export default function LanguageMenu() {
+export default function LanguageMenu({ size = 'medium' }: LanguageMenuProps) {
   const { t } = useTranslation();
   const { language, setLanguage } = useLanguage();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const active = LANGS.find((l) => language.startsWith(l.code)) ?? LANGS[0];
   const ActiveFlag = active.Flag;
+  const small = size === 'small';
 
   return (
     <>
@@ -37,13 +47,13 @@ export default function LanguageMenu() {
         onClick={(e) => setAnchorEl(e.currentTarget)}
         aria-haspopup="menu"
         aria-label={t('nav.changeLanguage', 'Change language')}
-        startIcon={<ActiveFlag h={14} />}
+        startIcon={<ActiveFlag h={small ? 12 : 14} />}
         endIcon={<Sym name="expand_more" size={18} color="inherit" />}
         sx={{
           color: '#fff',
           textTransform: 'none',
           fontWeight: 600,
-          fontSize: 14,
+          fontSize: small ? 12 : 14,
           px: 1,
           minWidth: 0,
           '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },

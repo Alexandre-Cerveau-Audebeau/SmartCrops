@@ -31,7 +31,6 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import TuneIcon from '@mui/icons-material/Tune';
 import { NAV_BG } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
-import { useLanguage } from '../../hooks/useLanguage';
 import ComingSoonChip from '../ComingSoonChip';
 import LanguageMenu from '../LanguageMenu';
 import ThemeModeSwitch from '../ThemeModeSwitch';
@@ -83,10 +82,8 @@ export default function Navbar() {
   const theme = useTheme();
   const mode = theme.palette.mode;
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const { language, setLanguage } = useLanguage();
   const location = useLocation();
   const { isAuthenticated, user, logout } = useAuth();
-  const toggleLanguage = () => setLanguage(language === 'en' ? 'fr' : 'en');
 
   const toggleDrawer = (open: boolean) => () => setDrawerOpen(open);
 
@@ -286,26 +283,45 @@ export default function Navbar() {
             <ThemeModeSwitch />
           </Box>
         </Box>
-        <Button
-          variant="outlined"
-          fullWidth
-          onClick={toggleLanguage}
-          aria-label={t('nav.switchLanguage', { lang: language.toUpperCase() })}
+        {/* SMA-56 — the desktop flag dropdown replaces the legacy FR/EN
+            toggle; white-on-green like the switches, so the same brand pill.
+            The small variant sizes the trigger for this tight row. */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1,
+          }}
         >
+          <Typography sx={{ fontSize: 14, fontWeight: 500 }}>
+            {t('nav.language')}
+          </Typography>
           <Box
-            component="span"
-            sx={{ fontWeight: language === 'fr' ? 700 : 400 }}
+            sx={{ bgcolor: NAV_BG, borderRadius: 999, display: 'inline-flex' }}
           >
-            FR
+            <LanguageMenu size="small" />
           </Box>
-          {' / '}
+        </Box>
+        {/* SMA-352 R2 — the unit switch's ONLY home: always in the drawer,
+            below the language row, never in any top bar. */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1,
+          }}
+        >
+          <Typography sx={{ fontSize: 14, fontWeight: 500 }}>
+            {t('nav.units')}
+          </Typography>
           <Box
-            component="span"
-            sx={{ fontWeight: language === 'en' ? 700 : 400 }}
+            sx={{ bgcolor: NAV_BG, borderRadius: 999, display: 'inline-flex' }}
           >
-            EN
+            <UnitSystemSwitch />
           </Box>
-        </Button>
+        </Box>
         {isAuthenticated ? (
           <Button
             variant="outlined"
@@ -357,17 +373,15 @@ export default function Navbar() {
           </Box>
 
           {isMobile ? (
-            // SMA-247 — units switch sits to the left of the hamburger on mobile.
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <UnitSystemSwitch />
-              <IconButton
-                onClick={toggleDrawer(true)}
-                sx={{ color: '#fff' }}
-                aria-label={t('nav.openMenu')}
-              >
-                <MenuIcon />
-              </IconButton>
-            </Box>
+            // SMA-352 R2 — the bar carries NO unit control on any page; the
+            // switch lives in the drawer below the language row.
+            <IconButton
+              onClick={toggleDrawer(true)}
+              sx={{ color: '#fff' }}
+              aria-label={t('nav.openMenu')}
+            >
+              <MenuIcon />
+            </IconButton>
           ) : (
             <>
               {/* Center: nav links */}
@@ -416,7 +430,12 @@ export default function Navbar() {
                 })}
               </Box>
 
-              {/* Right: language + auth */}
+              {/* Right: language + auth (original order, SMA-352 R2 — auth is
+                  the rightmost element). SMA-56 immobility with this order:
+                  the logged-out auth slot reserves the width of its widest
+                  label and the profile label is bounded below, so a language
+                  switch never changes the auth width — LanguageMenu, sitting
+                  left of it in a right-anchored cluster, cannot shift. */}
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <LanguageMenu />
                 {isAuthenticated ? (
@@ -439,7 +458,21 @@ export default function Navbar() {
                         '&:hover': { color: '#fff' },
                       }}
                     >
-                      {profileLabel}
+                      {/* SMA-56 — displayName/email is unbounded user data;
+                          the ellipsis keeps the bar geometry stable, and the
+                          title recovers the clipped full text on hover. */}
+                      <Box
+                        component="span"
+                        title={profileLabel}
+                        sx={{
+                          maxWidth: 180,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {profileLabel}
+                      </Box>
                     </Button>
                     <Menu
                       id="profile-menu"
@@ -508,6 +541,11 @@ export default function Navbar() {
                     size="small"
                     component={RouterLink}
                     to="/login"
+                    // Reserved slot (SMA-56): wide enough for the widest label
+                    // ("CONNEXION" ≈ 97px at the small-button uppercase face),
+                    // so switching language never resizes the button — and
+                    // never shifts the LanguageMenu to its left.
+                    sx={{ minWidth: 104 }}
                   >
                     {t('nav.login')}
                   </Button>

@@ -32,6 +32,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     i18next.changeLanguage(language);
+    // SMA-56 (a11y): keep the document language in sync so screen readers
+    // switch pronunciation with the UI.
+    document.documentElement.lang = language;
   }, [language]);
 
   return (
