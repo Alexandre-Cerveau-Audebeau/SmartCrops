@@ -90,9 +90,10 @@ afterAll(() => {
 
 describe('Navbar v2 (SMA-152 / SMA-150)', () => {
   beforeEach(async () => {
-    // LanguageProvider re-applies its own language on mount (mirrors
-    // Home.test), so the stored key must be cleared, not just i18next.
-    localStorage.removeItem('smartcrops-language');
+    // SMA-393: the no-choice default is now French, so English is stored the
+    // way a returning visitor stores it — LanguageProvider re-applies the
+    // stored key on mount (mirrors Home.test), not just i18next.
+    localStorage.setItem('smartcrops-language', 'en');
     localStorage.removeItem('smartcrops.unitSystem');
     await i18next.changeLanguage('en');
   });
@@ -195,7 +196,8 @@ describe('Navbar v2 (SMA-152 / SMA-150)', () => {
 
 describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
   beforeEach(async () => {
-    localStorage.removeItem('smartcrops-language');
+    // SMA-393: store 'en' like a returning visitor — the fr default would win otherwise.
+    localStorage.setItem('smartcrops-language', 'en');
     localStorage.removeItem('smartcrops.unitSystem');
     await i18next.changeLanguage('en');
   });

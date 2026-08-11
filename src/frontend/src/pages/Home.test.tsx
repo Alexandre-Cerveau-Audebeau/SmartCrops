@@ -95,7 +95,8 @@ describe('Home — the page says only what ships (SMA-353)', () => {
     vi.mocked(fetchMe).mockRejectedValue(new Error('Not authenticated'));
     // LanguageProvider re-applies its own language on mount, so the locale has
     // to be set the way a returning visitor sets it, not on i18next directly.
-    localStorage.removeItem('smartcrops-language');
+    // SMA-393: the no-choice default is French now, so English is stored.
+    localStorage.setItem('smartcrops-language', 'en');
     await i18next.changeLanguage('en');
   });
 
@@ -302,7 +303,8 @@ describe('Home — what a signed-in visitor is offered (SMA-360)', () => {
     mockMatchMedia(false);
     vi.mocked(fetchPlants).mockResolvedValue([]);
     vi.mocked(fetchMe).mockRejectedValue(new Error('Not authenticated'));
-    localStorage.removeItem('smartcrops-language');
+    // SMA-393: English is stored the way a returning visitor stores it.
+    localStorage.setItem('smartcrops-language', 'en');
     await i18next.changeLanguage('en');
   });
 

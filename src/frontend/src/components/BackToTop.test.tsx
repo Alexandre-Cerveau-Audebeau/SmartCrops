@@ -1,12 +1,17 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import '../i18n/i18n';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../i18n/i18n';
 
 // Force the scroll trigger on so the FAB is rendered (jsdom doesn't compute scroll).
 vi.mock('@mui/material/useScrollTrigger', () => ({ default: () => true }));
 
 import BackToTop from './BackToTop';
+
+// SMA-393: the default language is now French — pin English like a returning EN visitor.
+beforeEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 afterEach(() => {
   vi.restoreAllMocks();

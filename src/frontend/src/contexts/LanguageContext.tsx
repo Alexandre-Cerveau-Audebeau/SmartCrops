@@ -7,8 +7,11 @@ import type { Language } from './languageContextValue';
 const STORAGE_KEY = 'smartcrops-language';
 const SUPPORTED_LANGUAGES: ReadonlySet<string> = new Set(['en', 'fr']);
 
+// SMA-393: French is the default for visitors with no stored choice — a
+// stored 'en' or 'fr' always wins, and browser-language detection is
+// deliberately out (deterministic first render).
 function normalizeLanguage(value: string | null): Language {
-  return value && SUPPORTED_LANGUAGES.has(value) ? (value as Language) : 'en';
+  return value && SUPPORTED_LANGUAGES.has(value) ? (value as Language) : 'fr';
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
@@ -16,7 +19,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     try {
       return normalizeLanguage(localStorage.getItem(STORAGE_KEY));
     } catch {
-      return 'en';
+      return 'fr';
     }
   });
 

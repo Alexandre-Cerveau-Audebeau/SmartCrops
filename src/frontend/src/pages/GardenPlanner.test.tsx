@@ -75,6 +75,8 @@ const layout: GardenLayoutData = {
 
 beforeEach(() => {
   localStorage.clear();
+  // SMA-393: store 'en' like a returning visitor — the fr default would win otherwise.
+  localStorage.setItem('smartcrops-language', 'en');
   // jsdom ships no ResizeObserver; the planner observes its scroll container.
   vi.stubGlobal(
     'ResizeObserver',

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import '../../i18n/i18n';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../../i18n/i18n';
 import type { Plant } from '../../types/Plant';
 import type { InfrastructureType } from '../../utils/infrastructure';
 import PlantSidebar, { type PlantSidebarTab } from './PlantSidebar';
@@ -75,6 +75,13 @@ function renderSidebar(overrides: SidebarOverrides = {}) {
 }
 
 describe('PlantSidebar (SMA-194)', () => {
+  // SMA-393: FR is the no-stored-choice default now — pin EN the way a
+  // returning English visitor would, so the English UI labels below hold.
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
+  });
+
+
   it('renders the localized common name as primary label, scientific as secondary', () => {
     renderSidebar();
     const items = screen.getAllByRole('button');

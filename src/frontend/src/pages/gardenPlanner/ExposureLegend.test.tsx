@@ -1,11 +1,16 @@
 import { render, screen } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { describe, expect, it } from 'vitest';
-import '../../i18n/i18n';
+import { beforeEach, describe, expect, it } from 'vitest';
+import i18n from '../../i18n/i18n';
 import { ExposureLegend } from './ExposureLegend';
 
 // SMA-15 (5.4): the legend's 5th "Ombre portée" swatch is DYNAMIC — it only
 // appears when a blocking infrastructure exists (nothing casts otherwise).
+
+// SMA-393: the no-stored-choice default is now French — pin English like a returning EN visitor.
+beforeEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 function renderLegend(hasCastShadow: boolean) {
   return render(

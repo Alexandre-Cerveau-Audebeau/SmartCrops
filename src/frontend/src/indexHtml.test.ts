@@ -12,3 +12,12 @@ describe('index.html (Wave-1 T3 GDPR lock)', () => {
     expect(indexHtml).not.toMatch(/gstatic/);
   });
 });
+
+// SMA-393 lock — the static document declares French, matching what
+// LanguageContext applies for a visitor with no stored choice, so the
+// pre-hydration paint and the app agree from the first frame.
+describe('index.html (SMA-393 French default)', () => {
+  it('declares French as the document language', () => {
+    expect(indexHtml).toMatch(/<html lang="fr">/);
+  });
+});
