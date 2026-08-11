@@ -35,6 +35,8 @@ import { DELETE_FAILED, DELETE_TIMEOUT, deleteAccount, exportAccountData } from 
 
 beforeEach(() => {
   localStorage.clear();
+  // SMA-393: default is now French — pin English the way a returning visitor sets it.
+  localStorage.setItem('smartcrops-language', 'en');
 });
 afterEach(() => {
   vi.clearAllMocks();

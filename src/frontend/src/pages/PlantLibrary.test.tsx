@@ -55,6 +55,9 @@ function mockMatchMedia(matches: boolean) {
 
 beforeEach(() => {
   mockMatchMedia(true);
+  // English-mechanics tests pin a returning EN visitor via the STORED key —
+  // since SMA-393 the no-key default is French.
+  localStorage.setItem('smartcrops-language', 'en');
 });
 
 afterEach(async () => {
@@ -191,6 +194,25 @@ describe('PlantLibrary', () => {
     expect(
       screen.getByRole('button', { name: 'Load more' })
     ).toBeInTheDocument();
+  });
+
+  it('a first visit with no stored choice queries the finder in French (SMA-393)', async () => {
+    localStorage.removeItem('smartcrops-language');
+    mockFinderCatalog(makeMany(3));
+    vi.mocked(fetchPlantTypes).mockResolvedValue([]);
+
+    renderLibrary();
+    await screen.findByRole('heading', { name: 'Plant 00' });
+
+    // UI↔API coherence: the context default IS the lang the wire carries.
+    expect(vi.mocked(findPlants)).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, perPage: PER_PAGE, lang: 'fr' }),
+      expect.anything()
+    );
+    expect(vi.mocked(findPlants)).not.toHaveBeenCalledWith(
+      expect.objectContaining({ lang: 'en' }),
+      expect.anything()
+    );
   });
 
   it('shows the rest state: zero-count button, quick type chips, unfiltered counter, no rail', async () => {

@@ -1,12 +1,17 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import '../../i18n/i18n';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../../i18n/i18n';
 import type { Moment, Season } from '../../utils/exposure';
 import { GridControls } from './GridControls';
 
 // R2 (SMA-17 5.3-D): GridControls is now the TOOLBAR CARD only — the garden
 // title and the Réglages/Annuler/Enregistrer actions moved to the page
 // header, so the F3 save/cancel gating pin lives in GardenPlanner.test.tsx.
+
+// SMA-393: the no-stored-choice default is now French — pin English as a returning EN visitor would.
+beforeEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 function renderControls(
   overrides: {

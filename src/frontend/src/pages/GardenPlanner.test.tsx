@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import '../i18n/i18n';
+import i18n from '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { useLanguage } from '../hooks/useLanguage';
 import type { GardenLayoutData } from '../services/gardenLayoutApi';
@@ -73,8 +73,13 @@ const layout: GardenLayoutData = {
   ],
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
+  // SMA-393: store 'en' like a returning visitor — the fr default would win otherwise.
+  localStorage.setItem('smartcrops-language', 'en');
+  // R1: reset the shared i18next singleton too (the Home.test idiom), so a
+  // test that flipped to French cannot leak its language into the next one.
+  await i18n.changeLanguage('en');
   // jsdom ships no ResizeObserver; the planner observes its scroll container.
   vi.stubGlobal(
     'ResizeObserver',

@@ -1,11 +1,16 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { ThemeProvider, alpha, createTheme } from '@mui/material/styles';
-import { describe, expect, it, vi } from 'vitest';
-import '../../i18n/i18n';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../../i18n/i18n';
 import type { CellData } from '../../types/GardenLayout';
 import type { ExposureCategory } from '../../utils/exposure';
 import { getPlantColor } from '../../utils/plantColor';
 import GardenGrid from './GardenGrid';
+
+// SMA-393 — the default is now French: pin the returning-EN-visitor language.
+beforeEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 // SMA-17 5.3-D / SMA-209 — the grid consumes the planner tokens: base cells
 // re-skinned (cellOn/cellOff, both modes) and the exposure layer replaces the

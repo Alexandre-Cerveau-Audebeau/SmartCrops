@@ -92,6 +92,8 @@ function mockMatchMedia(matches: boolean) {
 beforeEach(() => {
   mockMatchMedia(true);
   localStorage.clear();
+  // SMA-393: the no-choice default is French now, so English is set the way a returning visitor sets it.
+  localStorage.setItem('smartcrops-language', 'en');
 });
 
 afterEach(async () => {

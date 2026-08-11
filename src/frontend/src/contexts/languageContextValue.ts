@@ -1,6 +1,9 @@
 import { createContext } from 'react';
+import type { Language } from '../i18n/languageStorage';
 
-export type Language = 'en' | 'fr';
+// Re-exported so consumers of the context value keep one import site; the
+// type itself is owned by the neutral languageStorage module (SMA-393 R1).
+export type { Language };
 
 export interface LanguageContextValue {
   language: Language;
@@ -8,6 +11,6 @@ export interface LanguageContextValue {
 }
 
 export const LanguageContext = createContext<LanguageContextValue>({
-  language: 'en',
+  language: 'fr',
   setLanguage: () => {},
 });

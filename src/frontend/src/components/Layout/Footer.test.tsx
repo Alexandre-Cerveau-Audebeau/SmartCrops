@@ -6,6 +6,7 @@ import i18next from '../../i18n/i18n';
 import { AuthContext } from '../../contexts/authContextValue';
 import type { AuthContextValue } from '../../contexts/authContextValue';
 import { ColorModeProvider } from '../../contexts/ColorModeContext';
+import { LanguageProvider } from '../../contexts/LanguageContext';
 import Footer from './Footer';
 
 function makeAuth(overrides: Partial<AuthContextValue> = {}): AuthContextValue {
@@ -37,11 +38,25 @@ function renderFooter(auth: AuthContextValue = makeAuth()) {
 
 describe('Footer v2 (SMA-151)', () => {
   beforeEach(async () => {
+    // SMA-393: English is stored the way a returning visitor stores it.
+    localStorage.setItem('smartcrops-language', 'en');
     await i18next.changeLanguage('en');
   });
 
   it('carries the language selector beside the theme switch (SMA-56)', () => {
-    renderFooter();
+    // SMA-393: LanguageMenu reads LanguageContext (no-provider default is now
+    // French), so mount the provider and let the stored EN choice resolve.
+    render(
+      <ColorModeProvider>
+        <AuthContext.Provider value={makeAuth()}>
+          <LanguageProvider>
+            <MemoryRouter>
+              <Footer />
+            </MemoryRouter>
+          </LanguageProvider>
+        </AuthContext.Provider>
+      </ColorModeProvider>
+    );
     // Mounted AS-IS at the end of the copyright row; the white-on-green
     // trigger fits the dark footer natively.
     expect(

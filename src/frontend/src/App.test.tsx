@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import App from './App';
 
 vi.mock('./services/plantApi', () => ({
@@ -16,6 +16,11 @@ vi.mock('./services/authApi', () => ({
 }));
 
 describe('App', () => {
+  beforeEach(() => {
+    // Each test states its visitor: no key = first visit (SMA-393).
+    localStorage.removeItem('smartcrops-language');
+  });
+
   it('renders without crashing', () => {
     render(<App />);
   });
@@ -25,10 +30,23 @@ describe('App', () => {
     expect(screen.getAllByText('SmartCrops').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders the Library and Shop nav links (navbar + footer)', () => {
+  it('a first visit with no stored choice lands in French — nav links + document lang (SMA-393)', async () => {
     render(<App />);
-    // Both Library and Shop appear once in the Navbar and once in the Footer.
-    expect(screen.getAllByRole('link', { name: 'Library' })).toHaveLength(2);
+    // Both links appear once in the Navbar and once in the Footer.
+    expect(
+      await screen.findAllByRole('link', { name: 'Bibliothèque' })
+    ).toHaveLength(2);
+    expect(screen.getAllByRole('link', { name: 'Boutique' })).toHaveLength(2);
+    expect(document.documentElement.lang).toBe('fr');
+  });
+
+  it('a stored "en" keeps the site in English end-to-end (SMA-393)', async () => {
+    localStorage.setItem('smartcrops-language', 'en');
+    render(<App />);
+    expect(
+      await screen.findAllByRole('link', { name: 'Library' })
+    ).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: 'Shop' })).toHaveLength(2);
+    expect(document.documentElement.lang).toBe('en');
   });
 });

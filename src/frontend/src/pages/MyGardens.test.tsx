@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { useLanguage } from '../hooks/useLanguage';
@@ -54,6 +54,13 @@ function renderPage() {
 }
 
 describe('MyGardens cards (SMA-6 / SMA-155)', () => {
+  beforeEach(() => {
+    // English-mechanics tests pin a returning EN visitor via the STORED key —
+    // since SMA-393 the no-key default is French (LanguageProvider re-applies
+    // the stored language on mount).
+    localStorage.setItem('smartcrops-language', 'en');
+  });
+
   it('shows the distinct-placed-plants count and resolver-based preview names', async () => {
     vi.mocked(fetchGardens).mockResolvedValue([gardenWith([ivy, fern])]);
 
@@ -83,6 +90,17 @@ describe('MyGardens cards (SMA-6 / SMA-155)', () => {
     await waitFor(() => expect(fetchGardens).toHaveBeenCalled());
     const [, lang] = vi.mocked(fetchGardens).mock.calls[0]!;
     expect(lang).toBe('en');
+  });
+
+  it('a first visit with no stored choice fetches gardens in French (SMA-393)', async () => {
+    localStorage.removeItem('smartcrops-language');
+    vi.mocked(fetchGardens).mockResolvedValue([]);
+
+    renderPage();
+
+    await waitFor(() => expect(fetchGardens).toHaveBeenCalled());
+    const [, lang] = vi.mocked(fetchGardens).mock.calls[0]!;
+    expect(lang).toBe('fr');
   });
 
   it('opens a garden card straight into the planner (SMA-285 pin — no detail page)', async () => {

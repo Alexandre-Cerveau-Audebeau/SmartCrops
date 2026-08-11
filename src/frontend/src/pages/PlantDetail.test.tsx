@@ -31,10 +31,12 @@ vi.mock('../services/adminApi', () => ({
 import PlantDetail from './PlantDetail';
 import { fetchPlantById } from '../services/plantApi';
 
-// Avoid carrying the en/fr preference between tests — every spec assumes a
-// fresh page boot with the default English locale.
+// Every spec queries English labels; since SMA-393 the no-choice default is
+// French, so English is set the way a returning visitor sets it — the stored
+// key wins when LanguageProvider re-applies it on mount.
 beforeEach(() => {
   localStorage.clear();
+  localStorage.setItem('smartcrops-language', 'en');
 });
 
 afterEach(() => {
