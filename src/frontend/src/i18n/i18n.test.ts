@@ -8,6 +8,12 @@ describe('<html lang> synchronization', () => {
     await i18n.changeLanguage('fr');
   });
 
+  // Covers the init-time sync call: importing the module must already have
+  // stamped the resolved language (French on a virgin env, SMA-393) on <html>.
+  it("sets document.documentElement.lang to 'fr' at module initialization", () => {
+    expect(document.documentElement.lang).toBe('fr');
+  });
+
   it("sets document.documentElement.lang to 'en' after switching to English", async () => {
     await i18n.changeLanguage('en');
     expect(document.documentElement.lang).toBe('en');
