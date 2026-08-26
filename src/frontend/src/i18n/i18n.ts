@@ -16,4 +16,16 @@ i18next.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
+// SMA-354: keep <html lang> aligned with the active language — the static
+// lang="fr" in index.html only covers the pre-hydration state. Regioned codes
+// ("fr-FR") are normalized to their 2-letter base.
+const syncDocumentLanguage = (lng: string) => {
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = lng.split('-')[0];
+  }
+};
+
+syncDocumentLanguage(i18next.language);
+i18next.on('languageChanged', syncDocumentLanguage);
+
 export default i18next;
