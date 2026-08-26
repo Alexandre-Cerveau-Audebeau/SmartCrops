@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { act } from 'react';
 import { render } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { afterEach, describe, expect, it } from 'vitest';
 import i18next from '../i18n/i18n';
 import DocumentHead from './DocumentHead';
@@ -24,13 +24,25 @@ function renderAt(path: string, children?: React.ReactNode) {
   );
 }
 
-// Mimics PlantDetail's contract: set the loaded display name on mount, clear
-// on unmount so the route title is restored.
-function PlantNameProbe({ name }: { name: string }) {
+// Mimics PlantDetail's contract: set the loaded display name (scoped to the
+// plant's own route) on mount, clear on unmount so the route title is restored.
+function PlantNameProbe({ name, pathname }: { name: string; pathname: string }) {
   useEffect(() => {
-    setDocumentTitleOverride(name);
+    setDocumentTitleOverride(name, pathname);
     return () => setDocumentTitleOverride(null);
-  }, [name]);
+  }, [name, pathname]);
+  return null;
+}
+
+// Exposes the router's navigate function so a test can change routes while the
+// tree stays mounted (PlantDetail does not unmount between two plant pages).
+// Captured in an effect, not during render (react-hooks/globals).
+let navigateTo: (to: string) => void;
+function NavigationProbe() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    navigateTo = navigate;
+  }, [navigate]);
   return null;
 }
 
@@ -75,7 +87,7 @@ describe('DocumentHead (SMA-354)', () => {
     const view = render(
       <MemoryRouter initialEntries={['/library/42']}>
         <DocumentHead />
-        <PlantNameProbe name="Basilic" />
+        <PlantNameProbe name="Basilic" pathname="/library/42" />
       </MemoryRouter>
     );
     expect(document.title).toBe('Basilic · SmartCrops');
@@ -88,6 +100,25 @@ describe('DocumentHead (SMA-354)', () => {
         <DocumentHead />
       </MemoryRouter>
     );
+    expect(document.title).toBe('Bibliothèque de plantes · SmartCrops');
+  });
+
+  it('scopes the plant-name override to its own route', () => {
+    render(
+      <MemoryRouter initialEntries={['/library/aaa']}>
+        <DocumentHead />
+        <NavigationProbe />
+      </MemoryRouter>
+    );
+    act(() => {
+      setDocumentTitleOverride('Tomate', '/library/aaa');
+    });
+    expect(document.title).toBe('Tomate · SmartCrops');
+    // Navigating to another plant WITHOUT republishing (PlantDetail's plant
+    // state lags the URL): the stale name must not leak onto /library/bbb.
+    act(() => {
+      navigateTo('/library/bbb');
+    });
     expect(document.title).toBe('Bibliothèque de plantes · SmartCrops');
   });
 });

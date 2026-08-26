@@ -10,6 +10,7 @@ interface LayoutProps {
   children: ReactNode;
 }
 
+/** App shell: head manager, navbar, clipped main content, footer, back-to-top. */
 export default function Layout({ children }: LayoutProps) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>

@@ -241,12 +241,15 @@ function CataloguePlantDetail() {
 
   // SMA-354: publish the resolved display name as the document-title override
   // (same resolution as `displayName` below, which lives after the early
-  // returns) — cleared on unmount so the route title is restored.
+  // returns) — cleared on unmount so the route title is restored. Scoped to
+  // the PLANT's own route (not the current URL, which may already point to the
+  // next plant while this state lingers — PR #211 round 1).
   useEffect(() => {
     if (!plant) return;
     setDocumentTitleOverride(
       capitalizeFirst(resolveTranslatedField(plant, language, 'commonName')) ??
-        plant.scientificName
+        plant.scientificName,
+      `/library/${plant.id}`
     );
     return () => setDocumentTitleOverride(null);
   }, [plant, language]);

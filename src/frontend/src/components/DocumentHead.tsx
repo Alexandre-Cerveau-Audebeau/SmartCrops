@@ -52,6 +52,7 @@ const CANONICAL_PATHS = new Set([
   '/terms',
 ]);
 
+/** Headless per-route document-title + canonical manager, mounted once in Layout. */
 export default function DocumentHead() {
   const { pathname } = useLocation();
   // useTranslation re-renders this component on languageChanged, so the title
@@ -64,8 +65,10 @@ export default function DocumentHead() {
   );
 
   let title: string;
-  if (override && PLANT_DETAIL_RE.test(pathname)) {
-    title = `${override} · ${SITE_NAME}`;
+  if (override && override.pathname === pathname) {
+    // Scoped override (PR #211 round 1): applied only on the exact route it
+    // was published for, so a stale plant name never leaks onto the next page.
+    title = `${override.name} · ${SITE_NAME}`;
   } else if (pathname === '/') {
     title = BRAND_TITLE;
   } else if (PLANT_DETAIL_RE.test(pathname)) {
