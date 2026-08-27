@@ -95,7 +95,13 @@ export default function PasswordField({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') reveal();
                 }}
-                onKeyUp={hide}
+                // Mirrors onKeyDown: only the reveal keys end the hold. An
+                // unconditional hide would mask the field when any OTHER key
+                // is released mid-hold. Focus leaving while a key is still
+                // held is covered by onBlur.
+                onKeyUp={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') hide();
+                }}
               >
                 {revealed ? (
                   <Visibility fontSize="small" />

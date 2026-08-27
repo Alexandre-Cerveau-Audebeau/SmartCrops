@@ -87,6 +87,21 @@ describe('PasswordField — hold to reveal (SMA-350)', () => {
     fireEvent.keyUp(button, { key: 'Enter' });
     expect(input).toHaveAttribute('type', 'password');
   });
+
+  // PR #212 round 2: keyup fired for EVERY key, so releasing an unrelated key
+  // — a modifier, a stray letter — while Enter or Space was still held masked
+  // the field under the user's finger. Only the reveal keys may end the hold.
+  it('stays revealed when an unrelated key is released mid-hold', () => {
+    renderField('Str0ng!Pass');
+    const input = screen.getByLabelText(/^Password/);
+    const button = screen.getByRole('button', { name: REVEAL_LABEL });
+
+    fireEvent.keyDown(button, { key: 'Enter' });
+    expect(input).toHaveAttribute('type', 'text');
+
+    fireEvent.keyUp(button, { key: 'a' });
+    expect(input).toHaveAttribute('type', 'text');
+  });
 });
 
 describe('PasswordField — the rules bubble (SMA-350, PR #212 round 1)', () => {
