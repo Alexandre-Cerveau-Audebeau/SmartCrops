@@ -1,0 +1,46 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using SmartCrops.Api.Tests.Infrastructure;
+
+namespace SmartCrops.Api.Tests;
+
+/// <summary>
+/// SMA-350 — characterization proof of the password policy the registration UI
+/// now states in words. The six values were the ASP.NET Core defaults and were
+/// never written down in this repo, so the UI copy had no source of truth to
+/// track. Pinning them in <c>AddIdentity</c> changes NO behaviour; this test
+/// exists so a future silent framework-default change, or an accidental edit to
+/// the pinned block, breaks the build instead of quietly contradicting the copy.
+/// </summary>
+public class IdentityPasswordPolicyTests
+{
+    [Fact]
+    public void PasswordPolicy_IsPinnedToTheSixRulesTheRegistrationUiStates()
+    {
+        using WebApplicationFactory<Program> factory = new TestWebAppBuilder()
+            .WithEnvironment("Testing")
+            .WithJwtAuth()
+            .WithGoogleOAuth()
+            .WithFrontendUrl()
+            .WithTrefle()
+            .WithPerenual()
+            .WithTypesense()
+            .WithSmtp()
+            .WithInMemoryDatabase("IdentityPasswordPolicyTests")
+            .Build();
+
+        PasswordOptions password = factory.Services
+            .GetRequiredService<IOptions<IdentityOptions>>()
+            .Value
+            .Password;
+
+        Assert.Equal(6, password.RequiredLength);
+        Assert.True(password.RequireDigit);
+        Assert.True(password.RequireLowercase);
+        Assert.True(password.RequireUppercase);
+        Assert.True(password.RequireNonAlphanumeric);
+        Assert.Equal(1, password.RequiredUniqueChars);
+    }
+}

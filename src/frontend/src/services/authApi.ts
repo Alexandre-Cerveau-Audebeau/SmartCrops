@@ -2,6 +2,33 @@ import type { AuthUser } from '../types/Auth';
 
 const API_BASE = '/api';
 
+/**
+ * SMA-350: the rejection of a failed registration, carrying the Identity error
+ * CODES alongside the joined descriptions.
+ *
+ * The API has always answered a refused CreateAsync with the full
+ * `IdentityError[]` — code and description — but only the descriptions were
+ * ever read, and they arrive in English (the backend has no localization, see
+ * SMA-31). The codes are the stable machine-readable half, so they are what
+ * the page translates; the message keeps the server's own prose for callers
+ * that have nothing better to show.
+ *
+ * Deliberately a dedicated class rather than a sentinel: `register` is the only
+ * caller that needs per-rule detail, and the reset-password path next door
+ * classifies on `err.name === 'Error'` — a plain `Error` here would be
+ * indistinguishable from it, and a new sentinel would say WHAT failed without
+ * saying WHY.
+ */
+export class RegisterFailedError extends Error {
+  readonly codes: string[];
+
+  constructor(message: string, codes: string[]) {
+    super(message);
+    this.name = 'RegisterFailedError';
+    this.codes = codes;
+  }
+}
+
 export async function register(email: string, password: string): Promise<void> {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
@@ -11,10 +38,20 @@ export async function register(email: string, password: string): Promise<void> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    const message = Array.isArray(body)
-      ? body.map((e: { description?: string }) => e.description).join(', ')
-      : 'Registration failed';
-    throw new Error(message);
+    if (!Array.isArray(body)) {
+      // Not an IdentityError[]: the [MinLength(6)] DTO guard answers
+      // ValidationProblemDetails before CreateAsync ever runs, and a body that
+      // failed to parse is null. Neither carries a code to translate.
+      throw new RegisterFailedError('Registration failed', []);
+    }
+    const errors = body as { code?: string; description?: string }[];
+    throw new RegisterFailedError(
+      errors
+        .map((e) => e.description)
+        .filter(Boolean)
+        .join(', '),
+      errors.map((e) => e.code).filter((c): c is string => typeof c === 'string')
+    );
   }
 }
 

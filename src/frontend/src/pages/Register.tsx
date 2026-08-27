@@ -12,9 +12,34 @@ import Divider from '@mui/material/Divider';
 import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import PasswordField from '../components/PasswordField';
 import { useAuth } from '../hooks/useAuth';
+import { RegisterFailedError } from '../services/authApi';
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:5000';
+
+/**
+ * SMA-350: the Identity codes that name a violated password rule, mapped to the
+ * criterion the user has to fix. Listed in the order the bubble states them so
+ * a refusal reads in the same order as the promise, whatever order the server
+ * happened to return.
+ */
+const PASSWORD_RULE_KEYS: readonly (readonly [string, string])[] = [
+  ['PasswordTooShort', 'auth.passwordRuleLength'],
+  ['PasswordRequiresDigit', 'auth.passwordRuleDigit'],
+  ['PasswordRequiresLower', 'auth.passwordRuleLower'],
+  ['PasswordRequiresUpper', 'auth.passwordRuleUpper'],
+  ['PasswordRequiresNonAlphanumeric', 'auth.passwordRuleSpecial'],
+  ['PasswordRequiresUniqueChars', 'auth.passwordRuleUnique'],
+];
+
+/** The codes that are about the ADDRESS rather than the password. */
+const ACCOUNT_ERROR_KEYS: Record<string, string> = {
+  DuplicateUserName: 'auth.registerErrorEmailTaken',
+  DuplicateEmail: 'auth.registerErrorEmailTaken',
+  InvalidEmail: 'auth.registerErrorInvalidEmail',
+  InvalidUserName: 'auth.registerErrorInvalidEmail',
+};
 
 export default function Register() {
   const { t } = useTranslation();
@@ -22,16 +47,49 @@ export default function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  // SMA-350: `rules` is empty for every single-sentence failure — the criteria
+  // list is the one case where the Alert carries a heading plus its items.
+  const [error, setError] = useState<{
+    message: string;
+    rules: string[];
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [registered, setRegistered] = useState(false);
+
+  /**
+   * SMA-350: turns the refusal into something the user can act on. The API
+   * already named every violated rule; the codes are read here because the
+   * descriptions arrive in English and the backend has no localization.
+   * Password criteria win over an address complaint when both are present:
+   * the password is what the user just composed and can fix in place.
+   */
+  const describeFailure = (err: unknown): { message: string; rules: string[] } => {
+    const codes = err instanceof RegisterFailedError ? err.codes : [];
+
+    const rules = PASSWORD_RULE_KEYS.filter(([code]) => codes.includes(code)).map(
+      ([, key]) => t(key)
+    );
+    if (rules.length > 0) {
+      return { message: t('auth.passwordRulesTitle'), rules };
+    }
+
+    const accountKey = codes
+      .map((code) => ACCOUNT_ERROR_KEYS[code])
+      .find((key) => key !== undefined);
+    if (accountKey) {
+      return { message: t(accountKey), rules: [] };
+    }
+
+    // An unrecognised code, an empty list, a network failure: unchanged.
+    return { message: t('auth.registerError'), rules: [] };
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     if (password !== confirmPassword) {
-      setError(t('auth.passwordMismatch'));
+      setError({ message: t('auth.passwordMismatch'), rules: [] });
       return;
     }
 
@@ -42,8 +100,8 @@ export default function Register() {
       // be confirmed first, so the page shows the notice and routes toward
       // Login instead of navigating into the app.
       setRegistered(true);
-    } catch {
-      setError(t('auth.registerError'));
+    } catch (err) {
+      setError(describeFailure(err));
     } finally {
       setLoading(false);
     }
@@ -91,7 +149,14 @@ export default function Register() {
 
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
+              {error.message}
+              {error.rules.length > 0 && (
+                <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2.5 }}>
+                  {error.rules.map((rule) => (
+                    <li key={rule}>{rule}</li>
+                  ))}
+                </Box>
+              )}
             </Alert>
           )}
 
@@ -109,19 +174,14 @@ export default function Register() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
-            <TextField
+            <PasswordField
               label={t('auth.password')}
-              type="password"
-              required
-              fullWidth
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              showRules
             />
-            <TextField
+            <PasswordField
               label={t('auth.confirmPassword')}
-              type="password"
-              required
-              fullWidth
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
             />

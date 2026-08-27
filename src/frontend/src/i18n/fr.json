@@ -349,7 +349,17 @@
     "resetPasswordError": "La réinitialisation a échoué. Le lien est peut-être invalide ou expiré.",
     "resetPasswordInvalidLink": "Ce lien de réinitialisation est invalide ou incomplet.",
     "resetPasswordValidating": "Vérification de votre lien de réinitialisation...",
-    "resetPasswordRateLimited": "Trop de tentatives. Veuillez patienter un instant puis réessayer."
+    "resetPasswordRateLimited": "Trop de tentatives. Veuillez patienter un instant puis réessayer.",
+    "passwordRulesTitle": "Votre mot de passe doit contenir :",
+    "passwordRuleLength": "au moins 6 caractères",
+    "passwordRuleDigit": "au moins un chiffre",
+    "passwordRuleLower": "au moins une minuscule",
+    "passwordRuleUpper": "au moins une majuscule",
+    "passwordRuleSpecial": "au moins un caractère spécial",
+    "passwordRuleUnique": "au moins un caractère différent",
+    "registerErrorEmailTaken": "Cette adresse e-mail est déjà utilisée. Connectez-vous, ou réinitialisez votre mot de passe.",
+    "registerErrorInvalidEmail": "Cette adresse e-mail n'est pas valide.",
+    "showPasswordHold": "Maintenir pour afficher le mot de passe"
   },
   "notFound": {
     "title": "404",
