@@ -142,3 +142,25 @@ describe('Login — unconfirmed-account branch (SMA-320)', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('Login — official Google mark on the OAuth button (SMA-57)', () => {
+  beforeEach(async () => {
+    mockLogin.mockReset();
+    await i18next.changeLanguage('en');
+  });
+
+  // The mark is decorative (empty alt), so it is invisible to role and name
+  // queries by design — it is reached through the button that owns it.
+  it('leads the Google button with the official G asset', () => {
+    renderPage();
+
+    const googleButton = screen.getByRole('button', {
+      name: 'Sign in with Google',
+    });
+
+    expect(googleButton.querySelector('img')).toHaveAttribute(
+      'src',
+      '/google-g.svg'
+    );
+  });
+});

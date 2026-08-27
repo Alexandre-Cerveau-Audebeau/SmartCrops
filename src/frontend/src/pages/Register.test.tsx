@@ -135,3 +135,29 @@ describe('Register — says WHICH rule failed (SMA-350)', () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe('Register — official Google mark on the OAuth button (SMA-57)', () => {
+  beforeEach(async () => {
+    mockRegister.mockReset();
+    await i18next.changeLanguage('en');
+  });
+
+  // The mark is decorative (empty alt), so it is invisible to role and name
+  // queries by design — it is reached through the button that owns it.
+  it('leads the Google button with the official G asset', () => {
+    render(
+      <MemoryRouter>
+        <Register />
+      </MemoryRouter>
+    );
+
+    const googleButton = screen.getByRole('button', {
+      name: 'Sign up with Google',
+    });
+
+    expect(googleButton.querySelector('img')).toHaveAttribute(
+      'src',
+      '/google-g.svg'
+    );
+  });
+});

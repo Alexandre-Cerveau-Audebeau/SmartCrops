@@ -17,6 +17,7 @@ import { EMAIL_NOT_CONFIRMED, resendConfirmation } from '../services/authApi';
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:5000';
 
+/** The sign-in page: email and password, the Google alternative, and the unconfirmed-account path. */
 export default function Login() {
   const { t } = useTranslation();
   const { login } = useAuth();
@@ -157,6 +158,7 @@ export default function Login() {
           <Button
             variant="outlined"
             fullWidth
+            startIcon={<img src="/google-g.svg" alt="" width={20} height={20} />}
             aria-label={t('auth.googleLogin')}
             onClick={() => {
               window.location.href = `${API_BASE}/api/auth/google-login`;
