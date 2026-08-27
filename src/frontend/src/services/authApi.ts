@@ -22,6 +22,7 @@ const API_BASE = '/api';
 export class RegisterFailedError extends Error {
   readonly codes: string[];
 
+  /** Builds the rejection from the server's joined descriptions and its raw Identity codes. */
   constructor(message: string, codes: string[]) {
     super(message);
     this.name = 'RegisterFailedError';
@@ -29,6 +30,7 @@ export class RegisterFailedError extends Error {
   }
 }
 
+/** Creates an account; rejects with {@link RegisterFailedError} carrying the refused rules' codes. */
 export async function register(email: string, password: string): Promise<void> {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',

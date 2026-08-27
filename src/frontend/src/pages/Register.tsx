@@ -30,7 +30,6 @@ const PASSWORD_RULE_KEYS: readonly (readonly [string, string])[] = [
   ['PasswordRequiresLower', 'auth.passwordRuleLower'],
   ['PasswordRequiresUpper', 'auth.passwordRuleUpper'],
   ['PasswordRequiresNonAlphanumeric', 'auth.passwordRuleSpecial'],
-  ['PasswordRequiresUniqueChars', 'auth.passwordRuleUnique'],
 ];
 
 /** The codes that are about the ADDRESS rather than the password. */
@@ -41,6 +40,7 @@ const ACCOUNT_ERROR_KEYS: Record<string, string> = {
   InvalidUserName: 'auth.registerErrorInvalidEmail',
 };
 
+/** The account-creation page: email, password with rules bubble, and the Google alternative. */
 export default function Register() {
   const { t } = useTranslation();
   const { register } = useAuth();
@@ -84,6 +84,7 @@ export default function Register() {
     return { message: t('auth.registerError'), rules: [] };
   };
 
+  /** Checks the two passwords match, then registers and routes the outcome to the Alert. */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);

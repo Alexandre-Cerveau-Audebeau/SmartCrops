@@ -9,7 +9,11 @@ import Typography from '@mui/material/Typography';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 
-/** The criteria the bubble lists, in the order the backend enforces them. */
+/**
+ * The criteria the bubble lists, in the order the backend enforces them. The
+ * vacuous RequiredUniqueChars rule is deliberately omitted, because a criterion
+ * that cannot fail would only be noise.
+ */
 const RULE_KEYS = [
   'auth.passwordRuleLength',
   'auth.passwordRuleDigit',

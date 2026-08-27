@@ -63,6 +63,7 @@ describe('Register — says WHICH rule failed (SMA-350)', () => {
     await i18next.changeLanguage('fr');
   });
 
+  /** Renders the page and submits a filled, self-consistent form so the server answer is what fails. */
   async function submitRegistration() {
     render(
       <MemoryRouter>

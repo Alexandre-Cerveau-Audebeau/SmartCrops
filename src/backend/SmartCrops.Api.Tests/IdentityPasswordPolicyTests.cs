@@ -16,6 +16,9 @@ namespace SmartCrops.Api.Tests;
 /// </summary>
 public class IdentityPasswordPolicyTests
 {
+    /// <summary>
+    /// Resolves the booted host's <see cref="IdentityOptions"/> and asserts the six pinned password values.
+    /// </summary>
     [Fact]
     public void PasswordPolicy_IsPinnedToTheSixRulesTheRegistrationUiStates()
     {

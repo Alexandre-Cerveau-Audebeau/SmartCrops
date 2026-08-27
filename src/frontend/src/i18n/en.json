@@ -356,7 +356,6 @@
     "passwordRuleLower": "at least one lowercase letter",
     "passwordRuleUpper": "at least one uppercase letter",
     "passwordRuleSpecial": "at least one special character",
-    "passwordRuleUnique": "at least one distinct character",
     "registerErrorEmailTaken": "This email address is already in use. Sign in, or reset your password.",
     "registerErrorInvalidEmail": "This email address is not valid.",
     "showPasswordHold": "Press and hold to show the password"

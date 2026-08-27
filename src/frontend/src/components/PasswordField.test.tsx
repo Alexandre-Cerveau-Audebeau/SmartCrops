@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
 import PasswordField from './PasswordField';
 
 const REVEAL_LABEL = 'Press and hold to show the password';
 
+/** Renders a bare PasswordField (no rules bubble) holding the given value. */
 function renderField(value: string) {
   return render(
     <PasswordField label="Password" value={value} onChange={vi.fn()} />
@@ -85,5 +86,40 @@ describe('PasswordField — hold to reveal (SMA-350)', () => {
 
     fireEvent.keyUp(button, { key: 'Enter' });
     expect(input).toHaveAttribute('type', 'password');
+  });
+});
+
+describe('PasswordField — the rules bubble (SMA-350, PR #212 round 1)', () => {
+  beforeEach(async () => {
+    await i18next.changeLanguage('en');
+  });
+
+  // Characterization: the bubble states FIVE criteria, not six. Identity's
+  // RequiredUniqueChars is pinned at 1 and is satisfied by every non-empty
+  // password, so the server can never refuse on it — listing a criterion that
+  // cannot fail would be noise. Two round-1 review comments proposed adding it;
+  // this test is what makes that decision break loudly if it is ever undone.
+  it('lists exactly the five criteria the server can actually refuse', async () => {
+    render(
+      <PasswordField label="Password" value="" onChange={vi.fn()} showRules />
+    );
+
+    fireEvent.focus(screen.getByLabelText(/^Password/));
+
+    const bubble = await screen.findByRole('tooltip');
+    expect(
+      within(bubble).getByText('Your password must contain:')
+    ).toBeInTheDocument();
+    expect(
+      within(bubble)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent)
+    ).toEqual([
+      'at least 6 characters',
+      'at least one digit',
+      'at least one lowercase letter',
+      'at least one uppercase letter',
+      'at least one special character',
+    ]);
   });
 });
