@@ -298,7 +298,8 @@
     "close": "Fermer",
     "backToTop": "Revenir en haut",
     "comingSoon": "Bientôt disponible",
-    "loading": "Chargement"
+    "loading": "Chargement",
+    "brandTitle": "SmartCrops — Votre jardin virtuel intelligent"
   },
   "auth": {
     "login": "Connexion",

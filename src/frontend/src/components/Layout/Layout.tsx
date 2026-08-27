@@ -4,14 +4,18 @@ import Toolbar from '@mui/material/Toolbar';
 import Footer from './Footer';
 import Navbar from './Navbar';
 import BackToTop from '../BackToTop';
+import DocumentHead from '../DocumentHead';
 
 interface LayoutProps {
   children: ReactNode;
 }
 
+/** App shell: head manager, navbar, clipped main content, footer, back-to-top. */
 export default function Layout({ children }: LayoutProps) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      {/* SMA-354: single mount point for the per-route title/canonical manager. */}
+      <DocumentHead />
       <Navbar />
       {/* Toolbar spacer pushes content below the fixed AppBar */}
       <Toolbar />

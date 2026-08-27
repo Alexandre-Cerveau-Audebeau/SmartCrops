@@ -72,6 +72,7 @@ import FaqSection from '../components/plantDetail/FaqSection';
 import { buildFaqItems } from '../utils/plantDetailFaq';
 import { resolveTranslatedField } from '../utils/getTranslation';
 import { capitalizeFirst } from '../utils/capitalizeFirst';
+import { setDocumentTitleOverride } from '../utils/documentTitleOverride';
 import { composeImageAttribution } from '../utils/imageAttribution';
 import { adaptBadge } from '../utils/badgeColors';
 import {
@@ -237,6 +238,21 @@ function CataloguePlantDetail() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, reloadCounter]);
+
+  // SMA-354: publish the resolved display name as the document-title override
+  // (same resolution as `displayName` below, which lives after the early
+  // returns) — cleared on unmount so the route title is restored. Scoped to
+  // the PLANT's own route (not the current URL, which may already point to the
+  // next plant while this state lingers — PR #211 round 1).
+  useEffect(() => {
+    if (!plant) return;
+    setDocumentTitleOverride(
+      capitalizeFirst(resolveTranslatedField(plant, language, 'commonName')) ??
+        plant.scientificName,
+      `/library/${plant.id}`
+    );
+    return () => setDocumentTitleOverride(null);
+  }, [plant, language]);
 
   const handleReEnrich = async (kind: 'trefle' | 'perenual') => {
     if (!plant) return;

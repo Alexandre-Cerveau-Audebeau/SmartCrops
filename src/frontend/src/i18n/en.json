@@ -298,7 +298,8 @@
     "close": "Close",
     "backToTop": "Back to top",
     "comingSoon": "Coming Soon",
-    "loading": "Loading"
+    "loading": "Loading",
+    "brandTitle": "SmartCrops — Your smart virtual garden"
   },
   "auth": {
     "login": "Login",
