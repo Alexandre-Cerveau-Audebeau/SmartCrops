@@ -157,6 +157,7 @@ export default function Login() {
           <Button
             variant="outlined"
             fullWidth
+            startIcon={<img src="/google-g.svg" alt="" width={20} height={20} />}
             aria-label={t('auth.googleLogin')}
             onClick={() => {
               window.location.href = `${API_BASE}/api/auth/google-login`;

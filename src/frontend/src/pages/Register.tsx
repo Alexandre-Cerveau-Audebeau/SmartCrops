@@ -216,6 +216,7 @@ export default function Register() {
           <Button
             variant="outlined"
             fullWidth
+            startIcon={<img src="/google-g.svg" alt="" width={20} height={20} />}
             aria-label={t('auth.googleRegister')}
             onClick={() => {
               window.location.href = `${API_BASE}/api/auth/google-login`;
