@@ -11,10 +11,6 @@ import {
 // social scrapers keep reading the static lot-1 head shipped in index.html.
 
 const SITE_NAME = 'SmartCrops';
-// Mirrors the static <title> of index.html — no existing i18n key carries this
-// exact brand meaning (home.hero.title reads differently), so the literal is
-// the source, per the SMA-354 design lock.
-const BRAND_TITLE = 'SmartCrops — Votre jardin virtuel intelligent';
 const CANONICAL_ORIGIN = 'https://smartcrops.fr';
 
 // Exact-path route → existing i18n label key. /auth/callback and
@@ -54,7 +50,12 @@ const CANONICAL_PATHS = new Set([
 
 /** Headless per-route document-title + canonical manager, mounted once in Layout. */
 export default function DocumentHead() {
-  const { pathname } = useLocation();
+  const { pathname: rawPathname } = useLocation();
+  // PR #211 round 2: trailing slashes are stripped once here so /about/ and
+  // /library/<id>/ resolve exactly like their canonical forms in every lookup
+  // below (titles, regexes, canonical set + href, override comparison — the
+  // overrides are published without a trailing slash). Root stays '/'.
+  const pathname = rawPathname.replace(/\/+$/, '') || '/';
   // useTranslation re-renders this component on languageChanged, so the title
   // recomposes in render scope and the effect below only touches the DOM when
   // the resulting strings actually change.
@@ -70,7 +71,9 @@ export default function DocumentHead() {
     // was published for, so a stale plant name never leaks onto the next page.
     title = `${override.name} · ${SITE_NAME}`;
   } else if (pathname === '/') {
-    title = BRAND_TITLE;
+    // PR #211 round 2: the brand title follows the active language (the FR
+    // value mirrors the static <title> of index.html; EN copy owner-validated).
+    title = t('common.brandTitle');
   } else if (PLANT_DETAIL_RE.test(pathname)) {
     title = `${t('library.title')} · ${SITE_NAME}`;
   } else if (PLANNER_RE.test(pathname)) {

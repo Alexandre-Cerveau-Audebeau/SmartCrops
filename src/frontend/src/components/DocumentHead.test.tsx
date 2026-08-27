@@ -12,9 +12,11 @@ import { setDocumentTitleOverride } from '../utils/documentTitleOverride';
 // routes only (upserted/removed at runtime), language reactivity, and the
 // plant-name override used by PlantDetail.
 
+/** Returns the current canonical <link> element, or null when absent. */
 const canonicalLink = () =>
   document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
 
+/** Renders DocumentHead (plus optional probes) inside a MemoryRouter at `path`. */
 function renderAt(path: string, children?: React.ReactNode) {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -24,8 +26,10 @@ function renderAt(path: string, children?: React.ReactNode) {
   );
 }
 
-// Mimics PlantDetail's contract: set the loaded display name (scoped to the
-// plant's own route) on mount, clear on unmount so the route title is restored.
+/**
+ * Mimics PlantDetail's contract: set the loaded display name (scoped to the
+ * plant's own route) on mount, clear on unmount so the route title is restored.
+ */
 function PlantNameProbe({ name, pathname }: { name: string; pathname: string }) {
   useEffect(() => {
     setDocumentTitleOverride(name, pathname);
@@ -34,10 +38,12 @@ function PlantNameProbe({ name, pathname }: { name: string; pathname: string }) 
   return null;
 }
 
-// Exposes the router's navigate function so a test can change routes while the
-// tree stays mounted (PlantDetail does not unmount between two plant pages).
-// Captured in an effect, not during render (react-hooks/globals).
 let navigateTo: (to: string) => void;
+/**
+ * Exposes the router's navigate function so a test can change routes while the
+ * tree stays mounted (PlantDetail does not unmount between two plant pages).
+ * Captured in an effect, not during render (react-hooks/globals).
+ */
 function NavigationProbe() {
   const navigate = useNavigate();
   useEffect(() => {
@@ -101,6 +107,25 @@ describe('DocumentHead (SMA-354)', () => {
       </MemoryRouter>
     );
     expect(document.title).toBe('Bibliothèque de plantes · SmartCrops');
+  });
+
+  it('localizes the home title with the active language', async () => {
+    renderAt('/');
+    expect(document.title).toBe(
+      'SmartCrops — Votre jardin virtuel intelligent'
+    );
+    await act(async () => {
+      await i18next.changeLanguage('en');
+    });
+    expect(document.title).toBe('SmartCrops — Your smart virtual garden');
+  });
+
+  it('normalizes trailing slashes for titles and canonical', () => {
+    renderAt('/about/');
+    expect(document.title).toBe('À propos de nous · SmartCrops');
+    expect(canonicalLink()?.getAttribute('href')).toBe(
+      'https://smartcrops.fr/about'
+    );
   });
 
   it('scopes the plant-name override to its own route', () => {
