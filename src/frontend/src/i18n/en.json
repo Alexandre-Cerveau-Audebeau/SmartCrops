@@ -349,7 +349,16 @@
     "resetPasswordError": "Password reset failed. The link may be invalid or expired.",
     "resetPasswordInvalidLink": "This reset link is invalid or incomplete.",
     "resetPasswordValidating": "Checking your reset link...",
-    "resetPasswordRateLimited": "Too many attempts. Please wait a moment and try again."
+    "resetPasswordRateLimited": "Too many attempts. Please wait a moment and try again.",
+    "passwordRulesTitle": "Your password must contain:",
+    "passwordRuleLength": "at least 6 characters",
+    "passwordRuleDigit": "at least one digit",
+    "passwordRuleLower": "at least one lowercase letter",
+    "passwordRuleUpper": "at least one uppercase letter",
+    "passwordRuleSpecial": "at least one special character",
+    "registerErrorEmailTaken": "This email address is already in use. Sign in, or reset your password.",
+    "registerErrorInvalidEmail": "This email address is not valid.",
+    "showPasswordHold": "Press and hold to show the password"
   },
   "notFound": {
     "title": "404",

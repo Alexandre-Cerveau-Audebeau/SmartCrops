@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { logout, RESET_RATE_LIMITED, resetPassword } from './authApi';
+import { logout, register, RESET_RATE_LIMITED, resetPassword } from './authApi';
 
 // contactApi.test.ts pattern: stub global fetch, restore after each test.
 // First service-level coverage of authApi (SMA-323 R4): the page tests mock
@@ -78,6 +78,55 @@ describe('resetPassword (SMA-323)', () => {
     ).rejects.toMatchObject({
       message:
         "Passwords must have at least one uppercase ('A'-'Z')., Passwords must have at least one digit ('0'-'9').",
+    });
+  });
+});
+
+describe('register (SMA-350)', () => {
+  // The API has always answered a failed CreateAsync with the IdentityError[]
+  // — code AND description — but the client read only the descriptions, so
+  // the page could never say WHICH rule was missing. The codes are the
+  // machine-readable half and the only thing translatable client-side (the
+  // backend has no localization), so they are what the rejection must carry.
+  it('rejects with an error exposing the CODES of a 400 IdentityError array', async () => {
+    mockFetch({
+      ok: false,
+      status: 400,
+      json: async () => [
+        {
+          code: 'PasswordRequiresUpper',
+          description: "Passwords must have at least one uppercase ('A'-'Z').",
+        },
+        {
+          code: 'PasswordRequiresDigit',
+          description: "Passwords must have at least one digit ('0'-'9').",
+        },
+      ],
+    });
+
+    await expect(register('alex@example.com', 'weakpassword')).rejects.toMatchObject({
+      name: 'RegisterFailedError',
+      codes: ['PasswordRequiresUpper', 'PasswordRequiresDigit'],
+      message:
+        "Passwords must have at least one uppercase ('A'-'Z')., Passwords must have at least one digit ('0'-'9').",
+    });
+  });
+
+  // The [MinLength(6)] DTO guard fires BEFORE CreateAsync and answers
+  // ValidationProblemDetails — an object, not an array. No Identity code
+  // exists to translate, so the caller must get an empty list and fall back
+  // to the generic message rather than an undefined it would have to guard.
+  it('rejects with an empty code list when the 400 body is not an array', async () => {
+    mockFetch({
+      ok: false,
+      status: 400,
+      json: async () => ({ errors: { Password: ['The field is too short.'] } }),
+    });
+
+    await expect(register('alex@example.com', 'ab')).rejects.toMatchObject({
+      name: 'RegisterFailedError',
+      codes: [],
+      message: 'Registration failed',
     });
   });
 });
