@@ -95,6 +95,7 @@ describe('Navbar v2 (SMA-152 / SMA-150)', () => {
     // stored key on mount (mirrors Home.test), not just i18next.
     localStorage.setItem('smartcrops-language', 'en');
     localStorage.removeItem('smartcrops.unitSystem');
+    localStorage.removeItem('smartcrops-color-mode');
     await i18next.changeLanguage('en');
   });
 
@@ -192,6 +193,70 @@ describe('Navbar v2 (SMA-152 / SMA-150)', () => {
       await screen.findByRole('link', { name: 'Boutique' })
     ).toHaveAttribute('href', '/shop');
   });
+
+  // SMA-315 (respec) — the theme row is a real MenuItem that toggles the mode
+  // and closes the menu. Its label names the DESTINATION, not the current mode.
+  // The colour mode is observed through localStorage, the same observable the
+  // units row is asserted on below: ColorModeProvider persists every change
+  // there, and the row unmounts with the menu on activation.
+  it('offers the dark-mode destination in light mode and switches to it', async () => {
+    const user = userEvent.setup();
+    renderNavbar(makeAuth({ isAuthenticated: true, user: TEST_USER }));
+
+    await user.click(screen.getByRole('button', { name: /Alex Gardener/ }));
+    const menu = await screen.findByRole('menu');
+
+    // Light is the stubbed-matchMedia default, so the row offers dark.
+    const row = within(menu).getByRole('menuitem', { name: 'Dark mode' });
+    expect(within(menu).queryByRole('menuitem', { name: 'Light mode' })).toBeNull();
+    // The row is active: no Coming Soon chip, unlike Notifications/Settings.
+    expect(within(row).queryByText('Coming Soon')).toBeNull();
+
+    await user.click(row);
+
+    expect(localStorage.getItem('smartcrops-color-mode')).toBe('dark');
+    // Activation closes the menu, exactly like the sibling rows.
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  });
+
+  it('offers the light-mode destination when the stored mode is dark', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem('smartcrops-color-mode', 'dark');
+    renderNavbar(makeAuth({ isAuthenticated: true, user: TEST_USER }));
+
+    await user.click(screen.getByRole('button', { name: /Alex Gardener/ }));
+    const menu = await screen.findByRole('menu');
+
+    expect(
+      within(menu).getByRole('menuitem', { name: 'Light mode' })
+    ).toBeInTheDocument();
+    expect(within(menu).queryByRole('menuitem', { name: 'Dark mode' })).toBeNull();
+  });
+
+  // The regression that matters (SMA-315 respec): the previous shape was a
+  // plain Box, which MenuList's focus walk skips because it carries no
+  // tabindex — the control was pointer-only. As a MenuItem the row is
+  // focusable like its siblings and Enter activates it.
+  it('exposes the theme row to the keyboard, like its sibling menu items', async () => {
+    const user = userEvent.setup();
+    renderNavbar(makeAuth({ isAuthenticated: true, user: TEST_USER }));
+
+    await user.click(screen.getByRole('button', { name: /Alex Gardener/ }));
+    const menu = await screen.findByRole('menu');
+
+    const row = within(menu).getByRole('menuitem', { name: 'Dark mode' });
+    const settings = within(menu).getByRole('menuitem', { name: /Settings/ });
+    // MUI stamps a tabindex on every enabled MenuItem; that attribute is what
+    // MenuList's moveFocus requires before it will land on an element.
+    expect(settings).toHaveAttribute('tabindex');
+    expect(row).toHaveAttribute('tabindex');
+
+    row.focus();
+    expect(row).toHaveFocus();
+    await user.keyboard('{Enter}');
+
+    expect(localStorage.getItem('smartcrops-color-mode')).toBe('dark');
+  });
 });
 
 describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
@@ -199,6 +264,7 @@ describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
     // SMA-393: store 'en' like a returning visitor — the fr default would win otherwise.
     localStorage.setItem('smartcrops-language', 'en');
     localStorage.removeItem('smartcrops.unitSystem');
+    localStorage.removeItem('smartcrops-color-mode');
     await i18next.changeLanguage('en');
   });
 

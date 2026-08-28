@@ -21,7 +21,9 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import CloseIcon from '@mui/icons-material/Close';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
 import GrassIcon from '@mui/icons-material/Grass';
+import LightModeIcon from '@mui/icons-material/LightMode';
 import LocalFloristIcon from '@mui/icons-material/LocalFlorist';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -31,6 +33,7 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import TuneIcon from '@mui/icons-material/Tune';
 import { NAV_BG } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
+import { useColorMode } from '../../hooks/useColorMode';
 import ComingSoonChip from '../ComingSoonChip';
 import LanguageMenu from '../LanguageMenu';
 import ThemeModeSwitch from '../ThemeModeSwitch';
@@ -75,6 +78,7 @@ const menuRowHoverSx = {
   '&:hover': { bgcolor: 'rgba(46,139,87,0.10)' },
 } as const;
 
+/** Top navigation bar: nav links, the language control, the mobile drawer, and the authenticated profile menu. */
 export default function Navbar() {
   const { t } = useTranslation();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -84,6 +88,7 @@ export default function Navbar() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const location = useLocation();
   const { isAuthenticated, user, logout } = useAuth();
+  const { toggle: toggleColorMode } = useColorMode();
 
   const toggleDrawer = (open: boolean) => () => setDrawerOpen(open);
 
@@ -524,6 +529,36 @@ export default function Navbar() {
                         </ListItemIcon>
                         <ListItemText primary={t('nav.settings')} />
                         <ComingSoonChip sx={{ ml: 1.5 }} />
+                      </MenuItem>
+                      {/* SMA-315 — a real MenuItem, not a container wrapping
+                          the segmented switch. MenuList's focus walk skips any
+                          child that carries no tabindex, and Menu intercepts
+                          Tab to close itself, so a non-MenuItem row is
+                          pointer-only; a MenuItem is keyboard-operable for
+                          free. Label and icon name the DESTINATION mode, not
+                          the current one. Activation toggles, then closes the
+                          menu like every sibling row. */}
+                      <MenuItem
+                        onClick={() => {
+                          toggleColorMode();
+                          closeProfileMenu();
+                        }}
+                        sx={menuRowHoverSx}
+                      >
+                        <ListItemIcon>
+                          {mode === 'dark' ? (
+                            <LightModeIcon fontSize="small" />
+                          ) : (
+                            <DarkModeIcon fontSize="small" />
+                          )}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={
+                            mode === 'dark'
+                              ? t('footer.lightMode')
+                              : t('footer.darkMode')
+                          }
+                        />
                       </MenuItem>
                       <Divider />
                       <MenuItem onClick={handleLogout} sx={menuRowHoverSx}>
