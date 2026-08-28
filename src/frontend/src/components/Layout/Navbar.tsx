@@ -5,7 +5,7 @@ import { Link as RouterLink, useLocation } from 'react-router-dom';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Divider from '@mui/material/Divider';
+import Divider, { dividerClasses } from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
@@ -33,6 +33,7 @@ import { NAV_BG } from '../../constants/colors';
 import { useAuth } from '../../hooks/useAuth';
 import ComingSoonChip from '../ComingSoonChip';
 import LanguageMenu from '../LanguageMenu';
+import { Sym } from '../Sym';
 import ThemeModeSwitch from '../ThemeModeSwitch';
 import UnitSystemSwitch from './UnitSystemSwitch';
 import LogoButton from '../LogoButton';
@@ -525,6 +526,46 @@ export default function Navbar() {
                         <ListItemText primary={t('nav.settings')} />
                         <ComingSoonChip sx={{ ml: 1.5 }} />
                       </MenuItem>
+                      {/* SMA-315 — the day/night switch the mobile drawer
+                          has carried since SMA-247. A Box, NOT a MenuItem:
+                          a MenuItem closes the menu on click, and the click
+                          belongs to the switch's own buttons. The sx repeats
+                          what MenuItem gives its siblings (48px min height,
+                          16/6 gutters, 36px icon slot, flush text, 8px
+                          margins on the Divider that follows); the pill
+                          keeps the white-on-green switch legible on the
+                          menu's white paper, exactly as in the drawer. */}
+                      <Box
+                        component="li"
+                        role="none"
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          minHeight: 48,
+                          px: 2,
+                          py: 0.75,
+                          listStyle: 'none',
+                          [`& + .${dividerClasses.root}`]: { my: 1 },
+                        }}
+                      >
+                        <ListItemIcon sx={{ minWidth: 36 }}>
+                          <Sym name="dark_mode" size={20} />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={t('footer.theme')}
+                          sx={{ my: 0 }}
+                        />
+                        <Box
+                          sx={{
+                            bgcolor: NAV_BG,
+                            borderRadius: 999,
+                            display: 'inline-flex',
+                            ml: 1.5,
+                          }}
+                        >
+                          <ThemeModeSwitch />
+                        </Box>
+                      </Box>
                       <Divider />
                       <MenuItem onClick={handleLogout} sx={menuRowHoverSx}>
                         <ListItemIcon>

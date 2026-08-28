@@ -95,6 +95,7 @@ describe('Navbar v2 (SMA-152 / SMA-150)', () => {
     // stored key on mount (mirrors Home.test), not just i18next.
     localStorage.setItem('smartcrops-language', 'en');
     localStorage.removeItem('smartcrops.unitSystem');
+    localStorage.removeItem('smartcrops-color-mode');
     await i18next.changeLanguage('en');
   });
 
@@ -192,6 +193,35 @@ describe('Navbar v2 (SMA-152 / SMA-150)', () => {
       await screen.findByRole('link', { name: 'Boutique' })
     ).toHaveAttribute('href', '/shop');
   });
+
+  // SMA-315 — the desktop profile menu now carries the same day/night switch
+  // the mobile drawer has had since SMA-247, and clicking it must NOT dismiss
+  // the menu (the row is a plain Box, not a MenuItem).
+  it('carries the day/night switch in the profile menu, without closing it (desktop)', async () => {
+    const user = userEvent.setup();
+    renderNavbar(makeAuth({ isAuthenticated: true, user: TEST_USER }));
+
+    await user.click(screen.getByRole('button', { name: /Alex Gardener/ }));
+    const menu = await screen.findByRole('menu');
+
+    // Both options stay visible; light is the stubbed-matchMedia default.
+    expect(
+      within(menu).getByRole('button', { name: 'Light mode' })
+    ).toHaveAttribute('aria-pressed', 'true');
+    const dark = within(menu).getByRole('button', { name: 'Dark mode' });
+    expect(dark).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(dark);
+
+    // Re-queried through the menu: it is still open, and dark is now pressed.
+    const openMenu = screen.getByRole('menu');
+    expect(
+      within(openMenu).getByRole('button', { name: 'Light mode' })
+    ).toHaveAttribute('aria-pressed', 'false');
+    expect(
+      within(openMenu).getByRole('button', { name: 'Dark mode' })
+    ).toHaveAttribute('aria-pressed', 'true');
+  });
 });
 
 describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
@@ -199,6 +229,7 @@ describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
     // SMA-393: store 'en' like a returning visitor — the fr default would win otherwise.
     localStorage.setItem('smartcrops-language', 'en');
     localStorage.removeItem('smartcrops.unitSystem');
+    localStorage.removeItem('smartcrops-color-mode');
     await i18next.changeLanguage('en');
   });
 
