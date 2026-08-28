@@ -1,5 +1,5 @@
-# CD (Lot 3 of the deployment chantier, SMA-41). Push-is-publish: every
-# green-CI push to main builds both prod images, pushes them to GHCR
+# CD (Lot 3 of the deployment chantier, SMA-41). Push-is-publish: on main,
+# the newest green-CI push builds both prod images, pushes them to GHCR
 # tagged sha-<commit>, and deploys that exact commit to the VPS over SSH.
 # Images are PULLED by the VPS, never built there (1 vCPU). A red deploy
 # NEVER rolls back automatically — rollback.yml is the operator's button.
