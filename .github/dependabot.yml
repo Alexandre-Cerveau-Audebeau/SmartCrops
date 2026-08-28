@@ -1,10 +1,13 @@
-# SMA-410 made main the published branch: publishing is a fast-forward push of
+# SMA-410: main is the published branch. Publishing is a fast-forward push of
 # develop onto main, and main is protected so that it only ever receives those
-# promotions. This repository had no Dependabot config, so Dependabot opened its
-# pull requests against the DEFAULT branch — which is about to become main.
-# Every ecosystem below therefore names develop explicitly, so dependency
-# updates keep entering through integration and never land on the published
-# branch.
+# promotions. Every entry below therefore names develop explicitly, so VERSION
+# updates enter through integration.
+#
+# That is all target-branch governs. Dependabot raises SECURITY pull requests
+# against the repository's DEFAULT branch and ignores target-branch, so the
+# default branch must REMAIN develop: making main the default would send
+# security fixes straight onto the published branch, around the promotion
+# model.
 version: 2
 updates:
   # GitHub Actions — .github/workflows/{ci,cd,rollback}.yml and
