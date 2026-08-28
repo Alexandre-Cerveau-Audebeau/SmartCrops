@@ -78,6 +78,7 @@ const menuRowHoverSx = {
   '&:hover': { bgcolor: 'rgba(46,139,87,0.10)' },
 } as const;
 
+/** Top navigation bar: nav links, the language control, the mobile drawer, and the authenticated profile menu. */
 export default function Navbar() {
   const { t } = useTranslation();
   const [drawerOpen, setDrawerOpen] = useState(false);
