@@ -194,33 +194,68 @@ describe('Navbar v2 (SMA-152 / SMA-150)', () => {
     ).toHaveAttribute('href', '/shop');
   });
 
-  // SMA-315 — the desktop profile menu now carries the same day/night switch
-  // the mobile drawer has had since SMA-247, and clicking it must NOT dismiss
-  // the menu (the row is a plain Box, not a MenuItem).
-  it('carries the day/night switch in the profile menu, without closing it (desktop)', async () => {
+  // SMA-315 (respec) — the theme row is a real MenuItem that toggles the mode
+  // and closes the menu. Its label names the DESTINATION, not the current mode.
+  // The colour mode is observed through localStorage, the same observable the
+  // units row is asserted on below: ColorModeProvider persists every change
+  // there, and the row unmounts with the menu on activation.
+  it('offers the dark-mode destination in light mode and switches to it', async () => {
     const user = userEvent.setup();
     renderNavbar(makeAuth({ isAuthenticated: true, user: TEST_USER }));
 
     await user.click(screen.getByRole('button', { name: /Alex Gardener/ }));
     const menu = await screen.findByRole('menu');
 
-    // Both options stay visible; light is the stubbed-matchMedia default.
-    expect(
-      within(menu).getByRole('button', { name: 'Light mode' })
-    ).toHaveAttribute('aria-pressed', 'true');
-    const dark = within(menu).getByRole('button', { name: 'Dark mode' });
-    expect(dark).toHaveAttribute('aria-pressed', 'false');
+    // Light is the stubbed-matchMedia default, so the row offers dark.
+    const row = within(menu).getByRole('menuitem', { name: 'Dark mode' });
+    expect(within(menu).queryByRole('menuitem', { name: 'Light mode' })).toBeNull();
+    // The row is active: no Coming Soon chip, unlike Notifications/Settings.
+    expect(within(row).queryByText('Coming Soon')).toBeNull();
 
-    await user.click(dark);
+    await user.click(row);
 
-    // Re-queried through the menu: it is still open, and dark is now pressed.
-    const openMenu = screen.getByRole('menu');
+    expect(localStorage.getItem('smartcrops-color-mode')).toBe('dark');
+    // Activation closes the menu, exactly like the sibling rows.
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  });
+
+  it('offers the light-mode destination when the stored mode is dark', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem('smartcrops-color-mode', 'dark');
+    renderNavbar(makeAuth({ isAuthenticated: true, user: TEST_USER }));
+
+    await user.click(screen.getByRole('button', { name: /Alex Gardener/ }));
+    const menu = await screen.findByRole('menu');
+
     expect(
-      within(openMenu).getByRole('button', { name: 'Light mode' })
-    ).toHaveAttribute('aria-pressed', 'false');
-    expect(
-      within(openMenu).getByRole('button', { name: 'Dark mode' })
-    ).toHaveAttribute('aria-pressed', 'true');
+      within(menu).getByRole('menuitem', { name: 'Light mode' })
+    ).toBeInTheDocument();
+    expect(within(menu).queryByRole('menuitem', { name: 'Dark mode' })).toBeNull();
+  });
+
+  // The regression that matters (SMA-315 respec): the previous shape was a
+  // plain Box, which MenuList's focus walk skips because it carries no
+  // tabindex — the control was pointer-only. As a MenuItem the row is
+  // focusable like its siblings and Enter activates it.
+  it('exposes the theme row to the keyboard, like its sibling menu items', async () => {
+    const user = userEvent.setup();
+    renderNavbar(makeAuth({ isAuthenticated: true, user: TEST_USER }));
+
+    await user.click(screen.getByRole('button', { name: /Alex Gardener/ }));
+    const menu = await screen.findByRole('menu');
+
+    const row = within(menu).getByRole('menuitem', { name: 'Dark mode' });
+    const settings = within(menu).getByRole('menuitem', { name: /Settings/ });
+    // MUI stamps a tabindex on every enabled MenuItem; that attribute is what
+    // MenuList's moveFocus requires before it will land on an element.
+    expect(settings).toHaveAttribute('tabindex');
+    expect(row).toHaveAttribute('tabindex');
+
+    row.focus();
+    expect(row).toHaveFocus();
+    await user.keyboard('{Enter}');
+
+    expect(localStorage.getItem('smartcrops-color-mode')).toBe('dark');
   });
 });
 
