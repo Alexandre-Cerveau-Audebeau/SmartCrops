@@ -1,5 +1,5 @@
-# CD (Lot 3 of the deployment chantier, SMA-41). Merge-is-publish: every
-# green-CI push to develop builds both prod images, pushes them to GHCR
+# CD (Lot 3 of the deployment chantier, SMA-41). Push-is-publish: every
+# green-CI push to main builds both prod images, pushes them to GHCR
 # tagged sha-<commit>, and deploys that exact commit to the VPS over SSH.
 # Images are PULLED by the VPS, never built there (1 vCPU). A red deploy
 # NEVER rolls back automatically — rollback.yml is the operator's button.
@@ -20,13 +20,16 @@
 #     `up`, so the seeder no-ops instead of reseeding from scratch.
 name: CD
 
+# Branch model (SMA-410): main is what production runs; develop
+# integrates and no longer publishes — publishing is a fast-forward
+# push of develop onto main.
 on:
   workflow_run:
     # Character-for-character the `name:` of .github/workflows/ci.yml — a
     # rename there silently orphans this trigger.
     workflows: ["CI"]
     types: [completed]
-    branches: [develop]
+    branches: [main]
 
 # Deploys QUEUE and are never cancelled mid-flight: interrupting a
 # half-applied `compose up` is strictly worse than finishing it and then
@@ -45,14 +48,14 @@ jobs:
   build-and-push:
     # Trusted-push gate (R1): `conclusion == success` alone is NOT enough —
     # ci.yml also runs on pull_request, and a fork PR can complete CI with
-    # head_branch 'develop'. Without the event + repository identity
+    # head_branch 'main'. Without the event + repository identity
     # checks, this privileged workflow would check out untrusted code while
     # holding deploy credentials and packages: write.
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_repository.full_name == github.repository &&
-      github.event.workflow_run.head_branch == 'develop'
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # This explicit block REPLACES the default set — every unlisted scope
@@ -77,11 +80,11 @@ jobs:
           # The cd-production concurrency group queues by COMPLETION time,
           # not commit order: CI for old commit A finishing after newer
           # commit B would otherwise regress production to A — silently and
-          # successfully. Only the newest green push run on develop deploys;
+          # successfully. Only the newest green push run on main deploys;
           # every later step in this job and the whole deploy job gate on
           # this output.
           latest=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow CI \
-            --branch develop --event push --status success --limit 1 \
+            --branch main --event push --status success --limit 1 \
             --json headSha --jq '.[0].headSha')
           # An empty/null answer is an API anomaly, not a verdict: fail RED
           # (re-runnable) instead of silently stranding a genuine deploy
@@ -90,8 +93,8 @@ jobs:
             echo "could not determine the newest green CI run - failing loudly rather than guessing"
             exit 1
           fi
-          echo "newest green CI push run on develop: $latest"
-          echo "this run:                            $HEAD_SHA"
+          echo "newest green CI push run on main: $latest"
+          echo "this run:                         $HEAD_SHA"
           if [ "$latest" = "$HEAD_SHA" ]; then
             echo "is_latest=true" >> "$GITHUB_OUTPUT"
           else
