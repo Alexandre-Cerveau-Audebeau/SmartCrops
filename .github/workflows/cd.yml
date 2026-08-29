@@ -104,7 +104,7 @@ jobs:
 
       - name: Checkout the CI-validated commit
         if: steps.stale.outputs.is_latest == 'true'
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Pinned to the commit CI actually validated — checking out the
           # branch here would let a LATER push smuggle unvalidated code into
@@ -149,7 +149,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout the CI-validated commit
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Same pin as build-and-push: the compose and routing files shipped
           # below come from the exact commit whose images were just built.
