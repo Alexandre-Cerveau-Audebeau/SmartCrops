@@ -1,0 +1,78 @@
+# SMA-410: main is the published branch. Publishing is a fast-forward push of
+# develop onto main, and main is protected so that it only ever receives those
+# promotions. Every entry below therefore names develop explicitly, so VERSION
+# updates enter through integration.
+#
+# That is all target-branch governs. Dependabot raises SECURITY pull requests
+# against the repository's DEFAULT branch and ignores target-branch, so the
+# default branch must REMAIN develop: making main the default would send
+# security fixes straight onto the published branch, around the promotion
+# model.
+version: 2
+updates:
+  # GitHub Actions — .github/workflows/{ci,cd,rollback}.yml and
+  # .github/actions/ssh-health-gate/action.yml. Dependabot requires "/" for this
+  # ecosystem; it resolves .github itself rather than a nested path.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # npm — src/frontend/package.json is the only package.json outside
+  # node_modules, and it is the directory Dependabot already uses today.
+  - package-ecosystem: "npm"
+    directory: "/src/frontend"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+
+  # NuGet — one entry per project directory, taken verbatim from the four
+  # tracked .csproj paths. Listed individually rather than pointing at the root
+  # solution so that no project depends on recursive discovery.
+  - package-ecosystem: "nuget"
+    directory: "/src/backend/SmartCrops.Api"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "nuget"
+    directory: "/src/backend/SmartCrops.Api.Tests"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "nuget"
+    directory: "/src/backend/SmartCrops.Core"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "nuget"
+    directory: "/src/backend/SmartCrops.Infrastructure"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Docker — the tracked Dockerfiles live in two directories: the API image, and
+  # src/frontend which holds both Dockerfile and Dockerfile.prod (one entry
+  # covers every Dockerfile in a directory).
+  - package-ecosystem: "docker"
+    directory: "/src/backend/SmartCrops.Api"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "docker"
+    directory: "/src/frontend"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
