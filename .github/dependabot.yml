@@ -19,6 +19,17 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    # Majors are never auto-proposed (every entry below carries the same rule);
+    # they get dedicated tickets and PRs. github-actions majors (checkout v7,
+    # setup-node v7, setup-dotnet v6, ...) are deliberately included in this
+    # freeze and will be taken via dedicated PRs when chosen.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      github-actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # npm — src/frontend/package.json is the only package.json outside
   # node_modules, and it is the directory Dependabot already uses today.
@@ -28,6 +39,13 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      npm-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # NuGet — one entry per project directory, taken verbatim from the four
   # tracked .csproj paths. Listed individually rather than pointing at the root
@@ -38,6 +56,13 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      nuget-api-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "nuget"
     directory: "/src/backend/SmartCrops.Api.Tests"
@@ -45,6 +70,13 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      nuget-api-tests-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "nuget"
     directory: "/src/backend/SmartCrops.Core"
@@ -52,6 +84,13 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      nuget-core-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "nuget"
     directory: "/src/backend/SmartCrops.Infrastructure"
@@ -59,6 +98,13 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      nuget-infrastructure-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # Docker — the tracked Dockerfiles live in two directories: the API image, and
   # src/frontend which holds both Dockerfile and Dockerfile.prod (one entry
@@ -69,6 +115,13 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      docker-api-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "docker"
     directory: "/src/frontend"
@@ -76,3 +129,10 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      docker-frontend-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
