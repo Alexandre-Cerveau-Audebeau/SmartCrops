@@ -1,7 +1,7 @@
 # Production image: build the static bundle, serve it with nginx.
 # The dev Dockerfile (Vite dev server) is untouched — this file is the
 # deployment artifact only, built in CI and pulled from GHCR by tag.
-FROM node:20-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 
 COPY package*.json ./
