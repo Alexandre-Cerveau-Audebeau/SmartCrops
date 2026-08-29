@@ -124,7 +124,7 @@ jobs:
 
       - name: Build and push the api image
         if: steps.stale.outputs.is_latest == 'true'
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: src/backend
           file: src/backend/SmartCrops.Api/Dockerfile
@@ -133,7 +133,7 @@ jobs:
 
       - name: Build and push the web image
         if: steps.stale.outputs.is_latest == 'true'
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: src/frontend
           file: src/frontend/Dockerfile.prod
