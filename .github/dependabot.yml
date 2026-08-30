@@ -19,10 +19,11 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
-    # Majors are never auto-proposed (every entry below carries the same rule);
-    # they get dedicated tickets and PRs. github-actions majors (checkout v7,
-    # setup-node v7, setup-dotnet v6, ...) are deliberately included in this
-    # freeze and will be taken via dedicated PRs when chosen.
+    # Non-security majors are excluded from automatic version-update PRs (every
+    # entry below carries the same rule) and arrive through dedicated tickets
+    # and PRs; github-actions majors (checkout v7, setup-node v7, setup-dotnet
+    # v6, ...) are deliberately in that freeze. Security updates remain
+    # automatic, including when they require a major.
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
