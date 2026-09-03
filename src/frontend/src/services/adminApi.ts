@@ -1,3 +1,10 @@
+import type {
+  AdminDashboardStats,
+  AdminUserListItem,
+  PagedResponse,
+} from '../types/Admin';
+import { fetchJson } from './fetchJson';
+
 const API_BASE = '/api/admin';
 
 /**
@@ -78,4 +85,36 @@ export function reEnrichTrefle(plantId: string): Promise<ReEnrichResponse> {
 /** POST `/api/admin/perenual/enrich/{plantId}` and return the parsed response. */
 export function reEnrichPerenual(plantId: string): Promise<ReEnrichResponse> {
   return postEnrich('perenual', plantId);
+}
+
+/**
+ * SMA-414 — GET `/api/admin/dashboard/stats`. Admin-only: a 403 surfaces as
+ * an {@link HttpStatusError} the page turns into its 403 state.
+ */
+export function fetchAdminStats(
+  signal?: AbortSignal
+): Promise<AdminDashboardStats> {
+  return fetchJson<AdminDashboardStats>(`${API_BASE}/dashboard/stats`, {
+    credentials: 'include',
+    signal,
+  });
+}
+
+/**
+ * SMA-414 — GET `/api/admin/dashboard/users?page=&pageSize=` (1-based page,
+ * pageSize 1..100 — the API answers 400 outside those bounds).
+ */
+export function fetchAdminUsers(
+  page: number,
+  pageSize: number,
+  signal?: AbortSignal
+): Promise<PagedResponse<AdminUserListItem>> {
+  const qs = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  return fetchJson<PagedResponse<AdminUserListItem>>(
+    `${API_BASE}/dashboard/users?${qs.toString()}`,
+    { credentials: 'include', signal }
+  );
 }

@@ -13,7 +13,8 @@
     "closeMenu": "Fermer le menu",
     "changeLanguage": "Changer de langue",
     "language": "Langue",
-    "units": "Unités"
+    "units": "Unités",
+    "admin": "Administration"
   },
   "errorBoundary": {
     "title": "Une erreur est survenue",
@@ -1602,5 +1603,82 @@
     "title": "Boutique",
     "teaser": "Bientôt : plantes, graines, terreaux et objets connectés compatibles SmartCrops.",
     "cta": "Parcourir la bibliothèque"
+  },
+  "admin": {
+    "title": "Administration",
+    "meta": {
+      "users_one": "{{count}} utilisateur",
+      "users_other": "{{count}} utilisateurs",
+      "gardens_one": "{{count}} jardin",
+      "gardens_other": "{{count}} jardins",
+      "placements_one": "{{count}} placement",
+      "placements_other": "{{count}} placements",
+      "line": "{{users}} · {{gardens}} · {{placements}} — données du {{date}}",
+      "lineMobile": "{{users}} · {{gardens}} · {{placements}}"
+    },
+    "chips": {
+      "role": "Rôle Admin · {{name}}",
+      "roleShort": "Rôle Admin",
+      "readOnly": "Lecture seule"
+    },
+    "tiles": {
+      "users": "Utilisateurs",
+      "usersSub": "<strong>+{{last7}}</strong> sur 7 jours · <strong>+{{last30}}</strong> sur 30 jours",
+      "usersSubMobile": "<strong>+{{last7}}</strong> / 7 j · <strong>+{{last30}}</strong> / 30 j",
+      "gardens": "Jardins créés",
+      "gardensMobile": "Jardins",
+      "gardensSub": "le plus récent créé {{relative}}",
+      "gardensSubMobile": "le dernier {{relative}}",
+      "gardensSubEmpty": "—",
+      "placements": "Placements posés",
+      "placementsMobile": "Placements",
+      "placementsSub_one": "répartis sur {{count}} jardin",
+      "placementsSub_other": "répartis sur les {{count}} jardins",
+      "placementsSubMobile_one": "sur {{count}} jardin",
+      "placementsSubMobile_other": "sur {{count}} jardins",
+      "withGarden": "Comptes avec ≥ 1 jardin",
+      "withGardenMobile": "≥ 1 jardin",
+      "withGardenSub": "soit {{percent}} % des utilisateurs",
+      "withGardenSubMobile": "{{percent}} % des comptes"
+    },
+    "users": {
+      "title": "Utilisateurs",
+      "count_one": "{{count}} compte",
+      "count_other": "{{count}} comptes",
+      "sortNote": "Tri : inscription, du plus récent",
+      "sortNoteMobile": "plus récents d'abord",
+      "columns": {
+        "user": "Utilisateur",
+        "registration": "Inscription",
+        "confirmation": "Confirmation",
+        "access": "Accès"
+      },
+      "confirmed": "Confirmé",
+      "pending": "En attente",
+      "google": "Google",
+      "local": "Local",
+      "you": "vous",
+      "registeredBefore": "Inscrit avant le {{date}}",
+      "registrationUnknown": "Date d'inscription non enregistrée",
+      "empty": "Aucun compte pour le moment."
+    },
+    "pagination": {
+      "range": "{{from}}–{{to}} sur {{total}}",
+      "page": "Page {{page}} / {{pages}}",
+      "previous": "Précédent",
+      "next": "Suivant"
+    },
+    "rgpd": "Affichage minimal (RGPD) : uniquement ce qui sert à administrer — aucun hash, aucun jeton, aucune donnée sensible ne transite.",
+    "error": {
+      "title": "Impossible de charger les données",
+      "text": "Le serveur n'a pas répondu. Vos droits d'administration n'ont pas changé — c'est le chargement qui a échoué, pas l'accès.",
+      "retry": "Réessayer"
+    },
+    "forbidden": {
+      "title": "Accès réservé",
+      "text": "Cette page est réservée à l'administration de SmartCrops. Votre compte n'a pas le rôle nécessaire pour la consulter.",
+      "code": "HTTP 403",
+      "home": "Retour à l'accueil"
+    }
   }
 }

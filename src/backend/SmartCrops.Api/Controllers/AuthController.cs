@@ -127,7 +127,9 @@ public class AuthController(
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken ct)
     {
-        var user = new ApplicationUser { UserName = request.Email, Email = request.Email };
+        // SMA-414 (D1): stamp the creation instant explicitly — no DB default,
+        // so pre-migration accounts stay null by construction.
+        var user = new ApplicationUser { UserName = request.Email, Email = request.Email, CreatedAt = DateTime.UtcNow };
         var result = await userManager.CreateAsync(user, request.Password);
 
         if (!result.Succeeded)
@@ -534,7 +536,8 @@ public class AuthController(
             var user = await userManager.FindByEmailAsync(email);
             if (user is null)
             {
-                user = new ApplicationUser { UserName = email, Email = email, EmailConfirmed = true };
+                // SMA-414 (D1): same explicit creation stamp as Register.
+                user = new ApplicationUser { UserName = email, Email = email, EmailConfirmed = true, CreatedAt = DateTime.UtcNow };
                 var createResult = await userManager.CreateAsync(user);
                 if (!createResult.Succeeded)
                     return Redirect($"{frontendUrl}/login?error=create-failed");

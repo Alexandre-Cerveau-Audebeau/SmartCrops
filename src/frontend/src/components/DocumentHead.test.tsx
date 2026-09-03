@@ -74,6 +74,12 @@ describe('DocumentHead (SMA-354)', () => {
     expect(canonicalLink()).toBeNull();
   });
 
+  it('titles the admin-only route (/admin) and gives it NO canonical (SMA-414)', () => {
+    renderAt('/admin');
+    expect(document.title).toBe('Administration · SmartCrops');
+    expect(canonicalLink()).toBeNull();
+  });
+
   it('falls back to "SmartCrops" with no canonical on an unknown route', () => {
     renderAt('/definitely-not-a-route');
     expect(document.title).toBe('SmartCrops');

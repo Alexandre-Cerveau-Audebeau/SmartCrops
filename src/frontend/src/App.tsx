@@ -4,12 +4,14 @@ import CookieBanner from './components/CookieBanner';
 import Layout from './components/Layout/Layout';
 import ScrollToTop from './components/ScrollToTop';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import AdminRoute from './components/AdminRoute';
 import GuestRoute from './components/GuestRoute';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { UnitSystemProvider } from './contexts/UnitSystemContext';
 import About from './pages/About';
+import Admin from './pages/Admin';
 import AuthCallback from './pages/AuthCallback';
 import ConfirmEmail from './pages/ConfirmEmail';
 import Contact from './pages/Contact';
@@ -74,6 +76,10 @@ export default function App() {
                         element={<GardenPlanner />}
                       />
                       <Route path="/profile" element={<Profile />} />
+                    </Route>
+                    {/* SMA-414: admin-only, the 403 state renders in place (D3). */}
+                    <Route element={<AdminRoute />}>
+                      <Route path="/admin" element={<Admin />} />
                     </Route>
                     <Route path="*" element={<NotFound />} />
                   </Routes>

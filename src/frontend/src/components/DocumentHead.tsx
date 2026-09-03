@@ -30,6 +30,7 @@ const ROUTE_TITLE_KEYS: Record<string, string> = {
   '/forgot-password': 'auth.forgotPasswordTitle',
   '/gardens': 'gardens.title',
   '/profile': 'profile.title',
+  '/admin': 'admin.title',
 };
 
 const PLANT_DETAIL_RE = /^\/library\/[^/]+$/;
