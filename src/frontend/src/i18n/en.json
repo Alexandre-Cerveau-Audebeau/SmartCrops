@@ -13,7 +13,8 @@
     "closeMenu": "Close menu",
     "changeLanguage": "Change language",
     "language": "Language",
-    "units": "Units"
+    "units": "Units",
+    "admin": "Administration"
   },
   "errorBoundary": {
     "title": "Something went wrong",
@@ -1602,5 +1603,81 @@
     "title": "Shop",
     "teaser": "Coming soon: plants, seeds, growing media, and SmartCrops-compatible connected devices.",
     "cta": "Browse the library"
+  },
+  "admin": {
+    "title": "Administration",
+    "meta": {
+      "users_one": "{{count}} user",
+      "users_other": "{{count}} users",
+      "gardens_one": "{{count}} garden",
+      "gardens_other": "{{count}} gardens",
+      "placements_one": "{{count}} placement",
+      "placements_other": "{{count}} placements",
+      "line": "{{users}} · {{gardens}} · {{placements}} — data as of {{date}}",
+      "lineMobile": "{{users}} · {{gardens}} · {{placements}}"
+    },
+    "chips": {
+      "role": "Admin role · {{name}}",
+      "roleShort": "Admin role",
+      "readOnly": "Read-only"
+    },
+    "tiles": {
+      "users": "Users",
+      "usersSub": "<strong>+{{last7}}</strong> over 7 days · <strong>+{{last30}}</strong> over 30 days",
+      "usersSubMobile": "<strong>+{{last7}}</strong> / 7 d · <strong>+{{last30}}</strong> / 30 d",
+      "gardens": "Gardens created",
+      "gardensMobile": "Gardens",
+      "gardensSub": "most recent created {{relative}}",
+      "gardensSubMobile": "latest {{relative}}",
+      "gardensSubEmpty": "—",
+      "placements": "Placements placed",
+      "placementsMobile": "Placements",
+      "placementsSub_one": "across {{count}} garden",
+      "placementsSub_other": "across the {{count}} gardens",
+      "placementsSubMobile_one": "in {{count}} garden",
+      "placementsSubMobile_other": "in {{count}} gardens",
+      "withGarden": "Accounts with ≥ 1 garden",
+      "withGardenMobile": "≥ 1 garden",
+      "withGardenSub": "i.e. {{percent}}% of users",
+      "withGardenSubMobile": "{{percent}}% of accounts"
+    },
+    "users": {
+      "title": "Users",
+      "count_one": "{{count}} account",
+      "count_other": "{{count}} accounts",
+      "sortNote": "Sort: registration, newest first",
+      "sortNoteMobile": "newest first",
+      "columns": {
+        "user": "User",
+        "registration": "Registration",
+        "confirmation": "Confirmation",
+        "access": "Access"
+      },
+      "confirmed": "Confirmed",
+      "pending": "Pending",
+      "google": "Google",
+      "local": "Local",
+      "you": "you",
+      "registeredBefore": "Registered before {{date}}",
+      "empty": "No accounts yet."
+    },
+    "pagination": {
+      "range": "{{from}}–{{to}} of {{total}}",
+      "page": "Page {{page}} / {{pages}}",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "rgpd": "Minimal display (GDPR): only what is needed to administer — no hash, no token, no sensitive data transits.",
+    "error": {
+      "title": "Unable to load data",
+      "text": "The server did not respond. Your admin rights have not changed — the loading failed, not the access.",
+      "retry": "Retry"
+    },
+    "forbidden": {
+      "title": "Restricted access",
+      "text": "This page is reserved for SmartCrops administration. Your account does not have the role required to view it.",
+      "code": "HTTP 403",
+      "home": "Back to home"
+    }
   }
 }

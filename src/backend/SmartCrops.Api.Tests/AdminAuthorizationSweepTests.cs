@@ -66,6 +66,7 @@ public class AdminAuthorizationSweepTests : IClassFixture<AdminSweepFactoryFixtu
     // constraint and never reach the authorization proof).
     public static TheoryData<string, string> AdminRoutes => new()
     {
+        { "GET", "/api/admin/dashboard/stats" },                                           // AdminDashboardController (SMA-414)
         { "POST", "/api/admin/bulk-import" },                                              // BulkImportController
         { "POST", "/api/admin/perenual/pest-catalog/harvest" },                            // PerenualPestCatalogController
         { "GET", "/api/admin/perenual/species-list" },                                     // PlantPerenualController

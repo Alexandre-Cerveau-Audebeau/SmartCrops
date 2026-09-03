@@ -5,6 +5,7 @@ import { Link as RouterLink, useLocation } from 'react-router-dom';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
@@ -19,6 +20,7 @@ import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import CloseIcon from '@mui/icons-material/Close';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
@@ -76,6 +78,19 @@ const navLinks: NavLink[] = [
 // default. The header row keeps its own (darker) green hover.
 const menuRowHoverSx = {
   '&:hover': { bgcolor: 'rgba(46,139,87,0.10)' },
+} as const;
+
+// SMA-414 — the « Admin » tag beside the Administration entry (desktop menu
+// and drawer): brand tint + primary text from the palette (mode-aware),
+// uppercase like the mock-up's ADMIN tag.
+const adminChipSx = {
+  height: 20,
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+  bgcolor: 'brandTintBg',
+  color: 'primary.main',
 } as const;
 
 /** Top navigation bar: nav links, the language control, the mobile drawer, and the authenticated profile menu. */
@@ -263,6 +278,27 @@ export default function Navbar() {
               </Typography>
               <ComingSoonChip sx={{ flexShrink: 0 }} />
             </Box>
+            {/* SMA-414 (D4) — admin-only entry, same condition as the desktop
+                menu: the flag is UX only, the API gates the page. */}
+            {user?.isAdmin && (
+              <ListItem disablePadding>
+                <ListItemButton
+                  component={RouterLink}
+                  to="/admin"
+                  onClick={toggleDrawer(false)}
+                >
+                  <ListItemIcon sx={{ minWidth: 36 }}>
+                    <AdminPanelSettingsIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText primary={t('nav.admin')} />
+                  <Chip
+                    size="small"
+                    label={t('profile.adminBadge')}
+                    sx={{ ml: 1.5, ...adminChipSx }}
+                  />
+                </ListItemButton>
+              </ListItem>
+            )}
           </List>
           <Divider />
         </>
@@ -560,6 +596,29 @@ export default function Navbar() {
                           }
                         />
                       </MenuItem>
+                      {/* SMA-414 — admin-only entry between the theme row and
+                          Logout, framed by two dividers (mock-up A9). Two
+                          separate conditionals, not a Fragment: Menu rejects
+                          Fragment children but skips `false` ones. */}
+                      {user?.isAdmin && <Divider />}
+                      {user?.isAdmin && (
+                        <MenuItem
+                          component={RouterLink}
+                          to="/admin"
+                          onClick={closeProfileMenu}
+                          sx={menuRowHoverSx}
+                        >
+                          <ListItemIcon>
+                            <AdminPanelSettingsIcon fontSize="small" />
+                          </ListItemIcon>
+                          <ListItemText primary={t('nav.admin')} />
+                          <Chip
+                            size="small"
+                            label={t('profile.adminBadge')}
+                            sx={{ ml: 1.5, ...adminChipSx }}
+                          />
+                        </MenuItem>
+                      )}
                       <Divider />
                       <MenuItem onClick={handleLogout} sx={menuRowHoverSx}>
                         <ListItemIcon>

@@ -419,3 +419,75 @@ describe('Drawer & cluster controls (SMA-352 R2 / SMA-56)', () => {
     await waitFor(() => expect(screen.queryByText('Units')).toBeNull());
   });
 });
+
+describe('Admin entry (SMA-414)', () => {
+  const ADMIN_USER: AuthUser = { ...TEST_USER, isAdmin: true };
+
+  beforeEach(async () => {
+    localStorage.setItem('smartcrops-language', 'en');
+    localStorage.removeItem('smartcrops.unitSystem');
+    localStorage.removeItem('smartcrops-color-mode');
+    await i18next.changeLanguage('en');
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('shows the Administration item, with the Admin tag, in the desktop menu for an admin', async () => {
+    const user = userEvent.setup();
+    renderNavbar(makeAuth({ isAuthenticated: true, user: ADMIN_USER }));
+
+    await user.click(screen.getByRole('button', { name: /Alex Gardener/ }));
+
+    const menu = await screen.findByRole('menu');
+    const item = within(menu).getByRole('menuitem', { name: /Administration/ });
+    expect(item).toHaveAttribute('href', '/admin');
+    expect(within(item).getByText('Admin')).toBeInTheDocument();
+    // Framed by dividers, between the theme row and Logout (mock-up A9).
+    const items = within(menu).getAllByRole('menuitem');
+    const names = items.map((el) => el.textContent ?? '');
+    const adminIndex = names.findIndex((n) => /Administration/.test(n));
+    expect(adminIndex).toBeGreaterThan(-1);
+    expect(names[adminIndex + 1]).toMatch(/Logout/);
+    expect(names[adminIndex - 1]).toMatch(/mode/i);
+  });
+
+  it('hides the Administration item from the desktop menu for a non-admin', async () => {
+    const user = userEvent.setup();
+    renderNavbar(makeAuth({ isAuthenticated: true, user: TEST_USER }));
+
+    await user.click(screen.getByRole('button', { name: /Alex Gardener/ }));
+
+    const menu = await screen.findByRole('menu');
+    expect(
+      within(menu).queryByRole('menuitem', { name: /Administration/ })
+    ).toBeNull();
+    expect(within(menu).getByRole('menuitem', { name: /Logout/ })).toBeInTheDocument();
+  });
+
+  it('mirrors the Administration row in the mobile drawer for an admin (D4)', async () => {
+    const user = userEvent.setup();
+    renderNavbar(makeAuth({ isAuthenticated: true, user: ADMIN_USER }), {
+      mobile: true,
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Open menu' }));
+
+    const row = screen.getByRole('link', { name: /Administration/ });
+    expect(row).toHaveAttribute('href', '/admin');
+    expect(within(row).getByText('Admin')).toBeInTheDocument();
+  });
+
+  it('hides the Administration row from the mobile drawer for a non-admin', async () => {
+    const user = userEvent.setup();
+    renderNavbar(makeAuth({ isAuthenticated: true, user: TEST_USER }), {
+      mobile: true,
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Open menu' }));
+
+    expect(screen.queryByRole('link', { name: /Administration/ })).toBeNull();
+    expect(screen.getByRole('link', { name: /Edit profile/ })).toBeInTheDocument();
+  });
+});
