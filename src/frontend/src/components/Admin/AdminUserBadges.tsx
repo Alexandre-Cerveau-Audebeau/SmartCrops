@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
@@ -13,7 +14,11 @@ import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 const inheritIcon = { '& .MuiChip-icon': { color: 'inherit' } } as const;
 
 /** « Confirmé » (check) or « En attente » (clock) from `emailConfirmed`. */
-export function ConfirmationChip({ confirmed }: { confirmed: boolean }) {
+export const ConfirmationChip = memo(function ConfirmationChip({
+  confirmed,
+}: {
+  confirmed: boolean;
+}) {
   const { t } = useTranslation();
   return confirmed ? (
     <Chip
@@ -50,10 +55,14 @@ export function ConfirmationChip({ confirmed }: { confirmed: boolean }) {
       }}
     />
   );
-}
+});
 
 /** « Google » (official G) when a Google login is linked, else « Local » (key) — D2. */
-export function AccessChip({ hasGoogleLogin }: { hasGoogleLogin: boolean }) {
+export const AccessChip = memo(function AccessChip({
+  hasGoogleLogin,
+}: {
+  hasGoogleLogin: boolean;
+}) {
   const { t } = useTranslation();
   return hasGoogleLogin ? (
     <Chip
@@ -78,10 +87,10 @@ export function AccessChip({ hasGoogleLogin }: { hasGoogleLogin: boolean }) {
       sx={{ fontWeight: 600, ...inheritIcon }}
     />
   );
-}
+});
 
 /** « vous » — marks the signed-in admin's own row. */
-export function YouChip() {
+export const YouChip = memo(function YouChip() {
   const { t } = useTranslation();
   return (
     <Chip
@@ -96,4 +105,4 @@ export function YouChip() {
       }}
     />
   );
-}
+});

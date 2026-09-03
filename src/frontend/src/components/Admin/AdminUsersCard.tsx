@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -12,7 +13,6 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
-import { USER_CREATED_AT_MIGRATION_DATE } from '../../constants/admin';
 import type { AdminUserListItem, PagedResponse } from '../../types/Admin';
 import {
   formatLongDate,
@@ -20,7 +20,7 @@ import {
   formatShortDate,
   isWithinRelativeWindow,
 } from '../../utils/formatRelativeDate';
-import AdminPagination from './AdminPagination';
+import { AdminPagination } from './AdminPagination';
 import { AccessChip, ConfirmationChip, YouChip } from './AdminUserBadges';
 
 interface AdminUsersCardProps {
@@ -32,13 +32,18 @@ interface AdminUsersCardProps {
   language: string;
   /** Marks the signed-in admin's own row with « vous ». */
   currentUserId: string | null;
+  /**
+   * Round 1 (V1): the earliest recorded `createdAt` across accounts (ISO), or
+   * null when no account carries one. Accounts with a null `createdAt` predate
+   * that instant — « Inscrit avant le … » — and read « date non enregistrée »
+   * while nothing has been recorded yet.
+   */
+  trackedSince: string | null;
   /** D5 — true above the pagination threshold: the bar is shown. */
   paginated: boolean;
   onPageChange: (page: number) => void;
 }
 
-// D1 — noon UTC so the day never shifts whatever the viewer's offset.
-const MIGRATION_DATE = new Date(`${USER_CREATED_AT_MIGRATION_DATE}T12:00:00Z`);
 const SKELETON_ROWS = [0, 1, 2, 3];
 
 const headCellSx = {
@@ -69,13 +74,14 @@ function displayNameOf(user: AdminUserListItem): string {
  * the mobile card list, then the pagination bar (D5). Loading keeps the
  * static labels and swaps the data for skeletons (A2).
  */
-export default function AdminUsersCard({
+export const AdminUsersCard = memo(function AdminUsersCard({
   page,
   loading,
   mobile,
   now,
   language,
   currentUserId,
+  trackedSince,
   paginated,
   onPageChange,
 }: AdminUsersCardProps) {
@@ -83,12 +89,14 @@ export default function AdminUsersCard({
   const total = page?.total ?? 0;
   const items = page?.items ?? [];
 
-  const registeredBefore = (short: boolean) =>
-    t('admin.users.registeredBefore', {
-      date: short
-        ? formatShortDate(MIGRATION_DATE, language)
-        : formatLongDate(MIGRATION_DATE, language),
+  // V1: the label for an account without a recorded creation instant.
+  const untrackedLabel = (short: boolean) => {
+    if (!trackedSince) return t('admin.users.registrationUnknown');
+    const since = new Date(trackedSince);
+    return t('admin.users.registeredBefore', {
+      date: short ? formatShortDate(since, language) : formatLongDate(since, language),
     });
+  };
 
   const countChip = loading ? (
     <Skeleton
@@ -189,7 +197,7 @@ export default function AdminUsersCard({
                     >
                       {created
                         ? formatRelativeDate(created, now, language, 'short')
-                        : registeredBefore(true)}
+                        : untrackedLabel(true)}
                     </Typography>
                   </Box>
                   <Typography variant="body2" color="text.secondary" noWrap>
@@ -321,7 +329,7 @@ export default function AdminUsersCard({
                         </>
                       ) : (
                         <Typography variant="body2" color="text.secondary">
-                          {registeredBefore(false)}
+                          {untrackedLabel(false)}
                         </Typography>
                       )}
                     </TableCell>
@@ -340,4 +348,4 @@ export default function AdminUsersCard({
       {pagination}
     </Card>
   );
-}
+});

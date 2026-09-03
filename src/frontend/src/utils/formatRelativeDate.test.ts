@@ -9,8 +9,10 @@ import {
   isWithinRelativeWindow,
 } from './formatRelativeDate';
 
-// Fixed clock: 31 August 2026, 12:00 UTC (noon keeps every offset on the
-// same calendar day, so the date-only assertions hold in any test timezone).
+// Fixed clock: 31 August 2026, 12:00 UTC — only ever used for elapsed-time
+// arithmetic, which is time-zone independent. Date-ONLY fixtures below are
+// built as local calendar dates (round 1, F5) so `toLocaleDateString` cannot
+// shift them by a day in any host time zone.
 const NOW = new Date('2026-08-31T12:00:00Z');
 const daysAgo = (days: number, extraMs = 0) =>
   new Date(NOW.getTime() - days * 86_400_000 - extraMs);
@@ -32,7 +34,7 @@ describe('formatRelativeDate (SMA-414)', () => {
     expect(formatRelativeDate(daysAgo(31), NOW, 'fr')).toBe(
       formatShortDate(daysAgo(31), 'fr')
     );
-    expect(formatRelativeDate(new Date('2026-06-12T12:00:00Z'), NOW, 'fr')).toBe(
+    expect(formatRelativeDate(new Date(2026, 5, 12, 12), NOW, 'fr')).toBe(
       '12 juin'
     );
   });
@@ -41,7 +43,7 @@ describe('formatRelativeDate (SMA-414)', () => {
     expect(formatRelativeDate(daysAgo(1), NOW, 'en')).toBe('yesterday');
     expect(formatRelativeDate(daysAgo(4), NOW, 'en')).toBe('4 days ago');
     expect(formatRelativeDate(daysAgo(14), NOW, 'en')).toBe('2 weeks ago');
-    expect(formatRelativeDate(new Date('2026-06-12T12:00:00Z'), NOW, 'en')).toBe(
+    expect(formatRelativeDate(new Date(2026, 5, 12, 12), NOW, 'en')).toBe(
       'Jun 12'
     );
   });
@@ -87,7 +89,9 @@ describe('formatRelativeDate (SMA-414)', () => {
   });
 
   it('formats the long date and the meta line per language', () => {
-    const date = new Date('2026-08-30T12:00:00Z');
+    // Local calendar date (round 1, F5): a UTC string would shift a day in
+    // far-east host time zones (UTC+14) and break the date-only assertions.
+    const date = new Date(2026, 7, 30, 12);
     expect(formatLongDate(date, 'fr')).toBe('30 août 2026');
     expect(formatLongDate(date, 'en')).toBe('August 30, 2026');
     expect(formatDateTimeMeta(date, 'fr')).toMatch(/^dimanche 30 août, \d{2}:\d{2}$/);

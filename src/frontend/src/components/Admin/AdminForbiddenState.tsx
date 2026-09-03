@@ -1,9 +1,10 @@
+import { memo } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Button from '@mui/material/Button';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import AdminStateCard from './AdminStateCard';
+import { AdminStateCard } from './AdminStateCard';
 
 /**
  * SMA-414 — the 403 state (A4): lock ring, « Accès réservé », the HTTP 403
@@ -11,7 +12,7 @@ import AdminStateCard from './AdminStateCard';
  * signed-in non-admin (D3) and by the page when the API itself answers 403.
  * No page header around it: a non-admin never sees the admin chrome.
  */
-export default function AdminForbiddenState() {
+export const AdminForbiddenState = memo(function AdminForbiddenState() {
   const { t } = useTranslation();
   return (
     <AdminStateCard
@@ -32,4 +33,4 @@ export default function AdminForbiddenState() {
       }
     />
   );
-}
+});

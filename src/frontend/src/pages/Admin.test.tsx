@@ -28,8 +28,10 @@ import { fetchMe } from '../services/authApi';
 // SMA-414 locks (Profile.test pattern: mocked services, real providers):
 // loading skeletons keep the static labels; loaded data fills the counters,
 // the rows, the icon+text badges and the « you » tag; D5 page sizing and the
-// bar; the error card retries BOTH calls; an API 403 becomes the forbidden
-// state; mobile swaps the table for cards.
+// bar, decided by the LISTING's own total (round 1, F2); the error card
+// retries BOTH calls; an API 403 becomes the forbidden state; mobile swaps
+// the table for cards; un-stamped accounts read « registered before » the
+// tracked-since pivot, or « not recorded » while there is none (round 1, V1).
 
 const ADMIN: AuthUser = {
   userId: 'u-admin',
@@ -49,6 +51,7 @@ const STATS: AdminDashboardStats = {
   latestGardenCreatedAt: iso(DAY),
   placementsCount: 214,
   usersWithAtLeastOneGarden: 5,
+  createdAtTrackedSince: '2026-05-15T12:00:00Z',
 };
 
 const USERS: PagedResponse<AdminUserListItem> = {
@@ -85,6 +88,15 @@ const USERS: PagedResponse<AdminUserListItem> = {
   pageSize: 100,
   total: 3,
 };
+
+function pageOf(
+  items: AdminUserListItem[],
+  page: number,
+  pageSize: number,
+  total: number
+): PagedResponse<AdminUserListItem> {
+  return { items, page, pageSize, total };
+}
 
 function setMatchMedia(matches: boolean) {
   vi.stubGlobal(
@@ -155,7 +167,8 @@ describe('Admin page (SMA-414)', () => {
     renderAdmin();
 
     expect(await screen.findByText('Léa Fontaine')).toBeInTheDocument();
-    // D5: 9 accounts ≤ 100 → one page of 100, no pagination bar.
+    // D5: 3 accounts ≤ 100 → one page of 100, no pagination bar, one listing call.
+    expect(fetchAdminUsers).toHaveBeenCalledTimes(1);
     expect(fetchAdminUsers).toHaveBeenCalledWith(1, 100, expect.anything());
     expect(screen.queryByRole('navigation')).toBeNull();
     // Header meta + tiles.
@@ -174,11 +187,10 @@ describe('Admin page (SMA-414)', () => {
     expect(screen.getByText('Pending')).toBeInTheDocument();
     expect(screen.getByText('Google')).toBeInTheDocument();
     expect(screen.getAllByText('Local')).toHaveLength(2);
-    // Long date + relative wording; a pre-migration account (null createdAt).
+    // Long date + relative wording; an un-stamped account reads « registered
+    // before » the tracked-since pivot from stats (V1).
     expect(screen.getByText('yesterday')).toBeInTheDocument();
-    expect(
-      screen.getByText('Registered before September 3, 2026')
-    ).toBeInTheDocument();
+    expect(screen.getByText('Registered before May 15, 2026')).toBeInTheDocument();
     // « you » on the admin's own row only.
     const you = screen.getAllByText('you');
     expect(you).toHaveLength(1);
@@ -187,14 +199,24 @@ describe('Admin page (SMA-414)', () => {
     expect(screen.getByText(/^Minimal display \(GDPR\)/)).toBeInTheDocument();
   });
 
+  it('says the registration date is not recorded while no account is stamped yet (V1)', async () => {
+    vi.mocked(fetchAdminStats).mockResolvedValue({
+      ...STATS,
+      createdAtTrackedSince: null,
+    });
+    renderAdmin();
+
+    expect(await screen.findByText('Léa Fontaine')).toBeInTheDocument();
+    expect(screen.getByText('Registration date not recorded')).toBeInTheDocument();
+    expect(screen.queryByText(/^Registered before/)).toBeNull();
+  });
+
   it('paginates above 100 accounts: 25 per page, the bar, next page (D5)', async () => {
-    const page1: PagedResponse<AdminUserListItem> = {
-      ...USERS,
-      pageSize: 25,
-      total: 127,
-    };
-    const page2: PagedResponse<AdminUserListItem> = {
-      items: [
+    const big: AdminDashboardStats = { ...STATS, totalUsers: 127 };
+    const probe = pageOf(USERS.items, 1, 100, 127); // the 100-row probe reports 127
+    const page1 = pageOf(USERS.items, 1, 25, 127);
+    const page2 = pageOf(
+      [
         {
           ...USERS.items[0]!,
           id: 'u-p2',
@@ -202,18 +224,21 @@ describe('Admin page (SMA-414)', () => {
           email: 'p2@example.com',
         },
       ],
-      page: 2,
-      pageSize: 25,
-      total: 127,
-    };
-    vi.mocked(fetchAdminStats).mockResolvedValue({ ...STATS, totalUsers: 127 });
+      2,
+      25,
+      127
+    );
+    vi.mocked(fetchAdminStats).mockResolvedValue(big);
     vi.mocked(fetchAdminUsers)
+      .mockResolvedValueOnce(probe)
       .mockResolvedValueOnce(page1)
       .mockResolvedValueOnce(page2);
     renderAdmin();
 
     expect(await screen.findByText('1–25 of 127')).toBeInTheDocument();
-    expect(fetchAdminUsers).toHaveBeenCalledWith(1, 25, expect.anything());
+    // F2: the 100-row probe first, then page 1 at 25 BEFORE the bar renders.
+    expect(fetchAdminUsers).toHaveBeenNthCalledWith(1, 1, 100, expect.anything());
+    expect(fetchAdminUsers).toHaveBeenNthCalledWith(2, 1, 25, expect.anything());
     expect(screen.getByText('Page 1 / 6')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
 
@@ -224,6 +249,36 @@ describe('Admin page (SMA-414)', () => {
     expect(screen.getByText('26–50 of 127')).toBeInTheDocument();
     expect(screen.getByText('Page 2 / 6')).toBeInTheDocument();
     expect(fetchAdminStats).toHaveBeenCalledTimes(1);
+  });
+
+  it('switches to 25 per page when the LISTING reports 101 even if stats says 100 (F2)', async () => {
+    vi.mocked(fetchAdminStats).mockResolvedValue({ ...STATS, totalUsers: 100 });
+    vi.mocked(fetchAdminUsers)
+      .mockResolvedValueOnce(pageOf(USERS.items, 1, 100, 101))
+      .mockResolvedValueOnce(pageOf(USERS.items, 1, 25, 101));
+    renderAdmin();
+
+    expect(await screen.findByText('1–25 of 101')).toBeInTheDocument();
+    expect(fetchAdminUsers).toHaveBeenCalledTimes(2);
+    expect(fetchAdminUsers).toHaveBeenNthCalledWith(1, 1, 100, expect.anything());
+    expect(fetchAdminUsers).toHaveBeenNthCalledWith(2, 1, 25, expect.anything());
+    expect(screen.getByRole('navigation')).toBeInTheDocument();
+    // The counters still come from stats.
+    expect(screen.getByText(/^100 users · /)).toBeInTheDocument();
+  });
+
+  it('stays on one page when the LISTING reports 100 even if stats says 101 (F2)', async () => {
+    vi.mocked(fetchAdminStats).mockResolvedValue({ ...STATS, totalUsers: 101 });
+    vi.mocked(fetchAdminUsers).mockResolvedValue(pageOf(USERS.items, 1, 100, 100));
+    renderAdmin();
+
+    expect(await screen.findByText('Léa Fontaine')).toBeInTheDocument();
+    expect(fetchAdminUsers).toHaveBeenCalledTimes(1);
+    expect(fetchAdminUsers).toHaveBeenCalledWith(1, 100, expect.anything());
+    expect(screen.queryByRole('navigation')).toBeNull();
+    expect(screen.getByText('100 accounts')).toBeInTheDocument();
+    // The counters still come from stats.
+    expect(screen.getByText(/^101 users · /)).toBeInTheDocument();
   });
 
   it('shows the error card and « Retry » re-runs BOTH calls', async () => {
@@ -270,5 +325,7 @@ describe('Admin page (SMA-414)', () => {
       screen.getByText('9 users · 8 gardens · 214 placements')
     ).toBeInTheDocument();
     expect(screen.getByText('≥ 1 garden')).toBeInTheDocument();
+    // V1 on mobile: the short-date variant of « registered before ».
+    expect(screen.getByText('Registered before May 15')).toBeInTheDocument();
   });
 });

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { ReactNode } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
@@ -106,7 +107,7 @@ interface AdminStatsTilesProps {
  * créés (most recent, relative), Placements posés (across N gardens), Comptes
  * avec ≥ 1 jardin (share of users). 2×2 on mobile, one row on desktop.
  */
-export default function AdminStatsTiles({
+export const AdminStatsTiles = memo(function AdminStatsTiles({
   stats,
   loading,
   mobile,
@@ -199,4 +200,4 @@ export default function AdminStatsTiles({
       />
     </Box>
   );
-}
+});

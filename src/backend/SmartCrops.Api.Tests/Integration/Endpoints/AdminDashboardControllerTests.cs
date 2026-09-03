@@ -95,6 +95,24 @@ public class AdminDashboardControllerTests : IntegrationTestBase
         Assert.Null(stats.LatestGardenCreatedAt);
         Assert.Equal(0, stats.PlacementsCount);
         Assert.Equal(0, stats.UsersWithAtLeastOneGarden);
+        Assert.Null(stats.CreatedAtTrackedSince);
+    }
+
+    [Fact]
+    public async Task Stats_OnlyUntrackedAccounts_ReportsNoTrackedSince()
+    {
+        // Round 1 (V1): accounts exist but none carries a CreatedAt yet — the
+        // "registered before" pivot must be null, not some default instant.
+        await SeedUserAsync(createdAt: null);
+        await SeedUserAsync(createdAt: null);
+        AuthAsAdmin();
+
+        var stats = await Client.GetFromJsonAsync<AdminDashboardStatsResponse>(StatsUrl);
+
+        Assert.NotNull(stats);
+        Assert.Equal(2, stats!.TotalUsers);
+        Assert.Equal(0, stats.NewUsersLast30Days);
+        Assert.Null(stats.CreatedAtTrackedSince);
     }
 
     [Fact]
@@ -103,7 +121,8 @@ public class AdminDashboardControllerTests : IntegrationTestBase
         var now = DateTime.UtcNow;
         var fresh = await SeedUserAsync(createdAt: now.AddDays(-1));
         var recent = await SeedUserAsync(createdAt: now.AddDays(-10));
-        await SeedUserAsync(createdAt: now.AddDays(-40));   // outside both windows
+        var oldestTrackedAt = now.AddDays(-40);
+        await SeedUserAsync(createdAt: oldestTrackedAt);    // outside both windows; the V1 pivot
         await SeedUserAsync(createdAt: null);               // pre-migration: never counted in windows
         var latestGardenAt = now.AddHours(-2);
         var gardenA = await SeedGardenAsync(fresh, latestGardenAt);
@@ -128,6 +147,12 @@ public class AdminDashboardControllerTests : IntegrationTestBase
             stats.LatestGardenCreatedAt!.Value,
             latestGardenAt.AddSeconds(-1),
             latestGardenAt.AddSeconds(1));
+        // V1: the pivot is the OLDEST stamp, the null-CreatedAt account ignored.
+        Assert.NotNull(stats.CreatedAtTrackedSince);
+        Assert.InRange(
+            stats.CreatedAtTrackedSince!.Value,
+            oldestTrackedAt.AddSeconds(-1),
+            oldestTrackedAt.AddSeconds(1));
     }
 
     // ── Users: sort, pagination, bounds ──────────────────────────────────────
@@ -193,6 +218,71 @@ public class AdminDashboardControllerTests : IntegrationTestBase
         var response = await Client.GetAsync($"{UsersUrl}?{query}");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // ── Users: page past the end (round 1, F1) ───────────────────────────────
+
+    [Fact]
+    public async Task Users_PageAtIntMaxValue_Returns200WithEmptyItemsAndExactTotal()
+    {
+        var now = DateTime.UtcNow;
+        for (var i = 0; i < 3; i++)
+        {
+            await SeedUserAsync(createdAt: now.AddDays(-i));
+        }
+        AuthAsAdmin();
+
+        // A valid page number whose offset (page - 1) * pageSize overflows int:
+        // the documented contract is an empty 200 page, never a 500.
+        var response = await Client.GetAsync($"{UsersUrl}?page={int.MaxValue}&pageSize=100");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var page = await response.Content.ReadFromJsonAsync<PagedResponse<AdminUserListItemResponse>>();
+        Assert.NotNull(page);
+        Assert.Empty(page!.Items);
+        Assert.Equal(int.MaxValue, page.Page);
+        Assert.Equal(100, page.PageSize);
+        Assert.Equal(3, page.Total);
+    }
+
+    [Fact]
+    public async Task Users_PageJustPastTheLast_Returns200WithEmptyItemsAndExactTotal()
+    {
+        var now = DateTime.UtcNow;
+        for (var i = 0; i < 5; i++)
+        {
+            await SeedUserAsync(createdAt: now.AddDays(-i));
+        }
+        AuthAsAdmin();
+
+        // 5 rows, pageSize 2 → last page is 3; page 4 is just past it.
+        var page = await Client.GetFromJsonAsync<PagedResponse<AdminUserListItemResponse>>($"{UsersUrl}?page=4&pageSize=2");
+
+        Assert.NotNull(page);
+        Assert.Empty(page!.Items);
+        Assert.Equal(4, page.Page);
+        Assert.Equal(2, page.PageSize);
+        Assert.Equal(5, page.Total);
+    }
+
+    [Fact]
+    public async Task Users_LastPage_ReturnsTheRemainderNotEmpty()
+    {
+        var now = DateTime.UtcNow;
+        var ids = new List<string>();
+        for (var i = 0; i < 5; i++)
+        {
+            ids.Add(await SeedUserAsync(createdAt: now.AddDays(-i)));   // ids[4] oldest
+        }
+        AuthAsAdmin();
+
+        // 5 rows, pageSize 2 → last page is 3 and holds the single oldest row.
+        var page = await Client.GetFromJsonAsync<PagedResponse<AdminUserListItemResponse>>($"{UsersUrl}?page=3&pageSize=2");
+
+        Assert.NotNull(page);
+        Assert.Equal(new[] { ids[4] }, page!.Items.Select(i => i.Id).ToArray());
+        Assert.Equal(3, page.Page);
+        Assert.Equal(5, page.Total);
     }
 
     [Fact]

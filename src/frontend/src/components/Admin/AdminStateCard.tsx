@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -23,7 +24,7 @@ interface AdminStateCardProps {
  * states: icon ring, title, explanation, optional code pill, one button.
  * Colors come from the theme only (mode-aware through the palette).
  */
-export default function AdminStateCard({
+export const AdminStateCard = memo(function AdminStateCard({
   tone,
   icon,
   title,
@@ -92,4 +93,4 @@ export default function AdminStateCard({
       </Card>
     </Box>
   );
-}
+});

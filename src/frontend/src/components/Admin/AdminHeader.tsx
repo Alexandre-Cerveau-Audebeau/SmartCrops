@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
@@ -27,7 +28,7 @@ interface AdminHeaderProps {
  * (« N utilisateurs · N jardins · N placements — données du … », no date part
  * on mobile) and the two chips « Rôle Admin · nom » / « Lecture seule ».
  */
-export default function AdminHeader({
+export const AdminHeader = memo(function AdminHeader({
   stats,
   receivedAt,
   loading,
@@ -119,4 +120,4 @@ export default function AdminHeader({
       </Stack>
     </Box>
   );
-}
+});

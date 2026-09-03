@@ -16,6 +16,12 @@ export interface AdminDashboardStats {
   placementsCount: number;
   /** Distinct `Gardens.UserId`. */
   usersWithAtLeastOneGarden: number;
+  /**
+   * Round 1 (V1): the earliest recorded `createdAt` across all accounts (ISO),
+   * or null when no account carries one yet. Accounts with a null `createdAt`
+   * were created before this instant.
+   */
+  createdAtTrackedSince: string | null;
 }
 
 export interface AdminUserListItem {

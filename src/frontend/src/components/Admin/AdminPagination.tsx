@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -18,7 +19,7 @@ interface AdminPaginationProps {
  * only above the pagination threshold; the single interactive command of the
  * dashboard.
  */
-export default function AdminPagination({
+export const AdminPagination = memo(function AdminPagination({
   page,
   pageSize,
   total,
@@ -74,4 +75,4 @@ export default function AdminPagination({
       </Button>
     </Box>
   );
-}
+});

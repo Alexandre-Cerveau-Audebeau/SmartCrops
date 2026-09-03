@@ -1,13 +1,6 @@
 /**
- * SMA-414 — Admin Dashboard v1 constants.
+ * SMA-414 — Admin Dashboard v1 constants (D5 pagination).
  */
-
-/**
- * D1 — date (UTC) of migration 30 `20260903154519_AddUserCreatedAt`. Accounts
- * with a null `createdAt` predate it and are shown as "registered before"
- * this date. ISO date only: the display is day-precise on purpose.
- */
-export const USER_CREATED_AT_MIGRATION_DATE = '2026-09-03';
 
 /** D5 — rows per page once the listing paginates. */
 export const ADMIN_USERS_PAGE_SIZE = 25;

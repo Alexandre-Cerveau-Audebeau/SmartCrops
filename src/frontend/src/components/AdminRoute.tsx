@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useAuth } from '../hooks/useAuth';
-import AdminForbiddenState from './Admin/AdminForbiddenState';
+import { AdminForbiddenState } from './Admin/AdminForbiddenState';
 
 /**
  * SMA-414 — admin-only route guard, the role-aware sibling of ProtectedRoute.

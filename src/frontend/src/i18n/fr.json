@@ -1659,6 +1659,7 @@
       "local": "Local",
       "you": "vous",
       "registeredBefore": "Inscrit avant le {{date}}",
+      "registrationUnknown": "Date d'inscription non enregistrée",
       "empty": "Aucun compte pour le moment."
     },
     "pagination": {

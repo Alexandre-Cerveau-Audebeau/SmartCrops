@@ -51,6 +51,11 @@ public class AdminDashboardController(SmartCropsDbContext context) : ControllerB
         var latestGardenCreatedAt = await gardens.MaxAsync(g => (DateTime?)g.CreatedAt, ct);
         var placementsCount = await context.GardenPlacements.AsNoTracking().CountAsync(ct);
         var usersWithAtLeastOneGarden = await gardens.Select(g => g.UserId).Distinct().CountAsync(ct);
+        // Round 1 (V1): the earliest recorded stamp — the "registered before"
+        // pivot for the accounts that predate it; null until one is stamped.
+        var createdAtTrackedSince = await users
+            .Where(u => u.CreatedAt != null)
+            .MinAsync(u => u.CreatedAt, ct);
 
         return Ok(new AdminDashboardStatsResponse(
             totalUsers,
@@ -59,7 +64,8 @@ public class AdminDashboardController(SmartCropsDbContext context) : ControllerB
             gardensCount,
             latestGardenCreatedAt,
             placementsCount,
-            usersWithAtLeastOneGarden));
+            usersWithAtLeastOneGarden,
+            createdAtTrackedSince));
     }
 
     /// <summary>
@@ -87,6 +93,17 @@ public class AdminDashboardController(SmartCropsDbContext context) : ControllerB
 
         var users = context.Users.AsNoTracking();
         var total = await users.CountAsync(ct);
+
+        // Round 1 (F1): a page past the end answers 200 with an empty page and
+        // the true total — and the offset is only computed once `page` is
+        // known to be in range, so a valid page such as int.MaxValue can no
+        // longer overflow the multiplication into a negative OFFSET (500).
+        var lastPage = total == 0 ? 0 : ((total - 1) / pageSize) + 1;
+        if (page > lastPage)
+        {
+            return Ok(new PagedResponse<AdminUserListItemResponse>(
+                Array.Empty<AdminUserListItemResponse>(), page, pageSize, total));
+        }
 
         var items = await users
             .OrderByDescending(u => u.CreatedAt != null)
