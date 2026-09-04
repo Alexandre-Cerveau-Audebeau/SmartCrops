@@ -62,10 +62,12 @@ export default function Admin() {
   const paginated = (users?.total ?? 0) > ADMIN_USERS_PAGINATION_THRESHOLD;
 
   // Initial load and every retry: stats, then the listing sized by D5 / F2.
+  // The 'loading' status is the initial state and is re-armed by `retry`,
+  // the only place `attempt` moves (SMA-421) — not here: a synchronous
+  // setState in the effect body trips react-hooks/set-state-in-effect.
   useEffect(() => {
     const controller = new AbortController();
     pageRequest.current?.abort();
-    setStatus('loading');
     (async () => {
       try {
         const nextStats = await fetchAdminStats(controller.signal);
@@ -110,7 +112,10 @@ export default function Admin() {
     }
   }, []);
 
-  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  const retry = useCallback(() => {
+    setStatus('loading');
+    setAttempt((n) => n + 1);
+  }, []);
 
   useEffect(() => () => pageRequest.current?.abort(), []);
 
