@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
@@ -19,17 +19,19 @@ import Typography from '@mui/material/Typography';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import { useGardens } from '../hooks/useGardens';
 import { useLanguage } from '../hooks/useLanguage';
-import { createGarden, deleteGarden, fetchGardens, updateGarden } from '../services/gardenApi';
+import { createGarden, deleteGarden, updateGarden } from '../services/gardenApi';
 import type { GardenListItem } from '../types/Garden';
 import { getPlantDisplayName } from '../utils/getPlantDisplayName';
 
 export default function MyGardens() {
   const { t } = useTranslation();
   const { language } = useLanguage();
-  const [gardens, setGardens] = useState<GardenListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  // SMA-421: the list fetch (locale re-fetch, stale-response guard,
+  // post-mutation refresh) lives in useGardens — the hook carries the
+  // SMA-155 / SMA-288 invariants this page used to hold inline.
+  const { gardens, loading, loadError, refetch } = useGardens(language);
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
   const [mutationError, setMutationError] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
@@ -44,42 +46,6 @@ export default function MyGardens() {
 
   const [deleteConfirmGarden, setDeleteConfirmGarden] = useState<GardenListItem | null>(null);
 
-  // Monotonic sequencing over EVERY loadGardens call-site (SMA-288): the
-  // post-mutation refreshes run without a signal, so an older response (e.g.
-  // a pre-locale-switch fetch) could land last and overwrite newer state.
-  // Every state commit is gated on still being the latest request; the
-  // effect's AbortController stays as the cancellation fast-path.
-  const latestRequestRef = useRef(0);
-
-  const loadGardens = async (signal?: AbortSignal) => {
-    const requestId = ++latestRequestRef.current;
-    try {
-      const data = await fetchGardens(signal, language);
-      if (requestId === latestRequestRef.current) {
-        setGardens(data);
-        setLoadError(false);
-      }
-    } catch (err) {
-      if (
-        (err as Error).name !== 'AbortError' &&
-        requestId === latestRequestRef.current
-      ) {
-        setLoadError(true);
-      }
-    } finally {
-      if (requestId === latestRequestRef.current) setLoading(false);
-    }
-  };
-
-  // Re-runs on language switch: preview names ride the server-localized flat
-  // `commonName`, so a locale change must re-fetch, not re-resolve (SMA-155).
-  useEffect(() => {
-    const controller = new AbortController();
-    loadGardens(controller.signal);
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language]);
-
   const handleCreate = async () => {
     if (isMutating) return;
     setIsMutating(true);
@@ -89,7 +55,7 @@ export default function MyGardens() {
       setCreateDialogOpen(false);
       setNewGardenName('');
       setNewGardenDescription('');
-      loadGardens();
+      refetch();
     } catch {
       setMutationError(true);
     } finally {
@@ -104,7 +70,7 @@ export default function MyGardens() {
     try {
       await updateGarden(editingGarden.id, editName, editDescription || undefined);
       setEditingGarden(null);
-      loadGardens();
+      refetch();
     } catch {
       setMutationError(true);
     } finally {
@@ -119,7 +85,7 @@ export default function MyGardens() {
     try {
       await deleteGarden(deleteConfirmGarden.id);
       setDeleteConfirmGarden(null);
-      loadGardens();
+      refetch();
     } catch {
       setMutationError(true);
     } finally {

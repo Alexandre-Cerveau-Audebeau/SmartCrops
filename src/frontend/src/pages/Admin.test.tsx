@@ -329,3 +329,32 @@ describe('Admin page (SMA-414)', () => {
     expect(screen.getByText('Registered before May 15')).toBeInTheDocument();
   });
 });
+
+// SMA-421 (S12): the 'loading' status is re-armed by the Retry handler, the
+// only place `attempt` moves — no longer at the top of the fetch effect.
+describe('Admin retry re-arms the loading state (SMA-421 S12)', () => {
+  it('shows the busy skeletons again, and no error card, before the retried calls settle', async () => {
+    vi.mocked(fetchAdminStats).mockRejectedValueOnce(new Error('network down'));
+    const { container } = renderAdmin();
+    expect(await screen.findByText('Unable to load data')).toBeInTheDocument();
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull();
+
+    // The retried stats call stays pending until we say so.
+    let resolveStats!: (stats: AdminDashboardStats) => void;
+    vi.mocked(fetchAdminStats).mockImplementationOnce(
+      () =>
+        new Promise<AdminDashboardStats>((resolve) => {
+          resolveStats = resolve;
+        })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(screen.queryByText('Unable to load data')).toBeNull();
+    expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(screen.queryByText('Léa Fontaine')).toBeNull();
+
+    resolveStats(STATS);
+    expect(await screen.findByText('Léa Fontaine')).toBeInTheDocument();
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+});

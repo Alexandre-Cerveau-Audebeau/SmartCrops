@@ -2532,3 +2532,80 @@ describe('SMA-18 lot 2 R2 — in-grid undo/zoom row (mobile)', () => {
     expect(screen.getByRole('button', { name: 'Zoom out' })).toBeInTheDocument();
   });
 });
+
+// SMA-421 (S5): the reducer is hydrated during render on the snapshot's
+// identity. The no-layout branch — a garden whose layout carries no
+// dimensions yet — must open the first-setup dialog instead of a grid.
+describe('GardenPlanner first setup (SMA-421 S5)', () => {
+  it('opens the setup dialog, and no grid, when the garden has no layout dimensions yet', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      width: null,
+      height: null,
+      cellSize: null,
+      placements: [],
+    });
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByRole('heading', { name: 'Garden settings' })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('grid')).toBeNull();
+  });
+});
+
+// SMA-421 (S6): the load-failure toast is raised during render on the
+// error's identity. Its text is resolved once, at failure time, and is not
+// re-resolved when the language changes — the pre-hook catch's behavior.
+describe('GardenPlanner load failure toast (SMA-421 S6)', () => {
+  it('shows the load-failure toast once, in the failure-time language, across a later language switch', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockRejectedValue(new Error('boom'));
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+
+    expect(
+      await screen.findByText('Failed to save layout.')
+    ).toBeInTheDocument();
+
+    // A language switch re-renders the page; the same failure must not toast
+    // again nor be re-resolved into the French copy.
+    fireEvent.click(screen.getByRole('button', { name: 'switch-to-fr' }));
+    // The page title (no garden loaded → planner.title) follows the locale.
+    await screen.findByText('Planificateur de jardin');
+    expect(screen.getAllByText('Failed to save layout.')).toHaveLength(1);
+    expect(screen.queryByText("Impossible d'enregistrer le plan.")).toBeNull();
+  });
+});
+
+// SMA-421 (S7): the removal toast and the selection clear react to the
+// reducer's transient removal event during render (adjust on removedSeq).
+describe('GardenPlanner removal toast (SMA-421 S7)', () => {
+  it('toasts the evicted count and clears the selection when a row removal drops a placement', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    // 3 rows: the reducer refuses to remove below 2, and the placement sits
+    // on row 1 (startRow 0), so removing the top row evicts it.
+    vi.mocked(fetchLayout).mockResolvedValue({ ...layout, height: 3 });
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    await waitFor(() =>
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
+    );
+
+    // Select the placement, then enter shape edit (which keeps the selection).
+    fireEvent.click(within(grid).getAllByRole('gridcell')[0]!);
+    expect(await screen.findByText('Selected placement')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Edit shape'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove top row' }));
+
+    expect(
+      await screen.findByText('1 plant was removed (out of bounds)')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Selected placement')).toBeNull();
+    expect(plantArea(grid).queryByText('B')).toBeNull();
+  });
+});

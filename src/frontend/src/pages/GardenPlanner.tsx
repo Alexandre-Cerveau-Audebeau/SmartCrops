@@ -285,6 +285,21 @@ export default function GardenPlanner() {
     null
   );
   const [catalogAttempt, setCatalogAttempt] = useState(0);
+  // SMA-421: one key per fetch cycle (garden, locale, manual retry). A key
+  // change is the render-time signal that a NEW request is about to start,
+  // so the previous cycle's failure is cleared here (adjust-during-render,
+  // the useSelection pattern) instead of at the top of the fetch effect — a
+  // synchronous setState there trips react-hooks/set-state-in-effect. Pure
+  // derivation cannot express it: a failed FR → EN → FR round trip lands on
+  // the SAME (id, lang, attempt) as the recorded failure, yet must read as
+  // neutral pending until the fresh request settles (SMA-288 R2).
+  const catalogCycleKey = `${id ?? ''}\n${language}\n${catalogAttempt}`;
+  const [prevCatalogCycleKey, setPrevCatalogCycleKey] =
+    useState(catalogCycleKey);
+  if (catalogCycleKey !== prevCatalogCycleKey) {
+    setPrevCatalogCycleKey(catalogCycleKey);
+    setCatalogError(null);
+  }
   const catalogReady = catalog !== null && catalog.lang === language;
   // Keeping the derived name `allPlants` leaves every consumer untouched.
   const allPlants = catalogReady ? catalog.plants : EMPTY_PLANTS;
@@ -332,18 +347,28 @@ export default function GardenPlanner() {
   // the Drawer unmounts but its state survived, so narrowing the viewport
   // again (a resized window, a rotated tablet) reopened the sheet on its
   // own while the trigger stayed hidden. Leaving the phone layout closes it.
-  useEffect(() => {
+  // SMA-421: adjusted during render on the breakpoint transition (the
+  // ConfirmEmail pattern) — the effect variant trips
+  // react-hooks/set-state-in-effect.
+  const [prevIsNarrow, setPrevIsNarrow] = useState(isNarrow);
+  if (isNarrow !== prevIsNarrow) {
+    setPrevIsNarrow(isNarrow);
     if (!isNarrow) setSheetOpen(false);
-  }, [isNarrow]);
+  }
   // SMA-18 lot 2 (FIX C): the two bottom sheets are mutually exclusive —
   // both anchor bottom and neither is useful behind the other. A selection
   // means the PANEL sheet (its open state IS the selection), so the
   // catalogue sheet yields; the reverse direction lives on the trigger,
   // which clears the selection as it opens the catalogue. Above lg this is
-  // a no-op (sheetOpen is already false).
-  useEffect(() => {
+  // a no-op (sheetOpen is already false). SMA-421: adjusted during render on
+  // the selection transition (the useSelection pattern) — the effect variant
+  // trips react-hooks/set-state-in-effect.
+  const [prevSelectedPlacementId, setPrevSelectedPlacementId] =
+    useState(selectedPlacementId);
+  if (selectedPlacementId !== prevSelectedPlacementId) {
+    setPrevSelectedPlacementId(selectedPlacementId);
     if (selectedPlacementId !== null) setSheetOpen(false);
-  }, [selectedPlacementId]);
+  }
 
   // Real blockers (SMA-15 5.4): blocking infrastructure regions derived from
   // the per-cell storage — the [] placeholder era ends here.
@@ -437,15 +462,11 @@ export default function GardenPlanner() {
     // localized server-side per `lang`, so the effect re-runs on language
     // switch — otherwise sidebar/grid/panel names would stay in the old
     // locale while gardenName etc. flip. Abort guards the stale response.
-    // Eager reset (R3 shape): correctness no longer depends on it — the
-    // render-time `catalogReady` derivation already gates mismatched-locale
-    // data — but dropping the old catalog keeps memory honest per request.
-    setCatalog(null);
-    // Returning to a previously FAILED language must read as neutral PENDING
-    // until the fresh request settles — never as the stale error (CR R1,
-    // SMA-288 R2). Cleared alongside the catalog hygiene reset; a genuine
-    // failure of THIS cycle re-records it in the rejection path below.
-    setCatalogError(null);
+    // No eager reset (SMA-421): the render-time `catalogReady` derivation
+    // already gates mismatched-locale data, so the previous catalog is simply
+    // replaced when this request lands; the previous cycle's failure is
+    // cleared at render by the `catalogCycleKey` adjust block above, and a
+    // genuine failure of THIS cycle re-records it in the rejection path below.
     const controller = new AbortController();
     fetchPlants(controller.signal, language)
       .then((plants) => {
@@ -463,56 +484,77 @@ export default function GardenPlanner() {
     return () => controller.abort();
   }, [id, language, catalogAttempt]);
 
-  // Hydrate the reducer from the hook's snapshot. useLayoutEffect so the grid
-  // lands in the same paint as `loading` flipping false — the pre-hook
-  // version applied both in one promise callback.
-  useLayoutEffect(() => {
-    if (!layoutSnapshot) return;
-    const { garden: gardenData, layout: layoutData } = layoutSnapshot;
-    setGarden(gardenData);
-    if (layoutData.width && layoutData.height && layoutData.cellSize) {
-      dispatch({
-        type: 'HYDRATE_FROM_LAYOUT',
-        width: layoutData.width,
-        height: layoutData.height,
-        cellSize: layoutData.cellSize,
-        cellsJson: layoutData.cellsJson,
-        placements: (layoutData.placements ?? []).map((p) => ({
-          // The server placement id doubles as the stable selection identity.
-          id: p.id,
-          plantId: p.plantId,
-          startRow: p.startRow,
-          startCol: p.startCol,
-          spanRows: p.spanRows,
-          spanCols: p.spanCols,
-          notes: p.notes,
-        })),
-      });
-    } else {
-      setShowSetup(true);
+  // Hydrate the reducer from the hook's snapshot — DURING render, on the
+  // snapshot's identity (the useSelection adjust pattern, SMA-421): React
+  // restarts the render with the dispatched state before committing, so the
+  // grid lands in the same commit — the same paint — as `loading` flipping
+  // false. That is the guarantee the previous useLayoutEffect gave (two
+  // commits, no paint between), minus the extra commit, and without the
+  // synchronous setState in an effect that react-hooks/set-state-in-effect
+  // forbids. `garden` stays local state rather than a derivation of the
+  // snapshot: the config dialog overwrites it with the PUT response
+  // (persistConfig) without reloading the layout.
+  const [hydratedSnapshot, setHydratedSnapshot] = useState(layoutSnapshot);
+  if (layoutSnapshot !== hydratedSnapshot) {
+    setHydratedSnapshot(layoutSnapshot);
+    if (layoutSnapshot) {
+      const { garden: gardenData, layout: layoutData } = layoutSnapshot;
+      setGarden(gardenData);
+      if (layoutData.width && layoutData.height && layoutData.cellSize) {
+        dispatch({
+          type: 'HYDRATE_FROM_LAYOUT',
+          width: layoutData.width,
+          height: layoutData.height,
+          cellSize: layoutData.cellSize,
+          cellsJson: layoutData.cellsJson,
+          placements: (layoutData.placements ?? []).map((p) => ({
+            // The server placement id doubles as the stable selection identity.
+            id: p.id,
+            plantId: p.plantId,
+            startRow: p.startRow,
+            startCol: p.startCol,
+            spanRows: p.spanRows,
+            spanCols: p.spanCols,
+            notes: p.notes,
+          })),
+        });
+      } else {
+        setShowSetup(true);
+      }
     }
-  }, [layoutSnapshot]);
+  }
 
-  // Load failure → the same toast the pre-hook catch produced (text resolved
-  // at failure time, not re-resolved on language change — as before).
-  useLayoutEffect(() => {
-    if (loadError === null) return;
-    setMessage({ type: 'error', text: t('planner.toolbar.saveError') });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadError]);
+  // Load failure → the same toast the pre-hook catch produced. Adjusted
+  // during render on the error's IDENTITY (useGardenLayout hands out a fresh
+  // object per failure, SMA-421): the text is resolved once, in the render
+  // that first sees the failure, and never re-resolved on language change —
+  // as before, without the synchronous setState in an effect that
+  // react-hooks/set-state-in-effect forbids.
+  const [prevLoadError, setPrevLoadError] = useState(loadError);
+  if (loadError !== prevLoadError) {
+    setPrevLoadError(loadError);
+    if (loadError !== null) {
+      setMessage({ type: 'error', text: t('planner.toolbar.saveError') });
+    }
+  }
 
   // The old notifyRemovedPlacements side effects, driven by the reducer's
-  // transient removal event: info toast + placement-selection clear.
-  // useLayoutEffect so the toast shares the removal's paint, as before.
-  useLayoutEffect(() => {
-    if (removedSeq === 0) return;
-    setMessage({
-      type: 'info',
-      text: t('planner.placementsRemoved', { count: removedCount }),
-    });
-    selectPlacement(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [removedSeq]);
+  // transient removal event: info toast + placement-selection clear. Eight
+  // reducer cases bump `removedSeq` (row/column removals, RESIZED, …), so
+  // the reaction stays event-driven — adjusted during render on the sequence
+  // number (SMA-421), which shares the removal's paint as the previous
+  // useLayoutEffect did, without its synchronous setState.
+  const [prevRemovedSeq, setPrevRemovedSeq] = useState(removedSeq);
+  if (removedSeq !== prevRemovedSeq) {
+    setPrevRemovedSeq(removedSeq);
+    if (removedSeq !== 0) {
+      setMessage({
+        type: 'info',
+        text: t('planner.placementsRemoved', { count: removedCount }),
+      });
+      selectPlacement(null);
+    }
+  }
 
   // Config is GARDEN-resource state (not reducer grid geometry, #170): the
   // dialog hydrates from the GardenResponse the planner already loaded, and
@@ -680,12 +722,9 @@ export default function GardenPlanner() {
       dispatch({ type: 'SET_INFRA_TYPE', infraType: type }),
     []
   );
-  const handlePlantSelect = useCallback((plantId: string | null) => {
-    // Lot 2: the click fired right after a sidebar drag's pointerup must
-    // not toggle-disarm the row it started from.
-    if (dragEndedRecentlyRef.current) return;
-    dispatch({ type: 'SET_PLACE_PLANT', plantId });
-  }, []);
+  // handlePlantSelect lives below the drag engine (after endDrag): it reads
+  // the click-swallow ref, which must be declared before the callback that
+  // captures it (SMA-421, react-hooks/immutability under 7.1.x).
   const handleSelectionMode = useCallback(
     // R3: one action through the single reset gate (armed values remembered).
     () => dispatch({ type: 'ENTER_SELECTION_MODE' }),
@@ -720,14 +759,8 @@ export default function GardenPlanner() {
   // the sheet (the user's next gesture is on the grid; the Navbar drawer's
   // every-action-closes convention). Disarming (null) keeps it open: the
   // user is still choosing. Fill-all keeps the sheet open too — it acts
-  // immediately and needs no grid gesture (declared choice).
-  const handlePlantSelectSheet = useCallback(
-    (plantId: string | null) => {
-      handlePlantSelect(plantId);
-      if (plantId !== null) setSheetOpen(false);
-    },
-    [handlePlantSelect]
-  );
+  // immediately and needs no grid gesture (declared choice). The plant
+  // variant (handlePlantSelectSheet) follows handlePlantSelect below.
   const handleInfraSelectSheet = useCallback(
     (type: InfrastructureType | null) => {
       handleInfraSelect(type);
@@ -811,8 +844,14 @@ export default function GardenPlanner() {
     [placements, allPlants, language, t]
   );
 
-  // Latest-ref (the page's handleSave pattern): the imperative document
-  // listeners read through this instead of re-registering every render.
+  // Latest-ref (the page's handleSave pattern, saveInputsRef below): the
+  // imperative document listeners read through this instead of
+  // re-registering every render. Refreshed in a useLayoutEffect with no deps
+  // (SMA-421) rather than assigned during render — react-hooks/refs forbids
+  // the render-time write. The listeners are registered from a pointerdown
+  // handler (beginPendingDrag), i.e. always after a commit, so the ref is
+  // fresh before any of them can read it; the initial useRef value covers the
+  // first render.
   const dndLatestRef = useRef({
     grid,
     placements,
@@ -824,17 +863,19 @@ export default function GardenPlanner() {
     gapPx: dndGapPx,
     toastFitRejection,
   });
-  dndLatestRef.current = {
-    grid,
-    placements,
-    placeMode,
-    placePlantId,
-    allPlants,
-    cellSize,
-    cellSizePx,
-    gapPx: dndGapPx,
-    toastFitRejection,
-  };
+  useLayoutEffect(() => {
+    dndLatestRef.current = {
+      grid,
+      placements,
+      placeMode,
+      placePlantId,
+      allPlants,
+      cellSize,
+      cellSizePx,
+      gapPx: dndGapPx,
+      toastFitRejection,
+    };
+  });
 
   /** Invert the overlay track formula: viewport coords → cell, or null off-grid. */
   const pointerToCell = (clientX: number, clientY: number) => {
@@ -928,6 +969,27 @@ export default function GardenPlanner() {
       });
     }
   }, []);
+
+  // Declared AFTER the drag engine's refs and endDrag (SMA-421): under
+  // react-hooks 7.1.x a ref captured by a useCallback before its own
+  // declaration is treated as a frozen hook argument, and endDrag's later
+  // write to it is reported by react-hooks/immutability. Same bodies as
+  // before; only the position moved.
+  const handlePlantSelect = useCallback((plantId: string | null) => {
+    // Lot 2: the click fired right after a sidebar drag's pointerup must
+    // not toggle-disarm the row it started from.
+    if (dragEndedRecentlyRef.current) return;
+    dispatch({ type: 'SET_PLACE_PLANT', plantId });
+  }, []);
+  // SMA-18: the sheet variant — arming CLOSES the sheet, disarming keeps it
+  // open (see the infra/soil variants above).
+  const handlePlantSelectSheet = useCallback(
+    (plantId: string | null) => {
+      handlePlantSelect(plantId);
+      if (plantId !== null) setSheetOpen(false);
+    },
+    [handlePlantSelect]
+  );
 
   /**
    * Document-level pointermove: arms the drag once the 6px threshold is
