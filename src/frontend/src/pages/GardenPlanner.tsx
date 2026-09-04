@@ -484,43 +484,59 @@ export default function GardenPlanner() {
     return () => controller.abort();
   }, [id, language, catalogAttempt]);
 
-  // Hydrate the reducer from the hook's snapshot. useLayoutEffect so the grid
-  // lands in the same paint as `loading` flipping false — the pre-hook
-  // version applied both in one promise callback.
-  useLayoutEffect(() => {
-    if (!layoutSnapshot) return;
-    const { garden: gardenData, layout: layoutData } = layoutSnapshot;
-    setGarden(gardenData);
-    if (layoutData.width && layoutData.height && layoutData.cellSize) {
-      dispatch({
-        type: 'HYDRATE_FROM_LAYOUT',
-        width: layoutData.width,
-        height: layoutData.height,
-        cellSize: layoutData.cellSize,
-        cellsJson: layoutData.cellsJson,
-        placements: (layoutData.placements ?? []).map((p) => ({
-          // The server placement id doubles as the stable selection identity.
-          id: p.id,
-          plantId: p.plantId,
-          startRow: p.startRow,
-          startCol: p.startCol,
-          spanRows: p.spanRows,
-          spanCols: p.spanCols,
-          notes: p.notes,
-        })),
-      });
-    } else {
-      setShowSetup(true);
+  // Hydrate the reducer from the hook's snapshot — DURING render, on the
+  // snapshot's identity (the useSelection adjust pattern, SMA-421): React
+  // restarts the render with the dispatched state before committing, so the
+  // grid lands in the same commit — the same paint — as `loading` flipping
+  // false. That is the guarantee the previous useLayoutEffect gave (two
+  // commits, no paint between), minus the extra commit, and without the
+  // synchronous setState in an effect that react-hooks/set-state-in-effect
+  // forbids. `garden` stays local state rather than a derivation of the
+  // snapshot: the config dialog overwrites it with the PUT response
+  // (persistConfig) without reloading the layout.
+  const [hydratedSnapshot, setHydratedSnapshot] = useState(layoutSnapshot);
+  if (layoutSnapshot !== hydratedSnapshot) {
+    setHydratedSnapshot(layoutSnapshot);
+    if (layoutSnapshot) {
+      const { garden: gardenData, layout: layoutData } = layoutSnapshot;
+      setGarden(gardenData);
+      if (layoutData.width && layoutData.height && layoutData.cellSize) {
+        dispatch({
+          type: 'HYDRATE_FROM_LAYOUT',
+          width: layoutData.width,
+          height: layoutData.height,
+          cellSize: layoutData.cellSize,
+          cellsJson: layoutData.cellsJson,
+          placements: (layoutData.placements ?? []).map((p) => ({
+            // The server placement id doubles as the stable selection identity.
+            id: p.id,
+            plantId: p.plantId,
+            startRow: p.startRow,
+            startCol: p.startCol,
+            spanRows: p.spanRows,
+            spanCols: p.spanCols,
+            notes: p.notes,
+          })),
+        });
+      } else {
+        setShowSetup(true);
+      }
     }
-  }, [layoutSnapshot]);
+  }
 
-  // Load failure → the same toast the pre-hook catch produced (text resolved
-  // at failure time, not re-resolved on language change — as before).
-  useLayoutEffect(() => {
-    if (loadError === null) return;
-    setMessage({ type: 'error', text: t('planner.toolbar.saveError') });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadError]);
+  // Load failure → the same toast the pre-hook catch produced. Adjusted
+  // during render on the error's IDENTITY (useGardenLayout hands out a fresh
+  // object per failure, SMA-421): the text is resolved once, in the render
+  // that first sees the failure, and never re-resolved on language change —
+  // as before, without the synchronous setState in an effect that
+  // react-hooks/set-state-in-effect forbids.
+  const [prevLoadError, setPrevLoadError] = useState(loadError);
+  if (loadError !== prevLoadError) {
+    setPrevLoadError(loadError);
+    if (loadError !== null) {
+      setMessage({ type: 'error', text: t('planner.toolbar.saveError') });
+    }
+  }
 
   // The old notifyRemovedPlacements side effects, driven by the reducer's
   // transient removal event: info toast + placement-selection clear.
