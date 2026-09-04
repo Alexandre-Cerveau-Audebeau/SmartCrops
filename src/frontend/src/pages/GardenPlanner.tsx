@@ -332,9 +332,14 @@ export default function GardenPlanner() {
   // the Drawer unmounts but its state survived, so narrowing the viewport
   // again (a resized window, a rotated tablet) reopened the sheet on its
   // own while the trigger stayed hidden. Leaving the phone layout closes it.
-  useEffect(() => {
+  // SMA-421: adjusted during render on the breakpoint transition (the
+  // ConfirmEmail pattern) — the effect variant trips
+  // react-hooks/set-state-in-effect.
+  const [prevIsNarrow, setPrevIsNarrow] = useState(isNarrow);
+  if (isNarrow !== prevIsNarrow) {
+    setPrevIsNarrow(isNarrow);
     if (!isNarrow) setSheetOpen(false);
-  }, [isNarrow]);
+  }
   // SMA-18 lot 2 (FIX C): the two bottom sheets are mutually exclusive —
   // both anchor bottom and neither is useful behind the other. A selection
   // means the PANEL sheet (its open state IS the selection), so the
