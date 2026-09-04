@@ -124,7 +124,7 @@ export default function PlantDetail() {
   if (egg) return <EasterEggDetail egg={egg} />;
   // --- end SMA-394 ---
 
-  return <CataloguePlantDetail key={id} />;
+  return <CataloguePlantDetail key={id} id={id} />;
 }
 
 /**
@@ -134,9 +134,8 @@ export default function PlantDetail() {
  * + scientific-data placeholder + pests + common names + synonyms + sources +
  * admin), with graceful degradation when enrichments are absent (cf. Basil seed).
  */
-function CataloguePlantDetail() {
+function CataloguePlantDetail({ id }: { id: string | undefined }) {
   const { t } = useTranslation();
-  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const navState = location.state as PlantDetailNavState;

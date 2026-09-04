@@ -113,3 +113,38 @@ describe('usePlant (SMA-421)', () => {
     expect(result.current.plant?.scientificName).toBe('Fresh');
   });
 });
+
+// SMA-421 round 1 (F2, Extension Major): the hook is correct on its own —
+// a new id on the SAME mount invalidates the settled payload during render.
+describe('usePlant — id change on the same mount (SMA-421 R1)', () => {
+  it('goes back to loading with no plant when the id changes, then serves the new plant', async () => {
+    vi.mocked(fetchPlantById).mockResolvedValueOnce(plantOf('p1', 'First'));
+    const { result, rerender } = renderHook(({ id }) => usePlant(id, 0), {
+      initialProps: { id: 'p1' },
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.plant?.scientificName).toBe('First');
+
+    let resolveSecond!: (plant: Plant) => void;
+    vi.mocked(fetchPlantById).mockImplementationOnce(
+      () =>
+        new Promise<Plant>((resolve) => {
+          resolveSecond = resolve;
+        })
+    );
+    rerender({ id: 'p2' });
+
+    // Synchronously after the id change: loading again, no stale plant.
+    expect(result.current.loading).toBe(true);
+    expect(result.current.plant).toBeNull();
+    expect(result.current.error).toBeNull();
+    await waitFor(() => expect(fetchPlantById).toHaveBeenCalledTimes(2));
+    expect(fetchPlantById).toHaveBeenLastCalledWith('p2', expect.anything());
+
+    await act(async () => {
+      resolveSecond(plantOf('p2', 'Second'));
+    });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.plant?.scientificName).toBe('Second');
+  });
+});

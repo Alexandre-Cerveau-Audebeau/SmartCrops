@@ -99,3 +99,64 @@ describe('useGardens (SMA-421)', () => {
     expect(result.current.gardens.map((g) => g.name)).toEqual(['Jardin frais']);
   });
 });
+
+// SMA-421 round 1 (F1, GitHub Major): refetch() must invalidate the active
+// request SYNCHRONOUSLY — the request id moves in the handler, not when the
+// passive effect re-runs — and a failed replacement must not leave the
+// previous list on screen.
+describe('useGardens — synchronous invalidation (SMA-421 R1)', () => {
+  it('ignores a superseded response that lands after refetch() but before the effect re-runs', async () => {
+    const deferred: Array<(gardens: GardenListItem[]) => void> = [];
+    vi.mocked(fetchGardens).mockImplementation(
+      () =>
+        new Promise<GardenListItem[]>((resolve) => {
+          deferred.push(resolve);
+        })
+    );
+    const { result, rerender } = renderHook(
+      ({ language }) => useGardens(language),
+      { initialProps: { language: 'en' } }
+    );
+    await waitFor(() => expect(deferred.length).toBe(1));
+    await act(async () => {
+      deferred[0]!([gardenOf('g1', 'Displayed')]);
+    });
+    expect(result.current.gardens.map((g) => g.name)).toEqual(['Displayed']);
+
+    // Request #2 (language switch) is in flight...
+    rerender({ language: 'fr' });
+    await waitFor(() => expect(deferred.length).toBe(2));
+
+    // ...refetch() is called, and #2 resolves in the window BEFORE the passive
+    // effect has re-run (inside the same async act scope, before its flush).
+    await act(async () => {
+      result.current.refetch();
+      deferred[1]!([gardenOf('g2', 'Late and stale')]);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(deferred.length).toBe(3));
+
+    // The superseded payload never overwrote the displayed list.
+    expect(result.current.gardens.map((g) => g.name)).toEqual(['Displayed']);
+
+    await act(async () => {
+      deferred[2]!([gardenOf('g3', 'Replacement')]);
+    });
+    expect(result.current.gardens.map((g) => g.name)).toEqual(['Replacement']);
+  });
+
+  it('clears the list and reports the error when the replacement request fails', async () => {
+    vi.mocked(fetchGardens).mockResolvedValueOnce([gardenOf('g1', 'Before')]);
+    const { result } = renderHook(() => useGardens('en'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.gardens.map((g) => g.name)).toEqual(['Before']);
+
+    vi.mocked(fetchGardens).mockRejectedValueOnce(new Error('boom'));
+    act(() => result.current.refetch());
+    await waitFor(() => expect(result.current.loadError).toBe(true));
+
+    // No stale list behind the error.
+    expect(result.current.gardens).toEqual([]);
+    expect(result.current.loading).toBe(false);
+  });
+});

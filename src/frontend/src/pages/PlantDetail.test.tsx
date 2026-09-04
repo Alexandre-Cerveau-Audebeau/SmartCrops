@@ -727,16 +727,15 @@ describe('PlantDetail keyed per route id and in-place reload (SMA-421 S11)', () 
 
     const plant = makePlant();
     let resolveReload!: (reloaded: Plant) => void;
-    vi.mocked(fetchPlantById)
-      .mockResolvedValueOnce(plant)
-      .mockImplementationOnce(
-        () =>
-          new Promise<Plant>((resolve) => {
-            resolveReload = resolve;
-          })
-      );
     renderAtPlant(plant);
     await screen.findByRole('heading', { name: 'Basil' });
+    // Queued AFTER the helper's default so the reload payload is unambiguous.
+    vi.mocked(fetchPlantById).mockImplementationOnce(
+      () =>
+        new Promise<Plant>((resolve) => {
+          resolveReload = resolve;
+        })
+    );
 
     await user.click(
       await screen.findByRole('button', { name: 'Admin actions' })

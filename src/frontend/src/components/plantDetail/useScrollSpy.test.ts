@@ -8,20 +8,30 @@ import { useScrollSpy } from './useScrollSpy';
 // change, a vanished one falls back to the first id of the new list.
 
 type ObserverCallback = (entries: IntersectionObserverEntry[]) => void;
+// One callback per observer the hook creates, plus the disconnect count, so
+// a test can assert re-subscription and cleanup after each ids change.
+type ObserverTracker = { callbacks: ObserverCallback[]; disconnects: number };
 
-function stubIntersectionObserver(callbacks: ObserverCallback[]) {
+function stubIntersectionObserver(): ObserverTracker {
+  const tracker: ObserverTracker = { callbacks: [], disconnects: 0 };
   vi.stubGlobal(
     'IntersectionObserver',
     class {
       constructor(cb: ObserverCallback) {
-        callbacks.push(cb);
+        tracker.callbacks.push(cb);
       }
       observe() {}
       unobserve() {}
-      disconnect() {}
+      disconnect() {
+        tracker.disconnects += 1;
+      }
     }
   );
+  return tracker;
 }
+
+const latestCallback = (tracker: ObserverTracker) =>
+  tracker.callbacks[tracker.callbacks.length - 1]!;
 
 const entryFor = (id: string, isIntersecting: boolean) =>
   ({
@@ -60,8 +70,7 @@ describe('useScrollSpy (SMA-421)', () => {
   });
 
   it('keeps an observer-selected section across an ids change that retains it, and resets when it does not', () => {
-    const callbacks: ObserverCallback[] = [];
-    stubIntersectionObserver(callbacks);
+    const observers = stubIntersectionObserver();
     document.body.innerHTML =
       '<div id="a"></div><div id="b"></div><div id="c"></div>';
 
@@ -69,18 +78,34 @@ describe('useScrollSpy (SMA-421)', () => {
       initialProps: { ids: ['a', 'b', 'c'] },
     });
     expect(result.current).toBe('a');
-    expect(callbacks).toHaveLength(1);
+    expect(observers.callbacks).toHaveLength(1);
+    expect(observers.disconnects).toBe(0);
 
     // The user scrolls: 'b' enters the spy band.
-    act(() => callbacks[0]!([entryFor('b', true)]));
+    act(() => latestCallback(observers)([entryFor('b', true)]));
     expect(result.current).toBe('b');
 
     // 'a' leaves the list, 'b' is still there: stays highlighted, no flash.
+    // The hook re-subscribes: the first observer is disconnected, a second
+    // one is created, and THAT one now drives the active id.
     rerender({ ids: ['b', 'c'] });
     expect(result.current).toBe('b');
+    expect(observers.disconnects).toBe(1);
+    expect(observers.callbacks).toHaveLength(2);
+    act(() => latestCallback(observers)([entryFor('c', true)]));
+    expect(result.current).toBe('c');
+    act(() =>
+      latestCallback(observers)([entryFor('c', false), entryFor('b', true)])
+    );
+    expect(result.current).toBe('b');
 
-    // 'b' leaves too: the first id of the new list takes over.
+    // 'b' leaves too: the first id of the new list takes over, the second
+    // observer is disconnected and a third one subscribes to what is left.
     rerender({ ids: ['c'] });
+    expect(result.current).toBe('c');
+    expect(observers.disconnects).toBe(2);
+    expect(observers.callbacks).toHaveLength(3);
+    act(() => latestCallback(observers)([entryFor('c', true)]));
     expect(result.current).toBe('c');
   });
 });

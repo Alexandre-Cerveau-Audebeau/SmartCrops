@@ -34,6 +34,16 @@ export function usePlant(
     plant: Plant | null;
     error: unknown;
   } | null>(null);
+  // Adjust-during-render (the React "reset on prop change" pattern, SMA-421
+  // round 1): a new id invalidates the settled payload, so the hook never
+  // reports a stale plant as the current one — with or without a keyed
+  // consumer. PlantDetail's key={id} stays a page-state reset, not a
+  // load-correctness requirement.
+  const [settledId, setSettledId] = useState(id);
+  if (id !== settledId) {
+    setSettledId(id);
+    setSettled(null);
+  }
 
   useEffect(() => {
     if (!id) return;
