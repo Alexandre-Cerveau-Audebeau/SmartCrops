@@ -6,7 +6,13 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom';
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { AuthProvider } from '../contexts/AuthContext';
@@ -30,6 +36,9 @@ vi.mock('../services/adminApi', () => ({
 
 import PlantDetail from './PlantDetail';
 import { fetchPlantById } from '../services/plantApi';
+import { classifyReEnrich, reEnrichTrefle } from '../services/adminApi';
+import type { ReEnrichResponse } from '../services/adminApi';
+import { fetchMe } from '../services/authApi';
 
 // Every spec queries English labels; since SMA-393 the no-choice default is
 // French, so English is set the way a returning visitor sets it — the stored
@@ -612,5 +621,149 @@ describe('PlantDetail back-to-garden affordance (SMA-309 R2)', () => {
     renderAtPlant(makePlant());
     await screen.findByRole('heading', { name: 'Basil' });
     expect(screen.queryByRole('button', { name: /Back to/ })).toBeNull();
+  });
+});
+
+// SMA-421 (S11): the catalogue page is keyed on the route id (remount per
+// plant) and fetches through usePlant (an admin reload happens in place, the
+// plant on screen stays up).
+describe('PlantDetail keyed per route id and in-place reload (SMA-421 S11)', () => {
+  const flowerImage = {
+    id: 1,
+    imageType: 'Flower',
+    url: 'https://img.test/flower.jpg',
+    thumbnailUrl: 'https://img.test/flower-thumb.jpg',
+    width: 100,
+    height: 100,
+    licenseName: 'CC BY-SA',
+    licenseUrl: null,
+    credit: 'Photographer',
+    source: 'Trefle',
+    sourceExternalId: null,
+    displayOrder: 0,
+    isFlagged: false,
+    attribution: '© Photographer — CC BY-SA',
+  };
+  const mint = makePlant({
+    id: '00000000-0000-0000-0000-000000000002',
+    scientificName: 'Mentha piperita',
+    translations: [
+      {
+        id: 3,
+        language: 'en',
+        commonName: 'Peppermint',
+        description: 'Peppermint short description.',
+      },
+      {
+        id: 4,
+        language: 'fr',
+        commonName: 'Menthe poivrée',
+        description: 'Description courte de la menthe.',
+      },
+    ],
+  });
+
+  it('remounts on a /library/:id change: the previous plant and its open lightbox are gone', async () => {
+    const user = userEvent.setup();
+    const basil = makePlant({ images: [flowerImage] });
+    vi.mocked(fetchPlantById).mockImplementation((id) =>
+      Promise.resolve(id === mint.id ? mint : basil)
+    );
+    function GoToMint() {
+      const navigate = useNavigate();
+      return (
+        <button type="button" onClick={() => navigate(`/library/${mint.id}`)}>
+          go-to-mint
+        </button>
+      );
+    }
+    render(
+      <LanguageProvider>
+        <UnitSystemProvider>
+          <AuthProvider>
+            <MemoryRouter initialEntries={[`/library/${basil.id}`]}>
+              <GoToMint />
+              <Routes>
+                <Route path="/library/:id" element={<PlantDetail />} />
+              </Routes>
+            </MemoryRouter>
+          </AuthProvider>
+        </UnitSystemProvider>
+      </LanguageProvider>
+    );
+    await screen.findByRole('heading', { name: 'Basil' });
+    await user.click(
+      screen.getByRole('button', { name: 'Open photo gallery' })
+    );
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    // The open modal hides its siblings from role queries — target the text.
+    fireEvent.click(screen.getByText('go-to-mint'));
+
+    await screen.findByRole('heading', { name: 'Peppermint' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Basil' })).toBeNull();
+    expect(fetchPlantById).toHaveBeenLastCalledWith(
+      mint.id,
+      expect.anything()
+    );
+  });
+
+  it('an admin re-enrich refetches in place: no spinner, the plant and its toast stay mounted', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchMe).mockResolvedValueOnce({
+      userId: 'u-admin',
+      email: 'admin@example.com',
+      displayName: 'Admin',
+      isAdmin: true,
+    });
+    vi.mocked(reEnrichTrefle).mockResolvedValue({
+      matched: true,
+      imagesAdded: 1,
+      commonNamesAdded: 0,
+      synonymsAdded: 0,
+    } as ReEnrichResponse);
+    vi.mocked(classifyReEnrich).mockReturnValue('matched');
+
+    const plant = makePlant();
+    let resolveReload!: (reloaded: Plant) => void;
+    vi.mocked(fetchPlantById)
+      .mockResolvedValueOnce(plant)
+      .mockImplementationOnce(
+        () =>
+          new Promise<Plant>((resolve) => {
+            resolveReload = resolve;
+          })
+      );
+    renderAtPlant(plant);
+    await screen.findByRole('heading', { name: 'Basil' });
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Admin actions' })
+    );
+    await user.click(
+      await screen.findByRole('menuitem', { name: 'Re-enrich from Trefle' })
+    );
+
+    // The success toast is page state: it survives only if the page did NOT
+    // remount for the reload.
+    const toastText = 'Trefle: 1 images, 0 common names, 0 synonyms added.';
+    await screen.findByText(toastText);
+    await waitFor(() => expect(fetchPlantById).toHaveBeenCalledTimes(2));
+    expect(fetchPlantById).toHaveBeenLastCalledWith(
+      plant.id,
+      expect.anything()
+    );
+    // In flight: no spinner, the current plant is still on screen.
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Basil' })).toBeInTheDocument();
+
+    // The refreshed payload renders (a photo now exists) and the toast is
+    // still there.
+    resolveReload({ ...plant, images: [flowerImage] });
+    expect(
+      await screen.findByRole('button', { name: 'Open photo gallery' })
+    ).toBeInTheDocument();
+    expect(screen.getByText(toastText)).toBeInTheDocument();
   });
 });

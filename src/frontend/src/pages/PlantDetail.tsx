@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Link as RouterLink,
@@ -36,9 +36,8 @@ import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import { NAV_BG } from '../constants/colors';
 import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../hooks/useLanguage';
+import { usePlant } from '../hooks/usePlant';
 import { useUnitSystem } from '../hooks/useUnitSystem';
-import { HttpStatusError } from '../services/httpStatusError';
-import { fetchPlantById } from '../services/plantApi';
 import {
   classifyReEnrich,
   reEnrichPerenual,
@@ -106,22 +105,26 @@ const SECTION_SCROLL_MARGIN = {
 
 /**
  * `GET /library/:id`. The route's entry point, and the module's default export.
- * Its body is a single line; anything above that line is an easter-egg lookup
- * fenced by its own markers, so removing the feature leaves this function
- * exporting the catalogue page and the module still valid.
+ * It reads the route param, keys the catalogue page on it (SMA-421: a
+ * /library/:a → /library/:b navigation REMOUNTS the page, so every piece of
+ * page state — fetched plant, lightbox, admin menu, toast — resets by
+ * construction instead of by an effect), and returns that page. Anything in
+ * between is an easter-egg lookup fenced by its own markers, so removing the
+ * feature leaves this function exporting the catalogue page and the module
+ * still valid.
  */
 export default function PlantDetail() {
+  const { id } = useParams<{ id: string }>();
   // --- SMA-394 easter eggs — delete this block and the easteregg folder to remove ---
   // One lookup, one branch, and nothing else: a slug in the local registry is
   // served by its own page, which owns every line of markup it needs. `null`
   // for all 536 catalogue plants, which fall through to the line below and
   // render exactly as they did before.
-  const eggParams = useParams<{ id: string }>();
-  const egg = getEasterEggBySlug(eggParams.id);
+  const egg = getEasterEggBySlug(id);
   if (egg) return <EasterEggDetail egg={egg} />;
   // --- end SMA-394 ---
 
-  return <CataloguePlantDetail />;
+  return <CataloguePlantDetail key={id} />;
 }
 
 /**
@@ -153,11 +156,19 @@ function CataloguePlantDetail() {
   // backend [Authorize(Roles = "Admin")] on the admin endpoints.
   const isAdmin = user?.isAdmin ?? false;
 
-  const [plant, setPlant] = useState<Plant | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // SMA-421: the fetch lives in usePlant. The page is remounted per :id (the
+  // keyed entry above), so this mount serves one plant; reloadCounter re-runs
+  // the request in place after an admin re-enrich while the current plant
+  // stays on screen. The error copy is resolved from the rejection as before
+  // (the message verbatim, the generic library error otherwise).
   const [reloadCounter, setReloadCounter] = useState(0);
-  const mountedRef = useRef(true);
+  const { plant, loading, error: loadError } = usePlant(id, reloadCounter);
+  const error =
+    loadError === null
+      ? null
+      : loadError instanceof Error
+        ? loadError.message
+        : t('library.error');
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   // The lightbox can be driven by the full gallery (hero) OR by the filtered
@@ -199,45 +210,6 @@ function CataloguePlantDetail() {
   // The Add-to-my-garden flow (dialog, fetchGardens, addPlantToGarden) was
   // REMOVED (SMA-6 Option A): plants enter a garden by being placed in the
   // planner. The hero/CTA actions now route to /gardens instead.
-
-  // ── Plant fetch with abort + reload trigger after admin re-enrich ─────────
-  useEffect(() => {
-    mountedRef.current = true;
-    // SMA-154: clear any open lightbox so a previous plant's photos never linger
-    // while navigating to another /library/:id.
-    setLightboxIndex(null);
-    setLightboxImages([]);
-    setPlant(null);
-    setError(null);
-    if (!id) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-
-    const controller = new AbortController();
-
-    fetchPlantById(id, controller.signal)
-      .then((data) => {
-        if (!controller.signal.aborted) setPlant(data);
-      })
-      .catch((err) => {
-        if (err.name === 'AbortError') return;
-        if (err instanceof HttpStatusError && err.status === 404) return;
-        if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : t('library.error'));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-
-    return () => {
-      mountedRef.current = false;
-      controller.abort();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, reloadCounter]);
 
   // SMA-354: publish the resolved display name as the document-title override
   // (same resolution as `displayName` below, which lives after the early
