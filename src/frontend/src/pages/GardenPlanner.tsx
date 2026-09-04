@@ -539,17 +539,22 @@ export default function GardenPlanner() {
   }
 
   // The old notifyRemovedPlacements side effects, driven by the reducer's
-  // transient removal event: info toast + placement-selection clear.
-  // useLayoutEffect so the toast shares the removal's paint, as before.
-  useLayoutEffect(() => {
-    if (removedSeq === 0) return;
-    setMessage({
-      type: 'info',
-      text: t('planner.placementsRemoved', { count: removedCount }),
-    });
-    selectPlacement(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [removedSeq]);
+  // transient removal event: info toast + placement-selection clear. Eight
+  // reducer cases bump `removedSeq` (row/column removals, RESIZED, …), so
+  // the reaction stays event-driven — adjusted during render on the sequence
+  // number (SMA-421), which shares the removal's paint as the previous
+  // useLayoutEffect did, without its synchronous setState.
+  const [prevRemovedSeq, setPrevRemovedSeq] = useState(removedSeq);
+  if (removedSeq !== prevRemovedSeq) {
+    setPrevRemovedSeq(removedSeq);
+    if (removedSeq !== 0) {
+      setMessage({
+        type: 'info',
+        text: t('planner.placementsRemoved', { count: removedCount }),
+      });
+      selectPlacement(null);
+    }
+  }
 
   // Config is GARDEN-resource state (not reducer grid geometry, #170): the
   // dialog hydrates from the GardenResponse the planner already loaded, and
