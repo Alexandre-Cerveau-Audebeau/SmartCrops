@@ -16,12 +16,15 @@ export function useScrollSpy(ids: string[]): string {
   // JSON.stringify (vs join('|')) avoids collisions if an id ever contains '|'.
   const key = JSON.stringify(ids);
 
+  // Reconcile the stored id with the CURRENT list at render time (SMA-421):
+  // while the stored section still exists it stays highlighted — no flash when
+  // `ids` changes around it — and once it disappears the first id takes over.
+  // Derived rather than reset inside the effect: a synchronous setState there
+  // trips react-hooks/set-state-in-effect. This also covers the jsdom / SSR
+  // fallback below, where the observer never runs.
+  const effectiveId = ids.includes(activeId) ? activeId : (ids[0] ?? '');
+
   useEffect(() => {
-    // Reset the active id only when the current one is no longer valid (its
-    // section disappeared from `ids`). Keeps the highlighted section stable when
-    // `ids` changes but the scrolled section still exists, and avoids a flash on
-    // the IntersectionObserver path. Also covers the jsdom / SSR fallback below.
-    setActiveId((prev) => (ids.includes(prev) ? prev : (ids[0] ?? '')));
     if (typeof IntersectionObserver === 'undefined') return;
     const elements = ids
       .map((id) => document.getElementById(id))
@@ -59,5 +62,5 @@ export function useScrollSpy(ids: string[]): string {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  return activeId;
+  return effectiveId;
 }
