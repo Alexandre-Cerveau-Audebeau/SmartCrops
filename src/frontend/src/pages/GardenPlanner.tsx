@@ -345,10 +345,15 @@ export default function GardenPlanner() {
   // means the PANEL sheet (its open state IS the selection), so the
   // catalogue sheet yields; the reverse direction lives on the trigger,
   // which clears the selection as it opens the catalogue. Above lg this is
-  // a no-op (sheetOpen is already false).
-  useEffect(() => {
+  // a no-op (sheetOpen is already false). SMA-421: adjusted during render on
+  // the selection transition (the useSelection pattern) — the effect variant
+  // trips react-hooks/set-state-in-effect.
+  const [prevSelectedPlacementId, setPrevSelectedPlacementId] =
+    useState(selectedPlacementId);
+  if (selectedPlacementId !== prevSelectedPlacementId) {
+    setPrevSelectedPlacementId(selectedPlacementId);
     if (selectedPlacementId !== null) setSheetOpen(false);
-  }, [selectedPlacementId]);
+  }
 
   // Real blockers (SMA-15 5.4): blocking infrastructure regions derived from
   // the per-cell storage — the [] placeholder era ends here.
