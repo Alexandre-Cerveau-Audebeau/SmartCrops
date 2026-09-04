@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { fetchGardens } from '../services/gardenApi';
 import type { GardenListItem } from '../types/Garden';
 
@@ -10,20 +16,24 @@ import type { GardenListItem } from '../types/Garden';
  *
  * Monotonic sequencing over EVERY request (SMA-288): a locale-switch fetch
  * and a post-mutation refresh can overlap, so an older response could land
- * last and overwrite newer state. Each run takes the next request id; a
- * state commit is gated on that id still being the latest AND on the run's
- * cleanup not having fired (`stale`). `refetch()` moves the id SYNCHRONOUSLY
- * in the handler (SMA-421 round 1), so a superseded response landing before
- * the passive effect re-runs is already out of date; a language change is
- * invalidated by the effect itself on entry, after its cleanup aborted the
- * previous run. The AbortController stays as the cancellation fast-path —
- * its abort always follows the cleanup, so an aborted run can never commit.
+ * last and overwrite newer state. The invalidation lives in the COMMIT
+ * (SMA-421 round 2): a layout effect keyed on [language, epoch] advances the
+ * request generation and aborts the in-flight request synchronously inside
+ * the commit — before any promise callback can run — so a superseded
+ * settlement that lands between the render and the passive effects is
+ * already out of date, for a language change and for refetch() alike.
+ * refetch() additionally moves the generation in the handler itself (round
+ * 1): its callers run after an `await`, so the commit of their epoch bump
+ * comes in a later task, and that call-to-commit interval needs closing too.
+ * The passive effect only STARTS the request of the current generation; a
+ * state commit is gated on that generation still being the latest and on
+ * the request not being aborted.
  *
  * Loading semantics match the page: `loading` starts true and only flips
  * false once — a refetch keeps the current cards rendered until the new list
  * lands; a FAILED replacement clears the list so the error never sits behind
  * stale cards. Every state write lives in the promise chain, never
- * synchronously in the effect body (react-hooks/set-state-in-effect).
+ * synchronously in an effect body (react-hooks/set-state-in-effect).
  */
 export function useGardens(language: string) {
   const [gardens, setGardens] = useState<GardenListItem[]>([]);
@@ -31,23 +41,40 @@ export function useGardens(language: string) {
   const [loadError, setLoadError] = useState(false);
   const [epoch, setEpoch] = useState(0);
   const latestRequestRef = useRef(0);
+  const inFlightRef = useRef<AbortController | null>(null);
 
-  // Synchronous invalidation (SMA-421 round 1): the request id moves HERE, in
-  // the handler, not when the passive effect re-runs — a response of the
-  // superseded run that lands in between can no longer pass isCurrent(). The
-  // effect then takes the next id on entry and starts the replacement.
+  // refetch() ALSO moves the generation here, synchronously in the handler
+  // (SMA-421 round 1, kept in round 2): the post-mutation callers run after an
+  // `await`, outside any discrete event, so React commits the epoch bump in a
+  // later task — a superseded response can settle between this call and that
+  // commit, before the layout effect below runs. The layout effect remains
+  // the one place where the previous request is aborted.
   const refetch = useCallback(() => {
     latestRequestRef.current += 1;
     setEpoch((e) => e + 1);
   }, []);
 
+  // The invalidation point for every commit: runs synchronously in the commit
+  // of every language change / refetch (and on unmount through its cleanup).
+  // The generation moves and the previous request is aborted before React
+  // yields, so no settlement can slip in between the render and the passive
+  // effects.
+  useLayoutEffect(() => {
+    latestRequestRef.current += 1;
+    inFlightRef.current?.abort();
+    inFlightRef.current = null;
+    return () => {
+      inFlightRef.current?.abort();
+      inFlightRef.current = null;
+    };
+  }, [language, epoch]);
+
   useEffect(() => {
-    let stale = false;
+    const requestId = latestRequestRef.current;
     const controller = new AbortController();
-    // Entry invalidation: every run (mount, language change, refetch) takes
-    // the next id, so any earlier run is out of date from this point on.
-    const requestId = ++latestRequestRef.current;
-    const isCurrent = () => !stale && requestId === latestRequestRef.current;
+    inFlightRef.current = controller;
+    const isCurrent = () =>
+      !controller.signal.aborted && requestId === latestRequestRef.current;
     fetchGardens(controller.signal, language)
       .then((data) => {
         if (!isCurrent()) return;
@@ -64,10 +91,6 @@ export function useGardens(language: string) {
       .finally(() => {
         if (isCurrent()) setLoading(false);
       });
-    return () => {
-      stale = true;
-      controller.abort();
-    };
   }, [language, epoch]);
 
   return { gardens, loading, loadError, refetch };

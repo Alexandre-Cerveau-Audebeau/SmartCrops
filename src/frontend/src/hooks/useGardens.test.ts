@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useLayoutEffect } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useGardens } from './useGardens';
 import { fetchGardens } from '../services/gardenApi';
@@ -157,6 +158,97 @@ describe('useGardens — synchronous invalidation (SMA-421 R1)', () => {
 
     // No stale list behind the error.
     expect(result.current.gardens).toEqual([]);
+    expect(result.current.loading).toBe(false);
+  });
+});
+
+// SMA-421 round 2 (F6, GitHub Major): the in-flight request must be
+// invalidated in the COMMIT — a layout effect — so a settlement that lands
+// after the language-change render but before the passive effects can no
+// longer pass isCurrent(). A real promise never settles inside React's
+// synchronous act flush, so that interval is modelled deterministically: the
+// pending request is a thenable the test settles from a layout effect
+// declared AFTER the hook — same commit as the language change, after the
+// hook's own layout effect, before any passive effect.
+type SyncDeferred<T> = {
+  thenable: Promise<T>;
+  resolve: (value: T) => void;
+};
+
+function syncDeferred<T>(): SyncDeferred<T> {
+  const onFulfilled: Array<(value: T) => unknown> = [];
+  const onFinally: Array<() => unknown> = [];
+  const thenable = {
+    then(f?: (value: T) => unknown) {
+      if (f) onFulfilled.push(f);
+      return thenable;
+    },
+    catch() {
+      return thenable;
+    },
+    finally(f?: () => unknown) {
+      if (f) onFinally.push(f);
+      return thenable;
+    },
+  };
+  return {
+    thenable: thenable as unknown as Promise<T>,
+    resolve: (value: T) => {
+      onFulfilled.forEach((f) => f(value));
+      onFinally.forEach((f) => f());
+    },
+  };
+}
+
+describe('useGardens — invalidation in the commit (SMA-421 R2)', () => {
+  it('ignores a response that settles after the language-change render but before the passive effect: list and loading intact', async () => {
+    // #1 (en) is settled by the test from inside the language-change commit;
+    // #2 (fr) stays pending until the end.
+    const late = syncDeferred<GardenListItem[]>();
+    const fresh: Array<(gardens: GardenListItem[]) => void> = [];
+    vi.mocked(fetchGardens)
+      .mockImplementationOnce(() => late.thenable)
+      .mockImplementation(
+        () =>
+          new Promise<GardenListItem[]>((resolve) => {
+            fresh.push(resolve);
+          })
+      );
+
+    let settleInCommit = false;
+    const { result, rerender } = renderHook(
+      ({ language }) => {
+        const gardens = useGardens(language);
+        // Declared after the hook: runs in the same commit, after the hook's
+        // layout effect and before any passive effect.
+        useLayoutEffect(() => {
+          if (settleInCommit) {
+            settleInCommit = false;
+            late.resolve([gardenOf('g1', 'Late and stale')]);
+          }
+        }, [language]);
+        return gardens;
+      },
+      { initialProps: { language: 'en' } }
+    );
+    await waitFor(() => expect(fetchGardens).toHaveBeenCalledTimes(1));
+    expect(result.current.loading).toBe(true);
+    expect(result.current.gardens).toEqual([]);
+
+    settleInCommit = true;
+    rerender({ language: 'fr' });
+
+    // The previous language's payload never landed: nothing displayed, still
+    // loading, no error — the fr request is the only one that may commit.
+    expect(result.current.gardens).toEqual([]);
+    expect(result.current.loading).toBe(true);
+    expect(result.current.loadError).toBe(false);
+    await waitFor(() => expect(fresh.length).toBe(1));
+
+    await act(async () => {
+      fresh[0]!([gardenOf('g2', 'Fresh')]);
+    });
+    expect(result.current.gardens.map((g) => g.name)).toEqual(['Fresh']);
     expect(result.current.loading).toBe(false);
   });
 });
