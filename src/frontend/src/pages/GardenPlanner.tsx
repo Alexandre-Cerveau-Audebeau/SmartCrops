@@ -285,6 +285,21 @@ export default function GardenPlanner() {
     null
   );
   const [catalogAttempt, setCatalogAttempt] = useState(0);
+  // SMA-421: one key per fetch cycle (garden, locale, manual retry). A key
+  // change is the render-time signal that a NEW request is about to start,
+  // so the previous cycle's failure is cleared here (adjust-during-render,
+  // the useSelection pattern) instead of at the top of the fetch effect — a
+  // synchronous setState there trips react-hooks/set-state-in-effect. Pure
+  // derivation cannot express it: a failed FR → EN → FR round trip lands on
+  // the SAME (id, lang, attempt) as the recorded failure, yet must read as
+  // neutral pending until the fresh request settles (SMA-288 R2).
+  const catalogCycleKey = `${id ?? ''}\n${language}\n${catalogAttempt}`;
+  const [prevCatalogCycleKey, setPrevCatalogCycleKey] =
+    useState(catalogCycleKey);
+  if (catalogCycleKey !== prevCatalogCycleKey) {
+    setPrevCatalogCycleKey(catalogCycleKey);
+    setCatalogError(null);
+  }
   const catalogReady = catalog !== null && catalog.lang === language;
   // Keeping the derived name `allPlants` leaves every consumer untouched.
   const allPlants = catalogReady ? catalog.plants : EMPTY_PLANTS;
@@ -447,15 +462,11 @@ export default function GardenPlanner() {
     // localized server-side per `lang`, so the effect re-runs on language
     // switch — otherwise sidebar/grid/panel names would stay in the old
     // locale while gardenName etc. flip. Abort guards the stale response.
-    // Eager reset (R3 shape): correctness no longer depends on it — the
-    // render-time `catalogReady` derivation already gates mismatched-locale
-    // data — but dropping the old catalog keeps memory honest per request.
-    setCatalog(null);
-    // Returning to a previously FAILED language must read as neutral PENDING
-    // until the fresh request settles — never as the stale error (CR R1,
-    // SMA-288 R2). Cleared alongside the catalog hygiene reset; a genuine
-    // failure of THIS cycle re-records it in the rejection path below.
-    setCatalogError(null);
+    // No eager reset (SMA-421): the render-time `catalogReady` derivation
+    // already gates mismatched-locale data, so the previous catalog is simply
+    // replaced when this request lands; the previous cycle's failure is
+    // cleared at render by the `catalogCycleKey` adjust block above, and a
+    // genuine failure of THIS cycle re-records it in the rejection path below.
     const controller = new AbortController();
     fetchPlants(controller.signal, language)
       .then((plants) => {
