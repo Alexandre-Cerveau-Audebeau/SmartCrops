@@ -722,12 +722,9 @@ export default function GardenPlanner() {
       dispatch({ type: 'SET_INFRA_TYPE', infraType: type }),
     []
   );
-  const handlePlantSelect = useCallback((plantId: string | null) => {
-    // Lot 2: the click fired right after a sidebar drag's pointerup must
-    // not toggle-disarm the row it started from.
-    if (dragEndedRecentlyRef.current) return;
-    dispatch({ type: 'SET_PLACE_PLANT', plantId });
-  }, []);
+  // handlePlantSelect lives below the drag engine (after endDrag): it reads
+  // the click-swallow ref, which must be declared before the callback that
+  // captures it (SMA-421, react-hooks/immutability under 7.1.x).
   const handleSelectionMode = useCallback(
     // R3: one action through the single reset gate (armed values remembered).
     () => dispatch({ type: 'ENTER_SELECTION_MODE' }),
@@ -762,14 +759,8 @@ export default function GardenPlanner() {
   // the sheet (the user's next gesture is on the grid; the Navbar drawer's
   // every-action-closes convention). Disarming (null) keeps it open: the
   // user is still choosing. Fill-all keeps the sheet open too — it acts
-  // immediately and needs no grid gesture (declared choice).
-  const handlePlantSelectSheet = useCallback(
-    (plantId: string | null) => {
-      handlePlantSelect(plantId);
-      if (plantId !== null) setSheetOpen(false);
-    },
-    [handlePlantSelect]
-  );
+  // immediately and needs no grid gesture (declared choice). The plant
+  // variant (handlePlantSelectSheet) follows handlePlantSelect below.
   const handleInfraSelectSheet = useCallback(
     (type: InfrastructureType | null) => {
       handleInfraSelect(type);
@@ -978,6 +969,27 @@ export default function GardenPlanner() {
       });
     }
   }, []);
+
+  // Declared AFTER the drag engine's refs and endDrag (SMA-421): under
+  // react-hooks 7.1.x a ref captured by a useCallback before its own
+  // declaration is treated as a frozen hook argument, and endDrag's later
+  // write to it is reported by react-hooks/immutability. Same bodies as
+  // before; only the position moved.
+  const handlePlantSelect = useCallback((plantId: string | null) => {
+    // Lot 2: the click fired right after a sidebar drag's pointerup must
+    // not toggle-disarm the row it started from.
+    if (dragEndedRecentlyRef.current) return;
+    dispatch({ type: 'SET_PLACE_PLANT', plantId });
+  }, []);
+  // SMA-18: the sheet variant — arming CLOSES the sheet, disarming keeps it
+  // open (see the infra/soil variants above).
+  const handlePlantSelectSheet = useCallback(
+    (plantId: string | null) => {
+      handlePlantSelect(plantId);
+      if (plantId !== null) setSheetOpen(false);
+    },
+    [handlePlantSelect]
+  );
 
   /**
    * Document-level pointermove: arms the drag once the 6px threshold is
