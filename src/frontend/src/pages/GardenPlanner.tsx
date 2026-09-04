@@ -853,8 +853,14 @@ export default function GardenPlanner() {
     [placements, allPlants, language, t]
   );
 
-  // Latest-ref (the page's handleSave pattern): the imperative document
-  // listeners read through this instead of re-registering every render.
+  // Latest-ref (the page's handleSave pattern, saveInputsRef below): the
+  // imperative document listeners read through this instead of
+  // re-registering every render. Refreshed in a useLayoutEffect with no deps
+  // (SMA-421) rather than assigned during render — react-hooks/refs forbids
+  // the render-time write. The listeners are registered from a pointerdown
+  // handler (beginPendingDrag), i.e. always after a commit, so the ref is
+  // fresh before any of them can read it; the initial useRef value covers the
+  // first render.
   const dndLatestRef = useRef({
     grid,
     placements,
@@ -866,17 +872,19 @@ export default function GardenPlanner() {
     gapPx: dndGapPx,
     toastFitRejection,
   });
-  dndLatestRef.current = {
-    grid,
-    placements,
-    placeMode,
-    placePlantId,
-    allPlants,
-    cellSize,
-    cellSizePx,
-    gapPx: dndGapPx,
-    toastFitRejection,
-  };
+  useLayoutEffect(() => {
+    dndLatestRef.current = {
+      grid,
+      placements,
+      placeMode,
+      placePlantId,
+      allPlants,
+      cellSize,
+      cellSizePx,
+      gapPx: dndGapPx,
+      toastFitRejection,
+    };
+  });
 
   /** Invert the overlay track formula: viewport coords → cell, or null off-grid. */
   const pointerToCell = (clientX: number, clientY: number) => {
