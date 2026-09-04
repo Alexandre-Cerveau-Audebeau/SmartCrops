@@ -231,6 +231,16 @@ describe('GardenPlanner render budget when arming a catalogue plant (SMA-423)', 
     expect
       .soft(a.FootprintBadge ?? 0, 'A (first arming): catalogue rows rendered')
       .toBeLessThanOrEqual(2);
+    // The first arming ENTERS Place mode: the page flips
+    // `onCellPointerDown={placeMode ? handleCellPointerDown : undefined}`
+    // from undefined to the handler — a toggle the lot keeps on purpose (it
+    // drives the per-cell touch-action clamp) — so GardenGrid sees a changed
+    // prop and every cell re-renders EXACTLY once. That single full pass is
+    // the documented, measured budget (100 before and after SMA-423); only B,
+    // which stays inside Place mode, must leave the grid untouched.
+    expect
+      .soft(a.GridCell ?? 0, 'A (first arming): grid cells rendered')
+      .toBe(100);
 
     // B — switching to another plant: the previous row, the new row and the
     // chip; the grid is untouched (Place mode stays on, only the plant
@@ -256,5 +266,12 @@ describe('GardenPlanner render budget when arming a catalogue plant (SMA-423)', 
     expect
       .soft(c.FootprintBadge ?? 0, 'C (disarm): catalogue rows rendered')
       .toBeLessThanOrEqual(1);
+    // Disarming LEAVES Place mode (SET_PLACE_PLANT(null) sets placeMode to
+    // false): the same kept toggle flips onCellPointerDown back to undefined,
+    // so the grid re-renders exactly once more — the mirror of A, not a
+    // regression. B is the step that proves the grid callbacks are stable.
+    expect
+      .soft(c.GridCell ?? 0, 'C (disarm): grid cells rendered')
+      .toBe(100);
   }, 60000);
 });
