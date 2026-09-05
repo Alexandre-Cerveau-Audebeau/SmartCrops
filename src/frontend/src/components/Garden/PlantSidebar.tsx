@@ -17,7 +17,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { useTranslation } from 'react-i18next';
 import { STICKY_OFFSET } from '../../constants/layout';
 import { spacingToFootprintCells } from '../../pages/gardenPlanner/placementGeometry';
-import { iosSwitchSx } from '../../theme/plannerTokens';
+import { iosSwitchSx, type PlannerTokens } from '../../theme/plannerTokens';
 import { FootprintBadge } from './FootprintBadge';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import type { Plant } from '../../types/Plant';
@@ -189,6 +189,113 @@ function ArmedPlantChip({
     </Box>
   );
 }
+
+/**
+ * SMA-423: ONE catalogue row, memoized. The rows used to be built inline in
+ * PlantSidebar's `filtered.map`, so arming a plant — a click whose only
+ * changing prop is `selectedPlantId` — rebuilt all ~536 rows to change two,
+ * measured at ≈ 85-90 % of that click's commit (pre-flight §3). Every prop
+ * below is referentially stable across that click (the catalogue's plant
+ * object, primitives, the page's `useCallback([])` handlers, the
+ * module-constant tokens), so only the row that arms and the row that
+ * disarms re-render; every other row bails out in memo. DOM, aria-pressed
+ * toggle, drag wiring and touch-action clamp are the inline row's, verbatim;
+ * name / colour / footprint are derived here, per row, as before.
+ */
+const PlantRow = memo(function PlantRow({
+  plant,
+  selected,
+  cellSize,
+  language,
+  tk,
+  onPlantSelect,
+  onPlantPointerDown,
+}: {
+  plant: Plant;
+  selected: boolean;
+  cellSize: string;
+  language: string;
+  tk: PlannerTokens;
+  onPlantSelect: (plantId: string | null) => void;
+  /**
+   * The drag source (the page's engine). Absent in the SHEET — a stable
+   * `undefined`, which also lifts the touch-action clamp so the list scrolls
+   * under a finger (SMA-18), exactly as the inline row did.
+   */
+  onPlantPointerDown?: (plantId: string, e: React.PointerEvent) => void;
+}) {
+  // SMA-194: the picker's primary label is the SAME localized
+  // common name the Library shows (scientific fallback inside
+  // the resolver); the secondary stays the scientific name.
+  const name = getPlantDisplayName(plant, language);
+  const color = getPlantColor(plant.id);
+  // SMA-193: footprint badge from the list DTO's Perenual
+  // spacing — the SAME rule that sizes the actual placement,
+  // so the badge can never lie. Unknown → the mockup's
+  // dashed "1×1?" (Achillea).
+  const fp = spacingToFootprintCells(
+    plant.xPlantSpacingValue ?? null,
+    plant.xPlantSpacingUnit ?? null,
+    cellSize
+  );
+  return (
+    <ListItemButton
+      selected={selected}
+      // R2 (CR committable): the armed toggle state reaches
+      // AT — same as the infrastructure rows' aria-pressed.
+      aria-pressed={selected}
+      // Re-clicking the armed plant disarms it (SMA-193) —
+      // same toggle grammar as the infrastructure rows.
+      onClick={() => onPlantSelect(selected ? null : plant.id)}
+      // DnD (lot 2): the drag engine sees the pointerdown
+      // first; a plain click still lands on onClick above.
+      onPointerDown={onPlantPointerDown ? (e: React.PointerEvent) => onPlantPointerDown(plant.id, e) : undefined}
+      // R4 (mockup metrics): row padding 10×14.
+      sx={{
+        px: '14px',
+        py: '10px',
+        // Extension (lot 2 R1): a touch drag must feed the
+        // pointer engine, not scroll the list. SMA-18: the
+        // clamp follows the drag wiring (GardenGrid's own
+        // pattern) — the sheet passes no onPlantPointerDown,
+        // and its list MUST scroll under a finger.
+        ...(onPlantPointerDown && { touchAction: 'none' }),
+        // R5 (CR accept): the selected marker uses the planner
+        // token, not the generic theme primary.
+        borderLeft: selected
+          ? `3px solid ${tk.prim}`
+          : '3px solid transparent',
+      }}
+    >
+      {/* R3/R4 (mockup metrics): avatar 34px round, w800 fs 14.5. */}
+      <ListItemAvatar sx={{ minWidth: 42 }}>
+        <Avatar sx={{ width: 34, height: 34, fontSize: 14.5, fontWeight: 800, bgcolor: color }}>{name.charAt(0).toUpperCase()}</Avatar>
+      </ListItemAvatar>
+      <ListItemText
+        disableTypography
+        primary={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* R4: name 13.5 w700 tTitle · sci 11.5 italic
+                tSci — the sidebar leg of the day-contrast
+                pass (disableTypography keeps both intact
+                around the badge). */}
+            <Typography component="span" noWrap sx={{ fontSize: 13.5, fontWeight: 700, color: tk.tTitle, minWidth: 0 }}>
+              {name}
+            </Typography>
+            {/* Shared badge (SMA-18): same component as the
+                armed chip — R2/R3 aria semantics inside. */}
+            <FootprintBadge fp={fp} />
+          </Box>
+        }
+        secondary={
+          <Typography component="span" noWrap sx={{ display: 'block', fontSize: 11.5, fontStyle: 'italic', color: tk.tSci }}>
+            {plant.scientificName}
+          </Typography>
+        }
+      />
+    </ListItemButton>
+  );
+});
 
 function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, onPlantSelect, cellSize = '50cm', onPlantPointerDown, selectedInfraType = null, onInfraSelect, selectedSoilType = null, onSoilSelect, onSoilFillAll, language, shapeEditMode, onShapeEditToggle, catalogFailed, onCatalogRetry, catalogReady, variant = 'rail', activeTab, onActiveTabChange }: Props) {
   const { t } = useTranslation();
@@ -581,81 +688,20 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
               </Typography>
             ) : (
               <List dense disablePadding>
-                {filtered.map((plant) => {
-                  // SMA-194: the picker's primary label is the SAME localized
-                  // common name the Library shows (scientific fallback inside
-                  // the resolver); the secondary stays the scientific name.
-                  const name = getPlantDisplayName(plant, language);
-                  const color = getPlantColor(plant.id);
-                  const selected = plant.id === selectedPlantId;
-                  // SMA-193: footprint badge from the list DTO's Perenual
-                  // spacing — the SAME rule that sizes the actual placement,
-                  // so the badge can never lie. Unknown → the mockup's
-                  // dashed "1×1?" (Achillea).
-                  const fp = spacingToFootprintCells(
-                    plant.xPlantSpacingValue ?? null,
-                    plant.xPlantSpacingUnit ?? null,
-                    cellSize
-                  );
-                  return (
-                    <ListItemButton
-                      key={plant.id}
-                      selected={selected}
-                      // R2 (CR committable): the armed toggle state reaches
-                      // AT — same as the infrastructure rows' aria-pressed.
-                      aria-pressed={selected}
-                      // Re-clicking the armed plant disarms it (SMA-193) —
-                      // same toggle grammar as the infrastructure rows.
-                      onClick={() => onPlantSelect(selected ? null : plant.id)}
-                      // DnD (lot 2): the drag engine sees the pointerdown
-                      // first; a plain click still lands on onClick above.
-                      onPointerDown={onPlantPointerDown ? (e: React.PointerEvent) => onPlantPointerDown(plant.id, e) : undefined}
-                      // R4 (mockup metrics): row padding 10×14.
-                      sx={{
-                        px: '14px',
-                        py: '10px',
-                        // Extension (lot 2 R1): a touch drag must feed the
-                        // pointer engine, not scroll the list. SMA-18: the
-                        // clamp follows the drag wiring (GardenGrid's own
-                        // pattern) — the sheet passes no onPlantPointerDown,
-                        // and its list MUST scroll under a finger.
-                        ...(onPlantPointerDown && { touchAction: 'none' }),
-                        // R5 (CR accept): the selected marker uses the planner
-                        // token, not the generic theme primary.
-                        borderLeft: selected
-                          ? `3px solid ${tk.prim}`
-                          : '3px solid transparent',
-                      }}
-                    >
-                      {/* R3/R4 (mockup metrics): avatar 34px round, w800 fs 14.5. */}
-                      <ListItemAvatar sx={{ minWidth: 42 }}>
-                        <Avatar sx={{ width: 34, height: 34, fontSize: 14.5, fontWeight: 800, bgcolor: color }}>{name.charAt(0).toUpperCase()}</Avatar>
-                      </ListItemAvatar>
-                      <ListItemText
-                        disableTypography
-                        primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {/* R4: name 13.5 w700 tTitle · sci 11.5 italic
-                                tSci — the sidebar leg of the day-contrast
-                                pass (disableTypography keeps both intact
-                                around the badge). */}
-                            <Typography component="span" noWrap sx={{ fontSize: 13.5, fontWeight: 700, color: tk.tTitle, minWidth: 0 }}>
-                              {name}
-                            </Typography>
-                            {/* Shared badge (SMA-18): same component as the
-                                armed chip — R2/R3 aria semantics inside. */}
-                            <FootprintBadge fp={fp} />
-                          </Box>
-                        }
-                        secondary={
-                          <Typography component="span" noWrap sx={{ display: 'block', fontSize: 11.5, fontStyle: 'italic', color: tk.tSci }}>
-                            {plant.scientificName}
-                          </Typography>
-                        }
-                      />
-                    </ListItemButton>
-                  );
-                })}
+                {filtered.map((plant) => (
+                  // SMA-423: one memoized row per plant (PlantRow above) —
+                  // only the rows whose `selected` flips re-render on arming.
+                  <PlantRow
+                    key={plant.id}
+                    plant={plant}
+                    selected={plant.id === selectedPlantId}
+                    cellSize={cellSize}
+                    language={language}
+                    tk={tk}
+                    onPlantSelect={onPlantSelect}
+                    onPlantPointerDown={onPlantPointerDown}
+                  />
+                ))}
               </List>
             )}
           </Box>

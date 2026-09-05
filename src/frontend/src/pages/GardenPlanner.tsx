@@ -852,6 +852,11 @@ export default function GardenPlanner() {
   // handler (beginPendingDrag), i.e. always after a commit, so the ref is
   // fresh before any of them can read it; the initial useRef value covers the
   // first render.
+  // SMA-423: handleCellClick reads through this ref too (the mode flags,
+  // catalogReady, exposureVisible and selectPlacement joined the DnD inputs),
+  // so its identity no longer follows placeMode / placePlantId — before, every
+  // arming click handed GardenGrid a new onCellClick and re-rendered all ~100
+  // cells (pre-flight §3.2, 100/100 per click).
   const dndLatestRef = useRef({
     grid,
     placements,
@@ -862,6 +867,12 @@ export default function GardenPlanner() {
     cellSizePx,
     gapPx: dndGapPx,
     toastFitRejection,
+    shapeEditMode,
+    infraMode,
+    soilMode,
+    catalogReady,
+    exposureVisible,
+    selectPlacement,
   });
   useLayoutEffect(() => {
     dndLatestRef.current = {
@@ -874,6 +885,12 @@ export default function GardenPlanner() {
       cellSizePx,
       gapPx: dndGapPx,
       toastFitRejection,
+      shapeEditMode,
+      infraMode,
+      soilMode,
+      catalogReady,
+      exposureVisible,
+      selectPlacement,
     };
   });
 
@@ -990,6 +1007,12 @@ export default function GardenPlanner() {
     },
     [handlePlantSelect]
   );
+  // SMA-423: the grid's ref-callback with ONE identity — the inline arrow it
+  // replaces defeated GardenGrid's memo on every page render (pre-flight §3.3,
+  // G1: the grid shell re-rendered for nothing on each click).
+  const setDndGridEl = useCallback((el: HTMLDivElement | null) => {
+    dndGridElRef.current = el;
+  }, []);
 
   /**
    * Document-level pointermove: arms the drag once the 6px threshold is
@@ -1281,6 +1304,27 @@ export default function GardenPlanner() {
       // Lot 2: the click the browser fires right after a drag's pointerup
       // is NOT a click intent — swallow it once.
       if (dragEndedRecentlyRef.current) return;
+      // SMA-423: every input comes from the latest-ref (refreshed in a
+      // useLayoutEffect after each commit, so it is current before any click
+      // can land) — the handler keeps ONE identity for the page's lifetime
+      // and GardenGrid's memoized cells stop re-rendering on each arming.
+      // Same names as the page-level values on purpose: the body below is
+      // the pre-SMA-423 body, unchanged.
+      const {
+        grid,
+        placements,
+        placeMode,
+        placePlantId,
+        allPlants,
+        cellSize,
+        toastFitRejection,
+        shapeEditMode,
+        infraMode,
+        soilMode,
+        catalogReady,
+        exposureVisible,
+        selectPlacement,
+      } = dndLatestRef.current;
       // All paint modes swallow clicks (5.4; soil since SMA-14): painted
       // cells use the drag surface, like shape-edit.
       if (shapeEditMode || infraMode || soilMode || !grid) return;
@@ -1389,7 +1433,7 @@ export default function GardenPlanner() {
 
       selectPlacement(existing ? existing.id : null);
     },
-    [shapeEditMode, infraMode, soilMode, placeMode, placePlantId, grid, placements, allPlants, cellSize, catalogReady, exposureVisible, selectPlacement, toastFitRejection]
+    []
   );
 
   const handleRemoveSelectedPlacement = useCallback(() => {
@@ -1731,6 +1775,30 @@ export default function GardenPlanner() {
     clearSelection();
     setMessage({ type: 'info', text: t('planner.toolbar.changesDiscarded') });
   }, [saving, hasLastSaved, placeMode, clearSelection, t]);
+
+  // SMA-423 (hygiene): ExposureOverridePopover and CompassRose are memoized
+  // components whose memo never held — their handlers / labels object were
+  // rebuilt inline on every page render. Same bodies, stable identities: the
+  // select handler follows the popover's own state (null between uses).
+  const handleOverrideSelect = useCallback(
+    (value: ExposureCategory | null) => {
+      if (overridePopover) {
+        dispatch({
+          type: 'SET_CELL_EXPOSURE_OVERRIDE',
+          row: overridePopover.row,
+          col: overridePopover.col,
+          value,
+        });
+      }
+      setOverridePopover(null);
+    },
+    [overridePopover]
+  );
+  const handleOverrideClose = useCallback(() => setOverridePopover(null), []);
+  const compassLabels = useMemo(
+    () => ({ n: 'N', e: 'E', s: 'S', w: t('planner.config.west') }),
+    [t]
+  );
 
   const m = cellSizeToMeters(cellSize);
   const activeCells = grid ? grid.flat().filter((c) => c.active).length : 0;
@@ -2304,7 +2372,7 @@ export default function GardenPlanner() {
                 size={isMobile ? 30 : 42}
                 mode={plannerMode}
                 orientation={garden?.orientation ?? null}
-                labels={{ n: 'N', e: 'E', s: 'S', w: t('planner.config.west') }}
+                labels={compassLabels}
                 ariaLabel={
                   garden?.orientation
                     ? t('planner.config.compassLabel', {
@@ -2561,9 +2629,7 @@ export default function GardenPlanner() {
                         }
                       : null
                   }
-                  gridElRef={(el) => {
-                    dndGridElRef.current = el;
-                  }}
+                  gridElRef={setDndGridEl}
                   cellSizePx={cellSizePx}
                 />
                 {shapeEditMode && (
@@ -2882,18 +2948,8 @@ export default function GardenPlanner() {
                 ?.exposureOverride ?? null)
             : null
         }
-        onSelect={(value) => {
-          if (overridePopover) {
-            dispatch({
-              type: 'SET_CELL_EXPOSURE_OVERRIDE',
-              row: overridePopover.row,
-              col: overridePopover.col,
-              value,
-            });
-          }
-          setOverridePopover(null);
-        }}
-        onClose={() => setOverridePopover(null)}
+        onSelect={handleOverrideSelect}
+        onClose={handleOverrideClose}
       />
 
       {/* Plants in this garden — derived from placements only (SMA-6 Option A) */}
