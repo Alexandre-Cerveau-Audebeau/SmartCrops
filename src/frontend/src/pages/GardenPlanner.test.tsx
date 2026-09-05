@@ -81,15 +81,6 @@ beforeEach(async () => {
   // R1: reset the shared i18next singleton too (the Home.test idiom), so a
   // test that flipped to French cannot leak its language into the next one.
   await i18n.changeLanguage('en');
-  // jsdom ships no ResizeObserver; the planner observes its scroll container.
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    }
-  );
 });
 
 afterEach(() => {
