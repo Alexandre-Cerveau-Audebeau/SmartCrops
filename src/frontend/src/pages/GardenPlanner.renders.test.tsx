@@ -156,15 +156,6 @@ beforeEach(async () => {
   localStorage.clear();
   localStorage.setItem('smartcrops-language', 'en');
   await i18n.changeLanguage('en');
-  // jsdom ships no ResizeObserver; the planner observes its scroll container.
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    }
-  );
 });
 
 afterEach(() => {
