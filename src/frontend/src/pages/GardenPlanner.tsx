@@ -23,6 +23,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloseIcon from '@mui/icons-material/Close';
+import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import SaveIcon from '@mui/icons-material/Save';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { CompassRose } from '../components/Garden/CompassRose';
@@ -36,6 +37,7 @@ import DeleteGardenDialog, {
 import GardenConfigDialog, {
   type DialogDimensions,
 } from '../components/Garden/GardenConfigDialog';
+import GardenTemplatesDialog from '../components/Garden/GardenTemplatesDialog';
 import RemovePlacementDialog from '../components/Garden/RemovePlacementDialog';
 import { STICKY_OFFSET } from '../constants/layout';
 import { useGardenLayout } from '../hooks/useGardenLayout';
@@ -57,6 +59,11 @@ import {
   type Moment,
   type Season,
 } from '../utils/exposure';
+import {
+  getGardenTemplate,
+  templateGrid,
+  type GardenTemplateKey,
+} from '../utils/gardenTemplates';
 import { getPlantDisplayName } from '../utils/getPlantDisplayName';
 import {
   groupInfrastructureRegions,
@@ -74,12 +81,14 @@ import {
   cellSizeToMeters,
   clampFootprintToGrid,
   footprintFits,
+  partitionPlacementsForTemplate,
   spacingToFootprintCells,
   type FootprintFitResult,
 } from './gardenPlanner/placementGeometry';
 import {
   initialPlannerState,
   plannerReducer,
+  type PlannerPlacement,
 } from './gardenPlanner/plannerReducer';
 
 
@@ -199,6 +208,7 @@ export default function GardenPlanner() {
     zoom,
     removedCount,
     removedSeq,
+    removedReason,
     exposureVisible,
     exposureMoment,
     exposureSeason,
@@ -219,6 +229,13 @@ export default function GardenPlanner() {
   const [saving, setSaving] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  // SMA-18 lot 2 — the "Modèles de jardin" dialog: opened from the header
+  // button at any time, and automatically once the first setup is confirmed.
+  const [showTemplates, setShowTemplates] = useState(false);
+  // How many template species the catalog lacked on the LAST application —
+  // handed to the removal event (below) so evictions and omissions share ONE
+  // toast. State, not a ref: the adjust block reads it during render.
+  const [templateMissing, setTemplateMissing] = useState(0);
   // SMA-18 lot 1 — the two confirmation dialogs. The removal one asks about
   // the LIVE selection: it stays open only while a placement is selected, and
   // a selection that vanishes underneath it (structural eviction) closes it
@@ -580,10 +597,29 @@ export default function GardenPlanner() {
   if (removedSeq !== prevRemovedSeq) {
     setPrevRemovedSeq(removedSeq);
     if (removedSeq !== 0) {
-      setMessage({
-        type: 'info',
-        text: t('planner.placementsRemoved', { count: removedCount }),
-      });
+      let text: string;
+      if (removedReason === 'template') {
+        // SMA-18 lot 2: ONE toast for the whole template application — the
+        // evictions, plus the template species the catalog lacked (set by
+        // handleApplyTemplate in the same event as the dispatch, so this
+        // render sees both).
+        const removedText = t('planner.templates.removed', {
+          count: removedCount,
+        });
+        text =
+          templateMissing > 0
+            ? t('planner.templates.toastBoth', {
+                removed: removedText,
+                missing: t('planner.templates.missing', {
+                  count: templateMissing,
+                }),
+              })
+            : removedText;
+        if (templateMissing > 0) setTemplateMissing(0);
+      } else {
+        text = t('planner.placementsRemoved', { count: removedCount });
+      }
+      setMessage({ type: 'info', text });
       selectPlacement(null);
     }
   }
@@ -642,6 +678,12 @@ export default function GardenPlanner() {
       cellSize: dims.cellSize,
     });
     setShowSetup(false);
+    // SMA-18 lot 2 (D1): the templates dialog opens right after the first
+    // setup — closing it means starting from the empty grid just created; a
+    // template applied here REPLACES the dimensions just typed with its own
+    // (documented), through the same draft path RESIZED takes (committed by
+    // the next layout Save).
+    setShowTemplates(true);
   };
 
   // "Réglages" on an existing garden: on success, a dimension change goes
@@ -741,6 +783,8 @@ export default function GardenPlanner() {
     setConfigError(null);
     setShowConfig(true);
   }, []);
+  const handleOpenTemplates = useCallback(() => setShowTemplates(true), []);
+  const handleCloseTemplates = useCallback(() => setShowTemplates(false), []);
   const handleShapeEditToggle = useCallback(
     (enabled: boolean) => dispatch({ type: 'SET_SHAPE_EDIT_MODE', enabled }),
     []
@@ -1713,6 +1757,80 @@ export default function GardenPlanner() {
     return list;
   }, [placements, allPlants, language]);
 
+  // SMA-18 lot 2 — garden templates. A template names its plants by EXACT
+  // scientific name (plant GUIDs are minted at import, so they differ between
+  // databases; lower(ScientificName) is the table's unique, portable key).
+  // Names resolve here, against the active-language catalog, case-insensitively
+  // like the index; the reducer receives resolved placements only. A species
+  // the catalog lacks is omitted and counted — never guessed.
+  const plantIdByScientificName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const plant of allPlants) {
+      if (typeof plant.scientificName === 'string') {
+        map.set(plant.scientificName.toLowerCase(), plant.id);
+      }
+    }
+    return map;
+  }, [allPlants]);
+  const resolvePlantId = useCallback(
+    (scientificName: string) =>
+      plantIdByScientificName.get(scientificName.toLowerCase()),
+    [plantIdByScientificName]
+  );
+  const handleApplyTemplate = useCallback(
+    (key: GardenTemplateKey) => {
+      // The dialog disables its buttons while the catalog is pending; this
+      // guard is the reducer-style belt to that suspender.
+      if (!grid || !catalogReady) return;
+      const template = getGardenTemplate(key);
+      const resolved: PlannerPlacement[] = [];
+      let missing = 0;
+      for (const p of template.placements) {
+        const plantId = resolvePlantId(p.scientificName);
+        if (!plantId) {
+          missing += 1;
+          continue;
+        }
+        resolved.push({
+          id: `new-${++placementSeq.current}`,
+          plantId,
+          startRow: p.row,
+          startCol: p.col,
+          spanRows: p.spanRows,
+          spanCols: p.spanCols,
+          notes: null,
+        });
+      }
+      const nextGrid = templateGrid(template);
+      // The SAME partition the reducer runs (one function, placementGeometry):
+      // the page only needs to know whether the removal event will fire, to
+      // route the omission count into that single toast or raise its own.
+      const { removed } = partitionPlacementsForTemplate(
+        nextGrid,
+        resolved,
+        placements
+      );
+      setShowTemplates(false);
+      if (removed.length > 0) {
+        setTemplateMissing(missing);
+      } else if (missing > 0) {
+        setMessage({
+          type: 'info',
+          text: t('planner.templates.missing', { count: missing }),
+        });
+      }
+      dispatch({
+        type: 'APPLY_TEMPLATE',
+        grid: nextGrid,
+        width: template.cols,
+        height: template.rows,
+        cellSize: template.cellSize,
+        placements: resolved,
+      });
+    },
+    [grid, catalogReady, placements, resolvePlantId, t]
+  );
+
   // Latest-ref pattern: handleSave reads its inputs from a ref refreshed on
   // every commit, so its identity depends only on `t` and the GridControls
   // memo stays effective across layout edits. useLayoutEffect (no deps) runs
@@ -2070,6 +2188,16 @@ export default function GardenPlanner() {
         onDeleteRequest={handleDeleteGardenRequest}
       />
 
+      {/* Garden templates (SMA-18 lot 2) — from the header button at any
+          time, and automatically after the first setup (D1). */}
+      <GardenTemplatesDialog
+        open={showTemplates}
+        catalogReady={catalogReady}
+        resolvePlantId={resolvePlantId}
+        onClose={handleCloseTemplates}
+        onApply={handleApplyTemplate}
+      />
+
       {/* Confirmations (SMA-18 lot 1) */}
       <DeleteGardenDialog
         open={deleteGardenOpen}
@@ -2162,6 +2290,25 @@ export default function GardenPlanner() {
             </Box>
           )}
         </Box>
+
+        {/* SMA-18 lot 2 (D2): "Modèles" beside "Réglages" — same style, same
+            row, same visibility gate, so the two behave alike at every width. */}
+        {grid && (
+          <Button
+            variant="outlined"
+            startIcon={<GridViewOutlinedIcon sx={{ fontSize: 19 }} />}
+            onClick={handleOpenTemplates}
+            sx={{
+              ...headerBtnSx,
+              fontWeight: 700,
+              bgcolor: tk.card,
+              borderColor: tk.obtnBd,
+              color: tk.obtnTx,
+            }}
+          >
+            {t('planner.toolbar.templates')}
+          </Button>
+        )}
 
         {grid && (
           <Button

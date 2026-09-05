@@ -612,6 +612,7 @@
       "cancel": "Cancel",
       "resize": "Resize",
       "settings": "Settings",
+      "templates": "Templates",
       "activeCells": "{{active}}/{{total}} active cells ({{surface}} m²)",
       "saving": "Saving...",
       "unsavedChanges": "You have unsaved changes",
@@ -687,6 +688,41 @@
       "cellRange": "{{from}}–{{to}}",
       "cancel": "Cancel",
       "confirm": "Remove"
+    },
+    "templates": {
+      "title": "Garden templates",
+      "subtitle": "Start from a ready-made layout — at setup or any time",
+      "close": "Close",
+      "use": "Use this template",
+      "waitingCatalog": "Loading the library…",
+      "meta_one": "{{cols}} × {{rows}} · {{cellSize}} · {{count}} plant",
+      "meta_other": "{{cols}} × {{rows}} · {{cellSize}} · {{count}} plants",
+      "cellSizes": {
+        "25cm": "25 cm",
+        "50cm": "50 cm",
+        "1m": "1 m"
+      },
+      "cardLabel": "{{title}} — {{meta}}",
+      "note": "Applying a template replaces the current layout. Plants already placed are kept when their spot stays free.",
+      "items": {
+        "potager": {
+          "title": "Vegetable garden",
+          "description": "Rows of vegetables, a central path, a water point in the corner."
+        },
+        "japanese": {
+          "title": "Japanese garden",
+          "description": "Moss, a gravel path, stones and a pond."
+        },
+        "mediterranean": {
+          "title": "Mediterranean",
+          "description": "Terracotta pots, lavender, an olive tree and gravel."
+        }
+      },
+      "removed_one": "{{count}} plant removed for lack of room",
+      "removed_other": "{{count}} plants removed for lack of room",
+      "missing_one": "{{count}} template plant not found in the library",
+      "missing_other": "{{count}} template plants not found in the library",
+      "toastBoth": "{{removed}} · {{missing}}"
     }
   },
   "plantDetail": {

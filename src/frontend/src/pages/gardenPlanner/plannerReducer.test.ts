@@ -2155,3 +2155,175 @@ describe('plannerReducer lifecycle mode reset (SMA-14 R3)', () => {
     expect(s.soilMode).toBe(false);
   });
 });
+
+// SMA-18 lot 2 — APPLY_TEMPLATE: the ONE-entry mass action behind "Utiliser
+// ce modèle". Grid, dimensions, cellSize and placements are replaced
+// wholesale; existing placements survive where their spot stays free;
+// lastSaved is preserved (unlike SETUP_CONFIRMED); a single UNDO brings
+// everything back — cellSize included, which the snapshot gained here.
+describe('plannerReducer APPLY_TEMPLATE (SMA-18 lot 2)', () => {
+  /** A 4×4 template grid: humus at (0,0), a path at (1,1), (2,0) deactivated. */
+  const templateGridFixture = () =>
+    parseCellsJson(
+      JSON.stringify([
+        { row: 0, col: 0, soil: 'humus' },
+        { row: 1, col: 1, infrastructure: 'path' },
+        { row: 2, col: 0, active: false },
+      ]),
+      4,
+      4
+    );
+
+  const apply = (
+    state: PlannerState,
+    placements: PlannerPlacement[] = []
+  ): PlannerState =>
+    plannerReducer(state, {
+      type: 'APPLY_TEMPLATE',
+      grid: templateGridFixture(),
+      width: 4,
+      height: 4,
+      cellSize: '25cm',
+      placements,
+    });
+
+  it('replaces grid, dimensions, cellSize and placements in ONE history entry — dirty, lastSaved preserved, selection mode', () => {
+    // hydrated(): 3×3 · 50cm · clean · srv-1 at (1,1). Enter soil mode first
+    // to pin the mode reset.
+    const base = plannerReducer(hydrated(), {
+      type: 'SET_SOIL_TYPE',
+      soilType: 'clay',
+    });
+    const templatePlacements = [
+      placement('new-1', { plantId: 'tomato', startRow: 0, startCol: 2 }),
+      placement('new-2', {
+        plantId: 'courgette',
+        startRow: 2,
+        startCol: 2,
+        spanRows: 2,
+        spanCols: 2,
+      }),
+    ];
+    const s = apply(base, templatePlacements);
+
+    expect(s.past).toHaveLength(base.past.length + 1);
+    expect(s.grid).toHaveLength(4);
+    expect(s.grid![0]).toHaveLength(4);
+    expect(s.grid![0][0].soil).toBe('humus');
+    expect(s.grid![1][1].infrastructure).toBe('path');
+    expect(s.grid![2][0].active).toBe(false);
+    expect(s.layoutWidth).toBe(4);
+    expect(s.layoutHeight).toBe(4);
+    expect(s.cellSize).toBe('25cm');
+    expect(s.isDirty).toBe(true);
+    // lastSaved PRESERVED — Cancel still reaches the saved garden.
+    expect(s.lastSaved).toBe(base.lastSaved);
+    expect(s.lastSaved).not.toBeNull();
+    // Lands in SELECTION mode; the armed soil stays remembered (every exit).
+    expect(s.soilMode).toBe(false);
+    expect(s.soilType).toBe('clay');
+    // The template's placements come first, then the survivors: srv-1 at
+    // (1,1) sits ON the path cell — a plant over an infrastructure is the
+    // documented layering (footprintFits), so it is KEPT.
+    expect(s.placements.map((p) => p.id)).toEqual(['new-1', 'new-2', 'srv-1']);
+    expect(s.removedSeq).toBe(base.removedSeq);
+  });
+
+  it('the stored grid is a copy of the action grid, never an alias', () => {
+    const grid = templateGridFixture();
+    const s = plannerReducer(hydrated(), {
+      type: 'APPLY_TEMPLATE',
+      grid,
+      width: 4,
+      height: 4,
+      cellSize: '25cm',
+      placements: [],
+    });
+    expect(s.grid).toEqual(grid);
+    expect(s.grid).not.toBe(grid);
+    expect(s.grid![0][0]).not.toBe(grid[0][0]);
+  });
+
+  it('drops an existing placement whose spot is taken — by a template plant or a deactivated cell — and reports it with reason "template"', () => {
+    let base = hydrated();
+    // 'a' on (2,0): the template deactivates that cell. 'b' on (2,2): the
+    // template plants there.
+    base = plannerReducer(base, {
+      type: 'ADD_PLACEMENT',
+      id: 'a',
+      plantId: 'basil',
+      row: 2,
+      col: 0,
+      spanRows: 1,
+      spanCols: 1,
+    });
+    base = plannerReducer(base, {
+      type: 'ADD_PLACEMENT',
+      id: 'b',
+      plantId: 'basil',
+      row: 2,
+      col: 2,
+      spanRows: 1,
+      spanCols: 1,
+    });
+    expect(base.placements).toHaveLength(3);
+    const seqBefore = base.removedSeq;
+
+    const s = apply(base, [
+      placement('new-1', { plantId: 'tomato', startRow: 2, startCol: 2 }),
+    ]);
+
+    expect(s.placements.map((p) => p.id)).toEqual(['new-1', 'srv-1']);
+    expect(s.removedCount).toBe(2);
+    expect(s.removedSeq).toBe(seqBefore + 1);
+    expect(s.removedReason).toBe('template');
+    // Still ONE history entry for the whole application.
+    expect(s.past).toHaveLength(base.past.length + 1);
+  });
+
+  it('a removal by any other structural action keeps the historical reason "bounds"', () => {
+    const s = plannerReducer(hydrated(), {
+      type: 'RESIZED',
+      width: 1,
+      height: 1,
+      cellSize: '50cm',
+    });
+    expect(s.removedCount).toBe(1);
+    expect(s.removedReason).toBe('bounds');
+  });
+
+  it('is a guarded no-op without a grid (same state object, nothing pushed)', () => {
+    expect(apply(initialPlannerState)).toBe(initialPlannerState);
+  });
+
+  it('UNDO restores grid, placements, dimensions, cellSize, lastSaved and isDirty in one step', () => {
+    const base = hydrated(); // 3×3 · 50cm · clean
+    const s = apply(base, [
+      placement('new-1', { plantId: 'tomato', startRow: 0, startCol: 2 }),
+    ]);
+    expect(s.cellSize).toBe('25cm');
+
+    const u = plannerReducer(s, { type: 'UNDO' });
+    expect(u.grid).toEqual(base.grid);
+    expect(u.placements).toEqual(base.placements);
+    expect(u.layoutWidth).toBe(3);
+    expect(u.layoutHeight).toBe(3);
+    expect(u.cellSize).toBe('50cm');
+    expect(u.lastSaved).toBe(base.lastSaved);
+    expect(u.isDirty).toBe(false);
+    expect(u.past).toHaveLength(0);
+  });
+
+  it('the extended snapshot also gives a RESIZED its previous cellSize back on UNDO', () => {
+    const s = plannerReducer(hydrated(), {
+      type: 'RESIZED',
+      width: 5,
+      height: 4,
+      cellSize: '1m',
+    });
+    expect(s.cellSize).toBe('1m');
+    const u = plannerReducer(s, { type: 'UNDO' });
+    expect(u.cellSize).toBe('50cm');
+    expect(u.layoutWidth).toBe(3);
+  });
+});

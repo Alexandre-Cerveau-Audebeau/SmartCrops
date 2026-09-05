@@ -4,7 +4,10 @@ import type { ExposureCategory, Moment, Season } from '../../utils/exposure';
 import type { InfrastructureType } from '../../utils/infrastructure';
 import type { ArmedSoil, SoilType } from '../../utils/soil';
 import { SOIL_ERASER } from '../../utils/soil';
-import { footprintFits } from './placementGeometry';
+import {
+  footprintFits,
+  partitionPlacementsForTemplate,
+} from './placementGeometry';
 
 /**
  * A placement with a CLIENT identity. The `id` is the server placement id
@@ -41,16 +44,28 @@ export interface LayoutSnapshot {
  * — no new content-equality comparison is invented (the only equality in
  * this reducer, MARK_SAVED's referential revision check, cannot compare
  * across deep copies). Dimensions are derived from the restored grid at pop
- * time; cellSize is deliberately NOT part of the snapshot (a documented
- * limitation: undoing a RESIZED restores the cells but keeps the new
- * cellSize).
+ * time. cellSize joined the snapshot with SMA-18 lot 2: it used to be left
+ * out (a documented limitation — undoing a RESIZED restored the cells but
+ * kept the new cellSize), which APPLY_TEMPLATE would have turned into a bug:
+ * a template carries its own cellSize, and "undo the template" must give the
+ * previous one back with the previous cells.
  */
 interface DraftSnapshot {
   grid: CellData[][] | null;
   placements: PlannerPlacement[];
+  cellSize: string;
   lastSaved: LayoutSnapshot | null;
   isDirty: boolean;
 }
+
+/**
+ * Why placements were dropped by the last structural action (SMA-18 lot 2):
+ * `bounds` — the historical reason (row/column removals, RESIZED, painting a
+ * cell inactive, SET_ALL_CELLS); `template` — evicted by APPLY_TEMPLATE
+ * because their spot was no longer free. The page picks the toast copy from
+ * it; the event channel (removedCount/removedSeq) stays the one it always was.
+ */
+export type RemovalReason = 'bounds' | 'template';
 
 export interface PlannerState {
   grid: CellData[][] | null;
@@ -114,6 +129,8 @@ export interface PlannerState {
    */
   removedCount: number;
   removedSeq: number;
+  /** Reason behind the last removal event (see RemovalReason). */
+  removedReason: RemovalReason;
   /**
    * Exposure layer (SMA-17 5.3-D) — pure VIEW state, session-only (never
    * persisted, deliberately opt-in per visit): the layer starts hidden, the
@@ -168,6 +185,7 @@ export const initialPlannerState: PlannerState = {
   lastSaved: null,
   removedCount: 0,
   removedSeq: 0,
+  removedReason: 'bounds',
   exposureVisible: false,
   exposureMoment: 'noon',
   exposureSeason: 'summer',
@@ -185,6 +203,20 @@ export type PlannerAction =
     }
   | { type: 'SETUP_CONFIRMED'; cols: number; rows: number; cellSize: string }
   | { type: 'RESIZED'; width: number; height: number; cellSize: string }
+  /**
+   * Apply a garden template (SMA-18 lot 2): the grid, its dimensions, the
+   * cellSize and the template's placements arrive ALREADY RESOLVED (plant
+   * ids, spans, client ids — the page resolves scientific names against the
+   * catalog; the reducer stays pure). One undo entry for the whole change.
+   */
+  | {
+      type: 'APPLY_TEMPLATE';
+      grid: CellData[][];
+      width: number;
+      height: number;
+      cellSize: string;
+      placements: PlannerPlacement[];
+    }
   | { type: 'PAINT_START'; row: number; col: number }
   | { type: 'PAINT_ENTER'; row: number; col: number }
   | { type: 'PAINT_END' }
@@ -324,6 +356,7 @@ const pushHistory = (state: PlannerState): DraftSnapshot[] => {
     {
       grid: copyGrid(state.grid),
       placements: copyPlacements(state.placements),
+      cellSize: state.cellSize,
       // Save context (R6): lastSaved is immutable once created (MARK_SAVED /
       // HYDRATE build fresh objects), so the reference is safe to share.
       lastSaved: state.lastSaved,
@@ -334,14 +367,21 @@ const pushHistory = (state: PlannerState): DraftSnapshot[] => {
 };
 
 
-/** Bump the transient removal event only when placements were dropped. */
+/** Bump the transient removal event only when placements were dropped. The
+ * reason defaults to the historical `bounds` so the eight pre-existing
+ * callers read unchanged; APPLY_TEMPLATE names its own (SMA-18 lot 2). */
 const withRemoval = (
   state: PlannerState,
-  removedCount: number
-): Pick<PlannerState, 'removedCount' | 'removedSeq'> =>
+  removedCount: number,
+  reason: RemovalReason = 'bounds'
+): Pick<PlannerState, 'removedCount' | 'removedSeq' | 'removedReason'> =>
   removedCount > 0
-    ? { removedCount, removedSeq: state.removedSeq + 1 }
-    : { removedCount: state.removedCount, removedSeq: state.removedSeq };
+    ? { removedCount, removedSeq: state.removedSeq + 1, removedReason: reason }
+    : {
+        removedCount: state.removedCount,
+        removedSeq: state.removedSeq,
+        removedReason: state.removedReason,
+      };
 
 export function plannerReducer(
   state: PlannerState,
@@ -422,6 +462,47 @@ export function plannerReducer(
         placements: filtered,
         isDirty: true,
         ...withRemoval(state, state.placements.length - filtered.length),
+      };
+    }
+
+    case 'APPLY_TEMPLATE': {
+      // SMA-18 lot 2: the ONE-entry mass action the templates needed. The
+      // grid, dimensions, cellSize and placements are replaced wholesale —
+      // like SETUP_CONFIRMED — but `lastSaved` is PRESERVED (Cancel still
+      // reaches the saved garden) and existing placements are re-fitted
+      // rather than wiped: the ones whose spot stays free on the new grid
+      // survive, the others are dropped and reported through the removal
+      // event (withRemoval, reason 'template'). The template's own placements
+      // are trusted as given — they are compile-time constants pinned by
+      // gardenTemplates.test.ts (bounds, no overlap, footprintFits on the
+      // derived grid); only the EXISTING placements go through the guard.
+      // Guarded no-op without a grid: a template applies to a draft, and the
+      // UI can only reach the dialog once SETUP_CONFIRMED / hydration made
+      // one (the page's `grid &&` gate).
+      if (!state.grid) return state;
+      const { kept } = partitionPlacementsForTemplate(
+        action.grid,
+        action.placements,
+        state.placements
+      );
+      return {
+        ...state,
+        ...enterSelectionMode,
+        // ONE history entry for the whole application (the SET_ALL_SOIL
+        // precedent): a single undo brings back cells, placements,
+        // dimensions AND cellSize (snapshot extended for this action).
+        past: pushHistory(state),
+        grid: copyGrid(action.grid)!,
+        layoutWidth: action.width,
+        layoutHeight: action.height,
+        cellSize: action.cellSize,
+        placements: [...action.placements, ...kept],
+        isDirty: true,
+        ...withRemoval(
+          state,
+          state.placements.length - kept.length,
+          'template'
+        ),
       };
     }
 
@@ -1212,6 +1293,9 @@ export function plannerReducer(
         // restore them); a null grid means back to the pre-setup draft.
         layoutWidth: previous.grid?.[0]?.length ?? 0,
         layoutHeight: previous.grid?.length ?? 0,
+        // cellSize restored WITH the cells (SMA-18 lot 2): undoing a
+        // RESIZED or an APPLY_TEMPLATE gives the previous cell size back.
+        cellSize: previous.cellSize,
         // Save-state restored WITH the content (R6, CR accept): the snapshot
         // knows whether that state was saved — undoing the only post-save
         // edit lands clean, and a lastSaved cleared later (SETUP_CONFIRMED)

@@ -612,6 +612,7 @@
       "cancel": "Annuler",
       "resize": "Redimensionner",
       "settings": "Réglages",
+      "templates": "Modèles",
       "activeCells": "{{active}}/{{total}} parcelles actives ({{surface}} m²)",
       "saving": "Enregistrement...",
       "unsavedChanges": "Modifications non sauvegardées",
@@ -687,6 +688,41 @@
       "cellRange": "{{from}}–{{to}}",
       "cancel": "Annuler",
       "confirm": "Retirer"
+    },
+    "templates": {
+      "title": "Modèles de jardin",
+      "subtitle": "Partez d'une disposition prête à l'emploi — au setup comme à tout moment",
+      "close": "Fermer",
+      "use": "Utiliser ce modèle",
+      "waitingCatalog": "Bibliothèque en cours de chargement…",
+      "meta_one": "{{cols}} × {{rows}} · {{cellSize}} · {{count}} plante",
+      "meta_other": "{{cols}} × {{rows}} · {{cellSize}} · {{count}} plantes",
+      "cellSizes": {
+        "25cm": "25 cm",
+        "50cm": "50 cm",
+        "1m": "1 m"
+      },
+      "cardLabel": "{{title}} — {{meta}}",
+      "note": "Appliquer un modèle remplace la disposition actuelle. Les plantes déjà posées sont conservées si leur place reste libre.",
+      "items": {
+        "potager": {
+          "title": "Potager",
+          "description": "Rangs de légumes, allée centrale, point d'eau dans l'angle."
+        },
+        "japanese": {
+          "title": "Jardin japonais",
+          "description": "Mousse, allée de graviers, pierres et bassin."
+        },
+        "mediterranean": {
+          "title": "Méditerranéen",
+          "description": "Pots en terre cuite, lavande, olivier et gravier."
+        }
+      },
+      "removed_one": "{{count}} plante retirée faute de place",
+      "removed_other": "{{count}} plantes retirées faute de place",
+      "missing_one": "{{count}} plante du modèle introuvable dans la bibliothèque",
+      "missing_other": "{{count}} plantes du modèle introuvables dans la bibliothèque",
+      "toastBoth": "{{removed}} · {{missing}}"
     }
   },
   "plantDetail": {
