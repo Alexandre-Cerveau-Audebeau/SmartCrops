@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -14,20 +15,49 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Skeleton from '@mui/material/Skeleton';
+import Snackbar from '@mui/material/Snackbar';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import DeleteGardenDialog from '../components/Garden/DeleteGardenDialog';
 import { useGardens } from '../hooks/useGardens';
 import { useLanguage } from '../hooks/useLanguage';
-import { createGarden, deleteGarden, updateGarden } from '../services/gardenApi';
+import { createGarden, updateGarden } from '../services/gardenApi';
 import type { GardenListItem } from '../types/Garden';
 import { getPlantDisplayName } from '../utils/getPlantDisplayName';
+
+/**
+ * Router state the planner posts when it navigates here after deleting the
+ * garden (SMA-18 lot 1) — the same location.state channel PlantDetail reads
+ * for its back link. Consumed once at mount, then erased with a replace so a
+ * refresh never replays the toast.
+ */
+type MyGardensNavState = { toast?: 'gardenDeleted' } | null;
 
 export default function MyGardens() {
   const { t } = useTranslation();
   const { language } = useLanguage();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navState = location.state as MyGardensNavState;
+  // ONE toast kind today. The planner's displayedToast rationale, both
+  // halves: the open flag is separate so the copy survives the Snackbar's
+  // exit transition, and `toastSeq` keys the Snackbar so a second deletion
+  // inside the first toast's window remounts it with a FULL auto-hide
+  // window (MUI restarts the timer on `open`, not on a same-value write).
+  const [toastSeq, setToastSeq] = useState(() =>
+    navState?.toast === 'gardenDeleted' ? 1 : 0
+  );
+  const [toastOpen, setToastOpen] = useState(
+    () => navState?.toast === 'gardenDeleted'
+  );
+  useEffect(() => {
+    if (navState?.toast) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [navState, navigate, location.pathname]);
   // SMA-421: the list fetch (locale re-fetch, stale-response guard,
   // post-mutation refresh) lives in useGardens — the hook carries the
   // SMA-155 / SMA-288 invariants this page used to hold inline.
@@ -44,7 +74,12 @@ export default function MyGardens() {
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
 
-  const [deleteConfirmGarden, setDeleteConfirmGarden] = useState<GardenListItem | null>(null);
+  // The deletion target OUTLIVES the dialog's open flag: every close path
+  // only flips `deleteOpen`, so the fading dialog keeps its name, count and
+  // (disarmed) button instead of collapsing to ''/0 mid-transition. The next
+  // opening replaces the target.
+  const [deleteTarget, setDeleteTarget] = useState<GardenListItem | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const handleCreate = async () => {
     if (isMutating) return;
@@ -78,19 +113,18 @@ export default function MyGardens() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteConfirmGarden || isMutating) return;
-    setIsMutating(true);
-    setMutationError(false);
-    try {
-      await deleteGarden(deleteConfirmGarden.id);
-      setDeleteConfirmGarden(null);
-      refetch();
-    } catch {
-      setMutationError(true);
-    } finally {
-      setIsMutating(false);
-    }
+  const openDeleteDialog = (garden: GardenListItem) => {
+    setDeleteTarget(garden);
+    setDeleteOpen(true);
+  };
+
+  // The dialog owns the DELETE call and its pending/error states (SMA-18
+  // lot 1); the page only reacts to the confirmed deletion.
+  const handleDeleted = () => {
+    setDeleteOpen(false);
+    setToastSeq((seq) => seq + 1);
+    setToastOpen(true);
+    refetch();
   };
 
   const openEditDialog = (garden: GardenListItem) => {
@@ -180,7 +214,7 @@ export default function MyGardens() {
                 </IconButton>
                 <IconButton
                   size="small"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDeleteConfirmGarden(garden); }}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); openDeleteDialog(garden); }}
                   aria-label={`${t('gardens.delete')} ${garden.name}`}
                   sx={{ color: 'error.main' }}
                 >
@@ -329,21 +363,36 @@ export default function MyGardens() {
         </DialogActions>
       </Dialog>
 
-      {/* Delete Confirm Dialog */}
-      <Dialog open={deleteConfirmGarden !== null} onClose={() => setDeleteConfirmGarden(null)}>
-        <DialogTitle>{t('gardens.deleteDialogTitle')}</DialogTitle>
-        <DialogContent>
-          <Typography>
-            {t('gardens.deleteConfirm', { name: deleteConfirmGarden?.name })}
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirmGarden(null)}>{t('gardens.cancel')}</Button>
-          <Button variant="contained" color="error" disabled={isMutating} onClick={handleDelete}>
-            {t('gardens.delete')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* Delete confirm (SMA-18 lot 1): type-the-name brake. The list DTO
+          only knows the DISTINCT placed plants, so that is the one count the
+          body can honestly name here. */}
+      <DeleteGardenDialog
+        open={deleteOpen}
+        gardenId={deleteTarget?.id ?? ''}
+        gardenName={deleteTarget?.name ?? ''}
+        summary={{ kind: 'list', plants: deleteTarget?.plants.length ?? 0 }}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={handleDeleted}
+      />
+
+      {/* Deletion feedback — from this page's own dialog or from the planner
+          (router state). Same Snackbar/Alert idiom as the planner's toast. */}
+      <Snackbar
+        key={toastSeq}
+        open={toastOpen}
+        autoHideDuration={6000}
+        onClose={() => setToastOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setToastOpen(false)}
+          severity="success"
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {t('gardens.deleteDialog.successToast')}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 }

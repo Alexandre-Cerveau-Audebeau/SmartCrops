@@ -30,9 +30,13 @@ import GardenGrid from '../components/Garden/GardenGrid';
 import PlantSidebar, {
   type PlantSidebarTab,
 } from '../components/Garden/PlantSidebar';
+import DeleteGardenDialog, {
+  type DeleteGardenSummary,
+} from '../components/Garden/DeleteGardenDialog';
 import GardenConfigDialog, {
   type DialogDimensions,
 } from '../components/Garden/GardenConfigDialog';
+import RemovePlacementDialog from '../components/Garden/RemovePlacementDialog';
 import { STICKY_OFFSET } from '../constants/layout';
 import { useGardenLayout } from '../hooks/useGardenLayout';
 import { useLanguage } from '../hooks/useLanguage';
@@ -55,6 +59,7 @@ import {
 } from '../utils/exposure';
 import { getPlantDisplayName } from '../utils/getPlantDisplayName';
 import {
+  groupInfrastructureRegions,
   infrastructureBlockers,
   type InfrastructureType,
 } from '../utils/infrastructure';
@@ -205,6 +210,16 @@ export default function GardenPlanner() {
   const [saving, setSaving] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  // SMA-18 lot 1 — the two confirmation dialogs. The removal one asks about
+  // the LIVE selection: it stays open only while a placement is selected, and
+  // a selection that vanishes underneath it (structural eviction) closes it
+  // in the same render (adjust-during-render, the page's gate pattern) so it
+  // can never re-surface for the next selection.
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+  const [deleteGardenOpen, setDeleteGardenOpen] = useState(false);
+  if (removeDialogOpen && selectedPlacement === null) {
+    setRemoveDialogOpen(false);
+  }
   // Per-cell override picker (5.3-D): anchored to the clicked cell while the
   // exposure layer is visible in selection mode.
   const [overridePopover, setOverridePopover] = useState<{
@@ -1436,11 +1451,52 @@ export default function GardenPlanner() {
     []
   );
 
+  // "Retirer du plan" now ASKS first (SMA-18 lot 1): the panel button opens
+  // the confirmation; the dispatch below is the pre-existing one, unchanged —
+  // history (undo) and the absence of a toast are exactly what they were.
+  // The confirm handler re-reads selectedPlacementId at confirm time (never
+  // an id captured at open): REMOVE_PLACEMENT is not idempotent, so a stale
+  // id would push a phantom undo entry and dirty the draft.
+  const handleRequestRemoveSelectedPlacement = useCallback(() => {
+    if (!selectedPlacementId) return;
+    setRemoveDialogOpen(true);
+  }, [selectedPlacementId]);
+  const handleCancelRemoveSelectedPlacement = useCallback(() => {
+    setRemoveDialogOpen(false);
+  }, []);
   const handleRemoveSelectedPlacement = useCallback(() => {
+    setRemoveDialogOpen(false);
     if (!selectedPlacementId) return;
     dispatch({ type: 'REMOVE_PLACEMENT', placementId: selectedPlacementId });
     selectPlacement(null);
   }, [selectedPlacementId, selectPlacement]);
+
+  // Danger zone (SMA-18 lot 1): the settings dialog hands over to the
+  // type-the-name confirmation; a confirmed deletion leaves for the list,
+  // which shows the "garden deleted" toast from the router state it receives.
+  const handleDeleteGardenRequest = useCallback(() => {
+    setShowConfig(false);
+    setDeleteGardenOpen(true);
+  }, []);
+  const handleCloseDeleteGarden = useCallback(() => {
+    setDeleteGardenOpen(false);
+  }, []);
+  const handleGardenDeleted = useCallback(() => {
+    navigate('/gardens', { replace: true, state: { toast: 'gardenDeleted' } });
+  }, [navigate]);
+  // Consequences named by the deletion dialog: the DRAFT the user sees, and
+  // infrastructure BLOCKS (what reads as "one fence"), not painted cells.
+  const infrastructureCount = useMemo(
+    () => (grid ? groupInfrastructureRegions(grid).length : 0),
+    [grid]
+  );
+  const deleteGardenSummary: DeleteGardenSummary = grid
+    ? {
+        kind: 'planner',
+        placements: placements.length,
+        infrastructures: infrastructureCount,
+      }
+    : { kind: 'unknown' };
 
   // ── Footprint panel wiring (SMA-193 lot 3) ──────────────────────────────
   // The panel's fit checks and the reducer guard share footprintFits at the
@@ -1942,7 +1998,7 @@ export default function GardenPlanner() {
           onSetFootprint: handleSetSelectedFootprint,
           onSetNotes: handleSetSelectedNotes,
           onMove: handleMoveSelectedPlacement,
-          onRemove: handleRemoveSelectedPlacement,
+          onRemove: handleRequestRemoveSelectedPlacement,
           onClose: clearSelection,
           gardenId: id,
           gardenName: garden?.name,
@@ -1990,7 +2046,36 @@ export default function GardenPlanner() {
         errorText={configError}
         onConfirm={handleSettingsConfigConfirm}
         onCancel={() => setShowConfig(false)}
+        onDeleteRequest={handleDeleteGardenRequest}
       />
+
+      {/* Confirmations (SMA-18 lot 1) */}
+      <DeleteGardenDialog
+        open={deleteGardenOpen}
+        gardenId={id ?? ''}
+        gardenName={garden?.name ?? ''}
+        summary={deleteGardenSummary}
+        onClose={handleCloseDeleteGarden}
+        onDeleted={handleGardenDeleted}
+      />
+      {selectedPlacement !== null && (
+        <RemovePlacementDialog
+          open={removeDialogOpen}
+          plantName={
+            selectedPlant
+              ? getPlantDisplayName(selectedPlant, language)
+              : catalogReady
+                ? t('planner.unknownPlant')
+                : ''
+          }
+          startRow={selectedPlacement.startRow}
+          startCol={selectedPlacement.startCol}
+          spanRows={selectedPlacement.spanRows}
+          spanCols={selectedPlacement.spanCols}
+          onCancel={handleCancelRemoveSelectedPlacement}
+          onConfirm={handleRemoveSelectedPlacement}
+        />
+      )}
 
       {/* Toolbar */}
       <Button
