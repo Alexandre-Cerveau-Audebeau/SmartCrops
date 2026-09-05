@@ -280,13 +280,28 @@
     "delete": "Delete",
     "createDialogTitle": "Create a new garden",
     "editDialogTitle": "Edit garden",
-    "deleteDialogTitle": "Delete garden?",
     "gardenName": "Name",
     "description": "Description",
     "cancel": "Cancel",
     "save": "Save",
     "create": "Create",
-    "deleteConfirm": "Are you sure you want to delete '{{name}}'? This action cannot be undone.",
+    "deleteDialog": {
+      "title": "Delete this garden?",
+      "bodyList_one": "“{{name}}” — its grid and {{count}} plant will be permanently deleted.",
+      "bodyList_other": "“{{name}}” — its grid and its {{count}} plants will be permanently deleted.",
+      "bodyPlanner": "“{{name}}” — its grid, {{placements}} and {{infrastructures}} will be permanently deleted.",
+      "bodyNoCounts": "“{{name}}” — its grid and all its contents will be permanently deleted.",
+      "placementsCount_one": "{{count}} placement",
+      "placementsCount_other": "{{count}} placements",
+      "infrastructuresCount_one": "{{count}} infrastructure item",
+      "infrastructuresCount_other": "{{count}} infrastructure items",
+      "irreversible": "This cannot be undone.",
+      "confirmLabel": "Type the garden name to confirm",
+      "confirm": "Delete garden",
+      "cancel": "Cancel",
+      "error": "Couldn't delete the garden. Please try again.",
+      "successToast": "Garden deleted"
+    },
     "loading": "Loading gardens...",
     "error": "Unable to load gardens. Please try again later.",
     "mutationError": "An error occurred. Please try again.",
@@ -480,7 +495,11 @@
       "lightTotal": "{{hours}} h of light / day · uniform across the grid",
       "save": "Save",
       "cancel": "Cancel",
-      "saveError": "Couldn't save the garden settings. Please try again."
+      "saveError": "Couldn't save the garden settings. Please try again.",
+      "dangerZone": {
+        "title": "Danger zone",
+        "delete": "Delete this garden"
+      }
     },
     "exposure": {
       "toggle": "Exposure",
@@ -661,6 +680,13 @@
       "notesPlaceholder": "Notes about this placement…",
       "footprintTitle": "Footprint",
       "replaceHint": "Select another plant in the sidebar to replace this one."
+    },
+    "removePlacementDialog": {
+      "title": "Remove this placement?",
+      "body": "{{plant}} ({{r}}×{{c}}, cells {{cells}}) — this placement will be removed from the grid. The plant stays in the garden list — you can place it again from the sidebar.",
+      "cellRange": "{{from}}–{{to}}",
+      "cancel": "Cancel",
+      "confirm": "Remove"
     }
   },
   "plantDetail": {

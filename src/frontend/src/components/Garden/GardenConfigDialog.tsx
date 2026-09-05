@@ -56,6 +56,11 @@ interface Props {
   errorText?: string | null;
   onConfirm: (dimensions: DialogDimensions, config: GardenConfig) => void;
   onCancel: () => void;
+  /** SMA-18 lot 1: when provided, a "Danger zone" section closes the dialog
+   * with its "Delete this garden" button. The planner passes it on the
+   * "Réglages" instance ONLY — never on first setup, whose Cancel already
+   * leaves for /gardens. */
+  onDeleteRequest?: () => void;
 }
 
 const CELL_SIZES = ['25cm', '50cm', '1m'];
@@ -186,6 +191,7 @@ function GardenConfigDialogInner({
   errorText,
   onConfirm,
   onCancel,
+  onDeleteRequest,
 }: Omit<Props, 'open'>) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -696,6 +702,47 @@ function GardenConfigDialogInner({
           {t('planner.config.save')}
         </Button>
       </Box>
+
+      {/* ── Danger zone (SMA-18 lot 1) ── deliberately LAST and visually set
+          apart, the Profile page idiom: one does not delete a garden next to
+          its cell size. Rendered only when the planner wires the request
+          (the "Réglages" instance), so first setup never shows it. */}
+      {onDeleteRequest && (
+        <Box
+          sx={{
+            mt: 3,
+            pt: 3,
+            borderTop: '1px solid',
+            borderColor: tk.divider,
+          }}
+        >
+          <Box
+            sx={{
+              border: '1px solid',
+              borderColor: 'error.main',
+              borderRadius: '12px',
+              p: 2,
+            }}
+          >
+            <Typography
+              component="h3"
+              color="error"
+              sx={{ fontSize: 15, fontWeight: 700, mb: 1.5 }}
+            >
+              {t('planner.config.dangerZone.title')}
+            </Typography>
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={onDeleteRequest}
+              disabled={busy}
+              sx={{ textTransform: 'none' }}
+            >
+              {t('planner.config.dangerZone.delete')}
+            </Button>
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }

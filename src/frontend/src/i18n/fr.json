@@ -280,13 +280,28 @@
     "delete": "Supprimer",
     "createDialogTitle": "Créer un nouveau jardin",
     "editDialogTitle": "Modifier le jardin",
-    "deleteDialogTitle": "Supprimer le jardin ?",
     "gardenName": "Nom",
     "description": "Description",
     "cancel": "Annuler",
     "save": "Enregistrer",
     "create": "Créer",
-    "deleteConfirm": "Êtes-vous sûr de vouloir supprimer « {{name}} » ? Cette action est irréversible.",
+    "deleteDialog": {
+      "title": "Supprimer ce jardin ?",
+      "bodyList_one": "« {{name}} » — sa grille et {{count}} plante seront définitivement supprimées.",
+      "bodyList_other": "« {{name}} » — sa grille et ses {{count}} plantes seront définitivement supprimées.",
+      "bodyPlanner": "« {{name}} » — sa grille, {{placements}} et {{infrastructures}} seront définitivement supprimés.",
+      "bodyNoCounts": "« {{name}} » — sa grille et tout son contenu seront définitivement supprimés.",
+      "placementsCount_one": "{{count}} placement",
+      "placementsCount_other": "{{count}} placements",
+      "infrastructuresCount_one": "{{count}} infrastructure",
+      "infrastructuresCount_other": "{{count}} infrastructures",
+      "irreversible": "Cette action est irréversible.",
+      "confirmLabel": "Saisissez le nom du jardin pour confirmer",
+      "confirm": "Supprimer le jardin",
+      "cancel": "Annuler",
+      "error": "Impossible de supprimer le jardin. Veuillez réessayer.",
+      "successToast": "Jardin supprimé"
+    },
     "loading": "Chargement des jardins...",
     "error": "Impossible de charger les jardins. Veuillez réessayer plus tard.",
     "mutationError": "Une erreur est survenue. Veuillez réessayer.",
@@ -480,7 +495,11 @@
       "lightTotal": "{{hours}} h de lumière / jour · uniforme sur la grille",
       "save": "Enregistrer",
       "cancel": "Annuler",
-      "saveError": "Impossible d'enregistrer les réglages du jardin. Veuillez réessayer."
+      "saveError": "Impossible d'enregistrer les réglages du jardin. Veuillez réessayer.",
+      "dangerZone": {
+        "title": "Zone de danger",
+        "delete": "Supprimer ce jardin"
+      }
     },
     "exposure": {
       "toggle": "Exposition",
@@ -661,6 +680,13 @@
       "notesPlaceholder": "Notes sur ce placement…",
       "footprintTitle": "Empreinte",
       "replaceHint": "Sélectionnez une autre plante dans le menu pour remplacer celle-ci."
+    },
+    "removePlacementDialog": {
+      "title": "Retirer ce placement ?",
+      "body": "{{plant}} ({{r}}×{{c}}, cases {{cells}}) — ce placement sera retiré de la grille. La plante reste dans la liste du jardin — vous pourrez la replacer depuis la barre latérale.",
+      "cellRange": "{{from}}–{{to}}",
+      "cancel": "Annuler",
+      "confirm": "Retirer"
     }
   },
   "plantDetail": {

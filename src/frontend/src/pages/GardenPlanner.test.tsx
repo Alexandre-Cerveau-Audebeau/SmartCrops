@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
@@ -13,6 +13,7 @@ vi.mock('../services/plantApi', () => ({ fetchPlants: vi.fn() }));
 vi.mock('../services/gardenApi', () => ({
   fetchGarden: vi.fn(),
   updateGarden: vi.fn(),
+  deleteGarden: vi.fn(),
 }));
 vi.mock('../services/gardenLayoutApi', () => ({
   fetchLayout: vi.fn(),
@@ -20,7 +21,7 @@ vi.mock('../services/gardenLayoutApi', () => ({
 }));
 
 import GardenPlanner from './GardenPlanner';
-import { fetchGarden, updateGarden } from '../services/gardenApi';
+import { deleteGarden, fetchGarden, updateGarden } from '../services/gardenApi';
 import { fetchLayout, saveLayout } from '../services/gardenLayoutApi';
 import { fetchPlants } from '../services/plantApi';
 
@@ -2607,5 +2608,371 @@ describe('GardenPlanner removal toast (SMA-421 S7)', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText('Selected placement')).toBeNull();
     expect(plantArea(grid).queryByText('B')).toBeNull();
+  });
+});
+
+// ── SMA-18 lot 1: "Retirer du plan" asks first ─────────────────────────────
+// The panel button opens a confirmation; the confirm runs the pre-existing
+// REMOVE_PLACEMENT dispatch (history/undo untouched, still no toast). The
+// dialog asks about the LIVE selection: it keeps it while open and never
+// dispatches for a selection that vanished underneath it.
+describe('GardenPlanner remove-placement confirmation (SMA-18 lot 1)', () => {
+  async function selectFixturePlacement() {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    await waitFor(() =>
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
+    );
+    fireEvent.click(within(grid).getAllByRole('gridcell')[0]!);
+    expect(await screen.findByText('Selected placement')).toBeInTheDocument();
+    return grid;
+  }
+
+  async function openRemoveDialog() {
+    const grid = await selectFixturePlacement();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from plan' }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Remove this placement?',
+    });
+    return { grid, dialog };
+  }
+
+  it('the panel button opens the dialog, which names the placement and keeps the selection', async () => {
+    const { grid, dialog } = await openRemoveDialog();
+
+    expect(
+      within(dialog).getByText(
+        /^Basilicum fixture \(1×1, cells A1\) — this placement will be removed from the grid\./
+      )
+    ).toBeInTheDocument();
+    // Nothing happened yet: the placement is still on the grid, the panel is
+    // still mounted underneath (selection kept), the draft is still clean.
+    expect(plantArea(grid).getByText('B')).toBeInTheDocument();
+    expect(screen.getByText('Selected placement')).toBeInTheDocument();
+    expect(screen.queryByTestId('dirty-bar')).toBeNull();
+  });
+
+  it('Remove runs the existing removal: placement gone, dialog closed, draft dirty, undo armed', async () => {
+    const { grid, dialog } = await openRemoveDialog();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(plantArea(grid).queryByText('B')).toBeNull();
+    expect(screen.queryByText('Selected placement')).toBeNull();
+    // Same aftermath as before the dialog existed: history pushed, dirty.
+    expect(await screen.findByTestId('dirty-bar')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Undo last action' })
+    ).toBeEnabled();
+  });
+
+  it('Cancel keeps the placement and the selection', async () => {
+    const { grid, dialog } = await openRemoveDialog();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(plantArea(grid).getByText('B')).toBeInTheDocument();
+    expect(screen.getByText('Selected placement')).toBeInTheDocument();
+    expect(screen.queryByTestId('dirty-bar')).toBeNull();
+  });
+
+  it('a selection that vanishes under the open dialog closes it without any dispatch', async () => {
+    const { grid } = await openRemoveDialog();
+
+    // The page-level Escape grammar clears the selection out from under the
+    // dialog (dispatched on window, i.e. past MUI's modal Escape handling).
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.queryByText('Selected placement')).toBeNull();
+    // No phantom REMOVE_PLACEMENT: the placement stays, nothing to undo.
+    expect(plantArea(grid).getByText('B')).toBeInTheDocument();
+    expect(screen.queryByTestId('dirty-bar')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Undo last action' })
+    ).toBeDisabled();
+    // And the dialog does not re-surface for the next selection.
+    fireEvent.click(within(grid).getAllByRole('gridcell')[0]!);
+    expect(await screen.findByText('Selected placement')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('dialog', { name: 'Remove this placement?' })
+    ).toBeNull();
+  });
+});
+
+// ── SMA-18 lot 1: Danger zone in "Réglages" → type-the-name deletion ───────
+// Routed variant (the Profile.test idiom): asserting "the user actually LEFT
+// the planner" needs a real route to land on. The stub also echoes the router
+// state the list page reads for its toast.
+describe('GardenPlanner danger zone (SMA-18 lot 1)', () => {
+  function GardensStub() {
+    const location = useLocation();
+    return <div>GARDENS:{JSON.stringify(location.state)}</div>;
+  }
+
+  function renderPlannerWithRoutes() {
+    return render(
+      <LanguageProvider>
+        <MemoryRouter initialEntries={['/gardens/g1/planner']}>
+          <Routes>
+            <Route path="/gardens/:id/planner" element={<GardenPlanner />} />
+            <Route path="/gardens" element={<GardensStub />} />
+          </Routes>
+        </MemoryRouter>
+      </LanguageProvider>
+    );
+  }
+
+  async function openDeleteDialog() {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlannerWithRoutes();
+    await screen.findByRole('grid');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const settings = await screen.findByRole('dialog');
+    expect(within(settings).getByText('Danger zone')).toBeInTheDocument();
+    fireEvent.click(
+      within(settings).getByRole('button', { name: 'Delete this garden' })
+    );
+    return await screen.findByRole('dialog', { name: 'Delete this garden?' });
+  }
+
+  it('the Danger zone hands over from Réglages to the type-the-name dialog, naming the draft', async () => {
+    const dialog = await openDeleteDialog();
+
+    // Réglages closed — genuinely unmounted, not merely aria-hidden under the
+    // confirmation (hence `hidden: true`, which looks past MUI's aria-hidden
+    // on the sibling modal roots).
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: 'Garden settings', hidden: true })
+      ).toBeNull()
+    );
+    // The fixture layout: one placement, no painted infrastructure.
+    expect(
+      within(dialog).getByText(
+        '“Test garden” — its grid, 1 placement and 0 infrastructure items will be permanently deleted.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole('button', { name: 'Delete garden' })
+    ).toBeDisabled();
+    expect(deleteGarden).not.toHaveBeenCalled();
+  });
+
+  it('a confirmed deletion leaves for the gardens list with the toast state', async () => {
+    vi.mocked(deleteGarden).mockResolvedValue(undefined);
+    const dialog = await openDeleteDialog();
+
+    fireEvent.change(
+      within(dialog).getByLabelText('Type the garden name to confirm'),
+      { target: { value: 'Test garden' } }
+    );
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Delete garden' })
+    );
+
+    await waitFor(() => expect(deleteGarden).toHaveBeenCalledWith('g1'));
+    expect(
+      await screen.findByText('GARDENS:{"toast":"gardenDeleted"}')
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('grid')).toBeNull();
+  });
+
+  it('a failed deletion keeps the planner and the dialog, with the error inline', async () => {
+    vi.mocked(deleteGarden).mockRejectedValueOnce(new Error('boom'));
+    const dialog = await openDeleteDialog();
+
+    fireEvent.change(
+      within(dialog).getByLabelText('Type the garden name to confirm'),
+      { target: { value: 'Test garden' } }
+    );
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Delete garden' })
+    );
+
+    expect(
+      await within(dialog).findByText(
+        "Couldn't delete the garden. Please try again."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('dialog', { name: 'Delete this garden?' })
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^GARDENS:/)).toBeNull();
+  });
+
+  it('Cancel returns to the planner without deleting', async () => {
+    const dialog = await openDeleteDialog();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('grid')).toBeInTheDocument();
+    expect(deleteGarden).not.toHaveBeenCalled();
+  });
+
+  it('first setup never shows the Danger zone', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      width: null,
+      height: null,
+      cellSize: null,
+      placements: [],
+    });
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    renderPlanner();
+
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByRole('heading', { name: 'Garden settings' })
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText('Danger zone')).toBeNull();
+    expect(
+      within(dialog).queryByRole('button', { name: 'Delete this garden' })
+    ).toBeNull();
+  });
+});
+
+// ── SMA-18 lot 1 (review round): S1/S2 made observable ─────────────────────
+// The body must count the DRAFT (not the saved layout) and infrastructure
+// BLOCKS (not painted cells): a two-cell fence is one item, and a placement
+// removed in the unsaved draft is already gone from the count.
+describe('GardenPlanner danger zone — draft and block counts (SMA-18 lot 1)', () => {
+  function GardensStub() {
+    const location = useLocation();
+    return <div>GARDENS:{JSON.stringify(location.state)}</div>;
+  }
+
+  it('counts a two-cell fence as ONE infrastructure item and a draft-removed placement as gone', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      // Bottom row painted with one contiguous fence: 2 cells, 1 block.
+      cellsJson: JSON.stringify([
+        { row: 1, col: 0, infrastructure: 'fence' },
+        { row: 1, col: 1, infrastructure: 'fence' },
+      ]),
+    });
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    render(
+      <LanguageProvider>
+        <MemoryRouter initialEntries={['/gardens/g1/planner']}>
+          <Routes>
+            <Route path="/gardens/:id/planner" element={<GardenPlanner />} />
+            <Route path="/gardens" element={<GardensStub />} />
+          </Routes>
+        </MemoryRouter>
+      </LanguageProvider>
+    );
+    const grid = await screen.findByRole('grid');
+    await waitFor(() =>
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
+    );
+
+    // Saved layout: 1 placement. Remove it in the DRAFT (unsaved).
+    fireEvent.click(within(grid).getAllByRole('gridcell')[0]!);
+    await screen.findByText('Selected placement');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from plan' }));
+    const removeDialog = await screen.findByRole('dialog', {
+      name: 'Remove this placement?',
+    });
+    fireEvent.click(within(removeDialog).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByTestId('dirty-bar')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const settings = await screen.findByRole('dialog');
+    fireEvent.click(
+      within(settings).getByRole('button', { name: 'Delete this garden' })
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Delete this garden?' });
+
+    expect(
+      within(dialog).getByText(
+        '“Test garden” — its grid, 0 placements and 1 infrastructure item will be permanently deleted.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  // Round 1 F3': the counts are a SNAPSHOT taken at opening — they hold
+  // through the closing fade (a count gated on the open flag would already
+  // read "0 infrastructure items" mid-transition), and a re-open reads the
+  // draft afresh at that moment.
+  it('snapshots the counts at opening: unchanged through the closing fade, re-read from the draft on re-open', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      // Saved: 1 placement (the fixture) + one contiguous 2-cell fence (1 block).
+      cellsJson: JSON.stringify([
+        { row: 1, col: 0, infrastructure: 'fence' },
+        { row: 1, col: 1, infrastructure: 'fence' },
+      ]),
+    });
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    render(
+      <LanguageProvider>
+        <MemoryRouter initialEntries={['/gardens/g1/planner']}>
+          <Routes>
+            <Route path="/gardens/:id/planner" element={<GardenPlanner />} />
+            <Route path="/gardens" element={<GardensStub />} />
+          </Routes>
+        </MemoryRouter>
+      </LanguageProvider>
+    );
+    const grid = await screen.findByRole('grid');
+    await waitFor(() =>
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
+    );
+    const openDeleteDialog = async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+      const settings = await screen.findByRole('dialog');
+      fireEvent.click(
+        within(settings).getByRole('button', { name: 'Delete this garden' })
+      );
+      return await screen.findByRole('dialog', { name: 'Delete this garden?' });
+    };
+    const bodyAtFirstOpening =
+      '“Test garden” — its grid, 1 placement and 1 infrastructure item will be permanently deleted.';
+
+    const first = await openDeleteDialog();
+    expect(within(first).getByText(bodyAtFirstOpening)).toBeInTheDocument();
+
+    fireEvent.click(within(first).getByRole('button', { name: 'Cancel' }));
+    // Same tick, mid-transition: the copy has NOT moved.
+    expect(screen.getByText(bodyAtFirstOpening)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Delete this garden?' })
+      ).toBeNull()
+    );
+
+    // Change the DRAFT (remove the placement, unsaved), then re-open: the
+    // snapshot is taken again at THIS opening and reads the current draft —
+    // neither the saved layout nor the previous snapshot.
+    fireEvent.click(within(grid).getAllByRole('gridcell')[0]!);
+    await screen.findByText('Selected placement');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from plan' }));
+    const removeDialog = await screen.findByRole('dialog', {
+      name: 'Remove this placement?',
+    });
+    fireEvent.click(within(removeDialog).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByTestId('dirty-bar')).toBeInTheDocument();
+
+    const second = await openDeleteDialog();
+    expect(
+      within(second).getByText(
+        '“Test garden” — its grid, 0 placements and 1 infrastructure item will be permanently deleted.'
+      )
+    ).toBeInTheDocument();
   });
 });

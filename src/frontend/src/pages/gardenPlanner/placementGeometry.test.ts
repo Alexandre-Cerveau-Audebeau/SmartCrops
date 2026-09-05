@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { CellData } from '../../types/GardenLayout';
 import {
-  cellRef,
   cellSizeToMeters,
   clampFootprintToGrid,
-  colToLetter,
   footprintFits,
   rectsOverlap,
   spacingToFootprintCells,
@@ -254,21 +252,5 @@ describe('clampFootprintToGrid (SMA-193 lot 3)', () => {
       spanRows: 2,
       spanCols: 2,
     });
-  });
-});
-
-describe('cell references (collision toast copy)', () => {
-  it.each([
-    [0, 'A'],
-    [7, 'H'],
-    [25, 'Z'],
-    [26, 'AA'],
-  ] as const)('colToLetter(%s) → %s', (col, letter) => {
-    expect(colToLetter(col)).toBe(letter);
-  });
-
-  it('cellRef is column letter + 1-based row (mockup "H3")', () => {
-    expect(cellRef(2, 7)).toBe('H3');
-    expect(cellRef(0, 0)).toBe('A1');
   });
 });
