@@ -683,7 +683,7 @@
     },
     "removePlacementDialog": {
       "title": "Remove this placement?",
-      "body": "{{plant}} ({{w}}×{{h}}, cells {{cells}}) — this placement will be removed from the grid. The plant stays in the garden list — you can place it again from the sidebar.",
+      "body": "{{plant}} ({{r}}×{{c}}, cells {{cells}}) — this placement will be removed from the grid. The plant stays in the garden list — you can place it again from the sidebar.",
       "cellRange": "{{from}}–{{to}}",
       "cancel": "Cancel",
       "confirm": "Remove"

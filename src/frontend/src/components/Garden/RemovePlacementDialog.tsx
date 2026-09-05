@@ -9,7 +9,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { cellRef } from '../../pages/gardenPlanner/placementGeometry';
+import { cellRef } from '../../utils/cellRef';
 
 interface Props {
   open: boolean;
@@ -22,7 +22,8 @@ interface Props {
   spanCols: number;
   /** Escape, backdrop click and the Cancel button all land here. */
   onCancel: () => void;
-  /** The Remove button and Enter land here — the caller owns the dispatch. */
+  /** The Remove button and Enter (from the dialog body) land here — the
+   * caller owns the dispatch. */
   onConfirm: () => void;
 }
 
@@ -33,9 +34,11 @@ interface Props {
  * state: it only asks, and the page dispatches the unchanged REMOVE_PLACEMENT.
  *
  * Initial focus lands on Cancel (the first `autoFocus` on a dialog button in
- * the app — the safe default for a destructive confirm). Enter still means
- * Remove (mockup keyboard grammar), so the Dialog intercepts it before the
- * focused Cancel button can act on it.
+ * the app — the safe default for a destructive confirm). Enter confirms from
+ * the dialog BODY only: a focused button keeps its own native Enter
+ * activation (Cancel cancels, Remove removes) — the DeleteGardenDialog rule,
+ * aligned in review round 1 so the two confirmations teach ONE keyboard
+ * grammar.
  */
 export default function RemovePlacementDialog({
   open,
@@ -67,10 +70,12 @@ export default function RemovePlacementDialog({
         // A held Enter must not open-and-confirm in one press: the panel's
         // button opens on the first keypress, and the auto-repeat that
         // follows would otherwise land here (repeat = no deliberate act).
-        if (e.key === 'Enter' && !e.repeat) {
-          e.preventDefault();
-          onConfirm();
-        }
+        if (e.key !== 'Enter' || e.repeat) return;
+        // A focused button keeps its own native Enter activation: Cancel
+        // cancels, Remove removes (same rule as DeleteGardenDialog).
+        if ((e.target as HTMLElement).closest('button')) return;
+        e.preventDefault();
+        onConfirm();
       }}
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
@@ -104,8 +109,10 @@ export default function RemovePlacementDialog({
         <Typography id={descriptionId} variant="body2">
           {t('planner.removePlacementDialog.body', {
             plant: plantName,
-            w: spanCols,
-            h: spanRows,
+            // rows × cols — the panel's footprint-line order
+            // (planner.place.footprintLine), product decision round 1.
+            r: spanRows,
+            c: spanCols,
             cells,
           })}
         </Typography>

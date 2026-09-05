@@ -48,7 +48,8 @@ const PAPER_MAX_WIDTH_PX = 560;
  * DeleteAccountDialog brake (SMA-341) applied to gardens, reused from BOTH
  * the "Mes Jardins" card and the planner's settings Danger zone. The dialog
  * owns the API call so the pending/error states live in one place: a failure
- * keeps it open with the typed value intact for a retry.
+ * keeps it open with the typed value intact for a retry. The name field takes
+ * the initial focus — typing the name is the first expected gesture (round 1).
  */
 export default function DeleteGardenDialog({
   open,
@@ -65,6 +66,21 @@ export default function DeleteGardenDialog({
   const [typed, setTyped] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(false);
+
+  // Reset the brake on the CLOSING edge (open → false), whichever side closed
+  // it: handleClose resets on its own, but a parent that flips `open` itself
+  // — e.g. after a failed request — would otherwise re-open on stale input
+  // and a stale error (round 1, GitHub minor). Render-time adjust, as in
+  // useSelection (react-hooks/set-state-in-effect forbids the effect
+  // variant); keyed on the edge so the opening fade never flashes a reset.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (!open) {
+      setTyped('');
+      setError(false);
+    }
+  }
 
   // Same rule as the account brake (DeleteAccountDialog): trimmed and
   // case-insensitive — the brake is the act of typing. An empty target never
@@ -183,6 +199,8 @@ export default function DeleteGardenDialog({
             fullWidth
             size="small"
             autoComplete="off"
+            // Typing the name is the first expected gesture (round 1, P2).
+            autoFocus
             disabled={deleting}
           />
         </Box>

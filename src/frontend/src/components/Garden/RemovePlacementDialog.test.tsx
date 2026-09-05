@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
 import RemovePlacementDialog from './RemovePlacementDialog';
@@ -45,10 +46,12 @@ describe('RemovePlacementDialog (SMA-18 lot 1)', () => {
     expect(dialog).toHaveAccessibleDescription(/Courgette \(1×1, cells F3\)/);
   });
 
-  it('spells a footprint as a first–last cell range (2×2 anchored at F3 → F3–G4)', () => {
-    renderDialog({ spanRows: 2, spanCols: 2 });
+  it('spells a footprint as rows×cols and a first–last cell range (2 rows × 3 cols at F3 → 2×3, F3–H4)', () => {
+    renderDialog({ spanRows: 2, spanCols: 3 });
 
-    expect(screen.getByText(/\(2×2, cells F3–G4\)/)).toBeInTheDocument();
+    // rows × cols — the panel's footprint-line order (product decision,
+    // review round 1): 2 rows down (3 → 4), 3 columns across (F → H).
+    expect(screen.getByText(/\(2×3, cells F3–H4\)/)).toBeInTheDocument();
   });
 
   it('gives Cancel the initial focus, and Cancel fires onCancel', async () => {
@@ -78,24 +81,37 @@ describe('RemovePlacementDialog (SMA-18 lot 1)', () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it('Enter confirms — even while the focus sits on Cancel — and swallows the button activation', () => {
+  it('Enter from the dialog body confirms and takes the key', () => {
     const { onCancel, onConfirm } = renderDialog();
 
-    // fireEvent returns false when a handler called preventDefault(): that is
-    // what stops the focused Cancel button's own native Enter activation.
-    const notPrevented = fireEvent.keyDown(
-      screen.getByRole('button', { name: 'Cancel' }),
-      { key: 'Enter' }
-    );
-    expect(notPrevented).toBe(false);
+    // fireEvent returns false when a handler called preventDefault().
+    expect(
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' })
+    ).toBe(false);
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('Enter on the focused Cancel button cancels — never removes (the button keeps its own activation)', async () => {
+    const user = userEvent.setup();
+    const { onCancel, onConfirm } = renderDialog();
+
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    await waitFor(() => expect(cancel).toHaveFocus());
+    // user-event synthesises the browser's Enter activation of the focused
+    // button (keydown → keypress → click) UNLESS the keydown was
+    // default-prevented: the dialog no longer intercepts it (review round 1,
+    // the DeleteGardenDialog rule), so Cancel's own click lands.
+    await user.keyboard('{Enter}');
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 
   it('ignores an auto-repeated Enter (a held key must not open-and-confirm in one press)', () => {
     const { onCancel, onConfirm } = renderDialog();
 
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Cancel' }), {
+    fireEvent.keyDown(screen.getByRole('dialog'), {
       key: 'Enter',
       repeat: true,
     });

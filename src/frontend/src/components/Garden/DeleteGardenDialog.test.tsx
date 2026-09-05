@@ -267,3 +267,46 @@ describe('DeleteGardenDialog (SMA-18 lot 1) — brake and request', () => {
     expect(confirmButton()).toBeDisabled();
   });
 });
+
+// ── Review round 1 ──────────────────────────────────────────────────────────
+describe('DeleteGardenDialog (SMA-18 lot 1, round 1) — focus and parent-driven close', () => {
+  it('gives the name field the initial focus (typing the name is the first expected gesture)', async () => {
+    renderDialog();
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Type the garden name to confirm')).toHaveFocus()
+    );
+  });
+
+  it('a parent-driven close (open → false) resets the typed name and the error, so a re-open starts clean', async () => {
+    vi.mocked(deleteGarden).mockRejectedValueOnce(new Error('boom'));
+    const { onClose, onDeleted, rerender } = renderDialog();
+
+    fireEvent.change(nameInput(), { target: { value: 'Casa Lolo' } });
+    fireEvent.click(confirmButton());
+    expect(
+      await screen.findByText("Couldn't delete the garden. Please try again.")
+    ).toBeInTheDocument();
+    expect(nameInput()).toHaveValue('Casa Lolo');
+
+    // The parent closes the dialog ITSELF — no Escape, no Cancel, so the
+    // handleClose reset never ran. The closing edge must reset both states.
+    const props = {
+      gardenId: 'g1',
+      gardenName: 'Casa Lolo',
+      summary: { kind: 'planner', placements: 3, infrastructures: 2 } as const,
+      onClose,
+      onDeleted,
+    };
+    rerender(<DeleteGardenDialog open={false} {...props} />);
+    rerender(<DeleteGardenDialog open {...props} />);
+
+    expect(nameInput()).toHaveValue('');
+    expect(
+      screen.queryByText("Couldn't delete the garden. Please try again.")
+    ).toBeNull();
+    expect(confirmButton()).toBeDisabled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onDeleted).not.toHaveBeenCalled();
+  });
+});

@@ -55,9 +55,14 @@ export default function MyGardens() {
   );
   useEffect(() => {
     if (navState?.toast) {
-      navigate(location.pathname, { replace: true, state: null });
+      // Replace ONLY the state: the entry keeps its search and hash (a future
+      // filter / sort / deep link must survive arriving from the planner).
+      navigate(
+        { pathname: location.pathname, search: location.search, hash: location.hash },
+        { replace: true, state: null }
+      );
     }
-  }, [navState, navigate, location.pathname]);
+  }, [navState, navigate, location.pathname, location.search, location.hash]);
   // SMA-421: the list fetch (locale re-fetch, stale-response guard,
   // post-mutation refresh) lives in useGardens — the hook carries the
   // SMA-155 / SMA-288 invariants this page used to hold inline.

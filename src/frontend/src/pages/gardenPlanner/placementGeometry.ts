@@ -124,18 +124,7 @@ export function clampFootprintToGrid(
   };
 }
 
-/** Column index → spreadsheet letter (0 → A, 25 → Z, 26 → AA). */
-export function colToLetter(col: number): string {
-  let letters = '';
-  let n = col;
-  do {
-    letters = String.fromCharCode(65 + (n % 26)) + letters;
-    n = Math.floor(n / 26) - 1;
-  } while (n >= 0);
-  return letters;
-}
-
-/** Grid cell reference in the mockup's "H3" style (column letter + 1-based row). */
-export function cellRef(row: number, col: number): string {
-  return `${colToLetter(col)}${row + 1}`;
-}
+// The spreadsheet cell grammar (colToLetter, cellRef) lives in
+// utils/cellRef.ts since review round 1 of SMA-18 lot 1: pure formatting
+// with no planner state, shared by the panel, the toasts and the
+// components-layer confirmation dialog.

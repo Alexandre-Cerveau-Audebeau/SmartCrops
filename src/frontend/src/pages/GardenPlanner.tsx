@@ -63,6 +63,7 @@ import {
   infrastructureBlockers,
   type InfrastructureType,
 } from '../utils/infrastructure';
+import { cellRef } from '../utils/cellRef';
 import type { ArmedSoil } from '../utils/soil';
 import { ExposureLegend } from './gardenPlanner/ExposureLegend';
 import { ExposureOverridePopover } from './gardenPlanner/ExposureOverridePopover';
@@ -70,7 +71,6 @@ import { GridControls, UndoZoomCluster } from './gardenPlanner/GridControls';
 import { PlacementDetailPanel } from './gardenPlanner/PlacementDetailPanel';
 import { PlantsInGardenSection } from './gardenPlanner/PlantsInGardenSection';
 import {
-  cellRef,
   cellSizeToMeters,
   clampFootprintToGrid,
   footprintFits,
@@ -167,6 +167,15 @@ const sheetTitleRowSx = {
   flexShrink: 0,
 } as const;
 
+/**
+ * What the garden-deletion dialog says, frozen when it opens (SMA-18 lot 1,
+ * round 1 F3'): the name to type and the draft counts at that moment.
+ */
+type DeleteGardenTarget = { name: string; summary: DeleteGardenSummary };
+// Before the first opening the dialog is closed and renders nothing; the
+// fallback only keeps the prop total.
+const NO_DELETE_TARGET_SUMMARY: DeleteGardenSummary = { kind: 'unknown' };
+
 export default function GardenPlanner() {
   const { t } = useTranslation();
   const { language } = useLanguage();
@@ -216,6 +225,14 @@ export default function GardenPlanner() {
   // in the same render (adjust-during-render, the page's gate pattern) so it
   // can never re-surface for the next selection.
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+  // Garden deletion (round 1, F3'): the dialog's copy is a SNAPSHOT taken
+  // once at opening — the draft's placements and infrastructure BLOCKS
+  // (groupInfrastructureRegions: "one fence", never painted cells). The
+  // target OUTLIVES the open flag (the MyGardens deleteTarget idiom): the
+  // fading dialog keeps its counts instead of collapsing to 0, and nothing
+  // is grouped outside the opening gesture — the next opening replaces it.
+  const [deleteGardenTarget, setDeleteGardenTarget] =
+    useState<DeleteGardenTarget | null>(null);
   const [deleteGardenOpen, setDeleteGardenOpen] = useState(false);
   if (removeDialogOpen && selectedPlacement === null) {
     setRemoveDialogOpen(false);
@@ -1476,27 +1493,31 @@ export default function GardenPlanner() {
   // which shows the "garden deleted" toast from the router state it receives.
   const handleDeleteGardenRequest = useCallback(() => {
     setShowConfig(false);
+    // Snapshot the consequences ONCE, here (F3'): the DRAFT as the user sees
+    // it — placements, and infrastructure BLOCKS (what reads as "one fence"),
+    // not painted cells. This is the only place the grid is grouped for the
+    // dialog: PAINT_ENTER rebuilds the grid per traversed cell, and the
+    // full-grid scan (up to 50×50) must not ride every paint stroke. No grid
+    // loaded yet → the count-free body.
+    setDeleteGardenTarget({
+      name: garden?.name ?? '',
+      summary: grid
+        ? {
+            kind: 'planner',
+            placements: placements.length,
+            infrastructures: groupInfrastructureRegions(grid).length,
+          }
+        : { kind: 'unknown' },
+    });
     setDeleteGardenOpen(true);
-  }, []);
+  }, [garden, grid, placements]);
+  // Close flips the flag ONLY: the target stays through the exit fade.
   const handleCloseDeleteGarden = useCallback(() => {
     setDeleteGardenOpen(false);
   }, []);
   const handleGardenDeleted = useCallback(() => {
     navigate('/gardens', { replace: true, state: { toast: 'gardenDeleted' } });
   }, [navigate]);
-  // Consequences named by the deletion dialog: the DRAFT the user sees, and
-  // infrastructure BLOCKS (what reads as "one fence"), not painted cells.
-  const infrastructureCount = useMemo(
-    () => (grid ? groupInfrastructureRegions(grid).length : 0),
-    [grid]
-  );
-  const deleteGardenSummary: DeleteGardenSummary = grid
-    ? {
-        kind: 'planner',
-        placements: placements.length,
-        infrastructures: infrastructureCount,
-      }
-    : { kind: 'unknown' };
 
   // ── Footprint panel wiring (SMA-193 lot 3) ──────────────────────────────
   // The panel's fit checks and the reducer guard share footprintFits at the
@@ -2053,8 +2074,8 @@ export default function GardenPlanner() {
       <DeleteGardenDialog
         open={deleteGardenOpen}
         gardenId={id ?? ''}
-        gardenName={garden?.name ?? ''}
-        summary={deleteGardenSummary}
+        gardenName={deleteGardenTarget?.name ?? ''}
+        summary={deleteGardenTarget?.summary ?? NO_DELETE_TARGET_SUMMARY}
         onClose={handleCloseDeleteGarden}
         onDeleted={handleGardenDeleted}
       />

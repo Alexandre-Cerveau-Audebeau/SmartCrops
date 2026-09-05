@@ -242,18 +242,32 @@ describe('MyGardens delete flow (SMA-18 lot 1)', () => {
     expect(screen.getByText('Casa Lolo')).toBeInTheDocument();
   });
 
-  it('toasts on arrival from the planner (router state) and erases that state with a replace', async () => {
+  it('toasts on arrival from the planner (router state) and erases that state with a replace that keeps the URL (search + hash)', async () => {
     vi.mocked(fetchGardens).mockResolvedValue([]);
-    // Probe: what the router currently holds as location.state.
+    // Probe: what the router currently holds as location.state and as URL.
     function StateProbe() {
       const location = useLocation();
-      return <div>state:{JSON.stringify(location.state)}</div>;
+      return (
+        <div>
+          <div>state:{JSON.stringify(location.state)}</div>
+          <div>
+            url:{location.pathname}
+            {location.search}
+            {location.hash}
+          </div>
+        </div>
+      );
     }
     render(
       <LanguageProvider>
         <MemoryRouter
           initialEntries={[
-            { pathname: '/gardens', state: { toast: 'gardenDeleted' } },
+            {
+              pathname: '/gardens',
+              search: '?sort=name',
+              hash: '#top',
+              state: { toast: 'gardenDeleted' },
+            },
           ]}
         >
           <StateProbe />
@@ -267,6 +281,9 @@ describe('MyGardens delete flow (SMA-18 lot 1)', () => {
     expect(await screen.findByText('Garden deleted')).toBeInTheDocument();
     // Consumed once: a refresh (or a back/forward) would find no state to replay.
     await waitFor(() => expect(screen.getByText('state:null')).toBeInTheDocument());
+    // …and ONLY the state went: the replace kept the query and the fragment
+    // (review round 1 — a future filter / sort / deep link must survive).
+    expect(screen.getByText('url:/gardens?sort=name#top')).toBeInTheDocument();
   });
 
   it('shows no toast on a plain visit', async () => {

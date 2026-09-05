@@ -2902,4 +2902,77 @@ describe('GardenPlanner danger zone — draft and block counts (SMA-18 lot 1)', 
       )
     ).toBeInTheDocument();
   });
+
+  // Round 1 F3': the counts are a SNAPSHOT taken at opening — they hold
+  // through the closing fade (a count gated on the open flag would already
+  // read "0 infrastructure items" mid-transition), and a re-open reads the
+  // draft afresh at that moment.
+  it('snapshots the counts at opening: unchanged through the closing fade, re-read from the draft on re-open', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      // Saved: 1 placement (the fixture) + one contiguous 2-cell fence (1 block).
+      cellsJson: JSON.stringify([
+        { row: 1, col: 0, infrastructure: 'fence' },
+        { row: 1, col: 1, infrastructure: 'fence' },
+      ]),
+    });
+    vi.mocked(fetchPlants).mockResolvedValue([basil]);
+    render(
+      <LanguageProvider>
+        <MemoryRouter initialEntries={['/gardens/g1/planner']}>
+          <Routes>
+            <Route path="/gardens/:id/planner" element={<GardenPlanner />} />
+            <Route path="/gardens" element={<GardensStub />} />
+          </Routes>
+        </MemoryRouter>
+      </LanguageProvider>
+    );
+    const grid = await screen.findByRole('grid');
+    await waitFor(() =>
+      expect(plantArea(grid).getByText('B')).toBeInTheDocument()
+    );
+    const openDeleteDialog = async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+      const settings = await screen.findByRole('dialog');
+      fireEvent.click(
+        within(settings).getByRole('button', { name: 'Delete this garden' })
+      );
+      return await screen.findByRole('dialog', { name: 'Delete this garden?' });
+    };
+    const bodyAtFirstOpening =
+      '“Test garden” — its grid, 1 placement and 1 infrastructure item will be permanently deleted.';
+
+    const first = await openDeleteDialog();
+    expect(within(first).getByText(bodyAtFirstOpening)).toBeInTheDocument();
+
+    fireEvent.click(within(first).getByRole('button', { name: 'Cancel' }));
+    // Same tick, mid-transition: the copy has NOT moved.
+    expect(screen.getByText(bodyAtFirstOpening)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Delete this garden?' })
+      ).toBeNull()
+    );
+
+    // Change the DRAFT (remove the placement, unsaved), then re-open: the
+    // snapshot is taken again at THIS opening and reads the current draft —
+    // neither the saved layout nor the previous snapshot.
+    fireEvent.click(within(grid).getAllByRole('gridcell')[0]!);
+    await screen.findByText('Selected placement');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from plan' }));
+    const removeDialog = await screen.findByRole('dialog', {
+      name: 'Remove this placement?',
+    });
+    fireEvent.click(within(removeDialog).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByTestId('dirty-bar')).toBeInTheDocument();
+
+    const second = await openDeleteDialog();
+    expect(
+      within(second).getByText(
+        '“Test garden” — its grid, 0 placements and 1 infrastructure item will be permanently deleted.'
+      )
+    ).toBeInTheDocument();
+  });
 });

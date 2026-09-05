@@ -683,7 +683,7 @@
     },
     "removePlacementDialog": {
       "title": "Retirer ce placement ?",
-      "body": "{{plant}} ({{w}}×{{h}}, cases {{cells}}) — ce placement sera retiré de la grille. La plante reste dans la liste du jardin — vous pourrez la replacer depuis la barre latérale.",
+      "body": "{{plant}} ({{r}}×{{c}}, cases {{cells}}) — ce placement sera retiré de la grille. La plante reste dans la liste du jardin — vous pourrez la replacer depuis la barre latérale.",
       "cellRange": "{{from}}–{{to}}",
       "cancel": "Annuler",
       "confirm": "Retirer"

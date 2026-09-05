@@ -6,7 +6,8 @@ import '../../i18n/i18n';
 import i18n from '../../i18n/i18n';
 import type { CellData } from '../../types/GardenLayout';
 import type { Plant } from '../../types/Plant';
-import { cellRef, footprintFits } from './placementGeometry';
+import { cellRef } from '../../utils/cellRef';
+import { footprintFits } from './placementGeometry';
 import type { PlannerPlacement } from './plannerReducer';
 import { PlacementDetailPanel } from './PlacementDetailPanel';
 

@@ -27,9 +27,9 @@ import type {
   MomentsLit,
   Moment,
 } from '../../utils/exposure';
+import { cellRef } from '../../utils/cellRef';
 import { ExposureOverridePopover } from './ExposureOverridePopover';
 import {
-  cellRef,
   cellSizeToMeters,
   spacingToFootprintCells,
   type FootprintFitResult,
