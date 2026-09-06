@@ -159,6 +159,43 @@ describe('GardenTemplatesDialog (SMA-18 lot 2)', () => {
     expect(buttonOf(cards[0]!)).toHaveClass('MuiButton-outlined');
   });
 
+  it('a parent closing the dialog resets the cards: hovered or focused before, none active after reopening (CodeRabbit round 2)', () => {
+    const tk = getPlannerTokens('light');
+    const onClose = vi.fn();
+    const onApply = vi.fn();
+    const dialogAt = (open: boolean) => (
+      <GardenTemplatesDialog
+        open={open}
+        catalogReady
+        onClose={onClose}
+        onApply={onApply}
+      />
+    );
+    const { rerender } = render(dialogAt(true));
+    const buttonOf = (card: HTMLElement) =>
+      within(card).getByRole('button', { name: 'Use this template' });
+
+    // One card hovered, another one holding focus.
+    let cards = screen.getAllByRole('group');
+    fireEvent.mouseEnter(cards[2]!);
+    fireEvent.focus(buttonOf(cards[0]!));
+    expect(buttonOf(cards[2]!)).toHaveClass('MuiButton-contained');
+    expect(buttonOf(cards[0]!)).toHaveClass('MuiButton-contained');
+
+    // The PARENT flips `open` — handleClose never runs — then reopens.
+    rerender(dialogAt(false));
+    expect(onClose).not.toHaveBeenCalled();
+    rerender(dialogAt(true));
+
+    cards = screen.getAllByRole('group');
+    expect(cards).toHaveLength(3);
+    cards.forEach((card) => {
+      expect(buttonOf(card)).toHaveClass('MuiButton-outlined');
+      expect(card).toHaveStyle({ borderColor: tk.inputBd });
+    });
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
   it('renders in French', async () => {
     await i18n.changeLanguage('fr');
     renderDialog();

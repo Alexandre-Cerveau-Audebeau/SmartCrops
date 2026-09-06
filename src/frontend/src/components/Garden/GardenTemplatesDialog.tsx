@@ -170,6 +170,19 @@ export default function GardenTemplatesDialog({
     setFocusKey(null);
   };
 
+  // Reset both keys on the CLOSING edge (open → false), whichever side closed
+  // the dialog (CodeRabbit round 2): handleClose and handleApply reset on
+  // their own, but a parent that flips `open` itself would otherwise re-open
+  // with the last hovered / focused card still active, with no pointer or
+  // focus on it. Render-time adjust — the DeleteGardenDialog idiom (lot 1):
+  // react-hooks/set-state-in-effect forbids the effect variant; keyed on the
+  // edge so the opening fade never flashes a reset.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (!open) resetActive();
+  }
+
   const handleClose = () => {
     resetActive();
     onClose();
