@@ -124,6 +124,38 @@ export function clampFootprintToGrid(
   };
 }
 
+/**
+ * Which EXISTING placements survive a template application (SMA-18 lot 2):
+ * the template's own placements own the new grid first; each existing
+ * placement is then kept iff `footprintFits` accepts it on the new grid
+ * against the template placements PLUS the existing ones already kept —
+ * so a kept plant can neither sit on a cell the template deactivated nor
+ * overlap a template plant. Infrastructure under a kept plant is allowed,
+ * exactly as it is for a hand-placed one (the footprintFits contract).
+ * Order is preserved on both sides. ONE function, called by the reducer
+ * (APPLY_TEMPLATE) and by the page (the removal toast's count) — the same
+ * single-source principle as footprintFits itself, so the two can never
+ * disagree on who was evicted.
+ */
+export function partitionPlacementsForTemplate(
+  grid: CellData[][],
+  templatePlacements: PlannerPlacement[],
+  existing: PlannerPlacement[]
+): { kept: PlannerPlacement[]; removed: PlannerPlacement[] } {
+  const occupied = [...templatePlacements];
+  const kept: PlannerPlacement[] = [];
+  const removed: PlannerPlacement[] = [];
+  for (const placement of existing) {
+    if (footprintFits(grid, occupied, placement).ok) {
+      kept.push(placement);
+      occupied.push(placement);
+    } else {
+      removed.push(placement);
+    }
+  }
+  return { kept, removed };
+}
+
 // The spreadsheet cell grammar (colToLetter, cellRef) lives in
 // utils/cellRef.ts since review round 1 of SMA-18 lot 1: pure formatting
 // with no planner state, shared by the panel, the toasts and the

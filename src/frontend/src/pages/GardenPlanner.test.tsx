@@ -24,6 +24,12 @@ import GardenPlanner from './GardenPlanner';
 import { deleteGarden, fetchGarden, updateGarden } from '../services/gardenApi';
 import { fetchLayout, saveLayout } from '../services/gardenLayoutApi';
 import { fetchPlants } from '../services/plantApi';
+import { serializeCellsJson } from '../types/GardenLayout';
+import {
+  GARDEN_TEMPLATES,
+  getGardenTemplate,
+  templateGrid,
+} from '../utils/gardenTemplates';
 
 // Locks the transient wrong-initial artifact: a placement hydrating before
 // the plant catalog used to render the 'U' of the 'Unknown' fallback for
@@ -2965,5 +2971,286 @@ describe('GardenPlanner danger zone — draft and block counts (SMA-18 lot 1)', 
         '“Test garden” — its grid, 0 placements and 1 infrastructure item will be permanently deleted.'
       )
     ).toBeInTheDocument();
+  });
+});
+
+// ── SMA-18 lot 2: garden templates ─────────────────────────────────────────
+// The header button opens the dialog at any time; the first setup opens it
+// by itself; "Use this template" resolves the template's scientific names
+// against the loaded catalog, applies everything in ONE undo step, and toasts
+// once about what could not be kept or found.
+describe('GardenPlanner garden templates (SMA-18 lot 2)', () => {
+  // One catalog plant per scientific name the three templates reference. Ids
+  // deliberately unlike the names: a placement reaching the wire with a
+  // `tpl-` id proves the name → id resolution ran.
+  const templateNames = Array.from(
+    new Set(
+      GARDEN_TEMPLATES.flatMap((tpl) =>
+        tpl.placements.map((p) => p.scientificName)
+      )
+    )
+  );
+  const templateCatalog = templateNames.map(
+    (name, i) => ({ id: `tpl-${i}`, scientificName: name }) as Plant
+  );
+  const potager = getGardenTemplate('potager');
+
+  async function renderReady(
+    layoutFixture: GardenLayoutData = layout,
+    catalog: Plant[] = [basil, ...templateCatalog]
+  ) {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layoutFixture);
+    vi.mocked(fetchPlants).mockResolvedValue(catalog);
+    renderPlanner();
+    const grid = await screen.findByRole('grid');
+    if (layoutFixture.placements.length > 0) {
+      await waitFor(() =>
+        expect(plantArea(grid).getByText('B')).toBeInTheDocument()
+      );
+    }
+    return grid;
+  }
+
+  async function openTemplates() {
+    fireEvent.click(screen.getByRole('button', { name: 'Templates' }));
+    return await screen.findByRole('dialog', { name: 'Garden templates' });
+  }
+
+  async function applyFromDialog(index: number) {
+    const dialog = await openTemplates();
+    fireEvent.click(
+      within(dialog).getAllByRole('button', { name: 'Use this template' })[
+        index
+      ]!
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  }
+
+  it('the header button opens the dialog; closing it changes nothing', async () => {
+    await renderReady();
+    const dialog = await openTemplates();
+    expect(within(dialog).getAllByRole('group')).toHaveLength(3);
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('grid')).toHaveAttribute('aria-colcount', '2');
+    expect(screen.queryByTestId('dirty-bar')).toBeNull();
+  });
+
+  it('applying the Potager replaces the grid (10 × 6), evicts the basil sitting where a tomato goes — ONE toast, ONE undo step', async () => {
+    await renderReady();
+    await applyFromDialog(0);
+
+    const grid = screen.getByRole('grid');
+    expect(grid).toHaveAttribute('aria-colcount', '10');
+    expect(grid).toHaveAttribute('aria-rowcount', '6');
+    // The template copy — not the out-of-bounds one.
+    expect(
+      await screen.findByText('1 plant removed for lack of room')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/out of bounds/)).toBeNull();
+    expect(screen.getByTestId('dirty-bar')).toBeInTheDocument();
+    // The basil is gone; the template plants are on the grid (their initials
+    // come from the scientific names — the fixture has no common names).
+    expect(plantArea(grid).queryByText('B')).toBeNull();
+    expect(plantArea(grid).getByText('C')).toBeInTheDocument(); // Cucurbita
+    expect(plantArea(grid).getByText('D')).toBeInTheDocument(); // Daucus
+
+    // ONE undo step: a single Undo restores the 2×2 WITH its basil and a
+    // clean draft, then Undo is disabled (hydration had cleared the history).
+    fireEvent.click(screen.getByRole('button', { name: 'Undo last action' }));
+    const restored = screen.getByRole('grid');
+    expect(restored).toHaveAttribute('aria-colcount', '2');
+    expect(restored).toHaveAttribute('aria-rowcount', '2');
+    await waitFor(() =>
+      expect(plantArea(restored).getByText('B')).toBeInTheDocument()
+    );
+    expect(
+      screen.getByRole('button', { name: 'Undo last action' })
+    ).toBeDisabled();
+    expect(screen.queryByTestId('dirty-bar')).toBeNull();
+  });
+
+  it('Save after a template sends the template geometry and its 14 resolved placements', async () => {
+    vi.mocked(saveLayout).mockResolvedValue(undefined);
+    await renderReady();
+    await applyFromDialog(0);
+    await screen.findByText('1 plant removed for lack of room');
+
+    fireEvent.click(
+      within(screen.getByTestId('dirty-bar')).getByRole('button', {
+        name: 'Save',
+      })
+    );
+    await waitFor(() => expect(saveLayout).toHaveBeenCalledTimes(1));
+    const [gardenId, payload] = vi.mocked(saveLayout).mock.calls[0]!;
+    expect(gardenId).toBe('g1');
+    expect(payload.width).toBe(10);
+    expect(payload.height).toBe(6);
+    expect(payload.cellSize).toBe('50cm');
+    expect(payload.cellsJson).toBe(serializeCellsJson(templateGrid(potager)));
+    expect(payload.placements).toHaveLength(14);
+    expect(payload.placements.every((p) => p.plantId.startsWith('tpl-'))).toBe(
+      true
+    );
+    expect(
+      payload.placements.map((p) => [
+        p.startRow,
+        p.startCol,
+        p.spanRows,
+        p.spanCols,
+      ])
+    ).toEqual(
+      potager.placements.map((p) => [p.row, p.col, p.spanRows, p.spanCols])
+    );
+  });
+
+  it('keeps an existing placement whose spot stays free — no toast, and the survivor rides the save payload after the template plants', async () => {
+    vi.mocked(saveLayout).mockResolvedValue(undefined);
+    // Basil at (1, 0): a free gravel cell of the Mediterranean.
+    await renderReady({
+      ...layout,
+      placements: [{ ...layout.placements[0]!, startRow: 1, startCol: 0 }],
+    });
+    await applyFromDialog(2);
+
+    const grid = screen.getByRole('grid');
+    expect(grid).toHaveAttribute('aria-rowcount', '6');
+    expect(plantArea(grid).getByText('B')).toBeInTheDocument();
+    expect(screen.queryByText(/removed for lack of room/)).toBeNull();
+    expect(screen.queryByText(/not found in the library/)).toBeNull();
+
+    fireEvent.click(
+      within(screen.getByTestId('dirty-bar')).getByRole('button', {
+        name: 'Save',
+      })
+    );
+    await waitFor(() => expect(saveLayout).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(saveLayout).mock.calls[0]![1];
+    expect(payload.placements).toHaveLength(11);
+    expect(payload.placements.at(-1)).toMatchObject({
+      plantId: 'p1',
+      startRow: 1,
+      startCol: 0,
+    });
+  });
+
+  it('a template species the catalog lacks is omitted — its count joins the evictions in ONE toast', async () => {
+    // No Lactuca sativa: the three lettuces are omitted; the basil at A1 is
+    // still evicted by the tomato the template plants there.
+    await renderReady(layout, [
+      basil,
+      ...templateCatalog.filter((p) => p.scientificName !== 'Lactuca sativa'),
+    ]);
+    await applyFromDialog(0);
+
+    expect(
+      await screen.findByText(
+        '1 plant removed for lack of room · 3 template plants not found in the library'
+      )
+    ).toBeInTheDocument();
+    // One toast, not two: neither half appears on its own.
+    expect(screen.queryByText('1 plant removed for lack of room')).toBeNull();
+    expect(
+      screen.queryByText('3 template plants not found in the library')
+    ).toBeNull();
+  });
+
+  it('omissions alone raise their own toast', async () => {
+    await renderReady({ ...layout, placements: [] }, [
+      basil,
+      ...templateCatalog.filter((p) => p.scientificName !== 'Iris germanica'),
+    ]);
+    await applyFromDialog(1); // Japanese garden: two irises
+
+    expect(
+      await screen.findByText('2 template plants not found in the library')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/removed/)).toBeNull();
+  });
+
+  it('the buttons wait for the catalog', async () => {
+    vi.mocked(fetchGarden).mockResolvedValue(garden);
+    vi.mocked(fetchLayout).mockResolvedValue(layout);
+    // A catalog that never lands.
+    vi.mocked(fetchPlants).mockImplementation(
+      () => new Promise<Plant[]>(() => {})
+    );
+    renderPlanner();
+    await screen.findByRole('grid');
+
+    const dialog = await openTemplates();
+    const waiting = within(dialog).getAllByRole('button', {
+      name: 'Loading the library…',
+    });
+    expect(waiting).toHaveLength(3);
+    waiting.forEach((button) => expect(button).toBeDisabled());
+    expect(
+      within(dialog).queryAllByRole('button', { name: 'Use this template' })
+    ).toHaveLength(0);
+  });
+
+  describe('first setup (D1)', () => {
+    async function confirmFirstSetup() {
+      vi.mocked(fetchGarden).mockResolvedValue(garden);
+      vi.mocked(fetchLayout).mockResolvedValue({
+        ...layout,
+        width: null,
+        height: null,
+        cellSize: null,
+        placements: [],
+      });
+      vi.mocked(fetchPlants).mockResolvedValue([basil, ...templateCatalog]);
+      vi.mocked(updateGarden).mockResolvedValue(garden);
+      renderPlanner();
+
+      const settings = await screen.findByRole('dialog');
+      expect(
+        within(settings).getByRole('heading', { name: 'Garden settings' })
+      ).toBeInTheDocument();
+      // Dialog defaults: 10 columns × 8 rows, 50cm.
+      fireEvent.click(within(settings).getByRole('button', { name: 'Save' }));
+      return await screen.findByRole('dialog', { name: 'Garden templates' });
+    }
+
+    it('confirming the settings opens the templates dialog by itself; closing it keeps the empty grid just created', async () => {
+      const templates = await confirmFirstSetup();
+      await waitFor(() => expect(updateGarden).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(within(templates).getByRole('button', { name: 'Close' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      const grid = screen.getByRole('grid');
+      expect(grid).toHaveAttribute('aria-colcount', '10');
+      expect(grid).toHaveAttribute('aria-rowcount', '8');
+      // The setup draft is dirty (SETUP_CONFIRMED) — unchanged by the dialog.
+      expect(screen.getByTestId('dirty-bar')).toBeInTheDocument();
+    });
+
+    it('a template applied here replaces the dimensions just typed, as a draft; Undo brings the typed grid back', async () => {
+      const templates = await confirmFirstSetup();
+
+      fireEvent.click(
+        within(templates).getAllByRole('button', {
+          name: 'Use this template',
+        })[1]!
+      );
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      const grid = screen.getByRole('grid');
+      expect(grid).toHaveAttribute('aria-colcount', '10');
+      expect(grid).toHaveAttribute('aria-rowcount', '6');
+      // Acer, Athyrium, Asplenium — three template plants initial 'A'.
+      expect(plantArea(grid).getAllByText('A')).toHaveLength(3);
+      // Nothing to evict or omit on a fresh grid: no toast at all.
+      expect(screen.queryByText(/removed/)).toBeNull();
+      expect(screen.queryByText(/not found/)).toBeNull();
+      // The layout is a draft — nothing was persisted beyond the config.
+      expect(saveLayout).not.toHaveBeenCalled();
+      expect(screen.getByTestId('dirty-bar')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo last action' }));
+      expect(screen.getByRole('grid')).toHaveAttribute('aria-rowcount', '8');
+      expect(plantArea(screen.getByRole('grid')).queryAllByText('A')).toHaveLength(0);
+    });
   });
 });
