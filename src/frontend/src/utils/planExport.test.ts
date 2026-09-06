@@ -45,10 +45,32 @@ describe('dataUrlToBlob', () => {
     ]);
   });
 
-  it('decodes a percent-encoded (non-base64) data URL', async () => {
-    const blob = dataUrlToBlob('data:text/plain,hello%20world');
+  it('decodes a percent-encoded (non-base64) text data URL', async () => {
+    const blob = dataUrlToBlob('data:text/plain,a%20b');
     expect(blob.type).toBe('text/plain');
-    expect(await blob.text()).toBe('hello world');
+    expect(await blob.text()).toBe('a b');
+  });
+
+  // CodeRabbit #266 round 1: percent-encoded BINARY payloads used to throw a
+  // URIError through decodeURIComponent — every %HH is now one raw byte.
+  it('decodes percent-encoded binary bytes instead of throwing', async () => {
+    const one = dataUrlToBlob('data:application/octet-stream,%FF');
+    expect(one.type).toBe('application/octet-stream');
+    expect(Array.from(new Uint8Array(await one.arrayBuffer()))).toEqual([0xff]);
+
+    const png = dataUrlToBlob('data:application/octet-stream,%89PNG');
+    expect(Array.from(new Uint8Array(await png.arrayBuffer()))).toEqual([
+      0x89, 0x50, 0x4e, 0x47,
+    ]);
+  });
+
+  it('UTF-8 encodes the literal text between escapes and keeps a stray % literal', async () => {
+    expect(await dataUrlToBlob('data:text/plain,caf%C3%A9').text()).toBe(
+      'café'
+    );
+    expect(await dataUrlToBlob('data:text/plain,café%21').text()).toBe('café!');
+    expect(await dataUrlToBlob('data:text/plain,100%').text()).toBe('100%');
+    expect(await dataUrlToBlob('data:text/plain,%%41').text()).toBe('%A');
   });
 
   it('rejects anything that is not a data URL', () => {
@@ -88,9 +110,12 @@ describe('grid geometry and print scale', () => {
 });
 
 describe('PLAN_PRINT_CSS', () => {
-  it('declares the A4 landscape page, hides the view on screen and keeps colours on paper', () => {
+  it('declares the A4 landscape page with no browser margin (the 12 mm are the root padding), hides the view on screen and keeps colours on paper', () => {
     expect(PLAN_PRINT_CSS).toContain(
-      '@page { size: A4 landscape; margin: 12mm; }'
+      '@page { size: A4 landscape; margin: 0; }'
+    );
+    expect(PLAN_PRINT_CSS).toContain(
+      `[${PLAN_PRINT_ROOT_ATTR}] { display: block; box-sizing: border-box; padding: 12mm; }`
     );
     expect(PLAN_PRINT_CSS).toContain(
       `@media screen { [${PLAN_PRINT_ROOT_ATTR}] { display: none; } }`

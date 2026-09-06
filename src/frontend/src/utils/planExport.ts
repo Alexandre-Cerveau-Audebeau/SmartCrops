@@ -23,8 +23,11 @@ const EXPORT_GAP_PX = GAP_PX.sm;
  * rounded UP so the scaled print wrapper never clips the last row. */
 const COLUMN_AXIS_PX = 20;
 
-/** The A4 landscape sheet and the print view's margins, in mm — the same
- * numbers the `@page` rule below declares. */
+/** The A4 landscape sheet and the print view's margins, in mm. Since round 1
+ * the `@page` rule declares a ZERO margin — that is what removes the
+ * browser's own header and footer (date, URL, page number) — and the 12 mm
+ * land as padding on the print root instead, so the printable area is
+ * unchanged. */
 export const PRINT_PAGE_MM = { width: 297, height: 210, margin: 12 } as const;
 
 /** CSS reference pixel: 96 px per inch, 25.4 mm per inch. */
@@ -38,23 +41,33 @@ const PRINT_CHROME_PX = 200;
  * own — a safety net for a browser that never fires the event. */
 export const PRINT_FALLBACK_MS = 15_000;
 
+/** Upper bound on one html-to-image capture (CodeRabbit #266 round 1): the
+ * library awaits every font and image `fetch` without a timeout, so a
+ * resource request that never settles would otherwise leave the export job
+ * running — and the panel locked — until a reload. Past this delay the
+ * capture is abandoned and reported as a failure. */
+export const PNG_CAPTURE_TIMEOUT_MS = 20_000;
+
 /** Attribute marking the print view's root: the print stylesheet hides every
  * other direct child of `<body>` and the screen stylesheet hides this one. */
 export const PLAN_PRINT_ROOT_ATTR = 'data-plan-print-root';
 
 /**
  * The print stylesheet the print view injects while it is mounted: A4
- * landscape with 12 mm margins, the view hidden on screen and alone on paper,
- * and `print-color-adjust: exact` so the browser keeps the cell fills, the §3
- * hatch and the §15 soil trames (all CSS backgrounds/gradients) on paper.
+ * landscape with a zero `@page` margin (the browser then prints none of its
+ * own header and footer — date, URL, page number; visual finding, round 1),
+ * the 12 mm carried by the root's padding instead, the view hidden on screen
+ * and alone on paper, and `print-color-adjust: exact` so the browser keeps
+ * the cell fills, the §3 hatch and the §15 soil trames (all CSS
+ * backgrounds/gradients) on paper.
  */
 export const PLAN_PRINT_CSS = `
-@page { size: A4 landscape; margin: ${PRINT_PAGE_MM.margin}mm; }
+@page { size: A4 landscape; margin: 0; }
 @media screen { [${PLAN_PRINT_ROOT_ATTR}] { display: none; } }
 @media print {
   html, body { background: ${getPlannerTokens('light').card}; }
   body > *:not([${PLAN_PRINT_ROOT_ATTR}]) { display: none !important; }
-  [${PLAN_PRINT_ROOT_ATTR}] { display: block; }
+  [${PLAN_PRINT_ROOT_ATTR}] { display: block; box-sizing: border-box; padding: ${PRINT_PAGE_MM.margin}mm; }
   [${PLAN_PRINT_ROOT_ATTR}], [${PLAN_PRINT_ROOT_ATTR}] * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
 `;
@@ -116,6 +129,42 @@ export function slugify(name: string): string {
 }
 
 /**
+ * Decodes a percent-encoded data-URL payload into raw bytes: every `%HH`
+ * becomes one byte and the literal text between them is UTF-8 encoded —
+ * never `decodeURIComponent`, which throws a `URIError` on a binary payload
+ * such as `%89PNG` (CodeRabbit #266 round 1). A `%` not followed by two hex
+ * digits is kept literally.
+ */
+function percentDecode(payload: string): Uint8Array<ArrayBuffer> {
+  const encoder = new TextEncoder();
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let total = 0;
+  let i = 0;
+  while (i < payload.length) {
+    const hex = payload.slice(i + 1, i + 3);
+    if (payload[i] === '%' && /^[0-9a-f]{2}$/i.test(hex)) {
+      chunks.push(Uint8Array.of(parseInt(hex, 16)));
+      total += 1;
+      i += 3;
+      continue;
+    }
+    let end = i + 1;
+    while (end < payload.length && payload[end] !== '%') end++;
+    const text = encoder.encode(payload.slice(i, end));
+    chunks.push(text);
+    total += text.length;
+    i = end;
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return bytes;
+}
+
+/**
  * Decodes a data URL (base64 or percent-encoded) into a Blob carrying the
  * URL's MIME type — html-to-image returns the PNG as a data URL, and the
  * download path works on Blobs (the Profile export precedent).
@@ -129,7 +178,7 @@ export function dataUrlToBlob(dataUrl: string): Blob {
   const payload = dataUrl.slice(comma + 1);
   const type = /^data:([^;,]+)/.exec(header)?.[1] ?? 'application/octet-stream';
   if (!/;base64$/i.test(header)) {
-    return new Blob([decodeURIComponent(payload)], { type });
+    return new Blob([percentDecode(payload)], { type });
   }
   const binary = atob(payload);
   const bytes = new Uint8Array(binary.length);

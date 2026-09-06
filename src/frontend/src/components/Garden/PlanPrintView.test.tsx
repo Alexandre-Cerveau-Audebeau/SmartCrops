@@ -142,8 +142,13 @@ describe('PlanPrintView (SMA-18 lot 3)', () => {
   it('injects the A4 landscape page rule and calls window.print() once after mounting', async () => {
     renderView();
     await waitFor(() => expect(printSpy).toHaveBeenCalledTimes(1));
+    // Round 1 (visual finding): a zero @page margin keeps the browser's own
+    // header/footer off the sheet; the 12 mm are the print root's padding.
     expect(injectedCss()).toMatch(
-      /@page\s*\{\s*size:\s*A4 landscape;\s*margin:\s*12mm;?\s*\}/
+      /@page\s*\{\s*size:\s*A4 landscape;\s*margin:\s*0;?\s*\}/
+    );
+    expect(injectedCss()).toMatch(
+      /\[data-plan-print-root\]\s*\{[^}]*padding:\s*12mm/
     );
     expect(injectedCss()).toMatch(/print-color-adjust:\s*exact/);
     // The browser's default PDF name while the dialog is open.

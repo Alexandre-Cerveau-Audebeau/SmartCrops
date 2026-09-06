@@ -9,6 +9,7 @@ import {
   dataUrlToBlob,
   downloadBlob,
   EXPORT_CELL_PX,
+  PNG_CAPTURE_TIMEOUT_MS,
   type PlanExportOutcome,
 } from '../../utils/planExport';
 import GardenGrid, { type PlacementOverlay } from './GardenGrid';
@@ -29,6 +30,9 @@ export interface PlanPngCaptureProps {
   fileName: string;
   /** Reported exactly once: the file was handed to the browser, or not. */
   onDone: (outcome: PlanExportOutcome) => void;
+  /** Bound on the capture, in ms (default PNG_CAPTURE_TIMEOUT_MS); a capture
+   * that has not settled by then is abandoned and reported as a failure. */
+  timeoutMs?: number;
 }
 
 /**
@@ -48,11 +52,19 @@ export function PlanPngCapture({
   castShadow,
   fileName,
   onDone,
+  timeoutMs = PNG_CAPTURE_TIMEOUT_MS,
 }: PlanPngCaptureProps) {
   const stageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
+    let timer: number | undefined;
+    const clearTimer = () => {
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+        timer = undefined;
+      }
+    };
     const run = async () => {
       // Two frames: React has committed the stage and the browser laid it out.
       await afterTwoFrames();
@@ -60,12 +72,31 @@ export function PlanPngCapture({
       const node = stageRef.current;
       if (!node) throw new Error('plan stage unmounted');
       const { toPng } = await import('html-to-image');
-      const dataUrl = await toPng(node, {
-        pixelRatio: PNG_PIXEL_RATIO,
-        // Left undefined on purpose: no fill means a transparent canvas.
-        backgroundColor: undefined,
-        cacheBust: true,
+      // Bounded (CodeRabbit #266 round 1): html-to-image awaits every font
+      // and image fetch without a timeout. Past `timeoutMs` the race rejects
+      // into the failure path below and the timer is cleared either way; a
+      // rasterization that lands after the deadline has no continuation
+      // left, so it can never download.
+      const deadline = new Promise<never>((_, reject) => {
+        timer = window.setTimeout(
+          () => reject(new Error('plan capture timed out')),
+          timeoutMs
+        );
       });
+      let dataUrl: string;
+      try {
+        dataUrl = await Promise.race([
+          toPng(node, {
+            pixelRatio: PNG_PIXEL_RATIO,
+            // Left undefined on purpose: no fill means a transparent canvas.
+            backgroundColor: undefined,
+            cacheBust: true,
+          }),
+          deadline,
+        ]);
+      } finally {
+        clearTimer();
+      }
       if (cancelled) return;
       downloadBlob(dataUrlToBlob(dataUrl), fileName);
       onDone({ ok: true });
@@ -75,8 +106,9 @@ export function PlanPngCapture({
     });
     return () => {
       cancelled = true;
+      clearTimer();
     };
-  }, [fileName, onDone]);
+  }, [fileName, onDone, timeoutMs]);
 
   return (
     <Box

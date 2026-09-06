@@ -16,6 +16,7 @@ import { createAppTheme } from '../../theme';
 import { getPlannerTokens } from '../../theme/plannerTokens';
 import type { CellData } from '../../types/GardenLayout';
 import type { ExposureCategory } from '../../utils/exposure';
+import { PNG_CAPTURE_TIMEOUT_MS } from '../../utils/planExport';
 import { PlanPngCapture } from './PlanPngCapture';
 
 // SMA-18 lot 3 — the PNG stage: the grid alone, off-screen, day palette,
@@ -74,7 +75,11 @@ afterEach(() => {
 });
 
 function renderCapture(
-  opts: { withLayer?: boolean; onDone?: (o: { ok: boolean }) => void } = {}
+  opts: {
+    withLayer?: boolean;
+    onDone?: (o: { ok: boolean }) => void;
+    timeoutMs?: number;
+  } = {}
 ) {
   const onDone = opts.onDone ?? vi.fn();
   render(
@@ -87,6 +92,7 @@ function renderCapture(
         castShadow={null}
         fileName="smartcrops-my-garden-plan.png"
         onDone={onDone}
+        timeoutMs={opts.timeoutMs}
       />
     </ThemeProvider>
   );
@@ -94,6 +100,42 @@ function renderCapture(
 }
 
 describe('PlanPngCapture (SMA-18 lot 3)', () => {
+  // CodeRabbit #266 round 1 (F1): html-to-image awaits its resource fetches
+  // without a timeout — the capture is raced against a bound so a stalled
+  // request reaches the failure path instead of locking the export forever.
+  it('gives up on a capture that never settles: failure after the bound, nothing downloaded', async () => {
+    vi.mocked(toPng).mockReturnValue(new Promise<string>(() => {}));
+    const { onDone } = renderCapture({ timeoutMs: 40 });
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith({ ok: false }));
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(clickSpy).not.toHaveBeenCalled();
+  });
+
+  it('arms the default bound and clears it once the capture lands', async () => {
+    vi.mocked(toPng).mockResolvedValue(PNG_DATA_URL);
+    const realSetTimeout = window.setTimeout.bind(window);
+    const armed: number[] = [];
+    const setSpy = vi
+      .spyOn(window, 'setTimeout')
+      .mockImplementation((handler, delay, ...args) => {
+        const id = realSetTimeout(handler, delay, ...args);
+        if (delay === PNG_CAPTURE_TIMEOUT_MS) armed.push(id);
+        return id;
+      });
+    const clearSpy = vi.spyOn(window, 'clearTimeout');
+    try {
+      const { onDone } = renderCapture();
+      await waitFor(() => expect(onDone).toHaveBeenCalledWith({ ok: true }));
+      expect(armed).toHaveLength(1);
+      expect(clearSpy).toHaveBeenCalledWith(armed[0]);
+    } finally {
+      setSpy.mockRestore();
+      clearSpy.mockRestore();
+    }
+  });
+
   it('rasterizes the off-screen read-only grid once, at 2× on a transparent background, in the day palette', async () => {
     vi.mocked(toPng).mockResolvedValue(PNG_DATA_URL);
     const { onDone } = renderCapture();

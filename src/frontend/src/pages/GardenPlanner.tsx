@@ -282,13 +282,31 @@ export default function GardenPlanner() {
     format: PlanExportRequest['format'];
     includeLayer: boolean;
     printedAt: Date;
+    /** Frozen at job start (round 1): the stage effects key on these two
+     * strings and must not restart when the locale — hence `t` — changes
+     * mid-export. */
+    fileName: string;
+    documentTitle: string;
   } | null>(null);
   // A draft that vanishes mid-export (discarded) ends the job in the same
   // render — the stages are gated on the grid (adjust-during-render, the
-  // page's gate pattern).
+  // page's gate pattern). The panel closes with it (round 1): its anchor is
+  // the header button, which unmounts with the grid.
   if (exportJob !== null && grid === null) {
     setExportJob(null);
+    setExportAnchor(null);
   }
+  // File names follow the garden name (slug), with a localized fallback.
+  const exportSlug =
+    slugify(garden?.name ?? '') || t('planner.export.fileNameFallback');
+  // Latest translator + slug for the export callbacks (the dndLatestRef
+  // idiom — round 1, CodeRabbit #266): `t` changes identity on every locale
+  // switch, and a completion callback that followed it would restart the
+  // stage effects mid-export (a second toPng, a second window.print).
+  const exportLatestRef = useRef({ t, exportSlug });
+  useLayoutEffect(() => {
+    exportLatestRef.current = { t, exportSlug };
+  });
   // Config-save pending + error state (SMA-17 R2): the config dialog is kept
   // open until its updateGarden succeeds, Save is disabled while pending, and
   // a failure surfaces inline without discarding the entered values.
@@ -481,19 +499,31 @@ export default function GardenPlanner() {
   // momentsLit included) now live in computeExposureView — pure, shared with
   // the plan export, which forces the SAME computation past this gate when
   // its "include the layer" box is ticked. Output unchanged.
+  //
+  // ONE input shape for both readers (round 1, CodeRabbit #266): the screen
+  // memo and the export memo below consume this same object, so a future
+  // engine field lands here once instead of at two call sites — each memo
+  // keeps its own gate.
+  const exposureParams = useMemo(
+    () =>
+      grid
+        ? {
+            grid,
+            rows: layoutHeight,
+            cols: layoutWidth,
+            garden,
+            blockers,
+            season: exposureSeason,
+            moment: exposureMoment,
+            castsShadow,
+          }
+        : null,
+    [grid, layoutHeight, layoutWidth, garden, blockers, exposureSeason, exposureMoment, castsShadow]
+  );
   const exposureView = useMemo(() => {
-    if (!grid || !needExposure) return null;
-    return computeExposureView({
-      grid,
-      rows: layoutHeight,
-      cols: layoutWidth,
-      garden,
-      blockers,
-      season: exposureSeason,
-      moment: exposureMoment,
-      castsShadow,
-    });
-  }, [grid, needExposure, layoutWidth, layoutHeight, garden, exposureSeason, exposureMoment, blockers, castsShadow]);
+    if (!exposureParams || !needExposure) return null;
+    return computeExposureView(exposureParams);
+  }, [exposureParams, needExposure]);
   const exposureCells = exposureView?.cells ?? null;
   const exposureMomentsLit = exposureView?.momentsLit ?? null;
   const castShadowCells = exposureView?.cast ?? null;
@@ -793,28 +823,34 @@ export default function GardenPlanner() {
   const handleOpenTemplates = useCallback(() => setShowTemplates(true), []);
   const handleCloseTemplates = useCallback(() => setShowTemplates(false), []);
   // SMA-18 lot 3 — export panel + job lifecycle. Success closes the panel;
-  // failure keeps it open and toasts (the page's one error surface).
+  // failure keeps it open and toasts (the page's one error surface). Every
+  // callback here is STABLE for the page's lifetime (round 1): the translator
+  // is read through exportLatestRef, never captured from `t`.
   const handleOpenExport = useCallback(
     (e: React.MouseEvent<HTMLElement>) => setExportAnchor(e.currentTarget),
     []
   );
   const handleCloseExport = useCallback(() => setExportAnchor(null), []);
-  const handleExport = useCallback(
-    (request: PlanExportRequest) =>
-      setExportJob({ ...request, printedAt: new Date() }),
-    []
-  );
-  const handleExportDone = useCallback(
-    (outcome: PlanExportOutcome) => {
-      setExportJob(null);
-      if (outcome.ok) {
-        setExportAnchor(null);
-      } else {
-        setMessage({ type: 'error', text: t('planner.export.error') });
-      }
-    },
-    [t]
-  );
+  const handleExport = useCallback((request: PlanExportRequest) => {
+    const { t: translate, exportSlug: slug } = exportLatestRef.current;
+    setExportJob({
+      ...request,
+      printedAt: new Date(),
+      fileName: translate('planner.export.pngFileName', { slug }),
+      documentTitle: translate('planner.export.pdfTitle', { slug }),
+    });
+  }, []);
+  const handleExportDone = useCallback((outcome: PlanExportOutcome) => {
+    setExportJob(null);
+    if (outcome.ok) {
+      setExportAnchor(null);
+    } else {
+      setMessage({
+        type: 'error',
+        text: exportLatestRef.current.t('planner.export.error'),
+      });
+    }
+  }, []);
   const handlePrintDone = useCallback(
     () => handleExportDone({ ok: true }),
     [handleExportDone]
@@ -1791,22 +1827,13 @@ export default function GardenPlanner() {
     return list;
   }, [placements, allPlants, language]);
 
-  // SMA-18 lot 3 — export inputs. The layer is recomputed HERE with the same
-  // pure helper as the screen, only while a job that ticked the box runs, so
-  // an export never depends on the layer being visible on screen.
+  // SMA-18 lot 3 — export inputs. The layer is recomputed HERE from the same
+  // exposureParams as the screen, only while a job that ticked the box runs,
+  // so an export never depends on the layer being visible on screen.
   const exportExposure = useMemo(() => {
-    if (!grid || !exportJob?.includeLayer) return null;
-    return computeExposureView({
-      grid,
-      rows: layoutHeight,
-      cols: layoutWidth,
-      garden,
-      blockers,
-      season: exposureSeason,
-      moment: exposureMoment,
-      castsShadow,
-    });
-  }, [grid, exportJob, layoutWidth, layoutHeight, garden, blockers, exposureSeason, exposureMoment, castsShadow]);
+    if (!exposureParams || !exportJob?.includeLayer) return null;
+    return computeExposureView(exposureParams);
+  }, [exposureParams, exportJob]);
   // The printed list: the on-screen distinct plants plus a quantity per plant
   // (how many placements carry it) — built only for a PDF job.
   const exportPlantRows = useMemo(() => {
@@ -1817,8 +1844,6 @@ export default function GardenPlanner() {
       count: counts.get(p.plantId) ?? 0,
     }));
   }, [exportJob, placements, plantsToShow]);
-  const exportSlug =
-    slugify(garden?.name ?? '') || t('planner.export.fileNameFallback');
 
   // SMA-18 lot 2 — garden templates. A template names its plants by EXACT
   // scientific name (plant GUIDs are minted at import, so they differ between
@@ -3308,7 +3333,7 @@ export default function GardenPlanner() {
           placements={enrichedPlacements}
           exposure={exportExposure?.cells ?? null}
           castShadow={exportExposure?.cast ?? null}
-          fileName={t('planner.export.pngFileName', { slug: exportSlug })}
+          fileName={exportJob.fileName}
           onDone={handleExportDone}
         />
       )}
@@ -3319,7 +3344,7 @@ export default function GardenPlanner() {
           metaTypeChip={metaTypeChip}
           metaFacingChip={metaFacingChip}
           printedAt={exportJob.printedAt}
-          documentTitle={t('planner.export.pdfTitle', { slug: exportSlug })}
+          documentTitle={exportJob.documentTitle}
           grid={grid}
           placements={enrichedPlacements}
           cols={layoutWidth}

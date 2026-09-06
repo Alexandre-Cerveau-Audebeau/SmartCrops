@@ -1,4 +1,4 @@
-import { memo, useId, useState, type ComponentType } from 'react';
+import { Fragment, memo, useId, useState, type ComponentType } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -103,61 +103,78 @@ function ExportPlanForm({
         {FORMATS.map(({ value, labelKey, subKey, Icon, iconColor }) => {
           const selected = format === value;
           return (
-            <FormControlLabel
-              key={value}
-              value={value}
-              disabled={exporting}
-              control={
-                <Radio
-                  size="small"
-                  sx={{
-                    p: '2px',
-                    color: tk.muted,
-                    '&.Mui-checked': { color: tk.prim },
-                  }}
-                />
-              }
-              label={
-                <Box
-                  sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}
-                >
-                  <Icon sx={{ fontSize: 20, color: iconColor(tk) }} />
-                  <Box>
-                    <Typography
-                      component="span"
-                      sx={{
-                        display: 'block',
-                        fontSize: 13.5,
-                        fontWeight: 700,
-                        color: tk.tTitle,
-                      }}
-                    >
-                      {t(labelKey)}
-                    </Typography>
-                    <Typography
-                      component="span"
-                      sx={{ display: 'block', fontSize: 11.5, color: tk.muted }}
-                    >
-                      {t(subKey)}
-                    </Typography>
+            <Fragment key={value}>
+              <FormControlLabel
+                value={value}
+                disabled={exporting}
+                control={
+                  <Radio
+                    size="small"
+                    sx={{
+                      p: '2px',
+                      color: tk.muted,
+                      '&.Mui-checked': { color: tk.prim },
+                    }}
+                  />
+                }
+                label={
+                  <Box
+                    sx={{ display: 'flex', alignItems: 'center', gap: '10px' }}
+                  >
+                    <Icon sx={{ fontSize: 20, color: iconColor(tk) }} />
+                    <Box>
+                      <Typography
+                        component="span"
+                        sx={{
+                          display: 'block',
+                          fontSize: 13.5,
+                          fontWeight: 700,
+                          color: tk.tTitle,
+                        }}
+                      >
+                        {t(labelKey)}
+                      </Typography>
+                      <Typography
+                        component="span"
+                        sx={{
+                          display: 'block',
+                          fontSize: 11.5,
+                          color: tk.muted,
+                        }}
+                      >
+                        {t(subKey)}
+                      </Typography>
+                    </Box>
                   </Box>
-                </Box>
-              }
-              sx={{
-                m: 0,
-                gap: '10px',
-                borderRadius: '9px',
-                // Mockup: the selected option carries a 2px --prim border on
-                // the §12 selected-card fill (nearest existing token); the
-                // other a 1px input border. The padding compensates the
-                // border width so both boxes share one outer size.
-                border: selected
-                  ? `2px solid ${tk.prim}`
-                  : `1px solid ${tk.inputBd}`,
-                p: selected ? '10px 11px' : '11px 12px',
-                bgcolor: selected ? tk.typeSelBg : 'transparent',
-              }}
-            />
+                }
+                sx={{
+                  m: 0,
+                  gap: '10px',
+                  borderRadius: '9px',
+                  // Mockup: the selected option carries a 2px --prim border on
+                  // the §12 selected-card fill (nearest existing token); the
+                  // other a 1px input border. The padding compensates the
+                  // border width so both boxes share one outer size.
+                  border: selected
+                    ? `2px solid ${tk.prim}`
+                    : `1px solid ${tk.inputBd}`,
+                  p: selected ? '10px 11px' : '11px 12px',
+                  bgcolor: selected ? tk.typeSelBg : 'transparent',
+                }}
+              />
+              {/* Round 1 (orchestrator): the PDF is saved from the browser's
+                print dialog — a discreet reminder under the selected option,
+                outside the radio's label so its accessible name stays the
+                mockup's. */}
+              {value === 'pdf' && selected && (
+                <Typography
+                  data-testid="export-pdf-hint"
+                  sx={{ fontSize: 12, color: tk.tMeta, px: '12px', mt: '-2px' }}
+                >
+                  {t('planner.export.pdfHint')}
+                </Typography>
+              )}
+            </Fragment>
           );
         })}
       </RadioGroup>
@@ -175,7 +192,13 @@ function ExportPlanForm({
             }}
           />
         }
-        label={t('planner.export.includeLayer')}
+        // Format-aware (CodeRabbit #266 round 1): the PNG stage renders the
+        // grid alone, so its label must not promise the legend the PDF adds.
+        label={t(
+          format === 'pdf'
+            ? 'planner.export.includeLayerPdf'
+            : 'planner.export.includeLayerPng'
+        )}
         sx={{
           m: 0,
           mb: '15px',
@@ -208,9 +231,10 @@ function ExportPlanForm({
 /**
  * « Exporter le plan » (SMA-18 lot 3, États mockup "Popover export"):
  * anchored to the header's Export button — PDF (A4 landscape: plan + legend
- * + plant list) or PNG (2×, grid only, transparent), plus the "include the
- * Exposure layer and legend" box, then one Export action. Esc / click-away
- * close (Popover's own behavior); the Paper is the labelled dialog.
+ * + plant list) or PNG (2×, grid only, transparent), plus the format-aware
+ * "include the Exposure layer (and legend)" box, then one Export action. Esc
+ * / click-away close (Popover's own behavior); the Paper is the labelled
+ * dialog.
  */
 export const ExportPlanPopover = memo(function ExportPlanPopover({
   open,

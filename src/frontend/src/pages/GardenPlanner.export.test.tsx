@@ -20,6 +20,7 @@ import {
 import { toPng } from 'html-to-image';
 import i18n from '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import { useLanguage } from '../hooks/useLanguage';
 import type { GardenLayoutData } from '../services/gardenLayoutApi';
 import type { Garden } from '../types/Garden';
 import type { Plant } from '../types/Plant';
@@ -39,7 +40,7 @@ vi.mock('../services/gardenLayoutApi', () => ({
 vi.mock('html-to-image', () => ({ toPng: vi.fn() }));
 
 import GardenPlanner from './GardenPlanner';
-import { fetchGarden } from '../services/gardenApi';
+import { fetchGarden, updateGarden } from '../services/gardenApi';
 import { fetchLayout } from '../services/gardenLayoutApi';
 import { fetchPlants } from '../services/plantApi';
 
@@ -136,9 +137,21 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+// Flips the app language mid-test — the GardenPlanner.test.tsx idiom (same
+// LanguageProvider mechanics the planner's own menu uses).
+function SwitchToFrench() {
+  const { setLanguage } = useLanguage();
+  return (
+    <button type="button" onClick={() => setLanguage('fr')}>
+      switch-to-fr
+    </button>
+  );
+}
+
 function renderPlanner() {
   return render(
     <LanguageProvider>
+      <SwitchToFrench />
       <MemoryRouter initialEntries={['/gardens/g1/planner']}>
         <Routes>
           <Route path="/gardens/:id/planner" element={<GardenPlanner />} />
@@ -165,6 +178,140 @@ const follows = (a: Element, b: Element) =>
   (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 
 describe('GardenPlanner export (SMA-18 lot 3)', () => {
+  // CodeRabbit #266 round 1 (F4): `t` changes identity on a locale switch;
+  // the completion callbacks and the job's file name / document title must
+  // not follow it, or the stage effects restart mid-export.
+  it('a language switch mid-export leaves the PNG job alone: one capture, one download', async () => {
+    let resolveCapture!: (dataUrl: string) => void;
+    vi.mocked(toPng).mockReturnValue(
+      new Promise<string>((resolve) => {
+        resolveCapture = resolve;
+      })
+    );
+    await renderReady();
+    const dialog = openPanel();
+    fireEvent.click(
+      within(dialog).getByRole('radio', { name: /Image \(PNG, 2×\)/ })
+    );
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Export' }));
+    await waitFor(() => expect(toPng).toHaveBeenCalledTimes(1));
+
+    // The switch lives outside the open popover (a modal): hidden to AT.
+    fireEvent.click(
+      screen.getByRole('button', { name: 'switch-to-fr', hidden: true })
+    );
+    // The page re-rendered in French while the job kept running.
+    expect(
+      await screen.findByRole('button', { name: 'Export en cours…' })
+    ).toBeDisabled();
+    expect(toPng).toHaveBeenCalledTimes(1);
+
+    resolveCapture(PNG_DATA_URL);
+    await waitFor(() => expect(clickSpy).toHaveBeenCalledTimes(1));
+    expect(toPng).toHaveBeenCalledTimes(1);
+    const anchor = clickSpy.mock.contexts[0] as HTMLAnchorElement;
+    expect(anchor.download).toBe('smartcrops-test-garden-plan.png');
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Exporter le plan' })
+      ).toBeNull()
+    );
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('a language switch mid-export leaves the PDF job alone: one print', async () => {
+    await renderReady();
+    const dialog = openPanel();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Export' }));
+    await waitFor(() => expect(printSpy).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'switch-to-fr', hidden: true })
+    );
+    expect(
+      await screen.findByRole('button', { name: 'Export en cours…' })
+    ).toBeDisabled();
+    expect(screen.getByTestId('plan-print-view')).toBeInTheDocument();
+    expect(printSpy).toHaveBeenCalledTimes(1);
+    expect(document.title).toBe('smartcrops-test-garden-plan');
+
+    act(() => {
+      window.dispatchEvent(new Event('afterprint'));
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId('plan-print-view')).toBeNull()
+    );
+    expect(printSpy).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole('dialog', { name: 'Exporter le plan' })
+    ).toBeNull();
+  });
+
+  // CodeRabbit #266 round 1 (F6): the draft can vanish mid-export — Cancel
+  // on an unsaved first setup dispatches DISCARD_DRAFT (grid null). The job
+  // ends in the same render, the stage unmounts and the panel is neither
+  // stuck on "Exporting…" nor left floating without its anchor.
+  it('a draft discarded mid-export ends the job, unmounts the stage and closes the panel', async () => {
+    vi.mocked(fetchLayout).mockResolvedValue({
+      ...layout,
+      width: null,
+      height: null,
+      cellSize: null,
+      placements: [],
+    });
+    vi.mocked(updateGarden).mockResolvedValue(garden);
+    renderPlanner();
+    const settings = await screen.findByRole('dialog');
+    // Dialog defaults: 10 columns × 8 rows, 50cm → an unsaved draft.
+    fireEvent.click(within(settings).getByRole('button', { name: 'Save' }));
+    const templates = await screen.findByRole('dialog', {
+      name: 'Garden templates',
+    });
+    fireEvent.click(within(templates).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('grid')).toBeInTheDocument();
+
+    const dialog = openPanel();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Export' }));
+    await waitFor(() => expect(printSpy).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('plan-print-view')).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole('button', { name: 'Exporting…' })
+    ).toBeDisabled();
+
+    // Reaching the header means leaving the panel first (click-away / Esc);
+    // the job keeps running behind it.
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Export the plan' })
+      ).toBeNull()
+    );
+    expect(screen.getByTestId('plan-print-view')).toBeInTheDocument();
+
+    // Two Cancel buttons carry the same handler (header + unsaved-changes
+    // bar); the bar's is the unambiguous one.
+    fireEvent.click(
+      within(screen.getByTestId('dirty-bar')).getByRole('button', {
+        name: 'Cancel',
+      })
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('plan-print-view')).toBeNull()
+    );
+    expect(screen.queryByRole('grid')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Exporting…' })).toBeNull();
+    expect(
+      screen.queryByRole('dialog', { name: 'Export the plan' })
+    ).toBeNull();
+    // The first-setup dialog is back for the discarded draft.
+    expect(
+      await screen.findByRole('heading', { name: 'Garden settings' })
+    ).toBeInTheDocument();
+    expect(printSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('adds "Export" to the header between "Templates" and "Settings", opening the panel', async () => {
     await renderReady();
     const templates = screen.getByRole('button', { name: 'Templates' });
