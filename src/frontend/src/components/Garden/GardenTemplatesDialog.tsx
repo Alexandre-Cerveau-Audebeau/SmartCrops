@@ -40,17 +40,22 @@ function TemplateCard({
   active,
   catalogReady,
   resolvePlantId,
-  onActivate,
-  onDeactivate,
+  onMouseEnter,
+  onMouseLeave,
+  onFocus,
+  onBlur,
   onApply,
   tk,
 }: {
   template: GardenTemplate;
+  /** Hovered OR holding focus — the dialog derives it from its two states. */
   active: boolean;
   catalogReady: boolean;
   resolvePlantId?: (scientificName: string) => string | undefined;
-  onActivate: () => void;
-  onDeactivate: () => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  onFocus: () => void;
+  onBlur: () => void;
   onApply: (key: GardenTemplateKey) => void;
   tk: PlannerTokens;
 }) {
@@ -68,10 +73,10 @@ function TemplateCard({
     <Box
       role="group"
       aria-label={t('planner.templates.cardLabel', { title, meta })}
-      onMouseEnter={onActivate}
-      onMouseLeave={onDeactivate}
-      onFocus={onActivate}
-      onBlur={onDeactivate}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      onFocus={onFocus}
+      onBlur={onBlur}
       sx={{
         display: 'flex',
         flexDirection: 'column',
@@ -153,14 +158,24 @@ export default function GardenTemplatesDialog({
   const tk = usePlannerTokens();
   const titleId = useId();
   const descriptionId = useId();
-  const [activeKey, setActiveKey] = useState<GardenTemplateKey | null>(null);
+  // The active card = the hovered one OR the one holding keyboard focus —
+  // two states, tracked independently (CodeRabbit round 1): with a single
+  // state, the pointer leaving a card the keyboard had focused cleared its
+  // border and filled button while focus was still inside it. mouseleave
+  // only releases hover; blur only releases focus.
+  const [hoverKey, setHoverKey] = useState<GardenTemplateKey | null>(null);
+  const [focusKey, setFocusKey] = useState<GardenTemplateKey | null>(null);
+  const resetActive = () => {
+    setHoverKey(null);
+    setFocusKey(null);
+  };
 
   const handleClose = () => {
-    setActiveKey(null);
+    resetActive();
     onClose();
   };
   const handleApply = (key: GardenTemplateKey) => {
-    setActiveKey(null);
+    resetActive();
     onApply(key);
   };
 
@@ -231,11 +246,13 @@ export default function GardenTemplatesDialog({
             <TemplateCard
               key={template.key}
               template={template}
-              active={activeKey === template.key}
+              active={hoverKey === template.key || focusKey === template.key}
               catalogReady={catalogReady}
               resolvePlantId={resolvePlantId}
-              onActivate={() => setActiveKey(template.key)}
-              onDeactivate={() => setActiveKey(null)}
+              onMouseEnter={() => setHoverKey(template.key)}
+              onMouseLeave={() => setHoverKey(null)}
+              onFocus={() => setFocusKey(template.key)}
+              onBlur={() => setFocusKey(null)}
               onApply={handleApply}
               tk={tk}
             />

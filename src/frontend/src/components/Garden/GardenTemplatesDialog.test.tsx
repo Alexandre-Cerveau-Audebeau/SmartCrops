@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
+import { getPlannerTokens } from '../../theme/plannerTokens';
 import GardenTemplatesDialog from './GardenTemplatesDialog';
 
 function renderDialog(
@@ -126,6 +127,36 @@ describe('GardenTemplatesDialog (SMA-18 lot 2)', () => {
     // Keyboard reach does the same: focus inside the card activates it.
     fireEvent.focus(buttonOf(cards[0]!));
     expect(buttonOf(cards[0]!)).toHaveClass('MuiButton-contained');
+  });
+
+  it('a focused card keeps its treatment when the pointer leaves; blur releases it (CodeRabbit round 1)', () => {
+    renderDialog();
+    const tk = getPlannerTokens('light');
+    const cards = screen.getAllByRole('group');
+    const buttonOf = (card: HTMLElement) =>
+      within(card).getByRole('button', { name: 'Use this template' });
+
+    // Keyboard reach, then the pointer wanders in and back out of the card:
+    // mouseleave releases hover ONLY — the card is still focused.
+    fireEvent.focus(buttonOf(cards[1]!));
+    fireEvent.mouseEnter(cards[1]!);
+    fireEvent.mouseLeave(cards[1]!);
+    expect(buttonOf(cards[1]!)).toHaveClass('MuiButton-contained');
+    expect(cards[1]).toHaveStyle({ borderColor: tk.prim });
+    // The other cards are untouched.
+    expect(buttonOf(cards[0]!)).toHaveClass('MuiButton-outlined');
+    expect(buttonOf(cards[2]!)).toHaveClass('MuiButton-outlined');
+
+    // Blur is what releases the focus treatment.
+    fireEvent.blur(buttonOf(cards[1]!));
+    expect(buttonOf(cards[1]!)).toHaveClass('MuiButton-outlined');
+    expect(cards[1]).toHaveStyle({ borderColor: tk.inputBd });
+
+    // And a hover with no focus held still releases on leave.
+    fireEvent.mouseEnter(cards[0]!);
+    expect(buttonOf(cards[0]!)).toHaveClass('MuiButton-contained');
+    fireEvent.mouseLeave(cards[0]!);
+    expect(buttonOf(cards[0]!)).toHaveClass('MuiButton-outlined');
   });
 
   it('renders in French', async () => {
