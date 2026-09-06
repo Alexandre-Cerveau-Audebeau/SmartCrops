@@ -6,6 +6,12 @@ import { ExportPlanPopover } from './ExportPlanPopover';
 
 // SMA-18 lot 3 — « Exporter le plan » panel (États mockup "Popover export").
 
+// The PDF hint is asserted by its visible text (SMA-175: no data-testid where
+// the established selector already works — CodeRabbit #266 round 2).
+const PDF_HINT_EN = 'In the print dialog, choose “Save as PDF”.';
+const PDF_HINT_FR =
+  "Dans la boîte d'impression, choisissez « Enregistrer au format PDF ».";
+
 beforeEach(async () => {
   await i18n.changeLanguage('en');
 });
@@ -64,9 +70,7 @@ describe('ExportPlanPopover (SMA-18 lot 3)', () => {
       })
     ).toBeChecked();
     // Round 1 (orchestrator): the print-dialog reminder under the PDF option.
-    expect(within(dialog).getByTestId('export-pdf-hint')).toHaveTextContent(
-      'In the print dialog, choose “Save as PDF”.'
-    );
+    expect(within(dialog).getByText(PDF_HINT_EN)).toBeInTheDocument();
     expect(
       within(dialog).getByRole('button', { name: 'Export' })
     ).toBeEnabled();
@@ -86,7 +90,7 @@ describe('ExportPlanPopover (SMA-18 lot 3)', () => {
     ).not.toBeChecked();
     // PNG selected: the box no longer promises a legend (round 1, F3) and
     // the PDF hint is gone.
-    expect(within(dialog).queryByTestId('export-pdf-hint')).toBeNull();
+    expect(within(dialog).queryByText(PDF_HINT_EN)).toBeNull();
     fireEvent.click(
       within(dialog).getByRole('checkbox', {
         name: 'Include the Exposure layer',
@@ -163,9 +167,7 @@ describe('ExportPlanPopover (SMA-18 lot 3)', () => {
         name: 'Include the Exposure layer and legend',
       })
     ).toBeChecked();
-    expect(within(dialog).getByTestId('export-pdf-hint')).toHaveTextContent(
-      'In the print dialog, choose “Save as PDF”.'
-    );
+    expect(within(dialog).getByText(PDF_HINT_EN)).toBeInTheDocument();
 
     fireEvent.click(
       within(dialog).getByRole('radio', { name: /Image \(PNG, 2×\)/ })
@@ -180,7 +182,7 @@ describe('ExportPlanPopover (SMA-18 lot 3)', () => {
         name: 'Include the Exposure layer and legend',
       })
     ).toBeNull();
-    expect(within(dialog).queryByTestId('export-pdf-hint')).toBeNull();
+    expect(within(dialog).queryByText(PDF_HINT_EN)).toBeNull();
 
     fireEvent.click(
       within(dialog).getByRole('radio', { name: /PDF \(A4 landscape\)/ })
@@ -190,7 +192,7 @@ describe('ExportPlanPopover (SMA-18 lot 3)', () => {
         name: 'Include the Exposure layer and legend',
       })
     ).toBeInTheDocument();
-    expect(within(dialog).getByTestId('export-pdf-hint')).toBeInTheDocument();
+    expect(within(dialog).getByText(PDF_HINT_EN)).toBeInTheDocument();
   });
 
   it('renders the French copy of the mockup', async () => {
@@ -207,9 +209,7 @@ describe('ExportPlanPopover (SMA-18 lot 3)', () => {
         name: "Inclure le calque d'exposition et la légende",
       })
     ).toBeChecked();
-    expect(within(dialog).getByTestId('export-pdf-hint')).toHaveTextContent(
-      "Dans la boîte d'impression, choisissez « Enregistrer au format PDF »."
-    );
+    expect(within(dialog).getByText(PDF_HINT_FR)).toBeInTheDocument();
     fireEvent.click(
       within(dialog).getByRole('radio', { name: /Image \(PNG, 2×\)/ })
     );

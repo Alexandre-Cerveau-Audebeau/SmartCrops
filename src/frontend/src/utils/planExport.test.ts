@@ -110,12 +110,17 @@ describe('grid geometry and print scale', () => {
 });
 
 describe('PLAN_PRINT_CSS', () => {
-  it('declares the A4 landscape page with no browser margin (the 12 mm are the root padding), hides the view on screen and keeps colours on paper', () => {
+  it('declares the A4 landscape page with lateral margins only, resets the body margin, frames the root as a table, hides the view on screen and keeps colours on paper', () => {
+    // Round 2 (V3 + F7): zero top/bottom @page margin (no browser header or
+    // footer), the vertical 12 mm are the print view's spacer rows.
     expect(PLAN_PRINT_CSS).toContain(
-      '@page { size: A4 landscape; margin: 0; }'
+      '@page { size: A4 landscape; margin: 0 12mm; }'
     );
+    // CodeRabbit #266 round 2 (Major): the user-agent body margin is reset.
+    expect(PLAN_PRINT_CSS).toContain('html, body { margin: 0; padding: 0;');
+    expect(PLAN_PRINT_CSS).not.toContain('padding: 12mm');
     expect(PLAN_PRINT_CSS).toContain(
-      `[${PLAN_PRINT_ROOT_ATTR}] { display: block; box-sizing: border-box; padding: 12mm; }`
+      `[${PLAN_PRINT_ROOT_ATTR}] { display: table; width: 100%; border-collapse: collapse; }`
     );
     expect(PLAN_PRINT_CSS).toContain(
       `@media screen { [${PLAN_PRINT_ROOT_ATTR}] { display: none; } }`

@@ -168,7 +168,6 @@ function ExportPlanForm({
                 mockup's. */}
               {value === 'pdf' && selected && (
                 <Typography
-                  data-testid="export-pdf-hint"
                   sx={{ fontSize: 12, color: tk.tMeta, px: '12px', mt: '-2px' }}
                 >
                   {t('planner.export.pdfHint')}

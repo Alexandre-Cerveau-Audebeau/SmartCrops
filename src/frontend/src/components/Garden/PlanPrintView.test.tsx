@@ -142,13 +142,17 @@ describe('PlanPrintView (SMA-18 lot 3)', () => {
   it('injects the A4 landscape page rule and calls window.print() once after mounting', async () => {
     renderView();
     await waitFor(() => expect(printSpy).toHaveBeenCalledTimes(1));
-    // Round 1 (visual finding): a zero @page margin keeps the browser's own
-    // header/footer off the sheet; the 12 mm are the print root's padding.
+    // Round 2 (V3 + F7): @page keeps the lateral 12 mm only — its zero
+    // top/bottom margin keeps the browser's own header/footer off the sheet —
+    // the user-agent body margin is reset (CodeRabbit round 2, Major), and
+    // the vertical 12 mm are the table's spacer rows (asserted separately),
+    // no longer a root padding.
     expect(injectedCss()).toMatch(
-      /@page\s*\{\s*size:\s*A4 landscape;\s*margin:\s*0;?\s*\}/
+      /@page\s*\{\s*size:\s*A4 landscape;\s*margin:\s*0 12mm;?\s*\}/
     );
-    expect(injectedCss()).toMatch(
-      /\[data-plan-print-root\]\s*\{[^}]*padding:\s*12mm/
+    expect(injectedCss()).toMatch(/html,\s*body\s*\{\s*margin:\s*0/);
+    expect(injectedCss()).not.toMatch(
+      /\[data-plan-print-root\]\s*\{[^}]*padding/
     );
     expect(injectedCss()).toMatch(/print-color-adjust:\s*exact/);
     // The browser's default PDF name while the dialog is open.
@@ -172,6 +176,30 @@ describe('PlanPrintView (SMA-18 lot 3)', () => {
     unmount();
     expect(document.title).toBe('Before');
     expect(screen.queryByTestId('plan-print-view')).toBeNull();
+  });
+
+  // Round 2 (V3 + F7): the browser repeats a table's <thead> and <tfoot> on
+  // every printed page — one empty 12 mm row in each is the vertical margin
+  // page 2 was missing. jsdom has no paginator: the repetition itself belongs
+  // to the control PDF; the structure is pinned here.
+  it('frames the sheet with a 12 mm spacer row in <thead> and <tfoot>, the content in <tbody>', async () => {
+    renderView();
+    const view = await screen.findByTestId('plan-print-view');
+    expect(view.tagName).toBe('TABLE');
+    const head = view.querySelector(':scope > thead > tr > td');
+    const foot = view.querySelector(':scope > tfoot > tr > td');
+    expect(head).toBeEmptyDOMElement();
+    expect(foot).toBeEmptyDOMElement();
+    expect(head).toHaveStyle({ height: '12mm' });
+    expect(foot).toHaveStyle({ height: '12mm' });
+    const body = view.querySelector(':scope > tbody');
+    expect(body).toContainElement(
+      within(view).getByRole('heading', { level: 1, hidden: true })
+    );
+    expect(body).toContainElement(
+      within(view).getByRole('table', { hidden: true })
+    );
+    expect(body).toHaveTextContent('SmartCrops · smartcrops.fr');
   });
 
   it('prints neither the layer nor the legend when the box is unticked', async () => {

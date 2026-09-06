@@ -23,11 +23,12 @@ const EXPORT_GAP_PX = GAP_PX.sm;
  * rounded UP so the scaled print wrapper never clips the last row. */
 const COLUMN_AXIS_PX = 20;
 
-/** The A4 landscape sheet and the print view's margins, in mm. Since round 1
- * the `@page` rule declares a ZERO margin — that is what removes the
- * browser's own header and footer (date, URL, page number) — and the 12 mm
- * land as padding on the print root instead, so the printable area is
- * unchanged. */
+/** The A4 landscape sheet and the print view's margins, in mm. The `@page`
+ * rule keeps the LATERAL margins only: a zero top/bottom margin is what
+ * removes the browser's own header and footer (date, URL, page number), and
+ * the vertical 12 mm are rendered by the print view itself as one empty
+ * spacer row in its table's <thead> and <tfoot> — repeated by the browser on
+ * every page (round 2, V3 + F7). The printable area is unchanged. */
 export const PRINT_PAGE_MM = { width: 297, height: 210, margin: 12 } as const;
 
 /** CSS reference pixel: 96 px per inch, 25.4 mm per inch. */
@@ -54,20 +55,23 @@ export const PLAN_PRINT_ROOT_ATTR = 'data-plan-print-root';
 
 /**
  * The print stylesheet the print view injects while it is mounted: A4
- * landscape with a zero `@page` margin (the browser then prints none of its
- * own header and footer — date, URL, page number; visual finding, round 1),
- * the 12 mm carried by the root's padding instead, the view hidden on screen
- * and alone on paper, and `print-color-adjust: exact` so the browser keeps
- * the cell fills, the §3 hatch and the §15 soil trames (all CSS
- * backgrounds/gradients) on paper.
+ * landscape with the lateral 12 mm as native `@page` margins and a ZERO
+ * top/bottom margin (the browser then prints none of its own header and
+ * footer — date, URL, page number), the user-agent `body` margin reset
+ * (CodeRabbit #266 round 2, Major: it added ~8 px per side beyond the area
+ * `printableAreaPx` models), the view hidden on screen and alone on paper
+ * as a `display: table` root whose <thead>/<tfoot> spacer rows carry the
+ * vertical 12 mm on every page, and `print-color-adjust: exact` so the
+ * browser keeps the cell fills, the §3 hatch and the §15 soil trames (all
+ * CSS backgrounds/gradients) on paper.
  */
 export const PLAN_PRINT_CSS = `
-@page { size: A4 landscape; margin: 0; }
+@page { size: A4 landscape; margin: 0 ${PRINT_PAGE_MM.margin}mm; }
 @media screen { [${PLAN_PRINT_ROOT_ATTR}] { display: none; } }
 @media print {
-  html, body { background: ${getPlannerTokens('light').card}; }
+  html, body { margin: 0; padding: 0; background: ${getPlannerTokens('light').card}; }
   body > *:not([${PLAN_PRINT_ROOT_ATTR}]) { display: none !important; }
-  [${PLAN_PRINT_ROOT_ATTR}] { display: block; box-sizing: border-box; padding: ${PRINT_PAGE_MM.margin}mm; }
+  [${PLAN_PRINT_ROOT_ATTR}] { display: table; width: 100%; border-collapse: collapse; }
   [${PLAN_PRINT_ROOT_ATTR}], [${PLAN_PRINT_ROOT_ATTR}] * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
 `;
