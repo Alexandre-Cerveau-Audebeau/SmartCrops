@@ -653,6 +653,28 @@
       "facing": "Orienté {{facing}}"
     },
     "dimensions": "{{cols}} × {{rows}} — {{width}} × {{height}} ({{cellSize}}/cellule)",
+    "export": {
+      "button": "Exporter",
+      "title": "Exporter le plan",
+      "formatLabel": "Format",
+      "pdf": "PDF (A4 paysage)",
+      "pdfSub": "Plan + légende + liste des plantes",
+      "png": "Image (PNG, 2×)",
+      "pngSub": "Grille seule, fond transparent",
+      "includeLayer": "Inclure le calque d'exposition et la légende",
+      "inProgress": "Export en cours…",
+      "error": "L'export du plan a échoué. Réessayez.",
+      "pngFileName": "smartcrops-{{slug}}-plan.png",
+      "pdfTitle": "smartcrops-{{slug}}-plan",
+      "fileNameFallback": "jardin",
+      "print": {
+        "date": "Exporté le {{date}}",
+        "plant": "Plante",
+        "scientificName": "Nom scientifique",
+        "quantity": "Quantité",
+        "footer": "SmartCrops · smartcrops.fr"
+      }
+    },
     "plantsInGarden": "Plantes dans ce jardin",
     "sidebar": {
       "search": "Rechercher des plantes...",

@@ -493,6 +493,13 @@ export function getPlannerTokens(mode: PlannerThemeMode): PlannerTokens {
  * components, react-refresh). */
 export const GAP_PX = { xs: 2, sm: 3 } as const;
 
+/** §4 axes: the row-number rail's width in px — layout plumbing, not a doc
+ * token (18 px fits two digits at fs 10.5). Moved here from GardenGrid with
+ * SMA-18 lot 3 for the same react-refresh reason as GAP_PX: the plan export's
+ * print scale needs the grid's full pixel width, so the rail must be readable
+ * outside the component. */
+export const AXIS_RAIL_PX = 18;
+
 /** Footprint badge chip (SMA-193): solid border when the spacing is known,
  * dashed for the mockup's unknown "1×1?" (Achillea). Shared by the sidebar
  * rows and the DnD ghost's N×N chip (lot 2) so the variants never drift.

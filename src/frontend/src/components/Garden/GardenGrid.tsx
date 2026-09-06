@@ -11,7 +11,12 @@ import {
   type InfraRegion,
 } from '../../utils/infrastructure';
 import type { SoilType } from '../../utils/soil';
-import { GAP_PX, getPlannerTokens, type PlannerTokens } from '../../theme/plannerTokens';
+import {
+  AXIS_RAIL_PX,
+  GAP_PX,
+  getPlannerTokens,
+  type PlannerTokens,
+} from '../../theme/plannerTokens';
 import { getPlantColor } from '../../utils/plantColor';
 import { Sym } from '../Sym';
 
@@ -126,9 +131,8 @@ function columnLabel(index: number): string {
   return label;
 }
 
-// §4 axes: fs 10.5 (8.5 mobile) · w700 · --muted. The rail width is layout
-// plumbing (not a doc token): 18 px fits two digits at fs 10.5.
-const AXIS_RAIL_PX = 18;
+// §4 axes: fs 10.5 (8.5 mobile) · w700 · --muted. The rail width (AXIS_RAIL_PX)
+// lives in plannerTokens since SMA-18 lot 3, next to GAP_PX — same reason.
 const axisLabelSx = {
   fontSize: { xs: 8.5, sm: 10.5 },
   fontWeight: 700,
