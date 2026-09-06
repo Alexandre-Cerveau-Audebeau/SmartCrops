@@ -24,19 +24,35 @@ const EXPORT_GAP_PX = GAP_PX.sm;
 const COLUMN_AXIS_PX = 20;
 
 /** The A4 landscape sheet and the print view's margins, in mm. The `@page`
- * rule keeps the LATERAL margins only: a zero top/bottom margin is what
- * removes the browser's own header and footer (date, URL, page number), and
- * the vertical 12 mm are rendered by the print view itself as one empty
- * spacer row in its table's <thead> and <tfoot> — repeated by the browser on
- * every page (round 2, V3 + F7). The printable area is unchanged. */
+ * rule keeps the LATERAL margins only; the vertical 12 mm are rendered by
+ * the print view itself as one empty spacer row in its table's <thead> and
+ * <tfoot> — repeated by the browser on every page (round 2, V3 + F7). On
+ * Chrome and Edge the zero top/bottom `@page` margin is also what keeps the
+ * browser's own header and footer (date, URL, page number) off the sheet —
+ * they are drawn inside the page margin boxes, which a zero margin leaves no
+ * room for; on other browsers that depends on the print dialog's « Headers
+ * and footers » option (round 3). The printable area is the sheet minus this
+ * 12 mm frame. */
 export const PRINT_PAGE_MM = { width: 297, height: 210, margin: 12 } as const;
 
 /** CSS reference pixel: 96 px per inch, 25.4 mm per inch. */
 const CSS_PX_PER_MM = 96 / 25.4;
 
-/** Vertical room the header, the legend and the footer take on the first
- * page, in px — reserved so the grid's own scale leaves them space. */
-const PRINT_CHROME_PX = 200;
+/**
+ * Vertical room the header takes above the grid on the FIRST page, in px —
+ * subtracted from the printable height before the grid's scale is computed,
+ * so the header and the grid share page 1 (round 3, V4: a 40 × 30 garden
+ * printed its header alone on page 1 and the grid on page 2). Measured on
+ * the rendered header (Chrome, Inter): h1 24 px × line-height 1.2 = 28.8,
+ * meta line 12.5 px × 1.5 = 18.75 under a 4 px margin, date 11 px × 1.5 =
+ * 16.5 under a 2 px margin → 70.05 px — font-independent, every line height
+ * being explicit, and exact as long as the title and the meta line stay on
+ * one line each, which the print view enforces (nowrap + ellipsis) — plus the
+ * grid's 10 px top margin = 80.05 px. 88 keeps 8 px against the paginator's
+ * LayoutUnit rounding of the 12 mm spacer rows. The legend, the plant list
+ * and the footer are NOT reserved: they flow onto the next page.
+ */
+export const PRINT_HEADER_RESERVE_PX = 88;
 
 /** How long the print view waits for `afterprint` before unmounting on its
  * own — a safety net for a browser that never fires the event. */
@@ -56,8 +72,10 @@ export const PLAN_PRINT_ROOT_ATTR = 'data-plan-print-root';
 /**
  * The print stylesheet the print view injects while it is mounted: A4
  * landscape with the lateral 12 mm as native `@page` margins and a ZERO
- * top/bottom margin (the browser then prints none of its own header and
- * footer — date, URL, page number), the user-agent `body` margin reset
+ * top/bottom margin (on Chrome and Edge that is what keeps the browser's
+ * own header and footer — date, URL, page number — off the sheet; on other
+ * browsers it depends on the print dialog's « Headers and footers » option),
+ * the user-agent `body` margin reset
  * (CodeRabbit #266 round 2, Major: it added ~8 px per side beyond the area
  * `printableAreaPx` models), the view hidden on screen and alone on paper
  * as a `display: table` root whose <thead>/<tfoot> spacer rows carry the
@@ -96,21 +114,24 @@ export function gridPixelSize(
   };
 }
 
-/** Printable area left to the grid on the first A4 landscape page, in px. */
+/** Printable area left to the grid on the first A4 landscape page, in px:
+ * the sheet minus the 12 mm frame, the height minus the header reserve
+ * (round 3, V4) so the header and the grid share page 1. */
 export function printableAreaPx(): { width: number; height: number } {
   const usable = (mm: number) =>
     (mm - 2 * PRINT_PAGE_MM.margin) * CSS_PX_PER_MM;
   return {
     width: usable(PRINT_PAGE_MM.width),
-    height: usable(PRINT_PAGE_MM.height) - PRINT_CHROME_PX,
+    height: usable(PRINT_PAGE_MM.height) - PRINT_HEADER_RESERVE_PX,
   };
 }
 
 /**
  * Uniform scale (≤ 1) that fits the grid inside the printable area — bounded
- * by the width (the column count, the mockup's rule) AND by the height, so a
- * tall garden (up to 50 rows) shrinks to fit instead of being clipped at the
- * page break. Aspect ratio is preserved by construction.
+ * by the width (the column count, the mockup's rule) AND by the height left
+ * under the header on page 1, so a tall garden (up to 50 rows) shrinks to
+ * fit instead of being pushed to the next page. Aspect ratio is preserved by
+ * construction.
  */
 export function printScale(cols: number, rows: number): number {
   const size = gridPixelSize(cols, rows);

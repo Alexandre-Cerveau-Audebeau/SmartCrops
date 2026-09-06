@@ -14,6 +14,7 @@ import { createAppTheme } from '../../theme';
 import { getPlannerTokens } from '../../theme/plannerTokens';
 import type { CellData } from '../../types/GardenLayout';
 import type { ExposureCategory } from '../../utils/exposure';
+import { gridPixelSize, printScale } from '../../utils/planExport';
 import { PlanPrintView, type PlanPrintViewProps } from './PlanPrintView';
 
 // SMA-18 lot 3 — the PDF stage: the print view mounts, calls window.print()
@@ -95,6 +96,16 @@ function injectedCss(): string {
     .join('\n');
 }
 
+/** The declarations Emotion emitted for an element's own `css-*` class —
+ * for the fragmentation properties jsdom's computed style does not carry. */
+function emotionRule(el: Element): string {
+  const cls = Array.from(el.classList).find((c) => c.startsWith('css-'));
+  if (!cls) throw new Error('no emotion class on the element');
+  return (
+    injectedCss().match(new RegExp(`\\.${cls}\\{([^}]*)\\}`, 'g')) ?? []
+  ).join('');
+}
+
 describe('PlanPrintView (SMA-18 lot 3)', () => {
   it('prints name, meta line, date, the read-only grid with the layer, the legend, the plant list with quantities and the footer', async () => {
     renderView();
@@ -142,11 +153,12 @@ describe('PlanPrintView (SMA-18 lot 3)', () => {
   it('injects the A4 landscape page rule and calls window.print() once after mounting', async () => {
     renderView();
     await waitFor(() => expect(printSpy).toHaveBeenCalledTimes(1));
-    // Round 2 (V3 + F7): @page keeps the lateral 12 mm only — its zero
-    // top/bottom margin keeps the browser's own header/footer off the sheet —
-    // the user-agent body margin is reset (CodeRabbit round 2, Major), and
-    // the vertical 12 mm are the table's spacer rows (asserted separately),
-    // no longer a root padding.
+    // Round 2 (V3 + F7): @page keeps the lateral 12 mm only — on Chrome and
+    // Edge its zero top/bottom margin also keeps the browser's own
+    // header/footer off the sheet, elsewhere that is the print dialog's
+    // « Headers and footers » option (round 3) — the user-agent body margin
+    // is reset (CodeRabbit round 2, Major), and the vertical 12 mm are the
+    // table's spacer rows (asserted separately), no longer a root padding.
     expect(injectedCss()).toMatch(
       /@page\s*\{\s*size:\s*A4 landscape;\s*margin:\s*0 12mm;?\s*\}/
     );
@@ -200,6 +212,53 @@ describe('PlanPrintView (SMA-18 lot 3)', () => {
       within(view).getByRole('table', { hidden: true })
     );
     expect(body).toHaveTextContent('SmartCrops · smartcrops.fr');
+  });
+
+  // Round 3 (V4 + V5): a transform leaves the inner box's layout size
+  // untouched (2 458 × 1 847 px for 40 × 30) and Chrome's paginator fragments
+  // that overflow — the grid alone on page 2, a blank page 4. The wrapper
+  // clips the block to its scaled footprint (one unbreakable block), the
+  // inner box is a top-aligned flex container (the inline-flex grid no longer
+  // sits on a text baseline, 1 px past the footprint) and the header keeps
+  // the grid with it. jsdom has no paginator: the page counts belong to the
+  // round's Chrome harness; the structure is pinned here.
+  it('clips the grid block to its scaled footprint and keeps the header with the grid', async () => {
+    renderView();
+    const view = await screen.findByTestId('plan-print-view');
+    const size = gridPixelSize(2, 2);
+    const scale = printScale(2, 2);
+    expect(scale).toBe(1);
+
+    const block = within(view).getByTestId('plan-print-grid');
+    expect(block).toHaveStyle({
+      overflow: 'hidden',
+      width: `${size.width * scale}px`,
+      height: `${size.height * scale}px`,
+    });
+    expect(emotionRule(block)).toMatch(/break-inside:\s*avoid/);
+
+    const inner = block.firstElementChild as HTMLElement;
+    expect(inner).toHaveStyle({
+      display: 'flex',
+      alignItems: 'flex-start',
+      width: `${size.width}px`,
+      height: `${size.height}px`,
+      transform: `scale(${scale})`,
+    });
+    expect(inner).toContainElement(
+      within(view).getByRole('grid', { hidden: true })
+    );
+
+    const header = view.querySelector('header') as HTMLElement;
+    expect(emotionRule(header)).toMatch(/break-after:\s*avoid/);
+    expect(emotionRule(header)).toMatch(/break-inside:\s*avoid/);
+    expect(
+      within(view).getByRole('heading', { level: 1, hidden: true })
+    ).toHaveStyle({ whiteSpace: 'nowrap', textOverflow: 'ellipsis' });
+    expect(screen.getByTestId('plan-print-meta')).toHaveStyle({
+      whiteSpace: 'nowrap',
+      textOverflow: 'ellipsis',
+    });
   });
 
   it('prints neither the layer nor the legend when the box is unticked', async () => {

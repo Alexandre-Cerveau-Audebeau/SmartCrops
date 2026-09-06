@@ -9,6 +9,8 @@ import {
   gridPixelSize,
   PLAN_PRINT_CSS,
   PLAN_PRINT_ROOT_ATTR,
+  PRINT_HEADER_RESERVE_PX,
+  PRINT_PAGE_MM,
   printableAreaPx,
   printScale,
   slugify,
@@ -107,12 +109,38 @@ describe('grid geometry and print scale', () => {
     expect(printScale(10, 50)).toBeCloseTo(area.height / size.height, 6);
     expect(printScale(10, 50)).toBeLessThan(printScale(10, 6));
   });
+
+  // Round 3 (V4): the header shares page 1 with the grid — the printable
+  // height is the sheet minus the 12 mm frame minus the header reserve, so a
+  // 40 × 30 garden's grid is scaled to fit UNDER its header instead of being
+  // pushed to page 2.
+  it('subtracts the header reserve from the printable height so header and grid share the first page (40 × 30)', () => {
+    const usableHeight =
+      (PRINT_PAGE_MM.height - 2 * PRINT_PAGE_MM.margin) * (96 / 25.4);
+    expect(printableAreaPx().height).toBeCloseTo(
+      usableHeight - PRINT_HEADER_RESERVE_PX,
+      6
+    );
+    const size = gridPixelSize(40, 30);
+    const scale = printScale(40, 30);
+    expect(scale).toBeLessThan(1);
+    expect(size.height * scale).toBeLessThanOrEqual(
+      usableHeight - PRINT_HEADER_RESERVE_PX
+    );
+    expect(size.height * scale).toBeCloseTo(
+      usableHeight - PRINT_HEADER_RESERVE_PX,
+      6
+    );
+    expect(size.width * scale).toBeLessThanOrEqual(printableAreaPx().width);
+  });
 });
 
 describe('PLAN_PRINT_CSS', () => {
   it('declares the A4 landscape page with lateral margins only, resets the body margin, frames the root as a table, hides the view on screen and keeps colours on paper', () => {
-    // Round 2 (V3 + F7): zero top/bottom @page margin (no browser header or
-    // footer), the vertical 12 mm are the print view's spacer rows.
+    // Round 2 (V3 + F7): zero top/bottom @page margin (on Chrome and Edge
+    // that keeps the browser's header and footer off the sheet; elsewhere it
+    // is the print dialog's option — round 3), the vertical 12 mm are the
+    // print view's spacer rows.
     expect(PLAN_PRINT_CSS).toContain(
       '@page { size: A4 landscape; margin: 0 12mm; }'
     );

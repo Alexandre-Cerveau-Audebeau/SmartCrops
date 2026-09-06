@@ -76,9 +76,10 @@ export interface PlanPrintViewProps {
  * every other direct child. On screen it is display:none; on paper it is the
  * only thing — a table framed by two 12 mm spacer rows (<thead>/<tfoot>,
  * repeated on every page) around: name, the meta line the page already
- * computes, the date, the read-only grid scaled to the printable width (day
- * palette, layer per the box), the legend, the plant list with quantities,
- * a footer. Two frames after mounting it calls window.print(); the browser's
+ * computes, the date, the read-only grid scaled to share the first page with
+ * that header (day palette, layer per the box), then the legend, the plant
+ * list with quantities and a footer flowing onto the next pages. Two frames
+ * after mounting it calls window.print(); the browser's
  * dialog produces the PDF (« Enregistrer au format PDF ») — accepted
  * deviation from a direct download. `afterprint` (or the fallback timer)
  * reports back so the page unmounts the view.
@@ -149,8 +150,10 @@ export function PlanPrintView({
             empty 12 mm row each — the browser repeats both at the top and the
             bottom of EVERY printed page, which is how the vertical margin
             reaches page 2 and beyond now that @page keeps only the lateral
-            margins (its zero top/bottom margin suppresses the browser's own
-            header and footer). All the content sits in the <tbody>. */}
+            margins (on Chrome and Edge that zero top/bottom margin is also
+            what keeps the browser's own header and footer off the sheet;
+            elsewhere it is the print dialog's « Headers and footers »
+            option). All the content sits in the <tbody>. */}
         <Box
           component="table"
           data-plan-print-root=""
@@ -174,7 +177,13 @@ export function PlanPrintView({
                 component="td"
                 sx={{ p: 0, border: 0, verticalAlign: 'top' }}
               >
-                <Box component="header" sx={{ breakInside: 'avoid' }}>
+                {/* Round 3 (V4): the header stays with the grid (break-after)
+                    and keeps the height PRINT_HEADER_RESERVE_PX models —
+                    title and meta line on one line each. */}
+                <Box
+                  component="header"
+                  sx={{ breakInside: 'avoid', breakAfter: 'avoid' }}
+                >
                   <Typography
                     component="h1"
                     sx={{
@@ -183,6 +192,9 @@ export function PlanPrintView({
                       letterSpacing: '-0.01em',
                       lineHeight: 1.2,
                       color: tk.prim,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
                     }}
                   >
                     {gardenName}
@@ -195,6 +207,9 @@ export function PlanPrintView({
                         fontSize: 12.5,
                         fontWeight: 600,
                         color: tk.tMeta,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
                       }}
                     >
                       {meta}
@@ -205,21 +220,31 @@ export function PlanPrintView({
                   </Typography>
                 </Box>
 
-                {/* The grid keeps its on-screen geometry and is scaled as a whole
-              (transform: scale, aspect preserved) into a wrapper sized to the
-              scaled footprint, so the flow below never reserves the unscaled
-              height. */}
+                {/* The grid keeps its on-screen geometry and is scaled as a
+                    whole (transform: scale, aspect preserved) into a wrapper
+                    sized to the scaled footprint. Round 3 (V4 + V5): a
+                    transform leaves the inner box's LAYOUT size untouched
+                    (2 458 × 1 847 px for 40 × 30) and the paginator fragments
+                    that overflow — the grid was pushed to page 2 and sliced
+                    up to a blank page 4 — so the wrapper CLIPS it: with
+                    overflow hidden it is one unbreakable block of exactly the
+                    scaled size. The inner box is a top-aligned flex container
+                    so the inline-flex grid sits at its top instead of on a
+                    text baseline (6 px lower, 1 px past the footprint). */}
                 <Box
                   data-testid="plan-print-grid"
                   sx={{
                     mt: '10px',
                     width: size.width * scale,
                     height: size.height * scale,
+                    overflow: 'hidden',
                     breakInside: 'avoid',
                   }}
                 >
                   <Box
                     sx={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
                       width: size.width,
                       height: size.height,
                       transform: `scale(${scale})`,
