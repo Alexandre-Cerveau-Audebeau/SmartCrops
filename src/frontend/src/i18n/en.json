@@ -653,6 +653,30 @@
       "facing": "Facing {{facing}}"
     },
     "dimensions": "{{cols}} × {{rows}} — {{width}} × {{height}} ({{cellSize}}/cell)",
+    "export": {
+      "button": "Export",
+      "title": "Export the plan",
+      "formatLabel": "Format",
+      "pdf": "PDF (A4 landscape)",
+      "pdfSub": "Plan + legend + plant list",
+      "png": "Image (PNG, 2×)",
+      "pngSub": "Grid only, transparent background",
+      "includeLayerPdf": "Include the Exposure layer and legend",
+      "includeLayerPng": "Include the Exposure layer",
+      "pdfHint": "In the print dialog, choose “Save as PDF”.",
+      "inProgress": "Exporting…",
+      "error": "The plan export failed. Please try again.",
+      "pngFileName": "smartcrops-{{slug}}-plan.png",
+      "pdfTitle": "smartcrops-{{slug}}-plan",
+      "fileNameFallback": "garden",
+      "print": {
+        "date": "Exported on {{date}}",
+        "plant": "Plant",
+        "scientificName": "Scientific name",
+        "quantity": "Quantity",
+        "footer": "SmartCrops · smartcrops.fr"
+      }
+    },
     "plantsInGarden": "Plants in this garden",
     "sidebar": {
       "search": "Search plants...",
