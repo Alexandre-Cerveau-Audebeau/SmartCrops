@@ -1,7 +1,8 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   DndContext,
+  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   closestCenter,
@@ -9,6 +10,7 @@ import {
   useSensors,
   type Announcements,
   type DragEndEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -62,8 +64,11 @@ export default function DashboardGrid({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
+  const [activeKey, setActiveKey] = useState<DashboardBlockKey | null>(null);
+
   const visible = useMemo(() => blocks.filter((block) => !block.hidden), [blocks]);
   const visibleKeys = useMemo(() => visible.map((block) => block.key), [visible]);
+  const activeBlock = visible.find((block) => block.key === activeKey) ?? null;
 
   const label = (key: DashboardBlockKey) => t(`dashboard.blocks.${key}.title`);
 
@@ -100,7 +105,11 @@ export default function DashboardGrid({
     };
   }, [t, visibleKeys]);
 
+  const handleDragStart = ({ active }: DragStartEvent) =>
+    setActiveKey(active.id as DashboardBlockKey);
+
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    setActiveKey(null);
     if (!over || active.id === over.id) return;
     const from = visibleKeys.indexOf(active.id as DashboardBlockKey);
     const to = visibleKeys.indexOf(over.id as DashboardBlockKey);
@@ -115,7 +124,9 @@ export default function DashboardGrid({
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onDragCancel={() => setActiveKey(null)}
       accessibility={{
         announcements,
         screenReaderInstructions: { draggable: t('dashboard.a11y.instructions') },
@@ -149,6 +160,17 @@ export default function DashboardGrid({
           ))}
         </Box>
       </SortableContext>
+
+      {/* The widget under the pointer, lifted out of the grid (round 1, G6):
+          the overlay follows the cursor one-to-one while the neighbours reflow
+          into the hole its slot leaves behind. */}
+      <DragOverlay>
+        {activeBlock ? (
+          <Box data-drag-overlay sx={{ height: '100%', cursor: 'grabbing' }}>
+            {renderBlock(activeBlock)}
+          </Box>
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 }

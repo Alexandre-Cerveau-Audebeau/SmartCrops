@@ -339,6 +339,155 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.False(Block(body!, DashboardLayout.Blocks.Gardens).Hidden);
     }
 
+    [Fact]
+    public async Task GetPreferences_LayoutWithNullBlockEntry_FallsBackWithoutError()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        // `"blocks":[null]` is valid jsonb. Nullable annotations are not runtime
+        // checks, so it deserializes to a list holding a null; before round 1
+        // Merge dereferenced it and the read answered 500 (E3).
+        await InsertRawLayoutAsync(
+            userId,
+            DashboardLayout.CurrentSchemaVersion,
+            """{"schemaVersion":1,"level":"gardener","blocks":[null]}""");
+
+        var response = await Client.GetAsync(Url);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<DashboardPreferencesResponse>();
+        Assert.NotNull(body);
+        // The document parsed and its level survived, so this is not the
+        // "unreadable" path: the blocks are simply all filled from the preset.
+        Assert.False(body.IsPreset);
+        Assert.Equal(DashboardLayout.Levels.Gardener, body.Level);
+        Assert.Equal(DashboardLayout.Blocks.All, body.Blocks.Select(b => b.Key).ToList());
+    }
+
+    [Fact]
+    public async Task GetPreferences_LayoutWithNullAmongRealBlocks_KeepsTheRealOnes()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        await InsertRawLayoutAsync(
+            userId,
+            DashboardLayout.CurrentSchemaVersion,
+            """
+            {"schemaVersion":1,"level":"gardener","blocks":[
+              null,
+              {"key":"tips","size":"small","hidden":false,"options":null},
+              null]}
+            """);
+
+        var response = await Client.GetAsync(Url);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<DashboardPreferencesResponse>();
+        Assert.NotNull(body);
+        // The one real block keeps its stored position and size.
+        Assert.Equal(DashboardLayout.Blocks.Tips, body.Blocks[0].Key);
+        Assert.Equal(DashboardLayout.Sizes.Small, body.Blocks[0].Size);
+        Assert.Equal(DashboardLayout.Blocks.All.Count, body.Blocks.Count);
+    }
+
+    // ── Bounded options (round 1, E1 / G2) ───────────────────────────────────
+
+    [Fact]
+    public async Task PutPreferences_TooManyOptionKeys_Returns400()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        // 17 keys: one past MaxOptionKeysPerBlock, each value tiny — so this
+        // trips the COUNT ceiling and not the byte ceiling.
+        var options = Enumerable.Range(0, 17)
+            .ToDictionary(i => $"k{i}", _ => JsonValue("1"));
+
+        var response = await Client.PutAsJsonAsync(Url, RequestWithOptions(options));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await AssertNothingStoredAsync(userId);
+    }
+
+    [Fact]
+    public async Task PutPreferences_OversizedOptions_Returns400()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        // ONE key, well past MaxOptionsBytesPerBlock — the count ceiling cannot
+        // catch this one, which is why both bounds exist.
+        var options = new Dictionary<string, JsonElement>
+        {
+            ["blob"] = JsonValue(JsonSerializer.Serialize(new string('x', 4096))),
+        };
+
+        var response = await Client.PutAsJsonAsync(Url, RequestWithOptions(options));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await AssertNothingStoredAsync(userId);
+    }
+
+    [Fact]
+    public async Task PutPreferences_OptionsWithinBothBounds_IsAccepted()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var options = new Dictionary<string, JsonElement>
+        {
+            ["photos"] = JsonValue("true"),
+            ["garden"] = JsonValue("\"all\""),
+        };
+
+        var response = await Client.PutAsJsonAsync(Url, RequestWithOptions(options));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+        Assert.NotNull(body);
+        var stored = Block(body, DashboardLayout.Blocks.Weather).Options;
+        Assert.NotNull(stored);
+        Assert.Equal(2, stored.Count);
+    }
+
+    // ── Concurrent first save (round 1, E2 / G1) ─────────────────────────────
+
+    [Fact]
+    public async Task PutPreferences_ConcurrentFirstSaves_AllSucceed_AndLeaveOneRow()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+
+        // Eight clients, no stored row yet: every one of them reads `row is null`
+        // and inserts. The unique index on UserId lets exactly one through; the
+        // others must be retried against the winner's row, not surfaced as 500.
+        var clients = Enumerable.Range(0, 8).Select(_ => AuthorizedClient(userId)).ToList();
+        try
+        {
+            var responses = await Task.WhenAll(
+                clients.Select(client => client.PutAsJsonAsync(Url, ValidRequest())));
+
+            Assert.All(responses, r => Assert.Equal(HttpStatusCode.NoContent, r.StatusCode));
+        }
+        finally
+        {
+            foreach (var client in clients) client.Dispose();
+        }
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        Assert.Equal(
+            1,
+            await db.UserDashboardPreferences.CountAsync(p => p.UserId == userId));
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static DashboardBlockDto Block(DashboardPreferencesResponse body, string key) =>
@@ -349,10 +498,42 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
             [.. DashboardPresets.For(level ?? DashboardLayout.Levels.Gardener)
                 .Select(b => new SaveDashboardBlockRequest(b.Key, b.Size, b.Hidden, null))]);
 
+    /// <summary>A valid save whose Weather block carries the given options.</summary>
+    private static SaveDashboardPreferencesRequest RequestWithOptions(
+        Dictionary<string, JsonElement> options) =>
+        new(DashboardLayout.Levels.Gardener,
+            [.. DashboardPresets.For(DashboardLayout.Levels.Gardener)
+                .Select(b => new SaveDashboardBlockRequest(
+                    b.Key,
+                    b.Size,
+                    b.Hidden,
+                    b.Key == DashboardLayout.Blocks.Weather ? options : null))]);
+
+    /// <summary>One JSON value, from its literal text.</summary>
+    private static JsonElement JsonValue(string json) =>
+        JsonSerializer.Deserialize<JsonElement>(json);
+
+    private async Task AssertNothingStoredAsync(string userId)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+
+        Assert.False(await db.UserDashboardPreferences.AnyAsync(p => p.UserId == userId));
+    }
+
     private void AuthAs(string userId)
     {
         Client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
+    }
+
+    /// <summary>A SEPARATE client, so several requests can be in flight at once.</summary>
+    private HttpClient AuthorizedClient(string userId)
+    {
+        var client = Fixture.Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
+        return client;
     }
 
     private async Task SeedUserAsync(string userId)

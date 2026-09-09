@@ -39,15 +39,17 @@ const garden = (id: string, name: string): GardenListItem => ({
   plants: [],
 });
 
-function servePreferences(
-  level: DashboardLevel,
-  blocks: DashboardBlock[] = presetFor(level)
-) {
+/**
+ * Round 1 (E14): `blocks` no longer carries a default value, so
+ * `blocks === undefined` is a real question — the helper served `isPreset:
+ * false` for every case, including the ones the tests name as presets.
+ */
+function servePreferences(level: DashboardLevel, blocks?: DashboardBlock[]) {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level,
     isPreset: blocks === undefined,
-    blocks,
+    blocks: blocks ?? presetFor(level),
     updatedAt: null,
   });
 }
@@ -309,6 +311,113 @@ describe('GardensDashboard — the seven widget shells (SMA-336)', () => {
   });
 });
 
+describe('GardensDashboard — invitation layout (SMA-336 round 1, V3)', () => {
+  it('gives the invitation an intrinsic height instead of stretching it', async () => {
+    // V3: the tinted panel used to fill a Large card top to bottom. It now
+    // takes the height of what it says and sits in the middle.
+    servePreferences('expert');
+
+    renderPage();
+
+    await screen.findByText('The weather needs to know where your gardens are.');
+    const panel = document.querySelector('[data-invite-panel]') as HTMLElement;
+    const style = getComputedStyle(panel);
+
+    expect(style.flexGrow).not.toBe('1');
+    expect(style.height).not.toBe('100%');
+    expect(style.margin).toBe('auto');
+    expect(style.maxWidth).toBe('360px');
+  });
+
+  it('draws the tinted ground and the dashed border around the content only', async () => {
+    servePreferences('expert');
+
+    renderPage();
+
+    await screen.findByText('The weather needs to know where your gardens are.');
+    const panel = document.querySelector('[data-invite-panel]') as HTMLElement;
+
+    expect(getComputedStyle(panel).border).toContain('dashed');
+  });
+
+  it('does not leave half a Large Gardens card empty for two gardens', async () => {
+    // Same rule for short real content: the rows are centred in the card.
+    vi.mocked(fetchGardens).mockResolvedValue([
+      garden('g1', 'Casa Lolo'),
+      garden('g2', 'Le Potager'),
+    ]);
+    servePreferences('gardener');
+
+    renderPage();
+
+    await screen.findByText('Casa Lolo');
+    const grid = document
+      .querySelector('[data-widget="gardens"]')!
+      .querySelector('[style], div')!;
+    const rows = [...document.querySelectorAll('[data-widget="gardens"] div')]
+      .map((node) => getComputedStyle(node as HTMLElement))
+      .filter((style) => style.display === 'grid');
+
+    expect(grid).not.toBeNull();
+    expect(rows.some((style) => style.alignContent === 'center')).toBe(true);
+  });
+});
+
+describe('GardensDashboard — headings and dialogs (SMA-336 round 1)', () => {
+  it('makes the page title the h1 and the widget titles h2', async () => {
+    // Round 1 (E16 / G5).
+    servePreferences('gardener');
+
+    renderPage();
+
+    const title = await screen.findByRole('heading', { level: 1 });
+    expect(title).toHaveTextContent('My Gardens');
+    const widgetTitles = await screen.findAllByRole('heading', { level: 2 });
+    expect(widgetTitles.map((node) => node.textContent)).toContain('Gardens');
+  });
+
+  it('resets the create form on every close path', async () => {
+    // Round 1 (E15): the name and the error used to survive a cancel.
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create Garden' }));
+    const name = await screen.findByLabelText(/Name/);
+    fireEvent.change(name, { target: { value: 'Half-typed' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // The dialog unmounts after its exit transition; the header button is
+    // behind the modal until then.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.queryByDisplayValue('Half-typed')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create Garden' }));
+    expect(await screen.findByLabelText(/Name/)).toHaveValue('');
+  });
+
+  it('keeps the description toggle out of the card link', async () => {
+    // Round 1 (E7): a <button> nested in an <a> is invalid HTML that assistive
+    // technology cannot resolve into two targets.
+    vi.mocked(fetchGardens).mockResolvedValue([
+      {
+        ...garden('g1', 'Casa Lolo'),
+        description: 'x'.repeat(120),
+      },
+    ]);
+    servePreferences('gardener');
+
+    renderPage();
+
+    const toggle = await screen.findByRole('button', { name: 'See more' });
+    expect(toggle.closest('a')).toBeNull();
+
+    const link = screen.getByRole('link', { name: /Casa Lolo/ });
+    expect(link.querySelector('button')).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(await screen.findByRole('button', { name: 'See less' })).toBeInTheDocument();
+  });
+});
+
 describe('GardensDashboard — Customize panel (SMA-336)', () => {
   const openPanel = async () => {
     renderPage();
@@ -322,8 +431,18 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(screen.getByRole('radio', { name: /Novice/ })).toBeInTheDocument();
     expect(screen.getByText('the essentials, nothing more')).toBeInTheDocument();
     expect(screen.getByText('weather, tasks and counts')).toBeInTheDocument();
-    expect(screen.getByText('Everything, in large')).toBeInTheDocument();
+    // Round 1 (E13): the three taglines share one casing convention.
+    expect(screen.getByText('everything, in large')).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Gardener/ })).toBeChecked();
+  });
+
+  it('names the drawer and the level group for assistive technology', async () => {
+    // Round 1 (E5): the heading was a plain Typography with nothing tying it
+    // to either the dialog or the RadioGroup, so both were announced unnamed.
+    await openPanel();
+
+    expect(screen.getByRole('dialog', { name: 'Customize' })).toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: 'Level' })).toBeInTheDocument();
   });
 
   it('choosing a level applies its preset and persists it', async () => {
@@ -360,8 +479,10 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
   });
 
   it('the gallery lists the hidden widgets and « + » puts one back on the page', async () => {
-    const panel = await openPanel();
-    const gallery = panel.closest('div')!.parentElement!;
+    await openPanel();
+    // Round 1 (G9): MUI renders the open temporary Drawer as role="dialog";
+    // since round 1 it also carries an accessible name (E5).
+    const gallery = screen.getByRole('dialog', { name: 'Customize' });
 
     expect(within(gallery).getByText('Statistics')).toBeInTheDocument();
     expect(within(gallery).getByText('Harvest')).toBeInTheDocument();

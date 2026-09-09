@@ -92,7 +92,6 @@ export default function SortableWidget({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       sx={{
-        position: 'relative',
         minWidth: 0,
         gridColumn: {
           xs: `span ${span.columns.xs}`,
@@ -100,110 +99,129 @@ export default function SortableWidget({
         },
         gridRow: `span ${span.rows}`,
         zIndex: isDragging ? 2 : 'auto',
-        opacity: isDragging ? 0.85 : 1,
-        ...(editing && {
-          animation: `${wobble} 0.5s ease-in-out infinite`,
-          '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
-        }),
+        // The dragged widget is carried by the DragOverlay; its slot stays in
+        // the grid so the neighbours reflow around a hole of the right size.
+        opacity: isDragging ? 0 : 1,
       }}
     >
-      {children}
+      {/* The wobble lives on an INNER wrapper (round 1, G6): keyframes outrank
+          a normal inline style in the cascade, so animating the sortable node
+          itself replaced the `transform` dnd-kit writes there and the widget
+          stopped following the drag. The outer node keeps the transform, this
+          one carries the animation. */}
+      <Box
+        sx={{
+          position: 'relative',
+          height: '100%',
+          ...(editing && {
+            animation: `${wobble} 0.5s ease-in-out infinite`,
+            '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
+          }),
+        }}
+      >
+        {children}
 
-      {editing && (
-        <>
-          <Box
-            sx={{
-              position: 'absolute',
-              top: 4,
-              left: 6,
-              right: 6,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              zIndex: 3,
-            }}
-          >
-            {locked ? (
-              <Box
-                aria-label={t('dashboard.editMode.locked', { widget: label })}
-                sx={{
-                  display: 'flex',
-                  p: '5px',
-                  color: 'text.disabled',
-                }}
-              >
-                <LockOutlinedIcon fontSize="small" />
-              </Box>
-            ) : (
+        {editing && (
+          <>
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 4,
+                left: 6,
+                right: 6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                zIndex: 3,
+              }}
+            >
+              {locked ? (
+                // A generic div forbids an author-supplied name, so assistive
+                // technology may ignore the aria-label; role="img" makes it a
+                // graphic WITH a text alternative (round 1, E6 / G7). The lock
+                // is the only signal that this widget cannot be hidden.
+                <Box
+                  role="img"
+                  aria-label={t('dashboard.editMode.locked', { widget: label })}
+                  sx={{
+                    display: 'flex',
+                    p: '5px',
+                    color: 'text.disabled',
+                  }}
+                >
+                  <LockOutlinedIcon fontSize="small" aria-hidden />
+                </Box>
+              ) : (
+                <IconButton
+                  size="small"
+                  onClick={onHide}
+                  aria-label={t('dashboard.editMode.hide', { widget: label })}
+                >
+                  <RemoveRoundedIcon fontSize="small" />
+                </IconButton>
+              )}
+
               <IconButton
                 size="small"
-                onClick={onHide}
-                aria-label={t('dashboard.editMode.hide', { widget: label })}
+                ref={setActivatorNodeRef}
+                aria-label={t('dashboard.editMode.drag', { widget: label })}
+                sx={{ cursor: 'grab', touchAction: 'none' }}
+                {...attributes}
+                {...listeners}
               >
-                <RemoveRoundedIcon fontSize="small" />
+                <DragIndicatorIcon fontSize="small" />
               </IconButton>
-            )}
 
-            <IconButton
-              size="small"
-              ref={setActivatorNodeRef}
-              aria-label={t('dashboard.editMode.drag', { widget: label })}
-              sx={{ cursor: 'grab', touchAction: 'none' }}
-              {...attributes}
-              {...listeners}
-            >
-              <DragIndicatorIcon fontSize="small" />
-            </IconButton>
-
-            <IconButton
-              size="small"
-              onClick={(event) => setOptionsAnchor(event.currentTarget)}
-              aria-label={t('dashboard.editMode.options', { widget: label })}
-            >
-              <SettingsOutlinedIcon fontSize="small" />
-            </IconButton>
-          </Box>
-
-          <IconButton
-            size="small"
-            onClick={onResize}
-            aria-label={t('dashboard.editMode.resize', {
-              widget: label,
-              size: sizeLabel,
-            })}
-            sx={{ position: 'absolute', bottom: 4, right: 4, zIndex: 3 }}
-          >
-            <OpenInFullOutlinedIcon fontSize="small" />
-          </IconButton>
-
-          {/* Generic options shell (_spec.md 8, A8): the frame exists so a
-              later lot drops its real entries in. PR 1/5 ships none, and says
-              so rather than drawing a switch that toggles nothing. */}
-          <Menu
-            anchorEl={optionsAnchor}
-            open={optionsAnchor !== null}
-            onClose={() => setOptionsAnchor(null)}
-            slotProps={{ paper: { sx: { width: 320 } } }}
-          >
-            <Box sx={{ px: 2, pt: 1, pb: 0.5 }}>
-              <Typography
-                sx={{ fontSize: 13, fontWeight: 700, color: 'text.secondary' }}
+              <IconButton
+                size="small"
+                onClick={(event) => setOptionsAnchor(event.currentTarget)}
+                aria-label={t('dashboard.editMode.options', { widget: label })}
               >
-                {t('dashboard.editMode.optionsTitle')}
-              </Typography>
+                <SettingsOutlinedIcon fontSize="small" />
+              </IconButton>
             </Box>
-            <Box sx={{ px: 2, pb: 1 }}>
-              <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>
-                {t('dashboard.editMode.optionsEmpty')}
-              </Typography>
-            </Box>
-            <Divider />
-            <MenuItem onClick={() => setOptionsAnchor(null)}>
-              {t('dashboard.editMode.optionsDone')}
-            </MenuItem>
-          </Menu>
-        </>
-      )}
+
+            <IconButton
+              size="small"
+              onClick={onResize}
+              aria-label={t('dashboard.editMode.resize', {
+                widget: label,
+                size: sizeLabel,
+              })}
+              sx={{ position: 'absolute', bottom: 4, right: 4, zIndex: 3 }}
+            >
+              <OpenInFullOutlinedIcon fontSize="small" />
+            </IconButton>
+
+            {/* Generic options shell (_spec.md 8, A8): the frame exists so a
+                later lot drops its real entries in. PR 1/5 ships none, and says
+                so rather than drawing a switch that toggles nothing. */}
+            <Menu
+              anchorEl={optionsAnchor}
+              open={optionsAnchor !== null}
+              onClose={() => setOptionsAnchor(null)}
+              slotProps={{ paper: { sx: { width: 320 } } }}
+            >
+              <Box sx={{ px: 2, pt: 1, pb: 0.5 }}>
+                <Typography
+                  sx={{ fontSize: 13, fontWeight: 700, color: 'text.secondary' }}
+                >
+                  {t('dashboard.editMode.optionsTitle')}
+                </Typography>
+              </Box>
+              <Box sx={{ px: 2, pb: 1 }}>
+                <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>
+                  {t('dashboard.editMode.optionsEmpty')}
+                </Typography>
+              </Box>
+              <Divider />
+              <MenuItem onClick={() => setOptionsAnchor(null)}>
+                {t('dashboard.editMode.optionsDone')}
+              </MenuItem>
+            </Menu>
+          </>
+        )}
+      </Box>
     </Box>
   );
 }

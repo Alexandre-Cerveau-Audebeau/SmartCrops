@@ -48,33 +48,68 @@ export function useDashboardPreferences() {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [reloadEpoch, setReloadEpoch] = useState(0);
 
-  // The write the debounce still owes the server. Held in a ref so the unmount
-  // cleanup can flush it: navigating away one keystroke after a drag must not
+  // The write the debounce still owes the server. Held in a ref so the teardown
+  // paths can flush it: navigating away one keystroke after a drag must not
   // silently drop that drag.
   const pendingRef = useRef<Layout | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirrors `layout` so the mutators can read the current level WITHOUT doing
+  // it from inside a `setLayout` updater (round 1, E11): an updater must be a
+  // pure function of the previous state, and React may run it more than once
+  // for the same logical update — StrictMode does exactly that in development.
+  const layoutRef = useRef<Layout | null>(null);
+  // The last write still in flight (round 1, G8). The endpoint replaces the
+  // layout wholesale, so two concurrent PUTs are a lost-update hazard: if the
+  // older one lands last, the server keeps the older layout and the user's
+  // final arrangement is gone with no error shown. Chaining orders them.
+  const chainRef = useRef<Promise<unknown>>(Promise.resolve());
 
-  const flush = useCallback(() => {
-    const pending = pendingRef.current;
-    pendingRef.current = null;
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    if (!pending) return;
-    saveDashboardPreferences(pending)
-      .then(() => setSaveState('saved'))
-      .catch(() => setSaveState('error'));
+  const send = useCallback((next: Layout, keepalive: boolean) => {
+    const sent = chainRef.current
+      .catch(() => {})
+      .then(() =>
+        // The one-argument call is kept for the ordinary path so the request
+        // carries no keepalive flag it does not need.
+        keepalive ? saveDashboardPreferences(next, true) : saveDashboardPreferences(next)
+      );
+    chainRef.current = sent.catch(() => {});
+    return sent;
   }, []);
+
+  const flush = useCallback(
+    (keepalive = false) => {
+      const pending = pendingRef.current;
+      pendingRef.current = null;
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (!pending) return;
+      send(pending, keepalive)
+        .then(() => setSaveState('saved'))
+        .catch(() => setSaveState('error'));
+    },
+    [send]
+  );
 
   const schedule = useCallback(
     (next: Layout) => {
       pendingRef.current = next;
       setSaveState('pending');
       if (timerRef.current !== null) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(flush, SAVE_DEBOUNCE_MS);
+      timerRef.current = setTimeout(() => flush(), SAVE_DEBOUNCE_MS);
     },
     [flush]
+  );
+
+  /** Applies a layout locally and schedules its write. The ONE side-effect path. */
+  const commit = useCallback(
+    (next: Layout) => {
+      layoutRef.current = next;
+      setLayout(next);
+      schedule(next);
+    },
+    [schedule]
   );
 
   useEffect(() => {
@@ -82,11 +117,14 @@ export function useDashboardPreferences() {
     fetchDashboardPreferences(controller.signal)
       .then((preferences) => {
         if (controller.signal.aborted) return;
-        setLayout({ level: preferences.level, blocks: preferences.blocks });
+        const loaded = { level: preferences.level, blocks: preferences.blocks };
+        layoutRef.current = loaded;
+        setLayout(loaded);
         setLoadError(false);
       })
       .catch(() => {
         if (controller.signal.aborted) return;
+        layoutRef.current = null;
         setLayout(null);
         setLoadError(true);
       })
@@ -96,17 +134,18 @@ export function useDashboardPreferences() {
     return () => controller.abort();
   }, [reloadEpoch]);
 
-  // Unmount only: the pending write leaves with the component.
-  useEffect(
-    () => () => {
-      const pending = pendingRef.current;
-      pendingRef.current = null;
-      if (timerRef.current !== null) clearTimeout(timerRef.current);
-      timerRef.current = null;
-      if (pending) void saveDashboardPreferences(pending).catch(() => {});
-    },
-    []
-  );
+  // Page teardown AND unmount (round 1, E12): an unmount cleanup never runs for
+  // a tab close or a cross-document navigation, and a plain fetch started at
+  // that moment may be cancelled with the document — hence `pagehide` and the
+  // keepalive flag.
+  useEffect(() => {
+    const flushNow = () => flush(true);
+    window.addEventListener('pagehide', flushNow);
+    return () => {
+      window.removeEventListener('pagehide', flushNow);
+      flushNow();
+    };
+  }, [flush]);
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -117,14 +156,11 @@ export function useDashboardPreferences() {
   /** Replaces the blocks (reorder, resize, hide, show) and schedules the save. */
   const setBlocks = useCallback(
     (blocks: DashboardBlock[]) => {
-      setLayout((current) => {
-        if (!current) return current;
-        const next = { level: current.level, blocks };
-        schedule(next);
-        return next;
-      });
+      const current = layoutRef.current;
+      if (!current) return;
+      commit({ level: current.level, blocks });
     },
-    [schedule]
+    [commit]
   );
 
   /**
@@ -134,23 +170,15 @@ export function useDashboardPreferences() {
    * distinct gesture rather than a duplicate of this one.
    */
   const setLevel = useCallback(
-    (level: DashboardLevel) => {
-      const next = { level, blocks: presetFor(level) };
-      setLayout(next);
-      schedule(next);
-    },
-    [schedule]
+    (level: DashboardLevel) => commit({ level, blocks: presetFor(level) }),
+    [commit]
   );
 
   /** Back to the current level's preset, discarding the manual arrangement. */
   const resetToLevel = useCallback(() => {
-    setLayout((current) => {
-      const level = current?.level ?? DEFAULT_DASHBOARD_LEVEL;
-      const next = { level, blocks: presetFor(level) };
-      schedule(next);
-      return next;
-    });
-  }, [schedule]);
+    const level = layoutRef.current?.level ?? DEFAULT_DASHBOARD_LEVEL;
+    commit({ level, blocks: presetFor(level) });
+  }, [commit]);
 
   const level = layout?.level ?? DEFAULT_DASHBOARD_LEVEL;
   const blocks = layout?.blocks ?? [];

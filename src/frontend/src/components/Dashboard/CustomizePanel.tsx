@@ -3,7 +3,9 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
+import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import FormLabel from '@mui/material/FormLabel';
 import IconButton from '@mui/material/IconButton';
 import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
@@ -18,6 +20,10 @@ import {
   type DashboardBlockKey,
   type DashboardLevel,
 } from '../../types/Dashboard';
+
+/** Stable ids: the drawer names itself by its heading, the group by its label. */
+const TITLE_ID = 'dashboard-customize-title';
+const LEVEL_LABEL_ID = 'dashboard-customize-level-label';
 
 interface Props {
   open: boolean;
@@ -58,11 +64,18 @@ export default function CustomizePanel({
   };
 
   return (
+    // The open temporary Drawer is a role="dialog"; without `aria-labelledby`
+    // it has no accessible name at all (round 1, E5).
     <Drawer
       anchor="right"
       open={open}
       onClose={onClose}
-      slotProps={{ paper: { sx: { width: { xs: '100%', sm: 380 } } } }}
+      slotProps={{
+        paper: {
+          'aria-labelledby': TITLE_ID,
+          sx: { width: { xs: '100%', sm: 380 } },
+        },
+      }}
     >
       <Box
         role="presentation"
@@ -75,7 +88,7 @@ export default function CustomizePanel({
             justifyContent: 'space-between',
           }}
         >
-          <Typography component="h2" variant="h6" fontWeight={700}>
+          <Typography id={TITLE_ID} component="h2" variant="h6" fontWeight={700}>
             {t('dashboard.panel.title')}
           </Typography>
           <IconButton
@@ -88,52 +101,58 @@ export default function CustomizePanel({
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <Typography sx={sectionTitleSx}>
-            {t('dashboard.panel.levelSection')}
-          </Typography>
-          <RadioGroup
-            value={level}
-            onChange={(event) =>
-              onLevelChange(event.target.value as DashboardLevel)
-            }
-            sx={{ gap: '8px' }}
-          >
-            {DASHBOARD_LEVELS.map((option) => (
-              <FormControlLabel
-                key={option}
-                value={option}
-                control={<Radio size="small" />}
-                sx={{
-                  m: 0,
-                  p: '12px',
-                  alignItems: 'flex-start',
-                  borderRadius: '10px',
-                  border: '1px solid',
-                  borderColor: option === level ? 'primary.main' : 'borderSubtle',
-                }}
-                label={
-                  <Box>
-                    <Typography
-                      sx={{
-                        fontSize: `${DASHBOARD_TYPE.body}px`,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {t(`dashboard.levels.${option}.name`)}
-                    </Typography>
-                    <Typography
-                      sx={{
-                        fontSize: `${DASHBOARD_TYPE.secondary}px`,
-                        color: 'text.secondary',
-                      }}
-                    >
-                      {t(`dashboard.levels.${option}.tagline`)}
-                    </Typography>
-                  </Box>
-                }
-              />
-            ))}
-          </RadioGroup>
+          {/* FormControl + FormLabel rather than a bare Typography (round 1,
+              E5): it is what wires the group's accessible name, so a screen
+              reader announces WHAT the three options choose. */}
+          <FormControl>
+            <FormLabel id={LEVEL_LABEL_ID} sx={sectionTitleSx}>
+              {t('dashboard.panel.levelSection')}
+            </FormLabel>
+            <RadioGroup
+              aria-labelledby={LEVEL_LABEL_ID}
+              value={level}
+              onChange={(event) =>
+                onLevelChange(event.target.value as DashboardLevel)
+              }
+              sx={{ gap: '8px', mt: '12px' }}
+            >
+              {DASHBOARD_LEVELS.map((option) => (
+                <FormControlLabel
+                  key={option}
+                  value={option}
+                  control={<Radio size="small" />}
+                  sx={{
+                    m: 0,
+                    p: '12px',
+                    alignItems: 'flex-start',
+                    borderRadius: '10px',
+                    border: '1px solid',
+                    borderColor: option === level ? 'primary.main' : 'borderSubtle',
+                  }}
+                  label={
+                    <Box>
+                      <Typography
+                        sx={{
+                          fontSize: `${DASHBOARD_TYPE.body}px`,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {t(`dashboard.levels.${option}.name`)}
+                      </Typography>
+                      <Typography
+                        sx={{
+                          fontSize: `${DASHBOARD_TYPE.secondary}px`,
+                          color: 'text.secondary',
+                        }}
+                      >
+                        {t(`dashboard.levels.${option}.tagline`)}
+                      </Typography>
+                    </Box>
+                  }
+                />
+              ))}
+            </RadioGroup>
+          </FormControl>
           <Typography
             sx={{
               fontSize: `${DASHBOARD_TYPE.secondary}px`,

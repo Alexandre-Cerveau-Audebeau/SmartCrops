@@ -28,7 +28,7 @@ vi.mock('../services/dashboardApi', () => ({
 }));
 
 import GardensDashboard from './GardensDashboard';
-import { deleteGarden, fetchGardens } from '../services/gardenApi';
+import { deleteGarden, fetchGardens, updateGarden } from '../services/gardenApi';
 import {
   fetchDashboardPreferences,
   saveDashboardPreferences,
@@ -346,6 +346,89 @@ describe('Gardens widget delete flow (SMA-18 lot 1, moved by SMA-336)', () => {
 
     await waitFor(() => expect(fetchGardens).toHaveBeenCalled());
     expect(screen.queryByText('Garden deleted')).toBeNull();
+  });
+});
+
+// ── SMA-336 round 1 (E9 / G4): the rename error belongs to the dialog it is
+// raised in, and leaves with it.
+describe('Gardens widget rename errors (SMA-336 round 1)', () => {
+  beforeEach(() => {
+    localStorage.setItem('smartcrops-language', 'en');
+    vi.mocked(updateGarden).mockReset();
+  });
+
+  async function openRenameDialog() {
+    vi.mocked(fetchGardens).mockResolvedValue([gardenWith([ivy, fern])]);
+    renderPage();
+    await screen.findByText('Casa Lolo');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Casa Lolo' }));
+    return await screen.findByRole('dialog', { name: 'Edit garden' });
+  }
+
+  it('shows a failed rename INSIDE the dialog, not behind it', async () => {
+    vi.mocked(updateGarden).mockRejectedValueOnce(new Error('boom'));
+    const dialog = await openRenameDialog();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    // The dialog is a modal in a portal: a message on the widget frame sits
+    // behind its backdrop, where the user cannot read it.
+    const error = await within(dialog).findByText(
+      'An error occurred. Please try again.'
+    );
+    expect(error).toBeInTheDocument();
+    expect(within(gardensWidget()).queryByText(
+      'An error occurred. Please try again.'
+    )).toBeNull();
+  });
+
+  it('clears the error when the dialog is cancelled', async () => {
+    vi.mocked(updateGarden).mockRejectedValueOnce(new Error('boom'));
+    const dialog = await openRenameDialog();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await within(dialog).findByText('An error occurred. Please try again.');
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit garden' })).toBeNull()
+    );
+    // Before round 1 the message stayed on the card until the next successful
+    // rename — a reported failure with no subject left to explain it.
+    expect(
+      screen.queryByText('An error occurred. Please try again.')
+    ).toBeNull();
+  });
+
+  it('clears the error when the dialog is reopened on another garden', async () => {
+    vi.mocked(updateGarden).mockRejectedValueOnce(new Error('boom'));
+    const dialog = await openRenameDialog();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await within(dialog).findByText('An error occurred. Please try again.');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit garden' })).toBeNull()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Casa Lolo' }));
+
+    const reopened = await screen.findByRole('dialog', { name: 'Edit garden' });
+    expect(
+      within(reopened).queryByText('An error occurred. Please try again.')
+    ).toBeNull();
+  });
+
+  it('closes and refetches when the rename succeeds', async () => {
+    vi.mocked(updateGarden).mockResolvedValue({ id: 'g1', name: 'Casa Lolo' });
+    const dialog = await openRenameDialog();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(updateGarden).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit garden' })).toBeNull()
+    );
+    await waitFor(() => expect(fetchGardens).toHaveBeenCalledTimes(2));
   });
 });
 

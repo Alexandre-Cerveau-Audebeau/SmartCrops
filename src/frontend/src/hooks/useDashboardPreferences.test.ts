@@ -183,6 +183,102 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
     );
   });
 
+  it('flushes the pending write when the page unmounts mid-debounce', async () => {
+    // Round 1 (E10): the one protection against losing the user's last drag on
+    // navigation, and a regression there is silent — no error, no failing
+    // assertion, just a lost layout. Real timers, so the debounce cannot fire
+    // on its own before the unmount.
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue(preferences());
+    const { result, unmount } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const blocks = presetFor('gardener');
+    blocks[0]!.size = 'small';
+    act(() => result.current.setBlocks(blocks));
+    expect(saveDashboardPreferences).not.toHaveBeenCalled();
+
+    unmount();
+
+    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalledTimes(1));
+    // The teardown write is keepalive: a plain fetch started at unload may be
+    // cancelled with the document (E12).
+    expect(saveDashboardPreferences).toHaveBeenCalledWith(
+      { level: 'gardener', blocks },
+      true
+    );
+  });
+
+  it('flushes the pending write on pagehide, without waiting for the unmount', async () => {
+    // Round 1 (E12): an unmount cleanup never runs for a tab close or a
+    // cross-document navigation.
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue(preferences());
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const blocks = presetFor('gardener');
+    blocks[1]!.size = 'small';
+    act(() => result.current.setBlocks(blocks));
+    expect(saveDashboardPreferences).not.toHaveBeenCalled();
+
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+
+    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalledTimes(1));
+    expect(saveDashboardPreferences).toHaveBeenCalledWith(
+      { level: 'gardener', blocks },
+      true
+    );
+  });
+
+  it('serializes the writes: a slow older PUT cannot land after a newer one', async () => {
+    // Round 1 (G8): the endpoint replaces the layout WHOLESALE, so two
+    // concurrent PUTs are a lost-update hazard — if the older one reaches the
+    // server last, the server keeps the older layout and the user's final
+    // arrangement is gone with no error shown.
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue(preferences());
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const settle: Array<() => void> = [];
+    vi.mocked(saveDashboardPreferences).mockImplementation(
+      () => new Promise<void>((resolve) => settle.push(resolve))
+    );
+
+    const first = presetFor('gardener');
+    first[0]!.size = 'small';
+    const second = presetFor('gardener');
+    second[0]!.size = 'large';
+
+    vi.useFakeTimers();
+    act(() => result.current.setBlocks(first));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
+
+    // The first PUT is still in flight when the second change is committed.
+    act(() => result.current.setBlocks(second));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+
+    // The second write has NOT left: it is chained behind the first.
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
+
+    settle[0]!();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(saveDashboardPreferences).mock.calls[1]![0]).toEqual({
+      level: 'gardener',
+      blocks: second,
+    });
+    vi.useRealTimers();
+  });
+
   it('writes nothing to localStorage — the layout lives on the server', async () => {
     vi.mocked(fetchDashboardPreferences).mockResolvedValue(preferences());
     const setItem = vi.spyOn(Storage.prototype, 'setItem');

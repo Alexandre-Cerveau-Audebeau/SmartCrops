@@ -96,10 +96,23 @@ function servePreferences(
   });
 }
 
-const renderedKeys = () =>
-  [...document.querySelectorAll('[data-widget]')].map((node) =>
-    node.getAttribute('data-widget')
+/** The widgets in the GRID — the DragOverlay renders a copy of the dragged one. */
+const gridWidgets = () =>
+  [...document.querySelectorAll('[data-widget]')].filter(
+    (node) => !node.closest('[data-drag-overlay]')
   );
+
+const renderedKeys = () =>
+  gridWidgets().map((node) => node.getAttribute('data-widget'));
+
+/**
+ * The node `useSortable` writes its transform on: the grid cell. The card sits
+ * one wrapper below it since round 1 (G6), the wrapper that carries the wobble.
+ */
+const sortableNode = (key: string) =>
+  gridWidgets()
+    .find((node) => node.getAttribute('data-widget') === key)!
+    .parentElement!.parentElement!;
 
 function renderPage() {
   return render(
@@ -190,7 +203,11 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     await enterEditMode();
 
     expect(screen.queryByRole('button', { name: 'Hide Gardens' })).toBeNull();
-    expect(screen.getByLabelText("Gardens can’t be hidden")).toBeInTheDocument();
+    // Round 1 (E6 / G7): role="img" is what makes the aria-label reliably
+    // reach assistive technology — a generic div forbids an author name.
+    const lock = screen.getByRole('img', { name: "Gardens can’t be hidden" });
+    expect(lock).toBeInTheDocument();
+    expect(screen.getByLabelText("Gardens can’t be hidden")).toBe(lock);
   });
 
   it('opens a generic options panel that admits it carries nothing yet', async () => {
@@ -328,6 +345,69 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
       'stats',
       'harvest',
     ]);
+  });
+
+  it('never puts the wobble on the node dnd-kit writes its transform to', async () => {
+    // Round 1 (G6). Keyframe declarations outrank a normal inline style in the
+    // cascade, so animating the SORTABLE node replaced the `transform` dnd-kit
+    // writes there and the dragged widget stopped following. The animation now
+    // belongs to an inner wrapper; the sortable node keeps the transform.
+    await enterEditMode();
+
+    // Mid-drag, so dnd-kit has actually written a transform: Gardens is the
+    // neighbour Weather is moving onto, and it shifts out of the way.
+    const handle = screen.getByRole('button', { name: 'Move Weather' });
+    handle.focus();
+    fireEvent.keyDown(handle, { code: 'Space', key: ' ' });
+    await settle();
+    fireEvent.keyDown(handle, { code: 'ArrowRight', key: 'ArrowRight' });
+    await settle();
+
+    const sortable = sortableNode('gardens');
+    const inner = sortable.firstElementChild as HTMLElement;
+
+    expect(sortable.getAttribute('style')).toContain('transform');
+    expect(getComputedStyle(sortable).animation).toBe('');
+    expect(getComputedStyle(inner).animation).toContain('0.5s ease-in-out infinite');
+
+    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+  });
+
+  it('suppresses the wobble under prefers-reduced-motion', async () => {
+    await enterEditMode();
+
+    const inner = sortableNode('weather').firstElementChild as HTMLElement;
+    const rules = [...document.querySelectorAll('style')]
+      .map((tag) => tag.textContent ?? '')
+      .filter((text) => text.includes(inner.className.split(' ').pop()!));
+
+    expect(
+      rules.some(
+        (text) =>
+          text.includes('prefers-reduced-motion: reduce') &&
+          text.includes('animation:none')
+      )
+    ).toBe(true);
+  });
+
+  it('lifts the dragged widget into a DragOverlay', async () => {
+    await enterEditMode();
+
+    const handle = screen.getByRole('button', { name: 'Move Weather' });
+    handle.focus();
+    fireEvent.keyDown(handle, { code: 'Space', key: ' ' });
+
+    const overlay = await waitFor(() => {
+      const node = document.querySelector('[data-drag-overlay]');
+      expect(node).not.toBeNull();
+      return node!;
+    });
+    expect(overlay.querySelector('[data-widget="weather"]')).not.toBeNull();
+
+    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+    await waitFor(() =>
+      expect(document.querySelector('[data-drag-overlay]')).toBeNull()
+    );
   });
 
   it('Escape cancels the move and leaves the order — and the server — untouched', async () => {

@@ -30,6 +30,20 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
     private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
 
     /// <summary>
+    /// Ceiling on the number of entries one block's options document may carry.
+    /// Every setting the frozen design gives a widget fits well inside it.
+    /// </summary>
+    private const int MaxOptionKeysPerBlock = 16;
+
+    /// <summary>
+    /// Ceiling on one block's serialized options document, in UTF-8 bytes.
+    /// Without it an authenticated caller can PUT eight blocks of arbitrary
+    /// JSON, and the server stores all of it in their <c>jsonb</c> row, then
+    /// reads it back on every dashboard load.
+    /// </summary>
+    private const int MaxOptionsBytesPerBlock = 2 * 1024;
+
+    /// <summary>
     /// The caller's layout, or the preset of their level when they have never
     /// saved one. Always 200 for an authenticated caller — never 404.
     /// </summary>
@@ -66,7 +80,33 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
             DashboardLayout.CurrentSchemaVersion,
             request.Level,
             [.. request.Blocks.Select(b => new StoredBlock(b.Key, b.Size, b.Hidden, b.Options))]);
+        var json = JsonSerializer.Serialize(document, JsonWeb);
 
+        try
+        {
+            await UpsertAsync(userId, json, ct);
+        }
+        catch (DbUpdateException) when (!ct.IsCancellationRequested)
+        {
+            // A concurrent FIRST save won the unique index on UserId: both
+            // requests read no row, both inserted, one lost. The PUT replaces
+            // the document wholesale, so re-applying it over the row the winner
+            // created is safe and idempotent. Exactly one retry — a second
+            // conflict is a real failure and propagates.
+            context.ChangeTracker.Clear();
+            await UpsertAsync(userId, json, ct);
+        }
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Writes the document on the caller's row, creating it on first save.
+    /// Deliberately not atomic on its own: the read-then-insert race is handled
+    /// by the single retry in <see cref="PutPreferences"/>.
+    /// </summary>
+    private async Task UpsertAsync(string userId, string layoutJson, CancellationToken ct)
+    {
         var row = await context.UserDashboardPreferences
             .SingleOrDefaultAsync(p => p.UserId == userId, ct);
 
@@ -77,10 +117,9 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
         }
 
         row.SchemaVersion = DashboardLayout.CurrentSchemaVersion;
-        row.LayoutJson = JsonSerializer.Serialize(document, JsonWeb);
+        row.LayoutJson = layoutJson;
 
         await context.SaveChangesAsync(ct);
-        return NoContent();
     }
 
     // ── Reading ──────────────────────────────────────────────────────────────
@@ -114,8 +153,16 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
     /// no row, no document, a version this server does not know, or JSON that no
     /// longer binds. jsonb guarantees the text parses; it does not guarantee the
     /// shape still matches, so the try/catch is not redundant.
+    ///
+    /// <para>The null entries of the stored array are dropped HERE, not in
+    /// <see cref="Merge"/>: nullable annotations are not runtime checks, so
+    /// <c>"blocks":[null]</c> deserializes to a list holding a null, and Merge
+    /// would dereference it. Parse is the boundary where untrusted stored data
+    /// becomes a shape the rest of the read path can rely on — hence the
+    /// separate <see cref="ParsedLayout"/>, whose blocks are non-null by
+    /// construction.</para>
     /// </summary>
-    private static StoredLayout? Parse(UserDashboardPreferences? row)
+    private static ParsedLayout? Parse(UserDashboardPreferences? row)
     {
         if (row?.LayoutJson is not { Length: > 0 } json) return null;
         if (row.SchemaVersion != DashboardLayout.CurrentSchemaVersion) return null;
@@ -123,7 +170,11 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
         try
         {
             var parsed = JsonSerializer.Deserialize<StoredLayout>(json, JsonWeb);
-            return parsed?.Blocks is null ? null : parsed;
+            if (parsed?.Blocks is null) return null;
+
+            return new ParsedLayout(
+                parsed.Level,
+                [.. parsed.Blocks.Where(block => block is not null).Select(block => block!)]);
         }
         catch (JsonException)
         {
@@ -196,9 +247,31 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
             {
                 return $"block '{block.Key}' cannot be hidden";
             }
+
+            if (Validate(block) is { } optionsError) return optionsError;
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Bounds one block's options document. BOTH ceilings are needed: the key
+    /// count stops a wide document, the byte size stops a deep or a
+    /// long-valued one, and neither implies the other.
+    /// </summary>
+    private static string? Validate(SaveDashboardBlockRequest block)
+    {
+        if (block.Options is not { Count: > 0 } options) return null;
+
+        if (options.Count > MaxOptionKeysPerBlock)
+        {
+            return $"too many options for block '{block.Key}'";
+        }
+
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(options, JsonWeb).Length;
+        return bytes > MaxOptionsBytesPerBlock
+            ? $"options for block '{block.Key}' are too large"
+            : null;
     }
 
     private string? GetCurrentUserId() =>
@@ -210,7 +283,13 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
     // format are free to diverge, and the stored one is nullable everywhere
     // because it is read back from data this server may not have written.
 
-    private record StoredLayout(int SchemaVersion, string? Level, List<StoredBlock> Blocks);
+    // `Blocks` holds NULLABLE elements because that is what the column can
+    // legitimately contain: `"blocks":[null]` is valid jsonb, and the annotation
+    // must describe the data, not the wish.
+    private record StoredLayout(int SchemaVersion, string? Level, List<StoredBlock?> Blocks);
 
     private record StoredBlock(string? Key, string? Size, bool Hidden, Dictionary<string, JsonElement>? Options);
+
+    /// <summary>A document that survived <see cref="Parse"/>: no null blocks.</summary>
+    private record ParsedLayout(string? Level, List<StoredBlock> Blocks);
 }

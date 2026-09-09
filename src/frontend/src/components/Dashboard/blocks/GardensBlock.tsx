@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -101,6 +102,16 @@ export default function GardensBlock({
   const [deleteTarget, setDeleteTarget] = useState<GardenListItem | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
+  /**
+   * EVERY way the rename dialog closes (round 1, E9 / G4). Clearing the error
+   * here is the point: it is raised inside a modal, so leaving it behind put a
+   * failure message on the widget frame with no subject left to explain it.
+   */
+  const closeEditDialog = () => {
+    setEditingGarden(null);
+    setMutationError(false);
+  };
+
   const handleEdit = async () => {
     if (!editingGarden || isMutating) return;
     setIsMutating(true);
@@ -111,7 +122,7 @@ export default function GardensBlock({
         editName,
         editDescription || undefined
       );
-      setEditingGarden(null);
+      closeEditDialog();
       onChanged();
     } catch {
       setMutationError(true);
@@ -124,6 +135,7 @@ export default function GardensBlock({
     setEditingGarden(garden);
     setEditName(garden.name);
     setEditDescription(garden.description ?? '');
+    setMutationError(false);
   };
 
   const openDeleteDialog = (garden: GardenListItem) => {
@@ -299,6 +311,11 @@ export default function GardensBlock({
         sx={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+          // Rows are centred rather than packed at the top (round 1, V3): two
+          // gardens in a Large card left the bottom half empty. When the list
+          // outgrows the card the parent scrolls, as before.
+          alignContent: 'center',
+          minHeight: '100%',
           gap: '12px',
         }}
       >
@@ -401,28 +418,6 @@ export default function GardensBlock({
                     {garden.description}
                   </Typography>
                 )}
-                {garden.description && garden.description.length > 80 && (
-                  <Button
-                    variant="text"
-                    size="small"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      toggleDescription(garden.id);
-                    }}
-                    sx={{
-                      mt: 0.5,
-                      mb: 1,
-                      p: 0,
-                      minWidth: 0,
-                      fontSize: DASHBOARD_TYPE.chip,
-                    }}
-                  >
-                    {expandedDescriptions.has(garden.id)
-                      ? t('gardens.seeLess')
-                      : t('gardens.seeMore')}
-                  </Button>
-                )}
                 {/* Counter + preview = DISTINCT plants actually placed in the
                     map (SMA-6) - names through the shared Library resolver. */}
                 <Chip
@@ -456,6 +451,26 @@ export default function GardensBlock({
                 )}
               </CardContent>
             </CardActionArea>
+
+            {/* OUTSIDE the CardActionArea (round 1, E7): the action area is an
+                anchor, and a <button> nested in an <a> is invalid HTML that
+                assistive technology cannot resolve into two targets. The
+                preventDefault/stopPropagation pair hid the symptom in a
+                browser; moving the control out removes the nesting. */}
+            {garden.description && garden.description.length > 80 && (
+              <Box sx={{ px: 2, pb: 1 }}>
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={() => toggleDescription(garden.id)}
+                  sx={{ p: 0, minWidth: 0, fontSize: DASHBOARD_TYPE.chip }}
+                >
+                  {expandedDescriptions.has(garden.id)
+                    ? t('gardens.seeLess')
+                    : t('gardens.seeMore')}
+                </Button>
+              </Box>
+            )}
           </Card>
         ))}
       </Box>
@@ -515,28 +530,26 @@ export default function GardensBlock({
       editing={editing}
       chip={!loading && !loadError && gardens.length > 0 ? countChip : undefined}
     >
-      {mutationError && (
-        <Typography
-          sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'error.main' }}
-        >
-          {t('gardens.mutationError')}
-        </Typography>
-      )}
       {body()}
 
       <Dialog
         open={editingGarden !== null}
-        onClose={() => setEditingGarden(null)}
+        onClose={closeEditDialog}
         maxWidth="sm"
         fullWidth
       >
         <DialogTitle>{t('gardens.editDialogTitle')}</DialogTitle>
         <DialogContent>
+          {mutationError && (
+            <Alert severity="error" sx={{ mb: 1 }}>
+              {t('gardens.mutationError')}
+            </Alert>
+          )}
           <TextField
             label={t('gardens.gardenName')}
             fullWidth
             required
-            inputProps={{ maxLength: 100 }}
+            slotProps={{ htmlInput: { maxLength: 100 } }}
             value={editName}
             onChange={(event) => setEditName(event.target.value)}
             sx={{ mt: 1, mb: 2 }}
@@ -546,15 +559,13 @@ export default function GardensBlock({
             fullWidth
             multiline
             rows={3}
-            inputProps={{ maxLength: 500 }}
+            slotProps={{ htmlInput: { maxLength: 500 } }}
             value={editDescription}
             onChange={(event) => setEditDescription(event.target.value)}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditingGarden(null)}>
-            {t('gardens.cancel')}
-          </Button>
+          <Button onClick={closeEditDialog}>{t('gardens.cancel')}</Button>
           <Button
             variant="contained"
             disabled={isMutating || !editName.trim()}

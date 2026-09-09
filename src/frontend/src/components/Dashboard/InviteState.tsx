@@ -43,8 +43,16 @@ export default function InviteState({
 
   return (
     <Box
+      data-invite-panel
       sx={{
-        flex: 1,
+        // NOT `flex: 1` (round 1, V3): the panel takes the height of what it
+        // says and sits in the middle of the card, instead of stretching a
+        // tinted rectangle over a Large widget. `margin: auto` is what centres
+        // it — vertically and horizontally — inside the card's flex column,
+        // and the card keeps the grid footprint its size gives it.
+        m: 'auto',
+        width: '100%',
+        maxWidth: 360,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -54,7 +62,7 @@ export default function InviteState({
         p: '16px',
         borderRadius: '10px',
         backgroundColor: tk.invBg,
-        border: `1px solid ${tk.invBd}`,
+        border: `1px dashed ${tk.invBd}`,
       }}
     >
       <Box

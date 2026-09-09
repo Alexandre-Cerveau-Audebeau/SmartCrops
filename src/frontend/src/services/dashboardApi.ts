@@ -1,7 +1,12 @@
-import type {
-  DashboardPreferences,
-  SaveDashboardPreferences,
+import {
+  isDashboardBlockKey,
+  isDashboardLevel,
+  isDashboardSize,
+  type DashboardBlock,
+  type DashboardPreferences,
+  type SaveDashboardPreferences,
 } from '../types/Dashboard';
+import { DEFAULT_DASHBOARD_LEVEL, presetFor } from '../constants/dashboardPresets';
 import { fetchJson } from './fetchJson';
 
 const API_BASE = '/api';
@@ -10,26 +15,102 @@ const API_BASE = '/api';
 // HttpOnly auth cookie flows (SMA-280 policy: every call site states it).
 
 /**
- * The caller's layout. Never 404s: a user who has never saved one receives
- * their level preset with `isPreset: true`.
+ * SMA-336 round 1 (E17) — the service boundary is where an untrusted body
+ * becomes the typed layout the rest of the app relies on.
+ *
+ * `fetchJson` parses the body and hands it back as `T` WITHOUT any runtime
+ * check, so a block key this build does not know reaches `BLOCK_ICONS`, yields
+ * `undefined`, and rendering `<Icon />` throws in the Customize gallery or in a
+ * widget. The server is careful, but it is not the only thing that can be on
+ * the other end of this call: an older client meeting a newer server, a proxy,
+ * a replayed cache. Normalizing here costs one pass and removes the crash.
+ *
+ * Unknown block keys and invalid sizes are DROPPED, an unknown level falls back
+ * to the default, and a document from which nothing survives falls back to that
+ * level's preset — the same principle the server applies on read: a stored
+ * layout must never be able to keep someone out of their own dashboard.
+ */
+function normalizeBlock(value: unknown): DashboardBlock | null {
+  if (typeof value !== 'object' || value === null) return null;
+
+  const block = value as { key?: unknown; size?: unknown; hidden?: unknown; options?: unknown };
+  if (typeof block.key !== 'string' || !isDashboardBlockKey(block.key)) return null;
+  if (typeof block.size !== 'string' || !isDashboardSize(block.size)) return null;
+
+  const normalized: DashboardBlock = {
+    key: block.key,
+    size: block.size,
+    hidden: block.hidden === true,
+  };
+
+  // `options` is carried only when there is something to carry: an invented
+  // `options: null` would make every normalized block differ structurally from
+  // the presets the client compares against and re-sends.
+  if (typeof block.options === 'object' && block.options !== null) {
+    normalized.options = block.options as Record<string, unknown>;
+  }
+
+  return normalized;
+}
+
+function normalize(raw: unknown): DashboardPreferences {
+  const source = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+
+  const level =
+    typeof source.level === 'string' && isDashboardLevel(source.level)
+      ? source.level
+      : DEFAULT_DASHBOARD_LEVEL;
+
+  const blocks = Array.isArray(source.blocks)
+    ? source.blocks.map(normalizeBlock).filter((block): block is DashboardBlock => block !== null)
+    : [];
+
+  return {
+    schemaVersion: typeof source.schemaVersion === 'number' ? source.schemaVersion : 0,
+    level,
+    isPreset: source.isPreset === true,
+    // Nothing usable came back: show the level's preset rather than an empty
+    // grid, which would read as "you have no widgets" instead of "we could not
+    // read your layout".
+    blocks: blocks.length > 0 ? blocks : presetFor(level),
+    updatedAt: typeof source.updatedAt === 'string' ? source.updatedAt : null,
+  };
+}
+
+/**
+ * The caller's layout, normalized. Never 404s: a user who has never saved one
+ * receives their level preset with `isPreset: true`.
  */
 export async function fetchDashboardPreferences(
   signal?: AbortSignal
 ): Promise<DashboardPreferences> {
-  return fetchJson<DashboardPreferences>(`${API_BASE}/dashboard/preferences`, {
+  const raw = await fetchJson<unknown>(`${API_BASE}/dashboard/preferences`, {
     credentials: 'include',
     signal,
   });
+
+  return normalize(raw);
 }
 
-/** Replaces the layout wholesale; 204 on success (fetchJson resolves void). */
+/**
+ * Replaces the layout wholesale; 204 on success (fetchJson resolves void).
+ *
+ * `keepalive` is for the page-teardown write only (SMA-336 round 1, E12): a
+ * plain fetch started from an unload path may be cancelled with the document,
+ * while a keepalive request outlives it. Best-effort delivery, not an
+ * acknowledgement — and browsers cap the aggregate keepalive body at roughly
+ * 64 KiB, which the bounded options of `DashboardController` keep this payload
+ * well under.
+ */
 export async function saveDashboardPreferences(
-  preferences: SaveDashboardPreferences
+  preferences: SaveDashboardPreferences,
+  keepalive = false
 ): Promise<void> {
   return fetchJson<void>(`${API_BASE}/dashboard/preferences`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
+    keepalive,
     body: JSON.stringify(preferences),
   });
 }

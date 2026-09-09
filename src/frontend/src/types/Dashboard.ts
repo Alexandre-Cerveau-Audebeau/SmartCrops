@@ -37,7 +37,7 @@ export type DashboardLevel = (typeof DASHBOARD_LEVELS)[number];
  * no path to a garden or to the planner. The server refuses to store
  * `hidden: true` on it and ignores it on read (DashboardController.Merge).
  */
-export const NON_HIDABLE_BLOCK: DashboardBlockKey = 'gardens';
+export const NON_HIDABLE_BLOCK = 'gardens' satisfies DashboardBlockKey;
 
 /**
  * One widget in the layout. Position is the INDEX in
@@ -74,6 +74,10 @@ export function isDashboardBlockKey(value: string): value is DashboardBlockKey {
 
 export function isDashboardLevel(value: string): value is DashboardLevel {
   return (DASHBOARD_LEVELS as readonly string[]).includes(value);
+}
+
+export function isDashboardSize(value: string): value is DashboardSize {
+  return (DASHBOARD_SIZES as readonly string[]).includes(value);
 }
 
 /**

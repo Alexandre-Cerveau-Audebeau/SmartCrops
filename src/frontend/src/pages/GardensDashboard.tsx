@@ -116,6 +116,19 @@ export default function GardensDashboard() {
     }
   }, [navState, navigate, location.pathname, location.search, location.hash]);
 
+  /**
+   * EVERY way the create dialog closes (round 1, E15). Both close paths used to
+   * flip the open flag alone, so a failed creation left its error and the typed
+   * name behind, and the next opening started on the previous attempt.
+   */
+  const closeCreateDialog = () => {
+    if (isMutating) return;
+    setCreateDialogOpen(false);
+    setCreateError(false);
+    setNewGardenName('');
+    setNewGardenDescription('');
+  };
+
   const handleCreate = async () => {
     if (isMutating) return;
     setIsMutating(true);
@@ -123,6 +136,7 @@ export default function GardensDashboard() {
     try {
       await createGarden(newGardenName, newGardenDescription || undefined);
       setCreateDialogOpen(false);
+      setCreateError(false);
       setNewGardenName('');
       setNewGardenDescription('');
       refetch();
@@ -179,7 +193,15 @@ export default function GardensDashboard() {
         }}
       >
         <Box>
-          <Typography variant="h4" fontWeight={700} color="primary">
+          {/* h1 with the h4 look (round 1, E16 / G5): every DashboardBlock
+              title is an h2, so an <h4> page title put the widgets above the
+              page in the heading hierarchy. */}
+          <Typography
+            variant="h4"
+            component="h1"
+            fontWeight={700}
+            color="primary"
+          >
             {t('gardens.title')}
           </Typography>
           {!gardensLoading && !gardensError && (
@@ -319,7 +341,7 @@ export default function GardensDashboard() {
 
       <Dialog
         open={createDialogOpen}
-        onClose={() => setCreateDialogOpen(false)}
+        onClose={closeCreateDialog}
         maxWidth="sm"
         fullWidth
       >
@@ -334,7 +356,7 @@ export default function GardensDashboard() {
             label={t('gardens.gardenName')}
             fullWidth
             required
-            inputProps={{ maxLength: 100 }}
+            slotProps={{ htmlInput: { maxLength: 100 } }}
             value={newGardenName}
             onChange={(event) => setNewGardenName(event.target.value)}
             sx={{ mt: 1, mb: 2 }}
@@ -344,15 +366,13 @@ export default function GardensDashboard() {
             fullWidth
             multiline
             rows={3}
-            inputProps={{ maxLength: 500 }}
+            slotProps={{ htmlInput: { maxLength: 500 } }}
             value={newGardenDescription}
             onChange={(event) => setNewGardenDescription(event.target.value)}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setCreateDialogOpen(false)}>
-            {t('gardens.cancel')}
-          </Button>
+          <Button onClick={closeCreateDialog}>{t('gardens.cancel')}</Button>
           <Button
             variant="contained"
             disabled={isMutating || !newGardenName.trim()}
