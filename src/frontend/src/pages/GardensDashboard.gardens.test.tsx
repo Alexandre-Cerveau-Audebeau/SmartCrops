@@ -418,6 +418,48 @@ describe('Gardens widget rename errors (SMA-336 round 1)', () => {
     ).toBeNull();
   });
 
+  it('refuses to close while the rename is in flight, and reports its failure', async () => {
+    // Round 2 (E'5 / N2). Save is disabled during the request, but Cancel, the
+    // backdrop and Escape still reached `closeEditDialog`: the Dialog unmounted
+    // with the Alert inside it, and a rename that then failed was reported
+    // nowhere. Same close contract as the page's create dialog.
+    let reject: (reason: Error) => void = () => {};
+    vi.mocked(updateGarden).mockImplementation(
+      () => new Promise((_, rejectIt) => (reject = rejectIt))
+    );
+    const dialog = await openRenameDialog();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(updateGarden).toHaveBeenCalled());
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' });
+
+    // PAST the close transition, not in the same tick: MUI keeps a closing
+    // Dialog mounted for its 195ms exit, so an assertion fired straight after
+    // the click passes whether the handler refused to close or not.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+    expect(
+      screen.getByRole('dialog', { name: 'Edit garden' })
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      reject(new Error('boom'));
+      await Promise.resolve();
+    });
+
+    expect(
+      await within(dialog).findByText('An error occurred. Please try again.')
+    ).toBeInTheDocument();
+    // And once the mutation is over, the dialog closes normally again.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit garden' })).toBeNull()
+    );
+  });
+
   it('closes and refetches when the rename succeeds', async () => {
     vi.mocked(updateGarden).mockResolvedValue({ id: 'g1', name: 'Casa Lolo' });
     const dialog = await openRenameDialog();

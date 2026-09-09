@@ -124,6 +124,82 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     expect(preferences.updatedAt).toBeNull();
   });
 
+  it('keeps a valid `options` object', async () => {
+    mockFetch({
+      schemaVersion: 1,
+      level: 'gardener',
+      isPreset: false,
+      blocks: [
+        { key: 'gardens', size: 'large', hidden: false, options: { pinned: true } },
+      ],
+      updatedAt: null,
+    });
+
+    const preferences = await fetchDashboardPreferences();
+
+    expect(preferences.blocks[0]!.options).toEqual({ pinned: true });
+  });
+
+  it('omits `options` rather than inventing a null one', async () => {
+    // Round 2 (E'7). A structural difference from the preset would make every
+    // block read as « adjusted » and re-send a layout the user never changed —
+    // `isAdjusted` compares the normalized blocks against `presetFor`.
+    mockFetch({
+      schemaVersion: 1,
+      level: 'gardener',
+      isPreset: false,
+      blocks: [{ key: 'gardens', size: 'large', hidden: false, options: null }],
+      updatedAt: null,
+    });
+
+    const preferences = await fetchDashboardPreferences();
+
+    expect('options' in preferences.blocks[0]!).toBe(false);
+  });
+
+  it('refuses an ARRAY as `options` — `typeof` alone lets one through', async () => {
+    // Round 2 (N5): assigned to Record<string, unknown>, an array comes back out
+    // on the next write, where the endpoint binds a Dictionary and rejects it.
+    mockFetch({
+      schemaVersion: 1,
+      level: 'gardener',
+      isPreset: false,
+      blocks: [
+        { key: 'gardens', size: 'large', hidden: false, options: ['a', 'b'] },
+      ],
+      updatedAt: null,
+    });
+
+    const preferences = await fetchDashboardPreferences();
+
+    expect('options' in preferences.blocks[0]!).toBe(false);
+  });
+
+  it('keeps the FIRST of two blocks sharing a key', async () => {
+    // Round 2 (E'8): `key` is the identity React, SortableContext and the
+    // `indexOf` of handleDragEnd all sort by. Two blocks under one key make the
+    // grid reorder the wrong slot.
+    mockFetch({
+      schemaVersion: 1,
+      level: 'gardener',
+      isPreset: false,
+      blocks: [
+        { key: 'gardens', size: 'large', hidden: false },
+        { key: 'weather', size: 'medium', hidden: false },
+        { key: 'gardens', size: 'small', hidden: false },
+      ],
+      updatedAt: null,
+    });
+
+    const preferences = await fetchDashboardPreferences();
+
+    expect(preferences.blocks.map((block) => block.key)).toEqual([
+      'gardens',
+      'weather',
+    ]);
+    expect(preferences.blocks[0]!.size).toBe('large');
+  });
+
   it('coerces a non-boolean `hidden` instead of trusting it', async () => {
     mockFetch({
       schemaVersion: 1,
@@ -164,5 +240,24 @@ describe('saveDashboardPreferences (SMA-336)', () => {
     );
 
     expect(fetchSpy.mock.calls[0]![1].keepalive).toBe(true);
+  });
+
+  it('forwards the caller signal so a superseded write can be cancelled', async () => {
+    // Round 2 (E'6 / N4): the teardown write aborts the ordinary one it
+    // replaces, which only works if the signal reaches `fetchJson`. Asserted by
+    // ABORTING it — `fetchJson` builds its own controller and would hand fetch
+    // an AbortSignal either way, so the instance proves nothing.
+    const fetchSpy = mockFetch(null, 204);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      saveDashboardPreferences(
+        { level: 'gardener', blocks: presetFor('gardener') },
+        false,
+        controller.signal
+      )
+    ).rejects.toThrow();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

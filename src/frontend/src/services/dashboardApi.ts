@@ -3,6 +3,7 @@ import {
   isDashboardLevel,
   isDashboardSize,
   type DashboardBlock,
+  type DashboardBlockKey,
   type DashboardPreferences,
   type SaveDashboardPreferences,
 } from '../types/Dashboard';
@@ -46,7 +47,17 @@ function normalizeBlock(value: unknown): DashboardBlock | null {
   // `options` is carried only when there is something to carry: an invented
   // `options: null` would make every normalized block differ structurally from
   // the presets the client compares against and re-sends.
-  if (typeof block.options === 'object' && block.options !== null) {
+  //
+  // An array passes `typeof === 'object'` (round 2, N5), and one assigned to
+  // `Record<string, unknown>` comes straight back out on the next debounced
+  // write, where `SaveDashboardBlockRequest.Options` binds a
+  // `Dictionary<string, JsonElement>` and the PUT fails validation — an error
+  // state the user has no gesture to clear.
+  if (
+    typeof block.options === 'object' &&
+    block.options !== null &&
+    !Array.isArray(block.options)
+  ) {
     normalized.options = block.options as Record<string, unknown>;
   }
 
@@ -61,9 +72,20 @@ function normalize(raw: unknown): DashboardPreferences {
       ? source.level
       : DEFAULT_DASHBOARD_LEVEL;
 
-  const blocks = Array.isArray(source.blocks)
-    ? source.blocks.map(normalizeBlock).filter((block): block is DashboardBlock => block !== null)
-    : [];
+  // `key` is the identity the grid sorts by (round 2, E'8): React keys,
+  // `SortableContext` items, the `indexOf` of `handleDragEnd`, and the match
+  // `patchBlock` updates. The controller rejects duplicates on write and drops
+  // them on read, but `normalize` exists precisely for the response THIS server
+  // did not write — so the first occurrence wins here too.
+  const seen = new Set<DashboardBlockKey>();
+  const blocks = (Array.isArray(source.blocks) ? source.blocks : [])
+    .map(normalizeBlock)
+    .filter((block): block is DashboardBlock => block !== null)
+    .filter((block) => {
+      if (seen.has(block.key)) return false;
+      seen.add(block.key);
+      return true;
+    });
 
   return {
     schemaVersion: typeof source.schemaVersion === 'number' ? source.schemaVersion : 0,
@@ -101,16 +123,23 @@ export async function fetchDashboardPreferences(
  * acknowledgement — and browsers cap the aggregate keepalive body at roughly
  * 64 KiB, which the bounded options of `DashboardController` keep this payload
  * well under.
+ *
+ * `signal` cancels an ordinary write that a teardown write has superseded
+ * (round 2, E'6 / N4): the endpoint replaces the layout wholesale, so an older
+ * PUT still on the wire would restore the arrangement the user has just moved
+ * past. The teardown write itself is never given one.
  */
 export async function saveDashboardPreferences(
   preferences: SaveDashboardPreferences,
-  keepalive = false
+  keepalive = false,
+  signal?: AbortSignal
 ): Promise<void> {
   return fetchJson<void>(`${API_BASE}/dashboard/preferences`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     keepalive,
+    signal,
     body: JSON.stringify(preferences),
   });
 }

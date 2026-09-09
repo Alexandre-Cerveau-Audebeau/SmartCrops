@@ -63,15 +63,59 @@ export function useDashboardPreferences() {
   // older one lands last, the server keeps the older layout and the user's
   // final arrangement is gone with no error shown. Chaining orders them.
   const chainRef = useRef<Promise<unknown>>(Promise.resolve());
+  // The ordinary write currently ON THE WIRE, and whether a teardown write has
+  // superseded the ordinary lane (round 2, E'6 / N4 — see `send`).
+  const inFlightRef = useRef<AbortController | null>(null);
+  const supersededRef = useRef(false);
 
   const send = useCallback((next: Layout, keepalive: boolean) => {
+    if (keepalive) {
+      // THE TEARDOWN LANE (round 2, E'6 / N4). Two rules, and they are not the
+      // same rule.
+      //
+      // 1. Issue it NOW, outside the chain. Chaining only queues a microtask,
+      //    and a microtask queued while the document unloads is not guaranteed
+      //    to run: no request is ever created. `keepalive` keeps a request that
+      //    has ALREADY left alive past the document; it cannot resurrect one
+      //    that was never sent.
+      // 2. Cancel what it supersedes. The endpoint replaces the layout
+      //    wholesale, so an older PUT landing after this one restores the
+      //    arrangement the user has just moved past. This layout is the newest
+      //    by construction — `flush` only reaches here with a pending write —
+      //    so the older ones have nothing to carry that this one does not: the
+      //    request on the wire is aborted, the ones still queued are dropped.
+      //    Client-side only: a request the server has already handled cannot be
+      //    recalled, which would take a conditional write on the endpoint.
+      //
+      // When nothing is pending, `flush` returns before calling `send` at all,
+      // so an in-flight ordinary write is left alone — it is then the newest.
+      supersededRef.current = true;
+      inFlightRef.current?.abort();
+      inFlightRef.current = null;
+
+      const urgent = saveDashboardPreferences(next, true);
+      chainRef.current = urgent.catch(() => {});
+      return urgent;
+    }
+
+    const controller = new AbortController();
     const sent = chainRef.current
       .catch(() => {})
-      .then(() =>
-        // The one-argument call is kept for the ordinary path so the request
-        // carries no keepalive flag it does not need.
-        keepalive ? saveDashboardPreferences(next, true) : saveDashboardPreferences(next)
-      );
+      .then(() => {
+        if (supersededRef.current) return;
+        inFlightRef.current = controller;
+        return saveDashboardPreferences(next, false, controller.signal);
+      })
+      .catch((error: unknown) => {
+        // Our own abort: a supersession, not a failure. Reporting « error » for
+        // it would put a red state on a layout that WAS written, by the
+        // teardown request that replaced this one.
+        if (controller.signal.aborted) return;
+        throw error;
+      })
+      .finally(() => {
+        if (inFlightRef.current === controller) inFlightRef.current = null;
+      });
     chainRef.current = sent.catch(() => {});
     return sent;
   }, []);
@@ -94,6 +138,10 @@ export function useDashboardPreferences() {
 
   const schedule = useCallback(
     (next: Layout) => {
+      // A new local change re-opens the ordinary lane: `pagehide` also fires on
+      // a navigation the back/forward cache can restore, and the page that
+      // comes back must still be able to save.
+      supersededRef.current = false;
       pendingRef.current = next;
       setSaveState('pending');
       if (timerRef.current !== null) clearTimeout(timerRef.current);

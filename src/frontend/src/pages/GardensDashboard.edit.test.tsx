@@ -11,7 +11,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { presetFor } from '../constants/dashboardPresets';
-import type { DashboardBlock, DashboardLevel } from '../types/Dashboard';
+import type {
+  DashboardBlock,
+  DashboardLevel,
+  DashboardSize,
+} from '../types/Dashboard';
 
 vi.mock('../services/gardenApi', () => ({
   fetchGardens: vi.fn(),
@@ -42,12 +46,21 @@ import {
  * The same jsdom gap as the shared ResizeObserver stub (SMA-426), scoped to
  * this file because only the drag-and-drop tests need a laid-out page.
  */
-function stubGridGeometry() {
+function stubGridGeometry(sizes?: Record<string, DashboardSize>) {
   const originalRect = Element.prototype.getBoundingClientRect;
   const originalScroll = Element.prototype.scrollIntoView;
   const WIDTH = 280;
   const HEIGHT = 200;
   const GUTTER = 20;
+
+  // The three footprints of `_spec.md` § 1, in the same 280px column and 20px
+  // gutter. Only the tests that need DIFFERENT sizes ask for them (round 2, V4):
+  // every other drag test keeps the uniform geometry it was written against.
+  const FOOTPRINTS: Record<DashboardSize, { width: number; height: number }> = {
+    small: { width: WIDTH, height: HEIGHT },
+    medium: { width: WIDTH * 2 + GUTTER, height: HEIGHT },
+    large: { width: WIDTH * 2 + GUTTER, height: HEIGHT * 2 + GUTTER },
+  };
 
   const keyOf = (element: Element): string | null =>
     element.getAttribute('data-widget') ??
@@ -65,6 +78,20 @@ function stubGridGeometry() {
       return {
         x: 0, y: 0, top: 0, left: 0, right: 1200, bottom: 800,
         width: 1200, height: 800, toJSON: () => ({}),
+      } as DOMRect;
+    }
+    if (sizes) {
+      // One row, left to right, each widget as wide and as tall as its size.
+      let left = 0;
+      for (const previous of order.slice(0, index)) {
+        left += FOOTPRINTS[sizes[previous!] ?? 'medium']!.width + GUTTER;
+      }
+      const { width, height } = FOOTPRINTS[sizes[key!] ?? 'medium']!;
+      return {
+        x: left, y: 0, top: 0, left,
+        right: left + width, bottom: height,
+        width, height,
+        toJSON: () => ({}),
       } as DOMRect;
     }
     const left = (index % 4) * (WIDTH + GUTTER);
@@ -124,12 +151,27 @@ function renderPage() {
   );
 }
 
-/** Renders, waits for the grid and switches the page into Edit mode. */
-async function enterEditMode(level: DashboardLevel = 'gardener') {
-  servePreferences(level);
+/**
+ * Renders, waits for the grid and switches the page into Edit mode.
+ *
+ * The explicit timeout is the SMA-174 rule applied one level down: `findBy*`
+ * carries Testing Library's OWN 1 000 ms default, which the package.json
+ * `--testTimeout=20000` does not touch. Both waits are for the page to render,
+ * and under a full-suite load this file has lost that race — the assertions
+ * that follow are unaffected, only the patience of the wait changes.
+ */
+const RENDER_TIMEOUT = { timeout: 20000 };
+
+async function enterEditMode(
+  level: DashboardLevel = 'gardener',
+  blocks: DashboardBlock[] = presetFor(level)
+) {
+  servePreferences(level, blocks);
   renderPage();
-  fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-  return await screen.findByRole('button', { name: 'Done' });
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT)
+  );
+  return await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
 }
 
 /**
@@ -410,6 +452,30 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
     );
   });
 
+  it('keeps the dragging slot perceivable while the keyboard holds it', async () => {
+    // Round 2 (N3): `opacity: 0` on the slot applied to the whole subtree, the
+    // focused drag handle included — dnd-kit keeps DOM focus there for the
+    // length of a keyboard move, so the focus indicator went invisible with it.
+    await enterEditMode();
+
+    const handle = screen.getByRole('button', { name: 'Move Weather' });
+    handle.focus();
+    fireEvent.keyDown(handle, { code: 'Space', key: ' ' });
+    await settle();
+
+    const slot = sortableNode('weather');
+    expect(slot.contains(document.activeElement)).toBe(true);
+    // The slot is not what disappears...
+    expect(getComputedStyle(slot).opacity).not.toBe('0');
+    expect(getComputedStyle(slot).outline).toContain('dashed');
+    // ...the card inside it is, so the DragOverlay stays the only visible copy.
+    expect(
+      getComputedStyle(slot.firstElementChild as HTMLElement).opacity
+    ).toBe('0');
+
+    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+  });
+
   it('Escape cancels the move and leaves the order — and the server — untouched', async () => {
     await enterEditMode();
 
@@ -462,5 +528,75 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
       'stats',
       'harvest',
     ]);
+  });
+});
+
+// ── Round 2, V4: the neighbours of a dragged widget must MOVE, not deform.
+describe('GardensDashboard — drag transforms (SMA-336 round 2, V4)', () => {
+  let restoreGeometry: () => void;
+
+  // Footprints that DIFFER, which is the whole point: `rectSortingStrategy`
+  // returns `scaleX: newRect.width / oldRect.width` (and the same for the
+  // height), so a grid of equal cells hides the bug and this grid does not.
+  const sizes = {
+    weather: 'small',
+    gardens: 'large',
+    tips: 'medium',
+    month: 'medium',
+    todo: 'medium',
+    counters: 'medium',
+    stats: 'medium',
+    harvest: 'medium',
+  } as const satisfies Record<string, DashboardSize>;
+
+  const mixedBlocks = () => {
+    const blocks = presetFor('gardener');
+    for (const block of blocks) block.size = sizes[block.key];
+    return blocks;
+  };
+
+  beforeEach(() => {
+    restoreGeometry = stubGridGeometry(sizes);
+  });
+
+  afterEach(() => restoreGeometry());
+
+  it('translates a neighbour out of the way without scaling it', async () => {
+    // Before the fix the applied transform read
+    // `translate3d(...) scaleX(0.4827...) scaleY(0.4761...)`: a Large pushed
+    // aside by a Small was drawn shrunk to the Small's proportions until the
+    // drop. `CSS.Translate.toString` keeps the movement and drops the ratios.
+    await enterEditMode('gardener', mixedBlocks());
+
+    const handle = screen.getByRole('button', { name: 'Move Weather' });
+    handle.focus();
+    fireEvent.keyDown(handle, { code: 'Space', key: ' ' });
+    await settle();
+    fireEvent.keyDown(handle, { code: 'ArrowRight', key: 'ArrowRight' });
+    await settle();
+
+    const neighbour = sortableNode('gardens').getAttribute('style') ?? '';
+    expect(neighbour).toContain('transform');
+    expect(neighbour).toContain('translate3d');
+    expect(neighbour).not.toMatch(/scale/i);
+
+    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+  });
+
+  it('scales nothing on the widget being dragged either', async () => {
+    await enterEditMode('gardener', mixedBlocks());
+
+    const handle = screen.getByRole('button', { name: 'Move Weather' });
+    handle.focus();
+    fireEvent.keyDown(handle, { code: 'Space', key: ' ' });
+    await settle();
+    fireEvent.keyDown(handle, { code: 'ArrowRight', key: 'ArrowRight' });
+    await settle();
+
+    expect(sortableNode('weather').getAttribute('style') ?? '').not.toMatch(
+      /scale/i
+    );
+
+    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
   });
 });

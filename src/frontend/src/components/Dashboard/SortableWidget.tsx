@@ -90,7 +90,14 @@ export default function SortableWidget({
   return (
     <Box
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      // TRANSLATION ONLY (round 2, V4). `rectSortingStrategy` returns
+      // `scaleX: newRect.width / oldRect.width` and the same for the height, and
+      // `CSS.Transform.toString` appends both to the translation. On a uniform
+      // list those ratios are 1; this grid mixes 1x1, 2x1 and 2x2 footprints, so
+      // a Small pushed aside by a Large was drawn stretched to the Large's
+      // proportions for the length of the drag. `CSS.Translate.toString` emits
+      // the `translate3d` alone — the widget moves, it does not deform.
+      style={{ transform: CSS.Translate.toString(transform), transition }}
       sx={{
         minWidth: 0,
         gridColumn: {
@@ -101,7 +108,18 @@ export default function SortableWidget({
         zIndex: isDragging ? 2 : 'auto',
         // The dragged widget is carried by the DragOverlay; its slot stays in
         // the grid so the neighbours reflow around a hole of the right size.
-        opacity: isDragging ? 0 : 1,
+        //
+        // The CARD goes transparent, not the slot (round 2, N3): dnd-kit keeps
+        // DOM focus on the drag handle inside it for the whole of a keyboard
+        // move, and `opacity: 0` on the slot took the focus indicator with it —
+        // a keyboard user had nothing on screen telling them what they held.
+        // The slot itself keeps a dashed outline where that focus is.
+        ...(isDragging && {
+          '& > *': { opacity: 0 },
+          borderRadius: '12px',
+          outline: '2px dashed',
+          outlineColor: 'primary.main',
+        }),
       }}
     >
       {/* The wobble lives on an INNER wrapper (round 1, G6): keyframes outrank

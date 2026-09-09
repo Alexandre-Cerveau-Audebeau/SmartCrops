@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
+using Npgsql;
 using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Dashboard;
 using SmartCrops.Core.Entities;
@@ -44,6 +45,20 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
     private const int MaxOptionsBytesPerBlock = 2 * 1024;
 
     /// <summary>
+    /// Ceiling on the whole PUT body, in bytes (round 2, E'4 / N1). The per-block
+    /// ceilings above are applied by <c>Validate</c>, which runs AFTER model
+    /// binding has already materialized every block and every options
+    /// dictionary; this one is applied before, so an oversized document costs a
+    /// rejected request instead of a parsed one.
+    ///
+    /// <para>Derived from those ceilings rather than picked: eight blocks
+    /// (<see cref="DashboardLayout.Blocks"/>) x <see cref="MaxOptionsBytesPerBlock"/>
+    /// is 16 KiB of options, and the doubling leaves room for the JSON envelope
+    /// — keys, sizes, level, escaping — around them.</para>
+    /// </summary>
+    private const int MaxRequestBodyBytes = 2 * 8 * MaxOptionsBytesPerBlock;
+
+    /// <summary>
     /// The caller's layout, or the preset of their level when they have never
     /// saved one. Always 200 for an authenticated caller — never 404.
     /// </summary>
@@ -67,6 +82,7 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
     /// block.
     /// </summary>
     [HttpPut("preferences")]
+    [RequestSizeLimit(MaxRequestBodyBytes)]
     public async Task<IActionResult> PutPreferences(
         SaveDashboardPreferencesRequest request,
         CancellationToken ct = default)
@@ -86,7 +102,8 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
         {
             await UpsertAsync(userId, json, ct);
         }
-        catch (DbUpdateException) when (!ct.IsCancellationRequested)
+        catch (DbUpdateException ex)
+            when (!ct.IsCancellationRequested && IsUserRowConflict(ex))
         {
             // A concurrent FIRST save won the unique index on UserId: both
             // requests read no row, both inserted, one lost. The PUT replaces
@@ -99,6 +116,21 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
 
         return NoContent();
     }
+
+    /// <summary>
+    /// The ONE failure the retry above answers (round 2, E'3): the unique index
+    /// on <c>UserId</c> rejecting the second of two concurrent first inserts.
+    /// Any other write failure — a foreign key, a check constraint, a dead
+    /// connection — is not a race this endpoint can resolve by trying again,
+    /// and a blanket <see cref="DbUpdateException"/> filter would buy it a
+    /// second read-then-insert cycle before failing anyway.
+    /// </summary>
+    private static bool IsUserRowConflict(DbUpdateException ex) =>
+        ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: "IX_UserDashboardPreferences_UserId",
+        };
 
     /// <summary>
     /// Writes the document on the caller's row, creating it on first save.

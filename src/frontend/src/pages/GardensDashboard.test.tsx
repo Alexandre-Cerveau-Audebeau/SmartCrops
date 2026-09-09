@@ -329,6 +329,58 @@ describe('GardensDashboard — invitation layout (SMA-336 round 1, V3)', () => {
     expect(style.maxWidth).toBe('360px');
   });
 
+  it('stays compact on a phone, where the grid row is 200px (round 2, V5)', async () => {
+    // V3 held on a desktop and not on a phone, and the breakpoint-conditioned
+    // rule behind that is `DashboardGrid`'s `gridAutoRows: {xs: 200px, sm:
+    // 273px}`. A 200px card leaves about 128px of body once its 20px padding,
+    // its title row and its 12px gap are taken; the stacked panel — 44px disc
+    // ABOVE the sentence above « Bientôt disponible » — needed about 164px, so
+    // it overflowed and the card's `overflow: hidden` clipped a dashed frame
+    // edge to edge. The frozen artboards draw `.inv` as a ROW (disc beside the
+    // text): the same words then need about 119px. No media query is involved,
+    // which is what makes the rule hold at EVERY width.
+    servePreferences('novice');
+
+    renderPage();
+
+    await screen.findByText('The weather needs to know where your gardens are.');
+    const panel = document.querySelector('[data-invite-panel]') as HTMLElement;
+
+    // The phone geometry the panel has to fit inside: one column, 200px rows.
+    const grid = panel.closest('[data-widget]')!.parentElement!.parentElement!
+      .parentElement!;
+    const rulesFor = (node: Element) =>
+      [...document.querySelectorAll('style')]
+        .map((tag) => tag.textContent ?? '')
+        .filter((text) => text.includes(node.className.split(' ').pop()!));
+
+    const gridRules = rulesFor(grid);
+    expect(gridRules.some((text) => text.includes('grid-template-columns:1fr'))).toBe(true);
+    expect(gridRules.some((text) => text.includes('grid-auto-rows:200px'))).toBe(true);
+
+    const panelRules = rulesFor(panel);
+    expect(panelRules.length).toBeGreaterThan(0);
+    // Not stacked: that is the ~56px the phone card does not have.
+    expect(panelRules.some((text) => text.includes('flex-direction:column'))).toBe(false);
+    // And nothing keyed on a breakpoint, so no width restores the stretch.
+    expect(panelRules.some((text) => text.includes('@media'))).toBe(false);
+  });
+
+  it('gives the invitation icon a fixed disc that never squeezes the text', async () => {
+    servePreferences('novice');
+
+    renderPage();
+
+    await screen.findByText('The weather needs to know where your gardens are.');
+    const panel = document.querySelector('[data-invite-panel]') as HTMLElement;
+    const disc = panel.firstElementChild as HTMLElement;
+
+    // `.inv-ic` of the frozen artboards: 34px, `flex-shrink: 0` — the sentence
+    // wraps beside it instead of the disc collapsing on a narrow card.
+    expect(getComputedStyle(disc).width).toBe('34px');
+    expect(getComputedStyle(disc).flexShrink).toBe('0');
+  });
+
   it('draws the tinted ground and the dashed border around the content only', async () => {
     servePreferences('expert');
 
@@ -453,10 +505,11 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     await waitFor(() => expect(renderedKeys()).toHaveLength(8));
     expect(await screen.findByText('Expert view')).toBeInTheDocument();
     await waitFor(() =>
-      expect(saveDashboardPreferences).toHaveBeenCalledWith({
-        level: 'expert',
-        blocks: presetFor('expert'),
-      })
+      expect(saveDashboardPreferences).toHaveBeenCalledWith(
+        { level: 'expert', blocks: presetFor('expert') },
+        false,
+        expect.any(AbortSignal)
+      )
     );
   });
 

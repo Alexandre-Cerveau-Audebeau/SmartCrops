@@ -411,6 +411,10 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         var response = await Client.PutAsJsonAsync(Url, RequestWithOptions(options));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        // WHICH ceiling rejected it (round 2, E'2): the status code alone cannot
+        // tell the count ceiling from the byte ceiling, so this test and the next
+        // one would both stay green if the two bounds silently collapsed into one.
+        Assert.Contains("too many options", await response.Content.ReadAsStringAsync());
         await AssertNothingStoredAsync(userId);
     }
 
@@ -431,6 +435,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         var response = await Client.PutAsJsonAsync(Url, RequestWithOptions(options));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("are too large", await response.Content.ReadAsStringAsync());
         await AssertNothingStoredAsync(userId);
     }
 

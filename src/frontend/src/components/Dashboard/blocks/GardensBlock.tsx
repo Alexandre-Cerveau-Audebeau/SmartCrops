@@ -108,6 +108,12 @@ export default function GardensBlock({
    * failure message on the widget frame with no subject left to explain it.
    */
   const closeEditDialog = () => {
+    // Not while the rename is in flight (round 2, E'5 / N2). The Save button is
+    // disabled, but the backdrop and Escape still reach this handler: closing
+    // there unmounts the Dialog the error Alert lives in, so a rename that then
+    // fails is reported nowhere at all. Same contract as `closeCreateDialog` in
+    // GardensDashboard.tsx — the widget and the page close the same way.
+    if (isMutating) return;
     setEditingGarden(null);
     setMutationError(false);
   };
@@ -122,7 +128,10 @@ export default function GardensBlock({
         editName,
         editDescription || undefined
       );
-      closeEditDialog();
+      // Clears the state directly: `isMutating` is still true here (it falls in
+      // the `finally`), so the guarded close would refuse to run.
+      setEditingGarden(null);
+      setMutationError(false);
       onChanged();
     } catch {
       setMutationError(true);

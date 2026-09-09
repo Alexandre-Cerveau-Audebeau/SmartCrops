@@ -116,10 +116,13 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
     });
 
     expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
-    expect(saveDashboardPreferences).toHaveBeenCalledWith({
-      level: 'gardener',
-      blocks: second,
-    });
+    // The ordinary write is explicitly non-keepalive and CANCELLABLE since
+    // round 2 (E'6 / N4): a teardown write aborts the one it supersedes.
+    expect(saveDashboardPreferences).toHaveBeenCalledWith(
+      { level: 'gardener', blocks: second },
+      false,
+      expect.any(AbortSignal)
+    );
     // The resolved PUT is flushed by advancing 0 ms inside act — RTL's async
     // polling would stall under fake timers (the MyGardens toast idiom).
     await act(async () => {
@@ -155,10 +158,11 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
     expect(result.current.blocks).toEqual(presetFor('expert'));
     expect(result.current.adjusted).toBe(false);
     await waitFor(() =>
-      expect(saveDashboardPreferences).toHaveBeenCalledWith({
-        level: 'expert',
-        blocks: presetFor('expert'),
-      })
+      expect(saveDashboardPreferences).toHaveBeenCalledWith(
+        { level: 'expert', blocks: presetFor('expert') },
+        false,
+        expect.any(AbortSignal)
+      )
     );
   });
 
@@ -176,10 +180,11 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
     expect(result.current.blocks).toEqual(presetFor('gardener'));
     expect(result.current.adjusted).toBe(false);
     await waitFor(() =>
-      expect(saveDashboardPreferences).toHaveBeenCalledWith({
-        level: 'gardener',
-        blocks: presetFor('gardener'),
-      })
+      expect(saveDashboardPreferences).toHaveBeenCalledWith(
+        { level: 'gardener', blocks: presetFor('gardener') },
+        false,
+        expect.any(AbortSignal)
+      )
     );
   });
 
@@ -276,6 +281,104 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
       level: 'gardener',
       blocks: second,
     });
+    vi.useRealTimers();
+  });
+
+  it('issues the teardown write AT ONCE, without waiting for the PUT in flight', async () => {
+    // Round 2 (E'6 / N4). Chaining the keepalive write behind an unsettled PUT
+    // only queues a microtask, and a microtask queued while the document
+    // unloads is not guaranteed to run: the request is never created, and
+    // `keepalive` protects a request that already left, not one never sent.
+    // The trigger is ordinary — drag, wait out the debounce, drag again, close
+    // the tab while the first PUT is still on the wire.
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue(preferences());
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // The first PUT never settles: it stays in flight for the whole test.
+    vi.mocked(saveDashboardPreferences).mockImplementation(
+      () => new Promise<void>(() => {})
+    );
+
+    const first = presetFor('gardener');
+    first[0]!.size = 'small';
+    const second = presetFor('gardener');
+    second[0]!.size = 'large';
+
+    vi.useFakeTimers();
+    act(() => result.current.setBlocks(first));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.setBlocks(second));
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+
+    // No timer advanced, nothing settled: the teardown write has left already.
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(saveDashboardPreferences).mock.calls[1]).toEqual([
+      { level: 'gardener', blocks: second },
+      true,
+    ]);
+    vi.useRealTimers();
+  });
+
+  it('cancels the older writes the teardown write supersedes', async () => {
+    // The other half of N4: the endpoint replaces the layout WHOLESALE, so an
+    // older PUT landing after the teardown one restores the arrangement the
+    // user has just moved past. The one on the wire is aborted, the one still
+    // queued behind it is dropped.
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue(preferences());
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const settle: Array<() => void> = [];
+    vi.mocked(saveDashboardPreferences).mockImplementation(
+      () => new Promise<void>((resolve) => settle.push(resolve))
+    );
+
+    const first = presetFor('gardener');
+    first[0]!.size = 'small';
+    const second = presetFor('gardener');
+    second[0]!.size = 'large';
+    const third = presetFor('gardener');
+    third[1]!.size = 'large';
+
+    vi.useFakeTimers();
+    act(() => result.current.setBlocks(first));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    // The second write is queued behind the first, which is still in flight.
+    act(() => result.current.setBlocks(second));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.setBlocks(third));
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+
+    // The in-flight one is aborted...
+    const firstSignal = vi.mocked(saveDashboardPreferences).mock
+      .calls[0]![2] as AbortSignal;
+    expect(firstSignal.aborted).toBe(true);
+
+    // ...and the queued one never leaves, even once the first settles.
+    settle[0]!();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(saveDashboardPreferences).mock.calls[1]![1]).toBe(true);
+    // An abort is a supersession, not a failure: no red state for it.
+    expect(result.current.saveState).not.toBe('error');
     vi.useRealTimers();
   });
 

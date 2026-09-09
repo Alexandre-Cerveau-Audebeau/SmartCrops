@@ -70,9 +70,13 @@ public class DashboardPresetsTests
     {
         var preset = DashboardPresets.For(level);
 
+        // `Assert.Contains`, not `Assert.NotNull(preset.First(...))` (round 2,
+        // E'1): `First` throws when the key is missing and returns a reference
+        // type when it is not, so the null check could never fail. This states
+        // the property the test is named for.
         Assert.All(
             DashboardLayout.Blocks.All,
-            key => Assert.NotNull(preset.First(p => p.Key == key)));
+            key => Assert.Contains(preset, p => p.Key == key));
     }
 
     [Fact]

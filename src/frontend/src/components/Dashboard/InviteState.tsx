@@ -31,6 +31,17 @@ interface Props {
  * The shared invitation panel of the gardens dashboard: a soft disc, one
  * sentence, and — when there is one — the gesture. Colours come from the frozen
  * invitation motif (`dashboardTokens`), never from a hardcoded hex.
+ *
+ * The SHAPE comes from the same frozen source (round 2, V5). `_spec.md` § 5's
+ * artboards draw `.inv` as a ROW — `display:flex; gap:12px; align-items:
+ * flex-start`, a 34px disc that does not shrink, and the text beside it — and
+ * this component had been built as a centred column with a 44px disc stacked
+ * above the sentence. That stack is ~56px taller for the same words, which is
+ * more than a phone card has to spare: the grid rows are 200px there against
+ * 273px on a desktop (`DashboardGrid`), so the tinted panel outgrew its card,
+ * was clipped by the card's `overflow: hidden`, and read as a frame stretched
+ * edge to edge. The row form fits at every breakpoint with no media query, so
+ * V3's rule — intrinsic height, centred in the card — holds on a phone too.
  */
 export default function InviteState({
   icon,
@@ -50,59 +61,68 @@ export default function InviteState({
         // tinted rectangle over a Large widget. `margin: auto` is what centres
         // it — vertically and horizontally — inside the card's flex column,
         // and the card keeps the grid footprint its size gives it.
+        //
+        // Unconditional, at every breakpoint (round 2, V5): nothing here is
+        // keyed on a media query, so there is no width at which the panel goes
+        // back to filling its card.
         m: 'auto',
         width: '100%',
         maxWidth: 360,
+        // `.inv` of the frozen artboards, verbatim.
         display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        textAlign: 'center',
+        alignItems: 'flex-start',
         gap: '12px',
-        p: '16px',
-        borderRadius: '10px',
+        p: '14px 16px',
+        borderRadius: '12px',
         backgroundColor: tk.invBg,
-        border: `1px dashed ${tk.invBd}`,
+        border: `1.5px dashed ${tk.invBd}`,
       }}
     >
       <Box
         aria-hidden
         sx={{
-          width: 44,
-          height: 44,
+          // `.inv-ic`: 34px, and it never shrinks — the text wraps instead.
+          width: 34,
+          height: 34,
+          flexShrink: 0,
           borderRadius: '50%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: tk.invIcBg,
           color: 'primary.main',
-          '& .MuiSvgIcon-root': { fontSize: 24 },
+          '& .MuiSvgIcon-root': { fontSize: 18 },
         }}
       >
         {icon}
       </Box>
-      <Typography
-        sx={{
-          fontSize: `${DASHBOARD_TYPE.body}px`,
-          lineHeight: 1.45,
-          color: 'text.primary',
-          maxWidth: 320,
-        }}
-      >
-        {message}
-      </Typography>
-      {variant === 'invite' && action}
-      {variant === 'soon' && (
+      <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography
           sx={{
-            fontSize: `${DASHBOARD_TYPE.secondary}px`,
-            lineHeight: 1.45,
-            color: 'text.secondary',
+            // `.inv-t`.
+            fontSize: `${DASHBOARD_TYPE.body}px`,
+            lineHeight: 1.4,
+            fontWeight: 700,
+            color: 'text.primary',
           }}
         >
-          {t('dashboard.soon')}
+          {message}
         </Typography>
-      )}
+        {variant === 'invite' && action}
+        {variant === 'soon' && (
+          <Typography
+            sx={{
+              // `.inv-b`.
+              fontSize: `${DASHBOARD_TYPE.secondary}px`,
+              lineHeight: 1.5,
+              color: 'text.secondary',
+              mt: '4px',
+            }}
+          >
+            {t('dashboard.soon')}
+          </Typography>
+        )}
+      </Box>
     </Box>
   );
 }
