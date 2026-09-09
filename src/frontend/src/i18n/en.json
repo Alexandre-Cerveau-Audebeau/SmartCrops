@@ -309,6 +309,111 @@
     "seeLess": "See less",
     "planMyGarden": "Plan my garden"
   },
+  "dashboard": {
+    "meta_one": "{{count}} garden",
+    "meta_other": "{{count}} gardens",
+    "edit": "Edit",
+    "done": "Done",
+    "customize": "Customize",
+    "levelChip": "{{level}} view",
+    "levelChipAdjusted": "{{level}} view · adjusted",
+    "loadError": "Couldn’t load your dashboard.",
+    "retry": "Try again",
+    "soon": "Coming soon",
+    "save": {
+      "pending": "Saving…",
+      "saved": "Saved",
+      "error": "Changes not saved"
+    },
+    "levels": {
+      "novice": {
+        "name": "Novice",
+        "tagline": "the essentials, nothing more"
+      },
+      "gardener": {
+        "name": "Gardener",
+        "tagline": "weather, tasks and counts"
+      },
+      "expert": {
+        "name": "Expert",
+        "tagline": "Everything, in large"
+      }
+    },
+    "sizes": {
+      "small": "Small",
+      "medium": "Medium",
+      "large": "Large"
+    },
+    "editMode": {
+      "drag": "Move {{widget}}",
+      "hide": "Hide {{widget}}",
+      "locked": "{{widget}} can’t be hidden",
+      "resize": "Change the size of {{widget}} — currently {{size}}",
+      "options": "{{widget}} options",
+      "optionsTitle": "Widget options",
+      "optionsEmpty": "No option for this widget yet.",
+      "optionsDone": "Done"
+    },
+    "panel": {
+      "title": "Customize",
+      "close": "Close",
+      "levelSection": "Level",
+      "note": "The level pre-configures the widgets; your manual settings take priority",
+      "reset": "Reset to the {{level}} level",
+      "gallerySection": "Gallery",
+      "galleryHint": "Hidden widgets — add them to the page.",
+      "galleryEmpty": "No hidden widget.",
+      "hidden": "hidden",
+      "add": "Add {{widget}}"
+    },
+    "a11y": {
+      "instructions": "Press Space or Enter to pick up the widget, the arrow keys to move it, Space or Enter to drop it, Escape to cancel.",
+      "dragStart": "{{widget}} picked up, position {{position}} of {{total}}.",
+      "dragOver": "{{widget}} moved to position {{position}} of {{total}}.",
+      "dragEnd": "{{widget}} dropped at position {{position}} of {{total}}.",
+      "dragCancel": "Moving {{widget}} cancelled."
+    },
+    "blocks": {
+      "weather": {
+        "title": "Weather",
+        "invite": "The weather needs to know where your gardens are."
+      },
+      "gardens": {
+        "title": "Gardens",
+        "count_one": "{{count}} garden",
+        "count_other": "{{count}} gardens",
+        "lastModified": "Modified {{when}}",
+        "openLast": "Open the last modified garden",
+        "more_one": "+{{count}} garden →",
+        "more_other": "+{{count}} gardens →",
+        "open": "Open {{name}}"
+      },
+      "tips": {
+        "title": "Tips",
+        "invite": "Tips arrive with the exposure and the calendar of your gardens."
+      },
+      "month": {
+        "title": "This month",
+        "invite": "The month’s calendar arrives with the sowings and harvests of your plantings."
+      },
+      "todo": {
+        "title": "To do today",
+        "invite": "Today’s tasks arrive with the weather and the calendar."
+      },
+      "counters": {
+        "title": "Counts by variety",
+        "invite": "Your varieties will be counted here, garden by garden."
+      },
+      "stats": {
+        "title": "Statistics",
+        "invite": "The occupancy and exposure of your gardens will be summed up here."
+      },
+      "harvest": {
+        "title": "Harvest",
+        "invite": "Your plants have no growth stage yet — the estimate can’t count them."
+      }
+    }
+  },
   "common": {
     "cancel": "Cancel",
     "close": "Close",

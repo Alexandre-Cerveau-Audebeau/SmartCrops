@@ -17,10 +17,10 @@ import ConfirmEmail from './pages/ConfirmEmail';
 import Contact from './pages/Contact';
 import ForgotPassword from './pages/ForgotPassword';
 import GardenPlanner from './pages/GardenPlanner';
+import GardensDashboard from './pages/GardensDashboard';
 import Home from './pages/Home';
 import LegalNotice from './pages/LegalNotice';
 import Login from './pages/Login';
-import MyGardens from './pages/MyGardens';
 import NotFound from './pages/NotFound';
 import PlantDetail from './pages/PlantDetail';
 import PlantLibrary from './pages/PlantLibrary';
@@ -70,7 +70,7 @@ export default function App() {
                     <Route path="/privacy" element={<Privacy />} />
                     <Route path="/terms" element={<Terms />} />
                     <Route element={<ProtectedRoute />}>
-                      <Route path="/gardens" element={<MyGardens />} />
+                      <Route path="/gardens" element={<GardensDashboard />} />
                       <Route
                         path="/gardens/:id/planner"
                         element={<GardenPlanner />}
