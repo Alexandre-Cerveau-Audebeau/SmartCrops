@@ -332,14 +332,159 @@ describe('fetchDashboardData — the aggregate boundary (round 1, E19 / G8)', ()
     await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
   });
 
-  it('checks the SHAPE, not the schema — an unknown extra key still passes', async () => {
-    // The line drawn on purpose: this body is computed fresh from the caller's
-    // own rows on every request, so walking a few hundred placements per load
-    // would cost more than it could catch. Only the three containers every
-    // widget indexes into are required to be there.
+  it('an unknown extra key still passes', async () => {
+    // The line drawn on purpose, and moved by round 3 (E″8): every field the
+    // page DEREFERENCES is required now, on the records as well as on the three
+    // containers — but nothing is rebuilt, so a field a newer server adds
+    // travels through untouched. Placement elements stay unwalked: a few
+    // hundred of them per load is the cost round 1 declined, and a bad one
+    // degrades a thumbnail rather than killing the render.
     const withExtra = { ...AGGREGATE, somethingNewer: 42 };
     mockFetch(withExtra);
 
     await expect(fetchDashboardData('en')).resolves.toEqual(withExtra);
+  });
+});
+
+// ── Round 3 (E″8): validate the RECORDS, not only their containers ───────────
+
+describe('fetchDashboardData — a garden record is checked before it is trusted', () => {
+  /** A garden with everything the page dereferences. */
+  const GARDEN = {
+    id: 'g1',
+    name: 'Terrasse',
+    description: null,
+    width: 4,
+    height: 2,
+    cellSize: '50cm',
+    cellsJson: null,
+    config: {
+      orientation: 'S',
+      gardenType: null,
+      lightSchedule: null,
+      hemisphere: 'N',
+      latitudeBand: 'mid',
+    },
+    updatedAt: '2026-05-01T00:00:00Z',
+    placements: [],
+    placementCount: 0,
+    varietyCount: 0,
+    occupiedCells: 0,
+    isEdible: null,
+  };
+
+  const VARIETY = {
+    plantId: 'p1',
+    scientificName: 'Ocimum basilicum',
+    commonName: 'Basil',
+    plantType: 'Herb',
+    isEdible: true,
+    imageUrl: null,
+    imageAttribution: null,
+    count: 1,
+    cells: 1,
+    gardenIds: ['g1'],
+  };
+
+  const full = () => ({
+    gardens: [{ ...GARDEN }],
+    varieties: [{ ...VARIETY }],
+    totals: {
+      gardenCount: 1,
+      placementCount: 1,
+      varietyCount: 1,
+      catalogPlantCount: 536,
+    },
+  });
+
+  it('accepts a complete aggregate, records and all', async () => {
+    const body = full();
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).resolves.toEqual(body);
+  });
+
+  it('rejects the garden the finding names — a plan, and no config', async () => {
+    // The crash this prevents: `deriveGardenView` enters its planned branch on
+    // positive width and height, then reads `garden.config.orientation` on the
+    // next line. Round 1 narrowed to `DashboardData` — which promises a config
+    // — while only ever checking that `gardens` was an array.
+    const body = full();
+    delete (body.gardens[0] as Record<string, unknown>).config;
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it.each([
+    'id',
+    'name',
+    'description',
+    'width',
+    'height',
+    'cellSize',
+    'cellsJson',
+    'config',
+    'updatedAt',
+    'placements',
+    'placementCount',
+    'varietyCount',
+    'occupiedCells',
+    'isEdible',
+  ])('rejects a garden with no %s', async (field) => {
+    const body = full();
+    delete (body.gardens[0] as Record<string, unknown>)[field];
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it.each([
+    ['config as null', { config: null }],
+    ['config as an array', { config: [] }],
+    ['width as a string', { width: '4' }],
+    ['height as a boolean', { height: true }],
+    ['placements as an object', { placements: {} }],
+    ['isEdible as a string', { isEdible: 'yes' }],
+  ])('rejects a garden with %s', async (_label, patch) => {
+    const body = full();
+    Object.assign(body.gardens[0]!, patch);
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it.each(['plantId', 'scientificName', 'count', 'cells', 'gardenIds'])(
+    'rejects a variety with no %s',
+    async (field) => {
+      const body = full();
+      delete (body.varieties[0] as Record<string, unknown>)[field];
+      mockFetch(body);
+
+      await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+    }
+  );
+
+  it.each([
+    'gardenCount',
+    'placementCount',
+    'varietyCount',
+    'catalogPlantCount',
+  ])('rejects totals with no %s', async (field) => {
+    const body = full();
+    delete (body.totals as Record<string, unknown>)[field];
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it('preserves an unknown field a newer server adds, on the record too', async () => {
+    // The check READS fields, it never rebuilds the object — so forward
+    // compatibility survives the stricter boundary.
+    const body = full();
+    Object.assign(body.gardens[0]!, { somethingNewer: 42 });
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).resolves.toEqual(body);
   });
 });

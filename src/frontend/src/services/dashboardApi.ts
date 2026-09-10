@@ -145,32 +145,110 @@ export async function saveDashboardPreferences(
   });
 }
 
+/** A plain object — not null, not an array. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
- * Is this body the aggregate, at all?
+ * `number | null`. No finiteness check: JSON carries neither `NaN` nor
+ * `Infinity`, so a guard against them would be untestable code standing for a
+ * value that cannot arrive.
+ */
+function isNullableNumber(value: unknown): boolean {
+  return value === null || typeof value === 'number';
+}
+
+/** `string | null`. */
+function isNullableString(value: unknown): boolean {
+  return value === null || typeof value === 'string';
+}
+
+/**
+ * One garden of the aggregate, checked on the fields the page DEREFERENCES.
  *
- * A SHAPE check, not a schema validation, and the line between the two is the
- * point (round 1, E19 / G8). A layout is stored data an older or newer build may
- * have written, so `normalizeBlock` above inspects every field. This body is
- * computed fresh from the caller's own rows on each request: there is no older
- * document to meet, and walking a few hundred placements per load would cost
- * more than it could catch. What CAN arrive and must not reach a component is
- * the empty case — `fetchJson` resolves `undefined` on a 204 or an empty body,
- * and `Promise<DashboardData>` says nothing about it, so `dashboardData.gardens`
+ * `config` is the one the finding names and the reason the whole check exists:
+ * `deriveGardenView` enters its planned branch on positive `width`/`height` and
+ * reads `garden.config.orientation` on the next line, so a garden that arrives
+ * without a config takes the page down at render — after the load succeeded,
+ * where no error state is left to draw it.
+ *
+ * `placements` is checked for being an array and no deeper: the derivation
+ * reads a placement's four numbers, but a few hundred of them per load is the
+ * walk round 1 declined, and a bad element degrades one thumbnail rather than
+ * killing the render.
+ */
+function isGardenRecord(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === 'string' &&
+    typeof value.name === 'string' &&
+    isNullableString(value.description) &&
+    isNullableNumber(value.width) &&
+    isNullableNumber(value.height) &&
+    isNullableString(value.cellSize) &&
+    isNullableString(value.cellsJson) &&
+    isRecord(value.config) &&
+    typeof value.updatedAt === 'string' &&
+    Array.isArray(value.placements) &&
+    typeof value.placementCount === 'number' &&
+    typeof value.varietyCount === 'number' &&
+    typeof value.occupiedCells === 'number' &&
+    (value.isEdible === null || typeof value.isEdible === 'boolean')
+  );
+}
+
+/** One Counters row, on the fields the widget reads without guarding. */
+function isVarietyRecord(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.plantId === 'string' &&
+    typeof value.scientificName === 'string' &&
+    typeof value.count === 'number' &&
+    typeof value.cells === 'number' &&
+    Array.isArray(value.gardenIds)
+  );
+}
+
+/** The four page totals. */
+function isTotalsRecord(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.gardenCount === 'number' &&
+    typeof value.placementCount === 'number' &&
+    typeof value.varietyCount === 'number' &&
+    typeof value.catalogPlantCount === 'number'
+  );
+}
+
+/**
+ * Is this body the aggregate?
+ *
+ * Round 1 (E19 / G8) checked the three top-level CONTAINERS, which stopped the
+ * empty body — `fetchJson` resolves `undefined` on a 204, and
+ * `Promise<DashboardData>` said nothing about it, so `dashboardData.gardens`
  * threw during render instead of showing the load-error state the page already
- * draws. The three top-level containers are what every widget indexes into on
- * its first line.
+ * draws.
+ *
+ * Round 3 (E″8) finishes the job, and the reason the first pass was incomplete
+ * rather than wrong is the signature: `value is DashboardData` narrows to a type
+ * that promises every RECORD's fields too, while the check only ever looked at
+ * the containers holding them — so the compiler was told more than the function
+ * had established, and a garden with a width but no `config` walked through a
+ * predicate that had declared it well-formed. What the page dereferences is now
+ * what is verified, and the narrowing is licensed by the check that precedes it.
+ *
+ * Unknown properties are PRESERVED: this reads fields, it never rebuilds the
+ * object, so a field a newer server adds travels through untouched.
  */
 function isDashboardData(value: unknown): value is DashboardData {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const body = value as Partial<DashboardData>;
+  if (!isRecord(value)) return false;
   return (
-    Array.isArray(body.gardens) &&
-    Array.isArray(body.varieties) &&
-    typeof body.totals === 'object' &&
-    body.totals !== null &&
-    !Array.isArray(body.totals)
+    Array.isArray(value.gardens) &&
+    value.gardens.every(isGardenRecord) &&
+    Array.isArray(value.varieties) &&
+    value.varieties.every(isVarietyRecord) &&
+    isTotalsRecord(value.totals)
   );
 }
 

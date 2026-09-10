@@ -5,6 +5,7 @@ import { parseCellsJson, type CellData } from '../types/GardenLayout';
 import type { ExposureCategory } from './exposure';
 import {
   deriveGardenView,
+  placementCoverage,
   gardenViewOf,
   dominantExposure,
   emptyExposureTally,
@@ -298,10 +299,18 @@ describe('deriveGardenView', () => {
   });
 
   it('reads the plan the server transported, without the server having parsed it', () => {
+    // ADAPTED by round 3 (E″9). It used to hand `occupiedCells: 2` on the
+    // transport and NO placements, because the view read the server's footprint
+    // sum. It reads the plan now, so the two occupied cells have to be in the
+    // plan — which is the point of the finding, and the same figures follow.
     const view = deriveGardenView(
       garden({
         cellsJson: JSON.stringify([{ row: 0, col: 0, active: false }]),
         occupiedCells: 2,
+        placements: [
+          placement({ startRow: 0, startCol: 1 }),
+          placement({ startRow: 0, startCol: 2 }),
+        ],
       })
     );
 
@@ -309,6 +318,7 @@ describe('deriveGardenView', () => {
     expect(view.totalCells).toBe(8);
     expect(view.activeCells).toBe(7);
     expect(view.surfaceM2).toBeCloseTo(1.75);
+    expect(view.occupiedCells).toBe(2);
     expect(view.freeCells).toBe(5);
     expect(view.occupancyPercent).toBe(29);
   });
@@ -437,5 +447,191 @@ describe('gardenViewOf — one derivation per garden (round 1, E10 / G4 / E22)',
 
     expect(gardenViewOf(first)).not.toBe(gardenViewOf(second));
     expect(gardenViewOf(first)).toEqual(gardenViewOf(second));
+  });
+});
+
+// ── Round 3 (E″9 / G″6): every occupancy figure from ONE coverage ────────────
+
+describe('placementCoverage — the single source of every occupancy figure', () => {
+  const cells: (ExposureCategory | null)[][] = [
+    ['full', 'full', 'full'],
+    ['full', null, 'shade'],
+  ];
+
+  it('counts an overlapped cell ONCE', () => {
+    // The case the finding names: the server's Σ spanRows × spanCols would say
+    // two, and there is one cell under both plants.
+    const coverage = placementCoverage(
+      cells,
+      [
+        placement({ startRow: 0, startCol: 0 }),
+        placement({ startRow: 0, startCol: 0 }),
+      ],
+      2,
+      3
+    );
+
+    expect(coverage.occupiedCells).toBe(1);
+    expect(coverage.taken[0]![0]).toBe(true);
+  });
+
+  it('clips a footprint that runs off the plan', () => {
+    const coverage = placementCoverage(
+      cells,
+      [placement({ startRow: 1, startCol: 2, spanRows: 4, spanCols: 4 })],
+      2,
+      3
+    );
+
+    // Only (1,2) is inside the 2 × 3 plan.
+    expect(coverage.occupiedCells).toBe(1);
+  });
+
+  it('does not count a plant sitting on a switched-off cell', () => {
+    // (1,1) is unrated, so it is not surface: covering it occupies nothing the
+    // garden could otherwise have used.
+    const coverage = placementCoverage(
+      cells,
+      [placement({ startRow: 1, startCol: 1 })],
+      2,
+      3
+    );
+
+    expect(coverage.occupiedCells).toBe(0);
+    expect(coverage.taken[1]![1]).toBe(true);
+  });
+
+  it('is zero when the engine rated nothing', () => {
+    const coverage = placementCoverage(null, [placement()], 2, 3);
+
+    expect(coverage.occupiedCells).toBe(0);
+  });
+});
+
+describe('deriveGardenView — the figures agree with each other (E″9 / G″6)', () => {
+  const gardenWith = (
+    over: Partial<DashboardGardenData> = {}
+  ): DashboardGardenData => ({
+    id: 'g1',
+    name: 'Terrasse',
+    description: null,
+    width: 4,
+    height: 2,
+    cellSize: '50cm',
+    cellsJson: null,
+    config: {
+      orientation: 'S',
+      gardenType: null,
+      lightSchedule: null,
+      hemisphere: 'N',
+      latitudeBand: 'mid',
+    },
+    updatedAt: '2026-05-01T00:00:00Z',
+    placements: [],
+    placementCount: 0,
+    varietyCount: 0,
+    occupiedCells: 0,
+    isEdible: null,
+    ...over,
+  });
+
+  /** Every case below must satisfy the same three identities. */
+  const expectConsistent = (view: ReturnType<typeof deriveGardenView>) => {
+    expect(view.occupiedCells + view.freeCells).toBe(view.activeCells);
+    expect(view.occupancyPercent).toBe(
+      view.activeCells === 0
+        ? 0
+        : Math.round((view.occupiedCells / view.activeCells) * 100)
+    );
+    const freeRated =
+      view.freeExposure.full +
+      view.freeExposure.morning +
+      view.freeExposure.afternoon +
+      view.freeExposure.shade;
+    expect(freeRated).toBe(view.freeCells);
+  };
+
+  it('two overlapping plants on one of two active cells — 50 %, not 100 %', () => {
+    // The exact contradiction the finding describes. The transport says four
+    // occupied cells (two 1 × 1 placements counted twice over, plus the sum of
+    // spans); the plan says one cell is taken and one is free.
+    const view = deriveGardenView(
+      gardenWith({
+        width: 2,
+        height: 1,
+        cellsJson: JSON.stringify([{ row: 0, col: 0, active: true }]),
+        occupiedCells: 2,
+        placements: [
+          placement({ startRow: 0, startCol: 0 }),
+          placement({ startRow: 0, startCol: 0 }),
+        ],
+      })
+    );
+
+    expect(view.activeCells).toBe(2);
+    expect(view.occupiedCells).toBe(1);
+    expect(view.freeCells).toBe(1);
+    expect(view.occupancyPercent).toBe(50);
+    expectConsistent(view);
+  });
+
+  it('a footprint anchored outside the plan cannot push occupancy past the plan', () => {
+    const view = deriveGardenView(
+      gardenWith({
+        occupiedCells: 16,
+        placements: [
+          placement({ startRow: 1, startCol: 3, spanRows: 4, spanCols: 4 }),
+        ],
+      })
+    );
+
+    // The 4 × 4 footprint has ONE cell inside a 4 × 2 plan.
+    expect(view.occupiedCells).toBe(1);
+    expectConsistent(view);
+  });
+
+  it('a plant on a switched-off cell occupies nothing', () => {
+    const view = deriveGardenView(
+      gardenWith({
+        cellsJson: JSON.stringify([{ row: 0, col: 0, active: false }]),
+        occupiedCells: 1,
+        placements: [placement({ startRow: 0, startCol: 0 })],
+      })
+    );
+
+    expect(view.activeCells).toBe(7);
+    expect(view.occupiedCells).toBe(0);
+    expect(view.freeCells).toBe(7);
+    expect(view.occupancyPercent).toBe(0);
+    expectConsistent(view);
+  });
+
+  it('holds for a plain garden with no placement at all', () => {
+    expectConsistent(deriveGardenView(gardenWith()));
+  });
+
+  it('holds when every active cell is covered', () => {
+    const view = deriveGardenView(
+      gardenWith({
+        placements: [
+          placement({ startRow: 0, startCol: 0, spanRows: 2, spanCols: 4 }),
+        ],
+      })
+    );
+
+    expect(view.occupiedCells).toBe(8);
+    expect(view.freeCells).toBe(0);
+    expect(view.occupancyPercent).toBe(100);
+    expectConsistent(view);
+  });
+
+  it('a garden with no plan reports no occupancy rather than the transport count', () => {
+    const view = deriveGardenView(
+      gardenWith({ width: null, height: null, occupiedCells: 12 })
+    );
+
+    expect(view.hasPlan).toBe(false);
+    expect(view.occupiedCells).toBe(0);
+    expectConsistent(view);
   });
 });

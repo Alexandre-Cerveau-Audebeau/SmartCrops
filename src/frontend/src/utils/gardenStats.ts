@@ -146,13 +146,67 @@ export function dominantExposure(
   return best;
 }
 
+/** What the placements of a garden actually cover, once. */
+export interface PlacementCoverage {
+  /** `rows × cols`: true where at least one placement footprint lands. */
+  taken: boolean[][];
+  /**
+   * Active cells covered — clipped to the grid, overlaps counted ONCE, cells
+   * the user switched off excluded.
+   */
+  occupiedCells: number;
+}
+
+/**
+ * The ONE coverage every occupancy figure of a garden derives from (round 3,
+ * E″9 / G″6).
+ *
+ * The figures used to come from two different notions of « occupied ».
+ * `garden.occupiedCells` arrives from the server as `Σ spanRows × spanCols`,
+ * which counts a cell twice when two placements overlap it, counts cells that
+ * fall outside the plan, and counts cells the user switched off; the free-cell
+ * exposure tally instead clipped, deduplicated, and looked only at rated cells.
+ * So the same garden could report 100 % occupancy and a free cell in the same
+ * breath — two overlapping placements on one of two active cells did exactly
+ * that. Everything is measured here now, so the figures cannot disagree: they
+ * are the same count.
+ *
+ * A cell is « active » iff the exposure engine rated it — it returns `null` per
+ * inactive cell, which is the same set `gridStats` counts. That equality is what
+ * makes `occupied + free = active` an identity rather than a coincidence.
+ */
+export function placementCoverage(
+  cells: (ExposureCategory | null)[][] | null,
+  placements: readonly PlacementData[],
+  rows: number,
+  cols: number
+): PlacementCoverage {
+  const taken = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(false));
+  let occupiedCells = 0;
+  if (!cells) return { taken, occupiedCells };
+
+  for (const placement of placements) {
+    // Clipped at both ends: a stored layout may anchor a placement outside the
+    // plan, and the layout PUT does not refuse it.
+    const rowEnd = Math.min(rows, placement.startRow + placement.spanRows);
+    const colEnd = Math.min(cols, placement.startCol + placement.spanCols);
+    for (let r = Math.max(0, placement.startRow); r < rowEnd; r++) {
+      for (let c = Math.max(0, placement.startCol); c < colEnd; c++) {
+        if (taken[r]![c]) continue; // an overlapped cell is one cell
+        taken[r]![c] = true;
+        // Only a rated cell is surface. A plant sitting on a switched-off cell
+        // occupies nothing the garden could have used.
+        if (cells[r]?.[c]) occupiedCells += 1;
+      }
+    }
+  }
+
+  return { taken, occupiedCells };
+}
+
 /**
  * Exposure tally restricted to cells that are active AND hold no plant — the
  * « 68 free cells, 28 of them in full sun » of the Statistics widget.
- *
- * Placement footprints are walked rather than intersected: a placement is a
- * rectangle anchored top-left, exactly as the planner's geometry defines it, and
- * marking its cells is cheaper and clearer than any overlap arithmetic.
  */
 export function freeCellExposureTally(
   cells: (ExposureCategory | null)[][] | null,
@@ -160,18 +214,23 @@ export function freeCellExposureTally(
   rows: number,
   cols: number
 ): ExposureTally {
+  if (!cells) return emptyExposureTally();
+  return freeExposureFrom(
+    cells,
+    placementCoverage(cells, placements, rows, cols).taken,
+    rows,
+    cols
+  );
+}
+
+/** The free-cell tally, read off a coverage already computed. */
+function freeExposureFrom(
+  cells: (ExposureCategory | null)[][],
+  taken: boolean[][],
+  rows: number,
+  cols: number
+): ExposureTally {
   const tally = emptyExposureTally();
-  if (!cells) return tally;
-
-  const taken = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(false));
-  for (const placement of placements) {
-    for (let r = placement.startRow; r < placement.startRow + placement.spanRows; r++) {
-      for (let c = placement.startCol; c < placement.startCol + placement.spanCols; c++) {
-        if (r >= 0 && r < rows && c >= 0 && c < cols) taken[r]![c] = true;
-      }
-    }
-  }
-
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const category = cells[r]?.[c];
@@ -274,7 +333,11 @@ export function deriveGardenView(garden: DashboardGardenData): GardenView {
       activeCells: 0,
       totalCells: 0,
       surfaceM2: 0,
-      occupiedCells: garden.occupiedCells,
+      // Zero, not the server's footprint sum (round 3, E″9). A garden with no
+      // plan has no surface to occupy, and every reader of this branch is
+      // already gated on `hasPlan`. Carrying the transport count here was the
+      // one place where `occupied + free = active` did not hold.
+      occupiedCells: 0,
       freeCells: 0,
       occupancyPercent: 0,
       dominantExposure: null,
@@ -313,16 +376,25 @@ export function deriveGardenView(garden: DashboardGardenData): GardenView {
 
   const exposure = exposureTally(view.cells);
 
+  // ONE coverage, four figures (round 3, E″9 / G″6). `garden.occupiedCells`
+  // — the server's Σ spanRows × spanCols — is deliberately NOT read here: it
+  // is the transport's own count of footprints, not a count of cells, and
+  // mixing it with a clipped, deduplicated tally is what let the widget say
+  // « 100 % occupied » beside « 1 free cell ».
+  const coverage = placementCoverage(view.cells, garden.placements, height, width);
+
   return {
     activeCells,
     totalCells,
     surfaceM2,
-    occupiedCells: garden.occupiedCells,
-    freeCells: freeCells(activeCells, garden.occupiedCells),
-    occupancyPercent: occupancyPercent(activeCells, garden.occupiedCells),
+    occupiedCells: coverage.occupiedCells,
+    freeCells: freeCells(activeCells, coverage.occupiedCells),
+    occupancyPercent: occupancyPercent(activeCells, coverage.occupiedCells),
     dominantExposure: dominantExposure(exposure),
     exposure,
-    freeExposure: freeCellExposureTally(view.cells, garden.placements, height, width),
+    freeExposure: view.cells
+      ? freeExposureFrom(view.cells, coverage.taken, height, width)
+      : emptyExposureTally(),
     hasPlan: true,
   };
 }

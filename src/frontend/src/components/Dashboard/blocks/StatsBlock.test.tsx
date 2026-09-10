@@ -3,6 +3,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
+import type { PlacementData } from '../../../services/gardenLayoutApi';
 import type { DashboardGardenData } from '../../../types/DashboardData';
 import { serializeCellsJson, type CellData } from '../../../types/GardenLayout';
 import StatsBlock from './StatsBlock';
@@ -34,6 +35,22 @@ const garden = (over: Partial<DashboardGardenData> = {}): DashboardGardenData =>
   occupiedCells: 0,
   isEdible: null,
   ...over,
+});
+
+/**
+ * One 1 x 1 plant on a cell. Round 3 (E"9): the occupancy figures derive from
+ * the PLAN now, so a test that wants an occupied cell has to place a plant on
+ * it rather than declare a count on the transport.
+ */
+const at = (startRow: number, startCol: number): PlacementData => ({
+  id: `pl-${startRow}-${startCol}`,
+  plantId: 'plant-1',
+  plantScientificName: 'Ocimum basilicum',
+  startRow,
+  startCol,
+  spanRows: 1,
+  spanCols: 1,
+  notes: null,
 });
 
 const widgetNode = () =>
@@ -87,7 +104,11 @@ describe('StatsBlock', () => {
 
     const widget = renderBlock({
       gardens: [
-        garden({ cellsJson: serializeCellsJson(grid), occupiedCells: 2 }),
+        garden({
+          cellsJson: serializeCellsJson(grid),
+          occupiedCells: 2,
+          placements: [at(0, 0), at(0, 1)],
+        }),
       ],
     });
 
@@ -97,7 +118,7 @@ describe('StatsBlock', () => {
 
   it('counts free cells, and how many of them are in full sun', () => {
     const widget = renderBlock({
-      gardens: [garden({ occupiedCells: 3 })],
+      gardens: [garden({ occupiedCells: 3, placements: [at(0, 0), at(0, 1), at(0, 2)] })],
     });
 
     // Eight active, three planted: five free. The sunny share comes from the
