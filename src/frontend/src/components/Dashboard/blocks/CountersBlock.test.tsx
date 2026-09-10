@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
@@ -202,7 +202,7 @@ describe('CountersBlock', () => {
     });
 
     it('draws the photo when the option is on', () => {
-      const widget = renderBlock({
+      renderBlock({
         options: { photos: true },
         varieties: [variety({ imageUrl: 'https://bs.plantnet.org/habit.jpg' })],
       });
@@ -214,7 +214,7 @@ describe('CountersBlock', () => {
 
     it('falls back to the brand placeholder for a variety with no photo', () => {
       // A quarter of the placed varieties have none.
-      const widget = renderBlock({
+      renderBlock({
         options: { photos: true },
         varieties: [variety({ imageUrl: null })],
       });

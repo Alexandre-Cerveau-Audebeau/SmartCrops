@@ -23,6 +23,7 @@ import DashboardGrid from '../components/Dashboard/DashboardGrid';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import GardensBlock from '../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
+import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useLanguage } from '../hooks/useLanguage';
@@ -201,6 +202,17 @@ export default function GardensDashboard() {
             varieties={dashboardData.varieties}
             gardens={gardens}
             totals={dashboardData.totals}
+            loading={gardensLoading}
+            loadError={gardensError}
+            onRetry={refetch}
+          />
+        );
+      case 'stats':
+        return (
+          <StatsBlock
+            size={block.size}
+            editing={editing}
+            gardens={gardens}
             loading={gardensLoading}
             loadError={gardensError}
             onRetry={refetch}

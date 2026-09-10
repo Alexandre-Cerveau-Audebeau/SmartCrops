@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { PlacementData } from '../services/gardenLayoutApi';
+import type { DashboardGardenData } from '../types/DashboardData';
 import { parseCellsJson, type CellData } from '../types/GardenLayout';
 import type { ExposureCategory } from './exposure';
 import {
+  deriveGardenView,
   dominantExposure,
   emptyExposureTally,
   exposureTally,
@@ -12,6 +14,7 @@ import {
   isEdibleVariety,
   isOrnamentalGarden,
   occupancyPercent,
+  sumExposureTallies,
 } from './gardenStats';
 
 // SMA-336 PR 2/5 — the figures the Gardens and Statistics widgets show, and the
@@ -263,5 +266,124 @@ describe('isOrnamentalGarden', () => {
     // Not true: an unplanted garden is neither, and calling it ornamental would
     // apply « never shows a harvest » to a garden nobody has planted yet.
     expect(isOrnamentalGarden([])).toBeNull();
+  });
+});
+
+describe('deriveGardenView', () => {
+  const garden = (
+    over: Partial<DashboardGardenData> = {}
+  ): DashboardGardenData => ({
+    id: 'g1',
+    name: 'Terrasse',
+    description: null,
+    width: 4,
+    height: 2,
+    cellSize: '50cm',
+    cellsJson: null,
+    config: {
+      orientation: 'S',
+      gardenType: null,
+      lightSchedule: null,
+      hemisphere: 'N',
+      latitudeBand: 'mid',
+    },
+    updatedAt: '2026-05-01T00:00:00Z',
+    placements: [],
+    placementCount: 0,
+    varietyCount: 0,
+    occupiedCells: 0,
+    isEdible: null,
+    ...over,
+  });
+
+  it('reads the plan the server transported, without the server having parsed it', () => {
+    const view = deriveGardenView(
+      garden({
+        cellsJson: JSON.stringify([{ row: 0, col: 0, active: false }]),
+        occupiedCells: 2,
+      })
+    );
+
+    expect(view.hasPlan).toBe(true);
+    expect(view.totalCells).toBe(8);
+    expect(view.activeCells).toBe(7);
+    expect(view.surfaceM2).toBeCloseTo(1.75);
+    expect(view.freeCells).toBe(5);
+    expect(view.occupancyPercent).toBe(29);
+  });
+
+  it('rates every active cell and none of the inactive ones', () => {
+    const view = deriveGardenView(
+      garden({ cellsJson: JSON.stringify([{ row: 0, col: 0, active: false }]) })
+    );
+    const rated =
+      view.exposure.full +
+      view.exposure.morning +
+      view.exposure.afternoon +
+      view.exposure.shade;
+
+    expect(rated).toBe(view.activeCells);
+    expect(view.dominantExposure).not.toBeNull();
+  });
+
+  it('answers the same thing twice — no clock anywhere in the chain', () => {
+    // Decision D12 is what makes this true: season and moment are fixed, so the
+    // figure cannot move between two loads, nor between two runs of this test.
+    const first = deriveGardenView(garden());
+    const second = deriveGardenView(garden());
+
+    expect(first).toEqual(second);
+  });
+
+  it('reports NO plan for a garden whose layout was never saved', () => {
+    const view = deriveGardenView(garden({ width: null, height: null }));
+
+    expect(view.hasPlan).toBe(false);
+    expect(view.activeCells).toBe(0);
+    expect(view.surfaceM2).toBe(0);
+    expect(view.dominantExposure).toBeNull();
+    expect(view.exposure).toEqual(emptyExposureTally());
+  });
+
+  it('subtracts the placement footprints from the free-cell tally', () => {
+    const view = deriveGardenView(
+      garden({
+        occupiedCells: 4,
+        placements: [
+          {
+            id: 'pl-1',
+            plantId: 'p-1',
+            plantScientificName: null,
+            startRow: 0,
+            startCol: 0,
+            spanRows: 2,
+            spanCols: 2,
+            notes: null,
+          },
+        ],
+      })
+    );
+    const free =
+      view.freeExposure.full +
+      view.freeExposure.morning +
+      view.freeExposure.afternoon +
+      view.freeExposure.shade;
+
+    expect(free).toBe(4);
+  });
+});
+
+describe('sumExposureTallies', () => {
+  it('adds the categories across gardens', () => {
+    expect(
+      sumExposureTallies([
+        { full: 1, morning: 2, afternoon: 0, shade: 3 },
+        { full: 4, morning: 0, afternoon: 5, shade: 0 },
+      ])
+    ).toEqual({ full: 5, morning: 2, afternoon: 5, shade: 3 });
+  });
+
+  it('answers a zeroed tally for no garden at all', () => {
+    expect(sumExposureTallies([])).toEqual(emptyExposureTally());
   });
 });

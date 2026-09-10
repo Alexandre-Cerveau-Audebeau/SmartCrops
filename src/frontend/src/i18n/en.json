@@ -439,7 +439,15 @@
       },
       "stats": {
         "title": "Statistics",
-        "invite": "The occupancy and exposure of your gardens will be summed up here."
+        "surface": "{{value}} m²",
+        "activeCells": "{{count}} active cells · {{occupied}} planted",
+        "freeCells": "{{count}} free cells, {{sunny}} of them in full sun",
+        "occupancySection": "Occupancy by garden",
+        "exposureSection": "Dominant exposure — {{season}} · {{moment}}",
+        "perGardenExposureSection": "Exposure by garden",
+        "noPlan": "No plan",
+        "empty": "Create a garden to see its statistics.",
+        "noPlans": "Draw a garden's plan to see its surface and its exposure."
       },
       "harvest": {
         "title": "Harvest",

@@ -328,11 +328,8 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
       'The month’s calendar arrives with the sowings and harvests of your plantings.',
     ],
     ['To do today', 'Today’s tasks arrive with the weather and the calendar.'],
-    // Counts by variety LEFT this list in PR 2/5: it carries real data now.
-    [
-      'Statistics',
-      'The occupancy and exposure of your gardens will be summed up here.',
-    ],
+    // Counts by variety and Statistics LEFT this list in PR 2/5: they carry
+    // real data now, and their own tests cover what they show.
     [
       'Harvest',
       'Your plants have no growth stage yet — the estimate can’t count them.',
@@ -361,8 +358,8 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
     renderPage();
 
     await waitFor(() => expect(renderedKeys()).toHaveLength(8));
-    // Six shells: Gardens and Counts by variety carry data.
-    expect(screen.getAllByText('Coming soon')).toHaveLength(6);
+    // Five shells: Gardens, Counts by variety and Statistics carry data.
+    expect(screen.getAllByText('Coming soon')).toHaveLength(5);
   });
 
   it('the Weather widget offers NO city field in this lot (decision R4)', async () => {
@@ -391,7 +388,7 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
         'Les conseils arrivent avec l’exposition et le calendrier de vos jardins.'
       )
     ).toBeInTheDocument();
-    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(6);
+    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(5);
   });
 });
 

@@ -439,7 +439,15 @@
       },
       "stats": {
         "title": "Statistiques",
-        "invite": "L’occupation et l’exposition de vos jardins seront résumées ici."
+        "surface": "{{value}} m²",
+        "activeCells": "{{count}} cases actives · {{occupied}} plantées",
+        "freeCells": "{{count}} cases libres, dont {{sunny}} en plein soleil",
+        "occupancySection": "Occupation par jardin",
+        "exposureSection": "Exposition dominante — {{season}} · {{moment}}",
+        "perGardenExposureSection": "Exposition par jardin",
+        "noPlan": "Sans plan",
+        "empty": "Créez un jardin pour voir ses statistiques.",
+        "noPlans": "Dessinez le plan d’un jardin pour voir sa surface et son exposition."
       },
       "harvest": {
         "title": "Récolte",
