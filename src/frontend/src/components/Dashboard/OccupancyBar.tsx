@@ -6,6 +6,24 @@ import { formatCount } from '../../utils/formatNumber';
 
 interface Props {
   percent: number;
+  /**
+   * Draw the track alone (round 4, A6).
+   *
+   * `A3Expert.dc.html` puts the Statistics rows on a three-column grid —
+   * `120px minmax(0, 1fr) 120px` — with the bar in the middle and « 20 m² ·
+   * 68 % » in the third column, so the figure travels with the surface rather
+   * than with the bar. The Gardens table has no such column and keeps the
+   * figure here.
+   */
+  valueHidden?: boolean;
+  /**
+   * Let the track fill its column instead of stopping at 64 px (round 4, A6).
+   *
+   * The cap is what keeps the table's 84 px OCCUPATION cell narrow; the
+   * Statistics grid gives the bar a whole `minmax(0, 1fr)` track and a capped
+   * bar would float in it.
+   */
+  stretch?: boolean;
 }
 
 /**
@@ -17,18 +35,29 @@ interface Props {
  * colour-blind reader can take — and the frozen design prints the percentage
  * next to it for exactly that reason.
  */
-export default function OccupancyBar({ percent }: Props) {
+export default function OccupancyBar({
+  percent,
+  valueHidden = false,
+  stretch = false,
+}: Props) {
   const { i18n } = useTranslation();
   const clamped = Math.max(0, Math.min(100, percent));
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        ...(stretch && { width: '100%', minWidth: 0 }),
+      }}
+    >
       <Box
         aria-hidden
         sx={{
           flex: 1,
-          minWidth: 28,
-          maxWidth: 64,
+          minWidth: stretch ? 0 : 28,
+          ...(stretch ? null : { maxWidth: 64 }),
           height: 6,
           borderRadius: 3,
           backgroundColor: 'action.hover',
@@ -43,6 +72,7 @@ export default function OccupancyBar({ percent }: Props) {
           }}
         />
       </Box>
+      {valueHidden ? null : (
       <Typography
         component="span"
         sx={{
@@ -62,6 +92,7 @@ export default function OccupancyBar({ percent }: Props) {
             number reaches the screen through raw concatenation. */}
         {`${formatCount(clamped, i18n.language)} %`}
       </Typography>
+      )}
     </Box>
   );
 }

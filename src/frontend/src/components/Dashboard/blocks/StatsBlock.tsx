@@ -3,8 +3,10 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
+import { visuallyHidden } from '@mui/utils';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import DashboardBlock from '../DashboardBlock';
+import ExposureBar from '../ExposureBar';
 import ExposureDot from '../ExposureDot';
 import InviteState from '../InviteState';
 import MissingDataMark from '../MissingDataMark';
@@ -44,6 +46,16 @@ interface Props {
  * A garden with no saved layout has neither a surface nor an exposure. It still
  * appears — with a marker where its figures would be, rather than a zero. Zero
  * is a measurement; « not drawn yet » is not.
+ *
+ * ROUND 4 (A6) redraws the Large card on `A3Expert.dc.html`: the three sections
+ * share one grid, the dominant exposure is a single segmented bar with a
+ * pastille legend instead of four stacked rows, and each per-garden row carries
+ * its own bar and figure. The section that shrinks is the middle one — about
+ * 168 px of rows for about 64 — and with three gardens the card now fits its
+ * 566 px footprint instead of scrolling inside itself (V7). `overflowY: 'auto'`
+ * stays: each further garden costs another 84 px (one occupancy row and one
+ * exposure row), so a long list still has to scroll — inside the card, which is
+ * what the design asks for, and never over the widget below it.
  */
 export default function StatsBlock({
   size,
@@ -122,106 +134,215 @@ export default function StatsBlock({
       value: formatDecimal(value, i18n.language, 1),
     });
 
+  const percentText = (value: number) =>
+    `${formatCount(Math.round(value), i18n.language)} %`;
+
+  const share = (part: number, whole: number) =>
+    whole > 0 ? percentText((part / whole) * 100) : '—';
+
+  /**
+   * One row of a Large section (round 4, A6).
+   *
+   * `A3Expert.dc.html` gives both list sections the SAME three-track grid —
+   * `grid-template-columns: 120px minmax(0, 1fr) 120px; gap: 14px;
+   * align-items: center; min-height: 42px` — a name that ellipsizes, a bar that
+   * takes the room left, and a right-aligned figure. They were two flex rows
+   * with the bar squeezed between them, so the figures of the two sections did
+   * not line up with each other.
+   *
+   * The last track is `auto` rather than a hard 120: « 19,5 m² · 77 % » is the
+   * longest string this column ever holds and it must not be the one that
+   * clips, whereas a garden NAME truncating is the artboard's own behaviour.
+   */
+  const statRow = (
+    key: string,
+    name: string,
+    middle: React.ReactNode,
+    value: React.ReactNode
+  ) => (
+    <Box
+      key={key}
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 120px) minmax(0, 1fr) auto',
+        gap: '14px',
+        alignItems: 'center',
+        minHeight: 42,
+      }}
+    >
+      <Typography
+        sx={{
+          minWidth: 0,
+          fontSize: DASHBOARD_TYPE.body,
+          fontWeight: 600,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {name}
+      </Typography>
+      {middle}
+      {value}
+    </Box>
+  );
+
+  const rowValue = (text: React.ReactNode) => (
+    <Box
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: '6px',
+        whiteSpace: 'nowrap',
+        fontSize: DASHBOARD_TYPE.secondary,
+        fontWeight: 600,
+        color: 'text.secondary',
+      }}
+    >
+      {text}
+    </Box>
+  );
+
+  /**
+   * OCCUPATION PAR JARDIN — « Terrasse · [bar] · 20 m² · 68 % » (round 4, A6).
+   *
+   * The surface was nowhere on these rows; the artboard prints it beside the
+   * percentage, which is what turns a share into a quantity — 68 % of a 20 m²
+   * terrace and 68 % of a 3 m² balcony are not the same news.
+   */
   const occupancyRows = (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-      {views.map(({ garden, view }) => (
-        <Box
-          key={garden.id}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            minHeight: 42,
-          }}
-        >
-          <Typography
-            sx={{
-              flex: 1,
-              minWidth: 0,
-              fontSize: DASHBOARD_TYPE.body,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {garden.name}
-          </Typography>
-          {view.hasPlan ? (
-            <OccupancyBar percent={view.occupancyPercent} />
+      {views.map(({ garden, view }) =>
+        statRow(
+          garden.id,
+          garden.name,
+          view.hasPlan ? (
+            <OccupancyBar percent={view.occupancyPercent} valueHidden stretch />
           ) : (
             <MissingDataMark label={t('dashboard.blocks.stats.noPlan')} />
-          )}
-        </Box>
-      ))}
+          ),
+          rowValue(
+            view.hasPlan
+              ? t('dashboard.blocks.stats.occupancyValue', {
+                  surface: surfaceText(view.surfaceM2),
+                  percent: percentText(view.occupancyPercent),
+                })
+              : '—'
+          )
+        )
+      )}
     </Box>
   );
 
+  /**
+   * EXPOSITION DOMINANTE — ONE segmented bar, then a legend (round 4, A6).
+   *
+   * It was a vertical list of four 42 px rows, one per category. `A3Expert`
+   * draws a single 16 px strip and puts the four figures under it as pastilles:
+   *
+   *   <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:8px">
+   *     <span class="lg"><span class="sw-ex ex-full"></span>Plein soleil
+   *       <span class="num">54 %</span></span>…
+   *
+   * 168 px of rows become about 64, which is the single biggest reason the
+   * Large card stopped scrolling inside itself (V7) — see the widget docstring.
+   * A bar is also the right shape for four shares of one whole, which four
+   * separate lines never state.
+   */
   const distributionRows = (
-    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-      {EXPOSURE_ORDER.map((category) => (
-        <Box
-          key={category}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            minHeight: 42,
-          }}
-        >
-          <ExposureDot category={category} />
-          <Typography sx={{ flex: 1, fontSize: DASHBOARD_TYPE.body }}>
+    <Box>
+      <ExposureBar tally={distribution} height={16} />
+      <Box
+        sx={{
+          display: 'flex',
+          gap: '16px',
+          flexWrap: 'wrap',
+          mt: '8px',
+        }}
+      >
+        {EXPOSURE_ORDER.map((category) => (
+          <Box
+            key={category}
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '7px',
+              fontSize: DASHBOARD_TYPE.secondary,
+              fontWeight: 600,
+              color: 'text.secondary',
+            }}
+          >
+            <ExposureDot category={category} size={12} />
             {/* The LONG label here — « afternoon sun », not « afternoon ». The
                 short form exists for the table, where the column is 51 px. */}
-            {t(`planner.exposure.categories.${category}`)}
-          </Typography>
-          <Typography
-            sx={{ fontSize: DASHBOARD_TYPE.body, fontWeight: 700 }}
-          >
-            {totalRated > 0
-              ? `${formatCount(Math.round((distribution[category] / totalRated) * 100), i18n.language)} %`
-              : '—'}
-          </Typography>
-        </Box>
-      ))}
+            <Box component="span">
+              {t(`planner.exposure.categories.${category}`)}
+            </Box>
+            <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>
+              {share(distribution[category], totalRated)}
+            </Box>
+          </Box>
+        ))}
+      </Box>
     </Box>
   );
 
+  /**
+   * EXPOSITION PAR JARDIN — a segmented bar per garden, the dominant share on
+   * the right (round 4, A6).
+   *
+   * `A3Expert` gives each garden its own 12 px strip and closes the row with the
+   * dominant category's swatch and its percentage — « ▨ 62 % ». The rows named
+   * the dominant category in words and said nothing about the other three, so
+   * two gardens that are 62 % and 98 % full sun read exactly alike.
+   *
+   * The name of the dominant category has not been lost: it is what the swatch
+   * stands for, and the accessible label carries it in words, so the row still
+   * says which exposure the figure is about without colour being the signal.
+   */
   const perGardenExposureRows = (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-      {views.map(({ garden, view }) => (
-        <Box
-          key={garden.id}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            minHeight: 42,
-          }}
-        >
-          <Typography
-            sx={{
-              flex: 1,
-              minWidth: 0,
-              fontSize: DASHBOARD_TYPE.body,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {garden.name}
-          </Typography>
-          {view.dominantExposure ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <ExposureDot category={view.dominantExposure} />
-              <Typography sx={{ fontSize: DASHBOARD_TYPE.body }}>
-                {t(`planner.exposure.categories.${view.dominantExposure}`)}
-              </Typography>
-            </Box>
+      {views.map(({ garden, view }) => {
+        const rated =
+          view.exposure.full +
+          view.exposure.morning +
+          view.exposure.afternoon +
+          view.exposure.shade;
+
+        return statRow(
+          garden.id,
+          garden.name,
+          view.dominantExposure ? (
+            <ExposureBar tally={view.exposure} height={12} />
           ) : (
             <MissingDataMark label={t('dashboard.blocks.stats.noPlan')} />
-          )}
-        </Box>
-      ))}
+          ),
+          view.dominantExposure
+            ? rowValue(
+                <>
+                  <ExposureDot category={view.dominantExposure} size={12} />
+                  {/* The swatch is the artboard's whole right column, and a
+                      colour alone is not a label. The name of the category
+                      travels with the figure for assistive technology; on
+                      screen it is the LEGEND of the section directly above
+                      that maps each colour to its name, which is how the
+                      artboard resolves it too — and adding the word here would
+                      cost the 120 px track the figure needs. */}
+                  <Box component="span" sx={visuallyHidden}>
+                    {t(`planner.exposure.categories.${view.dominantExposure}`)}
+                  </Box>
+                  <Box
+                    component="span"
+                    sx={{ fontWeight: 700, color: 'text.primary' }}
+                  >
+                    {share(view.exposure[view.dominantExposure], rated)}
+                  </Box>
+                </>
+              )
+            : rowValue('—')
+        );
+      })}
     </Box>
   );
 
@@ -249,7 +370,12 @@ export default function StatsBlock({
 
   const headline = (
     <Box>
+      {/* `data-stats-surface` names the card's OWN total (round 4, A6): the
+          occupancy rows print a surface each now, so « the m² of this widget »
+          stopped being a unique string. Same idiom as `data-widget` — an
+          attribute the widget declares, not a class a test guesses at. */}
       <Typography
+        data-stats-surface
         sx={{ fontSize: DASHBOARD_TYPE.big, fontWeight: 800, lineHeight: 1.1 }}
       >
         {surfaceText(totalSurface)}
