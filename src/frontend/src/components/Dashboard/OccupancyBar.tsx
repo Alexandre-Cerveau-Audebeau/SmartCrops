@@ -1,6 +1,8 @@
+import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
+import { formatCount } from '../../utils/formatNumber';
 
 interface Props {
   percent: number;
@@ -16,6 +18,7 @@ interface Props {
  * next to it for exactly that reason.
  */
 export default function OccupancyBar({ percent }: Props) {
+  const { i18n } = useTranslation();
   const clamped = Math.max(0, Math.min(100, percent));
 
   return (
@@ -44,7 +47,10 @@ export default function OccupancyBar({ percent }: Props) {
         component="span"
         sx={{ fontSize: DASHBOARD_TYPE.body, fontWeight: 700 }}
       >
-        {`${clamped} %`}
+        {/* Locale-formatted, like every other figure of the three widgets
+            (round 1, G5) — the percentage is whole, but the rule is that no
+            number reaches the screen through raw concatenation. */}
+        {`${formatCount(clamped, i18n.language)} %`}
       </Typography>
     </Box>
   );
