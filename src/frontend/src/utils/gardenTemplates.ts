@@ -70,6 +70,26 @@ export interface GardenTemplate {
   placements: readonly TemplatePlacement[];
 }
 
+/**
+ * Anything that can be DRAWN as a plan thumbnail (SMA-336 PR 2/5).
+ *
+ * `GardenTemplate` satisfies it without a cast — a widening, not a rename. Its
+ * `cols`/`rows` are the literal types `10` and `6`, which are assignable to
+ * `number`; the reverse is not, so a real garden is a PreviewPlan and a
+ * PreviewPlan is not a template. That is exactly the asymmetry we want: the
+ * three templates keep their fixed canvas, and a 40 × 30 garden becomes
+ * drawable without pretending to be one of them.
+ *
+ * It deliberately omits `key` and `cellSize`: TemplatePreview reads neither, and
+ * a real garden has no template key to offer.
+ */
+export interface PreviewPlan {
+  cols: number;
+  rows: number;
+  cells: readonly TemplateCell[];
+  placements: readonly TemplatePlacement[];
+}
+
 // ── Composition helpers (module-private) ─────────────────────────────────────
 
 /** A 1×1 plant at (row, col). */
