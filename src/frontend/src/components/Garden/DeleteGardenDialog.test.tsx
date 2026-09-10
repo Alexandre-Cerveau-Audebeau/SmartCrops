@@ -268,6 +268,36 @@ describe('DeleteGardenDialog (SMA-18 lot 1) — brake and request', () => {
   });
 });
 
+// ── SMA-336 round 4 (E'''2, extended): the same silence as the dashboard's
+// rename dialog — the deletion refuses every exit while it runs, and said so
+// only through a disabled button and an `aria-hidden` spinner.
+describe('DeleteGardenDialog (SMA-336 round 4) — the pending state, spoken', () => {
+  it('announces the deletion in a live region that is already mounted', async () => {
+    let resolveDelete: () => void = () => {};
+    vi.mocked(deleteGarden).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDelete = resolve;
+        })
+    );
+    renderDialog();
+
+    const status = within(screen.getByRole('dialog')).getByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status.textContent).toBe('');
+
+    fireEvent.change(nameInput(), { target: { value: 'Casa Lolo' } });
+    fireEvent.click(confirmButton());
+
+    await waitFor(() => expect(status).toHaveTextContent('Deleting...'));
+    expect(confirmButton()).toHaveAttribute('aria-busy', 'true');
+
+    resolveDelete();
+    await waitFor(() => expect(status.textContent).toBe(''));
+    expect(confirmButton()).not.toHaveAttribute('aria-busy', 'true');
+  });
+});
+
 // ── Review round 1 ──────────────────────────────────────────────────────────
 describe('DeleteGardenDialog (SMA-18 lot 1, round 1) — focus and parent-driven close', () => {
   it('gives the name field the initial focus (typing the name is the first expected gesture)', async () => {

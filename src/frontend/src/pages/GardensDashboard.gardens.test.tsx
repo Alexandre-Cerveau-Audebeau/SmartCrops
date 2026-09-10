@@ -28,7 +28,12 @@ vi.mock('../services/dashboardApi', () => ({
 }));
 
 import GardensDashboard from './GardensDashboard';
-import { deleteGarden, fetchGardens, updateGarden } from '../services/gardenApi';
+import {
+  createGarden,
+  deleteGarden,
+  fetchGardens,
+  updateGarden,
+} from '../services/gardenApi';
 import {
   fetchDashboardPreferences,
   saveDashboardPreferences,
@@ -510,6 +515,101 @@ describe('Gardens widget rename errors (SMA-336 round 1)', () => {
       expect(screen.queryByRole('dialog', { name: 'Edit garden' })).toBeNull()
     );
     await waitFor(() => expect(fetchGardens).toHaveBeenCalledTimes(2));
+  });
+});
+
+// ── SMA-336 round 4 (E'''2): a dialog that refuses to close has to SAY so out
+// loud. `aria-busy` sits on a DISABLED button, which assistive technology does
+// not announce, and the spinner is `aria-hidden` — so the pending shape of
+// round 3 reached a screen-reader user through nothing at all. Each dialog now
+// carries a live region, mounted at all times and empty when idle so the
+// announcement is not lost together with the insertion.
+describe('Gardens dialogs speak their pending state (SMA-336 round 4)', () => {
+  beforeEach(() => {
+    localStorage.setItem('smartcrops-language', 'en');
+    vi.mocked(updateGarden).mockReset();
+    vi.mocked(createGarden).mockReset();
+  });
+
+  it('the rename dialog announces that it is saving, and goes quiet after', async () => {
+    let resolve: (value: { id: string; name: string }) => void = () => {};
+    vi.mocked(updateGarden).mockImplementation(
+      () => new Promise((resolveIt) => (resolve = resolveIt))
+    );
+    vi.mocked(fetchGardens).mockResolvedValue([gardenWith([ivy, fern])]);
+    renderPage();
+    await screen.findByText('Casa Lolo');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Casa Lolo' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit garden' });
+
+    // Already there before the request, and silent. Scoped to the dialog: the
+    // page carries dnd-kit's own live region, which is also a `status`.
+    const status = within(dialog).getByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status.textContent).toBe('');
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(updateGarden).toHaveBeenCalled());
+
+    expect(status).toHaveTextContent('Saving...');
+
+    await act(async () => {
+      resolve({ id: 'g1', name: 'Casa Lolo' });
+      await Promise.resolve();
+    });
+
+    // The rename over, the dialog leaves and takes the status with it. Checked
+    // on THIS node and on the text: dnd-kit gives the page a `role="status"`
+    // live region of its own, so a document-wide query never comes back empty.
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit garden' })).toBeNull()
+    );
+    await waitFor(() => expect(status.isConnected).toBe(false));
+    expect(screen.queryByText('Saving...')).toBeNull();
+  });
+
+  it('the create dialog announces that it is creating, and disarms Cancel', async () => {
+    // The create dialog has carried the same in-flight close guard since round
+    // 2 and said nothing about it: Cancel stayed live and silently did nothing.
+    let resolve: (value: { id: string; name: string }) => void = () => {};
+    vi.mocked(createGarden).mockImplementation(
+      () => new Promise((resolveIt) => (resolve = resolveIt))
+    );
+    vi.mocked(fetchGardens).mockResolvedValue([gardenWith([ivy])]);
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create Garden' }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Create a new garden',
+    });
+    fireEvent.change(within(dialog).getByLabelText(/^Name/), {
+      target: { value: 'Potager' },
+    });
+
+    const status = within(dialog).getByRole('status');
+    expect(status.textContent).toBe('');
+    const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
+    expect(cancel).toBeEnabled();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(createGarden).toHaveBeenCalled());
+
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveTextContent('Creating...');
+    expect(cancel).toBeDisabled();
+    expect(within(dialog).getByLabelText(/^Name/)).toBeDisabled();
+
+    await act(async () => {
+      resolve({ id: 'g2', name: 'Potager' });
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Create a new garden' })
+      ).toBeNull()
+    );
   });
 });
 

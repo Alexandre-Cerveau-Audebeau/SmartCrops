@@ -206,6 +206,21 @@ export default function DeleteGardenDialog({
         </Box>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
+        {/* SMA-336 round 4 (E'''2, extended): `handleClose` refuses to close
+            while the request runs and every control is disabled, and the
+            spinner is `aria-hidden` — so the pending state was invisible to a
+            screen reader here too. Mounted at all times and empty when idle:
+            a live region inserted together with its text is announced
+            unreliably. */}
+        <Typography
+          role="status"
+          aria-live="polite"
+          variant="body2"
+          color="text.secondary"
+          sx={{ mr: 'auto' }}
+        >
+          {deleting ? t('gardens.deleteDialog.deletingStatus') : ''}
+        </Typography>
         <Button variant="outlined" onClick={handleClose} disabled={deleting}>
           {t('gardens.deleteDialog.cancel')}
         </Button>
@@ -214,6 +229,7 @@ export default function DeleteGardenDialog({
           color="error"
           onClick={handleConfirm}
           disabled={!matches || deleting}
+          aria-busy={deleting}
           startIcon={
             deleting ? (
               <CircularProgress size={18} color="inherit" aria-hidden="true" />

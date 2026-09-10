@@ -680,4 +680,64 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
     expect(spanFor('medium', 1)).toEqual({ cols: 1, rows: 1 });
     expect(spanFor('large', 1)).toEqual({ cols: 1, rows: 2 });
   });
+
+  /**
+   * The value a property takes inside one media-query block. Sliced rather
+   * than matched with a built pattern, for the same reason `columnsAt` slices.
+   */
+  function declaredAt(css: string, minWidth: string, property: string): string {
+    const marker = `@media (min-width:${minWidth})`;
+    const at = css.indexOf(marker);
+    if (at < 0) throw new Error(`No ${marker} block in: ${css}`);
+    const block = css.slice(at, css.indexOf('}}', at));
+    const start = block.indexOf(`${property}:`);
+    if (start < 0) throw new Error(`No ${property} in ${marker}: ${block}`);
+    return block
+      .slice(start + property.length + 1)
+      .split(/[;}]/)[0]!
+      .trim();
+  }
+
+  /** The SortableWidget slot of a key — the node the spans are declared on. */
+  function slotNode(key: string): HTMLElement {
+    const card = document.querySelector(`[data-widget="${key}"]`);
+    if (!card) throw new Error(`No widget "${key}" rendered`);
+    const slot = card.parentElement?.parentElement;
+    if (!slot) {
+      throw new Error(`The slot of "${key}" is not where it was expected`);
+    }
+    return slot as HTMLElement;
+  }
+
+  it('every widget declares the span spanFor gives it at each breakpoint', async () => {
+    // Round 4 (E'''1). `DashboardGrid` packs with 1, then 2, then 4 columns;
+    // the widget CSS must name the SAME footprint at each of those, or the
+    // drag preview is computed on a grid the browser is not drawing. Asserted
+    // against `spanFor` itself — the one table both sides read — and not
+    // against literals, so a change to the table moves both together or fails.
+    const blocks = presetFor('gardener');
+    blocks[0]!.size = 'small';
+    blocks[1]!.size = 'medium';
+    blocks[2]!.size = 'large';
+    servePreferences('gardener', blocks);
+    renderPage();
+    await screen.findByText('Weather');
+
+    for (const block of blocks.slice(0, 3)) {
+      const css = rulesFor(slotNode(block.key)).join(' ');
+
+      expect(declaredAt(css, '0px', 'grid-column')).toBe(
+        `span ${spanFor(block.size, 1).cols}`
+      );
+      expect(declaredAt(css, '600px', 'grid-column')).toBe(
+        `span ${spanFor(block.size, 2).cols}`
+      );
+      expect(declaredAt(css, '1200px', 'grid-column')).toBe(
+        `span ${spanFor(block.size, 4).cols}`
+      );
+      // `grid-row` is not responsive: `spanFor` never changes the row span, so
+      // the one declaration outside any media query has to match all three.
+      expect(css).toContain(`grid-row:span ${spanFor(block.size, 4).rows}`);
+    }
+  });
 });

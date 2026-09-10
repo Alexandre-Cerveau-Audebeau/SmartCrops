@@ -80,11 +80,16 @@ export default function SortableWidget({
 
   // The footprint comes from the SAME table the sorting strategy packs with
   // (round 3, V6): a span declared here and modelled there would drift, and a
-  // drag preview computed from a stale span lands on the wrong cell. One
-  // column on a phone, two from a tablet up — CSS clamps a span to the column
-  // count, and `spanFor` says so explicitly.
+  // drag preview computed from a stale span lands on the wrong cell. CSS
+  // clamps a span to the column count and `spanFor` says so explicitly, so
+  // ONE call per breakpoint DashboardGrid declares — one column on a phone,
+  // two on a tablet, four from `lg` up (round 4, E'''1). The three sizes cap
+  // at two columns today, so the `lg` value equals the `sm` one; declaring it
+  // anyway is what keeps CSS and packing from diverging the day a size takes
+  // three or four.
   const phone = spanFor(block.size, 1);
-  const wide = spanFor(block.size, 2);
+  const tablet = spanFor(block.size, 2);
+  const desktop = spanFor(block.size, 4);
   const locked = block.key === NON_HIDABLE_BLOCK;
 
   return (
@@ -102,9 +107,10 @@ export default function SortableWidget({
         minWidth: 0,
         gridColumn: {
           xs: `span ${phone.cols}`,
-          sm: `span ${wide.cols}`,
+          sm: `span ${tablet.cols}`,
+          lg: `span ${desktop.cols}`,
         },
-        gridRow: `span ${wide.rows}`,
+        gridRow: `span ${desktop.rows}`,
         zIndex: isDragging ? 2 : 'auto',
         // The dragged widget is carried by the DragOverlay; its slot stays in
         // the grid, and since round 3 (V6) the sorting strategy translates it

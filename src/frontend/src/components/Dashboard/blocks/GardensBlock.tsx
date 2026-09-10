@@ -580,7 +580,24 @@ export default function GardensBlock({
           {/* Round 3 (N'1): while `closeEditDialog` refuses to close, the
               dialog has to SAY that it is working. Cancel disabled, the fields
               disabled and a spinner on Save — the same pending shape as
-              DeleteGardenDialog, so the two dialogs read alike. */}
+              DeleteGardenDialog, so the two dialogs read alike.
+
+              Round 4 (E'''2): all of that is SILENT. The spinner is
+              `aria-hidden` and `aria-busy` sits on a disabled button, which
+              assistive technology does not announce — so a screen-reader user
+              met a dialog that refused to close and said nothing. This region
+              is what speaks. It stays MOUNTED and empty when idle: a live
+              region inserted at the same moment as its text is announced
+              unreliably, one that is already there is not. */}
+          <Typography
+            role="status"
+            aria-live="polite"
+            variant="body2"
+            color="text.secondary"
+            sx={{ mr: 'auto', pl: 1 }}
+          >
+            {isMutating ? t('gardens.savingStatus') : ''}
+          </Typography>
           <Button onClick={closeEditDialog} disabled={isMutating}>
             {t('gardens.cancel')}
           </Button>

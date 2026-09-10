@@ -5,6 +5,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -359,6 +360,7 @@ export default function GardensDashboard() {
             slotProps={{ htmlInput: { maxLength: 100 } }}
             value={newGardenName}
             onChange={(event) => setNewGardenName(event.target.value)}
+            disabled={isMutating}
             sx={{ mt: 1, mb: 2 }}
           />
           <TextField
@@ -369,13 +371,36 @@ export default function GardensDashboard() {
             slotProps={{ htmlInput: { maxLength: 500 } }}
             value={newGardenDescription}
             onChange={(event) => setNewGardenDescription(event.target.value)}
+            disabled={isMutating}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeCreateDialog}>{t('gardens.cancel')}</Button>
+          {/* Round 4 (E'''2, extended): `closeCreateDialog` has carried the
+              same in-flight guard as the rename dialog since round 2, but here
+              NOTHING said so — Cancel stayed live and silently did nothing,
+              and there was no spinner at all. Same pending shape as the rename
+              and delete dialogs, and the same always-mounted live region. */}
+          <Typography
+            role="status"
+            aria-live="polite"
+            variant="body2"
+            color="text.secondary"
+            sx={{ mr: 'auto', pl: 1 }}
+          >
+            {isMutating ? t('gardens.creatingStatus') : ''}
+          </Typography>
+          <Button onClick={closeCreateDialog} disabled={isMutating}>
+            {t('gardens.cancel')}
+          </Button>
           <Button
             variant="contained"
             disabled={isMutating || !newGardenName.trim()}
+            aria-busy={isMutating}
+            startIcon={
+              isMutating ? (
+                <CircularProgress size={18} color="inherit" aria-hidden="true" />
+              ) : undefined
+            }
             onClick={handleCreate}
           >
             {t('gardens.create')}

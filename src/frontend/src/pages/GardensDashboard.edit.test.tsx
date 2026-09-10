@@ -12,6 +12,7 @@ import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { presetFor } from '../constants/dashboardPresets';
 import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
+import { DASHBOARD_SPACING } from '../theme/dashboardTokens';
 import type {
   DashboardBlock,
   DashboardLevel,
@@ -49,7 +50,9 @@ import {
  */
 const CELL = 280;
 const ROW = 200;
-const GUTTER = 20;
+// Round 4 (E'''5): the production gutter, not a copy of its current value —
+// the fixture geometry and the grid must move together.
+const GUTTER = DASHBOARD_SPACING.gutter;
 
 function stubGridGeometry(sizes?: Record<string, DashboardSize>) {
   const originalRect = Element.prototype.getBoundingClientRect;
@@ -79,9 +82,13 @@ function stubGridGeometry(sizes?: Record<string, DashboardSize>) {
   Element.prototype.scrollIntoView = () => {};
   Element.prototype.getBoundingClientRect = function (this: Element) {
     const key = keyOf(this);
-    const order = [...document.querySelectorAll('[data-widget]')].map((node) =>
-      node.getAttribute('data-widget')
-    );
+    // Round 4 (N'''1): the GRID widgets only. During a drag, DashboardGrid
+    // renders the active block a second time inside `[data-drag-overlay]`,
+    // `data-widget` and all; a document-wide query therefore carries that key
+    // twice, and since `packGrid` keys its placements by a Map, the overlay's
+    // placement replaced the grid slot's. The mixed-size assertions then read
+    // a cell the production grid does not have.
+    const order = renderedKeys();
     const index = key ? order.indexOf(key) : -1;
     if (index < 0) {
       return {
@@ -698,9 +705,13 @@ describe('GardensDashboard — drag transforms (SMA-336 round 2, V4)', () => {
     // transform itself with `CSS.Transform.toString`, so the string carries
     // `scaleX(1) scaleY(1)` rather than no scale at all — what must never
     // happen is a factor OTHER than 1.
-    for (const [, factor] of style.matchAll(/scale[XY]\(([-\d.]+)\)/g)) {
-      expect(Number(factor)).toBe(1);
-    }
+    // Round 4 (E'''4): collected, THEN asserted. `matchAll` on a style with no
+    // scale token yields nothing, so the loop this replaces passed without
+    // ever testing the contract it names.
+    const factors = [...style.matchAll(/scale[XY]\(([-\d.]+)\)/g)].map(
+      ([, factor]) => Number(factor)
+    );
+    expect(factors).toEqual([1, 1]);
 
     fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
   });

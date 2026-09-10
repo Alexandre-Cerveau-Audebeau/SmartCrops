@@ -285,6 +285,8 @@
     "cancel": "Annuler",
     "save": "Enregistrer",
     "create": "Créer",
+    "savingStatus": "Enregistrement en cours...",
+    "creatingStatus": "Création en cours...",
     "deleteDialog": {
       "title": "Supprimer ce jardin ?",
       "bodyList_one": "« {{name}} » — sa grille et {{count}} plante seront définitivement supprimées.",
@@ -300,7 +302,8 @@
       "confirm": "Supprimer le jardin",
       "cancel": "Annuler",
       "error": "Impossible de supprimer le jardin. Veuillez réessayer.",
-      "successToast": "Jardin supprimé"
+      "successToast": "Jardin supprimé",
+      "deletingStatus": "Suppression en cours..."
     },
     "loading": "Chargement des jardins...",
     "error": "Impossible de charger les jardins. Veuillez réessayer plus tard.",

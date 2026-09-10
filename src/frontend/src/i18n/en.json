@@ -285,6 +285,8 @@
     "cancel": "Cancel",
     "save": "Save",
     "create": "Create",
+    "savingStatus": "Saving...",
+    "creatingStatus": "Creating...",
     "deleteDialog": {
       "title": "Delete this garden?",
       "bodyList_one": "“{{name}}” — its grid and {{count}} plant will be permanently deleted.",
@@ -300,7 +302,8 @@
       "confirm": "Delete garden",
       "cancel": "Cancel",
       "error": "Couldn't delete the garden. Please try again.",
-      "successToast": "Garden deleted"
+      "successToast": "Garden deleted",
+      "deletingStatus": "Deleting..."
     },
     "loading": "Loading gardens...",
     "error": "Unable to load gardens. Please try again later.",

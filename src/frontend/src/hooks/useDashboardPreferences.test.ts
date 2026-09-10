@@ -422,6 +422,12 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
       await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
     });
     expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
+    // Round 4 (E'''3): the signal of the write that is ACTUALLY in flight. The
+    // mock ignores it and the test settles that request by hand further down,
+    // so without reading it the assertions below hold even with the abort
+    // removed — the one thing this test exists to pin.
+    const firstSignal = vi.mocked(saveDashboardPreferences).mock.calls[0]![2];
+    expect(firstSignal?.aborted).toBe(false);
 
     // Teardown: the epoch moves on and the in-flight write is aborted.
     act(() => result.current.setBlocks(teardown));
@@ -433,6 +439,7 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
       { level: 'gardener', blocks: teardown },
       true,
     ]);
+    expect(firstSignal?.aborted).toBe(true);
 
     // The teardown PUT completes — the tab was closing, the request went out.
     await act(async () => {
