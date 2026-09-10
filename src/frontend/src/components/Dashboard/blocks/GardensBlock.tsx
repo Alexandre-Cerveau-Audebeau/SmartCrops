@@ -41,32 +41,82 @@ import type { GardenView } from '../../../utils/gardenStats';
 /** Rows a Medium card shows before it defers the rest to "+N" (_spec.md 4). */
 const MEDIUM_ROWS = 3;
 
-/** Thumbnail edge on a Medium card and in the table's identity cell (_spec.md 7). */
-const MEDIUM_THUMB_PX = 48;
+/**
+ * Thumbnail box on a Medium row and in the table's identity cell.
+ *
+ * 48 x 40 on the Medium row, which is `A2Novice.dc.html`'s own
+ * `<span class="tbox" style="width: 48px; height: 40px;">` — it was a 48 square
+ * here, so a wide plan sat in a box 8 px taller than the artboard's.
+ */
+const MEDIUM_THUMB_W = 48;
+const MEDIUM_THUMB_H = 40;
 const TABLE_THUMB_W = 34;
 const TABLE_THUMB_H = 26;
 
 /**
  * Padding around an action glyph. 3 px on a 20 px icon gives a 26 px control —
- * above the 24 px floor WCAG 2.2 sets for a target, inside a row the design
- * keeps at 44 px tall (round 3, V14).
+ * above the 24 px floor WCAG 2.2 sets for a target, and exactly the height of
+ * the artboards' own `.pill` (26 px), which is what the zone behind the two
+ * buttons is.
  */
 const ACTION_PAD_PX = '3px';
 
 /**
+ * The tinted zone behind the two action glyphs (round 4, part B).
+ *
+ * 52 px by 26: two 26 px controls side by side, no gap and no padding, so the
+ * tint hugs them exactly and reads as one pill rather than a panel. 26 px is
+ * `.pill`'s height and `999px` its radius — the zone is drawn in the artboards'
+ * own vocabulary for a small inset, which is the whole point of § 4: the
+ * addition must not announce itself.
+ *
+ * `surfaceSubtle` is the fill: the product's single step away from the card, and
+ * the artboards' `--surface` verbatim (`#F2F6F0` by day). § 4 asks for « très
+ * légèrement plus clair que la carte » — at night that is literally what it is
+ * (`#1E3358` against a `#16294A` card); by day the card is pure white and
+ * nothing can be lighter, so the token steps the other way by the same few per
+ * cent. It is a theme token in both modes, which is the rule that matters.
+ */
+const ACTIONS_ZONE_W = 52;
+
+/**
+ * The fade, and NOT a rule (round 4, part B).
+ *
+ * 28 px of `transparent → card` immediately left of the frozen column, inside
+ * the 24–32 px § 4 asks for. What it replaces is the 1 px vertical border round
+ * 3 put there: a continuous vertical rule is the first thing § 4 rejects — « aucun
+ * autre séparateur du produit n'est vertical ; il découpe le widget en deux » —
+ * and the hard edge it drew was also what cut a word in half (« Plein so| »),
+ * the second rejection. A gradient does the one job the rule was doing, which is
+ * to say « the row continues under here », and does it by dimming the text
+ * instead of severing it.
+ *
+ * It is painted by the sticky cell's own `::before` at `right: 100%`, so it
+ * travels with the column at every scroll position and needs no second sticky
+ * element. `pointerEvents: 'none'` — it sits over the scrolling cells and must
+ * not take a click meant for them.
+ */
+const ACTIONS_FADE_PX = 28;
+
+/**
  * Width the actions column RESERVES in the Large table (round 2, V8; tightened
- * round 3, V14).
+ * round 3, V14; redrawn round 4, part B).
  *
- * Measured, not chosen: two icon buttons of 26 px, 2 px between them, none
- * before the chevron's 20, 4 px of left padding, none on the right, and 1 px of
- * separating rule. 26 + 2 + 26 + 0 + 20 + 4 + 1 = 79, declared at 80.
+ * Measured, not chosen: 2 px of left inset, the 52 px zone, 2 px, and the
+ * chevron's own 24 px column — the width the artboards give their last column
+ * (22 px on `Main`, 24 on `A3Expert`). 2 + 52 + 2 + 24 = 80.
  *
- * Round 2 declared 96 and DREW about 103: the cell also carried 8 px of padding
- * on each side, and a table cell takes the larger of its declared width and
- * what its content needs — so the declaration was never the number on screen.
- * The gaps and the padding are what moved here; the 23 px recovered go back to
- * the data columns, which is where the round 2 diagnosis said the pressure was
- * (568 px asked of a 516 px card).
+ * § 4 sets the target at « ≈ 52 px au lieu de 80 », reached by STACKING the two
+ * glyphs so they occupy one 28 px column beside the chevron's 24. That stack is
+ * refused here, and the refusal is arithmetic rather than taste: § 4 also fixes
+ * two hard constraints — each target at least 24 px (WCAG 2.2 § 2.5.8) and a
+ * 44 px row — and two 24 px targets stacked need 48 px of height with no gap at
+ * all, 4 px more than the row has. The § 2.5.8 spacing exception does not rescue
+ * it either: undersized targets are exempt only when a 24 px circle centred on
+ * each does not meet its neighbour's, and two controls sharing a 44 px row have
+ * their centres 22 px apart. § 4 says what to do when the two cannot both hold —
+ * « NE FORCE PAS : garde l'alignement horizontal resserré, dis-le avec la
+ * mesure » — so the pair stays side by side and the 80 px stands.
  *
  * It is DECLARED because the column is sticky, and a sticky column is still a
  * column: its width is counted in the layout, so at full scroll-right the last
@@ -89,35 +139,38 @@ const ACTIONS_COL_PX = 80;
  * the table is scrolled short of the end the data cells DO pass under this
  * column, and a translucent fill would let their text show through it — the
  * defect is worst on the dark theme, where the text is light and the card is
- * dark. The left rule is what says « the row continues behind here ».
+ * dark.
+ *
+ * What says « the row continues behind here » is now the FADE and no longer a
+ * border (round 4, part B): see {@link ACTIONS_FADE_PX}. Only the horizontal
+ * row rule is left, which every other cell of the table draws too.
+ *
+ * Both colours are resolved by the CALLER and written into the shorthand, which
+ * is the only form that survives MUI's system here (round 3, V16). Two others
+ * were measured and do not: `borderBottomColor: 'borderSubtle'` reaches CSS
+ * unresolved, because the system maps `borderColor` through the palette and
+ * passes the longhands straight through; and a `(theme) => ...` callback on such
+ * a longhand is dropped outright, leaving no declaration at all.
  */
-const stickyActionsSx = (rule: string) => ({
+const stickyActionsSx = (rule: string, paper: string) => ({
   position: 'sticky' as const,
   right: 0,
   // Above the scrolling cells, below MUI's own overlays (Tooltip, Popover).
   zIndex: 1,
   width: ACTIONS_COL_PX,
   minWidth: ACTIONS_COL_PX,
-  backgroundColor: 'background.paper',
-  // LONGHANDS, and the reason is a real defect (round 3, V16). Written as
-  // `borderLeft: '1px solid'` + `borderColor: 'borderSubtle'`, the separating
-  // rule came out near-black in daylight and near-white at night — the two
-  // extremes of contrast, on both sides of the same line. Spreading this object
-  // over `cellSx` keeps the POSITION of a key both objects declare, so
-  // `borderColor` was emitted where `cellSx` had put it: BEFORE `borderLeft`.
-  // The shorthand then reset the left colour to `currentColor`, which is the
-  // text colour. Longhands cannot be undone by a shorthand emitted earlier, so
-  // the rule now takes the token whatever the merge order — `borderSubtle`, the
-  // one every other rule of this table already uses.
-  //
-  // The caller resolves the colour and it is written INTO the shorthand, which
-  // is the only form that survives both hazards. Two others were measured and
-  // do not: `borderLeftColor: 'borderSubtle'` reaches CSS unresolved, because
-  // MUI's system maps `borderColor` through the palette and passes the
-  // longhands straight through; and a `(theme) => ...` callback on those
-  // longhands is dropped outright, leaving no declaration at all.
-  borderLeft: `1px solid ${rule}`,
+  backgroundColor: paper,
   borderBottom: `1px solid ${rule}`,
+  '&::before': {
+    content: '""',
+    position: 'absolute' as const,
+    top: 0,
+    bottom: 0,
+    right: '100%',
+    width: ACTIONS_FADE_PX,
+    pointerEvents: 'none' as const,
+    background: `linear-gradient(to right, transparent, ${paper})`,
+  },
 });
 
 interface Props {
@@ -184,8 +237,11 @@ export default function GardensBlock({
 }: Props) {
   const { t, i18n } = useTranslation();
   const tk = useDashboardTokens();
-  // The table's own rule colour, resolved once — see `stickyActionsSx`.
-  const ruleColor = useTheme().palette.borderSubtle;
+  // The table's own rule and card colours, resolved once — see
+  // `stickyActionsSx` for why they cannot be left as system strings.
+  const palette = useTheme().palette;
+  const ruleColor = palette.borderSubtle;
+  const paperColor = palette.background.paper;
 
   // ONE derivation per garden, shared with Statistics and reused across every
   // render of this widget (round 1, E10 / G4 / E22). It used to run inline in
@@ -311,9 +367,20 @@ export default function GardensBlock({
    * cursor when a widget is resized.
    */
   const gardenActions = (garden: DashboardGardenData) => (
-    // 2 px apart and 3 px of padding each (round 3, V14): « plus proches entre
-    // eux et plus proches du bord ».
-    <Box sx={{ display: 'flex', gap: '2px' }}>
+    // The tinted, borderless, rounded ZONE of § 4 (round 4, part B): two 26 px
+    // controls touching, so the fill hugs them into a 52 x 26 pill — the
+    // artboards' own `.pill` box, and no rule anywhere on it.
+    <Box
+      data-row-actions-zone
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        flexShrink: 0,
+        width: ACTIONS_ZONE_W,
+        borderRadius: '999px',
+        backgroundColor: 'surfaceSubtle',
+      }}
+    >
       <IconButton
         size="small"
         onClick={(event) => {
@@ -322,10 +389,20 @@ export default function GardensBlock({
           openEditDialog(garden);
         }}
         aria-label={`${t('gardens.edit')} ${garden.name}`}
-        sx={{ p: ACTION_PAD_PX }}
+        sx={{
+          p: ACTION_PAD_PX,
+          color: 'text.secondary',
+          '&:hover': { color: 'text.primary' },
+        }}
       >
         <EditIcon fontSize="small" />
       </IconButton>
+      {/* NEUTRAL at rest, red when the pointer or the keyboard reaches it
+          (§ 4). A saturated bin on every row put three alarms in a table the
+          frozen design gives no alert colour at all; the warning belongs to the
+          moment of acting, not to the moment of looking. `Mui-focusVisible`
+          rather than `:focus` so it answers the keyboard and not a click that
+          has already left. */}
       <IconButton
         size="small"
         onClick={(event) => {
@@ -334,7 +411,12 @@ export default function GardensBlock({
           openDeleteDialog(garden);
         }}
         aria-label={`${t('gardens.delete')} ${garden.name}`}
-        sx={{ p: ACTION_PAD_PX, color: 'error.main' }}
+        sx={{
+          p: ACTION_PAD_PX,
+          color: 'text.secondary',
+          '&:hover': { color: 'error.main' },
+          '&.Mui-focusVisible': { color: 'error.main' },
+        }}
       >
         <DeleteIcon fontSize="small" />
       </IconButton>
@@ -356,6 +438,9 @@ export default function GardensBlock({
       sx={{
         display: 'flex',
         alignItems: 'center',
+        // 2 px between the zone and the chevron: 2 + 52 + 2 + 24 = the 80 px
+        // the column declares (see `ACTIONS_COL_PX`).
+        gap: '2px',
         flexShrink: 0,
       }}
     >
@@ -383,6 +468,11 @@ export default function GardensBlock({
         sx={{
           display: 'flex',
           alignItems: 'center',
+          // Its own 24 px column, as the artboards give it (22 px on `Main`,
+          // 24 on `A3Expert`) and as § 4 requires it to keep.
+          justifyContent: 'center',
+          width: 24,
+          flexShrink: 0,
           color: 'text.disabled',
           textDecoration: 'none',
           '&:hover': { color: 'text.secondary' },
@@ -492,7 +582,9 @@ export default function GardensBlock({
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px',
+                  // `A2Novice.dc.html`: `gap: 12px` between the thumbnail, the
+                  // name group and the count pill.
+                  gap: '12px',
                   flex: 1,
                   minWidth: 0,
                   minHeight: 44,
@@ -505,10 +597,24 @@ export default function GardensBlock({
               >
                 <GardenThumbnail
                   garden={garden}
-                  maxW={MEDIUM_THUMB_PX}
-                  maxH={MEDIUM_THUMB_PX}
+                  maxW={MEDIUM_THUMB_W}
+                  maxH={MEDIUM_THUMB_H}
                 />
-                <Box sx={{ flex: 1, minWidth: 0 }}>
+                {/* The artboard's own middle group: `flex: 1; min-width: 0;
+                    display: flex; align-items: center; gap: 10px; overflow:
+                    hidden` — the name and the chips share ONE line and yield
+                    together, which is why the chips clip rather than push the
+                    name out. */}
+                <Box
+                  sx={{
+                    flex: 1,
+                    minWidth: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    overflow: 'hidden',
+                  }}
+                >
                   <Typography
                     sx={{
                       fontSize: DASHBOARD_TYPE.gardenName,
@@ -520,47 +626,53 @@ export default function GardensBlock({
                   >
                     {garden.name}
                   </Typography>
-                  <Typography
+                  {/* NO sub-line under the name (round 4, A4). The row carried
+                      « N plantes · M var. » there; `A2Novice.dc.html` puts the
+                      count in the green pill at the end of the row and leaves
+                      the name on a line of its own. A second line also made the
+                      row taller than the 44 px the artboard draws, which is
+                      what pushed three rows and two links past a Medium card. */}
+                  <Box
                     sx={{
-                      fontSize: DASHBOARD_TYPE.secondary,
-                      color: 'text.secondary',
+                      display: 'flex',
+                      gap: '6px',
+                      minWidth: 0,
+                      overflow: 'hidden',
+                      alignItems: 'center',
                     }}
                   >
-                    {t('gardens.plantsCount', { count: garden.placementCount })}
-                    {garden.varietyCount > 0 &&
-                      ` · ${t('dashboard.blocks.gardens.varieties', {
-                        count: garden.varietyCount,
-                      })}`}
-                  </Typography>
+                    {typeLabel(garden) && (
+                      <Chip
+                        label={typeLabel(garden)}
+                        size="small"
+                        variant="outlined"
+                        sx={{
+                          height: DASHBOARD_TYPE.chipHeight,
+                          fontSize: DASHBOARD_TYPE.chip,
+                        }}
+                      />
+                    )}
+                    {ornamentalChip(garden)}
+                  </Box>
                 </Box>
-                {/* What CEDES when the two buttons take their 68 px (V12): the
-                    chips, by clipping — which is the frozen design's own
-                    arrangement for this row (`A2Novice.dc.html`: the name and
-                    the chips share one `flex: 1; min-width: 0; overflow:
-                    hidden` group). They were `flexShrink: 0` here, so they
-                    would have pushed the name out instead of yielding. */}
-                <Box
+                {/* The GREEN count pill, right-aligned (round 4, A4):
+                    `<span class="pill ok num">50 plantes</span>`. Its colours
+                    are the artboards' `--chip-ok-bg` / `--chip-ok-tx` in both
+                    modes, carried as tokens like every other dashboard fill. */}
+                <Chip
+                  label={t('gardens.plantsCount', {
+                    count: garden.placementCount,
+                  })}
+                  size="small"
                   sx={{
-                    display: 'flex',
-                    gap: '4px',
-                    minWidth: 0,
-                    overflow: 'hidden',
-                    alignItems: 'center',
+                    flexShrink: 0,
+                    height: DASHBOARD_TYPE.chipHeight,
+                    fontSize: DASHBOARD_TYPE.chip,
+                    fontWeight: 700,
+                    backgroundColor: tk.okBg,
+                    color: tk.okText,
                   }}
-                >
-                  {typeLabel(garden) && (
-                    <Chip
-                      label={typeLabel(garden)}
-                      size="small"
-                      variant="outlined"
-                      sx={{
-                        height: DASHBOARD_TYPE.chipHeight,
-                        fontSize: DASHBOARD_TYPE.chip,
-                      }}
-                    />
-                  )}
-                  {ornamentalChip(garden)}
-                </Box>
+                />
               </Box>
             </MaybeTooltip>
             {rowTrailing(garden)}
@@ -658,7 +770,11 @@ export default function GardensBlock({
                   {label}
                 </Box>
               ))}
-              <Box component="th" scope="col" sx={stickyActionsSx(ruleColor)}>
+              <Box
+                component="th"
+                scope="col"
+                sx={stickyActionsSx(ruleColor, paperColor)}
+              >
                 <Box component="span" sx={visuallyHidden}>
                   {t('dashboard.blocks.gardens.columns.actions')}
                 </Box>
@@ -887,7 +1003,9 @@ function GardenRow({
   plannerPath,
 }: RowProps) {
   const { t, i18n } = useTranslation();
-  const ruleColor = useTheme().palette.borderSubtle;
+  const palette = useTheme().palette;
+  const ruleColor = palette.borderSubtle;
+  const paperColor = palette.background.paper;
 
   const cellSx = {
     // >= 44px rows (_spec.md 3): the line is a touch target as much as a row.
@@ -906,131 +1024,136 @@ function GardenRow({
     whiteSpace: 'nowrap',
   } as const;
 
+  /**
+   * The ONE sub-line of the identity cell (round 4, A5).
+   *
+   * The artboard's own text first — « 10 × 8 » in Gardener, « modifié il y a
+   * 2 h » in Expert, « plan non dessiné » when there is none — then the
+   * description after a middle dot when the garden has one. One line, truncated,
+   * the whole of it in the tooltip.
+   */
+  const primarySub = showHarvestColumn
+    ? t('dashboard.blocks.gardens.lastModified', {
+        when: formatRelativeDate(
+          new Date(garden.updatedAt),
+          new Date(),
+          language,
+          'short'
+        ),
+      })
+    : view?.hasPlan
+      ? t('dashboard.blocks.gardens.dimensions', {
+          cols: garden.width,
+          rows: garden.height,
+        })
+      : t('dashboard.blocks.gardens.noPlan');
+  const subLine = garden.description
+    ? `${primarySub} · ${garden.description}`
+    : primarySub;
+
   return (
     <Box component="tr">
+      {/* THREE children and never four (round 4, A5): the name, ONE sub-line,
+          then the wrapping thumbnail-and-chips row — which is exactly what
+          `Main.dc.html` puts in a `.td`:
+
+            <div class="gname">Terrasse</div>
+            <div class="tsub num">10 × 8 · 50 cm</div>
+            <div style="display:flex; …; flex-wrap:wrap;">[thumb][chips]</div>
+
+          The cell stacked four: the description had a line of its own between
+          the name and the dimensions. Every row of the table paid for it in
+          height, for a field one garden in three fills, and that height is what
+          pushed the table. The description has not gone — it is the truncated
+          TAIL of the one sub-line now, with the whole text in the tooltip, so
+          it costs no line at all. */}
       <Box component="td" sx={cellSx}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Box sx={{ minWidth: 0 }}>
-            <Box
-              component={RouterLink}
-              to={plannerPath}
-              aria-label={t('dashboard.blocks.gardens.open', {
-                name: garden.name,
-              })}
+        <Box sx={{ minWidth: 0 }}>
+          <Box
+            component={RouterLink}
+            to={plannerPath}
+            aria-label={t('dashboard.blocks.gardens.open', {
+              name: garden.name,
+            })}
+            sx={{
+              display: 'block',
+              fontSize: DASHBOARD_TYPE.gardenName,
+              fontWeight: 700,
+              textDecoration: 'none',
+              color: 'inherit',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {garden.name}
+          </Box>
+          {/* V10 — the description is still shown, and A5 is where it sits.
+              « Mes Jardins » printed it on every card; the widget carried it on
+              the wire and edited it in the rename dialog, but showed it nowhere.
+              `enterTouchDelay` / `leaveTouchDelay` make the tooltip open on a
+              long-press and stay open — on a phone there is no hover, and a
+              description nobody can reach is the defect this fixes. */}
+          <MaybeTooltip description={garden.description}>
+            <Typography
               sx={{
-                display: 'block',
-                fontSize: DASHBOARD_TYPE.gardenName,
-                fontWeight: 700,
-                textDecoration: 'none',
-                color: 'inherit',
+                ...subSx,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                // The tooltip is the way to the rest, and it needs a focusable,
+                // hoverable target of its own.
+                ...(garden.description ? { cursor: 'help' } : null),
               }}
+              tabIndex={garden.description ? 0 : undefined}
             >
-              {garden.name}
-            </Box>
-            {garden.description && (
-              /* V10 — the description is back. « Mes Jardins » printed it on
-                 every card (clamped to two lines, with a See more toggle above
-                 80 characters); the widget carried it on the wire and edited it
-                 in the rename dialog, but showed it nowhere.
-
-                 One truncated line here, the whole text in the tooltip. The
-                 table cell is 106 px wide and the row is a comparison line, not
-                 a card: two clamped lines would push every other column's
-                 baseline down for the sake of a field only one garden in three
-                 fills. `enterTouchDelay` / `leaveTouchDelay` make the tooltip
-                 open on a long-press and stay open — on a phone there is no
-                 hover, and a description nobody can reach is the defect this
-                 fixes, not the one it should ship. */
-              <Tooltip
-                title={garden.description}
-                enterTouchDelay={0}
-                leaveTouchDelay={6000}
-                describeChild
-              >
-                <Typography
-                  sx={{
-                    ...subSx,
-                    color: 'text.secondary',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    // The tooltip is the way to the rest, and it needs a
-                    // focusable, hoverable target of its own.
-                    cursor: 'help',
-                  }}
-                  tabIndex={0}
-                >
-                  {garden.description}
-                </Typography>
-              </Tooltip>
-            )}
-            <Typography sx={subSx}>
-              {showHarvestColumn
-                ? t('dashboard.blocks.gardens.lastModified', {
-                    when: formatRelativeDate(
-                      new Date(garden.updatedAt),
-                      new Date(),
-                      language,
-                      'short'
-                    ),
-                  })
-                : view?.hasPlan
-                  ? t('dashboard.blocks.gardens.dimensions', {
-                      cols: garden.width,
-                      rows: garden.height,
-                    })
-                  : t('dashboard.blocks.gardens.noPlan')}
+              {subLine}
             </Typography>
-            {/* V11 — the plan thumbnail is back, at every level.
+          </MaybeTooltip>
+          {/* V11 — the plan thumbnail is back, at every level.
 
-                It was never missing on the Gardener dashboard: it was tied to
-                `!showHarvestColumn`, so it vanished the moment the Harvest
-                widget joined the page — which is the Expert preset, and the
-                only place the defect was seen. That condition transcribed
-                `_spec.md` § 4 and § 10.18 faithfully, and both are a WIDTH
-                arbitration: seven labelled columns need 590 px and a Large card
-                offers 516, so the design paid for RÉCOLTE with the thumbnail.
-                V8 makes the table scroll horizontally with its actions frozen,
-                so 516 px is no longer a ceiling and the trade no longer has to
-                be made. Documented amendment: the thumbnail is unconditional.
+              It was never missing on the Gardener dashboard: it was tied to
+              `!showHarvestColumn`, so it vanished the moment the Harvest widget
+              joined the page — which is the Expert preset, and the only place
+              the defect was seen. That condition transcribed `_spec.md` § 4 and
+              § 10.18 faithfully, and both are a WIDTH arbitration: seven
+              labelled columns need 590 px and a Large card offers 516, so the
+              design paid for RÉCOLTE with the thumbnail. V8 makes the table
+              scroll horizontally with its actions frozen, so 516 px is no
+              longer a ceiling and the trade no longer has to be made.
+              Documented amendment: the thumbnail is unconditional.
 
-                Inside the wrapping chip row, exactly as the frozen artboard has
-                it (`Main.dc.html`: `flex-wrap: wrap`, thumbnail then chips),
-                and not to the left of the whole cell where it used to be. That
-                placement COSTS NOTHING: a wrapping row's minimum width is its
-                widest single item, so the identity column asks for 85 px (the
-                ornamental chip) instead of the 211 px the old inline row
-                summed. Restoring the thumbnail this way makes the table
-                narrower than it was without it. */}
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                mt: '2px',
-                flexWrap: 'wrap',
-              }}
-            >
-              <GardenThumbnail
-                garden={garden}
-                maxW={TABLE_THUMB_W}
-                maxH={TABLE_THUMB_H}
+              Inside the wrapping chip row, exactly as the frozen artboard has
+              it (`Main.dc.html`: `flex-wrap: wrap`, thumbnail then chips), and
+              not to the left of the whole cell where it used to be. That
+              placement COSTS NOTHING: a wrapping row's minimum width is its
+              widest single item, so the identity column asks for 85 px (the
+              ornamental chip) instead of the 211 px the old inline row summed. */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              mt: '2px',
+              flexWrap: 'wrap',
+            }}
+          >
+            <GardenThumbnail
+              garden={garden}
+              maxW={TABLE_THUMB_W}
+              maxH={TABLE_THUMB_H}
+            />
+            {typeLabel && (
+              <Chip
+                label={typeLabel}
+                size="small"
+                variant="outlined"
+                sx={{
+                  height: DASHBOARD_TYPE.chipHeight,
+                  fontSize: DASHBOARD_TYPE.chip,
+                }}
               />
-              {typeLabel && (
-                <Chip
-                  label={typeLabel}
-                  size="small"
-                  variant="outlined"
-                  sx={{
-                    height: DASHBOARD_TYPE.chipHeight,
-                    fontSize: DASHBOARD_TYPE.chip,
-                  }}
-                />
-              )}
-              {ornamental}
-            </Box>
+            )}
+            {ornamental}
           </Box>
         </Box>
       </Box>
@@ -1102,11 +1225,16 @@ function GardenRow({
         </Box>
       )}
 
-      {/* 4 px in, nothing out (round 3, V14): the column ends at the card's own
-          padding rather than 8 px short of it. */}
+      {/* 2 px in, nothing out: the column ends at the card's own padding, and
+          the zone starts where the fade to its left finishes. */}
       <Box
         component="td"
-        sx={{ ...cellSx, ...stickyActionsSx(ruleColor), pl: '4px', pr: 0 }}
+        sx={{
+          ...cellSx,
+          ...stickyActionsSx(ruleColor, paperColor),
+          pl: '2px',
+          pr: 0,
+        }}
       >
         {actions}
       </Box>

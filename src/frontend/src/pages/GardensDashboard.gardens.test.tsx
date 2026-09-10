@@ -763,9 +763,20 @@ describe('Gardens widget — the garden description (V10)', () => {
   const described = (description: string | null) =>
     dashboardWith([gardenWith(3, { description })]);
 
+  /**
+   * The identity cell's ONE sub-line (round 4, A5).
+   *
+   * The description used to hold a line of its own between the name and the
+   * dimensions, so the cell stacked four rows where `Main.dc.html` draws three
+   * — and every row of the table paid for it in height. It is the truncated
+   * TAIL of the dimensions line now: same text, same tooltip, same tab stop,
+   * no extra line. The fixture garden is 4 x 3.
+   */
+  const subLine = (description: string) => `4 × 3 · ${description}`;
+
   beforeEach(() => localStorage.setItem('smartcrops-language', 'en'));
 
-  it('shows it under the garden name on the Large table', async () => {
+  it('shares the identity cell’s one sub-line on the Large table', async () => {
     vi.mocked(fetchDashboardData).mockResolvedValue(
       described('Le coin sud, refait au printemps.')
     );
@@ -773,9 +784,15 @@ describe('Gardens widget — the garden description (V10)', () => {
     renderPage();
 
     await screen.findByText('Casa Lolo');
-    expect(
-      within(gardensWidget()).getByText('Le coin sud, refait au printemps.')
-    ).toBeInTheDocument();
+    const line = within(gardensWidget()).getByText(
+      subLine('Le coin sud, refait au printemps.')
+    );
+    expect(line).toBeInTheDocument();
+
+    // THREE children, never four: the name link, this line, and the wrapping
+    // thumbnail-and-chips row — the artboard's own `.td`.
+    const cell = line.closest('td')!;
+    expect(cell.firstElementChild!.children).toHaveLength(3);
   });
 
   it('is reachable by the keyboard, with the whole text on it', async () => {
@@ -796,7 +813,7 @@ describe('Gardens widget — the garden description (V10)', () => {
 
     renderPage();
     await screen.findByText('Casa Lolo');
-    const line = within(gardensWidget()).getByText(long);
+    const line = within(gardensWidget()).getByText(subLine(long));
 
     expect(line).toHaveAttribute('tabindex', '0');
     expect(line).toHaveAttribute('title', long);
@@ -815,7 +832,7 @@ describe('Gardens widget — the garden description (V10)', () => {
     renderPage();
     await screen.findByText('Casa Lolo');
 
-    fireEvent.mouseOver(within(gardensWidget()).getByText(text));
+    fireEvent.mouseOver(within(gardensWidget()).getByText(subLine(text)));
 
     expect(await screen.findByRole('tooltip')).toHaveTextContent(text);
   });
@@ -829,7 +846,7 @@ describe('Gardens widget — the garden description (V10)', () => {
 
     renderPage();
     await screen.findByText('Casa Lolo');
-    const line = within(gardensWidget()).getByText(text);
+    const line = within(gardensWidget()).getByText(subLine(text));
 
     fireEvent.touchStart(line);
 
@@ -844,9 +861,12 @@ describe('Gardens widget — the garden description (V10)', () => {
     await screen.findByText('Casa Lolo');
     const widget = within(gardensWidget());
     expect(widget.queryByRole('tooltip')).toBeNull();
-    // The identity cell keeps its dimensions line and nothing stands in for a
-    // description that does not exist.
-    expect(widget.getByText('4 × 3')).toBeInTheDocument();
+    // The sub-line is the dimensions ALONE — no separator left dangling, and
+    // no tab stop on a line that has nothing more to give.
+    const line = widget.getByText('4 × 3');
+    expect(line).toBeInTheDocument();
+    expect(line).not.toHaveAttribute('tabindex');
+    expect(line).not.toHaveAttribute('title');
   });
 
   it('is not on the Medium card, where the row is one 44 px line', async () => {
@@ -935,6 +955,118 @@ async function renderNovice() {
   await screen.findAllByText('Casa Lolo');
 }
 
+// ROUND 4 (A4) — the Medium row is `A2Novice.dc.html` again.
+//
+// The artboard gives it five things in this order: a 48 x 40 thumbnail, the
+// name, the type chip, a GREEN « 50 plantes » pill pushed to the right, and the
+// chevron. The implementation had put the count on a second line under the name
+// — « 3 plantes · 3 var. » — which is a sub-line the artboard does not draw,
+// and which made the row taller than the 44 px it is laid out at.
+describe('Gardens Medium row — the artboard’s own five elements (A4)', () => {
+  beforeEach(() => {
+    localStorage.setItem('smartcrops-language', 'en');
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenWith(3)])
+    );
+  });
+
+  it('puts the count in the green pill at the end of the row', async () => {
+    await renderNovice();
+    const widget = within(gardensWidget());
+
+    const pill = widget.getByText('3 plants');
+    expect(pill).toBeInTheDocument();
+    // `.pill.ok` — the artboards' `--chip-ok-bg` / `--chip-ok-tx`, carried as a
+    // theme token in both modes like every other dashboard fill.
+    const rules = rulesFor(pill.closest('.MuiChip-root')!)
+      .toLowerCase()
+      .replace(/\s+/g, '');
+    expect(rules).toContain('background-color:#e4f3e9');
+    expect(rules).toContain('color:#20713f');
+  });
+
+  it('carries NO sub-line under the name', async () => {
+    // « 3 plantes · 3 var. » was that sub-line. The varieties figure has not
+    // been lost: the Large table's PLANTES column still carries it, which is
+    // rule 3 of the design contract — more information as the widget grows,
+    // never different information.
+    await renderNovice();
+    const widget = within(gardensWidget());
+
+    expect(widget.queryByText(/3 var\./)).toBeNull();
+    expect(widget.queryByText('3 plants · 3 var.')).toBeNull();
+  });
+
+  it('draws the thumbnail in the artboard’s 48 x 40 box, not a 48 square', async () => {
+    await renderNovice();
+
+    const preview = within(gardensWidget()).getAllByTestId(
+      'template-preview'
+    )[0]!;
+    // `TemplatePreview` fits itself INSIDE the box it is given, so the box is
+    // the ceiling and the drawing is at most that.
+    const box = preview.getBoundingClientRect();
+    expect(box.width).toBeLessThanOrEqual(48);
+    expect(box.height).toBeLessThanOrEqual(40);
+  });
+});
+
+// ROUND 4 (part B) — the actions zone of § 4 of the design contract.
+describe('Gardens rows — the actions zone (round 4, part B)', () => {
+  beforeEach(() => {
+    localStorage.setItem('smartcrops-language', 'en');
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenWith(3)])
+    );
+  });
+
+  const zone = () =>
+    gardensWidget().querySelector('[data-row-actions-zone]') as HTMLElement;
+
+  it('is a borderless tinted pill, 52 px wide (§ 4)', async () => {
+    // « Zone sans bordure : fond très légèrement plus clair que la carte, coins
+    // arrondis, aucun filet. » Two 26 px controls touching, so the fill hugs
+    // them into one 52 x 26 pill — the artboards' own `.pill` box.
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    const rules = rulesFor(zone()).toLowerCase().replace(/\s+/g, '');
+    expect(rules).toContain('width:52px');
+    expect(rules).toContain('border-radius:999px');
+    expect(rules).toContain('background-color:');
+    expect(rules).not.toContain('border:1px');
+  });
+
+  it('keeps the bin NEUTRAL at rest and red only when reached', async () => {
+    // « Corbeille neutre au repos, rouge au survol et au focus. L'avertissement
+    // arrive au moment d'agir. » A saturated bin on every row put three alarms
+    // in a table the frozen design gives no alert colour at all.
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    const bin = within(gardensWidget()).getByRole('button', {
+      name: 'Delete Casa Lolo',
+    });
+    const rules = rulesFor(bin).toLowerCase().replace(/\s+/g, '');
+
+    // The resting declaration is the neutral one; the red lives behind :hover
+    // and behind the focus-visible class, never on the bare selector.
+    const resting = rules.split(':hover')[0]!;
+    expect(resting).not.toContain('color:#d32f2f');
+    expect(rules).toContain(':hover{color:#d32f2f');
+    expect(rules).toContain('mui-focusvisible{color:#d32f2f');
+  });
+
+  it('leaves the chevron its own 24 px column, as the artboard has it', async () => {
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    const chevron = gardensWidget().querySelector('[data-row-chevron]')!;
+    const rules = rulesFor(chevron).replace(/\s+/g, '');
+    expect(rules).toContain('width:24px');
+  });
+});
+
 describe('Gardens table — the actions column is frozen to the right (V8)', () => {
   beforeEach(() => {
     localStorage.setItem('smartcrops-language', 'en');
@@ -979,17 +1111,22 @@ describe('Gardens table — the actions column is frozen to the right (V8)', () 
   });
 
   it.each([
-    ['light', '#e2eadf'],
-    ['dark', 'rgba(79,179,124,0.45)'],
+    ['light', '#e2eadf', '#ffffff'],
+    ['dark', 'rgba(79,179,124,0.45)', '#16294a'],
   ])(
-    'draws its separating rule with the table’s own token in %s',
-    async (mode, expected) => {
-      // V16. Written as a `borderLeft` shorthand beside a `borderColor`, the
-      // rule came out near-black in daylight and near-white at night —
-      // maximum contrast on both sides of the same line. Spreading this object
-      // over `cellSx` keeps `borderColor` in its ORIGINAL position, before the
-      // shorthand, and the shorthand then reset the left colour to
-      // `currentColor`, which is the text colour.
+    'fades into the row instead of drawing a rule down it, in %s',
+    async (mode, rule, paper) => {
+      // ROUND 4, part B. Round 3 (V16) fixed the COLOUR of a 1 px vertical
+      // border here; § 4 of the design contract removes the border itself —
+      // « un fondu, pas une cloison ». Two of its rejections are the same
+      // defect seen twice: a continuous vertical rule is a separator no other
+      // surface of the product draws, and the hard edge it makes is what cut a
+      // word in half. 28 px of `transparent → card` does the one job the rule
+      // was doing, and does it by dimming the text rather than severing it.
+      //
+      // The horizontal row rule stays — every other cell of the table draws it
+      // — and it still has to carry the token rather than `currentColor`,
+      // which is what V16 was about.
       //
       // Rendered under the real application theme, deliberately: the page's
       // own test wrapper carries none, so `borderSubtle` would not resolve and
@@ -1008,7 +1145,13 @@ describe('Gardens table — the actions column is frozen to the right (V8)', () 
 
       for (const cell of actionCells()) {
         const rules = rulesFor(cell).toLowerCase().replace(/\s+/g, ' ');
-        expect(rules).toContain(`border-left:1px solid ${expected}`);
+        expect(rules).not.toContain('border-left');
+        expect(rules).toContain(`border-bottom:1px solid ${rule}`);
+        expect(rules).toContain('width:28px');
+        expect(rules).toContain(
+          `background:linear-gradient(to right, transparent, ${paper})`
+        );
+        expect(rules).toContain('pointer-events:none');
         expect(rules).not.toContain('currentcolor');
         expect(rules).not.toContain('bordersubtle');
       }
