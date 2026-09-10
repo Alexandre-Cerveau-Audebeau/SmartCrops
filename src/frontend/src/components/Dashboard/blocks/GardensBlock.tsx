@@ -13,7 +13,9 @@ import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Skeleton from '@mui/material/Skeleton';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { visuallyHidden } from '@mui/utils';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -30,8 +32,10 @@ import { DASHBOARD_TYPE } from '../../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../../theme/useDashboardTokens';
 import type { DashboardSize } from '../../../types/Dashboard';
 import type { DashboardGardenData } from '../../../types/DashboardData';
+import { formatCount } from '../../../utils/formatNumber';
 import { formatRelativeDate } from '../../../utils/formatRelativeDate';
-import { deriveGardenView, type GardenView } from '../../../utils/gardenStats';
+import { useGardenViews } from '../../../hooks/useGardenViews';
+import type { GardenView } from '../../../utils/gardenStats';
 
 /** Rows a Medium card shows before it defers the rest to "+N" (_spec.md 4). */
 const MEDIUM_ROWS = 3;
@@ -103,8 +107,14 @@ export default function GardensBlock({
   onDeleted,
   onExpand,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const tk = useDashboardTokens();
+
+  // ONE derivation per garden, shared with Statistics and reused across every
+  // render of this widget (round 1, E10 / G4 / E22). It used to run inline in
+  // `GardenRow`, so the rename dialog's own `setEditName` re-ran the exposure
+  // engine once per garden per keystroke.
+  const views = useGardenViews(gardens);
 
   const [mutationError, setMutationError] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
@@ -244,6 +254,7 @@ export default function GardensBlock({
     <Box
       sx={{
         flex: 1,
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -253,7 +264,7 @@ export default function GardensBlock({
         <Typography
           sx={{ fontSize: DASHBOARD_TYPE.big, fontWeight: 800, lineHeight: 1.1 }}
         >
-          {gardens.length}
+          {formatCount(gardens.length, i18n.language)}
         </Typography>
         <Typography
           sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary' }}
@@ -303,6 +314,11 @@ export default function GardensBlock({
         sx={{
           flex: 1,
           minHeight: 0,
+          // Bounded, like every other list body (V7): three rows and two links
+          // fit a Medium card, but a long garden name wrapping is enough to
+          // make them not, and the answer to that is a scrollbar inside the
+          // card — never a line drawn under it.
+          overflowY: 'auto',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-evenly',
@@ -437,7 +453,11 @@ export default function GardensBlock({
       ...(showHarvestColumn
         ? [t('dashboard.blocks.gardens.columns.harvest')]
         : [t('dashboard.blocks.gardens.columns.modified')]),
-      '',
+      // NO trailing empty entry (round 1, E9 / G2). The actions column has its
+      // own `th` below, with the screen-reader label this list cannot carry, so
+      // a placeholder here emitted a SEVENTH header for six body cells: every
+      // header after EXPOSURE sat one column right of the cells it named, and
+      // assistive technology read the actions cell under « MODIFIED ».
     ];
 
     return (
@@ -496,6 +516,7 @@ export default function GardensBlock({
               <GardenRow
                 key={garden.id}
                 garden={garden}
+                view={views.get(garden.id)}
                 language={language}
                 showWeatherColumn={showWeatherColumn}
                 showHarvestColumn={showHarvestColumn}
@@ -659,18 +680,10 @@ export default function GardensBlock({
   );
 }
 
-/** Screen-reader-only, for the header of the actions column. */
-const visuallyHidden = {
-  position: 'absolute',
-  width: 1,
-  height: 1,
-  overflow: 'hidden',
-  clip: 'rect(0 0 0 0)',
-  whiteSpace: 'nowrap',
-} as const;
-
 interface RowProps {
   garden: DashboardGardenData;
+  /** Derived once for the whole page — see `useGardenViews`. */
+  view: GardenView | undefined;
   language: string;
   showWeatherColumn: boolean;
   showHarvestColumn: boolean;
@@ -683,6 +696,7 @@ interface RowProps {
 /** One line of the comparison table. */
 function GardenRow({
   garden,
+  view,
   language,
   showWeatherColumn,
   showHarvestColumn,
@@ -691,8 +705,7 @@ function GardenRow({
   actions,
   plannerPath,
 }: RowProps) {
-  const { t } = useTranslation();
-  const view: GardenView = deriveGardenView(garden);
+  const { t, i18n } = useTranslation();
 
   const cellSx = {
     // >= 44px rows (_spec.md 3): the line is a touch target as much as a row.
@@ -744,6 +757,42 @@ function GardenRow({
             >
               {garden.name}
             </Box>
+            {garden.description && (
+              /* V10 — the description is back. « Mes Jardins » printed it on
+                 every card (clamped to two lines, with a See more toggle above
+                 80 characters); the widget carried it on the wire and edited it
+                 in the rename dialog, but showed it nowhere.
+
+                 One truncated line here, the whole text in the tooltip. The
+                 table cell is 106 px wide and the row is a comparison line, not
+                 a card: two clamped lines would push every other column's
+                 baseline down for the sake of a field only one garden in three
+                 fills. `enterTouchDelay` / `leaveTouchDelay` make the tooltip
+                 open on a long-press and stay open — on a phone there is no
+                 hover, and a description nobody can reach is the defect this
+                 fixes, not the one it should ship. */
+              <Tooltip
+                title={garden.description}
+                enterTouchDelay={0}
+                leaveTouchDelay={6000}
+                describeChild
+              >
+                <Typography
+                  sx={{
+                    ...subSx,
+                    color: 'text.secondary',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    // The tooltip is the way to the rest, and it needs a
+                    // focusable, hoverable target of its own.
+                    cursor: 'help',
+                  }}
+                  tabIndex={0}
+                >
+                  {garden.description}
+                </Typography>
+              </Tooltip>
+            )}
             <Typography sx={subSx}>
               {showHarvestColumn
                 ? t('dashboard.blocks.gardens.lastModified', {
@@ -754,7 +803,7 @@ function GardenRow({
                       'short'
                     ),
                   })
-                : view.hasPlan
+                : view?.hasPlan
                   ? t('dashboard.blocks.gardens.dimensions', {
                       cols: garden.width,
                       rows: garden.height,
@@ -780,7 +829,9 @@ function GardenRow({
       </Box>
 
       <Box component="td" sx={cellSx}>
-        <Box sx={{ fontWeight: 700 }}>{garden.placementCount}</Box>
+        <Box sx={{ fontWeight: 700 }}>
+          {formatCount(garden.placementCount, i18n.language)}
+        </Box>
         <Typography sx={subSx}>
           {t('dashboard.blocks.gardens.varieties', {
             count: garden.varietyCount,
@@ -789,7 +840,7 @@ function GardenRow({
       </Box>
 
       <Box component="td" sx={cellSx}>
-        {view.hasPlan ? (
+        {view?.hasPlan ? (
           <>
             <OccupancyBar percent={view.occupancyPercent} />
             <Typography sx={subSx}>
@@ -804,7 +855,7 @@ function GardenRow({
       </Box>
 
       <Box component="td" sx={cellSx}>
-        {view.dominantExposure ? (
+        {view?.dominantExposure ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <ExposureDot category={view.dominantExposure} />
             <Box component="span" sx={{ whiteSpace: 'nowrap' }}>

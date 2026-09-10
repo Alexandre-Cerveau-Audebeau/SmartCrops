@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -746,5 +747,127 @@ describe('Gardens widget delete flow — transitions (SMA-18 lot 1, moved by SMA
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// ── V10: the description is back on the page.
+//
+// « Mes Jardins » printed it on every card — clamped to two lines, with a
+// « See more » toggle above 80 characters (MyGardens.tsx, deleted by #267). The
+// widget carried it on the wire from the first commit of this lot and edited it
+// in the rename dialog, and showed it nowhere: a regression against the page it
+// replaced, on a field the user can still write.
+describe('Gardens widget — the garden description (V10)', () => {
+  const described = (description: string | null) =>
+    dashboardWith([gardenWith(3, { description })]);
+
+  beforeEach(() => localStorage.setItem('smartcrops-language', 'en'));
+
+  it('shows it under the garden name on the Large table', async () => {
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      described('Le coin sud, refait au printemps.')
+    );
+
+    renderPage();
+
+    await screen.findByText('Casa Lolo');
+    expect(
+      within(gardensWidget()).getByText('Le coin sud, refait au printemps.')
+    ).toBeInTheDocument();
+  });
+
+  it('is reachable by the keyboard, with the whole text on it', async () => {
+    // A truncated line is only honest if the rest is reachable. Two things make
+    // it so: the line is in the tab order, and `describeChild` puts the full
+    // text on the element itself, which is what a screen reader announces and
+    // what the browser shows on focus.
+    //
+    // MUI's own popper opens on KEYBOARD focus, which jsdom cannot produce:
+    // `:focus-visible` is false there even after a real `user-event` Tab, so
+    // asserting the popper on focus would assert the test environment rather
+    // than the widget. The hover and touch tests below cover the popper; this
+    // one covers what a keyboard user actually gets.
+    const long =
+      'Le coin sud, refait au printemps, avec les tomates contre le mur et ' +
+      'la menthe qui déborde du bac depuis deux étés.';
+    vi.mocked(fetchDashboardData).mockResolvedValue(described(long));
+
+    renderPage();
+    await screen.findByText('Casa Lolo');
+    const line = within(gardensWidget()).getByText(long);
+
+    expect(line).toHaveAttribute('tabindex', '0');
+    expect(line).toHaveAttribute('title', long);
+
+    const user = userEvent.setup();
+    await user.tab();
+    let guard = 0;
+    while (document.activeElement !== line && guard++ < 40) await user.tab();
+    expect(document.activeElement).toBe(line);
+  });
+
+  it('opens the tooltip on hover', async () => {
+    const text = 'Le coin sud, refait au printemps.';
+    vi.mocked(fetchDashboardData).mockResolvedValue(described(text));
+
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    fireEvent.mouseOver(within(gardensWidget()).getByText(text));
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(text);
+  });
+
+  it('opens the tooltip on touch, where there is no hover', async () => {
+    // Alexandre's decision: on a phone the tooltip is what a long-press opens,
+    // and it stays open long enough to read. `enterTouchDelay={0}` is what makes
+    // the first touch open it instead of the second.
+    const text = 'Balcon plein sud, arrosage tous les deux jours.';
+    vi.mocked(fetchDashboardData).mockResolvedValue(described(text));
+
+    renderPage();
+    await screen.findByText('Casa Lolo');
+    const line = within(gardensWidget()).getByText(text);
+
+    fireEvent.touchStart(line);
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(text);
+  });
+
+  it('says nothing at all when the garden has no description', async () => {
+    vi.mocked(fetchDashboardData).mockResolvedValue(described(null));
+
+    renderPage();
+
+    await screen.findByText('Casa Lolo');
+    const widget = within(gardensWidget());
+    expect(widget.queryByRole('tooltip')).toBeNull();
+    // The identity cell keeps its dimensions line and nothing stands in for a
+    // description that does not exist.
+    expect(widget.getByText('4 × 3')).toBeInTheDocument();
+  });
+
+  it('is not on the Medium card, where the row is one 44 px line', async () => {
+    // The frozen design gives a Medium row five elements — thumbnail, name,
+    // counts, type chip, chevron — and the old page had only one card size to
+    // compare against. Stated rather than assumed: the full text stays one size
+    // away, on the Large table.
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level: 'novice',
+      isPreset: true,
+      blocks: presetFor('novice'),
+      updatedAt: null,
+    });
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      described('Le coin sud, refait au printemps.')
+    );
+
+    renderPage();
+
+    await screen.findByText('Casa Lolo');
+    expect(
+      within(gardensWidget()).queryByText('Le coin sud, refait au printemps.')
+    ).toBeNull();
   });
 });
