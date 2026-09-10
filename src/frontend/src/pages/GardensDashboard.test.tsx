@@ -489,11 +489,16 @@ describe('GardensDashboard — invitation layout (SMA-336 round 1, V3)', () => {
     // arbitration, measured: seven labelled columns need 590 px and a Large
     // card offers 516. WEATHER is among them because the Gardener preset shows
     // the Weather widget; HARVEST is not, because it hides the Harvest one.
-    expect(
-      [...table!.querySelectorAll('thead th')]
-        .map((th) => th.textContent)
-        .filter(Boolean)
-    ).toEqual([
+    //
+    // Round 1 (E18): the RAW list, blanks included. The `.filter(Boolean)` this
+    // replaces discarded a seventh, empty `th` that the production headers
+    // array emitted — so the assertion read as « six columns and an Actions
+    // header » while the table declared one more column than any row filled.
+    // A blank header is exactly what this test has to be able to see.
+    const headerTexts = [...table!.querySelectorAll('thead th')].map(
+      (th) => th.textContent?.trim() ?? ''
+    );
+    expect(headerTexts).toEqual([
       'Garden',
       'Plants',
       'Occupancy',
@@ -502,6 +507,31 @@ describe('GardensDashboard — invitation layout (SMA-336 round 1, V3)', () => {
       'Modified',
       'Actions',
     ]);
+
+    // The ACTIONS header is screen-reader-only — it names a column of icon
+    // buttons — and it uses MUI's shared `visuallyHidden` since round 1 (E11 /
+    // G3) instead of a local copy of the same six declarations. Still hidden by
+    // clip, still announced.
+    const actionsHeader = [...table!.querySelectorAll('thead th')].at(-1)!;
+    expect(actionsHeader.textContent).toBe('Actions');
+    const label = actionsHeader.querySelector('span')!;
+    const hidden = getComputedStyle(label);
+    expect(hidden.position).toBe('absolute');
+    expect(hidden.overflow).toBe('hidden');
+    expect(hidden.whiteSpace).toBe('nowrap');
+    expect(hidden.width).toBe('1px');
+    expect(hidden.height).toBe('1px');
+
+    // And the invariant the blank header broke (round 1, E9 / G2): every body
+    // row fills exactly as many cells as the head declares columns. Without it
+    // the ACTIONS header sat one column right of the actions cells, and
+    // assistive technology announced « Modified » over the edit and delete
+    // buttons.
+    const bodyRows = [...table!.querySelectorAll('tbody tr')];
+    expect(bodyRows).not.toHaveLength(0);
+    for (const row of bodyRows) {
+      expect(row.querySelectorAll('td')).toHaveLength(headerTexts.length);
+    }
   });
 });
 
@@ -789,6 +819,67 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
       // `grid-row` is not responsive: `spanFor` never changes the row span, so
       // the one declaration outside any media query has to match all three.
       expect(css).toContain(`grid-row:span ${spanFor(block.size, 4).rows}`);
+    }
+  });
+});
+
+// ── V7: a widget's content stays in its card, at every size. Asserted on the
+// DECLARATIONS the browser resolves — jsdom lays nothing out, so a measured
+// height would be zero here and would prove nothing either way.
+describe('GardensDashboard — no widget draws outside its card (V7)', () => {
+  /** The SortableWidget slot: the grid ITEM, between the grid and the card. */
+  function slotFor(widget: string): HTMLElement {
+    const card = document.querySelector(`[data-widget="${widget}"]`);
+    if (!card) throw new Error(`No ${widget} widget rendered`);
+    const slot = card.parentElement?.parentElement;
+    if (!slot) throw new Error(`No slot around the ${widget} card`);
+    return slot as HTMLElement;
+  }
+
+  async function renderExpert() {
+    servePreferences('expert');
+    renderPage();
+    await screen.findByRole('heading', { level: 2, name: 'Statistics' });
+  }
+
+  it('every grid item declares min-height:0, so a fixed row can clip it', async () => {
+    // The defect: a grid item's automatic minimum size in the block axis is its
+    // content's min-content height, and this grid's rows are FIXED tracks. An
+    // item taller than its track therefore grew past it instead of being
+    // clipped by it — the Statistics card's last line was drawn under its own
+    // border and over the header of the widget below.
+    await renderExpert();
+
+    for (const widget of ['gardens', 'counters', 'stats']) {
+      const rules = rulesFor(slotFor(widget)).join(' ');
+      expect(rules).toContain('min-height:0');
+    }
+  });
+
+  it('every widget card hides what does not fit, rather than letting it out', async () => {
+    await renderExpert();
+
+    for (const widget of ['gardens', 'counters', 'stats']) {
+      const card = document.querySelector(`[data-widget="${widget}"]`)!;
+      expect(rulesFor(card).join(' ')).toContain('overflow:hidden');
+    }
+  });
+
+  it('the fed widgets bound their body instead of growing it', async () => {
+    // The other half of the same rule: inside the card, a list that outgrows
+    // the space scrolls in place. `min-height:0` on the flex child is what lets
+    // `overflow` apply at all — without it the child refuses to shrink and the
+    // scrollbar never appears.
+    await renderExpert();
+
+    for (const widget of ['gardens', 'counters', 'stats']) {
+      const card = document.querySelector(`[data-widget="${widget}"]`)!;
+      const bodies = [...card.querySelectorAll('*')]
+        .map((node) => getComputedStyle(node))
+        .filter((style) => style.flex === '1' || style.flexGrow === '1');
+
+      expect(bodies.length).toBeGreaterThan(0);
+      expect(bodies.some((style) => style.minHeight === '0px')).toBe(true);
     }
   });
 });

@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -16,10 +15,11 @@ import type { DashboardGardenData } from '../../../types/DashboardData';
 import {
   DASHBOARD_MOMENT,
   DASHBOARD_SEASON,
-  deriveGardenView,
   EXPOSURE_ORDER,
   sumExposureTallies,
 } from '../../../utils/gardenStats';
+import { useGardenViews } from '../../../hooks/useGardenViews';
+import { formatCount, formatDecimal } from '../../../utils/formatNumber';
 
 interface Props {
   size: DashboardSize;
@@ -53,16 +53,16 @@ export default function StatsBlock({
   loadError,
   onRetry,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
-  const views = useMemo(
-    () =>
-      gardens.map((garden) => ({
-        garden,
-        view: deriveGardenView(garden),
-      })),
-    [gardens]
-  );
+  // The SAME views the Gardens widget reads (round 1, E22): both are on an
+  // Expert page at once, and the exposure engine used to run twice per garden
+  // per load because each widget derived its own copy.
+  const byId = useGardenViews(gardens);
+  const views = gardens.map((garden) => ({
+    garden,
+    view: byId.get(garden.id)!,
+  }));
 
   const planned = views.filter((entry) => entry.view.hasPlan);
   const totalSurface = planned.reduce(
@@ -88,22 +88,39 @@ export default function StatsBlock({
     distribution.afternoon +
     distribution.shade;
 
+  /**
+   * One section label of a Large card.
+   *
+   * A HEADING, not styled text (round 1, E13). A Large card carries three of
+   * these, each introducing its own list of rows; as bare `Typography` a screen
+   * reader met three unlabelled groups with no way to jump between them. The
+   * widget card's own title is the `h2` that `DashboardBlock` renders, so these
+   * sit one level below it. `h3` changes nothing on screen — the styling is
+   * unchanged and the existing tests select them by text.
+   */
   const sectionTitle = (label: string) => (
     <Typography
+      component="h3"
       sx={{
         fontSize: 13,
         fontWeight: 700,
         letterSpacing: '0.04em',
         textTransform: 'uppercase',
         color: 'text.secondary',
+        m: 0,
       }}
     >
       {label}
     </Typography>
   );
 
+  // Locale-formatted, never `toFixed` (round 1, G5): `toFixed` always writes a
+  // point, so the French widget printed « 1.8 m² » where the language uses a
+  // comma. One fractional digit, as the frozen design has it.
   const surfaceText = (value: number) =>
-    t('dashboard.blocks.stats.surface', { value: value.toFixed(1) });
+    t('dashboard.blocks.stats.surface', {
+      value: formatDecimal(value, i18n.language, 1),
+    });
 
   const occupancyRows = (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
@@ -161,7 +178,7 @@ export default function StatsBlock({
             sx={{ fontSize: DASHBOARD_TYPE.body, fontWeight: 700 }}
           >
             {totalRated > 0
-              ? `${Math.round((distribution[category] / totalRated) * 100)} %`
+              ? `${formatCount(Math.round((distribution[category] / totalRated) * 100), i18n.language)} %`
               : '—'}
           </Typography>
         </Box>
@@ -208,13 +225,24 @@ export default function StatsBlock({
     </Box>
   );
 
+  /**
+   * « N cases libres, dont M en plein soleil » — two counts, each with its own
+   * cardinality (round 1, E15 / E16 / G7).
+   *
+   * i18next selects a plural form from ONE variable, `count`, so a sentence
+   * carrying two numbers could only ever agree with the first: « 1 cases libres,
+   * dont 1 en plein soleil ». Each count is rendered by its own plural-aware key
+   * and the wrapper only joins the two fragments.
+   */
   const freeCellsLine = (
     <Typography
       sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary' }}
     >
       {t('dashboard.blocks.stats.freeCells', {
-        count: totalFree,
-        sunny: freeDistribution.full,
+        free: t('dashboard.blocks.stats.freeCellsCount', { count: totalFree }),
+        sunny: t('dashboard.blocks.stats.sunnyCount', {
+          count: freeDistribution.full,
+        }),
       })}
     </Typography>
   );
@@ -229,9 +257,14 @@ export default function StatsBlock({
       <Typography
         sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary' }}
       >
+        {/* Same two-count rule as the free-cell line above. */}
         {t('dashboard.blocks.stats.activeCells', {
-          count: totalActive,
-          occupied: totalOccupied,
+          active: t('dashboard.blocks.stats.activeCellsCount', {
+            count: totalActive,
+          }),
+          occupied: t('dashboard.blocks.stats.occupiedCount', {
+            count: totalOccupied,
+          }),
         })}
       </Typography>
     </Box>
@@ -241,6 +274,7 @@ export default function StatsBlock({
     <Box
       sx={{
         flex: 1,
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',

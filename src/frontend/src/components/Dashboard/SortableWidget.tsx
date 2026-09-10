@@ -3,10 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
+import Popover from '@mui/material/Popover';
 import Typography from '@mui/material/Typography';
 import { keyframes } from '@mui/material/styles';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
@@ -114,6 +114,22 @@ export default function SortableWidget({
       style={{ transform: CSS.Translate.toString(transform), transition }}
       sx={{
         minWidth: 0,
+        // V7 — the widget's content STAYS in its card, at every size.
+        //
+        // A grid item's automatic minimum size in the block axis is
+        // `min-height: auto`, which resolves to its content's min-content
+        // height. The rows of this grid are fixed tracks (`gridAutoRows`,
+        // 200 px on a phone and 273 px above), so an item whose content was
+        // taller than its track grew PAST the track instead of being clipped by
+        // it: the Statistics card's last line — « N cases libres, dont M en
+        // plein soleil » — was drawn below the card's own border and over the
+        // header of whichever widget sat underneath.
+        //
+        // `minHeight: 0` is the block-axis twin of the `minWidth: 0` above it,
+        // and it is what lets `DashboardBlock`'s `overflow: hidden` and each
+        // body's own bounded scroll actually apply. Fixing it here fixes it for
+        // all eight widgets at once, which is why it is not in a widget.
+        minHeight: 0,
         gridColumn: {
           xs: `span ${phone.cols}`,
           sm: `span ${tablet.cols}`,
@@ -231,16 +247,53 @@ export default function SortableWidget({
             {/* Generic options shell (_spec.md 8, A8). PR 1/5 shipped the frame
                 and nothing in it; PR 2/5 drops the Counters entries in. A widget
                 with no settings still says so rather than opening on a blank
-                panel. */}
-            <Menu
+                panel.
+
+                A POPOVER, not a Menu (round 1, G6). What this surface holds is
+                a switch and a select — form controls, not `MenuItem`s — and
+                `Menu` wraps its children in a `MenuList`, which owns the arrow
+                keys and adds character typeahead. Inside it, Up and Down moved
+                the menu's own focus instead of opening the garden select, and
+                typing in a field could jump focus to whatever child started
+                with that letter. `Popover` is the same anchored, focus-trapping,
+                Escape-closing surface with none of the list behaviour, so the
+                controls behave the way they do everywhere else in the product.
+
+                What is preserved: the gear still opens it with Enter or Space
+                (it is an `IconButton`), the popover still moves focus into
+                itself, Escape and a click outside still close it, and closing
+                still returns focus to the gear — `Popover` restores it the same
+                way `Menu` did. « Terminé » is now a `Button`, which is what it
+                always was semantically. */}
+            <Popover
               anchorEl={optionsAnchor}
               open={optionsAnchor !== null}
               onClose={() => setOptionsAnchor(null)}
-              slotProps={{ paper: { sx: { width: 320 } } }}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              slotProps={{
+                paper: {
+                  sx: { width: 320 },
+                  // NAMED, and named after the widget: `Menu` gave this surface
+                  // a `menu` role for free, and dropping to a `Popover` would
+                  // otherwise leave a focus-trapping panel with no role and no
+                  // name at all. It traps focus, closes on Escape and returns
+                  // focus to the gear — that is a dialog — and the label says
+                  // which widget's settings a user is standing in.
+                  role: 'dialog',
+                  'aria-label': t('dashboard.editMode.options', { widget: label }),
+                },
+              }}
             >
               <Box sx={{ px: 2, pt: 1, pb: 0.5 }}>
                 <Typography
-                  sx={{ fontSize: 13, fontWeight: 700, color: 'text.secondary' }}
+                  component="h3"
+                  sx={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: 'text.secondary',
+                    m: 0,
+                  }}
                 >
                   {t('dashboard.editMode.optionsTitle')}
                 </Typography>
@@ -253,10 +306,12 @@ export default function SortableWidget({
                 )}
               </Box>
               <Divider />
-              <MenuItem onClick={() => setOptionsAnchor(null)}>
-                {t('dashboard.editMode.optionsDone')}
-              </MenuItem>
-            </Menu>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
+                <Button size="small" onClick={() => setOptionsAnchor(null)}>
+                  {t('dashboard.editMode.optionsDone')}
+                </Button>
+              </Box>
+            </Popover>
           </>
         )}
       </Box>

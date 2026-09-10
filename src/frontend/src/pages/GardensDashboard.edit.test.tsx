@@ -367,12 +367,13 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tips options' }));
 
-    const menu = await screen.findByRole('menu');
-    expect(within(menu).getByText('Widget options')).toBeInTheDocument();
+    const panel = await screen.findByRole('dialog', { name: 'Tips options' });
+    expect(within(panel).getByText('Widget options')).toBeInTheDocument();
     expect(
-      within(menu).getByText('No option for this widget yet.')
+      within(panel).getByText('No option for this widget yet.')
     ).toBeInTheDocument();
-    expect(within(menu).getByRole('menuitem', { name: 'Done' })).toBeInTheDocument();
+    // A BUTTON, not a menu item (round 1, G6): the surface is a Popover now.
+    expect(within(panel).getByRole('button', { name: 'Done' })).toBeInTheDocument();
   });
 });
 

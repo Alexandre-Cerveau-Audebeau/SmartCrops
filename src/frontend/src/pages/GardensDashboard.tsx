@@ -206,6 +206,11 @@ export default function GardensDashboard() {
             loading={gardensLoading}
             loadError={gardensError}
             onRetry={refetch}
+            // The widget's filter chips write the SAME options document the
+            // gear panel writes (round 1, E7), through the same `patchBlock`.
+            onOptionsChange={(options) =>
+              patchBlock('counters', (current) => ({ ...current, options }))
+            }
           />
         );
       case 'stats':

@@ -1,4 +1,4 @@
-import { render, within } from '@testing-library/react';
+import { cleanup, render, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import '../../../i18n/i18n';
@@ -40,9 +40,12 @@ const widgetNode = () =>
   document.querySelector('[data-widget="stats"]') as HTMLElement;
 
 function renderBlock(
-  props: Partial<React.ComponentProps<typeof StatsBlock>> = {}
+  props: Partial<React.ComponentProps<typeof StatsBlock>> = {},
+  language: 'en' | 'fr' = 'en'
 ) {
-  localStorage.setItem('smartcrops-language', 'en');
+  // Pinned through the STORED key, which is what `LanguageProvider` re-applies
+  // on mount — since SMA-393 the no-key default is French.
+  localStorage.setItem('smartcrops-language', language);
   render(
     <ThemeProvider theme={createTheme()}>
       <LanguageProvider>
@@ -150,7 +153,14 @@ describe('StatsBlock', () => {
     it('is left out of the totals rather than counted as empty', () => {
       const onlyPlanned = renderBlock({ gardens: [garden()] });
       const surface = onlyPlanned.getByText(/m²/).textContent;
-      document.body.innerHTML = '';
+      // UNMOUNT, not « remove the nodes » (round 1, E12). Wiping
+      // `document.body.innerHTML` took the first tree's DOM away and left its
+      // React root — and its effects — alive, and Testing Library's auto
+      // cleanup then unmounted a container whose nodes were already gone.
+      // `StatsBlock` registers no subscription today, so it passed; the first
+      // effect or timer it gains would have surfaced as a flake in a
+      // neighbouring test rather than here.
+      cleanup();
 
       const withUnplanned = renderBlock({ gardens: [garden(), unplanned] });
 
@@ -208,5 +218,56 @@ describe('StatsBlock', () => {
       expect(widget.getByText('Occupancy by garden')).toBeInTheDocument();
       expect(widget.queryByText('Exposure by garden')).toBeNull();
     });
+  });
+});
+
+describe('StatsBlock — section labels are headings (round 1, E13)', () => {
+  it('gives each Large section a heading one level below the widget title', () => {
+    // A Large card carries three of these, each introducing its own list of
+    // rows. As bare Typography a screen reader met three unlabelled groups with
+    // nothing to jump between; the widget card's own title is the h2 above them.
+    const widget = renderBlock({ size: 'large', gardens: [garden()] });
+
+    const headings = widget
+      .getAllByRole('heading', { level: 3 })
+      .map((node) => node.textContent);
+
+    expect(headings).toContain('Occupancy by garden');
+    expect(headings).toContain('Exposure by garden');
+    expect(headings.some((text) => text?.startsWith('Dominant exposure'))).toBe(
+      true
+    );
+  });
+
+  it('leaves the styling exactly where it was', () => {
+    // The change is semantic only: the existing tests select these labels by
+    // text, and they still find them.
+    const widget = renderBlock({ size: 'large', gardens: [garden()] });
+
+    expect(widget.getByText('Occupancy by garden')).toBeInTheDocument();
+  });
+});
+
+describe('StatsBlock — figures in the reader’s language (round 1, G5)', () => {
+  it('writes the surface with the French decimal comma', () => {
+    // `toFixed(1)` always emits a point, so the French widget printed « 1.8 m² »
+    // in a page that writes every other decimal with a comma.
+    const widget = renderBlock({ gardens: [garden()] }, 'fr');
+
+    expect(widget.getByText(/m²/).textContent).toMatch(/^\d+,\d m²$/);
+  });
+
+  it('writes it with a point in English', () => {
+    const widget = renderBlock({ gardens: [garden()] });
+
+    expect(widget.getByText(/m²/).textContent).toMatch(/^\d+\.\d m²$/);
+  });
+
+  it('never reaches the screen through toFixed', () => {
+    // The rule, not just the one site: no figure of this widget is formatted by
+    // `toFixed` or by bare concatenation.
+    const widget = renderBlock({ size: 'large', gardens: [garden()] });
+
+    expect(widget.getByText(/m²/).textContent).not.toContain('NaN');
   });
 });
