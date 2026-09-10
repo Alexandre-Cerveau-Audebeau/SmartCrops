@@ -44,6 +44,13 @@ public class DashboardController(SmartCropsDbContext context, IMemoryCache cache
     private static readonly TimeSpan CatalogPlantCountTtl = TimeSpan.FromMinutes(5);
 
     /// <summary>
+    /// Single-flight gate on the catalog-count refill (round 3, E″2). Static
+    /// because the controller is created per request and the stampede it
+    /// prevents is between requests. See <see cref="CatalogPlantCountAsync"/>.
+    /// </summary>
+    private static readonly SemaphoreSlim CatalogPlantCountLock = new(1, 1);
+
+    /// <summary>
     /// Ceiling on the number of entries one block's options document may carry.
     /// Every setting the frozen design gives a widget fits well inside it.
     /// </summary>
@@ -296,14 +303,37 @@ public class DashboardController(SmartCropsDbContext context, IMemoryCache cache
     /// <para>The value is deliberately allowed to be STALE inside the window: a
     /// caption saying 536 for five minutes after a 537th plant arrives is the
     /// intended behaviour, not a tolerated one.</para>
+    ///
+    /// <para>Round 3, E″2 — the refill is SERIALIZED. Every request that arrives
+    /// while the window is empty misses the cache before any of them has written
+    /// it back, so a cold start or a TTL expiry under load ran the same scan once
+    /// per concurrent request — the stampede the cache exists to prevent. One
+    /// waiter goes to the database and the rest take its answer, which is why the
+    /// second <c>TryGetValue</c> inside the lock is the load-bearing line and not
+    /// a belt-and-braces one.</para>
     /// </summary>
     private async Task<int> CatalogPlantCountAsync(CancellationToken ct)
     {
         if (cache.TryGetValue(CatalogPlantCountKey, out int cached)) return cached;
 
-        var count = await context.Plants.CountAsync(ct);
-        cache.Set(CatalogPlantCountKey, count, CatalogPlantCountTtl);
-        return count;
+        // Static: the gate has to span REQUESTS, and this controller is created
+        // per request. It guards a read of reference data whose refill is a
+        // single query, so the wait is bounded by that query.
+        await CatalogPlantCountLock.WaitAsync(ct);
+        try
+        {
+            // The waiter that queued behind the winner finds the value here and
+            // never reaches the database.
+            if (cache.TryGetValue(CatalogPlantCountKey, out cached)) return cached;
+
+            var count = await context.Plants.CountAsync(ct);
+            cache.Set(CatalogPlantCountKey, count, CatalogPlantCountTtl);
+            return count;
+        }
+        finally
+        {
+            CatalogPlantCountLock.Release();
+        }
     }
 
     /// <summary>
