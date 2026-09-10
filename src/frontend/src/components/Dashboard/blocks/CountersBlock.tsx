@@ -238,15 +238,31 @@ export default function CountersBlock({
    *
    * Not on Medium: the frozen design puts the row on the Large card only, and
    * the Medium card has no room for it under the density lock (V9).
+   *
+   * Round 3, E″4 / G″3 — the selection state is shown ONLY while the row can
+   * change it. Without `onOptionsChange` a `Chip` has no click handler, is not
+   * focusable, and MUI renders it as a roleless `div`; the filled variant and
+   * `aria-pressed="true"` then drew a single-select control nobody could
+   * operate — the round 1 defect over again, in the one configuration round 1
+   * did not close. Removing the state rather than forcing the chips active is
+   * the honest half: with no handler there is nothing to write the choice to,
+   * and a control that cannot record an answer should not ask a question.
    */
+  const interactive = Boolean(onOptionsChange);
+  const chipState = (selected: boolean) => ({
+    // The assertion goes on each branch, not on the ternary: `as const` applies
+    // to a literal, and `tsc -b` refuses it on a conditional expression.
+    variant: interactive && selected ? ('filled' as const) : ('outlined' as const),
+    'aria-pressed': interactive ? selected : undefined,
+  });
+
   const gardenFilter = gardens.length > 1 && (
     <Box sx={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
       <Chip
         label={t('dashboard.blocks.counters.allGardens')}
         size="small"
         onClick={selectGarden(COUNTERS_GARDEN_ALL)}
-        variant={activeGarden === COUNTERS_GARDEN_ALL ? 'filled' : 'outlined'}
-        aria-pressed={activeGarden === COUNTERS_GARDEN_ALL}
+        {...chipState(activeGarden === COUNTERS_GARDEN_ALL)}
         sx={{ height: DASHBOARD_TYPE.chipHeight, fontSize: DASHBOARD_TYPE.chip }}
       />
       {gardens.map((g) => (
@@ -255,8 +271,7 @@ export default function CountersBlock({
           label={g.name}
           size="small"
           onClick={selectGarden(g.id)}
-          variant={activeGarden === g.id ? 'filled' : 'outlined'}
-          aria-pressed={activeGarden === g.id}
+          {...chipState(activeGarden === g.id)}
           sx={{
             height: DASHBOARD_TYPE.chipHeight,
             fontSize: DASHBOARD_TYPE.chip,

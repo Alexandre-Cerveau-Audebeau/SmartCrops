@@ -65,27 +65,81 @@ describe('the four pluralized dashboard sites', () => {
       expect(mixed).toContain('7');
     });
 
+    it('the sunny fragment carries no pronoun of its own (round 3, E″6 / G″5)', () => {
+      // The case the finding names: MANY free cells, ONE of them sunny. The
+      // English singular read « 2 free cells, 1 of it in full sun » — « it »
+      // agreeing with the sunny count while standing for the free ones, which
+      // no combination of the two numbers can make right. French was already
+      // clear (« dont ... »), so only the English catalog moved; this asserts
+      // both, so the two stay in agreement.
+      const mixed = tr(language, 'dashboard.blocks.stats.freeCells', {
+        free: tr(language, 'dashboard.blocks.stats.freeCellsCount', {
+          count: 2,
+        }),
+        sunny: tr(language, 'dashboard.blocks.stats.sunnyCount', { count: 1 }),
+      });
+
+      expect(mixed).not.toMatch(/of (it|them)/);
+      expect(mixed).toContain('2');
+      expect(mixed).toContain('1');
+    });
+
     it('every count of the three widgets has a singular form', () => {
       // The general rule rather than the four sites: not one label of these
       // widgets renders « 1 » in front of a fixed plural.
+      //
+      // REWRITTEN by round 3 (E″5). The assertion used to be
+      // `tr(key, {count: 1}) !== tr(key, {count: 2})`, which could not fail:
+      // the interpolated numbers differ, so the two strings differ even when
+      // `_one` is missing and i18next falls back to `_other` for both. Worse,
+      // it also asserted the wrong thing for the keys whose two forms are the
+      // same by design — « 1 var. » and « 2 var. ».
+      //
+      // What is checked instead: the `_one` RESOURCE is really there, and the
+      // plural selector really picks it at 1. Deleting an `_one` key fails the
+      // first; a plural rule that stopped selecting it fails the second. The
+      // wording is not copied into the test — a second copy of these strings
+      // would be a second thing to keep in agreement.
       const singulars = [
-        ['dashboard.blocks.gardens.count', {}],
-        ['dashboard.blocks.gardens.varieties', {}],
-        ['dashboard.blocks.gardens.freeCells', {}],
-        ['dashboard.blocks.gardens.more', {}],
-        ['dashboard.blocks.counters.varieties', {}],
-        ['dashboard.blocks.counters.plants', {}],
-        ['dashboard.blocks.counters.more', {}],
-        ['dashboard.blocks.stats.activeCellsCount', {}],
-        ['dashboard.blocks.stats.occupiedCount', {}],
-        ['dashboard.blocks.stats.freeCellsCount', {}],
-        ['gardens.plantsCount', {}],
+        'dashboard.blocks.gardens.count',
+        'dashboard.blocks.gardens.varieties',
+        'dashboard.blocks.gardens.freeCells',
+        'dashboard.blocks.gardens.more',
+        'dashboard.blocks.counters.varieties',
+        'dashboard.blocks.counters.plants',
+        'dashboard.blocks.counters.more',
+        'dashboard.blocks.stats.activeCellsCount',
+        'dashboard.blocks.stats.occupiedCount',
+        'dashboard.blocks.stats.freeCellsCount',
+        'gardens.plantsCount',
       ] as const;
 
-      for (const [key, extra] of singulars) {
-        const one = tr(language, key, { count: 1, ...extra });
-        const many = tr(language, key, { count: 2, ...extra });
-        expect(one, `${key} has no singular form`).not.toBe(many);
+      for (const key of singulars) {
+        expect(
+          i18next.getResource(language, 'translation', `${key}_one`),
+          `${key}_one is missing from the ${language} catalog`
+        ).toBeDefined();
+        expect(
+          tr(language, key, { count: 1 }),
+          `${key} does not select its singular at 1`
+        ).toBe(tr(language, `${key}_one`, { count: 1 }));
+      }
+    });
+
+    it('and the plural form is what a count of two selects', () => {
+      // The mirror, so « every form resolves to the same template » cannot pass
+      // this file.
+      for (const key of [
+        'dashboard.blocks.gardens.count',
+        'dashboard.blocks.counters.varieties',
+        'dashboard.blocks.stats.freeCellsCount',
+      ] as const) {
+        expect(
+          i18next.getResource(language, 'translation', `${key}_other`)
+        ).toBeDefined();
+        expect(tr(language, key, { count: 2 })).toBe(
+          tr(language, `${key}_other`, { count: 2 })
+        );
       }
     });
   });

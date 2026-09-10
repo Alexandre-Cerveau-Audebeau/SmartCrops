@@ -586,9 +586,44 @@ describe('CountersBlock — the garden chips actually filter (round 1, E7)', () 
   it('draws no selection it cannot honour when nothing can write the options', () => {
     // Without `onOptionsChange` the chips carry no handler, so they must not
     // pretend to be a single-select the user can operate.
-    const widget = renderBlock({ gardens, varieties, options: null });
+    //
+    // WIDENED by round 3 (E″4 / G″3): a stored garden is set here, so the row
+    // has a selection to draw and deliberately does not. `tabindex` alone left
+    // the two halves of the affordance in place — the filled variant and
+    // `aria-pressed="true"` — which is a single-select drawn over nothing for
+    // the eye and announced as a pressed toggle to a screen reader.
+    const widget = renderBlock({
+      gardens,
+      varieties,
+      options: { photos: false, garden: 'g2' },
+    });
 
-    const chip = widget.getByText('Balcon').closest('.MuiChip-root')!;
-    expect(chip).not.toHaveAttribute('tabindex');
+    const selected = widget.getByText('Balcon').closest('.MuiChip-root')!;
+    const other = widget.getByText('Terrasse').closest('.MuiChip-root')!;
+    const all = widget.getByText('All gardens').closest('.MuiChip-root')!;
+
+    for (const chip of [selected, other, all]) {
+      expect(chip).not.toHaveAttribute('tabindex');
+      expect(chip).not.toHaveAttribute('aria-pressed');
+      expect(chip.className).toContain('MuiChip-outlined');
+      expect(chip.className).not.toContain('MuiChip-filled');
+    }
+  });
+
+  it('keeps the whole affordance as soon as a writer is there', () => {
+    // The other side of the same rule: nothing is taken away from the case that
+    // works.
+    const widget = renderBlock({
+      gardens,
+      varieties,
+      options: { photos: false, garden: 'g2' },
+      onOptionsChange: () => {},
+    });
+
+    const selected = widget.getByText('Balcon').closest('.MuiChip-root')!;
+
+    expect(selected).toHaveAttribute('aria-pressed', 'true');
+    expect(selected.className).toContain('MuiChip-filled');
+    expect(selected).toHaveAttribute('tabindex', '0');
   });
 });

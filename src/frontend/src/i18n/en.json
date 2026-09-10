@@ -459,8 +459,8 @@
         "occupiedCount_other": "{{count, number}} planted",
         "freeCellsCount_one": "{{count, number}} free cell",
         "freeCellsCount_other": "{{count, number}} free cells",
-        "sunnyCount_one": "{{count, number}} of it in full sun",
-        "sunnyCount_other": "{{count, number}} of them in full sun"
+        "sunnyCount_one": "{{count, number}} in full sun",
+        "sunnyCount_other": "{{count, number}} in full sun"
       },
       "harvest": {
         "title": "Harvest",
