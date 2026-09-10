@@ -186,8 +186,15 @@ describe('GardensDashboard — grid from the stored preferences (SMA-336)', () =
       'todo',
       'counters',
     ]);
-    expect(screen.queryByText('Statistics')).toBeNull();
-    expect(screen.queryByText('Harvest')).toBeNull();
+    expect(
+      screen.queryByRole('heading', { level: 2, name: 'Statistics' })
+    ).toBeNull();
+    // By ROLE, not by text (round 3, E″7). « Harvest » is a widget title AND a
+    // column label of the Gardens table, so a page-wide text query answers on
+    // either — and this assertion means « the widget is off the grid ».
+    expect(
+      screen.queryByRole('heading', { level: 2, name: 'Harvest' })
+    ).toBeNull();
   });
 
   it('applies the STORED order, not the preset order', async () => {
@@ -819,7 +826,13 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
     blocks[2]!.size = 'large';
     servePreferences('gardener', blocks);
     renderPage();
-    await screen.findByText('Weather');
+    // By ROLE (round 3, E″7). The Gardens table's MÉTÉO column header carries
+    // the same word as the Weather widget's title, so a page-wide
+    // `findByText('Weather')` answers on whichever the layout happens to
+    // render — here Gardens is Medium and there is no table, which is the only
+    // reason it resolved. One fixture change away from failing on « found
+    // multiple elements ».
+    await screen.findByRole('heading', { level: 2, name: 'Weather' });
 
     for (const block of blocks.slice(0, 3)) {
       const css = rulesFor(slotNode(block.key)).join(' ');
@@ -897,6 +910,43 @@ describe('GardensDashboard — no widget draws outside its card (V7)', () => {
 
       expect(bodies.length).toBeGreaterThan(0);
       expect(bodies.some((style) => style.minHeight === '0px')).toBe(true);
+    }
+  });
+});
+
+// ── Round 3 (E″7): two labels of this page are not unique ────────────────────
+// The Gardens table's column headers reuse the widget titles, so on a layout
+// that shows both, a page-wide text query has two answers. The collision is
+// stated here rather than left for the next test to discover: it is a property
+// of the frozen design (« MÉTÉO » and « RÉCOLTE » are column labels AND widget
+// names), not a defect — what has to change is how tests select.
+//
+// The sweep this finding asked for: three call sites carried one of the two
+// words. Two were page-wide and are role-based now (« the Harvest widget is off
+// the grid », line 189, and the span assertion's wait, line 822); the third is
+// scoped to the Customize drawer, which the table is not part of, so it stays
+// as it is.
+describe('GardensDashboard — Weather and Harvest name two things each (E″7)', () => {
+  it('at Expert, the widget title and the table column carry the same words', async () => {
+    servePreferences('expert');
+
+    renderPage();
+    await screen.findByRole('heading', { level: 2, name: 'Weather' });
+
+    const gardensWidget = () =>
+      document.querySelector('[data-widget="gardens"]') as HTMLElement;
+
+    for (const label of ['Weather', 'Harvest']) {
+      // One heading, one column header — a text query would have to choose.
+      expect(screen.getAllByText(label)).toHaveLength(2);
+      // The role narrows it to the widget, which is what those tests mean...
+      expect(
+        screen.getByRole('heading', { level: 2, name: label })
+      ).toBeInTheDocument();
+      // ...and the second occurrence really is the table's column header.
+      const header = within(gardensWidget()).getByText(label);
+      expect(header.tagName).toBe('TH');
+      expect(header).toHaveAttribute('scope', 'col');
     }
   });
 });
