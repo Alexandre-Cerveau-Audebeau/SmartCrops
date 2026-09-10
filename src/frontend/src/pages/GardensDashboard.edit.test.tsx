@@ -20,7 +20,6 @@ import type {
 } from '../types/Dashboard';
 
 vi.mock('../services/gardenApi', () => ({
-  fetchGardens: vi.fn(),
   createGarden: vi.fn(),
   updateGarden: vi.fn(),
   deleteGarden: vi.fn(),
@@ -29,11 +28,28 @@ vi.mock('../services/gardenApi', () => ({
 vi.mock('../services/dashboardApi', () => ({
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
+  fetchDashboardData: vi.fn(),
 }));
 
+import type {
+  DashboardData,
+  DashboardGardenData,
+} from '../types/DashboardData';
 import GardensDashboard from './GardensDashboard';
-import { fetchGardens } from '../services/gardenApi';
+
+/** SMA-336 PR 2/5 — an empty aggregate: these tests are about the GRID, not the data. */
+const dashboardWith = (gardens: DashboardGardenData[]): DashboardData => ({
+  gardens,
+  varieties: [],
+  totals: {
+    gardenCount: gardens.length,
+    placementCount: 0,
+    varietyCount: 0,
+    catalogPlantCount: 536,
+  },
+});
 import {
+  fetchDashboardData,
   fetchDashboardPreferences,
   saveDashboardPreferences,
 } from '../services/dashboardApi';
@@ -293,7 +309,7 @@ beforeEach(() => {
   // with `useMediaQuery`, and jsdom answers nothing without this.
   stubColumns(4);
   localStorage.setItem('smartcrops-language', 'en');
-  vi.mocked(fetchGardens).mockResolvedValue([]);
+  vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([]));
   vi.mocked(saveDashboardPreferences).mockClear();
   vi.mocked(saveDashboardPreferences).mockResolvedValue(undefined);
 });

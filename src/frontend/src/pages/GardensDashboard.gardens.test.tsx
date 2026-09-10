@@ -12,11 +12,12 @@ import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { useLanguage } from '../hooks/useLanguage';
 import { presetFor } from '../constants/dashboardPresets';
-import type { GardenListItem } from '../types/Garden';
-import type { Plant } from '../types/Plant';
+import type {
+  DashboardData,
+  DashboardGardenData,
+} from '../types/DashboardData';
 
 vi.mock('../services/gardenApi', () => ({
-  fetchGardens: vi.fn(),
   createGarden: vi.fn(),
   updateGarden: vi.fn(),
   deleteGarden: vi.fn(),
@@ -25,16 +26,17 @@ vi.mock('../services/gardenApi', () => ({
 vi.mock('../services/dashboardApi', () => ({
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
+  fetchDashboardData: vi.fn(),
 }));
 
 import GardensDashboard from './GardensDashboard';
 import {
   createGarden,
   deleteGarden,
-  fetchGardens,
   updateGarden,
 } from '../services/gardenApi';
 import {
+  fetchDashboardData,
   fetchDashboardPreferences,
   saveDashboardPreferences,
 } from '../services/dashboardApi';
@@ -48,24 +50,46 @@ import {
 // SMA-6 locks: the card counter counts DISTINCT PLACED plants (the DTO's
 // `plants` array), and preview names go through the shared Library resolver.
 
-const ivy = {
-  id: 'p1',
-  scientificName: 'Hedera helix',
-  commonName: 'english ivy',
-} as Plant;
-const fern = {
-  id: 'p2',
-  scientificName: 'Athyrium vidalii',
-  commonName: null,
-} as Plant;
-
-const gardenWith = (plants: Plant[]): GardenListItem => ({
+// SMA-336 PR 2/5 — the widget reads the transport aggregate now, so the
+// fixture builds ITS shape. What each test asserts is unchanged wherever the
+// widget still shows the same thing; the three cases that named a card's
+// preview line moved with the Large body, which is a table.
+const gardenWith = (
+  varieties: number,
+  over: Partial<DashboardGardenData> = {}
+): DashboardGardenData => ({
   id: 'g1',
   name: 'Casa Lolo',
   description: null,
-  createdAt: '2026-05-01T00:00:00Z',
+  width: 4,
+  height: 3,
+  cellSize: '50cm',
+  cellsJson: null,
+  config: {
+    orientation: null,
+    gardenType: null,
+    lightSchedule: null,
+    hemisphere: 'N',
+    latitudeBand: 'mid',
+  },
   updatedAt: '2026-05-01T00:00:00Z',
-  plants,
+  placements: [],
+  placementCount: varieties,
+  varietyCount: varieties,
+  occupiedCells: varieties,
+  isEdible: varieties > 0 ? false : null,
+  ...over,
+});
+
+const dashboardWith = (gardens: DashboardGardenData[]): DashboardData => ({
+  gardens,
+  varieties: [],
+  totals: {
+    gardenCount: gardens.length,
+    placementCount: gardens.reduce((sum, g) => sum + g.placementCount, 0),
+    varietyCount: gardens.reduce((sum, g) => sum + g.varietyCount, 0),
+    catalogPlantCount: 536,
+  },
 });
 
 /** The Gardens widget — the frozen design's own `data-widget` handle. */
@@ -104,52 +128,59 @@ describe('Gardens widget cards (SMA-6 / SMA-155, moved by SMA-336)', () => {
     localStorage.setItem('smartcrops-language', 'en');
   });
 
-  it('shows the distinct-placed-plants count and resolver-based preview names', async () => {
-    vi.mocked(fetchGardens).mockResolvedValue([gardenWith([ivy, fern])]);
+  // REWRITTEN by SMA-336 PR 2/5, and these are the only two of the twenty-two.
+  // The Gardens widget is Large at the Gardener preset, and Large is now the
+  // comparison table: it states plants and varieties in its own column instead
+  // of a chip and a preview line. What is asserted — the counts are the DISTINCT
+  // placed plants, and an empty garden says zero rather than nothing — is the
+  // lock SMA-6 set and it survives verbatim.
+  it('states the placement count and the DISTINCT variety count', async () => {
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenWith(2, { placementCount: 5, varietyCount: 2 })])
+    );
 
     renderPage();
 
-    expect(await screen.findByText('2 plants')).toBeInTheDocument();
-    // Preview = localized common name (sentence-cased) + scientific fallback.
-    expect(
-      screen.getByText('English ivy, Athyrium vidalii')
-    ).toBeInTheDocument();
+    await screen.findByText('Casa Lolo');
+    const widget = within(gardensWidget());
+    expect(widget.getByText('5')).toBeInTheDocument();
+    expect(widget.getByText('2 var.')).toBeInTheDocument();
   });
 
-  it('shows 0 plants and no preview line for a garden with no placements', async () => {
-    vi.mocked(fetchGardens).mockResolvedValue([gardenWith([])]);
+  it('says zero for a garden with no placement, rather than leaving the cell blank', async () => {
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(0)]));
 
     renderPage();
 
-    expect(await screen.findByText('0 plants')).toBeInTheDocument();
-    // Scoped to the widget: the seven invitation widgets carry commas of their
-    // own, so the original document-wide query no longer means anything.
-    expect(within(gardensWidget()).queryByText(/,/)).toBeNull();
+    await screen.findByText('Casa Lolo');
+    const widget = within(gardensWidget());
+    expect(widget.getByText('0')).toBeInTheDocument();
+    expect(widget.getByText('0 var.')).toBeInTheDocument();
   });
 
   it('passes the UI language to the gardens fetch (server-localized names)', async () => {
-    vi.mocked(fetchGardens).mockResolvedValue([]);
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([]));
 
     renderPage();
 
-    await waitFor(() => expect(fetchGardens).toHaveBeenCalled());
-    const [, lang] = vi.mocked(fetchGardens).mock.calls[0]!;
+    await waitFor(() => expect(fetchDashboardData).toHaveBeenCalled());
+    const [lang] = vi.mocked(fetchDashboardData).mock.calls[0]!;
     expect(lang).toBe('en');
   });
 
   it('a first visit with no stored choice fetches gardens in French (SMA-393)', async () => {
     localStorage.removeItem('smartcrops-language');
-    vi.mocked(fetchGardens).mockResolvedValue([]);
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([]));
 
     renderPage();
 
-    await waitFor(() => expect(fetchGardens).toHaveBeenCalled());
-    const [, lang] = vi.mocked(fetchGardens).mock.calls[0]!;
+    await waitFor(() => expect(fetchDashboardData).toHaveBeenCalled());
+    const [lang] = vi.mocked(fetchDashboardData).mock.calls[0]!;
     expect(lang).toBe('fr');
   });
 
   it('opens a garden card straight into the planner (SMA-285 pin — no detail page)', async () => {
-    vi.mocked(fetchGardens).mockResolvedValue([gardenWith([])]);
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(0)]));
 
     renderPage();
     await screen.findByText('Casa Lolo');
@@ -169,10 +200,10 @@ describe('Gardens widget cards (SMA-6 / SMA-155, moved by SMA-336)', () => {
         </button>
       );
     }
-    const deferred: Array<(gardens: GardenListItem[]) => void> = [];
-    vi.mocked(fetchGardens).mockImplementation(
+    const deferred: Array<(data: DashboardData) => void> = [];
+    vi.mocked(fetchDashboardData).mockImplementation(
       () =>
-        new Promise<GardenListItem[]>((resolve) => {
+        new Promise<DashboardData>((resolve) => {
           deferred.push(resolve);
         })
     );
@@ -192,12 +223,12 @@ describe('Gardens widget cards (SMA-6 / SMA-155, moved by SMA-336)', () => {
     await waitFor(() => expect(deferred.length).toBe(2));
 
     // Newest response lands first...
-    deferred[1]!([{ ...gardenWith([]), id: 'g2', name: 'Jardin frais' }]);
+    deferred[1]!(dashboardWith([gardenWith(0, { id: 'g2', name: 'Jardin frais' })]));
     expect(await screen.findByText('Jardin frais')).toBeInTheDocument();
 
     // ...then the STALE first response resolves last: it must be discarded,
     // never overwriting the newer cards.
-    deferred[0]!([{ ...gardenWith([]), id: 'g1', name: 'Vieux jardin' }]);
+    deferred[0]!(dashboardWith([gardenWith(0, { id: 'g1', name: 'Vieux jardin' })]));
     await waitFor(() => expect(screen.queryByText('Vieux jardin')).toBeNull());
     expect(screen.getByText('Jardin frais')).toBeInTheDocument();
   });
@@ -214,7 +245,7 @@ describe('Gardens widget delete flow (SMA-18 lot 1, moved by SMA-336)', () => {
   });
 
   async function openDeleteDialog() {
-    vi.mocked(fetchGardens).mockResolvedValue([gardenWith([ivy, fern])]);
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(2)]));
     renderPage();
     await screen.findByText('Casa Lolo');
     fireEvent.click(screen.getByRole('button', { name: 'Delete Casa Lolo' }));
@@ -252,7 +283,7 @@ describe('Gardens widget delete flow (SMA-18 lot 1, moved by SMA-336)', () => {
 
     await waitFor(() => expect(deleteGarden).toHaveBeenCalledWith('g1'));
     // The list is re-fetched (the initial load + the post-delete refresh).
-    await waitFor(() => expect(fetchGardens).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchDashboardData).toHaveBeenCalledTimes(2));
     expect(await screen.findByText('Garden deleted')).toBeInTheDocument();
     await waitFor(() =>
       expect(
@@ -281,7 +312,7 @@ describe('Gardens widget delete flow (SMA-18 lot 1, moved by SMA-336)', () => {
     expect(
       screen.getByRole('dialog', { name: 'Delete this garden?' })
     ).toBeInTheDocument();
-    expect(fetchGardens).toHaveBeenCalledTimes(1);
+    expect(fetchDashboardData).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Garden deleted')).toBeNull();
   });
 
@@ -300,7 +331,7 @@ describe('Gardens widget delete flow (SMA-18 lot 1, moved by SMA-336)', () => {
   });
 
   it('toasts on arrival from the planner (router state) and erases that state with a replace that keeps the URL (search + hash)', async () => {
-    vi.mocked(fetchGardens).mockResolvedValue([]);
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([]));
     // Probe: what the router currently holds as location.state and as URL.
     function StateProbe() {
       const location = useLocation();
@@ -346,10 +377,10 @@ describe('Gardens widget delete flow (SMA-18 lot 1, moved by SMA-336)', () => {
   });
 
   it('shows no toast on a plain visit', async () => {
-    vi.mocked(fetchGardens).mockResolvedValue([]);
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([]));
     renderPage();
 
-    await waitFor(() => expect(fetchGardens).toHaveBeenCalled());
+    await waitFor(() => expect(fetchDashboardData).toHaveBeenCalled());
     expect(screen.queryByText('Garden deleted')).toBeNull();
   });
 });
@@ -363,7 +394,7 @@ describe('Gardens widget rename errors (SMA-336 round 1)', () => {
   });
 
   async function openRenameDialog() {
-    vi.mocked(fetchGardens).mockResolvedValue([gardenWith([ivy, fern])]);
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(2)]));
     renderPage();
     await screen.findByText('Casa Lolo');
     fireEvent.click(screen.getByRole('button', { name: 'Edit Casa Lolo' }));
@@ -514,7 +545,7 @@ describe('Gardens widget rename errors (SMA-336 round 1)', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Edit garden' })).toBeNull()
     );
-    await waitFor(() => expect(fetchGardens).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchDashboardData).toHaveBeenCalledTimes(2));
   });
 });
 
@@ -536,7 +567,7 @@ describe('Gardens dialogs speak their pending state (SMA-336 round 4)', () => {
     vi.mocked(updateGarden).mockImplementation(
       () => new Promise((resolveIt) => (resolve = resolveIt))
     );
-    vi.mocked(fetchGardens).mockResolvedValue([gardenWith([ivy, fern])]);
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(2)]));
     renderPage();
     await screen.findByText('Casa Lolo');
     fireEvent.click(screen.getByRole('button', { name: 'Edit Casa Lolo' }));
@@ -575,7 +606,7 @@ describe('Gardens dialogs speak their pending state (SMA-336 round 4)', () => {
     vi.mocked(createGarden).mockImplementation(
       () => new Promise((resolveIt) => (resolve = resolveIt))
     );
-    vi.mocked(fetchGardens).mockResolvedValue([gardenWith([ivy])]);
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(1)]));
     renderPage();
     await screen.findByText('Casa Lolo');
 
@@ -622,7 +653,7 @@ describe('Gardens widget delete flow — transitions (SMA-18 lot 1, moved by SMA
   });
 
   it('keeps the garden name, count and a DISARMED button while the dialog fades out', async () => {
-    vi.mocked(fetchGardens).mockResolvedValue([gardenWith([ivy, fern])]);
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(2)]));
     renderPage();
     await screen.findByText('Casa Lolo');
     fireEvent.click(screen.getByRole('button', { name: 'Delete Casa Lolo' }));
@@ -660,7 +691,7 @@ describe('Gardens widget delete flow — transitions (SMA-18 lot 1, moved by SMA
 
   it('a second deletion inside the first toast window gets a FULL window of its own', async () => {
     vi.mocked(deleteGarden).mockResolvedValue(undefined);
-    vi.mocked(fetchGardens).mockResolvedValue([gardenWith([ivy, fern])]);
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(2)]));
     renderPage();
     await screen.findByText('Casa Lolo');
 

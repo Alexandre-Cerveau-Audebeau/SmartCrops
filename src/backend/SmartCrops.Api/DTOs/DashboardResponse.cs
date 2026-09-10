@@ -22,6 +22,13 @@ namespace SmartCrops.Api.DTOs;
 /// </summary>
 /// <param name="Id">Garden identifier; also the key of the per-garden filter chips.</param>
 /// <param name="Name">Garden name, as the user typed it.</param>
+/// <param name="Description">
+/// The garden's own description (≤ 500 chars), as the user typed it. Carried
+/// because the widget OWNS the rename dialog and <c>PUT /api/gardens/{id}</c>
+/// replaces name and description together: without it here, every rename would
+/// silently erase the description. Not to be confused with the plant catalog's
+/// free text, which this response deliberately never carries.
+/// </param>
 /// <param name="Width">Grid width in cells; null on a garden whose layout was never saved.</param>
 /// <param name="Height">Grid height in cells; null likewise.</param>
 /// <param name="CellSize">Cell edge as a stored token (« 50cm »), for <c>cellSizeToMeters</c>.</param>
@@ -49,6 +56,7 @@ namespace SmartCrops.Api.DTOs;
 public record DashboardGardenDto(
     Guid Id,
     string Name,
+    string? Description,
     int? Width,
     int? Height,
     string? CellSize,

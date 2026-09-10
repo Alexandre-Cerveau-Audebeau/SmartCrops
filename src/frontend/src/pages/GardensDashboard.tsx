@@ -23,7 +23,7 @@ import DashboardGrid from '../components/Dashboard/DashboardGrid';
 import GardensBlock from '../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
-import { useGardens } from '../hooks/useGardens';
+import { useDashboardData } from '../hooks/useDashboardData';
 import { useLanguage } from '../hooks/useLanguage';
 import { createGarden } from '../services/gardenApi';
 import { DASHBOARD_SPACING, DASHBOARD_TYPE } from '../theme/dashboardTokens';
@@ -71,14 +71,17 @@ export default function GardensDashboard() {
     resetToLevel,
   } = useDashboardPreferences();
 
-  // SMA-421: the list fetch (locale re-fetch, stale-response guard,
-  // post-mutation refresh) lives in useGardens.
+  // SMA-336 PR 2/5: one call instead of seven. `useDashboardData` keeps the
+  // guards `useGardens` earned — locale re-fetch, stale-response generation,
+  // post-mutation refresh (SMA-288 / SMA-421) — and answers with the plans the
+  // three data widgets derive their figures from.
   const {
-    gardens,
+    data: dashboardData,
     loading: gardensLoading,
     loadError: gardensError,
     refetch,
-  } = useGardens(language);
+  } = useDashboardData(language);
+  const gardens = dashboardData.gardens;
 
   const [editing, setEditing] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -159,25 +162,41 @@ export default function GardensDashboard() {
     patch: (block: DashboardBlock) => DashboardBlock
   ) => setBlocks(blocks.map((block) => (block.key === key ? patch(block) : block)));
 
-  const renderBlock = (block: DashboardBlock) =>
-    block.key === 'gardens' ? (
-      <GardensBlock
-        size={block.size}
-        editing={editing}
-        gardens={gardens}
-        loading={gardensLoading}
-        loadError={gardensError}
-        language={language}
-        onCreateClick={() => setCreateDialogOpen(true)}
-        onChanged={refetch}
-        onDeleted={handleDeleted}
-        onExpand={() =>
-          patchBlock('gardens', (current) => ({ ...current, size: 'large' }))
-        }
-      />
-    ) : (
-      <InviteBlock blockKey={block.key} size={block.size} editing={editing} />
-    );
+  /**
+   * Whether a widget is ON the page. The Gardens table hides its WEATHER and
+   * HARVEST columns when theirs are not (frozen design): a column for data the
+   * user has taken off their dashboard is a column of nothing.
+   */
+  const isBlockVisible = (key: DashboardBlockKey) =>
+    blocks.some((block) => block.key === key && !block.hidden);
+
+  const renderBlock = (block: DashboardBlock) => {
+    switch (block.key) {
+      case 'gardens':
+        return (
+          <GardensBlock
+            size={block.size}
+            editing={editing}
+            gardens={gardens}
+            loading={gardensLoading}
+            loadError={gardensError}
+            language={language}
+            showWeatherColumn={isBlockVisible('weather')}
+            showHarvestColumn={isBlockVisible('harvest')}
+            onCreateClick={() => setCreateDialogOpen(true)}
+            onChanged={refetch}
+            onDeleted={handleDeleted}
+            onExpand={() =>
+              patchBlock('gardens', (current) => ({ ...current, size: 'large' }))
+            }
+          />
+        );
+      default:
+        return (
+          <InviteBlock blockKey={block.key} size={block.size} editing={editing} />
+        );
+    }
+  };
 
   const levelName = t(`dashboard.levels.${level}.name`);
 

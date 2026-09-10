@@ -4,9 +4,6 @@ import { Link as RouterLink } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import CardActionArea from '@mui/material/CardActionArea';
-import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
@@ -23,27 +20,46 @@ import EditIcon from '@mui/icons-material/Edit';
 import YardOutlinedIcon from '@mui/icons-material/YardOutlined';
 import DeleteGardenDialog from '../../Garden/DeleteGardenDialog';
 import DashboardBlock from '../DashboardBlock';
+import ExposureDot from '../ExposureDot';
+import GardenThumbnail from '../GardenThumbnail';
 import InviteState from '../InviteState';
+import MissingDataMark from '../MissingDataMark';
+import OccupancyBar from '../OccupancyBar';
 import { updateGarden } from '../../../services/gardenApi';
 import { DASHBOARD_TYPE } from '../../../theme/dashboardTokens';
+import { useDashboardTokens } from '../../../theme/useDashboardTokens';
 import type { DashboardSize } from '../../../types/Dashboard';
-import type { GardenListItem } from '../../../types/Garden';
+import type { DashboardGardenData } from '../../../types/DashboardData';
 import { formatRelativeDate } from '../../../utils/formatRelativeDate';
-import { getPlantDisplayName } from '../../../utils/getPlantDisplayName';
+import { deriveGardenView, type GardenView } from '../../../utils/gardenStats';
 
 /** Rows a Medium card shows before it defers the rest to "+N" (_spec.md 4). */
 const MEDIUM_ROWS = 3;
 
+/** Thumbnail edge on a Medium card and in the table's identity cell (_spec.md 7). */
+const MEDIUM_THUMB_PX = 48;
+const TABLE_THUMB_W = 34;
+const TABLE_THUMB_H = 26;
+
 interface Props {
   size: DashboardSize;
   editing?: boolean;
-  gardens: GardenListItem[];
+  gardens: DashboardGardenData[];
   loading: boolean;
   loadError: boolean;
   language: string;
+  /**
+   * Whether the WEATHER and HARVEST columns belong on the Large table.
+   *
+   * The frozen design ties them to their own widgets: a column for data the user
+   * has taken off their dashboard is a column of nothing. The page passes what
+   * the layout says.
+   */
+  showWeatherColumn?: boolean;
+  showHarvestColumn?: boolean;
   /** Opens the page create dialog - the same one the header button opens. */
   onCreateClick: () => void;
-  /** Re-runs the gardens fetch after a failed load or a rename. */
+  /** Re-runs the dashboard fetch after a failed load or a rename. */
   onChanged: () => void;
   /** A deletion the backend confirmed: the page toasts and re-fetches. */
   onDeleted: () => void;
@@ -52,24 +68,26 @@ interface Props {
 }
 
 /**
- * SMA-336 PR 1/5 - the ONE widget of this lot fed with real data (orchestrator
- * decision R1, resolving the STOP of the first pass): the dashboard replaces
- * `MyGardens` on `/gardens`, and that page held the only link to the planner in
- * the whole product. Shipping it as an invitation would have made every garden
- * - and the planner with it - unreachable at merge.
+ * SMA-336 PR 2/5 — the Gardens widget, now fed by the transport aggregate.
  *
- * The widget therefore renders exactly what `MyGardens` rendered: the cards,
- * the distinct-placed-plants count and its preview names, the rename, the
- * type-the-name deletion, and the chevron into the planner. Deliberately NOT
- * here, and left to PR 2: the plan thumbnail, occupancy, dominant exposure, the
- * WEATHER and HARVEST columns, the full comparison table and the
- * `GET /api/dashboard` aggregate.
+ * PR 1/5 shipped it against `GET /api/gardens`, which serves a garden's name,
+ * its dates and its distinct plants and nothing else — so the cards carried what
+ * that DTO honestly held. `GET /api/dashboard` carries the PLAN, and everything
+ * the frozen design asks for follows from it: the thumbnail, the occupancy bar,
+ * the dominant exposure, the free-cell count.
  *
- * The frozen design also gives each card a garden-type chip and its dimensions
- * (_spec.md 7). `GET /api/gardens` serves neither (`GardenListItemResponse`:
- * id, name, description, dates, plants), and fetching them would mean the very
- * data plumbing this PR must not do - so the cards carry what the list DTO
- * honestly holds.
+ * Small is unchanged — the design does not revisit it. Medium gains the
+ * thumbnail, the type chip and the ornamental chip. Large stops being a grid of
+ * cards and becomes the six-column comparison table.
+ *
+ * The rename, the type-the-name deletion and their dialogs are MOVED here
+ * untouched, aria-labels included. They cost four review rounds to get right and
+ * this lot has no reason to spend them again.
+ *
+ * WEATHER and HARVEST render a marker with NO gesture (decision D10). The design
+ * gives the unlocated weather cell an « Add » link, but the geocoding endpoint
+ * behind it lands in PR 3/5 — and PR 1/5 settled the doctrine: a control that
+ * accepts a city and does nothing with it is worse than saying « soon ».
  */
 export default function GardensBlock({
   size,
@@ -78,20 +96,20 @@ export default function GardensBlock({
   loading,
   loadError,
   language,
+  showWeatherColumn = false,
+  showHarvestColumn = false,
   onCreateClick,
   onChanged,
   onDeleted,
   onExpand,
 }: Props) {
   const { t } = useTranslation();
+  const tk = useDashboardTokens();
 
-  const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(
-    new Set()
-  );
   const [mutationError, setMutationError] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
 
-  const [editingGarden, setEditingGarden] = useState<GardenListItem | null>(
+  const [editingGarden, setEditingGarden] = useState<DashboardGardenData | null>(
     null
   );
   const [editName, setEditName] = useState('');
@@ -100,7 +118,9 @@ export default function GardensBlock({
   // The deletion target OUTLIVES the dialog open flag (the MyGardens idiom):
   // every close path only flips `deleteOpen`, so the fading dialog keeps its
   // name, count and (disarmed) button instead of collapsing mid-transition.
-  const [deleteTarget, setDeleteTarget] = useState<GardenListItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DashboardGardenData | null>(
+    null
+  );
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   /**
@@ -141,37 +161,33 @@ export default function GardensBlock({
     }
   };
 
-  const openEditDialog = (garden: GardenListItem) => {
+  const openEditDialog = (garden: DashboardGardenData) => {
     setEditingGarden(garden);
     setEditName(garden.name);
     setEditDescription(garden.description ?? '');
     setMutationError(false);
   };
 
-  const openDeleteDialog = (garden: GardenListItem) => {
+  const openDeleteDialog = (garden: DashboardGardenData) => {
     setDeleteTarget(garden);
     setDeleteOpen(true);
   };
 
-  const toggleDescription = (gardenId: string) => {
-    setExpandedDescriptions((previous) => {
-      const next = new Set(previous);
-      if (next.has(gardenId)) next.delete(gardenId);
-      else next.add(gardenId);
-      return next;
-    });
-  };
-
   // Most recently touched garden - the Small card subject, and where its arrow
-  // leads. `updatedAt` is the one freshness signal the list DTO carries.
-  const lastModified = gardens.reduce<GardenListItem | null>(
+  // leads. `updatedAt` is the one freshness signal every size can rely on.
+  const lastModified = gardens.reduce<DashboardGardenData | null>(
     (latest, garden) =>
       !latest || garden.updatedAt > latest.updatedAt ? garden : latest,
     null
   );
 
-  const plannerPath = (garden: GardenListItem) =>
+  const plannerPath = (garden: DashboardGardenData) =>
     `/gardens/${garden.id}/planner`;
+
+  const typeLabel = (garden: DashboardGardenData) =>
+    garden.config.gardenType
+      ? t(`planner.config.type.${garden.config.gardenType}`)
+      : null;
 
   const countChip = (
     <Chip
@@ -180,6 +196,48 @@ export default function GardensBlock({
       variant="outlined"
       sx={{ height: DASHBOARD_TYPE.chipHeight, fontSize: DASHBOARD_TYPE.chip }}
     />
+  );
+
+  const ornamentalChip = (garden: DashboardGardenData) =>
+    garden.isEdible === false ? (
+      <Chip
+        label={t('dashboard.blocks.gardens.ornamental')}
+        size="small"
+        sx={{
+          height: DASHBOARD_TYPE.chipHeight,
+          fontSize: DASHBOARD_TYPE.chip,
+          backgroundColor: tk.ornBg,
+          color: tk.ornText,
+        }}
+      />
+    ) : null;
+
+  const gardenActions = (garden: DashboardGardenData) => (
+    <Box sx={{ display: 'flex', gap: 0.5 }}>
+      <IconButton
+        size="small"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openEditDialog(garden);
+        }}
+        aria-label={`${t('gardens.edit')} ${garden.name}`}
+      >
+        <EditIcon fontSize="small" />
+      </IconButton>
+      <IconButton
+        size="small"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openDeleteDialog(garden);
+        }}
+        aria-label={`${t('gardens.delete')} ${garden.name}`}
+        sx={{ color: 'error.main' }}
+      >
+        <DeleteIcon fontSize="small" />
+      </IconButton>
+    </Box>
   );
 
   const smallBody = () => (
@@ -251,48 +309,91 @@ export default function GardensBlock({
           gap: '8px',
         }}
       >
+        {/* No rename or delete on a Medium row. The frozen design gives it a
+            thumbnail, a name, a type chip, a count and a chevron — nothing else
+            fits a 566 x 273 card holding three of them, and both gestures are
+            one size away on the Large table. */}
         {shown.map((garden) => (
           <Box
             key={garden.id}
-            component={RouterLink}
-            to={plannerPath(garden)}
-            aria-label={t('dashboard.blocks.gardens.open', {
-              name: garden.name,
-            })}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              minHeight: 44,
-              px: '8px',
-              borderRadius: '8px',
-              textDecoration: 'none',
-              color: 'inherit',
-              '&:hover': { backgroundColor: 'surfaceSubtle' },
-            }}
+            sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            <Typography
+            <Box
+              component={RouterLink}
+              to={plannerPath(garden)}
+              aria-label={t('dashboard.blocks.gardens.open', {
+                name: garden.name,
+              })}
               sx={{
-                fontSize: DASHBOARD_TYPE.gardenName,
-                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
                 flex: 1,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                minWidth: 0,
+                minHeight: 44,
+                px: '8px',
+                borderRadius: '8px',
+                textDecoration: 'none',
+                color: 'inherit',
+                '&:hover': { backgroundColor: 'surfaceSubtle' },
               }}
             >
-              {garden.name}
-            </Typography>
-            <Chip
-              label={t('gardens.plantsCount', { count: garden.plants.length })}
-              size="small"
-              variant="outlined"
-              sx={{
-                height: DASHBOARD_TYPE.chipHeight,
-                fontSize: DASHBOARD_TYPE.chip,
-              }}
-            />
-            <ChevronRightIcon fontSize="small" sx={{ color: 'text.disabled' }} />
+              <GardenThumbnail
+                garden={garden}
+                maxW={MEDIUM_THUMB_PX}
+                maxH={MEDIUM_THUMB_PX}
+              />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography
+                  sx={{
+                    fontSize: DASHBOARD_TYPE.gardenName,
+                    fontWeight: 700,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {garden.name}
+                </Typography>
+                <Typography
+                  sx={{
+                    fontSize: DASHBOARD_TYPE.secondary,
+                    color: 'text.secondary',
+                  }}
+                >
+                  {t('gardens.plantsCount', { count: garden.placementCount })}
+                  {garden.varietyCount > 0 &&
+                    ` · ${t('dashboard.blocks.gardens.varieties', {
+                      count: garden.varietyCount,
+                    })}`}
+                </Typography>
+              </Box>
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: '4px',
+                  flexShrink: 0,
+                  alignItems: 'center',
+                }}
+              >
+                {typeLabel(garden) && (
+                  <Chip
+                    label={typeLabel(garden)}
+                    size="small"
+                    variant="outlined"
+                    sx={{
+                      height: DASHBOARD_TYPE.chipHeight,
+                      fontSize: DASHBOARD_TYPE.chip,
+                    }}
+                  />
+                )}
+                {ornamentalChip(garden)}
+              </Box>
+              <ChevronRightIcon
+                fontSize="small"
+                sx={{ color: 'text.disabled', flexShrink: 0 }}
+              />
+            </Box>
           </Box>
         ))}
         {remaining > 0 && (
@@ -315,177 +416,100 @@ export default function GardensBlock({
     );
   };
 
-  const largeBody = () => (
-    <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-          // Rows are centred rather than packed at the top (round 1, V3): two
-          // gardens in a Large card left the bottom half empty. When the list
-          // outgrows the card the parent scrolls, as before.
-          alignContent: 'center',
-          minHeight: '100%',
-          gap: '12px',
-        }}
-      >
-        {gardens.map((garden) => (
-          <Card
-            key={garden.id}
-            variant="outlined"
-            sx={{
-              position: 'relative',
-              display: 'flex',
-              flexDirection: 'column',
-              borderColor: 'borderSubtle',
-            }}
-          >
-            <Box
-              sx={{
-                position: 'absolute',
-                top: 4,
-                right: 4,
-                zIndex: 1,
-                display: 'flex',
-                gap: 0.5,
-              }}
-            >
-              <IconButton
-                size="small"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  openEditDialog(garden);
-                }}
-                aria-label={`${t('gardens.edit')} ${garden.name}`}
-              >
-                <EditIcon fontSize="small" />
-              </IconButton>
-              <IconButton
-                size="small"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  openDeleteDialog(garden);
-                }}
-                aria-label={`${t('gardens.delete')} ${garden.name}`}
-                sx={{ color: 'error.main' }}
-              >
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Box>
+  /**
+   * The comparison table (_spec.md 7). Six labelled columns plus the chevron —
+   * the frozen design's own arbitration, measured: seven labelled columns need
+   * 590 px and a Large card offers 516.
+   *
+   * The thumbnail lives in the identity cell and steps aside when HARVEST is
+   * shown, exactly as the design has it: that column is the wider one, and the
+   * cell cannot carry both.
+   */
+  const largeBody = () => {
+    const headers = [
+      t('dashboard.blocks.gardens.columns.garden'),
+      t('dashboard.blocks.gardens.columns.plants'),
+      t('dashboard.blocks.gardens.columns.occupancy'),
+      t('dashboard.blocks.gardens.columns.exposure'),
+      ...(showWeatherColumn
+        ? [t('dashboard.blocks.gardens.columns.weather')]
+        : []),
+      ...(showHarvestColumn
+        ? [t('dashboard.blocks.gardens.columns.harvest')]
+        : [t('dashboard.blocks.gardens.columns.modified')]),
+      '',
+    ];
 
-            <ChevronRightIcon
-              sx={{
-                position: 'absolute',
-                bottom: 10,
-                right: 6,
-                color: 'text.disabled',
-                pointerEvents: 'none',
-              }}
-            />
-
-            <CardActionArea
-              component={RouterLink}
-              to={plannerPath(garden)}
-              sx={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'stretch',
-              }}
-            >
-              <CardContent sx={{ flex: 1, pr: 5 }}>
-                <Typography
+    return (
+      <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        <Box
+          component="table"
+          sx={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            tableLayout: 'auto',
+          }}
+        >
+          <Box component="thead">
+            <Box component="tr">
+              {headers.map((label, index) => (
+                <Box
+                  component="th"
+                  key={index}
+                  scope="col"
                   sx={{
-                    fontSize: DASHBOARD_TYPE.gardenName,
+                    textAlign: 'left',
+                    // 11px capitals: one of the three sizes the frozen design
+                    // allows under 14, and the reason is measured — six labelled
+                    // columns plus a chevron only fit a 516 px card at this size.
+                    fontSize: 11,
                     fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                    color: 'text.secondary',
+                    py: '4px',
+                    borderBottom: '1px solid',
+                    borderColor: 'borderSubtle',
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  {garden.name}
-                </Typography>
-                {garden.description && (
-                  <Typography
-                    sx={
-                      expandedDescriptions.has(garden.id)
-                        ? {
-                            mb: 0.5,
-                            fontSize: DASHBOARD_TYPE.secondary,
-                            color: 'text.secondary',
-                          }
-                        : {
-                            mb: 0.5,
-                            fontSize: DASHBOARD_TYPE.secondary,
-                            color: 'text.secondary',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                          }
-                    }
-                  >
-                    {garden.description}
-                  </Typography>
-                )}
-                {/* Counter + preview = DISTINCT plants actually placed in the
-                    map (SMA-6) - names through the shared Library resolver. */}
-                <Chip
-                  label={t('gardens.plantsCount', {
-                    count: garden.plants.length,
-                  })}
-                  size="small"
-                  variant="outlined"
-                  sx={{
-                    height: DASHBOARD_TYPE.chipHeight,
-                    fontSize: DASHBOARD_TYPE.chip,
-                  }}
-                />
-                {garden.plants.length > 0 && (
-                  <Typography
-                    sx={{
-                      mt: 1,
-                      fontSize: DASHBOARD_TYPE.secondary,
-                      color: 'text.secondary',
-                    }}
-                  >
-                    {garden.plants
-                      .slice(0, 3)
-                      .map((plant) => getPlantDisplayName(plant, language))
-                      .join(', ')}
-                    {garden.plants.length > 3 &&
-                      ` ${t('gardens.more', {
-                        count: garden.plants.length - 3,
-                      })}`}
-                  </Typography>
-                )}
-              </CardContent>
-            </CardActionArea>
-
-            {/* OUTSIDE the CardActionArea (round 1, E7): the action area is an
-                anchor, and a <button> nested in an <a> is invalid HTML that
-                assistive technology cannot resolve into two targets. The
-                preventDefault/stopPropagation pair hid the symptom in a
-                browser; moving the control out removes the nesting. */}
-            {garden.description && garden.description.length > 80 && (
-              <Box sx={{ px: 2, pb: 1 }}>
-                <Button
-                  variant="text"
-                  size="small"
-                  onClick={() => toggleDescription(garden.id)}
-                  sx={{ p: 0, minWidth: 0, fontSize: DASHBOARD_TYPE.chip }}
-                >
-                  {expandedDescriptions.has(garden.id)
-                    ? t('gardens.seeLess')
-                    : t('gardens.seeMore')}
-                </Button>
+                  {label}
+                </Box>
+              ))}
+              <Box
+                component="th"
+                scope="col"
+                sx={{
+                  width: 76,
+                  borderBottom: '1px solid',
+                  borderColor: 'borderSubtle',
+                }}
+              >
+                <Box component="span" sx={visuallyHidden}>
+                  {t('dashboard.blocks.gardens.columns.actions')}
+                </Box>
               </Box>
-            )}
-          </Card>
-        ))}
+            </Box>
+          </Box>
+          <Box component="tbody">
+            {gardens.map((garden) => (
+              <GardenRow
+                key={garden.id}
+                garden={garden}
+                language={language}
+                showWeatherColumn={showWeatherColumn}
+                showHarvestColumn={showHarvestColumn}
+                typeLabel={typeLabel(garden)}
+                ornamental={ornamentalChip(garden)}
+                actions={gardenActions(garden)}
+                plannerPath={plannerPath(garden)}
+              />
+            ))}
+          </Box>
+        </Box>
       </Box>
-    </Box>
-  );
+    );
+  };
 
   const body = () => {
     if (loading) {
@@ -617,14 +641,14 @@ export default function GardensBlock({
         </DialogActions>
       </Dialog>
 
-      {/* Delete confirm (SMA-18 lot 1): type-the-name brake. The list DTO only
-          knows the DISTINCT placed plants, so that is the one count the body
-          can honestly name here. */}
+      {/* Delete confirm (SMA-18 lot 1): type-the-name brake. The aggregate
+          counts the DISTINCT placed varieties itself, which is the same number
+          the list DTO's `plants` array used to carry. */}
       <DeleteGardenDialog
         open={deleteOpen}
         gardenId={deleteTarget?.id ?? ''}
         gardenName={deleteTarget?.name ?? ''}
-        summary={{ kind: 'list', plants: deleteTarget?.plants.length ?? 0 }}
+        summary={{ kind: 'list', plants: deleteTarget?.varietyCount ?? 0 }}
         onClose={() => setDeleteOpen(false)}
         onDeleted={() => {
           setDeleteOpen(false);
@@ -632,5 +656,203 @@ export default function GardensBlock({
         }}
       />
     </DashboardBlock>
+  );
+}
+
+/** Screen-reader-only, for the header of the actions column. */
+const visuallyHidden = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+} as const;
+
+interface RowProps {
+  garden: DashboardGardenData;
+  language: string;
+  showWeatherColumn: boolean;
+  showHarvestColumn: boolean;
+  typeLabel: string | null;
+  ornamental: React.ReactNode;
+  actions: React.ReactNode;
+  plannerPath: string;
+}
+
+/** One line of the comparison table. */
+function GardenRow({
+  garden,
+  language,
+  showWeatherColumn,
+  showHarvestColumn,
+  typeLabel,
+  ornamental,
+  actions,
+  plannerPath,
+}: RowProps) {
+  const { t } = useTranslation();
+  const view: GardenView = deriveGardenView(garden);
+
+  const cellSx = {
+    // >= 44px rows (_spec.md 3): the line is a touch target as much as a row.
+    minHeight: 44,
+    py: '6px',
+    pr: '8px',
+    borderBottom: '1px solid',
+    borderColor: 'borderSubtle',
+    fontSize: DASHBOARD_TYPE.body,
+    verticalAlign: 'middle',
+  } as const;
+
+  const subSx = {
+    fontSize: 13,
+    color: 'text.secondary',
+    whiteSpace: 'nowrap',
+  } as const;
+
+  return (
+    <Box component="tr">
+      <Box component="td" sx={cellSx}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* The thumbnail steps aside when HARVEST is shown: that column is the
+              wider one and the identity cell cannot carry both (_spec.md 4). */}
+          {!showHarvestColumn && (
+            <GardenThumbnail
+              garden={garden}
+              maxW={TABLE_THUMB_W}
+              maxH={TABLE_THUMB_H}
+            />
+          )}
+          <Box sx={{ minWidth: 0 }}>
+            <Box
+              component={RouterLink}
+              to={plannerPath}
+              aria-label={t('dashboard.blocks.gardens.open', {
+                name: garden.name,
+              })}
+              sx={{
+                display: 'block',
+                fontSize: DASHBOARD_TYPE.gardenName,
+                fontWeight: 700,
+                textDecoration: 'none',
+                color: 'inherit',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {garden.name}
+            </Box>
+            <Typography sx={subSx}>
+              {showHarvestColumn
+                ? t('dashboard.blocks.gardens.lastModified', {
+                    when: formatRelativeDate(
+                      new Date(garden.updatedAt),
+                      new Date(),
+                      language,
+                      'short'
+                    ),
+                  })
+                : view.hasPlan
+                  ? t('dashboard.blocks.gardens.dimensions', {
+                      cols: garden.width,
+                      rows: garden.height,
+                    })
+                  : t('dashboard.blocks.gardens.noPlan')}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: '4px', mt: '2px' }}>
+              {typeLabel && (
+                <Chip
+                  label={typeLabel}
+                  size="small"
+                  variant="outlined"
+                  sx={{
+                    height: DASHBOARD_TYPE.chipHeight,
+                    fontSize: DASHBOARD_TYPE.chip,
+                  }}
+                />
+              )}
+              {ornamental}
+            </Box>
+          </Box>
+        </Box>
+      </Box>
+
+      <Box component="td" sx={cellSx}>
+        <Box sx={{ fontWeight: 700 }}>{garden.placementCount}</Box>
+        <Typography sx={subSx}>
+          {t('dashboard.blocks.gardens.varieties', {
+            count: garden.varietyCount,
+          })}
+        </Typography>
+      </Box>
+
+      <Box component="td" sx={cellSx}>
+        {view.hasPlan ? (
+          <>
+            <OccupancyBar percent={view.occupancyPercent} />
+            <Typography sx={subSx}>
+              {t('dashboard.blocks.gardens.freeCells', {
+                count: view.freeCells,
+              })}
+            </Typography>
+          </>
+        ) : (
+          <MissingDataMark label={t('dashboard.blocks.gardens.noPlanShort')} />
+        )}
+      </Box>
+
+      <Box component="td" sx={cellSx}>
+        {view.dominantExposure ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <ExposureDot category={view.dominantExposure} />
+            <Box component="span" sx={{ whiteSpace: 'nowrap' }}>
+              {t(`dashboard.exposure.short.${view.dominantExposure}`)}
+            </Box>
+          </Box>
+        ) : (
+          <MissingDataMark label={t('dashboard.blocks.gardens.noPlanShort')} />
+        )}
+      </Box>
+
+      {showWeatherColumn && (
+        <Box component="td" sx={cellSx}>
+          {/* Decision D10: a marker, no gesture. The design's « Add » link needs
+              the geocoding endpoint of PR 3/5 behind it.
+
+              Its own short word rather than the shells' « Coming soon »: the
+              column is 66 px wide, and a cell marker is not a card's sentence. */}
+          <MissingDataMark label={t('dashboard.blocks.gardens.columnSoon')} />
+        </Box>
+      )}
+
+      {showHarvestColumn ? (
+        <Box component="td" sx={cellSx}>
+          <MissingDataMark label={t('dashboard.blocks.gardens.columnSoon')} />
+        </Box>
+      ) : (
+        <Box component="td" sx={cellSx}>
+          <Typography sx={subSx}>
+            {formatRelativeDate(
+              new Date(garden.updatedAt),
+              new Date(),
+              language,
+              'short'
+            )}
+          </Typography>
+        </Box>
+      )}
+
+      <Box component="td" sx={{ ...cellSx, pr: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+          {actions}
+          <ChevronRightIcon
+            fontSize="small"
+            sx={{ color: 'text.disabled', pointerEvents: 'none' }}
+          />
+        </Box>
+      </Box>
+    </Box>
   );
 }

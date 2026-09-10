@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PlacementData } from '../services/gardenLayoutApi';
-import { parseCellsJson, serializeCellsJson, type CellData } from '../types/GardenLayout';
+import { serializeCellsJson, type CellData } from '../types/GardenLayout';
 import { fitPreview, gardenToPreview, plantInsetPx, TINY_CELL_PX } from './gardenPreview';
 
 // SMA-336 PR 2/5 — the adapter that lets TemplatePreview draw a real garden,

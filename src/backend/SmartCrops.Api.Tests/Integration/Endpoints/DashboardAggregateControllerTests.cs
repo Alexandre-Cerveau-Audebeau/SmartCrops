@@ -15,10 +15,11 @@ namespace SmartCrops.Api.Tests.Integration.Endpoints;
 /// SMA-336 (PR 2/5) — <c>GET /api/dashboard</c>, the transport aggregate.
 ///
 /// <para>Two locks carry the weight of this file. The WHITELIST proves the
-/// response is the lean shape the lot was built for: the moment a
-/// <c>PlantListItemResponse</c> is spliced back in, <c>description</c> reappears
-/// and the test says so. The ISOLATION lock proves an aggregate that now carries
-/// garden PLANS never crosses accounts.</para>
+/// response is the lean shape the lot was built for — the moment a
+/// <c>PlantListItemResponse</c> is spliced back in, keys appear that are not on
+/// the list, and a companion test matches the catalog's seeded free text to
+/// catch one nested a level deeper. The ISOLATION lock proves an aggregate that
+/// now carries garden PLANS never crosses accounts.</para>
 ///
 /// <para>The rest covers the states DEV data does not have: a user with no
 /// garden, a garden with no placement, a garden with no <c>CellsJson</c>, and a
@@ -37,14 +38,17 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
 
     /// <summary>
     /// camelCase keys of <see cref="DashboardGardenDto"/>, ordinal order. The
-    /// point of listing them: <c>description</c> is NOT here, and neither is any
-    /// other field of the plant catalog row.
+    /// point of listing them: not one field of the plant catalog row is here.
     /// </summary>
     private static readonly string[] GardenWhitelist =
     [
         "cellSize",
         "cellsJson",
         "config",
+        // The GARDEN's own description — the widget owns the rename dialog, and
+        // PUT /api/gardens/{id} replaces name and description together. NOT the
+        // plant catalog's free text; the test below tells the two apart.
+        "description",
         "height",
         "id",
         "isEdible",
@@ -134,11 +138,14 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task GetDashboard_CarriesNoPlantCatalogFreeText()
+    public async Task GetDashboard_CarriesTheGardensOwnTextButNoPlantCatalogFreeText()
     {
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId);
-        var gardenId = await SeedGardenAsync(userId, "Terrasse");
+        var gardenId = await SeedGardenAsync(
+            userId,
+            "Terrasse",
+            description: "Le coin sud, refait au printemps.");
         var plantId = await SeedPlantAsync("Ocimum basilicum", plantTypeId: 3);
         await SeedTranslationsAsync(
             plantId,
@@ -148,13 +155,15 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
 
         var raw = await Client.GetStringAsync(Url);
 
-        // The whole point of the lot: the aggregate is lighter than the gardens
-        // list because it carries plans, not catalog rows. A response that ships
-        // the description is a response that quietly grew a PlantListItemResponse
-        // back, and no key-level assertion above would notice it nested one level
-        // deeper.
+        // The garden's own words travel — the widget edits them.
+        Assert.Contains("Le coin sud, refait au printemps.", raw, StringComparison.Ordinal);
+
+        // The plant catalog's do not, and this is the whole point of the lot:
+        // the aggregate is lighter than the gardens list because it carries
+        // plans, not catalog rows. A key-level assertion could not catch a
+        // PlantListItemResponse spliced back in one level deeper; matching the
+        // seeded text can.
         Assert.DoesNotContain("nobody asked this endpoint for", raw, StringComparison.Ordinal);
-        Assert.DoesNotContain("\"description\"", raw, StringComparison.Ordinal);
     }
 
     // ── Empty states ─────────────────────────────────────────────────────────
@@ -493,7 +502,11 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
             userId);
     }
 
-    private async Task<Guid> SeedGardenAsync(string userId, string name, string? cellsJson = null)
+    private async Task<Guid> SeedGardenAsync(
+        string userId,
+        string name,
+        string? cellsJson = null,
+        string? description = null)
     {
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
@@ -501,6 +514,7 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         {
             Id = Guid.NewGuid(),
             Name = name,
+            Description = description,
             UserId = userId,
             LayoutWidth = 10,
             LayoutHeight = 10,

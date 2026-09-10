@@ -111,6 +111,7 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
             {
                 g.Id,
                 g.Name,
+                g.Description,
                 g.LayoutWidth,
                 g.LayoutHeight,
                 g.CellSize,
@@ -159,6 +160,7 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
             .Select(g => new DashboardGardenDto(
                 g.Id,
                 g.Name,
+                g.Description,
                 g.LayoutWidth,
                 g.LayoutHeight,
                 g.CellSize,

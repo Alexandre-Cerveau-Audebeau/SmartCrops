@@ -1,7 +1,10 @@
 import type { PlacementData } from '../services/gardenLayoutApi';
-import type { CellData } from '../types/GardenLayout';
+import type { DashboardGardenData } from '../types/DashboardData';
+import { parseCellsJson, type CellData } from '../types/GardenLayout';
+import { computeExposureView } from '../pages/gardenPlanner/exposureView';
 import { cellSizeToMeters } from '../pages/gardenPlanner/placementGeometry';
 import type { ExposureCategory } from './exposure';
+import { infrastructureBlockers } from './infrastructure';
 
 /**
  * SMA-336 PR 2/5 — what a garden's plan says about it, in numbers.
@@ -116,14 +119,15 @@ export function exposureTally(
 }
 
 /**
- * The category the most cells fall into, or null when nothing is rated.
+ * The four categories, sunniest first.
  *
- * Ties are broken by the declared order below rather than by whichever key the
- * runtime happens to enumerate first: the same garden must not report « full »
- * on one load and « morning » on the next. Sunnier wins, which is the reading a
- * gardener expects from a single-word summary.
+ * Declared here rather than derived from the engine's union type, because the
+ * ORDER is the point and a type has none. It breaks ties in
+ * {@link dominantExposure} — the same garden must not report « full » on one
+ * load and « morning » on the next — and it is the reading order of the
+ * Statistics distribution.
  */
-const DOMINANCE_ORDER: readonly ExposureCategory[] = [
+export const EXPOSURE_ORDER: readonly ExposureCategory[] = [
   'full',
   'morning',
   'afternoon',
@@ -134,7 +138,7 @@ export function dominantExposure(
   tally: ExposureTally
 ): ExposureCategory | null {
   let best: ExposureCategory | null = null;
-  for (const category of DOMINANCE_ORDER) {
+  for (const category of EXPOSURE_ORDER) {
     if (tally[category] > 0 && (best === null || tally[category] > tally[best])) {
       best = category;
     }
@@ -222,4 +226,117 @@ export function isOrnamentalGarden(
 ): boolean | null {
   if (varieties.length === 0) return null;
   return !varieties.some(isEdibleVariety);
+}
+
+/**
+ * Everything one garden's plan says, derived in one pass.
+ *
+ * Composed here rather than inside a component so the widgets stay
+ * presentational and the arithmetic stays testable without a DOM. The Gardens
+ * table, the Gardens cards and the Statistics sections all read this same shape,
+ * which is also what keeps the occupancy of a garden identical in all three.
+ */
+export interface GardenView {
+  activeCells: number;
+  totalCells: number;
+  surfaceM2: number;
+  occupiedCells: number;
+  freeCells: number;
+  occupancyPercent: number;
+  dominantExposure: ExposureCategory | null;
+  exposure: ExposureTally;
+  freeExposure: ExposureTally;
+  /** False when the garden has no saved layout — nothing here can be trusted then. */
+  hasPlan: boolean;
+}
+
+/**
+ * The season and moment the dashboard rates exposure at, fixed rather than
+ * derived (decision D12).
+ *
+ * The planner lets the user pick both; the dashboard has no such control, and
+ * the frozen design writes the choice into the section header — « DOMINANT
+ * EXPOSURE — SUMMER · NOON ». Deriving them from a clock instead would make the
+ * figure change under a user who changed nothing, and would make every test of
+ * this module depend on the day it runs. The engine is declared clock-free and
+ * this keeps it that way.
+ */
+export const DASHBOARD_SEASON = 'summer' as const;
+export const DASHBOARD_MOMENT = 'noon' as const;
+
+export function deriveGardenView(garden: DashboardGardenData): GardenView {
+  const width = garden.width ?? 0;
+  const height = garden.height ?? 0;
+  const hasPlan = width > 0 && height > 0;
+
+  if (!hasPlan) {
+    return {
+      activeCells: 0,
+      totalCells: 0,
+      surfaceM2: 0,
+      occupiedCells: garden.occupiedCells,
+      freeCells: 0,
+      occupancyPercent: 0,
+      dominantExposure: null,
+      exposure: emptyExposureTally(),
+      freeExposure: emptyExposureTally(),
+      hasPlan: false,
+    };
+  }
+
+  const grid = parseCellsJson(garden.cellsJson, width, height);
+  const { activeCells, totalCells, surfaceM2 } = gridStats(grid, garden.cellSize);
+  const blockers = infrastructureBlockers(grid);
+
+  const view = computeExposureView({
+    grid,
+    rows: height,
+    cols: width,
+    // The engine reads five config fields and applies its own defaults for the
+    // ones a garden never set; the rest of `Garden` is display data it ignores.
+    garden: {
+      id: garden.id,
+      name: garden.name,
+      orientation: garden.config.orientation,
+      gardenType: garden.config.gardenType,
+      lightSchedule: garden.config.lightSchedule,
+      hemisphere: garden.config.hemisphere,
+      latitudeBand: garden.config.latitudeBand,
+    },
+    blockers,
+    season: DASHBOARD_SEASON,
+    moment: DASHBOARD_MOMENT,
+    // The dashboard never draws the cast-shadow hatch, so the second engine
+    // pass would be computed and thrown away — once per garden, on every load.
+    castsShadow: false,
+  });
+
+  const exposure = exposureTally(view.cells);
+
+  return {
+    activeCells,
+    totalCells,
+    surfaceM2,
+    occupiedCells: garden.occupiedCells,
+    freeCells: freeCells(activeCells, garden.occupiedCells),
+    occupancyPercent: occupancyPercent(activeCells, garden.occupiedCells),
+    dominantExposure: dominantExposure(exposure),
+    exposure,
+    freeExposure: freeCellExposureTally(view.cells, garden.placements, height, width),
+    hasPlan: true,
+  };
+}
+
+/** Sums a list of tallies — the Statistics widget's all-gardens distribution. */
+export function sumExposureTallies(
+  tallies: readonly ExposureTally[]
+): ExposureTally {
+  const total = emptyExposureTally();
+  for (const tally of tallies) {
+    total.full += tally.full;
+    total.morning += tally.morning;
+    total.afternoon += tally.afternoon;
+    total.shade += tally.shade;
+  }
+  return total;
 }

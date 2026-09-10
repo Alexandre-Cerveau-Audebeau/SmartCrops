@@ -389,7 +389,26 @@
         "openLast": "Open the last modified garden",
         "more_one": "+{{count}} garden →",
         "more_other": "+{{count}} gardens →",
-        "open": "Open {{name}}"
+        "open": "Open {{name}}",
+        "varieties_one": "{{count}} var.",
+        "varieties_other": "{{count}} var.",
+        "ornamental": "Ornamental",
+        "dimensions": "{{cols}} × {{rows}}",
+        "noPlan": "No plan drawn",
+        "noPlanShort": "No plan",
+        "freeCells_one": "{{count}} free",
+        "freeCells_other": "{{count}} free",
+        "columns": {
+          "garden": "Garden",
+          "plants": "Plants",
+          "occupancy": "Occupancy",
+          "exposure": "Exposure",
+          "weather": "Weather",
+          "harvest": "Harvest",
+          "modified": "Modified",
+          "actions": "Actions"
+        },
+        "columnSoon": "Soon"
       },
       "tips": {
         "title": "Tips",
@@ -414,6 +433,14 @@
       "harvest": {
         "title": "Harvest",
         "invite": "Your plants have no growth stage yet — the estimate can’t count them."
+      }
+    },
+    "exposure": {
+      "short": {
+        "full": "Full sun",
+        "morning": "Morning",
+        "afternoon": "Afternoon",
+        "shade": "Shade"
       }
     }
   },
@@ -875,7 +902,10 @@
           "name": "GBIF",
           "desc": "Global Biodiversity Information Facility"
         },
-        "wfo": { "name": "WFO", "desc": "World Flora Online" },
+        "wfo": {
+          "name": "WFO",
+          "desc": "World Flora Online"
+        },
         "perenual": {
           "name": "Perenual",
           "desc": "Care, watering & cultivation"
@@ -1002,16 +1032,31 @@
       "availableTitle": "Available",
       "comingTitle": "Coming · exact measurements",
       "coming": {
-        "light": { "label": "Light received", "unit": "lumens·h" },
+        "light": {
+          "label": "Light received",
+          "unit": "lumens·h"
+        },
         "water": {
           "label": "Water need",
           "unitMetric": "L/day",
           "unitImperial": "gal/day"
         },
-        "npk": { "label": "NPK fertilisation", "unit": "g·week" },
-        "germination": { "label": "Germination", "unit": "days" },
-        "humidity": { "label": "Humidity range", "unit": "%RH" },
-        "temp": { "label": "Temperature range", "unit": "°C exact" }
+        "npk": {
+          "label": "NPK fertilisation",
+          "unit": "g·week"
+        },
+        "germination": {
+          "label": "Germination",
+          "unit": "days"
+        },
+        "humidity": {
+          "label": "Humidity range",
+          "unit": "%RH"
+        },
+        "temp": {
+          "label": "Temperature range",
+          "unit": "°C exact"
+        }
       },
       "wateringPh": "Watering pH range",
       "wateringIdealTemp": "Ideal watering temperature",
@@ -1288,7 +1333,10 @@
       "propagationLabel": "Propagation methods",
       "pruningLabel": "Pruning months",
       "wateringLabel": "Watering rhythm",
-      "units": { "days": "days", "days_one": "day" },
+      "units": {
+        "days": "days",
+        "days_one": "day"
+      },
       "propagationMethods": {
         "airLayeringPropagation": "Air layering",
         "asexualReproduction": "Asexual reproduction",

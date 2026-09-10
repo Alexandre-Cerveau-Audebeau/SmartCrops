@@ -7,6 +7,7 @@ import {
   type DashboardPreferences,
   type SaveDashboardPreferences,
 } from '../types/Dashboard';
+import type { DashboardData } from '../types/DashboardData';
 import { DEFAULT_DASHBOARD_LEVEL, presetFor } from '../constants/dashboardPresets';
 import { fetchJson } from './fetchJson';
 
@@ -142,4 +143,26 @@ export async function saveDashboardPreferences(
     signal,
     body: JSON.stringify(preferences),
   });
+}
+
+/**
+ * SMA-336 PR 2/5 — the transport aggregate: every garden with its plan, the
+ * counts by variety, and the page totals, in one call.
+ *
+ * Unlike the preferences above there is nothing to normalize. A layout is
+ * STORED data this server may not have written, so an unknown block key can
+ * genuinely arrive and must be dropped before it reaches a component. This body
+ * is computed fresh from the caller's own rows on every request: there is no
+ * older document to meet, and a defensive pass over a few hundred placements
+ * would cost more than it could ever catch. What the widgets do guard against
+ * is a MISSING aggregate, which is the load-error state the page already draws.
+ */
+export async function fetchDashboardData(
+  language: string,
+  signal?: AbortSignal
+): Promise<DashboardData> {
+  return fetchJson<DashboardData>(
+    `${API_BASE}/dashboard?lang=${encodeURIComponent(language)}`,
+    { credentials: 'include', signal }
+  );
 }

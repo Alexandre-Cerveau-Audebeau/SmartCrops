@@ -10,10 +10,12 @@ import {
   type DashboardBlock,
   type DashboardLevel,
 } from '../types/Dashboard';
-import type { GardenListItem } from '../types/Garden';
+import type {
+  DashboardData,
+  DashboardGardenData,
+} from '../types/DashboardData';
 
 vi.mock('../services/gardenApi', () => ({
-  fetchGardens: vi.fn(),
   createGarden: vi.fn(),
   updateGarden: vi.fn(),
   deleteGarden: vi.fn(),
@@ -22,22 +24,58 @@ vi.mock('../services/gardenApi', () => ({
 vi.mock('../services/dashboardApi', () => ({
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
+  fetchDashboardData: vi.fn(),
 }));
 
 import GardensDashboard from './GardensDashboard';
-import { fetchGardens } from '../services/gardenApi';
 import {
+  fetchDashboardData,
   fetchDashboardPreferences,
   saveDashboardPreferences,
 } from '../services/dashboardApi';
 
-const garden = (id: string, name: string): GardenListItem => ({
+/**
+ * SMA-336 PR 2/5 — the page reads the transport aggregate now, so the fixture
+ * builds its shape. `plants: []` became the placement and variety counts the
+ * aggregate carries; nothing else about these tests changes.
+ */
+const garden = (
+  id: string,
+  name: string,
+  over: Partial<DashboardGardenData> = {}
+): DashboardGardenData => ({
   id,
   name,
   description: null,
-  createdAt: '2026-05-01T00:00:00Z',
+  width: 4,
+  height: 3,
+  cellSize: '50cm',
+  cellsJson: null,
+  config: {
+    orientation: null,
+    gardenType: null,
+    lightSchedule: null,
+    hemisphere: 'N',
+    latitudeBand: 'mid',
+  },
   updatedAt: '2026-05-01T00:00:00Z',
-  plants: [],
+  placements: [],
+  placementCount: 0,
+  varietyCount: 0,
+  occupiedCells: 0,
+  isEdible: null,
+  ...over,
+});
+
+const dashboardWith = (gardens: DashboardGardenData[]): DashboardData => ({
+  gardens,
+  varieties: [],
+  totals: {
+    gardenCount: gardens.length,
+    placementCount: 0,
+    varietyCount: 0,
+    catalogPlantCount: 536,
+  },
 });
 
 /**
@@ -117,7 +155,7 @@ function renderPage() {
 
 beforeEach(() => {
   localStorage.setItem('smartcrops-language', 'en');
-  vi.mocked(fetchGardens).mockResolvedValue([garden('g1', 'Casa Lolo')]);
+  vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([garden('g1', 'Casa Lolo')]));
   vi.mocked(saveDashboardPreferences).mockResolvedValue(undefined);
   servePreferences('gardener');
 });
@@ -311,7 +349,11 @@ describe('GardensDashboard — the seven widget shells (SMA-336)', () => {
 
       renderPage();
 
-      expect(await screen.findByText(title)).toBeInTheDocument();
+      // By ROLE: since PR 2/5 the Gardens table labels WEATHER and HARVEST
+      // columns, so those two words match a column header as well as a title.
+      expect(
+        await screen.findByRole('heading', { level: 2, name: title })
+      ).toBeInTheDocument();
       expect(screen.getByText(sentence)).toBeInTheDocument();
     }
   );
@@ -431,26 +473,41 @@ describe('GardensDashboard — invitation layout (SMA-336 round 1, V3)', () => {
     expect(getComputedStyle(panel).border).toContain('dashed');
   });
 
-  it('does not leave half a Large Gardens card empty for two gardens', async () => {
-    // Same rule for short real content: the rows are centred in the card.
-    vi.mocked(fetchGardens).mockResolvedValue([
-      garden('g1', 'Casa Lolo'),
-      garden('g2', 'Le Potager'),
-    ]);
+  it('gives every garden one comparable row in the Large table', async () => {
+    // The V3 rule was written for the card grid: two gardens must not leave
+    // half a Large card empty. The Large body is the comparison table now, and
+    // the equivalent statement is stronger — one row per garden, each carrying
+    // the same labelled columns, so two gardens are actually comparable.
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([garden('g1', 'Casa Lolo'), garden('g2', 'Le Potager')])
+    );
     servePreferences('gardener');
 
     renderPage();
 
     await screen.findByText('Casa Lolo');
-    const grid = document
-      .querySelector('[data-widget="gardens"]')!
-      .querySelector('[style], div')!;
-    const rows = [...document.querySelectorAll('[data-widget="gardens"] div')]
-      .map((node) => getComputedStyle(node as HTMLElement))
-      .filter((style) => style.display === 'grid');
+    const widget = document.querySelector('[data-widget="gardens"]')!;
+    const table = widget.querySelector('table');
 
-    expect(grid).not.toBeNull();
-    expect(rows.some((style) => style.alignContent === 'center')).toBe(true);
+    expect(table).not.toBeNull();
+    expect(table!.querySelectorAll('tbody tr')).toHaveLength(2);
+    // SIX labelled columns plus the actions cell — the frozen design's own
+    // arbitration, measured: seven labelled columns need 590 px and a Large
+    // card offers 516. WEATHER is among them because the Gardener preset shows
+    // the Weather widget; HARVEST is not, because it hides the Harvest one.
+    expect(
+      [...table!.querySelectorAll('thead th')]
+        .map((th) => th.textContent)
+        .filter(Boolean)
+    ).toEqual([
+      'Garden',
+      'Plants',
+      'Occupancy',
+      'Exposure',
+      'Weather',
+      'Modified',
+      'Actions',
+    ]);
   });
 });
 
@@ -485,27 +542,25 @@ describe('GardensDashboard — headings and dialogs (SMA-336 round 1)', () => {
     expect(await screen.findByLabelText(/Name/)).toHaveValue('');
   });
 
-  it('keeps the description toggle out of the card link', async () => {
-    // Round 1 (E7): a <button> nested in an <a> is invalid HTML that assistive
-    // technology cannot resolve into two targets.
-    vi.mocked(fetchGardens).mockResolvedValue([
-      {
-        ...garden('g1', 'Casa Lolo'),
-        description: 'x'.repeat(120),
-      },
-    ]);
+  it('keeps every control out of the row link', async () => {
+    // Round 1 (E7), kept through PR 2/5: a <button> nested in an <a> is invalid
+    // HTML that assistive technology cannot resolve into two targets. The
+    // « See more » toggle it was written for went with the card body — the Large
+    // widget is a table and shows no description — but the rule outlived it: the
+    // row still puts a link and two buttons side by side.
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([garden('g1', 'Casa Lolo', { description: 'x'.repeat(120) })])
+    );
     servePreferences('gardener');
 
     renderPage();
 
-    const toggle = await screen.findByRole('button', { name: 'See more' });
-    expect(toggle.closest('a')).toBeNull();
-
-    const link = screen.getByRole('link', { name: /Casa Lolo/ });
+    const link = await screen.findByRole('link', { name: /Casa Lolo/ });
     expect(link.querySelector('button')).toBeNull();
 
-    fireEvent.click(toggle);
-    expect(await screen.findByRole('button', { name: 'See less' })).toBeInTheDocument();
+    for (const name of ['Edit Casa Lolo', 'Delete Casa Lolo']) {
+      expect(screen.getByRole('button', { name }).closest('a')).toBeNull();
+    }
   });
 });
 
@@ -631,7 +686,9 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
   async function gridCss() {
     servePreferences('gardener');
     renderPage();
-    await screen.findByText('Weather');
+    // By ROLE, not by text: the Gardens table now labels a WEATHER column, so
+    // the bare word matches both a widget title and a column header.
+    await screen.findByRole('heading', { level: 2, name: 'Weather' });
     return rulesFor(gridNode()).join(' ');
   }
 
