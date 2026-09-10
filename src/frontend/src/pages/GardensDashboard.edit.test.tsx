@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { presetFor } from '../constants/dashboardPresets';
+import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
 import type {
   DashboardBlock,
   DashboardLevel,
@@ -46,26 +47,34 @@ import {
  * The same jsdom gap as the shared ResizeObserver stub (SMA-426), scoped to
  * this file because only the drag-and-drop tests need a laid-out page.
  */
+const CELL = 280;
+const ROW = 200;
+const GUTTER = 20;
+
 function stubGridGeometry(sizes?: Record<string, DashboardSize>) {
   const originalRect = Element.prototype.getBoundingClientRect;
   const originalScroll = Element.prototype.scrollIntoView;
-  const WIDTH = 280;
-  const HEIGHT = 200;
-  const GUTTER = 20;
-
-  // The three footprints of `_spec.md` § 1, in the same 280px column and 20px
-  // gutter. Only the tests that need DIFFERENT sizes ask for them (round 2, V4):
-  // every other drag test keeps the uniform geometry it was written against.
-  const FOOTPRINTS: Record<DashboardSize, { width: number; height: number }> = {
-    small: { width: WIDTH, height: HEIGHT },
-    medium: { width: WIDTH * 2 + GUTTER, height: HEIGHT },
-    large: { width: WIDTH * 2 + GUTTER, height: HEIGHT * 2 + GUTTER },
-  };
 
   const keyOf = (element: Element): string | null =>
     element.getAttribute('data-widget') ??
     element.querySelector('[data-widget]')?.getAttribute('data-widget') ??
     null;
+
+  // Memoized on the DOM order. dnd-kit measures rects thousands of times per
+  // drag, and packing the grid inside every one of those calls made this file
+  // take minutes and time whole tests out.
+  let cachedOrder = '';
+  let cachedPlacement: ReturnType<typeof packGrid> | null = null;
+  const placementFor = (order: (string | null)[]) => {
+    const orderKey = order.join('|');
+    if (cachedPlacement && cachedOrder === orderKey) return cachedPlacement;
+    cachedOrder = orderKey;
+    cachedPlacement = packGrid(
+      order.map((k) => ({ key: k!, ...spanFor(sizes![k!] ?? 'medium', 4) })),
+      4
+    );
+    return cachedPlacement;
+  };
 
   Element.prototype.scrollIntoView = () => {};
   Element.prototype.getBoundingClientRect = function (this: Element) {
@@ -81,25 +90,30 @@ function stubGridGeometry(sizes?: Record<string, DashboardSize>) {
       } as DOMRect;
     }
     if (sizes) {
-      // One row, left to right, each widget as wide and as tall as its size.
-      let left = 0;
-      for (const previous of order.slice(0, index)) {
-        left += FOOTPRINTS[sizes[previous!] ?? 'medium']!.width + GUTTER;
-      }
-      const { width, height } = FOOTPRINTS[sizes[key!] ?? 'medium']!;
+      // Four columns laid out by the SAME sparse packing the production code
+      // models (round 3, V6). Saying it plainly: this fixture and the sorting
+      // strategy share the placement model, so the render tests below pin that
+      // the STRATEGY composes translations which keep the target areas
+      // disjoint. Whether the model matches the browser is what the hand-written
+      // expectations of `dashboardLayoutGrid.test.ts` pin, independently.
+      const cell = placementFor(order).get(key!)!;
+      const left = cell.col * (CELL + GUTTER);
+      const top = cell.row * (ROW + GUTTER);
+      const width = cell.cols * CELL + (cell.cols - 1) * GUTTER;
+      const height = cell.rows * ROW + (cell.rows - 1) * GUTTER;
       return {
-        x: left, y: 0, top: 0, left,
-        right: left + width, bottom: height,
+        x: left, y: top, top, left,
+        right: left + width, bottom: top + height,
         width, height,
         toJSON: () => ({}),
       } as DOMRect;
     }
-    const left = (index % 4) * (WIDTH + GUTTER);
-    const top = Math.floor(index / 4) * (HEIGHT + GUTTER);
+    const left = (index % 4) * (CELL + GUTTER);
+    const top = Math.floor(index / 4) * (ROW + GUTTER);
     return {
       x: left, y: top, top, left,
-      right: left + WIDTH, bottom: top + HEIGHT,
-      width: WIDTH, height: HEIGHT,
+      right: left + CELL, bottom: top + ROW,
+      width: CELL, height: ROW,
       toJSON: () => ({}),
     } as DOMRect;
   };
@@ -108,6 +122,67 @@ function stubGridGeometry(sizes?: Record<string, DashboardSize>) {
     Element.prototype.getBoundingClientRect = originalRect;
     Element.prototype.scrollIntoView = originalScroll;
   };
+}
+
+/**
+ * The breakpoint the page believes it is at. `DashboardGrid` reads the column
+ * count with `useMediaQuery` (round 3, V6), and jsdom ships no `matchMedia`:
+ * without this stub MUI answers `false` to everything, the strategy packs for
+ * ONE column while the geometry below lays four out, and the reflow assertions
+ * would compare two different grids. Same stub shape as Navbar.test.tsx.
+ */
+function stubColumns(columns: 1 | 2 | 4) {
+  // Installed in `beforeEach` and NEVER removed in `afterEach`. With vitest's
+  // default `sequence.hooks = 'stack'` this file's afterEach runs BEFORE
+  // Testing Library's auto-cleanup, so a `vi.unstubAllGlobals()` there takes
+  // `matchMedia` away while the page is still mounted — and React 19 flushes
+  // the pending effects of the unmount after that. Same trap the shared
+  // ResizeObserver stub documents in src/test/setup.ts, and it showed up the
+  // same way: a later test whose render never completed.
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockImplementation((query: string) => ({
+      matches:
+        (query.includes('1200px') && columns >= 4) ||
+        (query.includes('600px') && columns >= 2),
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+  );
+}
+
+/** The `translate3d(Xpx, Ypx, 0)` a node carries, or (0, 0). */
+function translationOf(node: Element): { x: number; y: number } {
+  const style = node.getAttribute('style') ?? '';
+  const match = /translate3d\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px/.exec(style);
+  return match
+    ? { x: Number(match[1]), y: Number(match[2]) }
+    : { x: 0, y: 0 };
+}
+
+/** Where a widget's slot actually sits mid-drag: its rect plus its transform. */
+function drawnRect(key: string) {
+  const slot = sortableNode(key);
+  const rect = slot.getBoundingClientRect();
+  const { x, y } = translationOf(slot);
+  return {
+    left: rect.left + x,
+    top: rect.top + y,
+    right: rect.right + x,
+    bottom: rect.bottom + y,
+  };
+}
+
+function overlaps(
+  a: ReturnType<typeof drawnRect>,
+  b: ReturnType<typeof drawnRect>
+) {
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 }
 
 function servePreferences(
@@ -159,8 +234,12 @@ function renderPage() {
  * `--testTimeout=20000` does not touch. Both waits are for the page to render,
  * and under a full-suite load this file has lost that race — the assertions
  * that follow are unaffected, only the patience of the wait changes.
+ *
+ * Deliberately BELOW the 20 000 ms test timeout (round 3): at 20 000 ms a slow
+ * render exhausted the test's whole budget and failed as a bare
+ * "Test timed out", saying nothing about what never appeared.
  */
-const RENDER_TIMEOUT = { timeout: 20000 };
+const RENDER_TIMEOUT = { timeout: 10000 };
 
 async function enterEditMode(
   level: DashboardLevel = 'gardener',
@@ -168,9 +247,14 @@ async function enterEditMode(
 ) {
   servePreferences(level, blocks);
   renderPage();
-  fireEvent.click(
-    await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT)
-  );
+  const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+  // ENABLED, not merely present. `GardensDashboard` renders Edit
+  // `disabled={loading || loadError}`, so clicking it while the preferences are
+  // still in flight is a no-op and « Done » never arrives — a race this helper
+  // lost under a full-suite load, and lost as a bare timeout rather than as
+  // anything that named the cause.
+  await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+  fireEvent.click(edit);
   return await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
 }
 
@@ -198,6 +282,9 @@ const lastSaved = () => {
 const lastSavedKeys = () => lastSaved().blocks.map((block) => block.key);
 
 beforeEach(() => {
+  // Four columns for the whole file: `DashboardGrid` reads the column count
+  // with `useMediaQuery`, and jsdom answers nothing without this.
+  stubColumns(4);
   localStorage.setItem('smartcrops-language', 'en');
   vi.mocked(fetchGardens).mockResolvedValue([]);
   vi.mocked(saveDashboardPreferences).mockClear();
@@ -476,6 +563,7 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
     fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
   });
 
+
   it('Escape cancels the move and leaves the order — and the server — untouched', async () => {
     await enterEditMode();
 
@@ -583,7 +671,11 @@ describe('GardensDashboard — drag transforms (SMA-336 round 2, V4)', () => {
     fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
   });
 
-  it('scales nothing on the widget being dragged either', async () => {
+  it('the dragged VISUAL is the DragOverlay, and it never deforms', async () => {
+    // Round 3 (N'3): the previous version of this test read the source slot,
+    // where dnd-kit may legitimately write nothing at all — an empty style has
+    // no `scale` in it either, so the assertion could pass on nothing. The
+    // dragged visual is the overlay, and that is what has to be checked.
     await enterEditMode('gardener', mixedBlocks());
 
     const handle = screen.getByRole('button', { name: 'Move Weather' });
@@ -593,9 +685,69 @@ describe('GardensDashboard — drag transforms (SMA-336 round 2, V4)', () => {
     fireEvent.keyDown(handle, { code: 'ArrowRight', key: 'ArrowRight' });
     await settle();
 
-    expect(sortableNode('weather').getAttribute('style') ?? '').not.toMatch(
-      /scale/i
-    );
+    // dnd-kit positions the overlay on the PARENT of our content node.
+    const overlay = document.querySelector('[data-drag-overlay]')!
+      .parentElement as HTMLElement;
+    const style = overlay.getAttribute('style') ?? '';
+
+    expect(overlay.querySelector('[data-widget="weather"]')).not.toBeNull();
+    expect(style).toContain('position: fixed');
+    // It moved: the keyboard step is a real translation, not the identity.
+    expect(translationOf(overlay)).not.toEqual({ x: 0, y: 0 });
+    // And it is drawn at its own size. `@dnd-kit/core` writes the overlay
+    // transform itself with `CSS.Transform.toString`, so the string carries
+    // `scaleX(1) scaleY(1)` rather than no scale at all — what must never
+    // happen is a factor OTHER than 1.
+    for (const [, factor] of style.matchAll(/scale[XY]\(([-\d.]+)\)/g)) {
+      expect(Number(factor)).toBe(1);
+    }
+
+    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+  });
+
+  it('no widget is drawn on top of the drop preview', async () => {
+    // Round 3 (V6), the point of the whole exercise: the dashed frame is the
+    // active widget's own slot, translated to the cell the drop will give it.
+    // Since the target layout is packed, that area is free — so no other
+    // widget, wherever the reflow puts it, may be drawn over it.
+    await enterEditMode('gardener', mixedBlocks());
+
+    const handle = screen.getByRole('button', { name: 'Move Weather' });
+    handle.focus();
+    fireEvent.keyDown(handle, { code: 'Space', key: ' ' });
+    await settle();
+    fireEvent.keyDown(handle, { code: 'ArrowRight', key: 'ArrowRight' });
+    await settle();
+
+    const preview = drawnRect('weather');
+    const others = renderedKeys().filter((key) => key !== 'weather');
+    expect(others.length).toBeGreaterThan(0);
+    for (const key of others) {
+      expect({ key, overlapping: overlaps(drawnRect(key!), preview) }).toEqual({
+        key,
+        overlapping: false,
+      });
+    }
+
+    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+  });
+
+  it('and no widget carries a scale factor while it reflows', async () => {
+    await enterEditMode('gardener', mixedBlocks());
+
+    const handle = screen.getByRole('button', { name: 'Move Weather' });
+    handle.focus();
+    fireEvent.keyDown(handle, { code: 'Space', key: ' ' });
+    await settle();
+    fireEvent.keyDown(handle, { code: 'ArrowRight', key: 'ArrowRight' });
+    await settle();
+
+    for (const key of renderedKeys()) {
+      expect({
+        key,
+        style: sortableNode(key!).getAttribute('style') ?? '',
+      }).toEqual({ key, style: expect.not.stringMatching(/scale/i) });
+    }
 
     fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
   });

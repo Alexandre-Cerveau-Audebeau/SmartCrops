@@ -14,6 +14,7 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import OpenInFullOutlinedIcon from '@mui/icons-material/OpenInFullOutlined';
 import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import { spanFor } from '../../utils/dashboardLayoutGrid';
 import { NON_HIDABLE_BLOCK, type DashboardBlock } from '../../types/Dashboard';
 
 /**
@@ -25,13 +26,6 @@ const wobble = keyframes`
   50% { transform: rotate(0.5deg); }
   100% { transform: rotate(-0.5deg); }
 `;
-
-/** Column and row spans per footprint, per breakpoint (_spec.md 1). */
-const SPANS = {
-  small: { columns: { xs: 1, sm: 1 }, rows: 1 },
-  medium: { columns: { xs: 1, sm: 2 }, rows: 1 },
-  large: { columns: { xs: 1, sm: 2 }, rows: 2 },
-} as const;
 
 interface Props {
   block: DashboardBlock;
@@ -84,7 +78,13 @@ export default function SortableWidget({
     isDragging,
   } = useSortable({ id: block.key, disabled: !editing });
 
-  const span = SPANS[block.size];
+  // The footprint comes from the SAME table the sorting strategy packs with
+  // (round 3, V6): a span declared here and modelled there would drift, and a
+  // drag preview computed from a stale span lands on the wrong cell. One
+  // column on a phone, two from a tablet up — CSS clamps a span to the column
+  // count, and `spanFor` says so explicitly.
+  const phone = spanFor(block.size, 1);
+  const wide = spanFor(block.size, 2);
   const locked = block.key === NON_HIDABLE_BLOCK;
 
   return (
@@ -101,13 +101,15 @@ export default function SortableWidget({
       sx={{
         minWidth: 0,
         gridColumn: {
-          xs: `span ${span.columns.xs}`,
-          sm: `span ${span.columns.sm}`,
+          xs: `span ${phone.cols}`,
+          sm: `span ${wide.cols}`,
         },
-        gridRow: `span ${span.rows}`,
+        gridRow: `span ${wide.rows}`,
         zIndex: isDragging ? 2 : 'auto',
         // The dragged widget is carried by the DragOverlay; its slot stays in
-        // the grid so the neighbours reflow around a hole of the right size.
+        // the grid, and since round 3 (V6) the sorting strategy translates it
+        // to the cell the drop will give it — so this outline is the DROP
+        // PREVIEW, on an area the packing leaves free, not a hole left behind.
         //
         // The CARD goes transparent, not the slot (round 2, N3): dnd-kit keeps
         // DOM focus on the drag handle inside it for the whole of a keyboard

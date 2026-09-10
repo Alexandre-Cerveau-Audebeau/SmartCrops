@@ -34,6 +34,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // The SINGLE owner of the timer mode (round 3, E″1). Timer mode is
+  // file-global state, so a test that installs fake timers must not be the one
+  // responsible for taking them down: an assertion that throws first would
+  // leave them installed for every later test in the file. Calling it here is
+  // safe whether or not a test ever installed them.
   vi.useRealTimers();
 });
 
@@ -281,7 +286,6 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
       level: 'gardener',
       blocks: second,
     });
-    vi.useRealTimers();
   });
 
   it('issues the teardown write AT ONCE, without waiting for the PUT in flight', async () => {
@@ -323,7 +327,6 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
       { level: 'gardener', blocks: second },
       true,
     ]);
-    vi.useRealTimers();
   });
 
   it('cancels the older writes the teardown write supersedes', async () => {
@@ -379,7 +382,84 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
     expect(vi.mocked(saveDashboardPreferences).mock.calls[1]![1]).toBe(true);
     // An abort is a supersession, not a failure: no red state for it.
     expect(result.current.saveState).not.toBe('error');
-    vi.useRealTimers();
+  });
+
+  it('a write queued before a teardown never leaves, even after the page comes back', async () => {
+    // Round 3 (N'2), the whole sequence in one test: an ordinary PUT in flight,
+    // a second one queued behind it, `pagehide`, then a back/forward-cache
+    // restoration and a fresh change. The shared flag this replaces had to be
+    // lowered for the restored page to save at all, and lowering it also freed
+    // the write still queued under the OLD layout — which then landed on top of
+    // the teardown write. An epoch captured per write cannot be un-superseded.
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue(preferences());
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const settle: Array<() => void> = [];
+    vi.mocked(saveDashboardPreferences).mockImplementation(
+      () => new Promise<void>((resolve) => settle.push(resolve))
+    );
+
+    const first = presetFor('gardener');
+    first[0]!.size = 'small';
+    const queued = presetFor('gardener');
+    queued[1]!.size = 'small';
+    const teardown = presetFor('gardener');
+    teardown[2]!.size = 'large';
+    const afterRestore = presetFor('gardener');
+    afterRestore[3]!.size = 'large';
+
+    vi.useFakeTimers();
+    act(() => result.current.setBlocks(first));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
+
+    // Queued behind the first, which never settles.
+    act(() => result.current.setBlocks(queued));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(1);
+
+    // Teardown: the epoch moves on and the in-flight write is aborted.
+    act(() => result.current.setBlocks(teardown));
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    expect(saveDashboardPreferences).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(saveDashboardPreferences).mock.calls[1]).toEqual([
+      { level: 'gardener', blocks: teardown },
+      true,
+    ]);
+
+    // The teardown PUT completes — the tab was closing, the request went out.
+    await act(async () => {
+      settle[1]!();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // The page comes back and the user changes the layout again.
+    act(() => result.current.setBlocks(afterRestore));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SAVE_DEBOUNCE_MS);
+    });
+
+    // Let the first PUT settle, which is what releases the queued one.
+    await act(async () => {
+      settle[0]!();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // Three writes, never four: the queued one is gone for good, and the write
+    // made after the restoration DID leave.
+    const sent = vi
+      .mocked(saveDashboardPreferences)
+      .mock.calls.map((call) => call[0]);
+    expect(sent).toHaveLength(3);
+    expect(sent[2]).toEqual({ level: 'gardener', blocks: afterRestore });
+    expect(sent).not.toContainEqual({ level: 'gardener', blocks: queued });
   });
 
   it('writes nothing to localStorage — the layout lives on the server', async () => {

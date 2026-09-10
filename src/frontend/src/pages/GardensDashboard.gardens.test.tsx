@@ -460,6 +460,45 @@ describe('Gardens widget rename errors (SMA-336 round 1)', () => {
     );
   });
 
+  it('says it is working while the close is blocked', async () => {
+    // Round 3 (N'1): round 2 made the dialog refuse to close during a rename,
+    // and left it mute — Cancel still looked live, Save was merely greyed out,
+    // and nothing said the dialog was waiting. Same pending shape as
+    // DeleteGardenDialog: Cancel disabled, fields disabled, spinner on Save.
+    let resolve: (value: { id: string; name: string }) => void = () => {};
+    vi.mocked(updateGarden).mockImplementation(
+      () => new Promise((resolveIt) => (resolve = resolveIt))
+    );
+    const dialog = await openRenameDialog();
+
+    const save = within(dialog).getByRole('button', { name: 'Save' });
+    const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
+    expect(cancel).toBeEnabled();
+    expect(save).not.toHaveAttribute('aria-busy', 'true');
+
+    fireEvent.click(save);
+    await waitFor(() => expect(updateGarden).toHaveBeenCalled());
+
+    expect(save).toHaveAttribute('aria-busy', 'true');
+    expect(save).toBeDisabled();
+    expect(cancel).toBeDisabled();
+    // The spinner itself is `aria-hidden` — that is the house pattern, and
+    // `aria-busy` on the button is what assistive technology reads. Asserted on
+    // its class so that deleting the visual indicator cannot leave this green.
+    expect(save.querySelector('.MuiCircularProgress-root')).not.toBeNull();
+    expect(within(dialog).getByLabelText(/^Name/)).toBeDisabled();
+    expect(within(dialog).getByLabelText('Description')).toBeDisabled();
+
+    await act(async () => {
+      resolve({ id: 'g1', name: 'Casa Lolo' });
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit garden' })).toBeNull()
+    );
+  });
+
   it('closes and refetches when the rename succeeds', async () => {
     vi.mocked(updateGarden).mockResolvedValue({ id: 'g1', name: 'Casa Lolo' });
     const dialog = await openRenameDialog();

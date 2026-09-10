@@ -15,11 +15,14 @@ import {
 import {
   SortableContext,
   arrayMove,
-  rectSortingStrategy,
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 import Box from '@mui/material/Box';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import SortableWidget from './SortableWidget';
+import { createDashboardSortingStrategy } from './dashboardSortingStrategy';
+import { spanFor } from '../../utils/dashboardLayoutGrid';
 import { DASHBOARD_SPACING } from '../../theme/dashboardTokens';
 import type { DashboardBlock, DashboardBlockKey } from '../../types/Dashboard';
 
@@ -56,6 +59,15 @@ export default function DashboardGrid({
   renderBlock,
 }: Props) {
   const { t } = useTranslation();
+  const theme = useTheme();
+
+  // The column count the CSS below resolves to, in JavaScript (round 3, V6):
+  // the sorting strategy has to lay the grid out to know where a widget lands,
+  // and CSS Grid cannot tell it. Same two breakpoints as `gridTemplateColumns`,
+  // so the model and the browser cannot disagree.
+  const atLeastFourColumns = useMediaQuery(theme.breakpoints.up('lg'));
+  const atLeastTwoColumns = useMediaQuery(theme.breakpoints.up('sm'));
+  const columns = atLeastFourColumns ? 4 : atLeastTwoColumns ? 2 : 1;
 
   const sensors = useSensors(
     // 8px before a drag starts: the four Edit-mode controls live inside the
@@ -69,6 +81,23 @@ export default function DashboardGrid({
   const visible = useMemo(() => blocks.filter((block) => !block.hidden), [blocks]);
   const visibleKeys = useMemo(() => visible.map((block) => block.key), [visible]);
   const activeBlock = visible.find((block) => block.key === activeKey) ?? null;
+
+  // The visible widgets with the footprint they have HERE — a Medium is two
+  // columns wide on a tablet and one on a phone, and the model has to know it.
+  const gridItems = useMemo(
+    () => visible.map((block) => ({ key: block.key, ...spanFor(block.size, columns) })),
+    [visible, columns]
+  );
+
+  const strategy = useMemo(
+    () =>
+      createDashboardSortingStrategy({
+        items: gridItems,
+        columns,
+        gap: DASHBOARD_SPACING.gutter,
+      }),
+    [gridItems, columns]
+  );
 
   const label = (key: DashboardBlockKey) => t(`dashboard.blocks.${key}.title`);
 
@@ -132,7 +161,7 @@ export default function DashboardGrid({
         screenReaderInstructions: { draggable: t('dashboard.a11y.instructions') },
       }}
     >
-      <SortableContext items={visibleKeys} strategy={rectSortingStrategy}>
+      <SortableContext items={visibleKeys} strategy={strategy}>
         <Box
           sx={{
             display: 'grid',

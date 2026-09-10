@@ -63,10 +63,10 @@ export function useDashboardPreferences() {
   // older one lands last, the server keeps the older layout and the user's
   // final arrangement is gone with no error shown. Chaining orders them.
   const chainRef = useRef<Promise<unknown>>(Promise.resolve());
-  // The ordinary write currently ON THE WIRE, and whether a teardown write has
-  // superseded the ordinary lane (round 2, E'6 / N4 — see `send`).
+  // The ordinary write currently ON THE WIRE, and the epoch of the ordinary
+  // lane (round 3, N'2 — see `send`).
   const inFlightRef = useRef<AbortController | null>(null);
-  const supersededRef = useRef(false);
+  const epochRef = useRef(0);
 
   const send = useCallback((next: Layout, keepalive: boolean) => {
     if (keepalive) {
@@ -89,7 +89,14 @@ export function useDashboardPreferences() {
       //
       // When nothing is pending, `flush` returns before calling `send` at all,
       // so an in-flight ordinary write is left alone — it is then the newest.
-      supersededRef.current = true;
+      //
+      // Round 3 (N'2): bumping an EPOCH, not raising a shared flag. A flag has
+      // to be lowered again for a page restored from the back/forward cache to
+      // save, and lowering it also un-supersedes the write still queued on the
+      // old chain — which then sends a layout from before the teardown and
+      // overwrites the newer one. An epoch is captured per write, so a queued
+      // write stays superseded forever while new writes are free.
+      epochRef.current += 1;
       inFlightRef.current?.abort();
       inFlightRef.current = null;
 
@@ -98,11 +105,16 @@ export function useDashboardPreferences() {
       return urgent;
     }
 
+    // Captured NOW, at scheduling time, not read later inside the chained
+    // continuation: that is the whole point of the epoch.
+    const epoch = epochRef.current;
     const controller = new AbortController();
     const sent = chainRef.current
       .catch(() => {})
       .then(() => {
-        if (supersededRef.current) return;
+        // Superseded while it waited its turn: a teardown write has already
+        // carried a newer layout, and this one would overwrite it.
+        if (epoch !== epochRef.current) return;
         inFlightRef.current = controller;
         return saveDashboardPreferences(next, false, controller.signal);
       })
@@ -138,10 +150,11 @@ export function useDashboardPreferences() {
 
   const schedule = useCallback(
     (next: Layout) => {
-      // A new local change re-opens the ordinary lane: `pagehide` also fires on
-      // a navigation the back/forward cache can restore, and the page that
-      // comes back must still be able to save.
-      supersededRef.current = false;
+      // No reset here (round 3, N'2): a write scheduled after a teardown simply
+      // captures the CURRENT epoch in `send` and is free to leave, while the
+      // ones queued under the old epoch stay dropped. A page restored from the
+      // back/forward cache therefore saves normally without ever reviving a
+      // stale write.
       pendingRef.current = next;
       setSaveState('pending');
       if (timerRef.current !== null) clearTimeout(timerRef.current);

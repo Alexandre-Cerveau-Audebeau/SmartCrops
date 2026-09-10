@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { presetFor } from '../constants/dashboardPresets';
+import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
 import {
   DASHBOARD_BLOCK_KEYS,
   type DashboardBlock,
@@ -52,6 +53,50 @@ function servePreferences(level: DashboardLevel, blocks?: DashboardBlock[]) {
     blocks: blocks ?? presetFor(level),
     updatedAt: null,
   });
+}
+
+/**
+ * The Emotion class of a node, matched by the `css-` prefix rather than taken
+ * as "the last class" (round 3, E″2): MUI puts a `MuiBox-root` before it and
+ * may put a component class after it, so position is not a contract. Throws
+ * rather than returning nothing, so a structural change is reported as a
+ * missing node and not as a missing CSS rule.
+ */
+function emotionClass(node: Element): string {
+  const found = [...node.classList].find((name) => name.startsWith('css-'));
+  if (!found) {
+    throw new Error(
+      `No Emotion class on <${node.tagName.toLowerCase()} class="${node.className}">`
+    );
+  }
+  return found;
+}
+
+/** The stylesheet rules Emotion emitted for a node. */
+const rulesFor = (node: Element) =>
+  [...document.querySelectorAll('style')]
+    .map((tag) => tag.textContent ?? '')
+    .filter((text) => text.includes(emotionClass(node)));
+
+/**
+ * The grid container: the widget cards sit inside a SortableWidget slot, which
+ * sits inside the grid. Guarded at every step (round 3, E″2) so a change of
+ * structure fails as "the grid was not found" instead of silently handing back
+ * an unrelated node whose rules happen to be empty.
+ */
+function gridNode(): HTMLElement {
+  const card = document.querySelector('[data-widget]');
+  if (!card) throw new Error('No widget rendered: the grid cannot be located');
+  const slot = card.parentElement?.parentElement;
+  const grid = slot?.parentElement;
+  if (!grid) throw new Error('The grid container is not where it was expected');
+  const rules = [...document.querySelectorAll('style')]
+    .map((tag) => tag.textContent ?? '')
+    .filter((text) => text.includes(emotionClass(grid)));
+  if (!rules.some((text) => text.includes('display:grid'))) {
+    throw new Error('The node reached is not the display:grid container');
+  }
+  return grid as HTMLElement;
 }
 
 /** The widget keys the grid currently renders, in DOM order. */
@@ -347,14 +392,7 @@ describe('GardensDashboard — invitation layout (SMA-336 round 1, V3)', () => {
     const panel = document.querySelector('[data-invite-panel]') as HTMLElement;
 
     // The phone geometry the panel has to fit inside: one column, 200px rows.
-    const grid = panel.closest('[data-widget]')!.parentElement!.parentElement!
-      .parentElement!;
-    const rulesFor = (node: Element) =>
-      [...document.querySelectorAll('style')]
-        .map((tag) => tag.textContent ?? '')
-        .filter((text) => text.includes(node.className.split(' ').pop()!));
-
-    const gridRules = rulesFor(grid);
+    const gridRules = rulesFor(gridNode());
     expect(gridRules.some((text) => text.includes('grid-template-columns:1fr'))).toBe(true);
     expect(gridRules.some((text) => text.includes('grid-auto-rows:200px'))).toBe(true);
 
@@ -380,6 +418,7 @@ describe('GardensDashboard — invitation layout (SMA-336 round 1, V3)', () => {
     expect(getComputedStyle(disc).width).toBe('34px');
     expect(getComputedStyle(disc).flexShrink).toBe('0');
   });
+
 
   it('draws the tinted ground and the dashed border around the content only', async () => {
     servePreferences('expert');
@@ -565,5 +604,80 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(document.body.textContent).not.toMatch(
       /tarif|abonnement|limite|premium|€/i
     );
+  });
+});
+
+// ── Round 3, phase D: the breakpoints, locked. The column count is a product
+// decision (09/09), and it is what the drag model reads to know where a widget
+// lands — so it is asserted on the DEFINITION the browser resolves, not on a
+// rendered width.
+describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => {
+  /**
+   * The `grid-template-columns` declared inside a given media query. Sliced,
+   * not matched with a built regular expression: a dynamic pattern needs its
+   * parentheses escaped, and an unescaped one turns the media query into a
+   * capture group that silently matches nothing.
+   */
+  function columnsAt(css: string, minWidth: string): string {
+    const marker = `@media (min-width:${minWidth})`;
+    const at = css.indexOf(marker);
+    if (at < 0) throw new Error(`No ${marker} block in: ${css}`);
+    const block = css.slice(at, css.indexOf('}}', at));
+    const declared = /grid-template-columns:([^;}]+)/.exec(block);
+    if (!declared) throw new Error(`No grid-template-columns in ${marker}: ${block}`);
+    return declared[1]!.trim();
+  }
+
+  async function gridCss() {
+    servePreferences('gardener');
+    renderPage();
+    await screen.findByText('Weather');
+    return rulesFor(gridNode()).join(' ');
+  }
+
+  it('one column on a phone, and 200px rows', async () => {
+    const css = await gridCss();
+
+    expect(columnsAt(css, '0px')).toBe('1fr');
+    expect(css).toContain('grid-auto-rows:200px');
+  });
+
+  it('two columns on a tablet, and 273px rows', async () => {
+    const css = await gridCss();
+
+    expect(columnsAt(css, '600px')).toBe('repeat(2, 1fr)');
+    expect(css).toContain('grid-auto-rows:273px');
+  });
+
+  it('four columns from 1200px', async () => {
+    const css = await gridCss();
+
+    expect(columnsAt(css, '1200px')).toBe('repeat(4, 1fr)');
+  });
+
+  it('four columns means TWO Medium widgets per row, two columns means one', async () => {
+    // The consequence the four columns exist for, stated on the model the drag
+    // preview packs with — the same `spanFor` the widget CSS is built from.
+    const two = [
+      { key: 'a', ...spanFor('medium', 4) },
+      { key: 'b', ...spanFor('medium', 4) },
+    ];
+    const desktop = packGrid(two, 4);
+    expect(desktop.get('a')!.row).toBe(desktop.get('b')!.row);
+
+    const tablet = packGrid(
+      [
+        { key: 'a', ...spanFor('medium', 2) },
+        { key: 'b', ...spanFor('medium', 2) },
+      ],
+      2
+    );
+    expect(tablet.get('a')!.row).toBe(0);
+    expect(tablet.get('b')!.row).toBe(1);
+  });
+
+  it('a Medium and a Large are one column wide on a phone', async () => {
+    expect(spanFor('medium', 1)).toEqual({ cols: 1, rows: 1 });
+    expect(spanFor('large', 1)).toEqual({ cols: 1, rows: 2 });
   });
 });

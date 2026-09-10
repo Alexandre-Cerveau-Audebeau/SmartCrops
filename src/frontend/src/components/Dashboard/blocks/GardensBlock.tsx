@@ -8,6 +8,7 @@ import Card from '@mui/material/Card';
 import CardActionArea from '@mui/material/CardActionArea';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -561,6 +562,7 @@ export default function GardensBlock({
             slotProps={{ htmlInput: { maxLength: 100 } }}
             value={editName}
             onChange={(event) => setEditName(event.target.value)}
+            disabled={isMutating}
             sx={{ mt: 1, mb: 2 }}
           />
           <TextField
@@ -571,13 +573,26 @@ export default function GardensBlock({
             slotProps={{ htmlInput: { maxLength: 500 } }}
             value={editDescription}
             onChange={(event) => setEditDescription(event.target.value)}
+            disabled={isMutating}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeEditDialog}>{t('gardens.cancel')}</Button>
+          {/* Round 3 (N'1): while `closeEditDialog` refuses to close, the
+              dialog has to SAY that it is working. Cancel disabled, the fields
+              disabled and a spinner on Save — the same pending shape as
+              DeleteGardenDialog, so the two dialogs read alike. */}
+          <Button onClick={closeEditDialog} disabled={isMutating}>
+            {t('gardens.cancel')}
+          </Button>
           <Button
             variant="contained"
             disabled={isMutating || !editName.trim()}
+            aria-busy={isMutating}
+            startIcon={
+              isMutating ? (
+                <CircularProgress size={18} color="inherit" aria-hidden="true" />
+              ) : undefined
+            }
             onClick={handleEdit}
           >
             {t('gardens.save')}
