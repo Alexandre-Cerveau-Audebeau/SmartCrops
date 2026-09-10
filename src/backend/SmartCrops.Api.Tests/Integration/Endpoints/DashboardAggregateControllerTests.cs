@@ -104,7 +104,7 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         await SeedUserAsync(theirs);
 
         var theirGarden = await SeedGardenAsync(theirs, "Their plot", cellsJson: "[{\"row\":0,\"col\":0,\"soil\":\"humus\"}]");
-        var plant = await SeedPlantAsync("Solanum lycopersicum", plantTypeId: 1);
+        var plant = await SeedPlantAsync("Solanum lycopersicum", await PlantTypeIdAsync("Vegetable"));
         await SeedPlacementAsync(theirGarden, plant, 0, 0);
 
         AuthAs(mine);
@@ -124,7 +124,7 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId);
         var gardenId = await SeedGardenAsync(userId, "Terrasse");
-        var plantId = await SeedPlantAsync("Ocimum basilicum", plantTypeId: 3);
+        var plantId = await SeedPlantAsync("Ocimum basilicum", await PlantTypeIdAsync("Herb"));
         await SeedPlacementAsync(gardenId, plantId, 0, 0);
         AuthAs(userId);
 
@@ -146,7 +146,7 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
             userId,
             "Terrasse",
             description: "Le coin sud, refait au printemps.");
-        var plantId = await SeedPlantAsync("Ocimum basilicum", plantTypeId: 3);
+        var plantId = await SeedPlantAsync("Ocimum basilicum", await PlantTypeIdAsync("Herb"));
         await SeedTranslationsAsync(
             plantId,
             ("en", "Basil", "A fragrant culinary herb nobody asked this endpoint for."));
@@ -210,7 +210,7 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId);
         var gardenId = await SeedGardenAsync(userId, "Sans plan", cellsJson: null);
-        var plantId = await SeedPlantAsync("Hedera helix", plantTypeId: 4);
+        var plantId = await SeedPlantAsync("Hedera helix", await PlantTypeIdAsync("Ornamental"));
         await SeedPlacementAsync(gardenId, plantId, 2, 3);
         AuthAs(userId);
 
@@ -225,6 +225,73 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         Assert.Equal(1, garden.OccupiedCells);
     }
 
+    // ── Stored data this server did not write ────────────────────────────────
+
+    [Theory]
+    // Not JSON at all — an export, a hand-edit, a truncated write.
+    [InlineData("not json")]
+    // Valid JSON, wrong shape: an object where the reader wants an array.
+    [InlineData("{\"start\":\"08:00\"}")]
+    // An array of the wrong element type.
+    [InlineData("[1,2,3]")]
+    // Truncated mid-document.
+    [InlineData("[{\"start\":\"08:00\",")]
+    public async Task GetDashboard_MalformedLightSchedule_DegradesToNull_AndStillServesTheGarden(
+        string storedJson)
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Serre");
+        await SetLightScheduleJsonAsync(gardenId, storedJson);
+        var plantId = await SeedPlantAsync("Ocimum basilicum", await PlantTypeIdAsync("Herb"));
+        await SeedPlacementAsync(gardenId, plantId, 0, 0);
+        AuthAs(userId);
+
+        // LightScheduleJson is an unconstrained text column: the two write paths
+        // validate what they store, but exports preserve legacy raw values and
+        // nothing stops a hand-edit. One malformed garden must not take the
+        // whole dashboard down with it (round 1, E4 / G1).
+        var response = await Client.GetAsync(Url);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var garden = Assert.Single((await GetDashboardAsync()).Gardens);
+        Assert.Null(garden.Config.LightSchedule);
+        Assert.Equal(1, garden.PlacementCount);
+    }
+
+    [Fact]
+    public async Task GetDashboard_MalformedLightScheduleOnOneGarden_StillServesTheOthers()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var broken = await SeedGardenAsync(userId, "Serre cassée");
+        await SetLightScheduleJsonAsync(broken, "{ this is not a slot list }");
+        await SeedGardenAsync(userId, "Terrasse saine");
+        AuthAs(userId);
+
+        var body = await GetDashboardAsync();
+
+        Assert.Equal(2, body.Gardens.Count);
+        Assert.All(body.Gardens, g => Assert.Null(g.Config.LightSchedule));
+    }
+
+    [Fact]
+    public async Task GetDashboard_WellFormedLightSchedule_StillTravels()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Serre");
+        await SetLightScheduleJsonAsync(gardenId, "[{\"start\":\"08:00\",\"end\":\"20:00\"}]");
+        AuthAs(userId);
+
+        var garden = Assert.Single((await GetDashboardAsync()).Gardens);
+
+        // The tolerance must not swallow the valid case with it.
+        var slot = Assert.Single(garden.Config.LightSchedule!);
+        Assert.Equal("08:00", slot.Start);
+        Assert.Equal("20:00", slot.End);
+    }
+
     // ── Counters ─────────────────────────────────────────────────────────────
 
     [Fact]
@@ -233,8 +300,8 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId);
         var gardenId = await SeedGardenAsync(userId, "Potager");
-        var basil = await SeedPlantAsync("Ocimum basilicum", plantTypeId: 3);
-        var fern = await SeedPlantAsync("Athyrium vidalii", plantTypeId: 4);
+        var basil = await SeedPlantAsync("Ocimum basilicum", await PlantTypeIdAsync("Herb"));
+        var fern = await SeedPlantAsync("Athyrium vidalii", await PlantTypeIdAsync("Ornamental"));
 
         await SeedPlacementAsync(gardenId, basil, 0, 0);
         await SeedPlacementAsync(gardenId, basil, 0, 1);
@@ -267,7 +334,7 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         await SeedUserAsync(userId);
         var first = await SeedGardenAsync(userId, "Balcon");
         var second = await SeedGardenAsync(userId, "Terrasse");
-        var fern = await SeedPlantAsync("Athyrium vidalii", plantTypeId: 4);
+        var fern = await SeedPlantAsync("Athyrium vidalii", await PlantTypeIdAsync("Ornamental"));
 
         await SeedPlacementAsync(first, fern, 0, 0);
         await SeedPlacementAsync(second, fern, 0, 0);
@@ -288,33 +355,114 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         Assert.Equal(2, variety.GardenIds.Count);
     }
 
+    [Fact]
+    public async Task GetDashboard_CatalogPlantCount_IsReusedRatherThanCountedAgain()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var first = (await GetDashboardAsync()).Totals.CatalogPlantCount;
+
+        // A plant lands between the two reads. The caption is ALLOWED to be
+        // stale inside the window (round 1, E2): the catalog is reference data
+        // an admin import writes, and re-scanning the table on every dashboard
+        // load to keep a « … of N in the catalog » caption to the second is a
+        // cost with no reader. Staleness is the contract, so it is what is
+        // asserted — not tolerated silently.
+        await SeedPlantAsync("Rosa gallica", await PlantTypeIdAsync("Ornamental"));
+
+        var second = (await GetDashboardAsync()).Totals.CatalogPlantCount;
+
+        Assert.Equal(first, second);
+    }
+
     // ── The R4 edible rule ───────────────────────────────────────────────────
 
+    /// <remarks>
+    /// Round 1, E1 — the cases are stated with the NAMES the rule reads.
+    /// <c>EdiblePlantTypes</c> in <c>DashboardController</c> matches on
+    /// <c>PlantType.Name</c>; writing the theory as the integers 1 to 4 made it
+    /// depend, invisibly at the assertion site, on both the existence of those
+    /// ids and the id → name mapping of the seeded reference table. Reorder that
+    /// seed and the theory kept passing while asserting a different rule, and its
+    /// own <c>[InlineData]</c> comments became wrong with nothing to say so.
+    /// <see cref="PlantTypeIdAsync"/> resolves the name and fails loudly when the
+    /// row is gone.
+    /// </remarks>
     [Theory]
     // Plant type says edible, the flag disagrees — 31 catalog plants are like this.
-    [InlineData(1, false, true)]
+    [InlineData("Vegetable", false, true)]
     // The flag says edible, the type says ornamental — 38 catalog plants are like this.
-    [InlineData(4, true, true)]
+    [InlineData("Ornamental", true, true)]
     // Neither says edible.
-    [InlineData(4, false, false)]
+    [InlineData("Ornamental", false, false)]
     // The flag is unknown; the type is filled on every catalog row and decides alone.
-    [InlineData(4, null, false)]
-    [InlineData(2, null, true)]
+    [InlineData("Ornamental", null, false)]
+    [InlineData("Fruit", null, true)]
+    // Named but NOT in the rule's list: « Medicinal » is a real seeded type and
+    // the union must not quietly adopt it.
+    [InlineData("Medicinal", null, false)]
+    [InlineData("Herb", null, true)]
     public async Task GetDashboard_EdibleVerdictIsTheUnionOfTypeAndFlag(
-        int plantTypeId,
+        string plantTypeName,
         bool? isEdible,
         bool expected)
     {
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId);
         var gardenId = await SeedGardenAsync(userId, "Test");
-        var plantId = await SeedPlantAsync("Test plant", plantTypeId, isEdible);
+        var plantId = await SeedPlantAsync(
+            "Test plant",
+            await PlantTypeIdAsync(plantTypeName),
+            isEdible);
         await SeedPlacementAsync(gardenId, plantId, 0, 0);
         AuthAs(userId);
 
         var garden = Assert.Single((await GetDashboardAsync()).Gardens);
 
         Assert.Equal(expected, garden.IsEdible);
+        // The type name also travels on the variety row, so the widget's own
+        // half of R4 reads the same vocabulary the server judged with.
+        Assert.Equal(plantTypeName, Assert.Single((await GetDashboardAsync()).Varieties).PlantType);
+    }
+
+    // ── One snapshot, not two reads (E3) ─────────────────────────────────────
+
+    [Fact]
+    public async Task GetDashboard_VarietyCountsAndGardenIdsComeFromTheSameSnapshot()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var first = await SeedGardenAsync(userId, "Balcon");
+        var second = await SeedGardenAsync(userId, "Terrasse");
+        var basil = await SeedPlantAsync("Ocimum basilicum", await PlantTypeIdAsync("Herb"));
+        var fern = await SeedPlantAsync("Athyrium vidalii", await PlantTypeIdAsync("Ornamental"));
+
+        await SeedPlacementAsync(first, basil, 0, 0);
+        await SeedPlacementAsync(second, basil, 0, 0, spanRows: 2, spanCols: 2);
+        await SeedPlacementAsync(second, fern, 1, 0);
+        AuthAs(userId);
+
+        var body = await GetDashboardAsync();
+
+        // The invariants the second placement read could break: every counted
+        // variety names at least one garden, and the three placement figures on
+        // the page agree because they are now derived from ONE read.
+        Assert.All(body.Varieties, v =>
+        {
+            Assert.True(v.Count > 0);
+            Assert.NotEmpty(v.GardenIds);
+        });
+        Assert.Equal(body.Totals.PlacementCount, body.Varieties.Sum(v => v.Count));
+        Assert.Equal(body.Totals.PlacementCount, body.Gardens.Sum(g => g.PlacementCount));
+        Assert.Equal(
+            body.Gardens.Sum(g => g.OccupiedCells),
+            body.Varieties.Sum(v => v.Cells));
+
+        // Every garden id a variety names is a garden the response also ships.
+        var shipped = body.Gardens.Select(g => g.Id).ToHashSet();
+        Assert.All(body.Varieties, v => Assert.All(v.GardenIds, id => Assert.Contains(id, shipped)));
     }
 
     [Fact]
@@ -323,8 +471,8 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId);
         var gardenId = await SeedGardenAsync(userId, "Mixte");
-        var fern = await SeedPlantAsync("Athyrium vidalii", plantTypeId: 4);
-        var basil = await SeedPlantAsync("Ocimum basilicum", plantTypeId: 3);
+        var fern = await SeedPlantAsync("Athyrium vidalii", await PlantTypeIdAsync("Ornamental"));
+        var basil = await SeedPlantAsync("Ocimum basilicum", await PlantTypeIdAsync("Herb"));
 
         await SeedPlacementAsync(gardenId, fern, 0, 0);
         await SeedPlacementAsync(gardenId, fern, 0, 1);
@@ -347,7 +495,7 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId);
         var gardenId = await SeedGardenAsync(userId, "Ordre");
-        var plantId = await SeedPlantAsync("Iris germanica", plantTypeId: 4);
+        var plantId = await SeedPlantAsync("Iris germanica", await PlantTypeIdAsync("Ornamental"));
 
         // Inserted out of order on purpose.
         await SeedPlacementAsync(gardenId, plantId, 2, 5);
@@ -369,8 +517,8 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId);
         var gardenId = await SeedGardenAsync(userId, "Ordre stable");
-        var iris = await SeedPlantAsync("Iris germanica", plantTypeId: 4);
-        var fern = await SeedPlantAsync("Athyrium vidalii", plantTypeId: 4);
+        var iris = await SeedPlantAsync("Iris germanica", await PlantTypeIdAsync("Ornamental"));
+        var fern = await SeedPlantAsync("Athyrium vidalii", await PlantTypeIdAsync("Ornamental"));
         AuthAs(userId);
 
         // The layout PUT deletes every placement and re-inserts it, so `Id` and
@@ -416,9 +564,9 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId);
         var gardenId = await SeedGardenAsync(userId, "Potager");
-        var translated = await SeedPlantAsync("Ocimum basilicum", plantTypeId: 3);
-        var englishOnly = await SeedPlantAsync("Hedera helix", plantTypeId: 4);
-        var untranslated = await SeedPlantAsync("Athyrium vidalii", plantTypeId: 4);
+        var translated = await SeedPlantAsync("Ocimum basilicum", await PlantTypeIdAsync("Herb"));
+        var englishOnly = await SeedPlantAsync("Hedera helix", await PlantTypeIdAsync("Ornamental"));
+        var untranslated = await SeedPlantAsync("Athyrium vidalii", await PlantTypeIdAsync("Ornamental"));
 
         await SeedTranslationsAsync(translated, ("fr", "Basilic", null), ("en", "Basil", null));
         await SeedTranslationsAsync(englishOnly, ("en", "English ivy", null));
@@ -445,8 +593,8 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId);
         var gardenId = await SeedGardenAsync(userId, "Potager");
-        var withImages = await SeedPlantAsync("Ocimum basilicum", plantTypeId: 3);
-        var withoutImages = await SeedPlantAsync("Athyrium vidalii", plantTypeId: 4);
+        var withImages = await SeedPlantAsync("Ocimum basilicum", await PlantTypeIdAsync("Herb"));
+        var withoutImages = await SeedPlantAsync("Athyrium vidalii", await PlantTypeIdAsync("Ornamental"));
 
         await SeedImagesAsync(
             withImages,
@@ -526,6 +674,36 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         db.Gardens.Add(garden);
         await db.SaveChangesAsync();
         return garden.Id;
+    }
+
+    /// <summary>
+    /// Writes <c>LightScheduleJson</c> straight to the column, bypassing the API
+    /// validators on purpose — the point is stored data this build did not write.
+    /// </summary>
+    private async Task SetLightScheduleJsonAsync(Guid gardenId, string json)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        await db.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""Gardens"" SET ""LightScheduleJson"" = {1} WHERE ""Id"" = {0};",
+            gardenId,
+            json);
+    }
+
+    /// <summary>
+    /// The id of a SEEDED <c>PlantTypes</c> row, by the name the R4 rule reads.
+    /// Fails with the available names rather than returning a wrong id.
+    /// </summary>
+    private async Task<int> PlantTypeIdAsync(string name)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var row = await db.PlantTypes.AsNoTracking().SingleOrDefaultAsync(t => t.Name == name);
+        Assert.True(
+            row is not null,
+            $"No seeded PlantType named '{name}'. Seeded: "
+                + string.Join(", ", await db.PlantTypes.AsNoTracking().Select(t => t.Name).ToListAsync()));
+        return row!.Id;
     }
 
     private async Task<Guid> SeedPlantAsync(

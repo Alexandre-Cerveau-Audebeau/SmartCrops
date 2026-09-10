@@ -119,6 +119,10 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
     });
 }
 
+// SMA-336 PR 2/5, round 1 (E2): the in-process cache the dashboard aggregate
+// keeps its catalog size in. Part of the shared framework — no package is added.
+builder.Services.AddMemoryCache();
+
 builder.Services.AddControllers()
     .AddJsonOptions(o =>
     {

@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Npgsql;
 using SmartCrops.Api.DTOs;
@@ -27,9 +28,20 @@ namespace SmartCrops.Api.Controllers;
 [ApiController]
 [Route("api/dashboard")]
 [Authorize]
-public class DashboardController(SmartCropsDbContext context) : ControllerBase
+public class DashboardController(SmartCropsDbContext context, IMemoryCache cache) : ControllerBase
 {
     private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
+
+    /// <summary>Cache key for <see cref="CatalogPlantCountAsync"/>.</summary>
+    private const string CatalogPlantCountKey = "dashboard:catalogPlantCount";
+
+    /// <summary>
+    /// How long the catalog size is reused before it is counted again (round 1,
+    /// E2). Five minutes: the catalog is reference data an admin import changes,
+    /// the figure only feeds a « … of 536 in the catalog » caption, and a caption
+    /// five minutes behind an import is not a defect anyone can see.
+    /// </summary>
+    private static readonly TimeSpan CatalogPlantCountTtl = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// Ceiling on the number of entries one block's options document may carry.
@@ -190,41 +202,52 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
                 g.Placements.Count == 0 ? null : g.EdibleCount > 0))
             .ToList();
 
-        // Counts by variety, every garden of the caller merged — the GROUP BY the
-        // pre-flight measured at 1.5 ms on the existing indexes.
-        var varietyRows = await context.GardenPlacements
-            .AsNoTracking()
-            .Where(p => p.Garden.UserId == userId)
-            .GroupBy(p => new
+        // Counts by variety — derived IN MEMORY from the placements query 1 has
+        // already loaded, never re-read (round 1, E3).
+        //
+        // The previous shape asked `GardenPlacements` a second time for the same
+        // rows. Two independent reads of a table the user can rewrite between
+        // them can disagree: `SaveLayout` deletes every placement of a garden and
+        // re-inserts it, so the window is a whole layout save wide, and a
+        // response could ship a variety whose `Count` was non-zero while its
+        // `GardenIds` — derived from the FIRST read — was empty. The frontend
+        // reads `gardenIds` as the per-garden filter, so that chip matched no
+        // garden; `Totals.PlacementCount` and the variety counts could disagree
+        // on the same page for the same reason.
+        //
+        // Every figure here is derivable from `gardenRows`: it already carries
+        // each placement's `PlantId`, `ScientificName`, `SpanRows` and `SpanCols`,
+        // and which garden it belongs to. That makes the whole response ONE
+        // snapshot by construction rather than by timing, and drops a full scan
+        // of the caller's placements. What SQL alone could give — `PlantType` and
+        // `IsEdible` — comes from `LoadVarietyDisplayAsync`, whose per-plant read
+        // is already bounded by the caller's own varieties.
+        var varietyRows = gardenRows
+            .SelectMany(g => g.Placements.Select(p => new
             {
+                GardenId = g.Id,
                 p.PlantId,
-                p.Plant.ScientificName,
-                PlantType = p.Plant.PlantType!.Name,
-                p.Plant.IsEdible,
-            })
+                p.ScientificName,
+                p.SpanRows,
+                p.SpanCols,
+            }))
+            .GroupBy(p => p.PlantId)
             .Select(grp => new
             {
-                grp.Key.PlantId,
-                grp.Key.ScientificName,
-                grp.Key.PlantType,
-                grp.Key.IsEdible,
+                PlantId = grp.Key,
+                grp.First().ScientificName,
                 Count = grp.Count(),
                 Cells = grp.Sum(p => p.SpanRows * p.SpanCols),
+                GardenIds = (IReadOnlyList<Guid>)[.. grp.Select(p => p.GardenId).Distinct()],
             })
             .OrderByDescending(v => v.Count)
-            .ThenBy(v => v.ScientificName)
-            .ToListAsync(ct);
-
-        // Which gardens hold each variety — derived from the rows already loaded
-        // rather than queried again: the placements are in hand, and deriving it
-        // here makes the filter chips consistent with the gardens array by
-        // construction instead of by a second read of the same table.
-        var gardenIdsByPlant = gardenRows
-            .SelectMany(g => g.Placements.Select(p => new { GardenId = g.Id, p.PlantId }))
-            .GroupBy(x => x.PlantId)
-            .ToDictionary(
-                grp => grp.Key,
-                grp => (IReadOnlyList<Guid>)[.. grp.Select(x => x.GardenId).Distinct()]);
+            // ORDINAL, and stated rather than defaulted: the sort moved from
+            // PostgreSQL's collation to the CLR's, and `StringComparer.Ordinal`
+            // is the one comparison that does not depend on the culture the
+            // server happens to run under. Scientific names are ASCII binomials,
+            // so it orders them the way a reader expects.
+            .ThenBy(v => v.ScientificName, StringComparer.Ordinal)
+            .ToList();
 
         var display = await LoadVarietyDisplayAsync(
             [.. varietyRows.Select(v => v.PlantId)], language, ct);
@@ -237,13 +260,13 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
                     v.PlantId,
                     v.ScientificName,
                     d.CommonName,
-                    v.PlantType,
-                    v.IsEdible,
+                    d.PlantType,
+                    d.IsEdible,
                     d.ImageUrl,
                     d.ImageAttribution,
                     v.Count,
                     v.Cells,
-                    gardenIdsByPlant.TryGetValue(v.PlantId, out var ids) ? ids : []);
+                    v.GardenIds);
             })
             .ToList();
 
@@ -254,13 +277,54 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
             // is one variety. Summing the per-garden counts would say seventeen
             // where the catalog says sixteen.
             varieties.Count,
-            await context.Plants.CountAsync(ct));
+            await CatalogPlantCountAsync(ct));
 
         return Ok(new DashboardResponse(gardens, varieties, totals));
     }
 
     /// <summary>
-    /// Localised name and cover photo for the placed varieties, in one read.
+    /// Size of the plant catalog, counted at most once every
+    /// <see cref="CatalogPlantCountTtl"/> (round 1, E2).
+    ///
+    /// <para><c>context.Plants.CountAsync</c> ran on EVERY dashboard load. On
+    /// PostgreSQL an unqualified <c>COUNT(*)</c> is a scan, so its cost grows with
+    /// the catalog while the number it produces changes about never — it is
+    /// reference data an admin import writes, and it feeds one caption. It is
+    /// also issued sequentially after the variety read and shares no dependency
+    /// with it, so it was pure added latency on the critical path of the page.</para>
+    ///
+    /// <para>The value is deliberately allowed to be STALE inside the window: a
+    /// caption saying 536 for five minutes after a 537th plant arrives is the
+    /// intended behaviour, not a tolerated one.</para>
+    /// </summary>
+    private async Task<int> CatalogPlantCountAsync(CancellationToken ct)
+    {
+        if (cache.TryGetValue(CatalogPlantCountKey, out int cached)) return cached;
+
+        var count = await context.Plants.CountAsync(ct);
+        cache.Set(CatalogPlantCountKey, count, CatalogPlantCountTtl);
+        return count;
+    }
+
+    /// <summary>
+    /// What the Counters widget needs about one placed variety beyond its counts:
+    /// the catalog facts SQL alone can answer, and its display name and cover.
+    /// </summary>
+    /// <param name="CommonName">Localised name, requested language then English; null when neither exists.</param>
+    /// <param name="PlantType">The catalog type name — half of the R4 edible rule.</param>
+    /// <param name="IsEdible">The catalog's own flag — the other half of R4.</param>
+    /// <param name="ImageUrl">A stable-source cover, or null.</param>
+    /// <param name="ImageAttribution">Attribution for <paramref name="ImageUrl"/>; null exactly when it is.</param>
+    private readonly record struct VarietyDisplay(
+        string? CommonName,
+        string? PlantType,
+        bool? IsEdible,
+        string? ImageUrl,
+        string? ImageAttribution);
+
+    /// <summary>
+    /// Catalog facts, localised name and cover photo for the placed varieties, in
+    /// one read.
     ///
     /// <para>The cover is picked with <see cref="PlantListItemMapper.StableImageRank"/>
     /// — the library's own priority — so a plant does not wear one photo on its
@@ -269,8 +333,14 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
     /// priority written as SQL, which is the divergence this lot exists to avoid.
     /// The set is bounded by the caller's own varieties, and only stable-source
     /// rows are read.</para>
+    ///
+    /// <para>Round 1, E3: it also carries <c>PlantType</c> and <c>IsEdible</c>.
+    /// They used to come from a second <c>GROUP BY</c> over the caller's
+    /// placements; they are catalog facts about a plant, this read is already
+    /// keyed on exactly those plants, and moving them here is what let the second
+    /// read go.</para>
     /// </summary>
-    private async Task<Dictionary<Guid, (string? CommonName, string? ImageUrl, string? ImageAttribution)>>
+    private async Task<Dictionary<Guid, VarietyDisplay>>
         LoadVarietyDisplayAsync(List<Guid> plantIds, string language, CancellationToken ct)
     {
         if (plantIds.Count == 0) return [];
@@ -281,6 +351,8 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
             .Select(p => new
             {
                 p.Id,
+                PlantType = p.PlantType!.Name,
+                p.IsEdible,
                 Names = p.Translations
                     .Where(t => t.Language == language || t.Language == "en")
                     .Select(t => new { t.Language, t.CommonName })
@@ -317,8 +389,10 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
                     .ThenBy(i => i.Id)
                     .FirstOrDefault();
 
-                return (
+                return new VarietyDisplay(
                     name,
+                    r.PlantType,
+                    r.IsEdible,
                     cover?.Url,
                     cover is null
                         ? null

@@ -33,20 +33,6 @@ public record UpdateGardenRequest(
 );
 
 /// <summary>
-/// Exposure config block (SMA-285 / SMA-17): values are stored as-is, all
-/// nullable — the app-level defaults (hemisphere null -> 'N', latitudeBand
-/// null -> 'mid') belong to the future READ-time exposure engine (5.3-C).
-/// </summary>
-public record GardenConfigDto(
-    string? Orientation,
-    string? GardenType,
-    List<LightSlotDto>? LightSchedule,
-    string? Hemisphere,
-    string? LatitudeBand);
-
-public record LightSlotDto(string? Start, string? End);
-
-/// <summary>
 /// GET /api/gardens/{id} contract (SMA-285): a clean DTO — the raw entity
 /// serialization (and its legacy GardenPlants graph) is retired.
 /// </summary>
@@ -70,19 +56,6 @@ public record GardenLayoutResponse(
     string? CellsJson,
     GardenConfigDto Config,
     List<PlacementResponse> Placements);
-
-// PlantName was removed from the placement wire (SMA-285): the front rebuilds
-// every display name from its locale-keyed catalog via the shared resolver
-// (getPlantDisplayName, SMA-194) and never read the server field.
-public record PlacementResponse(
-    Guid Id,
-    Guid PlantId,
-    string? PlantScientificName,
-    int StartRow,
-    int StartCol,
-    int SpanRows,
-    int SpanCols,
-    string? Notes);
 
 public record SaveLayoutRequest(
     [Range(1, 100)] int Width,
@@ -433,11 +406,35 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     /// The light schedule is a stored JSON document with its own tolerance for a
     /// malformed value; a second copy of that tolerance is a second thing to keep
     /// in agreement, for four lines saved.
+    ///
+    /// <para>Round 1, E4 / G1 — a MALFORMED document reads as no schedule at all,
+    /// rather than throwing. <c>LightScheduleJson</c> is an unconstrained text
+    /// column: the two API write paths validate what they store, but exports
+    /// preserve legacy raw values and nothing stops a hand-edit or a truncated
+    /// write. Both readers are on a page-wide critical path — this one builds
+    /// every garden of <c>GET /api/dashboard</c> — so an escaping
+    /// <see cref="JsonException"/> turned one unreadable garden into a dashboard
+    /// nobody could open. Degrading matches how the rest of this feature already
+    /// treats stored documents it did not write: an unknown block key, an unknown
+    /// level and an unparseable layout all fall back rather than fail.</para>
+    ///
+    /// <para>Only <see cref="JsonException"/> is caught. A malformed document is
+    /// the failure this reader can answer; anything else is not, and would be
+    /// hidden by a broader filter.</para>
     /// </summary>
-    internal static List<LightSlotDto>? ParseLightSchedule(string? json) =>
-        string.IsNullOrEmpty(json)
-            ? null
-            : JsonSerializer.Deserialize<List<LightSlotDto>>(json, JsonWeb);
+    internal static List<LightSlotDto>? ParseLightSchedule(string? json)
+    {
+        if (string.IsNullOrEmpty(json)) return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<LightSlotDto>>(json, JsonWeb);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     private static GardenConfigDto ToConfigDto(Garden garden) => new(
         garden.Orientation,
