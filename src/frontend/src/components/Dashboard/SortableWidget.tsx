@@ -36,6 +36,14 @@ interface Props {
   sizeLabel: string;
   onHide: () => void;
   onResize: () => void;
+  /**
+   * The widget's own settings, rendered inside the gear menu (SMA-336 PR 2/5).
+   *
+   * Absent for a widget that has none, and the menu then says so rather than
+   * drawing an empty panel — PR 1/5 shipped every widget that way, and five of
+   * the eight still are.
+   */
+  options?: ReactNode;
   children: ReactNode;
 }
 
@@ -63,6 +71,7 @@ export default function SortableWidget({
   sizeLabel,
   onHide,
   onResize,
+  options,
   children,
 }: Props) {
   const { t } = useTranslation();
@@ -219,9 +228,10 @@ export default function SortableWidget({
               <OpenInFullOutlinedIcon fontSize="small" />
             </IconButton>
 
-            {/* Generic options shell (_spec.md 8, A8): the frame exists so a
-                later lot drops its real entries in. PR 1/5 ships none, and says
-                so rather than drawing a switch that toggles nothing. */}
+            {/* Generic options shell (_spec.md 8, A8). PR 1/5 shipped the frame
+                and nothing in it; PR 2/5 drops the Counters entries in. A widget
+                with no settings still says so rather than opening on a blank
+                panel. */}
             <Menu
               anchorEl={optionsAnchor}
               open={optionsAnchor !== null}
@@ -236,9 +246,11 @@ export default function SortableWidget({
                 </Typography>
               </Box>
               <Box sx={{ px: 2, pb: 1 }}>
-                <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>
-                  {t('dashboard.editMode.optionsEmpty')}
-                </Typography>
+                {options ?? (
+                  <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>
+                    {t('dashboard.editMode.optionsEmpty')}
+                  </Typography>
+                )}
               </Box>
               <Divider />
               <MenuItem onClick={() => setOptionsAnchor(null)}>

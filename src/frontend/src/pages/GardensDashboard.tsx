@@ -21,6 +21,7 @@ import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import CustomizePanel from '../components/Dashboard/CustomizePanel';
 import DashboardGrid from '../components/Dashboard/DashboardGrid';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
+import CountersOptionsPanel from '../components/Dashboard/blocks/CountersOptionsPanel';
 import GardensBlock from '../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
@@ -225,6 +226,21 @@ export default function GardensDashboard() {
     }
   };
 
+  /**
+   * A widget's own settings, for the Edit-mode gear. Only Counters has any —
+   * the other seven open on the panel that says so.
+   */
+  const renderBlockOptions = (block: DashboardBlock) =>
+    block.key === 'counters' ? (
+      <CountersOptionsPanel
+        options={block.options ?? null}
+        gardens={gardens}
+        onChange={(options) =>
+          patchBlock('counters', (current) => ({ ...current, options }))
+        }
+      />
+    ) : undefined;
+
   const levelName = t(`dashboard.levels.${level}.name`);
 
   return (
@@ -371,6 +387,7 @@ export default function GardensDashboard() {
             }))
           }
           renderBlock={renderBlock}
+          renderBlockOptions={renderBlockOptions}
         />
       )}
 

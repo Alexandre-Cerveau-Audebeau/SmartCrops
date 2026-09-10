@@ -435,7 +435,11 @@
         "ornamentalSection": "Ornamental",
         "addFromLibrary": "Add from the Library →",
         "empty": "No plant placed yet.",
-        "emptyGarden": "This garden holds no plant yet."
+        "emptyGarden": "This garden holds no plant yet.",
+        "options": {
+          "photos": "Plant photos",
+          "garden": "Garden"
+        }
       },
       "stats": {
         "title": "Statistics",

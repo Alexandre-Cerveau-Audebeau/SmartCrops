@@ -435,7 +435,11 @@
         "ornamentalSection": "Ornement",
         "addFromLibrary": "Ajouter depuis la Bibliothèque →",
         "empty": "Aucune plante placée pour l’instant.",
-        "emptyGarden": "Ce jardin ne contient encore aucune plante."
+        "emptyGarden": "Ce jardin ne contient encore aucune plante.",
+        "options": {
+          "photos": "Photos des plantes",
+          "garden": "Jardin"
+        }
       },
       "stats": {
         "title": "Statistiques",
