@@ -16,6 +16,7 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { visuallyHidden } from '@mui/utils';
+import { useTheme } from '@mui/material/styles';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -46,18 +47,32 @@ const TABLE_THUMB_W = 34;
 const TABLE_THUMB_H = 26;
 
 /**
- * Width the actions column RESERVES in the Large table (round 2, V8).
+ * Padding around an action glyph. 3 px on a 20 px icon gives a 26 px control —
+ * above the 24 px floor WCAG 2.2 sets for a target, inside a row the design
+ * keeps at 44 px tall (round 3, V14).
+ */
+const ACTION_PAD_PX = '3px';
+
+/**
+ * Width the actions column RESERVES in the Large table (round 2, V8; tightened
+ * round 3, V14).
  *
- * Measured, not chosen: two `size="small"` icon buttons are 30 px each (5 px of
- * padding around a 20 px glyph), the gap between them is 4, the chevron is 20,
- * its gap 2, and the rule that separates the column from the scrolling cells
- * takes 1 plus 8 of padding. 30 + 4 + 30 + 2 + 20 + 9 = 95, declared at 96.
+ * Measured, not chosen: two icon buttons of 26 px, 2 px between them, none
+ * before the chevron's 20, 4 px of left padding, none on the right, and 1 px of
+ * separating rule. 26 + 2 + 26 + 0 + 20 + 4 + 1 = 79, declared at 80.
+ *
+ * Round 2 declared 96 and DREW about 103: the cell also carried 8 px of padding
+ * on each side, and a table cell takes the larger of its declared width and
+ * what its content needs — so the declaration was never the number on screen.
+ * The gaps and the padding are what moved here; the 23 px recovered go back to
+ * the data columns, which is where the round 2 diagnosis said the pressure was
+ * (568 px asked of a 516 px card).
  *
  * It is DECLARED because the column is sticky, and a sticky column is still a
  * column: its width is counted in the layout, so at full scroll-right the last
  * data cell stops just before it instead of running underneath.
  */
-const ACTIONS_COL_PX = 96;
+const ACTIONS_COL_PX = 80;
 
 /**
  * The frozen actions column (round 2, V8) — the header cell and every body cell
@@ -76,18 +91,34 @@ const ACTIONS_COL_PX = 96;
  * defect is worst on the dark theme, where the text is light and the card is
  * dark. The left rule is what says « the row continues behind here ».
  */
-const stickyActionsSx = {
-  position: 'sticky',
+const stickyActionsSx = (rule: string) => ({
+  position: 'sticky' as const,
   right: 0,
   // Above the scrolling cells, below MUI's own overlays (Tooltip, Popover).
   zIndex: 1,
   width: ACTIONS_COL_PX,
   minWidth: ACTIONS_COL_PX,
   backgroundColor: 'background.paper',
-  borderLeft: '1px solid',
-  borderBottom: '1px solid',
-  borderColor: 'borderSubtle',
-} as const;
+  // LONGHANDS, and the reason is a real defect (round 3, V16). Written as
+  // `borderLeft: '1px solid'` + `borderColor: 'borderSubtle'`, the separating
+  // rule came out near-black in daylight and near-white at night — the two
+  // extremes of contrast, on both sides of the same line. Spreading this object
+  // over `cellSx` keeps the POSITION of a key both objects declare, so
+  // `borderColor` was emitted where `cellSx` had put it: BEFORE `borderLeft`.
+  // The shorthand then reset the left colour to `currentColor`, which is the
+  // text colour. Longhands cannot be undone by a shorthand emitted earlier, so
+  // the rule now takes the token whatever the merge order — `borderSubtle`, the
+  // one every other rule of this table already uses.
+  //
+  // The caller resolves the colour and it is written INTO the shorthand, which
+  // is the only form that survives both hazards. Two others were measured and
+  // do not: `borderLeftColor: 'borderSubtle'` reaches CSS unresolved, because
+  // MUI's system maps `borderColor` through the palette and passes the
+  // longhands straight through; and a `(theme) => ...` callback on those
+  // longhands is dropped outright, leaving no declaration at all.
+  borderLeft: `1px solid ${rule}`,
+  borderBottom: `1px solid ${rule}`,
+});
 
 interface Props {
   size: DashboardSize;
@@ -153,6 +184,8 @@ export default function GardensBlock({
 }: Props) {
   const { t, i18n } = useTranslation();
   const tk = useDashboardTokens();
+  // The table's own rule colour, resolved once — see `stickyActionsSx`.
+  const ruleColor = useTheme().palette.borderSubtle;
 
   // ONE derivation per garden, shared with Statistics and reused across every
   // render of this widget (round 1, E10 / G4 / E22). It used to run inline in
@@ -278,7 +311,9 @@ export default function GardensBlock({
    * cursor when a widget is resized.
    */
   const gardenActions = (garden: DashboardGardenData) => (
-    <Box sx={{ display: 'flex', gap: 0.5 }}>
+    // 2 px apart and 3 px of padding each (round 3, V14): « plus proches entre
+    // eux et plus proches du bord ».
+    <Box sx={{ display: 'flex', gap: '2px' }}>
       <IconButton
         size="small"
         onClick={(event) => {
@@ -287,6 +322,7 @@ export default function GardensBlock({
           openEditDialog(garden);
         }}
         aria-label={`${t('gardens.edit')} ${garden.name}`}
+        sx={{ p: ACTION_PAD_PX }}
       >
         <EditIcon fontSize="small" />
       </IconButton>
@@ -298,7 +334,7 @@ export default function GardensBlock({
           openDeleteDialog(garden);
         }}
         aria-label={`${t('gardens.delete')} ${garden.name}`}
-        sx={{ color: 'error.main' }}
+        sx={{ p: ACTION_PAD_PX, color: 'error.main' }}
       >
         <DeleteIcon fontSize="small" />
       </IconButton>
@@ -320,15 +356,40 @@ export default function GardensBlock({
       sx={{
         display: 'flex',
         alignItems: 'center',
-        gap: '2px',
         flexShrink: 0,
       }}
     >
       {gardenActions(garden)}
-      <ChevronRightIcon
-        fontSize="small"
-        sx={{ color: 'text.disabled', pointerEvents: 'none' }}
-      />
+      {/* V15 — the chevron OPENS the garden.
+
+          It never did. It was drawn with `pointerEvents: 'none'`, so a click
+          went straight through it, and round 2 made that visible by moving it
+          out of the Medium row's link to put the two buttons before it: what
+          used to be an inert glyph on a clickable row became an inert glyph on
+          nothing. On the Large table it was inert from the first commit.
+
+          A link, then, to the same place the garden's name leads. `aria-hidden`
+          and out of the tab order deliberately: the row already exposes ONE
+          focusable link named « Open <garden> », and a second tab stop per row
+          with the same destination is noise for a keyboard and for a screen
+          reader. What it adds is the pointer affordance the arrow was already
+          promising. */}
+      <Box
+        component={RouterLink}
+        to={plannerPath(garden)}
+        aria-hidden="true"
+        tabIndex={-1}
+        data-row-chevron
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          color: 'text.disabled',
+          textDecoration: 'none',
+          '&:hover': { color: 'text.secondary' },
+        }}
+      >
+        <ChevronRightIcon fontSize="small" />
+      </Box>
     </Box>
   );
 
@@ -597,7 +658,7 @@ export default function GardensBlock({
                   {label}
                 </Box>
               ))}
-              <Box component="th" scope="col" sx={stickyActionsSx}>
+              <Box component="th" scope="col" sx={stickyActionsSx(ruleColor)}>
                 <Box component="span" sx={visuallyHidden}>
                   {t('dashboard.blocks.gardens.columns.actions')}
                 </Box>
@@ -826,6 +887,7 @@ function GardenRow({
   plannerPath,
 }: RowProps) {
   const { t, i18n } = useTranslation();
+  const ruleColor = useTheme().palette.borderSubtle;
 
   const cellSx = {
     // >= 44px rows (_spec.md 3): the line is a touch target as much as a row.
@@ -1040,7 +1102,12 @@ function GardenRow({
         </Box>
       )}
 
-      <Box component="td" sx={{ ...cellSx, ...stickyActionsSx, px: '8px' }}>
+      {/* 4 px in, nothing out (round 3, V14): the column ends at the card's own
+          padding rather than 8 px short of it. */}
+      <Box
+        component="td"
+        sx={{ ...cellSx, ...stickyActionsSx(ruleColor), pl: '4px', pr: 0 }}
+      >
         {actions}
       </Box>
     </Box>

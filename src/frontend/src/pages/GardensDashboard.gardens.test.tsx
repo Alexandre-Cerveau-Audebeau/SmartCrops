@@ -8,6 +8,8 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { ThemeProvider } from '@mui/material/styles';
+import { createAppTheme } from '../theme';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
@@ -963,15 +965,55 @@ describe('Gardens table — the actions column is frozen to the right (V8)', () 
   });
 
   it('declares its width, so the row is laid out around it', async () => {
+    // 80 px since round 3 (V14): round 2 declared 96 and drew about 103,
+    // because the cell also carried 8 px of padding on each side and a table
+    // cell takes the larger of its declaration and its content.
     renderPage();
     await screen.findByText('Casa Lolo');
 
     for (const cell of actionCells()) {
       const rules = rulesFor(cell);
-      expect(rules).toContain('width:96px');
-      expect(rules).toContain('min-width:96px');
+      expect(rules).toContain('width:80px');
+      expect(rules).toContain('min-width:80px');
     }
   });
+
+  it.each([
+    ['light', '#e2eadf'],
+    ['dark', 'rgba(79,179,124,0.45)'],
+  ])(
+    'draws its separating rule with the table’s own token in %s',
+    async (mode, expected) => {
+      // V16. Written as a `borderLeft` shorthand beside a `borderColor`, the
+      // rule came out near-black in daylight and near-white at night —
+      // maximum contrast on both sides of the same line. Spreading this object
+      // over `cellSx` keeps `borderColor` in its ORIGINAL position, before the
+      // shorthand, and the shorthand then reset the left colour to
+      // `currentColor`, which is the text colour.
+      //
+      // Rendered under the real application theme, deliberately: the page's
+      // own test wrapper carries none, so `borderSubtle` would not resolve and
+      // the assertion would be about MUI's default palette rather than about
+      // this product's.
+      render(
+        <ThemeProvider theme={createAppTheme(mode as 'light' | 'dark')}>
+          <LanguageProvider>
+            <MemoryRouter>
+              <GardensDashboard />
+            </MemoryRouter>
+          </LanguageProvider>
+        </ThemeProvider>
+      );
+      await screen.findByText('Casa Lolo');
+
+      for (const cell of actionCells()) {
+        const rules = rulesFor(cell).toLowerCase().replace(/\s+/g, ' ');
+        expect(rules).toContain(`border-left:1px solid ${expected}`);
+        expect(rules).not.toContain('currentcolor');
+        expect(rules).not.toContain('bordersubtle');
+      }
+    }
+  );
 
   it('is opaque, so the scrolling cells never show through it', async () => {
     // Worst on the dark theme, where the cells that pass underneath carry light
@@ -1150,10 +1192,15 @@ describe('Gardens rows — rename and delete at EVERY size (V12)', () => {
         button.getAttribute('aria-label')
       );
       expect(buttons).toEqual(['Edit Casa Lolo', 'Delete Casa Lolo']);
-      expect(group!.lastElementChild).toHaveAttribute(
-        'data-testid',
-        'ChevronRightIcon'
-      );
+
+      // The chevron closes the group. It is a LINK since round 3 (V15), so the
+      // last child is the anchor and the glyph sits inside it.
+      const chevron = group!.lastElementChild!;
+      expect(chevron.tagName).toBe('A');
+      expect(chevron).toHaveAttribute('data-row-chevron');
+      expect(
+        chevron.querySelector('[data-testid="ChevronRightIcon"]')
+      ).not.toBeNull();
     }
   );
 });
@@ -1277,4 +1324,115 @@ describe('The occupancy figure never breaks in two', () => {
     const figure = within(gardensWidget()).getByText(/^\d+ %$/);
     expect(rulesFor(figure)).toContain('white-space:nowrap');
   });
+});
+
+// ── Round 3 (V15): the chevron opens the garden ──────────────────────────────
+// It never did. It carried `pointerEvents: 'none'`, so a click went through it;
+// on the Medium row that went unnoticed while it still sat INSIDE the row link,
+// and round 2 moved it out to put the two buttons before it. On the Large table
+// it was inert from the first commit.
+describe('Gardens rows — the chevron opens the garden (V15)', () => {
+  beforeEach(() => {
+    localStorage.setItem('smartcrops-language', 'en');
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenWith(3)])
+    );
+  });
+
+  /** The page under a router that shows where a navigation lands. */
+  function renderWithProbe() {
+    function Probe() {
+      const location = useLocation();
+      return <div>at:{location.pathname}</div>;
+    }
+    return render(
+      <LanguageProvider>
+        <MemoryRouter initialEntries={['/gardens']}>
+          <Probe />
+          <Routes>
+            <Route path="/gardens" element={<GardensDashboard />} />
+            <Route
+              path="/gardens/:id/planner"
+              element={<div>planner reached</div>}
+            />
+          </Routes>
+        </MemoryRouter>
+      </LanguageProvider>
+    );
+  }
+
+  const chevron = () =>
+    gardensWidget().querySelector('[data-row-chevron]') as HTMLElement;
+
+  it.each([
+    ['medium', 'novice'],
+    ['large', 'expert'],
+  ])('at %s it is a link to the planner', async (_size, level) => {
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level: level as 'novice' | 'expert',
+      isPreset: true,
+      blocks: presetFor(level as 'novice' | 'expert'),
+      updatedAt: null,
+    });
+
+    renderPage();
+    await screen.findAllByText('Casa Lolo');
+
+    expect(chevron()).not.toBeNull();
+    expect(chevron()).toHaveAttribute('href', '/gardens/g1/planner');
+  });
+
+  it.each([
+    ['medium', 'novice'],
+    ['large', 'expert'],
+  ])('at %s clicking it really navigates', async (_size, level) => {
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level: level as 'novice' | 'expert',
+      isPreset: true,
+      blocks: presetFor(level as 'novice' | 'expert'),
+      updatedAt: null,
+    });
+
+    renderWithProbe();
+    await screen.findAllByText('Casa Lolo');
+
+    fireEvent.click(chevron());
+
+    expect(await screen.findByText('planner reached')).toBeInTheDocument();
+    expect(screen.getByText('at:/gardens/g1/planner')).toBeInTheDocument();
+  });
+
+  it('is out of the tab order and hidden from the reading order', async () => {
+    // The row already exposes ONE focusable link named « Open Casa Lolo ». A
+    // second tab stop per row, to the same place, is noise; what the chevron
+    // adds is the pointer affordance it was already drawing.
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    expect(chevron()).toHaveAttribute('tabindex', '-1');
+    expect(chevron()).toHaveAttribute('aria-hidden', 'true');
+    expect(
+      within(gardensWidget()).getByRole('link', { name: 'Open Casa Lolo' })
+    ).toBeInTheDocument();
+  });
+
+  it.each(['Edit Casa Lolo', 'Delete Casa Lolo'])(
+    '%s still does NOT open the garden',
+    async (name) => {
+      // The other half: the two buttons sit in the same group as the chevron,
+      // and pressing one must open its dialog and stay on the page.
+      renderWithProbe();
+      await screen.findByText('Casa Lolo');
+
+      fireEvent.click(
+        within(gardensWidget()).getByRole('button', { name })
+      );
+
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+      expect(screen.getByText('at:/gardens')).toBeInTheDocument();
+      expect(screen.queryByText('planner reached')).toBeNull();
+    }
+  );
 });
