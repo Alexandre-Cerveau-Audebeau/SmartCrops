@@ -313,8 +313,12 @@
     "planMyGarden": "Planifier mon jardin"
   },
   "dashboard": {
-    "meta_one": "{{count}} jardin",
-    "meta_other": "{{count}} jardins",
+    "meta": "{{gardens}} · {{plants}} · {{surface}}",
+    "metaGardens_one": "{{count, number}} jardin",
+    "metaGardens_other": "{{count, number}} jardins",
+    "metaPlants_one": "{{count, number}} plante",
+    "metaPlants_other": "{{count, number}} plantes",
+    "metaSurface": "{{value}} m²",
     "edit": "Modifier",
     "done": "Terminé",
     "customize": "Personnaliser",
@@ -366,6 +370,7 @@
       "gallerySection": "Galerie",
       "galleryHint": "Les widgets masqués — ajoutez-les à la page.",
       "galleryEmpty": "Aucun widget masqué.",
+      "gallerySoon": "Bientôt",
       "hidden": "masqué",
       "add": "Ajouter {{widget}}"
     },
@@ -448,6 +453,7 @@
         "activeCells": "{{active}} · {{occupied}}",
         "freeCells": "{{free}}, {{sunny}}",
         "occupancySection": "Occupation par jardin",
+        "occupancyValue": "{{surface}} · {{percent}}",
         "exposureSection": "Exposition dominante — {{season}} · {{moment}}",
         "perGardenExposureSection": "Exposition par jardin",
         "noPlan": "Sans plan",

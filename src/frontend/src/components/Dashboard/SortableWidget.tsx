@@ -11,7 +11,6 @@ import Typography from '@mui/material/Typography';
 import { keyframes } from '@mui/material/styles';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import OpenInFullOutlinedIcon from '@mui/icons-material/OpenInFullOutlined';
 import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { spanFor } from '../../utils/dashboardLayoutGrid';
@@ -26,6 +25,43 @@ const wobble = keyframes`
   50% { transform: rotate(0.5deg); }
   100% { transform: rotate(-0.5deg); }
 `;
+
+/**
+ * The corner resize grip (round 4, A9) — `A6Modifier.dc.html`, verbatim:
+ *
+ *   .grip { position: absolute; right: 8px; bottom: 8px; width: 16px;
+ *           height: 16px; z-index: 3; color: var(--prim); }
+ *   <svg class="grip" viewBox="0 0 16 16">
+ *     <path d="M15 1 1 15M15 8l-7 7" stroke="currentColor" stroke-width="2"
+ *           stroke-linecap="round" fill="none"/>
+ *   </svg>
+ *
+ * Two diagonal strokes and nothing else. It was `OpenInFullOutlined`, a
+ * two-headed arrow — a control that says « drag me in both directions » on a
+ * button that steps through three fixed sizes on a click, and the one glyph in
+ * Edit mode loud enough to be seen before the widget it sits on.
+ *
+ * A `<path>` rather than an icon from the set: no icon of `@mui/icons-material`
+ * is these two strokes, and the artboard's own drawing is four attributes long.
+ */
+function ResizeGrip() {
+  return (
+    <Box
+      component="svg"
+      viewBox="0 0 16 16"
+      aria-hidden
+      sx={{ width: 16, height: 16, display: 'block' }}
+    >
+      <path
+        d="M15 1 1 15M15 8l-7 7"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        fill="none"
+      />
+    </Box>
+  );
+}
 
 interface Props {
   block: DashboardBlock;
@@ -232,6 +268,10 @@ export default function SortableWidget({
               </IconButton>
             </Box>
 
+            {/* 3 px of offset plus the small IconButton's own 5 px of padding
+                put the 16 px grip exactly where the artboard has it — 8 px in
+                from both edges — while the button around it stays a full
+                keyboard target. */}
             <IconButton
               size="small"
               onClick={onResize}
@@ -239,9 +279,15 @@ export default function SortableWidget({
                 widget: label,
                 size: sizeLabel,
               })}
-              sx={{ position: 'absolute', bottom: 4, right: 4, zIndex: 3 }}
+              sx={{
+                position: 'absolute',
+                bottom: 3,
+                right: 3,
+                zIndex: 3,
+                color: 'primary.main',
+              }}
             >
-              <OpenInFullOutlinedIcon fontSize="small" />
+              <ResizeGrip />
             </IconButton>
 
             {/* Generic options shell (_spec.md 8, A8). PR 1/5 shipped the frame
@@ -285,20 +331,49 @@ export default function SortableWidget({
                 },
               }}
             >
-              <Box sx={{ px: 2, pt: 1, pb: 0.5 }}>
+              {/* TWO lines, and a rule under them (round 4, A7) —
+                  `A8Options.dc.html`'s `.pop-h`:
+
+                    <div class="pop-h">
+                      <div style="font-size:15px; font-weight:700; …">Compteurs
+                        par variété</div>
+                      <div class="sub">Options du widget</div>
+                    </div>
+                    .pop-h { padding: 16px 18px 12px;
+                             border-bottom: 1px solid var(--divider); }
+
+                  The panel opened on « Options du widget » alone, so a user who
+                  had just clicked one of eight identical gears had nothing on
+                  screen telling them which widget they were standing in. The
+                  `h3` moves to the widget's NAME, which is what the heading is
+                  for; the generic line becomes its subtitle. The Popover's
+                  `aria-label` already carried the name for assistive
+                  technology — this is the same fact, on screen. */}
+              <Box
+                sx={{
+                  px: '18px',
+                  pt: '16px',
+                  pb: '12px',
+                  borderBottom: '1px solid',
+                  borderColor: 'divider',
+                }}
+              >
                 <Typography
                   component="h3"
                   sx={{
-                    fontSize: 13,
+                    fontSize: 15,
                     fontWeight: 700,
-                    color: 'text.secondary',
+                    color: 'text.primary',
                     m: 0,
                   }}
                 >
+                  {label}
+                </Typography>
+                <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>
                   {t('dashboard.editMode.optionsTitle')}
                 </Typography>
               </Box>
-              <Box sx={{ px: 2, pb: 1 }}>
+              <Box sx={{ px: '18px', py: '8px' }}>
                 {options ?? (
                   <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>
                     {t('dashboard.editMode.optionsEmpty')}
@@ -306,8 +381,24 @@ export default function SortableWidget({
                 )}
               </Box>
               <Divider />
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
-                <Button size="small" onClick={() => setOptionsAnchor(null)}>
+              {/* `.pop-r { justify-content: flex-end }` closing on
+                  `<span class="lnk">Terminé</span>` — `.lnk { color:
+                  var(--prim); font-weight: 700; font-size: 15px }`. MUI's own
+                  primary is that green; the weight and the size are the
+                  artboard's. */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  px: '18px',
+                  py: '8px',
+                }}
+              >
+                <Button
+                  size="small"
+                  onClick={() => setOptionsAnchor(null)}
+                  sx={{ fontSize: 15, fontWeight: 700 }}
+                >
                   {t('dashboard.editMode.optionsDone')}
                 </Button>
               </Box>

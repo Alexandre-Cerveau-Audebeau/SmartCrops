@@ -375,6 +375,49 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     // A BUTTON, not a menu item (round 1, G6): the surface is a Popover now.
     expect(within(panel).getByRole('button', { name: 'Done' })).toBeInTheDocument();
   });
+
+  it('names the widget on the panel itself, above the generic line (A7)', async () => {
+    // `A8Options.dc.html`'s `.pop-h` carries two lines — the widget's name in
+    // bold, then « Options du widget ». The panel opened on the generic line
+    // alone, so a user who had just clicked one of eight identical gears had
+    // nothing ON SCREEN telling them which widget they were standing in.
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tips options' }));
+
+    const panel = await screen.findByRole('dialog', { name: 'Tips options' });
+    const heading = within(panel).getByRole('heading', { level: 3 });
+    expect(heading).toHaveTextContent('Tips');
+    // The name comes FIRST: it is the heading, the generic line its subtitle.
+    expect(
+      heading.compareDocumentPosition(within(panel).getByText('Widget options'))
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+});
+
+describe('GardensDashboard — the resize grip (round 4, A9)', () => {
+  it('is the artboard’s two diagonal strokes, not a two-headed arrow', async () => {
+    // `A6Modifier.dc.html`:
+    //   <svg class="grip" viewBox="0 0 16 16">
+    //     <path d="M15 1 1 15M15 8l-7 7" stroke="currentColor"
+    //           stroke-width="2" stroke-linecap="round" fill="none"/>
+    //   </svg>
+    //
+    // It was `OpenInFullOutlined` — a drag affordance on a button that steps
+    // through three fixed sizes on a click, and the loudest glyph in Edit mode.
+    await enterEditMode();
+
+    const handle = screen.getByRole('button', {
+      name: 'Change the size of Weather — currently Medium',
+    });
+    const path = handle.querySelector('svg[viewBox="0 0 16 16"] path');
+    expect(path).not.toBeNull();
+    expect(path).toHaveAttribute('d', 'M15 1 1 15M15 8l-7 7');
+    expect(path).toHaveAttribute('fill', 'none');
+    // The gesture it names has not changed: it still resizes, and it is still
+    // a button a keyboard can reach.
+    expect(handle.tagName).toBe('BUTTON');
+  });
 });
 
 describe('GardensDashboard — resizing and hiding (SMA-336)', () => {

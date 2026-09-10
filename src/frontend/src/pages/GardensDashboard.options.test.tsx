@@ -159,6 +159,21 @@ describe('the Counters widget options (artboard A8)', () => {
     expect(within(menu).queryByText('No option for this widget yet.')).toBeNull();
   });
 
+  it('opens each option on its own glyph (round 4, A7)', async () => {
+    // `.pop-r` starts on a 22 px icon: `PhotoCameraOutlined` for the photos
+    // switch and `YardOutlined` for the garden filter, both matched
+    // path-for-path against the artboard. Without them a switch and a whole
+    // garden filter read as one undifferentiated column.
+    const menu = await openCountersOptions();
+
+    expect(
+      menu.querySelector('svg[data-testid="PhotoCameraOutlinedIcon"]')
+    ).not.toBeNull();
+    expect(
+      menu.querySelector('svg[data-testid="YardOutlinedIcon"]')
+    ).not.toBeNull();
+  });
+
   it('a widget with no settings still says so', async () => {
     renderPage();
     // Same enabled-state wait as the helper above (round 1, E17).

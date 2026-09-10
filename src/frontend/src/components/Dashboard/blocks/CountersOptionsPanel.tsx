@@ -4,6 +4,8 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
+import PhotoCameraOutlinedIcon from '@mui/icons-material/PhotoCameraOutlined';
+import YardOutlinedIcon from '@mui/icons-material/YardOutlined';
 import type { DashboardGardenData } from '../../../types/DashboardData';
 import {
   COUNTERS_GARDEN_ALL,
@@ -40,22 +42,64 @@ export default function CountersOptionsPanel({
   const { t } = useTranslation();
   const current = countersOptions(options);
 
+  /**
+   * One option row (round 4, A7) — `A8Options.dc.html`'s `.pop-r`:
+   * `display: flex; align-items: center; gap: 14px; height: 48px`, opening on a
+   * 22 px glyph. The panel had none, so two settings of very different weight —
+   * a switch and a whole garden filter — read as one undifferentiated column.
+   *
+   * The two glyphs are the artboard's own, matched path-for-path:
+   * `PhotoCameraOutlined` for the photos switch and `YardOutlined` for the
+   * garden select — the SAME drawing the Gardens widget carries in its title,
+   * which is what says the filter is about those gardens.
+   */
+  const optionRow = (icon: React.ReactNode, control: React.ReactNode) => (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '14px',
+        minHeight: 48,
+      }}
+    >
+      <Box
+        aria-hidden
+        sx={{
+          display: 'flex',
+          flexShrink: 0,
+          color: 'text.secondary',
+          '& > svg': { fontSize: 22 },
+        }}
+      >
+        {icon}
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>{control}</Box>
+    </Box>
+  );
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      <FormControlLabel
-        control={
-          <Switch
-            size="small"
-            checked={current.photos}
-            onChange={(event) =>
-              onChange({ ...current, photos: event.target.checked })
-            }
-          />
-        }
-        label={t('dashboard.blocks.counters.options.photos')}
-        slotProps={{ typography: { fontSize: 14 } }}
-      />
-      <TextField
+    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+      {optionRow(
+        <PhotoCameraOutlinedIcon />,
+        <FormControlLabel
+          control={
+            <Switch
+              size="small"
+              checked={current.photos}
+              onChange={(event) =>
+                onChange({ ...current, photos: event.target.checked })
+              }
+            />
+          }
+          label={t('dashboard.blocks.counters.options.photos')}
+          slotProps={{ typography: { fontSize: 15 } }}
+          sx={{ m: 0, width: '100%', justifyContent: 'space-between' }}
+          labelPlacement="start"
+        />
+      )}
+      {optionRow(
+        <YardOutlinedIcon />,
+        <TextField
         select
         size="small"
         fullWidth
@@ -76,7 +120,8 @@ export default function CountersOptionsPanel({
             {garden.name}
           </MenuItem>
         ))}
-      </TextField>
+        </TextField>
+      )}
     </Box>
   );
 }

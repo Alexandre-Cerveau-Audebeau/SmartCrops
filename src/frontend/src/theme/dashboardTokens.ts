@@ -37,6 +37,17 @@ export interface DashboardTokens {
   /** Ornamental chip (`--orn-bg` / `--orn-tx`) — a garden with no edible variety. */
   ornBg: string;
   ornText: string;
+  /**
+   * The GREEN count pill (`--chip-ok-bg` / `--chip-ok-tx`) — « 50 plantes » at
+   * the right of a Medium Gardens row (`A2Novice.dc.html`, `.pill.ok`).
+   *
+   * Its own pair rather than {@link invIcBg}: that one is the disc behind an
+   * invitation's icon and the artboards give the two different night values
+   * (0.15 against 0.16), so sharing would tie a count pill to an invitation
+   * motif that has no reason to move with it.
+   */
+  okBg: string;
+  okText: string;
   /** Fill of a variety avatar standing in for a photo (`--ph-fill`). */
   avatarFill: string;
 }
@@ -49,6 +60,8 @@ const LIGHT: DashboardTokens = {
   thumbCellFrame: '#BCCBB6',
   ornBg: '#F8E3EC',
   ornText: '#A34D74',
+  okBg: '#E4F3E9',
+  okText: '#20713F',
   avatarFill: '#DCE9DF',
 };
 
@@ -60,6 +73,8 @@ const DARK: DashboardTokens = {
   thumbCellFrame: '#2C4771',
   ornBg: 'rgba(244,143,177,0.16)',
   ornText: '#F4A7C3',
+  okBg: 'rgba(76,180,124,0.16)',
+  okText: '#7ED0A4',
   avatarFill: '#24395F',
 };
 
@@ -74,9 +89,24 @@ export function getDashboardTokens(mode: DashboardThemeMode): DashboardTokens {
  * its font-size from here so the scale stays in one place.
  */
 export const DASHBOARD_TYPE = {
-  /** Widget title: 13px, 800, uppercase, letter-spacing .06em, muted. */
-  title: 13,
+  /**
+   * Widget title: 800, uppercase, letter-spacing .06em, muted.
+   *
+   * 15px, not the artboards' 13 (amendment A1, round 4). The frozen design has
+   * `.hd-t { font-size: 13px }`, and Alexandre asked for the titles to read
+   * bigger: « les titres en haut des widgets doivent être un peu plus gros,
+   * avec une plus grande police ». Everything else about the rule — the weight,
+   * the capitals, the tracking, the colour — is the artboard's, unchanged.
+   */
+  title: 15,
   titleLetterSpacing: '0.06em',
+  /**
+   * The icon that precedes a widget title (amendment A2, round 4). The artboards
+   * draw it at 18 (`<svg class="ic" width="18">` before `<span class="hd-t">`);
+   * 20 is the amendment, taken with the 13 → 15 of the title so the two stay in
+   * proportion.
+   */
+  titleIcon: 20,
   /** Body copy — list rows, tips, tasks, variety names. */
   body: 15,
   /** Secondary copy — sub-lines, captions. Never below 14. */

@@ -250,18 +250,51 @@ describe('GardensDashboard — grid from the stored preferences (SMA-336)', () =
 });
 
 describe('GardensDashboard — header (SMA-336)', () => {
-  it('shows the page title, the garden count and the level chip', async () => {
+  it('shows the page title, the WHOLE meta line and the level chip', async () => {
+    // ROUND 4 (A3). `Main.dc.html` writes three figures under the title —
+    // `<div class="meta">3 jardins · 128 plantes · 42,5 m²</div>` — and the
+    // page printed the first alone. The fixture garden is 4 × 3 at 50 cm, so
+    // 12 active cells at 0.25 m² make 3 m², and it holds no placement.
+    //
+    // Scoped to the header: the Gardens widget's own chip carries the garden
+    // count too, and both saying "1 garden" is the point, not an ambiguity.
     renderPage();
 
     const heading = await screen.findByRole('heading', { name: 'My Gardens' });
-    // Scoped to the header: the Gardens widget's own chip carries the same
-    // count, and both saying "1 garden" is the point, not an ambiguity.
     await waitFor(() =>
       expect(
-        within(heading.parentElement!).getByText('1 garden')
+        within(heading.parentElement!).getByText('1 garden · 0 plants · 3.0 m²')
       ).toBeInTheDocument()
     );
     expect(await screen.findByText('Gardener view')).toBeInTheDocument();
+  });
+
+  it('derives the surface from the plans, and each figure agrees with its own number', async () => {
+    // Three cardinalities in one sentence: i18next selects a plural form from
+    // ONE `count`, so a single string could only ever agree with the first —
+    // « 2 gardens · 1 plants ». Each figure is its own plural-aware fragment.
+    //
+    // The surface is DERIVED here (decision D9): the aggregate transports
+    // plans, not areas, and `totals` carries no surface at all. Two gardens of
+    // 4 × 3 at 50 cm make 6 m².
+    vi.mocked(fetchDashboardData).mockResolvedValue({
+      ...dashboardWith([garden('g1', 'Terrasse'), garden('g2', 'Balcon')]),
+      totals: {
+        gardenCount: 2,
+        placementCount: 1,
+        varietyCount: 1,
+        catalogPlantCount: 536,
+      },
+    });
+
+    renderPage();
+
+    const heading = await screen.findByRole('heading', { name: 'My Gardens' });
+    await waitFor(() =>
+      expect(
+        within(heading.parentElement!).getByText('2 gardens · 1 plant · 6.0 m²')
+      ).toBeInTheDocument()
+    );
   });
 
   it('marks the chip « adjusted » when the layout diverges from its preset', async () => {
@@ -612,6 +645,72 @@ describe('GardensDashboard — headings and dialogs (SMA-336 round 1)', () => {
   });
 });
 
+describe('GardensDashboard — the widget header (round 4, A1 / A2)', () => {
+  it('opens every widget title on a primary-coloured glyph', async () => {
+    // The artboards put one before every `<span class="hd-t">`:
+    //   <div class="hd"><svg class="ic" width="18" …/><span class="hd-t">…
+    //   .hd .ic { color: var(--prim); }
+    // The implementation had none at all — Alexandre: « il n'y a pas les logos
+    // non plus ».
+    renderPage();
+    await screen.findByText('Gardener view');
+
+    for (const card of document.querySelectorAll('[data-widget]')) {
+      const heading = card.querySelector('h2')!;
+      const glyph = heading.previousElementSibling;
+      expect(glyph, `${card.getAttribute('data-widget')} has no title glyph`)
+        .not.toBeNull();
+      expect(glyph!.tagName.toLowerCase()).toBe('svg');
+      // Decorative: the h2 beside it already names the widget, so the glyph is
+      // not announced a second time.
+      expect(glyph).toHaveAttribute('aria-hidden', 'true');
+    }
+  });
+
+  it('writes the title at 15 px, not the artboard’s 13 (amendment A1)', async () => {
+    // Alexandre, 10/09: « les titres en haut des widgets doivent être un peu
+    // plus gros, avec une plus grande police ». Everything else about `.hd-t`
+    // is the artboard's — 800, uppercase, .06em of tracking, muted.
+    renderPage();
+    await screen.findByText('Gardener view');
+
+    const heading = document.querySelector('[data-widget] h2')!;
+    const rules = rulesFor(heading).join(' ').replace(/\s+/g, '');
+    expect(rules).toContain('font-size:15px');
+    expect(rules).toContain('font-weight:800');
+    expect(rules).toContain('text-transform:uppercase');
+    expect(rules).toContain('letter-spacing:0.06em');
+  });
+
+  it('gives each widget the glyph its artboard draws', async () => {
+    // Identified rather than chosen (round 4, A2): every `<svg class="ic">` of
+    // a `.hd` was matched path-for-path against `@mui/icons-material`, and four
+    // entries moved — Tips, Today, Counts and Statistics were near-enough
+    // guesses. MUI stamps the icon name in `data-testid`, which is what makes
+    // the identification assertable rather than a comment.
+    servePreferences('expert');
+    renderPage();
+    await screen.findByText('Expert view');
+
+    const glyphOf = (key: string) =>
+      document
+        .querySelector(`[data-widget="${key}"] h2`)!
+        .previousElementSibling!.getAttribute('data-testid');
+
+    expect(glyphOf('gardens')).toBe('YardOutlinedIcon');
+    expect(glyphOf('tips')).toBe('TipsAndUpdatesOutlinedIcon');
+    expect(glyphOf('month')).toBe('CalendarMonthOutlinedIcon');
+    expect(glyphOf('todo')).toBe('TaskAltOutlinedIcon');
+    expect(glyphOf('counters')).toBe('LocalFloristOutlinedIcon');
+    expect(glyphOf('stats')).toBe('InsightsOutlinedIcon');
+    expect(glyphOf('harvest')).toBe('AgricultureOutlinedIcon');
+    // Weather is the one widget the artboards do not title: its card opens on
+    // the place name, so there is no header glyph to match. It keeps the
+    // artboard's own 44 px hero sun.
+    expect(glyphOf('weather')).toBe('WbSunnyOutlinedIcon');
+  });
+});
+
 describe('GardensDashboard — Customize panel (SMA-336)', () => {
   const openPanel = async () => {
     renderPage();
@@ -694,6 +793,39 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     await openPanel();
 
     expect(screen.getByText('No hidden widget.')).toBeInTheDocument();
+  });
+
+  it('draws a MINIATURE of what a hidden widget holds (round 4, A8)', async () => {
+    // `A7Personnaliser.dc.html` fills its `.gal-th` with the widget's own
+    // headline — « 42,5 m² » over two occupancy bars for Statistics — so the
+    // card shows what is being put back rather than the widget's name twice.
+    // The row carried a bare 20 px icon beside that name and nothing else.
+    //
+    // The fixture is one 4 × 3 garden at 50 cm: 12 active cells make 3 m², and
+    // the plan is empty, so the occupancy bar sits at 0.
+    await openPanel();
+    const gallery = screen.getByRole('dialog', { name: 'Customize' });
+
+    expect(within(gallery).getByText('3.0 m²')).toBeInTheDocument();
+
+    // A FILLED disc, not a bare glyph: `.plus { width: 36px; height: 36px;
+    // border-radius: 50%; background: var(--prim) }`.
+    const add = within(gallery).getByRole('button', { name: 'Add Statistics' });
+    const rules = rulesFor(add).join(' ').replace(/\s+/g, '');
+    expect(rules).toContain('width:36px');
+    expect(rules).toContain('height:36px');
+  });
+
+  it('says « soon » where a widget has no figure yet, never a zero', async () => {
+    // Rule 4 of the design contract: a missing datum is an invitation, never a
+    // page blanche and never a misleading zero. Five of the eight widgets are
+    // fed by no endpoint before PR 3/5 and PR 4/5, and Harvest is one of them.
+    await openPanel();
+    const gallery = screen.getByRole('dialog', { name: 'Customize' });
+
+    expect(within(gallery).getByText('Harvest')).toBeInTheDocument();
+    expect(within(gallery).getByText('Soon')).toBeInTheDocument();
+    expect(within(gallery).queryByText('0 m²')).toBeNull();
   });
 
   it('mentions no price, no quota and no plan anywhere on the page', async () => {

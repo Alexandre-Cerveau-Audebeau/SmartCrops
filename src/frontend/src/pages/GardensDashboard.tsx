@@ -27,9 +27,12 @@ import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
+import { useGardenViews } from '../hooks/useGardenViews';
 import { useLanguage } from '../hooks/useLanguage';
+import type { GalleryPreview } from '../components/Dashboard/CustomizePanel';
 import { createGarden } from '../services/gardenApi';
 import { DASHBOARD_SPACING, DASHBOARD_TYPE } from '../theme/dashboardTokens';
+import { formatCount, formatDecimal } from '../utils/formatNumber';
 import {
   nextDashboardSize,
   type DashboardBlock,
@@ -85,6 +88,15 @@ export default function GardensDashboard() {
     refetch,
   } = useDashboardData(language);
   const gardens = dashboardData.gardens;
+
+  // The page's own share of the derivation the widgets read — see the meta line
+  // below. Shared through `gardenViewOf`'s memo, so the header does not make the
+  // exposure engine run a third time.
+  const gardenViews = useGardenViews(gardens);
+  const totalSurface = gardens.reduce(
+    (sum, garden) => sum + (gardenViews.get(garden.id)?.surfaceM2 ?? 0),
+    0
+  );
 
   const [editing, setEditing] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -246,6 +258,48 @@ export default function GardensDashboard() {
       />
     ) : undefined;
 
+  /**
+   * A hidden widget's headline figure, for its gallery thumbnail (round 4, A8).
+   *
+   * Only what the page ACTUALLY holds. Three widgets are fed by the aggregate
+   * and answer with their own headline — the Statistics card's surface over the
+   * occupancy of the first two gardens, exactly what `A7Personnaliser.dc.html`
+   * draws; the Counters card's distinct-variety count; the Gardens card's own
+   * count. The other five have no data before PR 3/5 and PR 4/5 and answer
+   * `null`, which the panel renders as « soon » rather than as a zero.
+   *
+   * Nothing is invented and nothing is derived twice: the surface and the
+   * occupancies come from the same `gardenViews` the meta line and the two
+   * widgets read.
+   */
+  const galleryPreview = (key: DashboardBlockKey): GalleryPreview | null => {
+    if (gardensLoading || gardensError) return null;
+
+    if (key === 'stats') {
+      const planned = gardens
+        .map((garden) => gardenViews.get(garden.id))
+        .filter((view) => view?.hasPlan);
+      if (planned.length === 0) return null;
+      return {
+        value: t('dashboard.blocks.stats.surface', {
+          value: formatDecimal(totalSurface, language, 1),
+        }),
+        bars: planned.slice(0, 2).map((view) => view!.occupancyPercent),
+      };
+    }
+    if (key === 'counters') {
+      if (dashboardData.totals.varietyCount === 0) return null;
+      return {
+        value: formatCount(dashboardData.totals.varietyCount, language),
+      };
+    }
+    if (key === 'gardens') {
+      if (gardens.length === 0) return null;
+      return { value: formatCount(gardens.length, language) };
+    }
+    return null;
+  };
+
   const levelName = t(`dashboard.levels.${level}.name`);
 
   return (
@@ -279,7 +333,31 @@ export default function GardensDashboard() {
                 color: 'text.secondary',
               }}
             >
-              {t('dashboard.meta', { count: gardens.length })}
+              {/* The WHOLE meta line (round 4, A3): « 3 jardins · 128 plantes ·
+                  42,5 m² », which is what `Main.dc.html` writes under the page
+                  title — `<div class="meta">3 jardins · 128 plantes · 42,5
+                  m²</div>`. The page printed the first figure alone.
+
+                  Three fragments joined by a fourth key, never one sentence:
+                  i18next selects a plural form from ONE `count`, so a single
+                  string carrying two cardinalities can only ever agree with the
+                  first. Same rule as the Statistics widget's two-count lines
+                  (round 1, E15 / E16 / G7).
+
+                  The surface is DERIVED, like every other figure of this page
+                  (decision D9): the aggregate transports plans, not areas, and
+                  `useGardenViews` is the shared derivation the Gardens and
+                  Statistics widgets already read — asking for it here costs
+                  nothing, because `gardenViewOf` memoizes on the garden object. */}
+              {t('dashboard.meta', {
+                gardens: t('dashboard.metaGardens', { count: gardens.length }),
+                plants: t('dashboard.metaPlants', {
+                  count: dashboardData.totals.placementCount,
+                }),
+                surface: t('dashboard.metaSurface', {
+                  value: formatDecimal(totalSurface, language, 1),
+                }),
+              })}
             </Typography>
           )}
         </Box>
@@ -400,6 +478,7 @@ export default function GardensDashboard() {
         open={panelOpen}
         level={level}
         blocks={blocks}
+        preview={galleryPreview}
         onClose={() => setPanelOpen(false)}
         onLevelChange={setLevel}
         onReset={resetToLevel}

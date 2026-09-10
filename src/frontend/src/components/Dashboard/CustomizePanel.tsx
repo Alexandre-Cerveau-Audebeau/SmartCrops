@@ -25,11 +25,31 @@ import {
 const TITLE_ID = 'dashboard-customize-title';
 const LEVEL_LABEL_ID = 'dashboard-customize-level-label';
 
+/**
+ * What a gallery thumbnail can honestly show of a hidden widget (round 4, A8).
+ *
+ * `A7Personnaliser.dc.html` fills its `.gal-th` with the widget's own headline —
+ * « 42,5 m² » over two occupancy bars for Statistics, « 38 pieds » over one for
+ * Harvest — so the card shows what is being put back, not a category name a
+ * second time.
+ *
+ * `value` is a formatted string and `bars` are percentages, both supplied by the
+ * page, which is the only place that holds the figures. A widget the aggregate
+ * cannot feed yet returns `null` and the thumbnail says « soon » instead — rule
+ * 4 of the design contract: a missing figure is an invitation, never a zero.
+ */
+export interface GalleryPreview {
+  value: string;
+  bars?: number[];
+}
+
 interface Props {
   open: boolean;
   level: DashboardLevel;
   /** Every block - the gallery reads the hidden ones. */
   blocks: DashboardBlock[];
+  /** A hidden widget's headline figure, or null when it has none yet. */
+  preview?: (key: DashboardBlockKey) => GalleryPreview | null;
   onClose: () => void;
   onLevelChange: (level: DashboardLevel) => void;
   onReset: () => void;
@@ -47,6 +67,7 @@ export default function CustomizePanel({
   open,
   level,
   blocks,
+  preview,
   onClose,
   onLevelChange,
   onReset,
@@ -195,20 +216,93 @@ export default function CustomizePanel({
             hidden.map((block) => {
               const Icon = BLOCK_ICONS[block.key];
               const name = t(`dashboard.blocks.${block.key}.title`);
+              const shown = preview?.(block.key) ?? null;
               return (
                 <Box
                   key={block.key}
                   sx={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '12px',
-                    p: '12px',
-                    borderRadius: '10px',
+                    // `.gal { gap: 14px; border-radius: 12px; padding: 12px 14px }`
+                    gap: '14px',
+                    p: '12px 14px',
+                    borderRadius: '12px',
                     border: '1px solid',
                     borderColor: 'borderSubtle',
                   }}
                 >
-                  <Icon fontSize="small" sx={{ color: 'text.secondary' }} />
+                  {/* THE THUMBNAIL (round 4, A8) — `.gal-th`, verbatim:
+                      `width: 116px; height: 70px; border-radius: 8px; border:
+                      1px solid var(--card-bd); background: var(--surface);
+                      padding: 9px 10px; display: flex; flex-direction: column;
+                      gap: 5px; overflow: hidden`.
+
+                      The row carried a bare 20 px icon beside the widget's
+                      name, so eight hidden widgets read as eight lines of text
+                      and the gallery showed nothing of what it was offering. */}
+                  <Box
+                    aria-hidden
+                    sx={{
+                      width: 116,
+                      height: 70,
+                      flexShrink: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '5px',
+                      p: '9px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid',
+                      borderColor: 'borderSubtle',
+                      backgroundColor: 'surfaceSubtle',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', color: 'primary.main' }}>
+                      <Icon sx={{ fontSize: 13 }} />
+                    </Box>
+                    {/* `.gal-th .v { font-size: 15px; font-weight: 800 }` — the
+                        widget's own headline when it has one. Five of the eight
+                        widgets have no data at all until PR 3/5 and PR 4/5, and
+                        an empty box would be the « page blanche » rule 4
+                        forbids: they say « soon » in the same place, which is
+                        the word the Gardens table already uses for its WEATHER
+                        and HARVEST cells. */}
+                    <Typography
+                      sx={{
+                        fontSize: `${DASHBOARD_TYPE.body}px`,
+                        fontWeight: 800,
+                        lineHeight: 1.1,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        ...(shown ? null : { color: 'text.secondary' }),
+                      }}
+                    >
+                      {shown ? shown.value : t('dashboard.panel.gallerySoon')}
+                    </Typography>
+                    {/* `.gal-th .b { height: 5px; border-radius: 3px }` over
+                        `--track`, filled with `--prim`. */}
+                    {(shown?.bars ?? []).map((percent, index) => (
+                      <Box
+                        key={index}
+                        sx={{
+                          height: 5,
+                          borderRadius: '3px',
+                          backgroundColor: 'action.hover',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            width: `${Math.max(0, Math.min(100, percent))}%`,
+                            height: '100%',
+                            borderRadius: '3px',
+                            backgroundColor: 'primary.main',
+                          }}
+                        />
+                      </Box>
+                    ))}
+                  </Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography
                       sx={{
@@ -220,19 +314,31 @@ export default function CustomizePanel({
                     </Typography>
                     <Typography
                       sx={{
-                        fontSize: `${DASHBOARD_TYPE.chip}px`,
+                        fontSize: `${DASHBOARD_TYPE.secondary}px`,
                         color: 'text.secondary',
                       }}
                     >
                       {t('dashboard.panel.hidden')}
                     </Typography>
                   </Box>
+                  {/* `.plus { margin-left: auto; width: 36px; height: 36px;
+                      border-radius: 50%; background: var(--prim); color:
+                      var(--on-prim) }` — a filled green disc, not the bare
+                      glyph the panel had. */}
                   <IconButton
-                    size="small"
                     onClick={() => onShow(block.key)}
                     aria-label={t('dashboard.panel.add', { widget: name })}
+                    sx={{
+                      ml: 'auto',
+                      flexShrink: 0,
+                      width: 36,
+                      height: 36,
+                      backgroundColor: 'primary.main',
+                      color: 'primary.contrastText',
+                      '&:hover': { backgroundColor: 'primary.dark' },
+                    }}
                   >
-                    <AddRoundedIcon fontSize="small" />
+                    <AddRoundedIcon sx={{ fontSize: 20 }} />
                   </IconButton>
                 </Box>
               );
