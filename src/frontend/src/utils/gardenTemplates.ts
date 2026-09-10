@@ -294,8 +294,13 @@ export function templatePlacementCount(template: GardenTemplate): number {
  * soil and no infrastructure, then the template's sparse cells applied —
  * the same shape parseCellsJson builds from a persisted CellsJson, so
  * APPLY_TEMPLATE hands the reducer exactly what hydration would.
+ *
+ * Takes a {@link PreviewPlan} rather than a `GardenTemplate` (SMA-336 PR 2/5):
+ * it only ever read `rows`, `cols` and `cells`, and widening the parameter lets
+ * the dashboard thumbnail derive the same grid from a real garden. Every
+ * existing caller still type-checks — a template IS a PreviewPlan.
  */
-export function templateGrid(template: GardenTemplate): CellData[][] {
+export function templateGrid(template: PreviewPlan): CellData[][] {
   const grid: CellData[][] = Array.from({ length: template.rows }, () =>
     Array.from({ length: template.cols }, () => ({ active: true }))
   );

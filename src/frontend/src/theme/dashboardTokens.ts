@@ -18,18 +18,49 @@ export interface DashboardTokens {
   invBd: string;
   /** The soft disc behind an invitation's icon (`--inv-ic-bg`). */
   invIcBg: string;
+  /**
+   * Plan-thumbnail cell fill (`--cell-on`) and the frame behind the grid
+   * (`--cell-on-bd`), for the DASHBOARD only.
+   *
+   * They exist here rather than in `plannerTokens` because the frozen design
+   * moved them for the thumbnail and only for the thumbnail: at night the
+   * planner's `#132740` / `#1F3556` sit at 1.04:1 and 1.22:1 against the widget
+   * card, where a 2 px-per-cell sketch reads as an empty rectangle. The planner
+   * grid keeps its own values — it is a full-size interactive surface, it is out
+   * of this lot's scope, and `GardenGrid.test.tsx` pins `#132740` for it.
+   *
+   * The day values are the planner's, unchanged: the contrast problem the design
+   * measured is a night one.
+   */
+  thumbCellOn: string;
+  thumbCellFrame: string;
+  /** Ornamental chip (`--orn-bg` / `--orn-tx`) — a garden with no edible variety. */
+  ornBg: string;
+  ornText: string;
+  /** Fill of a variety avatar standing in for a photo (`--ph-fill`). */
+  avatarFill: string;
 }
 
 const LIGHT: DashboardTokens = {
   invBg: '#F6FBF4',
   invBd: '#C5D9C6',
   invIcBg: '#E4F3E9',
+  thumbCellOn: '#F1F7EE',
+  thumbCellFrame: '#BCCBB6',
+  ornBg: '#F8E3EC',
+  ornText: '#A34D74',
+  avatarFill: '#DCE9DF',
 };
 
 const DARK: DashboardTokens = {
   invBg: 'rgba(76,180,124,0.07)',
   invBd: 'rgba(76,180,124,0.35)',
   invIcBg: 'rgba(76,180,124,0.15)',
+  thumbCellOn: '#1B3050',
+  thumbCellFrame: '#2C4771',
+  ornBg: 'rgba(244,143,177,0.16)',
+  ornText: '#F4A7C3',
+  avatarFill: '#24395F',
 };
 
 export function getDashboardTokens(mode: DashboardThemeMode): DashboardTokens {
