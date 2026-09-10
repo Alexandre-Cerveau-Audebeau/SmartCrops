@@ -11,6 +11,7 @@ import type {
 } from '../../../types/DashboardData';
 import { getPlantColor } from '../../../utils/plantColor';
 import CountersBlock from './CountersBlock';
+import { COUNTERS_GARDEN_ALL, COUNTERS_LINE_CAP } from './countersOptions';
 
 // SMA-336 PR 2/5 — the Counters widget. Three things carry the weight here: the
 // ornamental split follows rule R4 and not either signal alone, the header chip
@@ -317,5 +318,277 @@ describe('CountersBlock', () => {
 
       expect(widget.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     });
+  });
+});
+
+describe('CountersBlock — the edible split survives the cut (round 1, E6)', () => {
+  /**
+   * Five ornamentals, then four edibles — the aggregate's order, by count, and
+   * NINE varieties for a Medium card that shows eight. One row has to go, and
+   * which one is the whole finding.
+   */
+  const ornamentalsFirst = [
+    ...Array.from({ length: 5 }, (_, i) =>
+      variety({
+        plantId: `orn-${i}`,
+        commonName: `Fern ${i}`,
+        plantType: 'Ornamental',
+        isEdible: false,
+        count: 20 - i,
+      })
+    ),
+    ...Array.from({ length: 4 }, (_, i) =>
+      variety({
+        plantId: `edi-${i}`,
+        commonName: `Basil ${i}`,
+        plantType: 'Herb',
+        isEdible: true,
+        count: 4 - i,
+      })
+    ),
+  ];
+
+  it('shows every edible variety at Medium even when ornamentals outrank them', () => {
+    // The failure: `filtered` is ordered by placement count, so slicing it to
+    // the limit BEFORE the R4 partition let the ferns take the card. The
+    // headings stayed in the right order while the wrong rows survived.
+    const widget = renderBlock({ size: 'medium', varieties: ornamentalsFirst });
+
+    for (const name of ['Basil 0', 'Basil 1', 'Basil 2', 'Basil 3']) {
+      expect(widget.getByText(name)).toBeInTheDocument();
+    }
+  });
+
+  it('keeps the ORNAMENTAL section when ornamentals remain', () => {
+    const widget = renderBlock({ size: 'medium', varieties: ornamentalsFirst });
+
+    expect(widget.getByText('Ornamental')).toBeInTheDocument();
+  });
+
+  it('hides the ornamental tail rather than the edible head', () => {
+    // Eight of eight fit at Medium, so cut deeper: twelve varieties, five
+    // edible. Whatever is hidden must come from the ornamental end.
+    const many = [
+      ...Array.from({ length: 9 }, (_, i) =>
+        variety({
+          plantId: `orn-${i}`,
+          commonName: `Fern ${i}`,
+          plantType: 'Ornamental',
+          isEdible: false,
+          count: 30 - i,
+        })
+      ),
+      ...Array.from({ length: 5 }, (_, i) =>
+        variety({
+          plantId: `edi-${i}`,
+          commonName: `Basil ${i}`,
+          plantType: 'Herb',
+          isEdible: true,
+          count: 5 - i,
+        })
+      ),
+    ];
+
+    const widget = renderBlock({ size: 'medium', varieties: many });
+
+    for (let i = 0; i < 5; i++) {
+      expect(widget.getByText(`Basil ${i}`)).toBeInTheDocument();
+    }
+    expect(widget.getByText('+6 varieties')).toBeInTheDocument();
+  });
+
+  it('counts the same hidden total as before the fix', () => {
+    // `hidden` is arithmetic on the same list; only WHICH rows survive changes.
+    // Nine varieties, eight shown: one hidden, whichever end it comes from.
+    const widget = renderBlock({ size: 'medium', varieties: ornamentalsFirst });
+
+    expect(widget.getByText('+1 variety')).toBeInTheDocument();
+  });
+
+  it('the ORNAMENT section goes when eight edible varieties fill the card', () => {
+    // STATED, not hidden — it is the consequence of putting edibles first, and
+    // it is what the frozen design's own Medium card draws (Main.dc.html shows
+    // eight edible varieties and « +18 variétés » on a fixture that holds seven
+    // ornamentals). Flagged for arbitration in the round-1 report: the widget
+    // cannot both cut ornamentals first and keep their heading on a card that
+    // fits eight rows.
+    const eightEdible = [
+      ...Array.from({ length: 8 }, (_, i) =>
+        variety({
+          plantId: `edi-${i}`,
+          commonName: `Basil ${i}`,
+          plantType: 'Herb',
+          isEdible: true,
+          count: 8 - i,
+        })
+      ),
+      variety({
+        plantId: 'orn-1',
+        commonName: 'Fern',
+        plantType: 'Ornamental',
+        isEdible: false,
+        count: 1,
+      }),
+    ];
+
+    const widget = renderBlock({ size: 'medium', varieties: eightEdible });
+
+    expect(widget.queryByText('Ornamental')).toBeNull();
+    expect(widget.getByText('+1 variety')).toBeInTheDocument();
+  });
+});
+
+describe('CountersBlock — the density lock (V9, _spec.md § 4)', () => {
+  const many = Array.from({ length: 26 }, (_, i) =>
+    variety({ plantId: `p-${i}`, commonName: `Plant ${i}`, count: 26 - i })
+  );
+
+  /** Rows actually drawn, and the grid they are drawn in. */
+  function listShape(size: 'medium' | 'large') {
+    const widget = renderBlock({ size, varieties: many });
+    const rows = many
+      .map((v) => widget.queryByText(v.commonName!))
+      .filter(Boolean);
+    const grid = widgetNode().querySelector<HTMLElement>(
+      '[class*="MuiBox-root"] > div'
+    );
+    return { rows: rows.length, widget, grid };
+  }
+
+  it('Medium shows eight varieties over two columns — four data lines, cap six', () => {
+    const { rows } = listShape('medium');
+
+    expect(rows).toBe(8);
+    // The lock is on LINES, not on varieties: eight in one column was eight
+    // lines on a card that allows six, which is why the body scrolled instead
+    // of capping.
+    expect(Math.ceil(rows / 2)).toBeLessThanOrEqual(COUNTERS_LINE_CAP.medium);
+  });
+
+  it('Large shows nineteen varieties over two columns — ten data lines, cap ten', () => {
+    const { rows } = listShape('large');
+
+    expect(rows).toBe(19);
+    expect(Math.ceil(rows / 2)).toBeLessThanOrEqual(COUNTERS_LINE_CAP.large);
+  });
+
+  it.each(['medium', 'large'] as const)(
+    'draws %s in two columns, as the frozen design has it',
+    (size) => {
+      const widget = renderBlock({ size, varieties: many });
+
+      const columns = [...widgetNode().querySelectorAll('*')]
+        .map((node) => getComputedStyle(node).gridTemplateColumns)
+        .filter((value) => value.includes('minmax'));
+
+      expect(columns.length).toBeGreaterThan(0);
+      expect(columns[0]).toBe('repeat(2, minmax(0, 1fr))');
+      widget.getByText('Plant 0');
+    }
+  );
+
+  it('Medium reaches the rest through « +18 varieties »', () => {
+    expect(
+      renderBlock({ size: 'medium', varieties: many }).getByText('+18 varieties')
+    ).toBeInTheDocument();
+  });
+
+  it('Large reaches the rest through « +7 varieties »', () => {
+    expect(
+      renderBlock({ size: 'large', varieties: many }).getByText('+7 varieties')
+    ).toBeInTheDocument();
+  });
+});
+
+describe('CountersBlock — the garden chips actually filter (round 1, E7)', () => {
+  const gardens = [garden('g1', 'Terrasse'), garden('g2', 'Balcon')];
+  const varieties = [
+    variety({ plantId: 'p-1', commonName: 'Basil', gardenIds: ['g1'] }),
+    variety({ plantId: 'p-2', commonName: 'Mint', gardenIds: ['g2'] }),
+  ];
+
+  it('writes the same options document the gear panel writes', () => {
+    const written: Record<string, unknown>[] = [];
+    const widget = renderBlock({
+      gardens,
+      varieties,
+      options: { photos: false, garden: COUNTERS_GARDEN_ALL },
+      onOptionsChange: (options) => written.push(options),
+    });
+
+    fireEvent.click(widget.getByText('Balcon'));
+
+    expect(written).toEqual([{ photos: false, garden: 'g2' }]);
+  });
+
+  it('carries the other option through untouched', () => {
+    // The panel replaces the whole document, so a chip that wrote only `garden`
+    // would silently turn the photos option off.
+    const written: Record<string, unknown>[] = [];
+    const widget = renderBlock({
+      gardens,
+      varieties,
+      options: { photos: true, garden: 'g1' },
+      onOptionsChange: (options) => written.push(options),
+    });
+
+    fireEvent.click(widget.getByText('All gardens'));
+
+    expect(written).toEqual([{ photos: true, garden: COUNTERS_GARDEN_ALL }]);
+  });
+
+  it('is reachable and pressable from the keyboard', () => {
+    const written: Record<string, unknown>[] = [];
+    const widget = renderBlock({
+      gardens,
+      varieties,
+      options: { photos: false, garden: COUNTERS_GARDEN_ALL },
+      onOptionsChange: (options) => written.push(options),
+    });
+
+    const chip = widget.getByText('Balcon').closest('.MuiChip-root')!;
+    expect(chip).toHaveAttribute('tabindex', '0');
+    fireEvent.keyDown(chip, { key: 'Enter' });
+    fireEvent.keyUp(chip, { key: 'Enter' });
+
+    expect(written).toEqual([{ photos: false, garden: 'g2' }]);
+  });
+
+  it('says which chip is on, for a screen reader as well as for the eye', () => {
+    const widget = renderBlock({
+      gardens,
+      varieties,
+      options: { photos: false, garden: 'g2' },
+      onOptionsChange: () => {},
+    });
+
+    expect(widget.getByText('Balcon').closest('.MuiChip-root')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(
+      widget.getByText('Terrasse').closest('.MuiChip-root')
+    ).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('filters the list by the stored garden', () => {
+    const widget = renderBlock({
+      gardens,
+      varieties,
+      options: { photos: false, garden: 'g2' },
+      onOptionsChange: () => {},
+    });
+
+    expect(widget.queryByText('Basil')).toBeNull();
+    expect(widget.getByText('Mint')).toBeInTheDocument();
+  });
+
+  it('draws no selection it cannot honour when nothing can write the options', () => {
+    // Without `onOptionsChange` the chips carry no handler, so they must not
+    // pretend to be a single-select the user can operate.
+    const widget = renderBlock({ gardens, varieties, options: null });
+
+    const chip = widget.getByText('Balcon').closest('.MuiChip-root')!;
+    expect(chip).not.toHaveAttribute('tabindex');
   });
 });

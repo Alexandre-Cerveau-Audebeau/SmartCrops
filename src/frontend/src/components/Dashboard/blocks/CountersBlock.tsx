@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Avatar from '@mui/material/Avatar';
@@ -18,18 +18,35 @@ import type {
   DashboardTotals,
   DashboardVarietyData,
 } from '../../../types/DashboardData';
+import { formatCount } from '../../../utils/formatNumber';
 import { isEdibleVariety } from '../../../utils/gardenStats';
 import { getPlantColor } from '../../../utils/plantColor';
 import { PLANT_HERO_PLACEHOLDER } from '../../../utils/plantDetail';
 import {
   COUNTERS_GARDEN_ALL,
   countersOptions,
+  resolveCountersGarden,
 } from './countersOptions';
 
-/** Varieties a Medium card lists before « +N » (_spec.md 4). */
-const MEDIUM_ROWS = 8;
-/** Data rows a Large card lists, across its two columns (_spec.md 4). */
-const LARGE_ROWS = 19;
+/**
+ * Varieties a Medium card lists before « +N », and in how many columns
+ * (`_spec.md` § 4: « Compteurs 4 × 2 = 8 variétés + « +18 variétés » »).
+ *
+ * V9 — the count was right and the COLUMNS were wrong. Eight varieties drawn in
+ * one column are eight data lines on a card whose density lock allows six, so
+ * the body scrolled instead of capping. Two columns of four is what the frozen
+ * design draws and what the lock permits: 8 / 2 = 4 lines.
+ */
+const MEDIUM_VARIETIES = 8;
+const MEDIUM_COLUMNS = 2;
+
+/**
+ * Varieties a Large card lists, across its two columns (`_spec.md` § 4: « les
+ * 19 potagères en deux colonnes »). 19 over two columns is 10 lines, which is
+ * exactly the Large lock.
+ */
+const LARGE_VARIETIES = 19;
+const LARGE_COLUMNS = 2;
 
 const AVATAR_PX = 34;
 
@@ -44,6 +61,15 @@ interface Props {
   loading: boolean;
   loadError: boolean;
   onRetry: () => void;
+  /**
+   * Writes the block's own `options` document — the SAME one
+   * `CountersOptionsPanel` writes (round 1, E7).
+   *
+   * Optional so the widget still renders where nobody can persist a layout;
+   * without it the filter chips are not drawn as a selection at all, because a
+   * selection nobody can change is a lie the styling tells.
+   */
+  onOptionsChange?: (options: Record<string, unknown>) => void;
 }
 
 /**
@@ -70,29 +96,30 @@ export default function CountersBlock({
   loading,
   loadError,
   onRetry,
+  onOptionsChange,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const tk = useDashboardTokens();
   const { photos, garden: gardenOption } = countersOptions(options);
 
   // A filter naming a garden that has since been deleted must not empty the
   // widget with no way back: the chip row would no longer offer that garden,
-  // so the user could not clear it.
-  const activeGarden =
-    gardenOption !== COUNTERS_GARDEN_ALL &&
-    gardens.some((g) => g.id === gardenOption)
-      ? gardenOption
-      : COUNTERS_GARDEN_ALL;
+  // so the user could not clear it. ONE owner for that rule since round 1 (E8)
+  // — the options panel resolves it with the same call.
+  const activeGarden = resolveCountersGarden(gardenOption, gardens);
 
   const [expanded, setExpanded] = useState(false);
 
-  const filtered = useMemo(
-    () =>
-      activeGarden === COUNTERS_GARDEN_ALL
-        ? varieties
-        : varieties.filter((v) => v.gardenIds.includes(activeGarden)),
-    [varieties, activeGarden]
-  );
+  // NOT memoized, deliberately. `activeGarden` now comes from
+  // `resolveCountersGarden` — an imported function — and the React Compiler
+  // rules refuse to preserve a `useMemo` whose dependency it cannot prove
+  // immutable, so keeping one here failed `npm run lint` outright. The cost of
+  // dropping it is one `Array.filter` over the caller's varieties per render,
+  // against a body that maps every surviving variety to DOM on the same render.
+  const filtered =
+    activeGarden === COUNTERS_GARDEN_ALL
+      ? varieties
+      : varieties.filter((v) => v.gardenIds.includes(activeGarden));
 
   const displayName = (variety: DashboardVarietyData) =>
     variety.commonName ?? variety.scientificName;
@@ -162,7 +189,10 @@ export default function CountersBlock({
       <Typography
         sx={{ fontSize: DASHBOARD_TYPE.body, fontWeight: 800 }}
       >
-        {`× ${variety.count}`}
+        {/* Locale-formatted (round 1, G5): a four-digit count concatenated
+            into a template literal reads « 1440 » in a French widget that
+            groups it « 1 440 » two lines above. */}
+        {`× ${formatCount(variety.count, i18n.language)}`}
       </Typography>
     </Box>
   );
@@ -189,12 +219,34 @@ export default function CountersBlock({
       </Button>
     ) : null;
 
+  /** Writes the same `options` document the panel writes — see `Props`. */
+  const selectGarden = (garden: string) =>
+    onOptionsChange ? () => onOptionsChange({ photos, garden }) : undefined;
+
+  /**
+   * The per-garden filter, as the frozen design draws it on the LARGE card
+   * (artboard A3): « Tous les jardins » filled, one outlined chip per garden.
+   *
+   * Round 1, E7 — the chips now DO what their filled-and-outlined styling says.
+   * A `Chip` with no `onClick` is not focusable and not clickable, so the row
+   * drew the standard MUI single-select affordance over nothing: a user with a
+   * stored filter on a deleted-then-recreated garden met the empty state, read
+   * « the filter above is the way back », clicked « All gardens » and watched
+   * nothing happen. The only writer was the options panel, which lives in Edit
+   * mode. They write the same document that panel writes, so the two stay in
+   * agreement by construction rather than by copy.
+   *
+   * Not on Medium: the frozen design puts the row on the Large card only, and
+   * the Medium card has no room for it under the density lock (V9).
+   */
   const gardenFilter = gardens.length > 1 && (
     <Box sx={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
       <Chip
         label={t('dashboard.blocks.counters.allGardens')}
         size="small"
+        onClick={selectGarden(COUNTERS_GARDEN_ALL)}
         variant={activeGarden === COUNTERS_GARDEN_ALL ? 'filled' : 'outlined'}
+        aria-pressed={activeGarden === COUNTERS_GARDEN_ALL}
         sx={{ height: DASHBOARD_TYPE.chipHeight, fontSize: DASHBOARD_TYPE.chip }}
       />
       {gardens.map((g) => (
@@ -202,7 +254,9 @@ export default function CountersBlock({
           key={g.id}
           label={g.name}
           size="small"
+          onClick={selectGarden(g.id)}
           variant={activeGarden === g.id ? 'filled' : 'outlined'}
+          aria-pressed={activeGarden === g.id}
           sx={{
             height: DASHBOARD_TYPE.chipHeight,
             fontSize: DASHBOARD_TYPE.chip,
@@ -216,6 +270,7 @@ export default function CountersBlock({
     <Box
       sx={{
         flex: 1,
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -225,7 +280,7 @@ export default function CountersBlock({
         <Typography
           sx={{ fontSize: DASHBOARD_TYPE.big, fontWeight: 800, lineHeight: 1.1 }}
         >
-          {totals.placementCount}
+          {formatCount(totals.placementCount, i18n.language)}
         </Typography>
         <Typography
           sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary' }}
@@ -246,9 +301,22 @@ export default function CountersBlock({
     </Box>
   );
 
-  const listBody = (limit: number, columns: number) => {
-    const shown = expanded ? filtered : filtered.slice(0, limit);
-    const hidden = filtered.length - shown.length;
+  const listBody = (limit: number, columns: number, withFilter: boolean) => {
+    // EDIBLE FIRST, then the cut (round 1, E6). Slicing `filtered` — whose
+    // order is the aggregate's, by placement count — let ornamental varieties
+    // take the first `limit` slots: five ferns ahead of the basil on a Medium
+    // card meant three edible rows and « +N » over the rest. The headings stayed
+    // in the right order while the wrong rows survived, so the widget's own
+    // stated rule (« a gardener counting what they will eat should not have to
+    // read past the ferns ») was contradicted by its arithmetic. `hidden` is
+    // unchanged: the same varieties are hidden, they are just not the same ones
+    // shown.
+    const edible = filtered.filter(isEdibleVariety);
+    const ornamental = filtered.filter((v) => !isEdibleVariety(v));
+    const ordered = [...edible, ...ornamental];
+
+    const shown = expanded ? ordered : ordered.slice(0, limit);
+    const hidden = ordered.length - shown.length;
     const shownEdible = shown.filter(isEdibleVariety);
     const shownOrnamental = shown.filter((v) => !isEdibleVariety(v));
 
@@ -263,7 +331,7 @@ export default function CountersBlock({
           gap: '8px',
         }}
       >
-        {gardenFilter}
+        {withFilter && gardenFilter}
         <Box
           sx={{
             display: 'grid',
@@ -277,7 +345,11 @@ export default function CountersBlock({
           <>
             {/* Its own heading, never mixed in: a gardener counting what they
                 will eat should not have to read past the ferns. */}
+            {/* A HEADING (round 1, E13), like the Statistics section labels:
+                it introduces its own list of rows, and the widget card's title
+                is the h2 above it. Styling unchanged. */}
             <Typography
+              component="h3"
               sx={{
                 fontSize: 13,
                 fontWeight: 700,
@@ -285,6 +357,7 @@ export default function CountersBlock({
                 textTransform: 'uppercase',
                 color: 'text.secondary',
                 mt: '4px',
+                mb: 0,
               }}
             >
               {t('dashboard.blocks.counters.ornamentalSection')}
@@ -301,7 +374,11 @@ export default function CountersBlock({
           </>
         )}
         {moreButton(hidden)}
-        {libraryLink}
+        {/* « Ajouter depuis la Bibliothèque → » is a LARGE-card element in the
+            frozen design (artboard A3); the Medium card carries the eight
+            varieties and the « +N » and nothing else (Main.dc.html). Keeping it
+            on Medium cost a 30 px row the density lock has no room for. */}
+        {withFilter && libraryLink}
       </Box>
     );
   };
@@ -361,8 +438,9 @@ export default function CountersBlock({
     }
 
     if (size === 'small') return smallBody();
-    if (size === 'medium') return listBody(MEDIUM_ROWS, 1);
-    return listBody(LARGE_ROWS, 2);
+    if (size === 'medium')
+      return listBody(MEDIUM_VARIETIES, MEDIUM_COLUMNS, false);
+    return listBody(LARGE_VARIETIES, LARGE_COLUMNS, true);
   };
 
   const countChip =

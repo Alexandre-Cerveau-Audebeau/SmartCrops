@@ -5,7 +5,11 @@ import MenuItem from '@mui/material/MenuItem';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import type { DashboardGardenData } from '../../../types/DashboardData';
-import { COUNTERS_GARDEN_ALL, countersOptions } from './countersOptions';
+import {
+  COUNTERS_GARDEN_ALL,
+  countersOptions,
+  resolveCountersGarden,
+} from './countersOptions';
 
 interface Props {
   options: Record<string, unknown> | null;
@@ -56,14 +60,12 @@ export default function CountersOptionsPanel({
         size="small"
         fullWidth
         label={t('dashboard.blocks.counters.options.garden')}
-        value={
-          // A stored id whose garden is gone would leave the select with no
-          // matching item, and MUI renders that as an empty box the user cannot
-          // read. Falling back to « all » shows the truth: no filter applies.
-          gardens.some((garden) => garden.id === current.garden)
-            ? current.garden
-            : COUNTERS_GARDEN_ALL
-        }
+        // A stored id whose garden is gone would leave the select with no
+        // matching item, and MUI renders that as an empty box the user cannot
+        // read. Falling back to « all » shows the truth: no filter applies —
+        // and the rule is `countersOptions`' now, so this select and the
+        // widget's own list cannot drift apart (round 1, E8).
+        value={resolveCountersGarden(current.garden, gardens)}
         onChange={(event) => onChange({ ...current, garden: event.target.value })}
       >
         <MenuItem value={COUNTERS_GARDEN_ALL}>

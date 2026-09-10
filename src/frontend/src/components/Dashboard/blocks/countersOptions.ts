@@ -43,3 +43,43 @@ export function countersOptions(
         : DEFAULTS.garden,
   };
 }
+
+/**
+ * The garden filter that ACTUALLY applies, given the gardens that exist.
+ *
+ * A stored id whose garden has since been deleted resolves to « all » (round 1,
+ * E8). The rule was written twice — `CountersOptionsPanel` for its select,
+ * `CountersBlock` for its list — and two owners of one contract have to agree
+ * for the select and the rows to describe the same state. It belongs here, next
+ * to the reader that already validates this document, and both call sites are a
+ * call.
+ *
+ * Falling back rather than showing nothing is the point on each side: MUI draws
+ * an unmatched select value as an empty box the user cannot read, and a list
+ * filtered on a garden that is gone is empty with no chip left to clear it.
+ */
+export function resolveCountersGarden(
+  garden: string,
+  gardens: readonly { readonly id: string }[]
+): string {
+  return garden !== COUNTERS_GARDEN_ALL &&
+    gardens.some((candidate) => candidate.id === garden)
+    ? garden
+    : COUNTERS_GARDEN_ALL;
+}
+
+/**
+ * Data LINES each size of the Counters widget may show — the density lock of
+ * the frozen design (`_spec.md` § 4: « Un Moyen montre au plus 6 lignes », « Un
+ * Grand montre au plus 10 lignes »).
+ *
+ * Lines, not varieties: eight varieties are four lines in two columns and eight
+ * in one, which is the whole of V9. Section titles, group headings, footers and
+ * « +N » links are explicitly outside the count — they belong to the card's
+ * frame, not to the list.
+ *
+ * Here rather than in `CountersBlock.tsx` so the widget file exports components
+ * only (react-refresh), and so a test can assert the lock without importing the
+ * component.
+ */
+export const COUNTERS_LINE_CAP = { medium: 6, large: 10 } as const;
