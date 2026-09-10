@@ -1,6 +1,10 @@
 import type { PlacementData } from '../services/gardenLayoutApi';
 import { parseCellsJson } from '../types/GardenLayout';
-import type { PreviewPlan, TemplateCell, TemplatePlacement } from './gardenTemplates';
+import type {
+  PreviewPlacement,
+  PreviewPlan,
+  TemplateCell,
+} from './gardenTemplates';
 
 /**
  * SMA-336 PR 2/5 — turning a REAL garden into something `TemplatePreview` can
@@ -25,14 +29,19 @@ export const TINY_CELL_PX = 4;
 /**
  * Inset of a plant block inside its cells, in px.
  *
- * Two pixels normally, and ZERO below a four-pixel cell. The frozen design
+ * Two pixels normally, and ZERO at or below a four-pixel cell. The frozen design
  * spells out why: at the 2 px cells of the Large comparison table, a 1×1 plant
  * inset by 2 px on each side measures 2 − 4 = 0 and the thumbnail stops showing
  * any planting at all. The margin is what makes blocks readable at 16 px and
  * what erases them at 2 px, so it is conditional rather than constant.
+ *
+ * The threshold is INCLUSIVE (round 1, G9). At exactly 4 px the two 2 px margins
+ * consume the whole track — 4 − 2 − 2 = 0 — so the strict comparison erased the
+ * plant at the one size it was meant to protect. Four is the first cell size at
+ * which a block survives the inset only if it does not get one.
  */
 export function plantInsetPx(cellPx: number): number {
-  return cellPx < TINY_CELL_PX ? 0 : 2;
+  return cellPx <= TINY_CELL_PX ? 0 : 2;
 }
 
 /** How to draw a plan inside a box: cell edge and gap, both in whole px. */
@@ -132,8 +141,8 @@ export function gardenToPreview(
     }
   }
 
-  const drawn: TemplatePlacement[] = placements.map((placement) => ({
-    scientificName: placement.plantId,
+  const drawn: PreviewPlacement[] = placements.map((placement) => ({
+    plantKey: placement.plantId,
     row: placement.startRow,
     col: placement.startCol,
     spanRows: placement.spanRows,

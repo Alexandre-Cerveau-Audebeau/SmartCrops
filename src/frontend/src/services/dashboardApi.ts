@@ -146,23 +146,56 @@ export async function saveDashboardPreferences(
 }
 
 /**
+ * Is this body the aggregate, at all?
+ *
+ * A SHAPE check, not a schema validation, and the line between the two is the
+ * point (round 1, E19 / G8). A layout is stored data an older or newer build may
+ * have written, so `normalizeBlock` above inspects every field. This body is
+ * computed fresh from the caller's own rows on each request: there is no older
+ * document to meet, and walking a few hundred placements per load would cost
+ * more than it could catch. What CAN arrive and must not reach a component is
+ * the empty case — `fetchJson` resolves `undefined` on a 204 or an empty body,
+ * and `Promise<DashboardData>` says nothing about it, so `dashboardData.gardens`
+ * threw during render instead of showing the load-error state the page already
+ * draws. The three top-level containers are what every widget indexes into on
+ * its first line.
+ */
+function isDashboardData(value: unknown): value is DashboardData {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const body = value as Partial<DashboardData>;
+  return (
+    Array.isArray(body.gardens) &&
+    Array.isArray(body.varieties) &&
+    typeof body.totals === 'object' &&
+    body.totals !== null &&
+    !Array.isArray(body.totals)
+  );
+}
+
+/**
  * SMA-336 PR 2/5 — the transport aggregate: every garden with its plan, the
  * counts by variety, and the page totals, in one call.
  *
- * Unlike the preferences above there is nothing to normalize. A layout is
- * STORED data this server may not have written, so an unknown block key can
- * genuinely arrive and must be dropped before it reaches a component. This body
- * is computed fresh from the caller's own rows on every request: there is no
- * older document to meet, and a defensive pass over a few hundred placements
- * would cost more than it could ever catch. What the widgets do guard against
- * is a MISSING aggregate, which is the load-error state the page already draws.
+ * Rejects a body that is not the aggregate rather than returning it (round 1,
+ * E19 / G8) — see {@link isDashboardData} for where the line is drawn. Throwing
+ * puts the failure on the path the page already handles: `useDashboardData`
+ * catches it, keeps `EMPTY_DASHBOARD_DATA` and raises `loadError`, which the
+ * three widgets draw with a Retry button.
  */
 export async function fetchDashboardData(
   language: string,
   signal?: AbortSignal
 ): Promise<DashboardData> {
-  return fetchJson<DashboardData>(
+  const body = await fetchJson<unknown>(
     `${API_BASE}/dashboard?lang=${encodeURIComponent(language)}`,
     { credentials: 'include', signal }
   );
+
+  if (!isDashboardData(body)) {
+    throw new Error('Malformed dashboard aggregate: gardens, varieties or totals is missing.');
+  }
+
+  return body;
 }

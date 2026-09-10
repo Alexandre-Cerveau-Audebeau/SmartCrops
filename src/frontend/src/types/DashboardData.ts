@@ -73,8 +73,23 @@ export interface DashboardData {
   totals: DashboardTotals;
 }
 
-/** What the page hands a widget while the aggregate is in flight or has failed. */
-export const EMPTY_DASHBOARD_DATA: DashboardData = {
+/**
+ * What the page hands a widget while the aggregate is in flight or has failed.
+ *
+ * FROZEN, and frozen deep (round 1, E20). Every widget mounted during a load
+ * holds these same three references, and the arrays are exactly what a widget
+ * would `sort` or `push` into: one in-place write anywhere downstream poisons
+ * the empty state for the whole application, and the corruption survives until
+ * a reload because nothing recreates the constant. `gardenStats.ts` already
+ * treats this hazard as a rule worth writing down — `emptyExposureTally()` is a
+ * factory precisely because callers would mutate a shared tally — and this is
+ * the same rule applied at the module boundary the widgets actually read.
+ *
+ * Runtime freezing rather than a `readonly` interface: the guarantee is wanted
+ * for this ONE value, and `readonly` on `DashboardData` would widen to every
+ * consumer of the type, including the ones that legitimately build one.
+ */
+export const EMPTY_DASHBOARD_DATA: DashboardData = freezeDeep({
   gardens: [],
   varieties: [],
   totals: {
@@ -83,4 +98,21 @@ export const EMPTY_DASHBOARD_DATA: DashboardData = {
     varietyCount: 0,
     catalogPlantCount: 0,
   },
-};
+});
+
+/**
+ * Freezes the aggregate AND the three containers a widget could write into.
+ *
+ * `Object.freeze` is shallow, and shallow is exactly not enough here: the value
+ * being protected is three empty containers, so freezing only the wrapper would
+ * leave every hazard the freeze exists for. Typed to return `DashboardData`
+ * rather than `Readonly<DashboardData>` — the immutability is a runtime
+ * guarantee about this one constant, not a contract change every consumer of
+ * the interface has to absorb.
+ */
+function freezeDeep(data: DashboardData): DashboardData {
+  Object.freeze(data.gardens);
+  Object.freeze(data.varieties);
+  Object.freeze(data.totals);
+  return Object.freeze(data);
+}

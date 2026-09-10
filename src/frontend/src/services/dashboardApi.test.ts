@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  fetchDashboardData,
   fetchDashboardPreferences,
   saveDashboardPreferences,
 } from './dashboardApi';
@@ -21,6 +22,28 @@ function mockFetch(body: unknown, status = 200) {
   vi.stubGlobal('fetch', spy);
   return spy;
 }
+
+/** A 204, or a 200 with nothing in it — both make `fetchJson` resolve undefined. */
+function mockEmptyBody(status = 204) {
+  const spy = vi.fn().mockResolvedValue({
+    ok: true,
+    status,
+    text: () => Promise.resolve(''),
+  });
+  vi.stubGlobal('fetch', spy);
+  return spy;
+}
+
+const AGGREGATE = {
+  gardens: [],
+  varieties: [],
+  totals: {
+    gardenCount: 0,
+    placementCount: 0,
+    varietyCount: 0,
+    catalogPlantCount: 536,
+  },
+};
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -259,5 +282,64 @@ describe('saveDashboardPreferences (SMA-336)', () => {
       )
     ).rejects.toThrow();
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('fetchDashboardData — the aggregate boundary (round 1, E19 / G8)', () => {
+  it('returns a well-formed aggregate untouched', async () => {
+    mockFetch(AGGREGATE);
+
+    await expect(fetchDashboardData('fr')).resolves.toEqual(AGGREGATE);
+  });
+
+  it('sends the language and the auth cookie', async () => {
+    const fetchSpy = mockFetch(AGGREGATE);
+
+    await fetchDashboardData('fr');
+
+    expect(fetchSpy.mock.calls[0]![0]).toBe('/api/dashboard?lang=fr');
+    expect(fetchSpy.mock.calls[0]![1].credentials).toBe('include');
+  });
+
+  it('rejects a 204, which resolves undefined and used to reach the widgets', async () => {
+    // The failure this guards: `fetchJson` resolves undefined on an empty
+    // successful body, `Promise<DashboardData>` says nothing about it, and
+    // `GardensDashboard` reads `dashboardData.gardens` on its first line — so
+    // the page threw during render instead of showing its load-error state.
+    mockEmptyBody();
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it('rejects a 200 with an empty body', async () => {
+    mockEmptyBody(200);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it.each([
+    ['null', null],
+    ['an array', []],
+    ['a string', 'ok'],
+    ['no gardens', { varieties: [], totals: {} }],
+    ['no varieties', { gardens: [], totals: {} }],
+    ['no totals', { gardens: [], varieties: [] }],
+    ['gardens as an object', { gardens: {}, varieties: [], totals: {} }],
+    ['totals as an array', { gardens: [], varieties: [], totals: [] }],
+  ])('rejects a body with %s', async (_label, body) => {
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it('checks the SHAPE, not the schema — an unknown extra key still passes', async () => {
+    // The line drawn on purpose: this body is computed fresh from the caller's
+    // own rows on every request, so walking a few hundred placements per load
+    // would cost more than it could catch. Only the three containers every
+    // widget indexes into are required to be there.
+    const withExtra = { ...AGGREGATE, somethingNewer: 42 };
+    mockFetch(withExtra);
+
+    await expect(fetchDashboardData('en')).resolves.toEqual(withExtra);
   });
 });

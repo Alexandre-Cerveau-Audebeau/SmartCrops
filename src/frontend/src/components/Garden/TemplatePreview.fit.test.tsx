@@ -149,7 +149,10 @@ describe('TemplatePreview cell colours (SMA-336 PR 2/5)', () => {
   it('takes the planner tokens by default', () => {
     const tk = getPlannerTokens('dark');
     const { preview, cells } = renderFitted(
-      <TemplatePreview template={gardenToPreview(null, 2, 2, [])} />,
+      <TemplatePreview
+        template={gardenToPreview(null, 2, 2, [])}
+        fitTo={{ maxW: 40, maxH: 40 }}
+      />,
       'dark'
     );
 
@@ -167,6 +170,7 @@ describe('TemplatePreview cell colours (SMA-336 PR 2/5)', () => {
     const { preview, cells } = renderFitted(
       <TemplatePreview
         template={gardenToPreview(null, 2, 2, [])}
+        fitTo={{ maxW: 40, maxH: 40 }}
         cellColors={{ on: dashboard.thumbCellOn, frame: dashboard.thumbCellFrame }}
       />,
       'dark'
@@ -198,6 +202,7 @@ describe('TemplatePreview cell colours (SMA-336 PR 2/5)', () => {
     const { cells } = renderFitted(
       <TemplatePreview
         template={plan}
+        fitTo={{ maxW: 40, maxH: 40 }}
         cellColors={{ on: dashboard.thumbCellOn, frame: dashboard.thumbCellFrame }}
       />,
       'dark'
@@ -205,5 +210,52 @@ describe('TemplatePreview cell colours (SMA-336 PR 2/5)', () => {
 
     expect(cells[0]).toHaveStyle({ backgroundColor: tk.infra.wall.bg });
     expect(cells[1]).toHaveStyle({ backgroundColor: tk.cellOff });
+  });
+});
+
+describe('TemplatePreview — the two plan kinds are separate (round 1, E21)', () => {
+  it('refuses a name resolver on a fitted plan, at COMPILE time', () => {
+    // The hazard being made unrepresentable: `resolvePlantId` maps a scientific
+    // name to a catalog id, and a fitted plan's colour key is a plant ID. Handed
+    // one, the resolver resolved nothing, fell through, and the plant silently
+    // changed colour. `TemplatePlacement` and `PreviewPlacement` are two types
+    // now, and the props union accepts only the plan that produces its own kind
+    // — so this is a type error, and `tsc` in `npm run build` is what runs it.
+    const plan = gardenToPreview(null, 2, 2, []);
+
+    const rejected = (
+      // @ts-expect-error a fitted plan carries plant IDs; there is no name to resolve
+      <TemplatePreview
+        template={plan}
+        fitTo={{ maxW: 40, maxH: 40 }}
+        resolvePlantId={(name: string) => name}
+      />
+    );
+
+    expect(rejected).toBeTruthy();
+  });
+
+  it('a fitted plan exposes a final colour key and no scientific name', () => {
+    const plan = gardenToPreview(null, 2, 2, [
+      {
+        id: 'pl-1',
+        plantId: 'plant-42',
+        plantScientificName: null,
+        startRow: 0,
+        startCol: 0,
+        spanRows: 1,
+        spanCols: 1,
+        notes: null,
+      },
+    ]);
+
+    expect(plan.placements[0]).toEqual({
+      plantKey: 'plant-42',
+      row: 0,
+      col: 0,
+      spanRows: 1,
+      spanCols: 1,
+    });
+    expect(plan.placements[0]).not.toHaveProperty('scientificName');
   });
 });

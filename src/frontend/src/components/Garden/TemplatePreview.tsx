@@ -1,37 +1,16 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import { alpha } from '@mui/material/styles';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import { fitPreview, plantInsetPx } from '../../utils/gardenPreview';
-import { templateGrid, type PreviewPlan } from '../../utils/gardenTemplates';
+import {
+  templateGrid,
+  type GardenTemplate,
+  type PreviewPlan,
+} from '../../utils/gardenTemplates';
 import { getPlantColor } from '../../utils/plantColor';
 
-interface Props {
-  /**
-   * The plan to draw. A {@link PreviewPlan} rather than a `GardenTemplate`
-   * since SMA-336 PR 2/5: a template satisfies it unchanged, and a real 40 × 30
-   * garden — which could never be typed as one of the three fixed-canvas
-   * templates — now satisfies it too.
-   */
-  template: PreviewPlan;
-  /**
-   * Resolves a scientific name to the catalog id the plant will carry once
-   * the template is applied (the page's map). Unresolved (or no resolver):
-   * the name itself feeds the colour hash, so the preview is stable before
-   * the catalog lands and identical to the placed block afterwards.
-   */
-  resolvePlantId?: (scientificName: string) => string | undefined;
-  /** Edge of one preview cell, in px. Ignored when {@link fitTo} is given. */
-  cellPx?: number;
-  /**
-   * Draw the whole plan inside this box instead of at a fixed cell size
-   * (SMA-336 PR 2/5). Opt-in: without it the component behaves exactly as the
-   * template picker has always had it.
-   *
-   * The cell and the gap are measured together by `fitPreview` — see there for
-   * why one cannot be derived from the other.
-   */
-  fitTo?: { maxW: number; maxH: number };
+interface CommonProps {
   /**
    * Cell fill and grid frame, when the surface behind the thumbnail is not the
    * planner's. The dashboard passes its own: the frozen design gives the widget
@@ -41,12 +20,61 @@ interface Props {
   cellColors?: { on: string; frame: string };
 }
 
+/** The template picker: one of the three templates, at a fixed cell size. */
+interface PickerProps extends CommonProps {
+  template: GardenTemplate;
+  /**
+   * Resolves a scientific name to the catalog id the plant will carry once
+   * the template is applied (the page's map). Unresolved (or no resolver):
+   * the name itself feeds the colour hash, so the preview is stable before
+   * the catalog lands and identical to the placed block afterwards.
+   */
+  resolvePlantId?: (scientificName: string) => string | undefined;
+  /** Edge of one preview cell, in px. */
+  cellPx?: number;
+  fitTo?: undefined;
+}
+
+/** A real garden fitted to a box (SMA-336 PR 2/5): colour keys already final. */
+interface FittedProps extends CommonProps {
+  template: PreviewPlan;
+  /**
+   * Draw the whole plan inside this box instead of at a fixed cell size.
+   * Opt-in: without it the component behaves exactly as the template picker
+   * has always had it.
+   *
+   * The cell and the gap are measured together by `fitPreview` — see there for
+   * why one cannot be derived from the other.
+   */
+  fitTo: { maxW: number; maxH: number };
+  resolvePlantId?: never;
+  cellPx?: never;
+}
+
+/**
+ * The two modes are separate by TYPE, not by convention (round 1, E21).
+ *
+ * A template's placement carries a scientific name; a real garden's carries a
+ * plant ID. They used to be the same field on the same interface, and this
+ * component fed that field to `resolvePlantId` — a name -> id map. Handed an ID
+ * it resolved nothing, fell through, and the plant silently changed colour;
+ * nothing in the old signature flagged the combination.
+ *
+ * `TemplatePlacement` and `PreviewPlacement` are now two types, and each mode
+ * accepts only the plan that produces its own kind. A fitted plan has no
+ * `scientificName` for a resolver to read, and no resolver to hand it to.
+ */
+type Props = PickerProps | FittedProps;
+
 /** The §15 soil hue shown as a wash over the cell — the pastille hue at the
  * trame's own day opacity, so a soil reads at 16 px without its pattern. */
 const SOIL_WASH_OPACITY = 0.38;
 
 /** Preview gap between cells, in px (the §4 gap scaled to the thumbnail). */
 const PREVIEW_GAP_PX = 1;
+
+/** Cell edge the template picker draws at when it names none. */
+const DEFAULT_CELL_PX = 16;
 
 /**
  * SMA-18 lot 2: a template's thumbnail — rows × cols rectangles coloured from
@@ -57,23 +85,48 @@ const PREVIEW_GAP_PX = 1;
  * component is interactive (role="grid", one gridcell per cell, axis rails,
  * 14–18 px icons, 7 px pastilles) and unreadable below ~30 px per cell.
  */
-function TemplatePreview({
-  template,
-  resolvePlantId,
-  cellPx = 16,
-  fitTo,
-  cellColors,
-}: Props) {
+function TemplatePreview(props: Props) {
+  const { template, cellColors } = props;
   const tk = usePlannerTokens();
-  const grid = templateGrid(template);
+
+  // MEMOIZED on the plan (round 1, E14, interim measure). `templateGrid`
+  // allocates one object per cell of the whole plan — 1 200 for a 40 × 30
+  // garden, 10 000 at the layout ceiling — and it ran on every render. This
+  // component is `memo`'d, but both call sites pass `fitTo` as an inline object
+  // literal, so its props are never referentially equal and the memo never held.
+  const grid = useMemo(() => templateGrid(template), [template]);
 
   // Fitting is opt-in, and when it is off NOTHING below changes: the same fixed
   // cell, the same one-pixel gap, the same 2 px plant inset the template picker
   // has always drawn.
-  const fit = fitTo
-    ? fitPreview(template.cols, template.rows, fitTo.maxW, fitTo.maxH)
-    : { cellPx, gapPx: PREVIEW_GAP_PX };
+  //
+  // Depends on the two NUMBERS rather than on the `fitTo` object, for the same
+  // reason: the object is rebuilt by the caller on every render.
+  const maxW = props.fitTo?.maxW;
+  const maxH = props.fitTo?.maxH;
+  const cellPx = props.cellPx;
+  const fit = useMemo(
+    () =>
+      maxW !== undefined && maxH !== undefined
+        ? fitPreview(template.cols, template.rows, maxW, maxH)
+        : { cellPx: cellPx ?? DEFAULT_CELL_PX, gapPx: PREVIEW_GAP_PX },
+    [template.cols, template.rows, maxW, maxH, cellPx]
+  );
   const inset = plantInsetPx(fit.cellPx);
+
+  /**
+   * The string `getPlantColor` hashes for one block.
+   *
+   * The branch is on the MODE, so each placement kind is read by the only code
+   * that can read it (round 1, E21): a fitted plan's key is already final, a
+   * template's is a scientific name the picker resolves to the id the plant
+   * will carry once applied.
+   */
+  const plantColorKey = (index: number): string => {
+    if (props.fitTo) return props.template.placements[index].plantKey;
+    const { scientificName } = props.template.placements[index];
+    return props.resolvePlantId?.(scientificName) ?? scientificName;
+  };
 
   return (
     <Box
@@ -142,10 +195,7 @@ function TemplatePreview({
             // thumbnails would stop showing any planting at all.
             m: `${inset}px`,
             borderRadius: '3px',
-            bgcolor: getPlantColor(
-              resolvePlantId?.(placement.scientificName) ??
-                placement.scientificName
-            ),
+            bgcolor: getPlantColor(plantColorKey(i)),
           }}
         />
       ))}

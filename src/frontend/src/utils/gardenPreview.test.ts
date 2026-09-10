@@ -122,8 +122,8 @@ describe('gardenToPreview', () => {
     // Two unnamed plants must not share one colour, which is what hashing the
     // empty string would give them.
     expect(plan.placements).toEqual([
-      { scientificName: 'p-1', row: 1, col: 2, spanRows: 1, spanCols: 1 },
-      { scientificName: 'p-2', row: 3, col: 0, spanRows: 1, spanCols: 1 },
+      { plantKey: 'p-1', row: 1, col: 2, spanRows: 1, spanCols: 1 },
+      { plantKey: 'p-2', row: 3, col: 0, spanRows: 1, spanCols: 1 },
     ]);
   });
 
@@ -213,15 +213,21 @@ describe('plantInsetPx', () => {
   it('insets a plant block by 2 px at a readable cell size', () => {
     expect(plantInsetPx(16)).toBe(2);
     expect(plantInsetPx(48)).toBe(2);
-    expect(plantInsetPx(TINY_CELL_PX)).toBe(2);
+    // The first size ABOVE the threshold still gets its margin: 5 − 4 = 1 px of
+    // block survives, so the rule drops the inset only where it has to.
+    expect(plantInsetPx(TINY_CELL_PX + 1)).toBe(2);
   });
 
-  it('drops the inset below 4 px, where 2 px on each side erases the block', () => {
+  it('drops the inset at and below 4 px, where 2 px on each side erases the block', () => {
     // The Large comparison table draws 2 px cells: a 1×1 block inset by 2 px on
     // each side would measure 2 − 4 = 0 and the thumbnail would show no
     // planting at all.
     expect(plantInsetPx(3)).toBe(0);
     expect(plantInsetPx(2)).toBe(0);
     expect(plantInsetPx(1)).toBe(0);
+    // AT the threshold too (round 1, G9): 4 − 2 − 2 = 0 is the same erasure,
+    // and the strict comparison let it through at exactly the size the rule was
+    // written for.
+    expect(plantInsetPx(TINY_CELL_PX)).toBe(0);
   });
 });

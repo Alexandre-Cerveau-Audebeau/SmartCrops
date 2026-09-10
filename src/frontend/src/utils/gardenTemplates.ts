@@ -52,13 +52,45 @@ export interface TemplateCell {
   infrastructure?: InfrastructureType;
 }
 
-/** One plant of a template, anchored top-left like PlannerPlacement. */
-export interface TemplatePlacement {
-  scientificName: string;
+/** Where a block sits on a plan — the half both placement kinds share. */
+interface PlacementBox {
   row: number;
   col: number;
   spanRows: number;
   spanCols: number;
+}
+
+/**
+ * One plant of a TEMPLATE, anchored top-left like PlannerPlacement.
+ *
+ * Its colour key is a scientific NAME, by construction: a template is written
+ * before any catalog exists, so a name is the only identifier it can hold.
+ * `GardenPlanner` resolves those names to catalog ids when the template is
+ * applied, and `TemplatePreview` resolves them for the picker thumbnail so the
+ * preview and the placed block wear the same colour.
+ */
+export interface TemplatePlacement extends PlacementBox {
+  scientificName: string;
+}
+
+/**
+ * One plant of any DRAWABLE plan — a real garden's, in practice.
+ *
+ * Round 1, E21: the two natures are two types now, not one field carrying
+ * either. `TemplatePlacement.scientificName` used to hold a plant ID whenever
+ * `gardenToPreview` produced it, and `TemplatePreview` fed that field to a
+ * name → id resolver. Today the resolver receives no resolver-shaped value at
+ * all: a `PreviewPlacement` has no `scientificName` to hand it, so « resolve an
+ * ID as if it were a name and silently repaint the plant » stopped being
+ * expressible rather than merely being documented as a hazard.
+ *
+ * `plantKey` is FINAL — whatever string `getPlantColor` should hash. For a real
+ * garden that is the placement's plant ID: it is always present, while the
+ * scientific name is nullable on the wire and every unnamed plant would
+ * otherwise share the one colour of the empty string.
+ */
+export interface PreviewPlacement extends PlacementBox {
+  plantKey: string;
 }
 
 export interface GardenTemplate {
@@ -70,24 +102,27 @@ export interface GardenTemplate {
   placements: readonly TemplatePlacement[];
 }
 
-/**
- * Anything that can be DRAWN as a plan thumbnail (SMA-336 PR 2/5).
- *
- * `GardenTemplate` satisfies it without a cast — a widening, not a rename. Its
- * `cols`/`rows` are the literal types `10` and `6`, which are assignable to
- * `number`; the reverse is not, so a real garden is a PreviewPlan and a
- * PreviewPlan is not a template. That is exactly the asymmetry we want: the
- * three templates keep their fixed canvas, and a 40 × 30 garden becomes
- * drawable without pretending to be one of them.
- *
- * It deliberately omits `key` and `cellSize`: TemplatePreview reads neither, and
- * a real garden has no template key to offer.
- */
-export interface PreviewPlan {
+/** The canvas half of a drawable plan: what `templateGrid` needs, and no more. */
+export interface PreviewCanvas {
   cols: number;
   rows: number;
   cells: readonly TemplateCell[];
-  placements: readonly TemplatePlacement[];
+}
+
+/**
+ * A REAL garden, drawn as a plan thumbnail (SMA-336 PR 2/5).
+ *
+ * `cols`/`rows` are plain numbers where a `GardenTemplate` carries the literal
+ * types `10` and `6`, so the three templates keep their fixed canvas and a
+ * 40 × 30 garden becomes drawable without pretending to be one of them.
+ *
+ * It deliberately omits `key` and `cellSize`: TemplatePreview reads neither, and
+ * a real garden has no template key to offer. Its placements are
+ * {@link PreviewPlacement} — colour keys already final — which is what keeps a
+ * template's name resolver from ever meeting one (round 1, E21).
+ */
+export interface PreviewPlan extends PreviewCanvas {
+  placements: readonly PreviewPlacement[];
 }
 
 // ── Composition helpers (module-private) ─────────────────────────────────────
@@ -295,12 +330,14 @@ export function templatePlacementCount(template: GardenTemplate): number {
  * the same shape parseCellsJson builds from a persisted CellsJson, so
  * APPLY_TEMPLATE hands the reducer exactly what hydration would.
  *
- * Takes a {@link PreviewPlan} rather than a `GardenTemplate` (SMA-336 PR 2/5):
+ * Takes a {@link PreviewCanvas} rather than a `GardenTemplate` (SMA-336 PR 2/5):
  * it only ever read `rows`, `cols` and `cells`, and widening the parameter lets
  * the dashboard thumbnail derive the same grid from a real garden. Every
- * existing caller still type-checks — a template IS a PreviewPlan.
+ * existing caller still type-checks — a template and a `PreviewPlan` are both
+ * canvases. It reads no placement, which is why the parameter says none
+ * (round 1, E21): the two placement kinds never have to meet here.
  */
-export function templateGrid(template: PreviewPlan): CellData[][] {
+export function templateGrid(template: PreviewCanvas): CellData[][] {
   const grid: CellData[][] = Array.from({ length: template.rows }, () =>
     Array.from({ length: template.cols }, () => ({ active: true }))
   );
