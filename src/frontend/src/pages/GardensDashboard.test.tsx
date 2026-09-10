@@ -319,7 +319,7 @@ describe('GardensDashboard — page states (SMA-336)', () => {
   });
 });
 
-describe('GardensDashboard — the seven widget shells (SMA-336)', () => {
+describe('GardensDashboard — the widget shells still waiting for data (SMA-336)', () => {
   const INVITATIONS_EN: Array<[string, string]> = [
     ['Weather', 'The weather needs to know where your gardens are.'],
     ['Tips', 'Tips arrive with the exposure and the calendar of your gardens.'],
@@ -328,10 +328,7 @@ describe('GardensDashboard — the seven widget shells (SMA-336)', () => {
       'The month’s calendar arrives with the sowings and harvests of your plantings.',
     ],
     ['To do today', 'Today’s tasks arrive with the weather and the calendar.'],
-    [
-      'Counts by variety',
-      'Your varieties will be counted here, garden by garden.',
-    ],
+    // Counts by variety LEFT this list in PR 2/5: it carries real data now.
     [
       'Statistics',
       'The occupancy and exposure of your gardens will be summed up here.',
@@ -364,8 +361,8 @@ describe('GardensDashboard — the seven widget shells (SMA-336)', () => {
     renderPage();
 
     await waitFor(() => expect(renderedKeys()).toHaveLength(8));
-    // Seven shells; the Gardens widget carries data instead.
-    expect(screen.getAllByText('Coming soon')).toHaveLength(7);
+    // Six shells: Gardens and Counts by variety carry data.
+    expect(screen.getAllByText('Coming soon')).toHaveLength(6);
   });
 
   it('the Weather widget offers NO city field in this lot (decision R4)', async () => {
@@ -394,7 +391,7 @@ describe('GardensDashboard — the seven widget shells (SMA-336)', () => {
         'Les conseils arrivent avec l’exposition et le calendrier de vos jardins.'
       )
     ).toBeInTheDocument();
-    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(7);
+    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(6);
   });
 });
 

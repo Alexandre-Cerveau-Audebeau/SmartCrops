@@ -20,6 +20,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import CustomizePanel from '../components/Dashboard/CustomizePanel';
 import DashboardGrid from '../components/Dashboard/DashboardGrid';
+import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import GardensBlock from '../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
@@ -189,6 +190,20 @@ export default function GardensDashboard() {
             onExpand={() =>
               patchBlock('gardens', (current) => ({ ...current, size: 'large' }))
             }
+          />
+        );
+      case 'counters':
+        return (
+          <CountersBlock
+            size={block.size}
+            editing={editing}
+            options={block.options ?? null}
+            varieties={dashboardData.varieties}
+            gardens={gardens}
+            totals={dashboardData.totals}
+            loading={gardensLoading}
+            loadError={gardensError}
+            onRetry={refetch}
           />
         );
       default:

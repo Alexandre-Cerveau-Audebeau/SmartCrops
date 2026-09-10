@@ -424,7 +424,18 @@
       },
       "counters": {
         "title": "Compteurs par variété",
-        "invite": "Vos variétés seront comptées ici, jardin par jardin."
+        "varieties_one": "{{count}} variété",
+        "varieties_other": "{{count}} variétés",
+        "plants_one": "{{count}} plante",
+        "plants_other": "{{count}} plantes",
+        "ofCatalog": "{{count}} variétés sur {{catalog}} au catalogue",
+        "more_one": "+{{count}} variété",
+        "more_other": "+{{count}} variétés",
+        "allGardens": "Tous les jardins",
+        "ornamentalSection": "Ornement",
+        "addFromLibrary": "Ajouter depuis la Bibliothèque →",
+        "empty": "Aucune plante placée pour l’instant.",
+        "emptyGarden": "Ce jardin ne contient encore aucune plante."
       },
       "stats": {
         "title": "Statistiques",

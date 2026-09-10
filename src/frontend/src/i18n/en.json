@@ -424,7 +424,18 @@
       },
       "counters": {
         "title": "Counts by variety",
-        "invite": "Your varieties will be counted here, garden by garden."
+        "varieties_one": "{{count}} variety",
+        "varieties_other": "{{count}} varieties",
+        "plants_one": "{{count}} plant",
+        "plants_other": "{{count}} plants",
+        "ofCatalog": "{{count}} varieties of {{catalog}} in the catalog",
+        "more_one": "+{{count}} variety",
+        "more_other": "+{{count}} varieties",
+        "allGardens": "All gardens",
+        "ornamentalSection": "Ornamental",
+        "addFromLibrary": "Add from the Library →",
+        "empty": "No plant placed yet.",
+        "emptyGarden": "This garden holds no plant yet."
       },
       "stats": {
         "title": "Statistics",
