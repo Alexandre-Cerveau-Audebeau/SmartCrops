@@ -45,7 +45,17 @@ export default function OccupancyBar({ percent }: Props) {
       </Box>
       <Typography
         component="span"
-        sx={{ fontSize: DASHBOARD_TYPE.body, fontWeight: 700 }}
+        sx={{
+          fontSize: DASHBOARD_TYPE.body,
+          fontWeight: 700,
+          // Round 2: « 10 % » was breaking across two lines in the Gardens
+          // table's OCCUPATION cell. The space between the figure and the sign
+          // is an ordinary one, so a squeezed column was free to wrap there —
+          // and a percentage split over two lines is not a percentage. The
+          // cell is narrow by design (84 px); this is what keeps the figure
+          // whole in it.
+          whiteSpace: 'nowrap',
+        }}
       >
         {/* Locale-formatted, like every other figure of the three widgets
             (round 1, G5) — the percentage is whole, but the rule is that no
