@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PlacementData } from '../services/gardenLayoutApi';
+import { placement } from '../test/fixtures/placements';
 import type { DashboardGardenData } from '../types/DashboardData';
 import { parseCellsJson, type CellData } from '../types/GardenLayout';
 import type { ExposureCategory } from './exposure';
@@ -21,18 +21,6 @@ import {
 
 // SMA-336 PR 2/5 — the figures the Gardens and Statistics widgets show, and the
 // edible rule the Counters widget splits on.
-
-const placement = (over: Partial<PlacementData> = {}): PlacementData => ({
-  id: 'pl-1',
-  plantId: 'plant-1',
-  plantScientificName: 'Ocimum basilicum',
-  startRow: 0,
-  startCol: 0,
-  spanRows: 1,
-  spanCols: 1,
-  notes: null,
-  ...over,
-});
 
 describe('gridStats', () => {
   it('counts active and total cells, and turns the active ones into square metres', () => {

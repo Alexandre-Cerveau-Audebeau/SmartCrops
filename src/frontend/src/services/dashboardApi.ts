@@ -165,18 +165,86 @@ function isNullableString(value: unknown): boolean {
 }
 
 /**
- * One garden of the aggregate, checked on the fields the page DEREFERENCES.
+ * One indoor light slot: two `HH:mm` strings, and nothing weaker.
  *
- * `config` is the one the finding names and the reason the whole check exists:
+ * The FORM only, not the clock. `GardensController.ValidateSlots` holds the
+ * document to a 24 h pattern, an ordering and a ceiling, and a schedule that
+ * fails any of them reads as no schedule at all before it reaches the wire — so
+ * repeating those rules here would be a second copy of a contract the server
+ * already enforces. What this boundary answers for is that `start` and `end`
+ * are strings at all, which is what `computeExposureGrid` reads.
+ */
+function isLightSlot(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return typeof value.start === 'string' && typeof value.end === 'string';
+}
+
+/**
+ * The five exposure inputs, each on its own (round 4, C1 — E‴5 / G‴2).
+ *
+ * Round 3 checked that `config` was an OBJECT and stopped there, which let `{}`
+ * narrow to `GardenConfig`. Two things then read fields that were never
+ * checked: `computeExposureGrid` calls `.filter` on `lightSchedule` in its
+ * indoor branch, so a non-array value throws; and the four string fields reach
+ * the engine as whatever arrived.
+ *
+ * `lightSchedule` is `null` or an array of slots — the third state the type
+ * allows, and the one the finding names.
+ */
+function isGardenConfig(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    isNullableString(value.orientation) &&
+    isNullableString(value.gardenType) &&
+    isNullableString(value.hemisphere) &&
+    isNullableString(value.latitudeBand) &&
+    (value.lightSchedule === null ||
+      (Array.isArray(value.lightSchedule) &&
+        value.lightSchedule.every(isLightSlot)))
+  );
+}
+
+/**
+ * One placed plant, complete (round 4, C1 — G‴2).
+ *
+ * The finding's own case, verbatim: « For a garden with a plan, `[null]`
+ * reaches `placementCoverage` and throws when it reads `placement.startRow`. »
+ * Round 3 checked that `placements` was an array and no deeper, on the argument
+ * that a bad element degrades one thumbnail rather than killing the render.
+ * That argument was wrong about WHERE the elements are read: `placementCoverage`
+ * runs inside `deriveGardenView`, on the page's critical path, and it
+ * dereferences four numbers per element with no guard — so one null in the array
+ * takes down the whole dashboard, not one thumbnail.
+ *
+ * The walk this adds is one pass of eight typeof checks over a few hundred
+ * elements, next to an exposure engine that already walks width × height
+ * several times per garden.
+ */
+function isPlacementRecord(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === 'string' &&
+    typeof value.plantId === 'string' &&
+    isNullableString(value.plantScientificName) &&
+    typeof value.startRow === 'number' &&
+    typeof value.startCol === 'number' &&
+    typeof value.spanRows === 'number' &&
+    typeof value.spanCols === 'number' &&
+    isNullableString(value.notes)
+  );
+}
+
+/**
+ * One garden of the aggregate, checked on the fields the page DEREFERENCES —
+ * and, since round 4, on the fields those fields carry.
+ *
+ * `config` is the one round 3 named and the reason the whole check exists:
  * `deriveGardenView` enters its planned branch on positive `width`/`height` and
  * reads `garden.config.orientation` on the next line, so a garden that arrives
  * without a config takes the page down at render — after the load succeeded,
- * where no error state is left to draw it.
- *
- * `placements` is checked for being an array and no deeper: the derivation
- * reads a placement's four numbers, but a few hundred of them per load is the
- * walk round 1 declined, and a bad element degrades one thumbnail rather than
- * killing the render.
+ * where no error state is left to draw it. Round 4 finishes the same argument
+ * one level down: a config that is an object and a placements array that is an
+ * array were still narrowing values nobody had looked inside.
  */
 function isGardenRecord(value: unknown): boolean {
   if (!isRecord(value)) return false;
@@ -188,9 +256,10 @@ function isGardenRecord(value: unknown): boolean {
     isNullableNumber(value.height) &&
     isNullableString(value.cellSize) &&
     isNullableString(value.cellsJson) &&
-    isRecord(value.config) &&
+    isGardenConfig(value.config) &&
     typeof value.updatedAt === 'string' &&
     Array.isArray(value.placements) &&
+    value.placements.every(isPlacementRecord) &&
     typeof value.placementCount === 'number' &&
     typeof value.varietyCount === 'number' &&
     typeof value.occupiedCells === 'number' &&
@@ -230,13 +299,18 @@ function isTotalsRecord(value: unknown): boolean {
  * threw during render instead of showing the load-error state the page already
  * draws.
  *
- * Round 3 (E″8) finishes the job, and the reason the first pass was incomplete
+ * Round 3 (E″8) went one level in, and the reason the first pass was incomplete
  * rather than wrong is the signature: `value is DashboardData` narrows to a type
  * that promises every RECORD's fields too, while the check only ever looked at
  * the containers holding them — so the compiler was told more than the function
  * had established, and a garden with a width but no `config` walked through a
- * predicate that had declared it well-formed. What the page dereferences is now
- * what is verified, and the narrowing is licensed by the check that precedes it.
+ * predicate that had declared it well-formed.
+ *
+ * Round 4 (C1 — E‴5 / G‴2) applies the same argument to the fields those records
+ * carry: `GardenConfig` field by field including `lightSchedule`, and every
+ * element of `placements` as a complete `PlacementData`. What the page
+ * dereferences is now what is verified, at every depth it reaches, and the
+ * narrowing is licensed by the check that precedes it.
  *
  * Unknown properties are PRESERVED: this reads fields, it never rebuilds the
  * object, so a field a newer server adds travels through untouched.

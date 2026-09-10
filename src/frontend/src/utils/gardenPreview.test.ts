@@ -1,23 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { PlacementData } from '../services/gardenLayoutApi';
+import { placement } from '../test/fixtures/placements';
 import { serializeCellsJson, type CellData } from '../types/GardenLayout';
 import { fitPreview, gardenToPreview, plantInsetPx, TINY_CELL_PX } from './gardenPreview';
 
 // SMA-336 PR 2/5 — the adapter that lets TemplatePreview draw a real garden,
 // and the two sizing rules the frozen design fixes (48 px on a card, 2 px in
 // the comparison table).
-
-const placement = (over: Partial<PlacementData> = {}): PlacementData => ({
-  id: 'pl-1',
-  plantId: 'plant-1',
-  plantScientificName: 'Ocimum basilicum',
-  startRow: 0,
-  startCol: 0,
-  spanRows: 1,
-  spanCols: 1,
-  notes: null,
-  ...over,
-});
 
 describe('gardenToPreview', () => {
   it('carries the grid size, whatever the plan says', () => {

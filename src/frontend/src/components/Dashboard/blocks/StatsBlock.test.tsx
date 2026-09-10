@@ -3,9 +3,9 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
-import type { PlacementData } from '../../../services/gardenLayoutApi';
 import type { DashboardGardenData } from '../../../types/DashboardData';
 import { serializeCellsJson, type CellData } from '../../../types/GardenLayout';
+import { at } from '../../../test/fixtures/placements';
 import StatsBlock from './StatsBlock';
 
 // SMA-336 PR 2/5 — the Statistics widget. What it must get right: the surface
@@ -35,22 +35,6 @@ const garden = (over: Partial<DashboardGardenData> = {}): DashboardGardenData =>
   occupiedCells: 0,
   isEdible: null,
   ...over,
-});
-
-/**
- * One 1 x 1 plant on a cell. Round 3 (E"9): the occupancy figures derive from
- * the PLAN now, so a test that wants an occupied cell has to place a plant on
- * it rather than declare a count on the transport.
- */
-const at = (startRow: number, startCol: number): PlacementData => ({
-  id: `pl-${startRow}-${startCol}`,
-  plantId: 'plant-1',
-  plantScientificName: 'Ocimum basilicum',
-  startRow,
-  startCol,
-  spanRows: 1,
-  spanCols: 1,
-  notes: null,
 });
 
 const widgetNode = () =>

@@ -478,6 +478,120 @@ describe('fetchDashboardData — a garden record is checked before it is trusted
     await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
   });
 
+  // ROUND 4 (C1 — E‴5 / G‴2): the nested records, checked at the depth the page
+  // actually reads them.
+  it.each([
+    ['config as {}', { config: {} }],
+    ['orientation as a number', { config: { ...GARDEN.config, orientation: 1 } }],
+    ['gardenType as an object', { config: { ...GARDEN.config, gardenType: {} } }],
+    ['hemisphere missing', { config: { orientation: 'S', gardenType: null, lightSchedule: null, latitudeBand: 'mid' } }],
+    ['latitudeBand as a boolean', { config: { ...GARDEN.config, latitudeBand: true } }],
+  ])('rejects an incomplete configuration — %s', async (_label, patch) => {
+    // `{}` used to narrow to `GardenConfig`: round 3 checked that `config` was
+    // an object and nothing about what it held.
+    const body = full();
+    Object.assign(body.gardens[0]!, patch);
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it.each([
+    ['a string', 'always'],
+    ['a number', 7],
+    ['an object', { start: '08:00', end: '20:00' }],
+    ['an array holding null', [null]],
+    ['an array of empty slots', [{}]],
+    ['a slot with no end', [{ start: '08:00' }]],
+    ['a slot whose start is a number', [{ start: 8, end: '20:00' }]],
+  ])('rejects a malformed lightSchedule — %s', async (_label, schedule) => {
+    // `computeExposureGrid` calls `.filter` on `lightSchedule` in its indoor
+    // branch, so a non-array value throws there rather than here.
+    const body = full();
+    Object.assign(body.gardens[0]!, {
+      config: { ...GARDEN.config, lightSchedule: schedule },
+    });
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it('accepts a well-formed lightSchedule', async () => {
+    const body = full();
+    Object.assign(body.gardens[0]!, {
+      config: {
+        ...GARDEN.config,
+        gardenType: 'indoor',
+        lightSchedule: [{ start: '08:00', end: '20:00' }],
+      },
+    });
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).resolves.toEqual(body);
+  });
+
+  const PLACEMENT = {
+    id: 'pl-1',
+    plantId: 'p1',
+    plantScientificName: 'Ocimum basilicum',
+    startRow: 0,
+    startCol: 0,
+    spanRows: 1,
+    spanCols: 1,
+    notes: null,
+  };
+
+  it('rejects the placement the finding names — [null] on a garden with a plan', async () => {
+    // Verbatim from the finding: « For a garden with a plan, `[null]` reaches
+    // `placementCoverage` and throws when it reads `placement.startRow`. »
+    const body = full();
+    Object.assign(body.gardens[0]!, { placements: [null] });
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it.each([
+    'id',
+    'plantId',
+    'plantScientificName',
+    'startRow',
+    'startCol',
+    'spanRows',
+    'spanCols',
+    'notes',
+  ])('rejects a placement with no %s', async (field) => {
+    const placement: Record<string, unknown> = { ...PLACEMENT };
+    delete placement[field];
+    const body = full();
+    Object.assign(body.gardens[0]!, { placements: [placement] });
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it.each([
+    ['startRow as a string', { startRow: '0' }],
+    ['spanCols as null', { spanCols: null }],
+    ['id as a number', { id: 7 }],
+  ])('rejects a malformed placement — %s', async (_label, patch) => {
+    const body = full();
+    Object.assign(body.gardens[0]!, {
+      placements: [{ ...PLACEMENT, ...patch }],
+    });
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it('accepts a complete placement', async () => {
+    const body = full();
+    Object.assign(body.gardens[0]!, { placements: [{ ...PLACEMENT }] });
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).resolves.toEqual(body);
+  });
+
   it('preserves an unknown field a newer server adds, on the record too', async () => {
     // The check READS fields, it never rebuilds the object — so forward
     // compatibility survives the stricter boundary.
