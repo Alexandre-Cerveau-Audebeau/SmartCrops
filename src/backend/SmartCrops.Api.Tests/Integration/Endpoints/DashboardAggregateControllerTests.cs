@@ -1,0 +1,600 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using SmartCrops.Api.DTOs;
+using SmartCrops.Core.Entities;
+using SmartCrops.Core.Enums;
+using SmartCrops.Infrastructure.Data;
+
+namespace SmartCrops.Api.Tests.Integration.Endpoints;
+
+/// <summary>
+/// SMA-336 (PR 2/5) — <c>GET /api/dashboard</c>, the transport aggregate.
+///
+/// <para>Two locks carry the weight of this file. The WHITELIST proves the
+/// response is the lean shape the lot was built for: the moment a
+/// <c>PlantListItemResponse</c> is spliced back in, <c>description</c> reappears
+/// and the test says so. The ISOLATION lock proves an aggregate that now carries
+/// garden PLANS never crosses accounts.</para>
+///
+/// <para>The rest covers the states DEV data does not have: a user with no
+/// garden, a garden with no placement, a garden with no <c>CellsJson</c>, and a
+/// variety planted in two gardens.</para>
+/// </summary>
+public class DashboardAggregateControllerTests : IntegrationTestBase
+{
+    public DashboardAggregateControllerTests(PostgresFixture fixture) : base(fixture) { }
+
+    private const string Url = "/api/dashboard";
+
+    /// <summary>
+    /// camelCase keys of <see cref="DashboardResponse"/>, ordinal order.
+    /// </summary>
+    private static readonly string[] ResponseWhitelist = ["gardens", "totals", "varieties"];
+
+    /// <summary>
+    /// camelCase keys of <see cref="DashboardGardenDto"/>, ordinal order. The
+    /// point of listing them: <c>description</c> is NOT here, and neither is any
+    /// other field of the plant catalog row.
+    /// </summary>
+    private static readonly string[] GardenWhitelist =
+    [
+        "cellSize",
+        "cellsJson",
+        "config",
+        "height",
+        "id",
+        "isEdible",
+        "name",
+        "occupiedCells",
+        "placementCount",
+        "placements",
+        "updatedAt",
+        "varietyCount",
+        "width",
+    ];
+
+    /// <summary>camelCase keys of <see cref="VarietyCountDto"/>, ordinal order.</summary>
+    private static readonly string[] VarietyWhitelist =
+    [
+        "cells",
+        "commonName",
+        "count",
+        "gardenIds",
+        "imageAttribution",
+        "imageUrl",
+        "isEdible",
+        "plantId",
+        "plantType",
+        "scientificName",
+    ];
+
+    /// <summary>camelCase keys of <see cref="DashboardTotalsDto"/>, ordinal order.</summary>
+    private static readonly string[] TotalsWhitelist =
+    [
+        "catalogPlantCount",
+        "gardenCount",
+        "placementCount",
+        "varietyCount",
+    ];
+
+    // ── Authorization ────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetDashboard_NoBearer_Returns401()
+    {
+        var response = await Client.GetAsync(Url);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetDashboard_NeverLeaksAnotherUsersGardens()
+    {
+        var mine = Guid.NewGuid().ToString();
+        var theirs = Guid.NewGuid().ToString();
+        await SeedUserAsync(mine);
+        await SeedUserAsync(theirs);
+
+        var theirGarden = await SeedGardenAsync(theirs, "Their plot", cellsJson: "[{\"row\":0,\"col\":0,\"soil\":\"humus\"}]");
+        var plant = await SeedPlantAsync("Solanum lycopersicum", plantTypeId: 1);
+        await SeedPlacementAsync(theirGarden, plant, 0, 0);
+
+        AuthAs(mine);
+        var body = await GetDashboardAsync();
+
+        Assert.Empty(body.Gardens);
+        Assert.Empty(body.Varieties);
+        Assert.Equal(0, body.Totals.GardenCount);
+        Assert.Equal(0, body.Totals.PlacementCount);
+    }
+
+    // ── The contract ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetDashboard_ResponseCarriesExactlyTheWhitelistedKeys()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Terrasse");
+        var plantId = await SeedPlantAsync("Ocimum basilicum", plantTypeId: 3);
+        await SeedPlacementAsync(gardenId, plantId, 0, 0);
+        AuthAs(userId);
+
+        using var document = JsonDocument.Parse(await Client.GetStringAsync(Url));
+        var root = document.RootElement;
+
+        Assert.Equal(ResponseWhitelist, Keys(root));
+        Assert.Equal(GardenWhitelist, Keys(root.GetProperty("gardens")[0]));
+        Assert.Equal(VarietyWhitelist, Keys(root.GetProperty("varieties")[0]));
+        Assert.Equal(TotalsWhitelist, Keys(root.GetProperty("totals")));
+    }
+
+    [Fact]
+    public async Task GetDashboard_CarriesNoPlantCatalogFreeText()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Terrasse");
+        var plantId = await SeedPlantAsync("Ocimum basilicum", plantTypeId: 3);
+        await SeedTranslationsAsync(
+            plantId,
+            ("en", "Basil", "A fragrant culinary herb nobody asked this endpoint for."));
+        await SeedPlacementAsync(gardenId, plantId, 0, 0);
+        AuthAs(userId);
+
+        var raw = await Client.GetStringAsync(Url);
+
+        // The whole point of the lot: the aggregate is lighter than the gardens
+        // list because it carries plans, not catalog rows. A response that ships
+        // the description is a response that quietly grew a PlantListItemResponse
+        // back, and no key-level assertion above would notice it nested one level
+        // deeper.
+        Assert.DoesNotContain("nobody asked this endpoint for", raw, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"description\"", raw, StringComparison.Ordinal);
+    }
+
+    // ── Empty states ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetDashboard_NoGardens_ReturnsZerosNotNulls()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var body = await GetDashboardAsync();
+
+        Assert.Empty(body.Gardens);
+        Assert.Empty(body.Varieties);
+        Assert.Equal(0, body.Totals.GardenCount);
+        Assert.Equal(0, body.Totals.PlacementCount);
+        Assert.Equal(0, body.Totals.VarietyCount);
+    }
+
+    [Fact]
+    public async Task GetDashboard_EmptyGarden_CountsZero_AndIsEdibleIsNull()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        await SeedGardenAsync(userId, "Jamais planté");
+        AuthAs(userId);
+
+        var garden = Assert.Single((await GetDashboardAsync()).Gardens);
+
+        Assert.Equal(0, garden.PlacementCount);
+        Assert.Equal(0, garden.VarietyCount);
+        Assert.Equal(0, garden.OccupiedCells);
+        Assert.Empty(garden.Placements);
+        // NOT false: an unplanted garden is neither ornamental nor edible, and
+        // false would make the Gardens widget wear an « Ornamental » chip — which
+        // the product rule then reads as « never shows a harvest ».
+        Assert.Null(garden.IsEdible);
+    }
+
+    [Fact]
+    public async Task GetDashboard_GardenWithoutCellsJson_ShipsNullPlanAndStillCounts()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Sans plan", cellsJson: null);
+        var plantId = await SeedPlantAsync("Hedera helix", plantTypeId: 4);
+        await SeedPlacementAsync(gardenId, plantId, 2, 3);
+        AuthAs(userId);
+
+        var garden = Assert.Single((await GetDashboardAsync()).Gardens);
+
+        // Null travels as null — the client's parseCellsJson(null, w, h) already
+        // reads that as a full grid of active cells, so there is nothing to
+        // invent here.
+        Assert.Null(garden.CellsJson);
+        Assert.Equal(1, garden.PlacementCount);
+        Assert.Equal(1, garden.VarietyCount);
+        Assert.Equal(1, garden.OccupiedCells);
+    }
+
+    // ── Counters ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetDashboard_SeededGardens_CountExactly()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Potager");
+        var basil = await SeedPlantAsync("Ocimum basilicum", plantTypeId: 3);
+        var fern = await SeedPlantAsync("Athyrium vidalii", plantTypeId: 4);
+
+        await SeedPlacementAsync(gardenId, basil, 0, 0);
+        await SeedPlacementAsync(gardenId, basil, 0, 1);
+        await SeedPlacementAsync(gardenId, fern, 1, 0, spanRows: 2, spanCols: 3);
+        AuthAs(userId);
+
+        var body = await GetDashboardAsync();
+        var garden = Assert.Single(body.Gardens);
+
+        Assert.Equal(3, garden.PlacementCount);
+        Assert.Equal(2, garden.VarietyCount);
+        Assert.Equal(1 + 1 + 6, garden.OccupiedCells);
+
+        // Busiest variety first.
+        Assert.Equal(["Ocimum basilicum", "Athyrium vidalii"], body.Varieties.Select(v => v.ScientificName));
+        Assert.Equal(2, body.Varieties[0].Count);
+        Assert.Equal(2, body.Varieties[0].Cells);
+        Assert.Equal(1, body.Varieties[1].Count);
+        Assert.Equal(6, body.Varieties[1].Cells);
+
+        Assert.Equal(1, body.Totals.GardenCount);
+        Assert.Equal(3, body.Totals.PlacementCount);
+        Assert.Equal(2, body.Totals.VarietyCount);
+    }
+
+    [Fact]
+    public async Task GetDashboard_VarietyInTwoGardens_CountsOnceAndNamesBothGardens()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var first = await SeedGardenAsync(userId, "Balcon");
+        var second = await SeedGardenAsync(userId, "Terrasse");
+        var fern = await SeedPlantAsync("Athyrium vidalii", plantTypeId: 4);
+
+        await SeedPlacementAsync(first, fern, 0, 0);
+        await SeedPlacementAsync(second, fern, 0, 0);
+        await SeedPlacementAsync(second, fern, 0, 1);
+        AuthAs(userId);
+
+        var body = await GetDashboardAsync();
+
+        // Each garden counts its own variety once: 1 + 1 = 2 per-garden counts…
+        Assert.Equal([1, 1], body.Gardens.Select(g => g.VarietyCount));
+        // …but the page total is DISTINCT varieties (decision D11): one.
+        Assert.Equal(1, body.Totals.VarietyCount);
+        Assert.Equal(3, body.Totals.PlacementCount);
+
+        var variety = Assert.Single(body.Varieties);
+        Assert.Equal(3, variety.Count);
+        Assert.Equal([first, second], variety.GardenIds.OrderBy(id => id == first ? 0 : 1));
+        Assert.Equal(2, variety.GardenIds.Count);
+    }
+
+    // ── The R4 edible rule ───────────────────────────────────────────────────
+
+    [Theory]
+    // Plant type says edible, the flag disagrees — 31 catalog plants are like this.
+    [InlineData(1, false, true)]
+    // The flag says edible, the type says ornamental — 38 catalog plants are like this.
+    [InlineData(4, true, true)]
+    // Neither says edible.
+    [InlineData(4, false, false)]
+    // The flag is unknown; the type is filled on every catalog row and decides alone.
+    [InlineData(4, null, false)]
+    [InlineData(2, null, true)]
+    public async Task GetDashboard_EdibleVerdictIsTheUnionOfTypeAndFlag(
+        int plantTypeId,
+        bool? isEdible,
+        bool expected)
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Test");
+        var plantId = await SeedPlantAsync("Test plant", plantTypeId, isEdible);
+        await SeedPlacementAsync(gardenId, plantId, 0, 0);
+        AuthAs(userId);
+
+        var garden = Assert.Single((await GetDashboardAsync()).Gardens);
+
+        Assert.Equal(expected, garden.IsEdible);
+    }
+
+    [Fact]
+    public async Task GetDashboard_OneEdibleAmongOrnamentals_MakesTheGardenEdible()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Mixte");
+        var fern = await SeedPlantAsync("Athyrium vidalii", plantTypeId: 4);
+        var basil = await SeedPlantAsync("Ocimum basilicum", plantTypeId: 3);
+
+        await SeedPlacementAsync(gardenId, fern, 0, 0);
+        await SeedPlacementAsync(gardenId, fern, 0, 1);
+        await SeedPlacementAsync(gardenId, basil, 1, 0);
+        AuthAs(userId);
+
+        var garden = Assert.Single((await GetDashboardAsync()).Gardens);
+
+        // « At least one », not « a majority »: declaring this garden ornamental
+        // would erase a real harvest, while the reverse mistake only shows an
+        // empty one.
+        Assert.True(garden.IsEdible);
+    }
+
+    // ── Placement order ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetDashboard_PlacementsAreOrderedByGridPosition()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Ordre");
+        var plantId = await SeedPlantAsync("Iris germanica", plantTypeId: 4);
+
+        // Inserted out of order on purpose.
+        await SeedPlacementAsync(gardenId, plantId, 2, 5);
+        await SeedPlacementAsync(gardenId, plantId, 0, 9);
+        await SeedPlacementAsync(gardenId, plantId, 0, 1);
+        await SeedPlacementAsync(gardenId, plantId, 1, 0);
+        AuthAs(userId);
+
+        var garden = Assert.Single((await GetDashboardAsync()).Gardens);
+
+        Assert.Equal(
+            [(0, 1), (0, 9), (1, 0), (2, 5)],
+            garden.Placements.Select(p => (p.StartRow, p.StartCol)));
+    }
+
+    [Fact]
+    public async Task GetDashboard_PlacementOrderSurvivesALayoutSave()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Ordre stable");
+        var iris = await SeedPlantAsync("Iris germanica", plantTypeId: 4);
+        var fern = await SeedPlantAsync("Athyrium vidalii", plantTypeId: 4);
+        AuthAs(userId);
+
+        // The layout PUT deletes every placement and re-inserts it, so `Id` and
+        // `PlacedAt` are BOTH new afterwards. Saving the same arrangement twice
+        // must not reshuffle the response — otherwise the names a card previews,
+        // and the order of the variety pastilles, change under a user who
+        // changed nothing.
+        var layout = new
+        {
+            Width = 10,
+            Height = 10,
+            CellSize = "50cm",
+            CellsJson = (string?)null,
+            Placements = new object[]
+            {
+                new { PlantId = fern, StartRow = 3, StartCol = 1, SpanRows = 1, SpanCols = 1, Notes = (string?)null },
+                new { PlantId = iris, StartRow = 0, StartCol = 4, SpanRows = 1, SpanCols = 1, Notes = (string?)null },
+                new { PlantId = iris, StartRow = 0, StartCol = 0, SpanRows = 1, SpanCols = 1, Notes = (string?)null },
+            },
+        };
+
+        var first = await Client.PutAsJsonAsync($"/api/gardens/{gardenId}/layout", layout);
+        Assert.Equal(HttpStatusCode.NoContent, first.StatusCode);
+        var before = (await GetDashboardAsync()).Gardens.Single().Placements
+            .Select(p => (p.StartRow, p.StartCol, p.PlantId))
+            .ToList();
+
+        var second = await Client.PutAsJsonAsync($"/api/gardens/{gardenId}/layout", layout);
+        Assert.Equal(HttpStatusCode.NoContent, second.StatusCode);
+        var after = (await GetDashboardAsync()).Gardens.Single().Placements
+            .Select(p => (p.StartRow, p.StartCol, p.PlantId))
+            .ToList();
+
+        Assert.Equal(before, after);
+        Assert.Equal([(0, 0), (0, 4), (3, 1)], after.Select(p => (p.StartRow, p.StartCol)));
+    }
+
+    // ── Localisation ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetDashboard_ServesTheRequestedLanguage_ThenEnglish()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Potager");
+        var translated = await SeedPlantAsync("Ocimum basilicum", plantTypeId: 3);
+        var englishOnly = await SeedPlantAsync("Hedera helix", plantTypeId: 4);
+        var untranslated = await SeedPlantAsync("Athyrium vidalii", plantTypeId: 4);
+
+        await SeedTranslationsAsync(translated, ("fr", "Basilic", null), ("en", "Basil", null));
+        await SeedTranslationsAsync(englishOnly, ("en", "English ivy", null));
+
+        await SeedPlacementAsync(gardenId, translated, 0, 0);
+        await SeedPlacementAsync(gardenId, englishOnly, 1, 0);
+        await SeedPlacementAsync(gardenId, untranslated, 2, 0);
+        AuthAs(userId);
+
+        var body = await GetDashboardAsync("fr");
+        var byId = body.Varieties.ToDictionary(v => v.PlantId);
+
+        Assert.Equal("Basilic", byId[translated].CommonName);
+        Assert.Equal("English ivy", byId[englishOnly].CommonName);
+        // No third-language guess: the client falls back to the scientific name.
+        Assert.Null(byId[untranslated].CommonName);
+    }
+
+    // ── The variety avatar ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetDashboard_PicksAStableCoverImage_WithItsAttribution()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Potager");
+        var withImages = await SeedPlantAsync("Ocimum basilicum", plantTypeId: 3);
+        var withoutImages = await SeedPlantAsync("Athyrium vidalii", plantTypeId: 4);
+
+        await SeedImagesAsync(
+            withImages,
+            (PlantSourceType.Trefle, PlantImageType.Leaf, "https://bs.plantnet.org/leaf.jpg", "Leaf credit"),
+            // Habit outranks Leaf — the library's own cover priority.
+            (PlantSourceType.Trefle, PlantImageType.Habit, "https://bs.plantnet.org/habit.jpg", "Habit credit"),
+            // Perenual URLs expire (SMA-118) and must never be surfaced.
+            (PlantSourceType.Perenual, PlantImageType.Main, "https://perenual.example/expired.jpg", "Perenual credit"));
+
+        await SeedPlacementAsync(gardenId, withImages, 0, 0);
+        await SeedPlacementAsync(gardenId, withoutImages, 1, 0);
+        AuthAs(userId);
+
+        var byId = (await GetDashboardAsync()).Varieties.ToDictionary(v => v.PlantId);
+
+        Assert.Equal("https://bs.plantnet.org/habit.jpg", byId[withImages].ImageUrl);
+        Assert.Equal("Habit credit", byId[withImages].ImageAttribution);
+        // Null together, always: the widget may render the photo, so it must be
+        // able to credit it.
+        Assert.Null(byId[withoutImages].ImageUrl);
+        Assert.Null(byId[withoutImages].ImageAttribution);
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private static string[] Keys(JsonElement element) =>
+        [.. element.EnumerateObject().Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal)];
+
+    private async Task<DashboardResponse> GetDashboardAsync(string? lang = null)
+    {
+        var url = lang is null ? Url : $"{Url}?lang={lang}";
+        var body = await Client.GetFromJsonAsync<DashboardResponse>(url);
+        Assert.NotNull(body);
+        return body;
+    }
+
+    private void AuthAs(string userId)
+    {
+        Client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
+    }
+
+    private async Task SeedUserAsync(string userId)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        await db.Database.ExecuteSqlRawAsync(
+            @"INSERT INTO ""AspNetUsers"" (
+                ""Id"", ""UserName"", ""NormalizedUserName"", ""Email"", ""NormalizedEmail"",
+                ""EmailConfirmed"", ""PasswordHash"", ""SecurityStamp"", ""ConcurrencyStamp"",
+                ""PhoneNumberConfirmed"", ""TwoFactorEnabled"", ""LockoutEnabled"", ""AccessFailedCount"")
+            VALUES ({0}, {0}, {0}, NULL, NULL, FALSE, NULL, NULL, NULL, FALSE, FALSE, FALSE, 0);",
+            userId);
+    }
+
+    private async Task<Guid> SeedGardenAsync(string userId, string name, string? cellsJson = null)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var garden = new Garden
+        {
+            Id = Guid.NewGuid(),
+            Name = name,
+            UserId = userId,
+            LayoutWidth = 10,
+            LayoutHeight = 10,
+            CellSize = "50cm",
+            CellsJson = cellsJson,
+            Hemisphere = "N",
+            LatitudeBand = "mid",
+        };
+        db.Gardens.Add(garden);
+        await db.SaveChangesAsync();
+        return garden.Id;
+    }
+
+    private async Task<Guid> SeedPlantAsync(
+        string scientificName,
+        int plantTypeId,
+        bool? isEdible = null)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var plant = new Plant
+        {
+            Id = Guid.NewGuid(),
+            ScientificName = scientificName,
+            PlantTypeId = plantTypeId,
+            IsEdible = isEdible,
+        };
+        db.Plants.Add(plant);
+        await db.SaveChangesAsync();
+        return plant.Id;
+    }
+
+    private async Task SeedPlacementAsync(
+        Guid gardenId,
+        Guid plantId,
+        int row,
+        int col,
+        int spanRows = 1,
+        int spanCols = 1)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        db.GardenPlacements.Add(new GardenPlacement
+        {
+            Id = Guid.NewGuid(),
+            GardenId = gardenId,
+            PlantId = plantId,
+            StartRow = row,
+            StartCol = col,
+            SpanRows = spanRows,
+            SpanCols = spanCols,
+            PlacedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SeedTranslationsAsync(
+        Guid plantId,
+        params (string Language, string CommonName, string? Description)[] translations)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        foreach (var (language, commonName, description) in translations)
+        {
+            db.PlantTranslations.Add(new PlantTranslation
+            {
+                PlantId = plantId,
+                Language = language,
+                CommonName = commonName,
+                Description = description,
+            });
+        }
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SeedImagesAsync(
+        Guid plantId,
+        params (PlantSourceType Source, PlantImageType Type, string Url, string Credit)[] images)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var order = 0;
+        foreach (var (source, type, url, credit) in images)
+        {
+            db.PlantImages.Add(new PlantImage
+            {
+                PlantId = plantId,
+                Source = source,
+                ImageType = type,
+                Url = url,
+                Credit = credit,
+                DisplayOrder = order++,
+            });
+        }
+        await db.SaveChangesAsync();
+    }
+}

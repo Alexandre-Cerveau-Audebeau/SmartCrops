@@ -427,7 +427,14 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         return null;
     }
 
-    private static List<LightSlotDto>? ParseLightSchedule(string? json) =>
+    /// <summary>
+    /// SMA-336 PR 2/5: <c>internal</c> rather than <c>private</c> so the dashboard
+    /// aggregate builds its <see cref="GardenConfigDto"/> from the SAME reader.
+    /// The light schedule is a stored JSON document with its own tolerance for a
+    /// malformed value; a second copy of that tolerance is a second thing to keep
+    /// in agreement, for four lines saved.
+    /// </summary>
+    internal static List<LightSlotDto>? ParseLightSchedule(string? json) =>
         string.IsNullOrEmpty(json)
             ? null
             : JsonSerializer.Deserialize<List<LightSlotDto>>(json, JsonWeb);

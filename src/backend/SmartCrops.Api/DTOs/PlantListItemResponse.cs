@@ -200,7 +200,13 @@ public static class PlantListItemMapper
     /// <c>Habit</c> shot reads best, then <c>Flower</c>, then <c>Leaf</c>, then the
     /// remaining detail types. Lower sorts first; unknown types sort last.
     /// </summary>
-    private static int StableImageRank(PlantImageType type) => type switch
+    /// <remarks>
+    /// SMA-336 PR 2/5: <c>internal</c> rather than <c>private</c> so the dashboard
+    /// aggregate picks its variety avatar with the SAME priority the library card
+    /// uses. A plant must not wear one photo in the Library and another in the
+    /// Counters widget, and that only holds while there is one ranking.
+    /// </remarks>
+    internal static int StableImageRank(PlantImageType type) => type switch
     {
         PlantImageType.Habit => 0,
         PlantImageType.Flower => 1,

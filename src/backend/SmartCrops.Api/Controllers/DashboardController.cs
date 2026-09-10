@@ -8,6 +8,7 @@ using Npgsql;
 using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Dashboard;
 using SmartCrops.Core.Entities;
+using SmartCrops.Core.Enums;
 using SmartCrops.Infrastructure.Data;
 
 namespace SmartCrops.Api.Controllers;
@@ -57,6 +58,271 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
     /// — keys, sizes, level, escaping — around them.</para>
     /// </summary>
     private const int MaxRequestBodyBytes = 2 * 8 * MaxOptionsBytesPerBlock;
+
+    /// <summary>
+    /// Plant types whose members are edible whatever their own flag says — the
+    /// first half of the R4 rule. Measured on the catalog: 31 plants of these
+    /// three types carry <c>IsEdible = false</c>, and 38 <c>Ornamental</c> plants
+    /// carry <c>IsEdible = true</c>, so neither signal alone is usable and the
+    /// rule is their union.
+    /// </summary>
+    private static readonly string[] EdiblePlantTypes = ["Vegetable", "Fruit", "Herb"];
+
+    /// <summary>
+    /// GET /api/dashboard — the Gardens, Counters and Statistics widgets in ONE
+    /// call, scoped to the caller.
+    ///
+    /// <para>A TRANSPORT aggregate, not a computing one (orchestrator decision
+    /// D9): every garden ships its <c>CellsJson</c> and its placements verbatim,
+    /// and the browser derives active cells, surface, occupancy, dominant exposure
+    /// and the plan thumbnail with the pure functions the planner already owns and
+    /// tests. Porting that engine to C# would put it in two languages with nothing
+    /// to catch a divergence — <c>dotnet test</c> and <c>npm test</c> never meet.
+    /// What travels here instead is what SQL answers on its own: counts per
+    /// garden, counts per variety, and the edible verdict.</para>
+    ///
+    /// <para>It is also SMALLER than what the product already sends: 10 277 bytes
+    /// against the 27 597 of <c>GET /api/gardens</c> for the same two gardens,
+    /// because it carries plans rather than full plant catalog rows.</para>
+    /// </summary>
+    /// <param name="lang">Display language for common names; English fallback, as on the gardens list.</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpGet]
+    public async Task<ActionResult<DashboardResponse>> GetDashboard(
+        [FromQuery] string lang = "en",
+        CancellationToken ct = default)
+    {
+        var userId = GetCurrentUserId();
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        var language = LanguageCodes.Normalize(lang);
+
+        // The gardens, with their plans. The projection is deliberate: the plant
+        // graph is reduced to the ONE field the thumbnail needs
+        // (ScientificName, for the placement colour hash). Materialising Plant
+        // would drag in the 42-field row — free-text Description included — that
+        // makes the gardens list four times heavier than this whole response.
+        var gardenRows = await context.Gardens
+            .AsNoTracking()
+            .Where(g => g.UserId == userId)
+            .OrderByDescending(g => g.CreatedAt)
+            .ThenBy(g => g.Id)
+            .Select(g => new
+            {
+                g.Id,
+                g.Name,
+                g.LayoutWidth,
+                g.LayoutHeight,
+                g.CellSize,
+                g.CellsJson,
+                g.Orientation,
+                g.GardenType,
+                g.LightScheduleJson,
+                g.Hemisphere,
+                g.LatitudeBand,
+                g.UpdatedAt,
+                // STABLE order, and the reason matters: SaveLayout deletes every
+                // placement and re-inserts it (GardensController.SaveLayout), so
+                // BOTH `Id` and `PlacedAt` are new after each save. Ordering on
+                // either would reshuffle the list — and with it the first names a
+                // card previews and the order of the variety pastilles — every
+                // time the user saves a layout without moving anything. Grid
+                // geometry is the only key the server does not rewrite: it is the
+                // user's own arrangement, in reading order. PlantId closes the
+                // tie for the case the layout PUT does not reject, two placements
+                // anchored on one cell.
+                Placements = g.Placements
+                    .OrderBy(p => p.StartRow)
+                    .ThenBy(p => p.StartCol)
+                    .ThenBy(p => p.PlantId)
+                    .Select(p => new
+                    {
+                        p.Id,
+                        p.PlantId,
+                        p.Plant.ScientificName,
+                        p.StartRow,
+                        p.StartCol,
+                        p.SpanRows,
+                        p.SpanCols,
+                        p.Notes,
+                    })
+                    .ToList(),
+                VarietyCount = g.Placements.Select(p => p.PlantId).Distinct().Count(),
+                OccupiedCells = g.Placements.Sum(p => p.SpanRows * p.SpanCols),
+                EdibleCount = g.Placements.Count(p =>
+                    p.Plant.IsEdible == true
+                    || EdiblePlantTypes.Contains(p.Plant.PlantType!.Name)),
+            })
+            .ToListAsync(ct);
+
+        var gardens = gardenRows
+            .Select(g => new DashboardGardenDto(
+                g.Id,
+                g.Name,
+                g.LayoutWidth,
+                g.LayoutHeight,
+                g.CellSize,
+                g.CellsJson,
+                new GardenConfigDto(
+                    g.Orientation,
+                    g.GardenType,
+                    GardensController.ParseLightSchedule(g.LightScheduleJson),
+                    g.Hemisphere,
+                    g.LatitudeBand),
+                g.UpdatedAt,
+                [.. g.Placements.Select(p => new PlacementResponse(
+                    p.Id,
+                    p.PlantId,
+                    p.ScientificName,
+                    p.StartRow,
+                    p.StartCol,
+                    p.SpanRows,
+                    p.SpanCols,
+                    p.Notes))],
+                g.Placements.Count,
+                g.VarietyCount,
+                g.OccupiedCells,
+                // An EMPTY garden is neither: null, not false. Calling it
+                // ornamental would apply « an ornamental garden never shows a
+                // harvest » to a garden nobody has planted yet.
+                g.Placements.Count == 0 ? null : g.EdibleCount > 0))
+            .ToList();
+
+        // Counts by variety, every garden of the caller merged — the GROUP BY the
+        // pre-flight measured at 1.5 ms on the existing indexes.
+        var varietyRows = await context.GardenPlacements
+            .AsNoTracking()
+            .Where(p => p.Garden.UserId == userId)
+            .GroupBy(p => new
+            {
+                p.PlantId,
+                p.Plant.ScientificName,
+                PlantType = p.Plant.PlantType!.Name,
+                p.Plant.IsEdible,
+            })
+            .Select(grp => new
+            {
+                grp.Key.PlantId,
+                grp.Key.ScientificName,
+                grp.Key.PlantType,
+                grp.Key.IsEdible,
+                Count = grp.Count(),
+                Cells = grp.Sum(p => p.SpanRows * p.SpanCols),
+            })
+            .OrderByDescending(v => v.Count)
+            .ThenBy(v => v.ScientificName)
+            .ToListAsync(ct);
+
+        // Which gardens hold each variety — derived from the rows already loaded
+        // rather than queried again: the placements are in hand, and deriving it
+        // here makes the filter chips consistent with the gardens array by
+        // construction instead of by a second read of the same table.
+        var gardenIdsByPlant = gardenRows
+            .SelectMany(g => g.Placements.Select(p => new { GardenId = g.Id, p.PlantId }))
+            .GroupBy(x => x.PlantId)
+            .ToDictionary(
+                grp => grp.Key,
+                grp => (IReadOnlyList<Guid>)[.. grp.Select(x => x.GardenId).Distinct()]);
+
+        var display = await LoadVarietyDisplayAsync(
+            [.. varietyRows.Select(v => v.PlantId)], language, ct);
+
+        var varieties = varietyRows
+            .Select(v =>
+            {
+                display.TryGetValue(v.PlantId, out var d);
+                return new VarietyCountDto(
+                    v.PlantId,
+                    v.ScientificName,
+                    d.CommonName,
+                    v.PlantType,
+                    v.IsEdible,
+                    d.ImageUrl,
+                    d.ImageAttribution,
+                    v.Count,
+                    v.Cells,
+                    gardenIdsByPlant.TryGetValue(v.PlantId, out var ids) ? ids : []);
+            })
+            .ToList();
+
+        var totals = new DashboardTotalsDto(
+            gardens.Count,
+            gardens.Sum(g => g.PlacementCount),
+            // DISTINCT varieties (decision D11): a variety planted in two gardens
+            // is one variety. Summing the per-garden counts would say seventeen
+            // where the catalog says sixteen.
+            varieties.Count,
+            await context.Plants.CountAsync(ct));
+
+        return Ok(new DashboardResponse(gardens, varieties, totals));
+    }
+
+    /// <summary>
+    /// Localised name and cover photo for the placed varieties, in one read.
+    ///
+    /// <para>The cover is picked with <see cref="PlantListItemMapper.StableImageRank"/>
+    /// — the library's own priority — so a plant does not wear one photo on its
+    /// Library card and another in the Counters widget. Ranking happens in memory
+    /// because that method is a C# switch: the alternative is a second copy of the
+    /// priority written as SQL, which is the divergence this lot exists to avoid.
+    /// The set is bounded by the caller's own varieties, and only stable-source
+    /// rows are read.</para>
+    /// </summary>
+    private async Task<Dictionary<Guid, (string? CommonName, string? ImageUrl, string? ImageAttribution)>>
+        LoadVarietyDisplayAsync(List<Guid> plantIds, string language, CancellationToken ct)
+    {
+        if (plantIds.Count == 0) return [];
+
+        var rows = await context.Plants
+            .AsNoTracking()
+            .Where(p => plantIds.Contains(p.Id))
+            .Select(p => new
+            {
+                p.Id,
+                Names = p.Translations
+                    .Where(t => t.Language == language || t.Language == "en")
+                    .Select(t => new { t.Language, t.CommonName })
+                    .ToList(),
+                Images = p.Images
+                    .Where(i => i.Source == PlantSourceType.Trefle
+                        || i.Source == PlantSourceType.PlantNet)
+                    .Select(i => new
+                    {
+                        i.Id,
+                        i.ImageType,
+                        i.DisplayOrder,
+                        i.Url,
+                        i.Credit,
+                        i.LicenseName,
+                        i.Source,
+                    })
+                    .ToList(),
+            })
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(
+            r => r.Id,
+            r =>
+            {
+                // Requested language, then English — the independent-field
+                // fallback the list mapper applies (SMA-120).
+                var name = r.Names.FirstOrDefault(t => t.Language == language)?.CommonName
+                    ?? r.Names.FirstOrDefault(t => t.Language == "en")?.CommonName;
+
+                var cover = r.Images
+                    .OrderBy(i => PlantListItemMapper.StableImageRank(i.ImageType))
+                    .ThenBy(i => i.DisplayOrder)
+                    .ThenBy(i => i.Id)
+                    .FirstOrDefault();
+
+                return (
+                    name,
+                    cover?.Url,
+                    cover is null
+                        ? null
+                        : ImageAttribution.Compose(cover.Credit, cover.LicenseName, cover.Source));
+            });
+    }
 
     /// <summary>
     /// The caller's layout, or the preset of their level when they have never
