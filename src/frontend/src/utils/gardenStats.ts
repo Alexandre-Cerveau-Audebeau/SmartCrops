@@ -327,6 +327,41 @@ export function deriveGardenView(garden: DashboardGardenData): GardenView {
   };
 }
 
+/**
+ * One derivation per garden OBJECT, however many callers ask for it
+ * (round 1, E10 / G4 / E22).
+ *
+ * `deriveGardenView` walks the whole grid several times — `gridStats`,
+ * `infrastructureBlockers`, `computeExposureView`, `exposureTally` and
+ * `freeCellExposureTally` are each O(width × height) and each allocate — and two
+ * widgets want the same answer for the same gardens. Before this, `GardensBlock`
+ * ran it inline for every row on every render (it owns the rename dialog, so a
+ * keystroke re-ran the engine once per garden per character) while `StatsBlock`
+ * kept its own memoized copy of the identical result.
+ *
+ * The key is the garden object itself, so the cache invalidates on exactly the
+ * thing that matters: `useDashboardData` builds fresh objects on every fetch, so
+ * new data is never served from here, and a re-render that changed no data is
+ * always a hit. A `WeakMap` holds nothing alive — an entry disappears with the
+ * garden it describes.
+ *
+ * A cached `GardenView` is SHARED, so it must be treated as read-only. Nothing
+ * on the dashboard writes to one — `sumExposureTallies` accumulates into a fresh
+ * tally rather than into its inputs — and this is the reason it must stay that
+ * way.
+ */
+const viewCache = new WeakMap<DashboardGardenData, GardenView>();
+
+/** {@link deriveGardenView}, memoized on the garden object. */
+export function gardenViewOf(garden: DashboardGardenData): GardenView {
+  const cached = viewCache.get(garden);
+  if (cached) return cached;
+
+  const view = deriveGardenView(garden);
+  viewCache.set(garden, view);
+  return view;
+}
+
 /** Sums a list of tallies — the Statistics widget's all-gardens distribution. */
 export function sumExposureTallies(
   tallies: readonly ExposureTally[]

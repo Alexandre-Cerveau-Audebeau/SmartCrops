@@ -5,6 +5,7 @@ import { parseCellsJson, type CellData } from '../types/GardenLayout';
 import type { ExposureCategory } from './exposure';
 import {
   deriveGardenView,
+  gardenViewOf,
   dominantExposure,
   emptyExposureTally,
   exposureTally,
@@ -385,5 +386,56 @@ describe('sumExposureTallies', () => {
 
   it('answers a zeroed tally for no garden at all', () => {
     expect(sumExposureTallies([])).toEqual(emptyExposureTally());
+  });
+});
+
+describe('gardenViewOf — one derivation per garden (round 1, E10 / G4 / E22)', () => {
+  const plannedGarden = (): DashboardGardenData => ({
+    id: 'g1',
+    name: 'Terrasse',
+    description: null,
+    width: 4,
+    height: 2,
+    cellSize: '50cm',
+    cellsJson: null,
+    config: {
+      orientation: 'S',
+      gardenType: null,
+      lightSchedule: null,
+      hemisphere: 'N',
+      latitudeBand: 'mid',
+    },
+    updatedAt: '2026-05-01T00:00:00Z',
+    placements: [placement()],
+    placementCount: 1,
+    varietyCount: 1,
+    occupiedCells: 1,
+    isEdible: true,
+  });
+
+  it('answers the identical object on a second call', () => {
+    // Reference equality is the measurement: `deriveGardenView` allocates a new
+    // GardenView, several grids and two tallies every time it runs, so the same
+    // reference coming back proves the engine did not run again.
+    const garden = plannedGarden();
+
+    expect(gardenViewOf(garden)).toBe(gardenViewOf(garden));
+  });
+
+  it('agrees with the unmemoized derivation', () => {
+    const garden = plannedGarden();
+
+    expect(gardenViewOf(garden)).toEqual(deriveGardenView(garden));
+  });
+
+  it('derives again for a different garden object', () => {
+    // The cache key is the object `useDashboardData` built, and a new fetch
+    // builds new objects — so new data is never served from the cache, however
+    // identical it looks.
+    const first = plannedGarden();
+    const second = plannedGarden();
+
+    expect(gardenViewOf(first)).not.toBe(gardenViewOf(second));
+    expect(gardenViewOf(first)).toEqual(gardenViewOf(second));
   });
 });
