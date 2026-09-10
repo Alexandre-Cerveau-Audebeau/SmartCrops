@@ -871,3 +871,410 @@ describe('Gardens widget — the garden description (V10)', () => {
     ).toBeNull();
   });
 });
+
+// ── Round 2 ───────────────────────────────────────────────────────────────────
+// V8, V11, V12 and the Medium description tooltip. jsdom lays nothing out and
+// scrolls nothing, so the layout defects are asserted on the DECLARATIONS a
+// browser resolves and on the STRUCTURE that makes them true — a measured width
+// would be zero here and would prove nothing either way.
+
+/** The Emotion class of a node, matched by its `css-` prefix, not by position. */
+function emotionClass(node: Element): string {
+  const found = [...node.classList].find((name) => name.startsWith('css-'));
+  if (!found) {
+    throw new Error(
+      `No Emotion class on <${node.tagName.toLowerCase()} class="${node.className}">`
+    );
+  }
+  return found;
+}
+
+/** The stylesheet rules Emotion emitted for a node, joined. */
+const rulesFor = (node: Element) =>
+  [...document.querySelectorAll('style')]
+    .map((tag) => tag.textContent ?? '')
+    .filter((text) => text.includes(emotionClass(node)))
+    .join(' ');
+
+/** The Gardens table's actions cells: the header cell first, then one per row. */
+function actionCells(): HTMLElement[] {
+  const table = gardensWidget().querySelector('table');
+  if (!table) throw new Error('The Gardens widget is not showing its table');
+  return [...table.querySelectorAll('tr')].map((row) => {
+    const last = row.lastElementChild;
+    if (!last) throw new Error('A table row has no cells at all');
+    return last as HTMLElement;
+  });
+}
+
+async function renderExpert() {
+  vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+    schemaVersion: 1,
+    level: 'expert',
+    isPreset: true,
+    blocks: presetFor('expert'),
+    updatedAt: null,
+  });
+  renderPage();
+  // `findAllByText`: at Expert the Statistics widget names the same garden, so
+  // the singular query is ambiguous by construction rather than by accident.
+  await screen.findAllByText('Casa Lolo');
+}
+
+async function renderNovice() {
+  vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+    schemaVersion: 1,
+    level: 'novice',
+    isPreset: true,
+    blocks: presetFor('novice'),
+    updatedAt: null,
+  });
+  renderPage();
+  await screen.findAllByText('Casa Lolo');
+}
+
+describe('Gardens table — the actions column is frozen to the right (V8)', () => {
+  beforeEach(() => {
+    localStorage.setItem('smartcrops-language', 'en');
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenWith(3)])
+    );
+  });
+
+  it('is a COLUMN and not a strip laid over the row', async () => {
+    // The whole of Alexandre's constraint rests on this distinction. A sticky
+    // cell is laid out as a cell: its width is taken out of the row once, so
+    // scrolled fully right it rests at its own place and the last data cell
+    // stops just before it. An absolutely positioned strip reserves nothing and
+    // would sit on top of the last column at every scroll position.
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    const [header, ...rows] = actionCells();
+    expect(header!.tagName).toBe('TH');
+    expect(rows).not.toHaveLength(0);
+    for (const cell of rows) expect(cell.tagName).toBe('TD');
+
+    for (const cell of actionCells()) {
+      const style = getComputedStyle(cell);
+      expect(style.position).toBe('sticky');
+      expect(style.right).toBe('0px');
+    }
+  });
+
+  it('declares its width, so the row is laid out around it', async () => {
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    for (const cell of actionCells()) {
+      const rules = rulesFor(cell);
+      expect(rules).toContain('width:96px');
+      expect(rules).toContain('min-width:96px');
+    }
+  });
+
+  it('is opaque, so the scrolling cells never show through it', async () => {
+    // Worst on the dark theme, where the cells that pass underneath carry light
+    // text over a dark card. The fill is the card's own paper.
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    for (const cell of actionCells()) {
+      const background = getComputedStyle(cell).backgroundColor;
+      expect(background).not.toBe('');
+      expect(background).not.toBe('transparent');
+      expect(background).not.toMatch(/rgba\([^)]*,\s*0\)$/);
+    }
+  });
+
+  it('separates its borders, so the rules travel with the frozen cells', async () => {
+    // Under `border-collapse: collapse` the borders belong to the table rather
+    // than to the cell that declares them, so they stay behind when a sticky
+    // cell moves.
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    const table = gardensWidget().querySelector('table')!;
+    expect(rulesFor(table)).toContain('border-collapse:separate');
+  });
+
+  it('keeps both buttons named and reachable, wherever the table is scrolled', async () => {
+    // Being sticky is what keeps them ON SCREEN at any scroll offset; being
+    // ordinary focusable buttons in the row is what keeps them reachable
+    // without scrolling at all.
+    renderPage();
+    await screen.findByText('Casa Lolo');
+    const widget = within(gardensWidget());
+
+    for (const name of ['Edit Casa Lolo', 'Delete Casa Lolo']) {
+      const button = widget.getByRole('button', { name });
+      expect(button).not.toBeDisabled();
+      button.focus();
+      expect(document.activeElement).toBe(button);
+    }
+  });
+
+  it('names its header for a screen reader while hiding it from the eye', async () => {
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    const header = actionCells()[0]!;
+    const label = within(header).getByText('Actions');
+    const style = getComputedStyle(label);
+    expect(style.position).toBe('absolute');
+    expect(style.width).toBe('1px');
+    expect(style.height).toBe('1px');
+    expect(style.overflow).toBe('hidden');
+  });
+});
+
+describe('Gardens table — the plan thumbnail is in the identity cell (V11)', () => {
+  beforeEach(() => {
+    localStorage.setItem('smartcrops-language', 'en');
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenWith(3)])
+    );
+  });
+
+  it('at Gardener, where the HARVEST column is off', async () => {
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    expect(
+      within(gardensWidget()).getAllByTestId('template-preview')
+    ).toHaveLength(1);
+  });
+
+  it('at Expert too, where the HARVEST column is on', async () => {
+    // The defect, exactly: the thumbnail was tied to `!showHarvestColumn`, so
+    // it vanished the moment the Harvest widget joined the page. That condition
+    // transcribed a WIDTH arbitration of the frozen design, and V8's frozen
+    // actions column is what lifts it.
+    await renderExpert();
+
+    expect(
+      within(gardensWidget()).getAllByTestId('template-preview')
+    ).toHaveLength(1);
+  });
+
+  it('sits in the wrapping chip row, which is what makes it affordable', async () => {
+    // A wrapping row asks for the width of its widest single item, not for the
+    // sum: the thumbnail comes back and the identity column gets NARROWER than
+    // it was when the thumbnail sat inline before the name.
+    await renderExpert();
+
+    const preview = within(gardensWidget()).getAllByTestId(
+      'template-preview'
+    )[0]!;
+    const row = preview.parentElement?.parentElement;
+    expect(row).not.toBeNull();
+    expect(rulesFor(row!)).toContain('flex-wrap:wrap');
+  });
+});
+
+describe('Gardens rows — rename and delete at EVERY size (V12)', () => {
+  beforeEach(() => {
+    localStorage.setItem('smartcrops-language', 'en');
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenWith(3)])
+    );
+  });
+
+  it('a Medium row carries both buttons — the Novice preset shows this widget in Medium', async () => {
+    // The reason this is an amendment to the frozen design and not a bug fix
+    // against it: the design gives a Medium row five elements and neither of
+    // these two. But Novice is the preset that shows Gardens in Medium, so a
+    // Novice account had no way at all to rename or delete a garden.
+    await renderNovice();
+    const widget = within(gardensWidget());
+
+    expect(
+      widget.getByRole('button', { name: 'Edit Casa Lolo' })
+    ).toBeInTheDocument();
+    expect(
+      widget.getByRole('button', { name: 'Delete Casa Lolo' })
+    ).toBeInTheDocument();
+    // Still the Medium list, not the Large table.
+    expect(gardensWidget().querySelector('table')).toBeNull();
+  });
+
+  it('opens the rename dialog from a Medium row', async () => {
+    await renderNovice();
+
+    fireEvent.click(
+      within(gardensWidget()).getByRole('button', { name: 'Edit Casa Lolo' })
+    );
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('textbox', { name: /^Name/ })).toHaveValue(
+      'Casa Lolo'
+    );
+  });
+
+  it('opens the type-the-name delete dialog from a Medium row', async () => {
+    await renderNovice();
+
+    fireEvent.click(
+      within(gardensWidget()).getByRole('button', { name: 'Delete Casa Lolo' })
+    );
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Delete this garden?' })
+    ).toBeInTheDocument();
+  });
+
+  it('puts them OUTSIDE the row link — a button inside an anchor is invalid', async () => {
+    await renderNovice();
+    const widget = within(gardensWidget());
+
+    const link = widget.getByRole('link', { name: 'Open Casa Lolo' });
+    for (const name of ['Edit Casa Lolo', 'Delete Casa Lolo']) {
+      expect(link.contains(widget.getByRole('button', { name }))).toBe(false);
+    }
+  });
+
+  it.each([
+    ['medium', renderNovice],
+    ['large', renderExpert],
+  ])(
+    'at %s the trailing group is rename, delete, chevron — in that order',
+    async (_size, renderAt) => {
+      // Alexandre's requirement: the buttons keep the same place whatever the
+      // widget's size, so resizing never moves them under the cursor.
+      await renderAt();
+
+      const group = gardensWidget().querySelector('[data-row-actions]');
+      expect(group).not.toBeNull();
+
+      const buttons = [...group!.querySelectorAll('button')].map((button) =>
+        button.getAttribute('aria-label')
+      );
+      expect(buttons).toEqual(['Edit Casa Lolo', 'Delete Casa Lolo']);
+      expect(group!.lastElementChild).toHaveAttribute(
+        'data-testid',
+        'ChevronRightIcon'
+      );
+    }
+  );
+});
+
+describe('Gardens Medium row — the description, for zero pixels', () => {
+  const describedGarden = (description: string | null) =>
+    dashboardWith([gardenWith(3, { description })]);
+
+  beforeEach(() => localStorage.setItem('smartcrops-language', 'en'));
+
+  it('rides the row link as a tooltip, adding no line', async () => {
+    const text = 'Le coin sud, refait au printemps.';
+    vi.mocked(fetchDashboardData).mockResolvedValue(describedGarden(text));
+
+    await renderNovice();
+    const widget = within(gardensWidget());
+
+    // Not printed anywhere: a Medium row is one 44 px line and has none to give.
+    expect(widget.queryByText(text)).toBeNull();
+    // `describeChild` writes it into the link's own `title`, which is what
+    // makes it the link's accessible DESCRIPTION rather than a stray attribute
+    // on a node no assistive technology stops on.
+    expect(
+      widget.getByRole('link', { name: 'Open Casa Lolo' })
+    ).toHaveAttribute('title', text);
+  });
+
+  it('is reachable by the keyboard — the row link is the tab stop that carries it', async () => {
+    // MUI's popper opens on KEYBOARD focus, which jsdom cannot produce:
+    // `:focus-visible` is false there even after a real `user-event` Tab (round
+    // 1 probed it). What a keyboard user gets is asserted instead — the link is
+    // in the tab order and carries the whole text.
+    const text = 'Balcon plein sud, arrosage tous les deux jours.';
+    vi.mocked(fetchDashboardData).mockResolvedValue(describedGarden(text));
+
+    await renderNovice();
+    const link = within(gardensWidget()).getByRole('link', {
+      name: 'Open Casa Lolo',
+    });
+
+    const user = userEvent.setup();
+    await user.tab();
+    let guard = 0;
+    while (document.activeElement !== link && guard++ < 40) await user.tab();
+    expect(document.activeElement).toBe(link);
+    expect(link).toHaveAttribute('title', text);
+  });
+
+  it('opens on hover', async () => {
+    const text = 'Le coin sud, refait au printemps.';
+    vi.mocked(fetchDashboardData).mockResolvedValue(describedGarden(text));
+
+    await renderNovice();
+
+    fireEvent.mouseOver(
+      within(gardensWidget()).getByRole('link', { name: 'Open Casa Lolo' })
+    );
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(text);
+  });
+
+  it('opens on touch, where there is no hover', async () => {
+    const text = 'Balcon plein sud, arrosage tous les deux jours.';
+    vi.mocked(fetchDashboardData).mockResolvedValue(describedGarden(text));
+
+    await renderNovice();
+
+    fireEvent.touchStart(
+      within(gardensWidget()).getByRole('link', { name: 'Open Casa Lolo' })
+    );
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(text);
+  });
+
+  it('says nothing at all when the garden has no description', async () => {
+    vi.mocked(fetchDashboardData).mockResolvedValue(describedGarden(null));
+
+    await renderNovice();
+    const link = within(gardensWidget()).getByRole('link', {
+      name: 'Open Casa Lolo',
+    });
+
+    // An empty `Tooltip` still wraps its child and still writes an empty
+    // `title`; « no description » has to mean no tooltip at all.
+    expect(link).not.toHaveAttribute('title');
+    fireEvent.mouseOver(link);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+});
+
+// ── The two smaller observations that came with V8 ────────────────────────────
+// Only ONE of them is a defect of its own. The MÉTÉO column reading « Bientô »
+// / « So » is the horizontal overflow itself, seen at the scrollport's edge:
+// the marker declares `white-space: nowrap` and an inline-block's own minimum
+// width, so nothing inside the cell truncates it — it was simply the last thing
+// on screen before the table ran off the card. It is answered by V8 (the row is
+// reachable, and the frozen column no longer forces a horizontal hunt for the
+// buttons), not by a change to the cell. The percentage is a real defect.
+
+describe('The occupancy figure never breaks in two', () => {
+  beforeEach(() => localStorage.setItem('smartcrops-language', 'en'));
+
+  it('declares nowrap, so « 10 % » stays on one line in an 84 px cell', async () => {
+    // The space between the figure and the sign is an ordinary one, so a
+    // squeezed OCCUPATION column was free to wrap there — and a percentage
+    // split over two lines is not a percentage. Asserted on the declaration:
+    // jsdom lays nothing out, so a measured line count would be zero here.
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([
+        gardenWith(3, {
+          cellsJson: JSON.stringify(
+            Array.from({ length: 12 }, () => ({ soil: 'soil' }))
+          ),
+        }),
+      ])
+    );
+
+    renderPage();
+    await screen.findAllByText('Casa Lolo');
+
+    const figure = within(gardensWidget()).getByText(/^\d+ %$/);
+    expect(rulesFor(figure)).toContain('white-space:nowrap');
+  });
+});

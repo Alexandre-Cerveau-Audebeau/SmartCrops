@@ -208,19 +208,36 @@ describe('GardensDashboard — grid from the stored preferences (SMA-336)', () =
 
     renderPage();
 
-    // Novice puts Gardens in Medium: one-line rows and the create link, not
-    // the Large card list with its per-card Edit / Delete controls.
+    // Novice puts Gardens in Medium: one-line link rows, not the Large
+    // comparison table.
+    //
+    // ADAPTED by round 2 (V12). This used to read the ABSENCE of the Delete
+    // button as the sign of a Medium widget, because the frozen design put
+    // rename and delete on the table only. That is exactly the defect V12
+    // names: Novice is the preset that shows this widget in Medium, so it was
+    // the one account with no way to rename or delete a garden at all. Both
+    // buttons are on both sizes now, and what separates the sizes is the
+    // table — which is what this asserts instead.
     await screen.findByRole('link', { name: 'Open Casa Lolo' });
-    expect(screen.queryByRole('button', { name: 'Delete Casa Lolo' })).toBeNull();
+    const widget = document.querySelector('[data-widget="gardens"]')!;
+    expect(widget.querySelector('table')).toBeNull();
+    expect(
+      within(widget as HTMLElement).getByRole('button', {
+        name: 'Delete Casa Lolo',
+      })
+    ).toBeInTheDocument();
   });
 
-  it('renders the Gardens widget at Large as the full card list', async () => {
+  it('renders the Gardens widget at Large as the comparison table', async () => {
     servePreferences('gardener');
 
     renderPage();
 
     expect(
       await screen.findByRole('button', { name: 'Delete Casa Lolo' })
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-widget="gardens"] table')
     ).toBeInTheDocument();
   });
 });
