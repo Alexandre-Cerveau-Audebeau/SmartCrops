@@ -285,6 +285,8 @@
     "cancel": "Annuler",
     "save": "Enregistrer",
     "create": "Créer",
+    "savingStatus": "Enregistrement en cours...",
+    "creatingStatus": "Création en cours...",
     "deleteDialog": {
       "title": "Supprimer ce jardin ?",
       "bodyList_one": "« {{name}} » — sa grille et {{count}} plante seront définitivement supprimées.",
@@ -300,7 +302,8 @@
       "confirm": "Supprimer le jardin",
       "cancel": "Annuler",
       "error": "Impossible de supprimer le jardin. Veuillez réessayer.",
-      "successToast": "Jardin supprimé"
+      "successToast": "Jardin supprimé",
+      "deletingStatus": "Suppression en cours..."
     },
     "loading": "Chargement des jardins...",
     "error": "Impossible de charger les jardins. Veuillez réessayer plus tard.",
@@ -308,6 +311,111 @@
     "seeMore": "Voir plus",
     "seeLess": "Voir moins",
     "planMyGarden": "Planifier mon jardin"
+  },
+  "dashboard": {
+    "meta_one": "{{count}} jardin",
+    "meta_other": "{{count}} jardins",
+    "edit": "Modifier",
+    "done": "Terminé",
+    "customize": "Personnaliser",
+    "levelChip": "Vue {{level}}",
+    "levelChipAdjusted": "Vue {{level}} · ajustée",
+    "loadError": "Impossible de charger votre tableau de bord.",
+    "retry": "Réessayer",
+    "soon": "Bientôt disponible",
+    "save": {
+      "pending": "Enregistrement…",
+      "saved": "Enregistré",
+      "error": "Modifications non enregistrées"
+    },
+    "levels": {
+      "novice": {
+        "name": "Novice",
+        "tagline": "l’essentiel, rien de plus"
+      },
+      "gardener": {
+        "name": "Jardinier",
+        "tagline": "météo, tâches et compteurs"
+      },
+      "expert": {
+        "name": "Expert",
+        "tagline": "Tout, en grand"
+      }
+    },
+    "sizes": {
+      "small": "Petit",
+      "medium": "Moyen",
+      "large": "Grand"
+    },
+    "editMode": {
+      "drag": "Déplacer {{widget}}",
+      "hide": "Masquer {{widget}}",
+      "locked": "{{widget}} ne peut pas être masqué",
+      "resize": "Changer la taille de {{widget}} — actuellement {{size}}",
+      "options": "Options de {{widget}}",
+      "optionsTitle": "Options du widget",
+      "optionsEmpty": "Aucune option pour ce widget pour le moment.",
+      "optionsDone": "Terminé"
+    },
+    "panel": {
+      "title": "Personnaliser",
+      "close": "Fermer",
+      "levelSection": "Niveau",
+      "note": "Le niveau pré-configure les widgets ; vos réglages manuels restent prioritaires",
+      "reset": "Réinitialiser au niveau {{level}}",
+      "gallerySection": "Galerie",
+      "galleryHint": "Les widgets masqués — ajoutez-les à la page.",
+      "galleryEmpty": "Aucun widget masqué.",
+      "hidden": "masqué",
+      "add": "Ajouter {{widget}}"
+    },
+    "a11y": {
+      "instructions": "Appuyez sur Espace ou Entrée pour saisir le widget, les flèches pour le déplacer, Espace ou Entrée pour le déposer, Échap pour annuler.",
+      "dragStart": "{{widget}} saisi, position {{position}} sur {{total}}.",
+      "dragOver": "{{widget}} déplacé en position {{position}} sur {{total}}.",
+      "dragEnd": "{{widget}} déposé en position {{position}} sur {{total}}.",
+      "dragCancel": "Déplacement de {{widget}} annulé."
+    },
+    "blocks": {
+      "weather": {
+        "title": "Météo",
+        "invite": "La météo a besoin de savoir où se trouvent vos jardins."
+      },
+      "gardens": {
+        "title": "Jardins",
+        "count_one": "{{count}} jardin",
+        "count_other": "{{count}} jardins",
+        "lastModified": "Modifié {{when}}",
+        "openLast": "Ouvrir le dernier jardin modifié",
+        "more_one": "+{{count}} jardin →",
+        "more_other": "+{{count}} jardins →",
+        "open": "Ouvrir {{name}}"
+      },
+      "tips": {
+        "title": "Conseils",
+        "invite": "Les conseils arrivent avec l’exposition et le calendrier de vos jardins."
+      },
+      "month": {
+        "title": "Ce mois-ci",
+        "invite": "Le calendrier du mois arrive avec les semis et les récoltes de vos plantations."
+      },
+      "todo": {
+        "title": "À faire aujourd’hui",
+        "invite": "Les tâches du jour arrivent avec la météo et le calendrier."
+      },
+      "counters": {
+        "title": "Compteurs par variété",
+        "invite": "Vos variétés seront comptées ici, jardin par jardin."
+      },
+      "stats": {
+        "title": "Statistiques",
+        "invite": "L’occupation et l’exposition de vos jardins seront résumées ici."
+      },
+      "harvest": {
+        "title": "Récolte",
+        "invite": "Les stades de croissance de vos plants ne sont pas encore renseignés — l’estimation ne peut pas les compter."
+      }
+    }
   },
   "common": {
     "cancel": "Annuler",

@@ -30,6 +30,8 @@ public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options)
 
     public DbSet<PerenualRevisitQueue> PerenualRevisitQueue => Set<PerenualRevisitQueue>();
 
+    public DbSet<UserDashboardPreferences> UserDashboardPreferences => Set<UserDashboardPreferences>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
