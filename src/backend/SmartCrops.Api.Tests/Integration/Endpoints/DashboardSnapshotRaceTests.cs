@@ -77,10 +77,40 @@ public class DashboardSnapshotRaceTests : IAsyncLifetime
             // `TestWebAppBuilder.WithInMemoryDatabase`: drop the options
             // descriptors, re-register, and carry the production interceptor
             // across so the timestamps keep working.
+            //
+            // Round 4 (C2 — E‴1): BOTH descriptor types go — every
+            // `DbContextOptions<SmartCropsDbContext>`, and every
+            // `IDbContextOptionsConfiguration<SmartCropsDbContext>` beside it.
+            // The defect the finding describes is real: where a provider keeps
+            // one configuration descriptor per `AddDbContext` call and applies
+            // ALL of them, dropping only the options descriptor leaves the
+            // production `AddInfrastructure` configuration live next to this
+            // one and the fixture is not isolated.
+            //
+            // MEASURED, and the measurement is worth writing down: on the
+            // pinned EF Core 8.0.x assemblies this clause matches nothing —
+            // `Microsoft.EntityFrameworkCore.dll` 8.0.11, 8.0.29 and 8.0.30
+            // contain no type whose name ends in `OptionsConfiguration` at all;
+            // that interface arrives with EF Core 9. On 8.0.30 the options
+            // descriptor alone is the whole registration, which is why the
+            // round 3 loop worked and why this test still proves what it
+            // claims. The clause is kept because it costs one string comparison
+            // per descriptor once at fixture start-up, and it is exactly the
+            // guard this fixture needs the day the solution moves to EF Core 9
+            // — the version where the finding's premise becomes true.
+            //
+            // Matched by NAME on the generic type definition rather than by
+            // `typeof(...)` for the same reason: the type does not exist on the
+            // version this project compiles against, so naming it would not
+            // build.
             .WithServices(services =>
             {
                 foreach (var descriptor in services
-                    .Where(d => d.ServiceType == typeof(DbContextOptions<SmartCropsDbContext>))
+                    .Where(d => d.ServiceType == typeof(DbContextOptions<SmartCropsDbContext>)
+                        || (d.ServiceType.IsGenericType
+                            && d.ServiceType.GetGenericTypeDefinition().Name
+                                .StartsWith("IDbContextOptionsConfiguration", StringComparison.Ordinal)
+                            && d.ServiceType.GenericTypeArguments[0] == typeof(SmartCropsDbContext)))
                     .ToList())
                 {
                     services.Remove(descriptor);

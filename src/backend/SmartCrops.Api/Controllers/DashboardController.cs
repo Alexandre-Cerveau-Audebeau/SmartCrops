@@ -47,6 +47,22 @@ public class DashboardController(SmartCropsDbContext context, IMemoryCache cache
     /// Single-flight gate on the catalog-count refill (round 3, E″2). Static
     /// because the controller is created per request and the stampede it
     /// prevents is between requests. See <see cref="CatalogPlantCountAsync"/>.
+    ///
+    /// <para>PER PROCESS, and the deployment topology decides what that is worth
+    /// (round 4, C3 — E‴2 / G‴1). This gate and <c>IMemoryCache</c> have the same
+    /// scope, so they are consistent with each other; what they are not is
+    /// global. N API instances starting cold run N scans, not one. That is the
+    /// intended trade while the catalog is a few hundred rows behind a
+    /// five-minute window and the figure only feeds a « … of 536 in the catalog »
+    /// caption — a shared cache with a distributed single-flight key would move
+    /// the ceiling to one scan, and is not worth its operational weight for this
+    /// caption alone.</para>
+    ///
+    /// <para>The other limit worth writing down: the winner holds the gate for
+    /// the whole <c>CountAsync</c>, so every concurrent dashboard load waits
+    /// behind it. Bounded today by a single indexed count; if that scan ever
+    /// becomes expensive, the answer is a timeout on <c>WaitAsync</c> falling
+    /// back to the uncached path, measured rather than guessed.</para>
     /// </summary>
     private static readonly SemaphoreSlim CatalogPlantCountLock = new(1, 1);
 
@@ -187,7 +203,7 @@ public class DashboardController(SmartCropsDbContext context, IMemoryCache cache
                 new GardenConfigDto(
                     g.Orientation,
                     g.GardenType,
-                    GardensController.ParseLightSchedule(g.LightScheduleJson),
+                    LightScheduleDocument.Parse(g.LightScheduleJson),
                     g.Hemisphere,
                     g.LatitudeBand),
                 g.UpdatedAt,
