@@ -259,6 +259,70 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         Assert.Equal(1, garden.PlacementCount);
     }
 
+    [Theory]
+    // A null array element — deserializes to a list holding a null.
+    [InlineData("[null]")]
+    // An object with neither field — deserializes to a slot with two nulls.
+    [InlineData("[{}]")]
+    // Only one of the two ends.
+    [InlineData("[{\"start\":\"08:00\"}]")]
+    // A time no clock has.
+    [InlineData("[{\"start\":\"25:00\",\"end\":\"20:00\"}]")]
+    // Well-shaped digits, wrong format.
+    [InlineData("[{\"start\":\"8:00\",\"end\":\"20:00\"}]")]
+    // Reversed range.
+    [InlineData("[{\"start\":\"20:00\",\"end\":\"08:00\"}]")]
+    // Zero-length range — the write path requires start < end, strictly.
+    [InlineData("[{\"start\":\"08:00\",\"end\":\"08:00\"}]")]
+    // One slot more than the write path allows.
+    [InlineData("[{\"start\":\"00:00\",\"end\":\"01:00\"},{\"start\":\"01:00\",\"end\":\"02:00\"},"
+        + "{\"start\":\"02:00\",\"end\":\"03:00\"},{\"start\":\"03:00\",\"end\":\"04:00\"},"
+        + "{\"start\":\"04:00\",\"end\":\"05:00\"},{\"start\":\"05:00\",\"end\":\"06:00\"},"
+        + "{\"start\":\"06:00\",\"end\":\"07:00\"}]")]
+    public async Task GetDashboard_SemanticallyInvalidLightSchedule_AlsoDegradesToNull(
+        string storedJson)
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Serre");
+        await SetLightScheduleJsonAsync(gardenId, storedJson);
+        AuthAs(userId);
+
+        // Round 3 (E″3). Every document here is VALID JSON of the right shape,
+        // so `JsonException` never fires and the round 1 guard let it through —
+        // the boundary handed back a schedule the write path answers 400 for.
+        // The reader now holds the document to the same slot rules, and a value
+        // that fails them reads as no schedule at all.
+        var garden = Assert.Single((await GetDashboardAsync()).Gardens);
+        Assert.Null(garden.Config.LightSchedule);
+    }
+
+    [Theory]
+    // The full six slots the write path allows, in order.
+    [InlineData("[{\"start\":\"00:00\",\"end\":\"01:00\"},{\"start\":\"01:00\",\"end\":\"02:00\"},"
+        + "{\"start\":\"02:00\",\"end\":\"03:00\"},{\"start\":\"03:00\",\"end\":\"04:00\"},"
+        + "{\"start\":\"04:00\",\"end\":\"05:00\"},{\"start\":\"05:00\",\"end\":\"06:00\"}]", 6)]
+    // The edges of the 24h clock.
+    [InlineData("[{\"start\":\"00:00\",\"end\":\"23:59\"}]", 1)]
+    // An empty document is not invalid — it simply carries no slot.
+    [InlineData("[]", 0)]
+    public async Task GetDashboard_ValidLightSchedule_SurvivesTheNewRules(
+        string storedJson,
+        int expectedSlots)
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Serre");
+        await SetLightScheduleJsonAsync(gardenId, storedJson);
+        AuthAs(userId);
+
+        // The other half of E″3: a stricter reader that refuses a legitimate
+        // document would be a worse defect than the one it fixes.
+        var garden = Assert.Single((await GetDashboardAsync()).Gardens);
+        Assert.NotNull(garden.Config.LightSchedule);
+        Assert.Equal(expectedSlots, garden.Config.LightSchedule!.Count);
+    }
+
     [Fact]
     public async Task GetDashboard_MalformedLightScheduleOnOneGarden_StillServesTheOthers()
     {
@@ -419,12 +483,16 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         await SeedPlacementAsync(gardenId, plantId, 0, 0);
         AuthAs(userId);
 
-        var garden = Assert.Single((await GetDashboardAsync()).Gardens);
+        // ONE aggregate for both assertions (round 3, G″1): the endpoint was
+        // called twice per theory case, seven times over, for a body that does
+        // not change between the two reads.
+        var body = await GetDashboardAsync();
+        var garden = Assert.Single(body.Gardens);
 
         Assert.Equal(expected, garden.IsEdible);
         // The type name also travels on the variety row, so the widget's own
         // half of R4 reads the same vocabulary the server judged with.
-        Assert.Equal(plantTypeName, Assert.Single((await GetDashboardAsync()).Varieties).PlantType);
+        Assert.Equal(plantTypeName, Assert.Single(body.Varieties).PlantType);
     }
 
     // ── One snapshot, not two reads (E3) ─────────────────────────────────────
@@ -699,11 +767,16 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
         var row = await db.PlantTypes.AsNoTracking().SingleOrDefaultAsync(t => t.Name == name);
-        Assert.True(
-            row is not null,
-            $"No seeded PlantType named '{name}'. Seeded: "
-                + string.Join(", ", await db.PlantTypes.AsNoTracking().Select(t => t.Name).ToListAsync()));
-        return row!.Id;
+        // Round 3 (G″2): the diagnostic list is built ON THE FAILURE PATH only.
+        // C# evaluates every argument before calling `Assert.True`, so the
+        // `string.Join` used to run a second `PlantTypes` query on every call —
+        // about twenty per class — to compose a message nobody would read.
+        if (row is null)
+        {
+            var seeded = await db.PlantTypes.AsNoTracking().Select(t => t.Name).ToListAsync();
+            Assert.Fail($"No seeded PlantType named '{name}'. Seeded: {string.Join(", ", seeded)}");
+        }
+        return row.Id;
     }
 
     private async Task<Guid> SeedPlantAsync(
