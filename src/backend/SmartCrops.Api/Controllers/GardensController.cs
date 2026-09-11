@@ -110,7 +110,7 @@ public class GardensController(
             .Include(g => g.Placements)
             .ThenInclude(p => p.Plant)
             .ThenInclude(p => p.Images.Where(i =>
-                i.Source == PlantSourceType.Trefle || i.Source == PlantSourceType.PlantNet))
+                PlantListItemMapper.StableImageSources.Contains(i.Source)))
             .OrderByDescending(g => g.CreatedAt)
             .AsSplitQuery()
             .AsNoTracking()

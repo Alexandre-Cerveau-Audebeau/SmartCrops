@@ -462,30 +462,6 @@ describe('fetchDashboardData — a garden record is checked before it is trusted
     await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
   });
 
-  it.each(['plantId', 'scientificName', 'count', 'cells', 'gardenIds'])(
-    'rejects a variety with no %s',
-    async (field) => {
-      const body = full();
-      delete (body.varieties[0] as Record<string, unknown>)[field];
-      mockFetch(body);
-
-      await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
-    }
-  );
-
-  it.each([
-    'gardenCount',
-    'placementCount',
-    'varietyCount',
-    'catalogPlantCount',
-  ])('rejects totals with no %s', async (field) => {
-    const body = full();
-    delete (body.totals as Record<string, unknown>)[field];
-    mockFetch(body);
-
-    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
-  });
-
   // ROUND 4 (C1 — E‴5 / G‴2): the nested records, checked at the depth the page
   // actually reads them.
   it.each([
@@ -700,6 +676,40 @@ describe('fetchDashboardData — a variety row is checked before it is trusted (
     await expect(fetchDashboardData('en')).rejects.toThrow(
       /a garden, a placement, a variety row or the totals block/
     );
+  });
+
+  // Moved from the garden-record `describe` (round 7, S48 — Extension #8-14):
+  // a reader who greps for variety validation finds one place.
+  it.each(['plantId', 'scientificName', 'count', 'cells', 'gardenIds'])(
+    'rejects a variety with no %s',
+    async (field) => {
+      const body = withVariety({});
+      delete (body.varieties[0] as Record<string, unknown>)[field];
+      mockFetch(body);
+
+      await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+    }
+  );
+});
+
+describe('fetchDashboardData — the totals block is checked before it is trusted', () => {
+  const withTotals = () => ({
+    gardens: [{ ...GARDEN }],
+    varieties: [{ ...VARIETY }],
+    totals: { gardenCount: 1, placementCount: 1, varietyCount: 1, catalogPlantCount: 536 },
+  });
+
+  it.each([
+    'gardenCount',
+    'placementCount',
+    'varietyCount',
+    'catalogPlantCount',
+  ])('rejects totals with no %s', async (field) => {
+    const body = withTotals();
+    delete (body.totals as Record<string, unknown>)[field];
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
   });
 });
 

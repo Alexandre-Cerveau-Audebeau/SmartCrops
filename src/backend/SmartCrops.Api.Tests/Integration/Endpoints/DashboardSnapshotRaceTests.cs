@@ -129,8 +129,13 @@ public class DashboardSnapshotRaceTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        _client.Dispose();
-        await _factory.DisposeAsync();
+        // Null-safe for the same reason as IntegrationTestBase.DisposeAsync
+        // (round 7, S23 — Extension #7-1): if InitializeAsync threw before these
+        // were assigned — the Respawn reset, the factory build, the interceptor
+        // resolution can each throw — disposing them would NRE and mask the
+        // original setup failure.
+        _client?.Dispose();
+        if (_factory is not null) await _factory.DisposeAsync();
     }
 
     [Fact]

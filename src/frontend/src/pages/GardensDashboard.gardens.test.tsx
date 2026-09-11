@@ -1,6 +1,5 @@
 import {
   act,
-  cleanup,
   fireEvent,
   render,
   screen,
@@ -20,7 +19,7 @@ import {
   dashboardFixture as dashboardWith,
   gardenFixture,
 } from '../test/fixtures/dashboard';
-import { placement } from '../test/fixtures/placements';
+import { at, placement } from '../test/fixtures/placements';
 import { rulesFor } from '../test/dashboardDom';
 import type {
   DashboardData,
@@ -70,6 +69,11 @@ const gardenWith = (
 ): DashboardGardenData =>
   gardenFixture({
     name: 'Casa Lolo',
+    // The PLAN and the counters state the same thing (round 7, S36 —
+    // Extension #7-20): `varieties` 1 × 1 placements on the first row of the
+    // 4 × 3 fixture, so a row never reads « 3 plants » beside « 0 % ». `at`
+    // places on row 0, so `varieties` stays within the fixture's width of 4.
+    placements: Array.from({ length: varieties }, (_, index) => at(0, index)),
     placementCount: varieties,
     varietyCount: varieties,
     occupiedCells: varieties,
@@ -1864,10 +1868,12 @@ describe('Gardens rows — the N5 finishes (round 6, partie D)', () => {
     expect(chip.querySelector('svg[data-testid="DeckIcon"]')).not.toBeNull();
   });
 
-  it('gives the Medium « Ornamental » chip its 13 px glyph, and the table none (N5-1 / N5-2)', async () => {
+  // ONE render per test (round 7, S17 — Extension #6-14): the two artboards
+  // used to share one `it` through a mid-test `cleanup()`, so a Medium
+  // regression hid a table one and the failure named one test for two things.
+  it('gives the Medium « Ornamental » chip its 13 px glyph (N5-1)', async () => {
     // `A2Novice`: `<span class="pill orn"><svg class="ic" width="13">…</svg>
-    // Ornemental</span>`, matched `FilterVintageOutlined`. `Main.dc.html`'s
-    // table writes the same chip bare, 24 px high (`.tbl .pill`).
+    // Ornemental</span>`, matched `FilterVintageOutlined`.
     vi.mocked(fetchDashboardData).mockResolvedValue(
       dashboardWith([gardenWith(3, { isEdible: false })])
     );
@@ -1875,15 +1881,15 @@ describe('Gardens rows — the N5 finishes (round 6, partie D)', () => {
     const medium = within(gardensWidget()).getByText('Ornamental').closest('.MuiChip-root')!;
     expect(medium.querySelector('svg[data-testid="FilterVintageOutlinedIcon"]')).not.toBeNull();
     expect(rulesFor(medium).replace(/\s+/g, '')).toContain('height:26px');
+  });
 
-    cleanup();
-    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
-      schemaVersion: 1,
-      level: 'gardener',
-      isPreset: true,
-      blocks: presetFor('gardener'),
-      updatedAt: null,
-    });
+  it('writes the table « Ornamental » chip bare, 24 px high (N5-2)', async () => {
+    // `Main.dc.html`'s table writes the same chip without a glyph (`.tbl .pill
+    // { height: 24px }`). The Gardener preset is the Large table, which the
+    // outer `beforeEach` already serves.
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenWith(3, { isEdible: false })])
+    );
     renderPage();
     await screen.findByText('Casa Lolo');
     const table = within(gardensWidget()).getByText('Ornamental').closest('.MuiChip-root')!;

@@ -97,8 +97,13 @@ export function occupancyPercent(
  */
 export type ExposureTally = Readonly<Record<ExposureCategory, number>>;
 
-/** The shape a builder accumulates into, before it hands the tally out. */
-type MutableExposureTally = Record<ExposureCategory, number>;
+/**
+ * The shape a builder accumulates into, before it hands the tally out.
+ * Exported (round 7, S22 — Extension #6-23): `emptyExposureTally` is public
+ * and returns it, so a consumer holding the value in a typed variable had to
+ * re-derive the alias by hand, and a declaration build would report TS4060.
+ */
+export type MutableExposureTally = Record<ExposureCategory, number>;
 
 const EMPTY_TALLY: ExposureTally = {
   full: 0,
@@ -200,6 +205,40 @@ export interface PlacementCoverage {
  * inactive cell, which is the same set `gridStats` counts. That equality is what
  * makes `occupied + free = active` an identity rather than a coincidence.
  */
+/** A placement's footprint, clipped to the plan. */
+export interface PlacementBox {
+  row: number;
+  col: number;
+  spanRows: number;
+  spanCols: number;
+}
+
+/**
+ * A placement footprint clipped to the plan, or null when nothing of it lands
+ * inside (round 7, S41 — Extension #7-27).
+ *
+ * ONE clip, two consumers: this module's `placementCoverage` (the occupancy
+ * mask) and `gardenPreview`'s adapter (the drawing mask) implemented the same
+ * clamp each on their own — near edge at zero, far edge at the dimension, drop
+ * when empty — and each owns a different user-visible answer. Relax or tighten
+ * one alone and the widget reports a figure its own picture contradicts, the
+ * class of disagreement round 3 (E″9) removed between the transport count and
+ * the clipped mask. A stored layout may anchor a placement outside the plan,
+ * and the layout PUT does not refuse it.
+ */
+export function clipPlacement(
+  placement: PlacementData,
+  rows: number,
+  cols: number
+): PlacementBox | null {
+  const row = Math.max(0, placement.startRow);
+  const col = Math.max(0, placement.startCol);
+  const rowEnd = Math.min(rows, placement.startRow + placement.spanRows);
+  const colEnd = Math.min(cols, placement.startCol + placement.spanCols);
+  if (rowEnd <= row || colEnd <= col) return null;
+  return { row, col, spanRows: rowEnd - row, spanCols: colEnd - col };
+}
+
 export function placementCoverage(
   cells: (ExposureCategory | null)[][] | null,
   placements: readonly PlacementData[],
@@ -211,12 +250,11 @@ export function placementCoverage(
   if (!cells) return { taken, occupiedCells };
 
   for (const placement of placements) {
-    // Clipped at both ends: a stored layout may anchor a placement outside the
-    // plan, and the layout PUT does not refuse it.
-    const rowEnd = Math.min(rows, placement.startRow + placement.spanRows);
-    const colEnd = Math.min(cols, placement.startCol + placement.spanCols);
-    for (let r = Math.max(0, placement.startRow); r < rowEnd; r++) {
-      for (let c = Math.max(0, placement.startCol); c < colEnd; c++) {
+    // Clipped at both ends, by the one clip the thumbnail draws with too.
+    const box = clipPlacement(placement, rows, cols);
+    if (!box) continue;
+    for (let r = box.row; r < box.row + box.spanRows; r++) {
+      for (let c = box.col; c < box.col + box.spanCols; c++) {
         if (taken[r]![c]) continue; // an overlapped cell is one cell
         taken[r]![c] = true;
         // Only a rated cell is surface. A plant sitting on a switched-off cell
@@ -465,10 +503,13 @@ export function sumExposureTallies(
 ): ExposureTally {
   const total = emptyExposureTally();
   for (const tally of tallies) {
-    total.full += tally.full;
-    total.morning += tally.morning;
-    total.afternoon += tally.afternoon;
-    total.shade += tally.shade;
+    // Over EXPOSURE_ORDER, not over a hard-coded quartet (round 7, S49 —
+    // Extension #8-18): a category added to `ExposureCategory` is summed the
+    // day it arrives, where four named additions would keep compiling and
+    // silently stop counting it — and `ratedCells`, the denominator of every
+    // share the Statistics widget prints, folds over the same order, so the
+    // two cannot drift.
+    for (const key of EXPOSURE_ORDER) total[key] += tally[key];
   }
   return total;
 }

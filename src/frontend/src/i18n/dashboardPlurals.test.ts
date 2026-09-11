@@ -173,7 +173,12 @@ describe('the figures are written in the reader’s language', () => {
       count: 1440,
     });
 
-    expect(fr).not.toContain('1440');
+    // A GROUPING, not the absence of « 1440 » (round 7, S37 — Extension
+    // #8-10): `not.toContain('1440')` also accepted « 1,440 », so an
+    // English-style regression passed. One whitespace between the digits, and
+    // not an ordinary one — whichever no-break space the runtime's ICU chooses.
+    expect(fr).toMatch(/1\s440/u);
+    expect(fr).not.toContain(' 440');
     expect(en).toContain('1,440');
   });
 

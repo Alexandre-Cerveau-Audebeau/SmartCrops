@@ -386,6 +386,45 @@ public class GardensEndpointsTests : IntegrationTestBase
 
     // ── Helpers (same standalone pattern as GardenLayoutEndpointsTests) ───────
 
+    // ROUND 7 (S25 — Extension #7-5): the READ path of the two gardens
+    // endpoints degrades a stored document the write path would refuse, the way
+    // the dashboard aggregate does — and it was covered on the aggregate only.
+    [Theory]
+    [InlineData("[{}]")]
+    [InlineData("[{\"start\":\"20:00\",\"end\":\"08:00\"}]")]
+    [InlineData("[{\"start\":\"00:00\",\"end\":\"01:00\"},{\"start\":\"01:00\",\"end\":\"02:00\"},"
+        + "{\"start\":\"02:00\",\"end\":\"03:00\"},{\"start\":\"03:00\",\"end\":\"04:00\"},"
+        + "{\"start\":\"04:00\",\"end\":\"05:00\"},{\"start\":\"05:00\",\"end\":\"06:00\"},"
+        + "{\"start\":\"06:00\",\"end\":\"07:00\"}]")]
+    public async Task GetGardenAndLayout_ALegacyInvalidLightSchedule_ReadsAsNull(string storedJson)
+    {
+        // `LightScheduleJson` is an unconstrained text column: a legacy import
+        // or a hand-edit can hold a document that PARSES and still breaks the
+        // slot rules the write path enforces. Both readers hand back null for
+        // it rather than a schedule this server would answer 400 for.
+        var (userId, gardenId, _) = await SeedAsync();
+        await SetLightScheduleJsonAsync(gardenId, storedJson);
+        AuthAs(userId);
+
+        var garden = await Client.GetFromJsonAsync<GardenResponseDto>($"/api/gardens/{gardenId}");
+        Assert.NotNull(garden);
+        Assert.Null(garden.LightSchedule);
+
+        var layout = await Client.GetFromJsonAsync<LayoutDto>($"/api/gardens/{gardenId}/layout");
+        Assert.NotNull(layout);
+        Assert.Null(layout.Config.LightSchedule);
+    }
+
+    private async Task SetLightScheduleJsonAsync(Guid gardenId, string json)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        await db.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""Gardens"" SET ""LightScheduleJson"" = {1} WHERE ""Id"" = {0};",
+            gardenId,
+            json);
+    }
+
     private void AuthAs(string userId)
     {
         Client.DefaultRequestHeaders.Authorization =

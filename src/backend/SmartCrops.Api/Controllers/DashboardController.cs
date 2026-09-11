@@ -210,8 +210,15 @@ public class DashboardController(
                         p.Notes,
                     })
                     .ToList(),
-                VarietyCount = g.Placements.Select(p => p.PlantId).Distinct().Count(),
-                OccupiedCells = g.Placements.Sum(p => p.SpanRows * p.SpanCols),
+                // `VarietyCount` and `OccupiedCells` are NOT projected here any
+                // more (round 7, S26 — Extension #7-4): EF Core translated each
+                // as a correlated subquery over `GardenPlacements`, two extra
+                // scans per garden for figures the placement list above already
+                // carries. They are derived from it below, by the rule this file
+                // states at « Counts by variety »: every figure derivable from
+                // `gardenRows` is derived from it. `EdibleCount` stays in SQL —
+                // it reads `PlantType.Name` and `IsEdible`, which the placement
+                // projection deliberately does not carry.
                 EdibleCount = g.Placements.Count(p =>
                     p.Plant.IsEdible == true
                     || EdiblePlantTypes.Contains(p.Plant.PlantType!.Name)),
@@ -244,8 +251,8 @@ public class DashboardController(
                     p.SpanCols,
                     p.Notes))],
                 g.Placements.Count,
-                g.VarietyCount,
-                g.OccupiedCells,
+                g.Placements.Select(p => p.PlantId).Distinct().Count(),
+                g.Placements.Sum(p => p.SpanRows * p.SpanCols),
                 // An EMPTY garden is neither: null, not false. Calling it
                 // ornamental would apply « an ornamental garden never shows a
                 // harvest » to a garden nobody has planted yet.
@@ -459,8 +466,7 @@ public class DashboardController(
                     .Select(t => new { t.Language, t.CommonName })
                     .ToList(),
                 Images = p.Images
-                    .Where(i => i.Source == PlantSourceType.Trefle
-                        || i.Source == PlantSourceType.PlantNet)
+                    .Where(i => PlantListItemMapper.StableImageSources.Contains(i.Source))
                     .Select(i => new
                     {
                         i.Id,

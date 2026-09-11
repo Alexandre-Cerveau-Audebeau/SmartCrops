@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { presetFor } from '../constants/dashboardPresets';
-import { rulesFor } from '../test/dashboardDom';
+import { emittedRules, rulesFor } from '../test/dashboardDom';
 import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
 import { DASHBOARD_SPACING } from '../theme/dashboardTokens';
 import type {
@@ -604,13 +604,17 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
   it('suppresses the wobble under prefers-reduced-motion', async () => {
     await enterEditMode();
 
+    // Through the shared probe (round 7, S34 — Extension #7-18): the last
+    // hand-rolled scan took « the last class » as the Emotion class, the exact
+    // heuristic the deleted helper documented as unsafe — MUI puts
+    // `MuiBox-root` before the `css-` class and may append a component class
+    // after it. `emittedRules` resolves the class by its prefix and throws when
+    // there is none, and the `some` keeps the proof that both declarations sit
+    // in the SAME emitted block.
     const inner = sortableNode('weather').firstElementChild as HTMLElement;
-    const rules = [...document.querySelectorAll('style')]
-      .map((tag) => tag.textContent ?? '')
-      .filter((text) => text.includes(inner.className.split(' ').pop()!));
 
     expect(
-      rules.some(
+      emittedRules(inner).some(
         (text) =>
           text.includes('prefers-reduced-motion: reduce') &&
           text.includes('animation:none')

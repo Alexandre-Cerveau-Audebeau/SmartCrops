@@ -24,29 +24,15 @@ import { getPlantColor } from '../../../utils/plantColor';
 import { PLANT_HERO_PLACEHOLDER } from '../../../utils/plantDetail';
 import {
   COUNTERS_GARDEN_ALL,
+  COUNTERS_LIST,
   countersOptions,
   resolveCountersFigures,
 } from './countersOptions';
 
-/**
- * Varieties a Medium card lists before « +N », and in how many columns
- * (`_spec.md` § 4: « Compteurs 4 × 2 = 8 variétés + « +18 variétés » »).
- *
- * V9 — the count was right and the COLUMNS were wrong. Eight varieties drawn in
- * one column are eight data lines on a card whose density lock allows six, so
- * the body scrolled instead of capping. Two columns of four is what the frozen
- * design draws and what the lock permits: 8 / 2 = 4 lines.
- */
-const MEDIUM_VARIETIES = 8;
-const MEDIUM_COLUMNS = 2;
-
-/**
- * Varieties a Large card lists, across its two columns (`_spec.md` § 4: « les
- * 19 potagères en deux colonnes »). 19 over two columns is 10 lines, which is
- * exactly the Large lock.
- */
-const LARGE_VARIETIES = 19;
-const LARGE_COLUMNS = 2;
+// What each size lists, and over how many columns, is `COUNTERS_LIST` in
+// `countersOptions.ts` — beside the density lock it has to satisfy (round 7,
+// S29 — Extension #7-10). Two owners of one contract, nothing forcing them to
+// agree, was the shape `resolveCountersGarden` was extracted to end.
 
 /**
  * The two marks a Counters row can open on (round 6, partie E1).
@@ -411,14 +397,19 @@ export default function CountersBlock({
     // read past the ferns ») was contradicted by its arithmetic. `hidden` is
     // unchanged: the same varieties are hidden, they are just not the same ones
     // shown.
-    const edible = filtered.filter(isEdibleVariety);
-    const ornamental = filtered.filter((v) => !isEdibleVariety(v));
+    //
+    // ONE pass (round 7, S44 — Extension #8-4): the partition was computed
+    // twice over the list and twice again over `shown`. It is known before the
+    // cut — the edible rows come first — so the cut's two halves are slices.
+    const edible: DashboardVarietyData[] = [];
+    const ornamental: DashboardVarietyData[] = [];
+    for (const v of filtered) (isEdibleVariety(v) ? edible : ornamental).push(v);
     const ordered = [...edible, ...ornamental];
 
     const shown = expanded ? ordered : ordered.slice(0, limit);
     const hidden = ordered.length - shown.length;
-    const shownEdible = shown.filter(isEdibleVariety);
-    const shownOrnamental = shown.filter((v) => !isEdibleVariety(v));
+    const shownEdible = shown.slice(0, Math.min(shown.length, edible.length));
+    const shownOrnamental = shown.slice(shownEdible.length);
 
     return (
       <Box
@@ -542,8 +533,8 @@ export default function CountersBlock({
 
     if (size === 'small') return smallBody();
     if (size === 'medium')
-      return listBody(MEDIUM_VARIETIES, MEDIUM_COLUMNS, false);
-    return listBody(LARGE_VARIETIES, LARGE_COLUMNS, true);
+      return listBody(COUNTERS_LIST.medium.varieties, COUNTERS_LIST.medium.columns, false);
+    return listBody(COUNTERS_LIST.large.varieties, COUNTERS_LIST.large.columns, true);
   };
 
   const countChip =

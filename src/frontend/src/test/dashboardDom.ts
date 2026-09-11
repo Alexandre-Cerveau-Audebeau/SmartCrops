@@ -33,11 +33,21 @@ export function emotionClass(node: Element): string {
   return found;
 }
 
-/** The `<style>` texts Emotion emitted that mention the node's class. */
-export const emittedRules = (node: Element): string[] =>
-  [...document.querySelectorAll('style')]
+/**
+ * The `<style>` texts Emotion emitted for the node's class — the SELECTOR,
+ * anchored, not a substring (round 7, S42 — Extension #8-16). Emotion hashes
+ * vary in length, so `css-1a2b3c` is a prefix of `css-1a2b3cd`, and an
+ * unanchored `includes` handed back a neighbour's rules when two nodes of one
+ * render landed on hashes in that relation: a design-freeze assertion could
+ * then pass on a declaration the node never received — the silent pass this
+ * shared owner exists to remove.
+ */
+export const emittedRules = (node: Element): string[] => {
+  const selector = new RegExp(`\\.${emotionClass(node)}(?![\\w-])`);
+  return [...document.querySelectorAll('style')]
     .map((tag) => tag.textContent ?? '')
-    .filter((text) => text.includes(emotionClass(node)));
+    .filter((text) => selector.test(text));
+};
 
 /** The same rules, joined — what most assertions read. */
 export const rulesFor = (node: Element): string => emittedRules(node).join(' ');
@@ -53,7 +63,15 @@ export function slotOf(widget: string): HTMLElement {
   if (!slot) {
     throw new Error(`The slot of "${widget}" is not where it was expected`);
   }
-  return slot as HTMLElement;
+  // The same structural guard `gridNode` carries (round 7, S20 — Extension
+  // #6-18): the slot is the node the span is declared on, so a node reached
+  // above the card that declares no `grid-column` is not it.
+  if (!emittedRules(slot).some((text) => text.includes('grid-column'))) {
+    throw new Error(
+      `The node reached above "${widget}" is not its grid slot: no span is declared on it`
+    );
+  }
+  return slot;
 }
 
 /**

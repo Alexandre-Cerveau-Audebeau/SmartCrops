@@ -3,10 +3,14 @@ import type {
   DashboardGardenData,
   DashboardVarietyData,
 } from '../../../types/DashboardData';
+import { gardenFixture } from '../../../test/fixtures/dashboard';
 import { placement } from '../../../test/fixtures/placements';
 import {
   COUNTERS_GARDEN_ALL,
+  COUNTERS_LINE_CAP,
+  COUNTERS_LIST,
   countersOptions,
+  worstCaseLines,
   resolveCountersFigures,
   resolveCountersGarden,
 } from './countersOptions';
@@ -77,31 +81,26 @@ describe('resolveCountersGarden — one owner for the fallback (round 1, E8)', (
 
 // ROUND 6 (partie A) — every figure the widget states, from one filter.
 describe('resolveCountersFigures — one resolver for every number (round 6, A)', () => {
+  // On the shared builder, with the three derived fields as the overrides
+  // that carry meaning (round 7, S15 — Extension #6-8 / #6-9). `occupiedCells`
+  // is the SUM OF FOOTPRINTS, as the server computes it — not the placement
+  // count: placement `c` below spans 1 × 2, so the terrace holds four occupied
+  // cells for three placements.
   const garden = (
     id: string,
     placements: DashboardGardenData['placements']
-  ): DashboardGardenData => ({
-    id,
-    name: id,
-    description: null,
-    width: 4,
-    height: 3,
-    cellSize: '50cm',
-    cellsJson: null,
-    config: {
-      orientation: null,
-      gardenType: null,
-      lightSchedule: null,
-      hemisphere: 'N',
-      latitudeBand: 'mid',
-    },
-    updatedAt: '2026-05-01T00:00:00Z',
-    placements,
-    placementCount: placements.length,
-    varietyCount: new Set(placements.map((p) => p.plantId)).size,
-    occupiedCells: placements.length,
-    isEdible: null,
-  });
+  ): DashboardGardenData =>
+    gardenFixture({
+      id,
+      name: id,
+      placements,
+      placementCount: placements.length,
+      varietyCount: new Set(placements.map((p) => p.plantId)).size,
+      occupiedCells: placements.reduce(
+        (sum, p) => sum + p.spanRows * p.spanCols,
+        0
+      ),
+    });
 
   const variety = (
     plantId: string,
@@ -207,10 +206,13 @@ describe('resolveCountersFigures — one resolver for every number (round 6, A)'
   });
 
   it('never writes into the caller’s varieties', () => {
-    const before = varieties.map((v) => v.count);
+    // `count` AND `cells` (round 7, S32 — Extension #7-14): the resolver
+    // re-states both per garden, and a guard that sampled `count` alone would
+    // have let an in-place write of `cells` through.
+    const before = varieties.map((v) => [v.count, v.cells]);
     resolveCountersFigures({ garden: 'g2' }, gardens, varieties, totals);
 
-    expect(varieties.map((v) => v.count)).toEqual(before);
+    expect(varieties.map((v) => [v.count, v.cells])).toEqual(before);
   });
 
   // ROUND 7 — the 🟠 Major inline of `556f0d0` (`countersOptions.ts` L168)
@@ -268,5 +270,32 @@ describe('countersOptions — an unknown key survives a read (round 6)', () => {
     expect(read.photos).toBe(false);
     expect(read.garden).toBe(COUNTERS_GARDEN_ALL);
     expect(read.later).toEqual({ a: 1 });
+  });
+});
+
+// ROUND 7 (S29 — Extension #7-10) — one owner for the density lock and for the
+// numbers that have to satisfy it.
+describe('COUNTERS_LIST — what each size lists fits the lines its card allows', () => {
+  it('holds, section split included, at both sizes', () => {
+    // Two sections can each round a half-row up, so the worst case is
+    // `ceil(a/c) + ceil(b/c)`: five lines for eight varieties over two columns,
+    // and exactly ten for nineteen — nineteen is odd, so the two halves cannot
+    // both round up. A change to either number that breaks the lock fails here
+    // rather than in a scrolling card.
+    const { medium, large } = COUNTERS_LIST;
+
+    expect(worstCaseLines(medium.varieties, medium.columns)).toBeLessThanOrEqual(
+      COUNTERS_LINE_CAP.medium
+    );
+    expect(worstCaseLines(large.varieties, large.columns)).toBeLessThanOrEqual(
+      COUNTERS_LINE_CAP.large
+    );
+  });
+
+  it('states the parity argument for what it is', () => {
+    expect(worstCaseLines(8, 2)).toBe(5);
+    expect(worstCaseLines(19, 2)).toBe(10);
+    // Twenty over two columns would be eleven lines on a ten-line card.
+    expect(worstCaseLines(20, 2)).toBe(11);
   });
 });

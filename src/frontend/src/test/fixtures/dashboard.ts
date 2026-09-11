@@ -1,6 +1,7 @@
 import type {
   DashboardData,
   DashboardGardenData,
+  DashboardVarietyData,
 } from '../../types/DashboardData';
 
 /**
@@ -40,6 +41,28 @@ export const gardenFixture = (
   varietyCount: 0,
   occupiedCells: 0,
   isEdible: null,
+  ...over,
+});
+
+/**
+ * ONE builder for the `DashboardVarietyData` fixture (round 7, S18 — Extension
+ * #6-15): an edible herb planted once, photo-less, in the default garden. The
+ * ten-field record was spelled out beside `gardenFixture`'s callers; a test
+ * overrides what it is about.
+ */
+export const varietyFixture = (
+  over: Partial<DashboardVarietyData> = {}
+): DashboardVarietyData => ({
+  plantId: 'p-1',
+  scientificName: 'Ocimum basilicum',
+  commonName: 'Basil',
+  plantType: 'Herb',
+  isEdible: true,
+  imageUrl: null,
+  imageAttribution: null,
+  count: 1,
+  cells: 1,
+  gardenIds: ['g1'],
   ...over,
 });
 

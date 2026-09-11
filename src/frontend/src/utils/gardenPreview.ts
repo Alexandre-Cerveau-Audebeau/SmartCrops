@@ -1,5 +1,6 @@
 import type { PlacementData } from '../services/gardenLayoutApi';
 import { parseCellsJson } from '../types/GardenLayout';
+import { clipPlacement } from './gardenStats';
 import type {
   PreviewPlacement,
   PreviewPlan,
@@ -159,20 +160,15 @@ export function gardenToPreview(
   // reason. A footprint that lands fully outside is dropped, one that crosses
   // the edge is cut at it, one that overlaps another is left to overlap — the
   // grid stacks them, which is what the planner draws too.
+  //
+  // The clip itself is `clipPlacement` in `gardenStats` (round 7, S41 —
+  // Extension #7-27), the SAME one `placementCoverage` counts occupancy with:
+  // the picture and the figure cannot disagree about where a footprint ends.
   const drawn: PreviewPlacement[] = [];
   for (const placement of placements) {
-    const row = Math.max(0, placement.startRow);
-    const col = Math.max(0, placement.startCol);
-    const rowEnd = Math.min(height, placement.startRow + placement.spanRows);
-    const colEnd = Math.min(width, placement.startCol + placement.spanCols);
-    if (rowEnd <= row || colEnd <= col) continue;
-    drawn.push({
-      plantKey: placement.plantId,
-      row,
-      col,
-      spanRows: rowEnd - row,
-      spanCols: colEnd - col,
-    });
+    const box = clipPlacement(placement, height, width);
+    if (!box) continue;
+    drawn.push({ plantKey: placement.plantId, ...box });
   }
 
   return { cols: width, rows: height, cells, placements: drawn };

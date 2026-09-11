@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { presetFor } from '../constants/dashboardPresets';
-import { gardenFixture } from '../test/fixtures/dashboard';
+import {
+  dashboardFixture,
+  gardenFixture,
+  varietyFixture,
+} from '../test/fixtures/dashboard';
 
 vi.mock('../services/gardenApi', () => ({
   createGarden: vi.fn(),
@@ -47,36 +51,40 @@ const garden = (id: string, name: string): DashboardGardenData =>
     isEdible: true,
   });
 
+// A photographed variety, planted twice — the photos option is what these
+// tests toggle, so the image is the override that carries meaning here.
 const variety = (
   plantId: string,
   commonName: string,
   gardenIds: string[]
-): DashboardVarietyData => ({
-  plantId,
-  scientificName: 'Ocimum basilicum',
-  commonName,
-  plantType: 'Herb',
-  isEdible: true,
-  imageUrl: 'https://bs.plantnet.org/habit.jpg',
-  imageAttribution: 'Credit',
-  count: 2,
-  cells: 2,
-  gardenIds,
-});
+): DashboardVarietyData =>
+  varietyFixture({
+    plantId,
+    commonName,
+    imageUrl: 'https://bs.plantnet.org/habit.jpg',
+    imageAttribution: 'Credit',
+    count: 2,
+    cells: 2,
+    gardenIds,
+  });
 
-const data: DashboardData = {
-  gardens: [garden('g1', 'Terrasse'), garden('g2', 'Balcon')],
-  varieties: [
-    variety('p-1', 'Basil', ['g1']),
-    variety('p-2', 'Aubergine', ['g2']),
-  ],
-  totals: {
-    gardenCount: 2,
-    placementCount: 4,
-    varietyCount: 2,
-    catalogPlantCount: 536,
-  },
-};
+const GARDENS = [garden('g1', 'Terrasse'), garden('g2', 'Balcon')];
+const VARIETIES = [
+  variety('p-1', 'Basil', ['g1']),
+  variety('p-2', 'Aubergine', ['g2']),
+];
+
+// Totals DERIVED, never restated (round 7, S18 — Extension #6-15): the fixture
+// used to say four placements over two gardens holding one each, and
+// `resolveCountersFigures` reads both sides. FROZEN for the reason
+// `EMPTY_DASHBOARD_DATA` is: one reference reaches every test in this file and
+// every widget of the page it renders, and nothing else enforced that no test
+// writes into it.
+const data: DashboardData = Object.freeze(
+  dashboardFixture(Object.freeze(GARDENS) as DashboardGardenData[], {
+    varieties: Object.freeze(VARIETIES) as DashboardVarietyData[],
+  })
+);
 
 /** The last layout the debounced save sent. */
 const lastSaved = () => {

@@ -59,13 +59,14 @@ const chipNode = () =>
 
 function renderBlock(
   props: Partial<React.ComponentProps<typeof StatsBlock>> = {},
-  language: 'en' | 'fr' = 'en'
+  language: 'en' | 'fr' = 'en',
+  theme = createTheme()
 ) {
   // Pinned through the STORED key, which is what `LanguageProvider` re-applies
   // on mount — since SMA-393 the no-key default is French.
   localStorage.setItem('smartcrops-language', language);
   render(
-    <ThemeProvider theme={createTheme()}>
+    <ThemeProvider theme={theme}>
       <LanguageProvider>
         <StatsBlock
           size="large"
@@ -570,9 +571,12 @@ describe('StatsBlock — the N5 finishes (round 6, partie D)', () => {
 
   it('paints the exposure legend in the meta colour, as `A3Expert` does inline (N5-9)', () => {
     // `<span class="lg" style="color: var(--t-meta);">` — `text.primary`, over
-    // the `.lg` rule's `--t-sci`. Under `createTheme()` that is MUI's default
-    // `rgba(0,0,0,0.87)`.
-    renderBlock();
+    // the `.lg` rule's `--t-sci`. Against a SENTINEL `text.primary` rather than
+    // MUI's default literal (round 7, S14 — Extension #6-6 / #6-7): the
+    // assertion is that the legend takes the theme's colour, and a hard-coded
+    // `rgba(0,0,0,0.87)` in the widget would have passed the old literal.
+    const theme = createTheme({ palette: { text: { primary: '#123456' } } });
+    renderBlock({}, 'en', theme);
 
     // Two « Full sun » on a Large card — the legend and the per-garden
     // swatch's hidden name — so the legend is reached from its own bar.
@@ -580,6 +584,7 @@ describe('StatsBlock — the N5 finishes (round 6, partie D)', () => {
       .nextElementSibling!;
     const item = within(legend as HTMLElement).getByText('Full sun').parentElement!;
     const rules = rulesFor(item).toLowerCase().replace(/\s+/g, '');
-    expect(rules).toContain('color:rgba(0,0,0,0.87)');
+    expect(rules).toContain(`color:${theme.palette.text.primary}`);
+    expect(rules).not.toContain('color:rgba(0,0,0,0.87)');
   });
 });

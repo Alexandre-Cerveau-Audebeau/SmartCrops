@@ -45,6 +45,54 @@ interface Props {
  * photos on is not a rearrangement. `isAdjusted` excludes options on purpose;
  * this panel is the reason that exclusion exists.
  */
+/**
+ * One option row (round 4, A7) — `A8Options.dc.html`'s `.pop-r`:
+ * `display: flex; align-items: center; gap: 14px; height: 48px`, opening on a
+ * 22 px glyph. The panel had none, so two settings of very different weight —
+ * a switch and a whole garden filter — read as one undifferentiated column.
+ *
+ * The two glyphs are the artboard's own, matched path-for-path:
+ * `PhotoCameraOutlined` for the photos switch and `YardOutlined` for the
+ * garden select — the SAME drawing the Gardens widget carries in its title,
+ * which is what says the filter is about those gardens.
+ *
+ * A component at module scope rather than a closure rebuilt per render (round
+ * 7, S12 — Extension #6-4): it closes over nothing, and this gives the
+ * 48 / 14 / 22 px geometry one owner the other panels can reuse the day they
+ * gain option rows of their own.
+ */
+function OptionRow({
+  icon,
+  children,
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '14px',
+        minHeight: 48,
+      }}
+    >
+      <Box
+        aria-hidden
+        sx={{
+          display: 'flex',
+          flexShrink: 0,
+          color: 'text.secondary',
+          '& > svg': { fontSize: 22 },
+        }}
+      >
+        {icon}
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>{children}</Box>
+    </Box>
+  );
+}
+
 export default function CountersOptionsPanel({
   options,
   gardens,
@@ -71,45 +119,9 @@ export default function CountersOptionsPanel({
   // persisting it over a choice this render cannot see.
   const written = ready ? current : { ...current, garden: parsed.garden };
 
-  /**
-   * One option row (round 4, A7) — `A8Options.dc.html`'s `.pop-r`:
-   * `display: flex; align-items: center; gap: 14px; height: 48px`, opening on a
-   * 22 px glyph. The panel had none, so two settings of very different weight —
-   * a switch and a whole garden filter — read as one undifferentiated column.
-   *
-   * The two glyphs are the artboard's own, matched path-for-path:
-   * `PhotoCameraOutlined` for the photos switch and `YardOutlined` for the
-   * garden select — the SAME drawing the Gardens widget carries in its title,
-   * which is what says the filter is about those gardens.
-   */
-  const optionRow = (icon: React.ReactNode, control: React.ReactNode) => (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '14px',
-        minHeight: 48,
-      }}
-    >
-      <Box
-        aria-hidden
-        sx={{
-          display: 'flex',
-          flexShrink: 0,
-          color: 'text.secondary',
-          '& > svg': { fontSize: 22 },
-        }}
-      >
-        {icon}
-      </Box>
-      <Box sx={{ flex: 1, minWidth: 0 }}>{control}</Box>
-    </Box>
-  );
-
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-      {optionRow(
-        <PhotoCameraOutlinedIcon />,
+      <OptionRow icon={<PhotoCameraOutlinedIcon />}>
         <FormControlLabel
           control={
             <Switch
@@ -125,9 +137,8 @@ export default function CountersOptionsPanel({
           sx={{ m: 0, width: '100%', justifyContent: 'space-between' }}
           labelPlacement="start"
         />
-      )}
-      {optionRow(
-        <YardOutlinedIcon />,
+      </OptionRow>
+      <OptionRow icon={<YardOutlinedIcon />}>
         <TextField
         select
         size="small"
@@ -151,7 +162,7 @@ export default function CountersOptionsPanel({
           </MenuItem>
         ))}
         </TextField>
-      )}
+      </OptionRow>
     </Box>
   );
 }

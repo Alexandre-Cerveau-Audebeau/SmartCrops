@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { gardenFixture } from '../test/fixtures/dashboard';
+import { gardenToPreview } from './gardenPreview';
 import { placement } from '../test/fixtures/placements';
 import type { DashboardGardenData } from '../types/DashboardData';
 import { parseCellsJson, type CellData } from '../types/GardenLayout';
 import type { ExposureCategory } from './exposure';
 import {
+  clipPlacement,
   deriveGardenView,
   placementCoverage,
   gardenViewOf,
@@ -599,5 +601,39 @@ describe('deriveGardenView — the figures agree with each other (E″9 / G″6)
     expect(view.hasPlan).toBe(false);
     expect(view.occupiedCells).toBe(0);
     expectConsistent(view);
+  });
+});
+
+// ROUND 7 (S41 — Extension #7-27) — one clip, two consumers.
+describe('clipPlacement', () => {
+  it('cuts a footprint at the plan’s edges and drops one that lands outside', () => {
+    expect(
+      clipPlacement(placement({ startRow: -1, startCol: 2, spanRows: 3, spanCols: 4 }), 3, 4)
+    ).toEqual({ row: 0, col: 2, spanRows: 2, spanCols: 2 });
+    expect(clipPlacement(placement({ startRow: 5, startCol: 0 }), 3, 4)).toBeNull();
+    expect(clipPlacement(placement({ startRow: 0, startCol: 0 }), 3, 4)).toEqual({
+      row: 0,
+      col: 0,
+      spanRows: 1,
+      spanCols: 1,
+    });
+  });
+
+  it('is the footprint the thumbnail draws AND the one occupancy counts', () => {
+    // The two masks used to implement the same clamp on their own; relax or
+    // tighten one alone and the widget reports a figure its picture
+    // contradicts. Both read this helper now, so a placement crossing the edge
+    // is drawn exactly as wide as it is counted.
+    const crossing = placement({ startRow: 1, startCol: 2, spanRows: 4, spanCols: 4 });
+    const drawn = gardenToPreview(null, 4, 3, [crossing]).placements;
+    const counted = placementCoverage(
+      parseCellsJson(null, 4, 3).map((row) => row.map(() => 'full' as const)),
+      [crossing],
+      3,
+      4
+    );
+
+    expect(drawn).toEqual([{ plantKey: crossing.plantId, row: 1, col: 2, spanRows: 2, spanCols: 2 }]);
+    expect(counted.occupiedCells).toBe(2 * 2);
   });
 });

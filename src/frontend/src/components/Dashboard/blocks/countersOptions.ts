@@ -203,3 +203,29 @@ export function resolveCountersFigures(
  * component.
  */
 export const COUNTERS_LINE_CAP = { medium: 6, large: 10 } as const;
+
+/**
+ * What each size LISTS before « +N », and over how many columns — beside the
+ * lock it has to satisfy (round 7, S29 — Extension #7-10). The widget declared
+ * these four numbers on its own and never read the cap: the lock held only
+ * because 8 / 2 and 19 / 2 happen to fit, and with two sections the worst case
+ * is `ceil(edible / c) + ceil(ornamental / c)` — 5 lines for 8 varieties, and
+ * exactly 10 for 19 because 19 is odd and the two halves cannot both round up.
+ * That parity argument sat in nobody's code. `worstCaseLines` states it, and
+ * one test holds these numbers to the cap.
+ *
+ * Medium: `_spec.md` § 4, « Compteurs 4 × 2 = 8 variétés + « +18 variétés » »
+ * — two columns of four (V9: eight in ONE column were eight lines on a card
+ * that allows six). Large: « les 19 potagères en deux colonnes ».
+ */
+export const COUNTERS_LIST = {
+  medium: { varieties: 8, columns: 2 },
+  large: { varieties: 19, columns: 2 },
+} as const;
+
+/**
+ * The most data lines `varieties` rows can take over `columns` when they are
+ * split into two sections that each round their last row up.
+ */
+export const worstCaseLines = (varieties: number, columns: number): number =>
+  Math.ceil(varieties / columns) + (varieties % columns === 0 ? 1 : 0);

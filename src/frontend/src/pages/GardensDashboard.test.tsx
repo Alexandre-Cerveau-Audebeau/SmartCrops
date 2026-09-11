@@ -214,15 +214,16 @@ describe('GardensDashboard — header (SMA-336)', () => {
     // The surface is DERIVED here (decision D9): the aggregate transports
     // plans, not areas, and `totals` carries no surface at all. Two gardens of
     // 4 × 3 at 50 cm make 6 m².
-    vi.mocked(fetchDashboardData).mockResolvedValue({
-      ...dashboardWith([garden('g1', 'Terrasse'), garden('g2', 'Balcon')]),
-      totals: {
-        gardenCount: 2,
-        placementCount: 1,
-        varietyCount: 1,
-        catalogPlantCount: 536,
-      },
-    });
+    // The placement sits on a GARDEN and the totals follow (round 7, S19 —
+    // Extension #6-16): the fixture used to pin `placementCount: 1` over two
+    // gardens holding none, an aggregate the server never emits, on which the
+    // test passed even if the page derived the figure from the gardens.
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([
+        garden('g1', 'Terrasse', { placementCount: 1, varietyCount: 1 }),
+        garden('g2', 'Balcon'),
+      ])
+    );
 
     renderPage();
 
