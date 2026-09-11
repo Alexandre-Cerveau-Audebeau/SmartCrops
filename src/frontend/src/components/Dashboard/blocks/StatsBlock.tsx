@@ -119,9 +119,12 @@ export default function StatsBlock({
     <Typography
       component="h3"
       sx={{
+        // `.sec-t` verbatim (round 6, N5-3): `font-size: 13px; font-weight:
+        // 800; letter-spacing: 0.06em; text-transform: uppercase`. The widget
+        // wrote 700 / 0.04em.
         fontSize: 13,
-        fontWeight: 700,
-        letterSpacing: '0.04em',
+        fontWeight: 800,
+        letterSpacing: '0.06em',
         textTransform: 'uppercase',
         color: 'text.secondary',
         m: 0,
@@ -330,7 +333,10 @@ export default function StatsBlock({
               gap: '7px',
               fontSize: DASHBOARD_TYPE.secondary,
               fontWeight: 600,
-              color: 'text.secondary',
+              // `<span class="lg" style="color: var(--t-meta)">` (round 6,
+              // N5-9): the artboard paints this legend in the meta colour by
+              // an inline style, over the `.lg` rule's `--t-sci`.
+              color: 'text.primary',
             }}
           >
             <ExposureDot category={category} size={12} />

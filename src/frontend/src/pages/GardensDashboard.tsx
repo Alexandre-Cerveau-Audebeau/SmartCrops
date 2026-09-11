@@ -15,9 +15,9 @@ import Skeleton from '@mui/material/Skeleton';
 import Snackbar from '@mui/material/Snackbar';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import AddIcon from '@mui/icons-material/Add';
 import DashboardCustomizeOutlinedIcon from '@mui/icons-material/DashboardCustomizeOutlined';
-import EditIcon from '@mui/icons-material/Edit';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import CustomizePanel from '../components/Dashboard/CustomizePanel';
 import DashboardGrid from '../components/Dashboard/DashboardGrid';
@@ -401,11 +401,17 @@ export default function GardensDashboard() {
                 adjusted ? 'dashboard.levelChipAdjusted' : 'dashboard.levelChip',
                 { level: levelName }
               )}
-              size="small"
               variant="outlined"
+              // `.lvl` verbatim (round 6, N5-5): `height: 32px; padding: 0 13px
+              // 0 10px; border-radius: 16px; gap: 7px; font-size: 13px;
+              // font-weight: 600`. A `size="small"` chip was 24 px high.
               sx={{
+                height: 32,
+                borderRadius: '16px',
+                fontSize: 13,
                 fontWeight: 600,
-                '& .MuiChip-icon': { color: 'primary.main' },
+                '& .MuiChip-icon': { color: 'primary.main', fontSize: 18, ml: '10px', mr: 0 },
+                '& .MuiChip-label': { pl: '7px', pr: '13px' },
               }}
             />
           )}
@@ -426,9 +432,13 @@ export default function GardensDashboard() {
             </Button>
           ) : (
             <>
+              {/* `EditOutlined` and `Add` (round 6, N5-6 / N5-7): the two
+                  paths `Main.dc.html` draws on « Modifier » and « Créer un
+                  jardin », matched attribute for attribute like the two
+                  others of this header were in round 5. */}
               <Button
                 variant="outlined"
-                startIcon={<EditIcon />}
+                startIcon={<EditOutlinedIcon />}
                 onClick={() => setEditing(true)}
                 disabled={loading || loadError}
               >
@@ -453,7 +463,7 @@ export default function GardensDashboard() {
               </Button>
               <Button
                 variant="contained"
-                startIcon={<AddRoundedIcon />}
+                startIcon={<AddIcon />}
                 onClick={() => setCreateDialogOpen(true)}
               >
                 {t('gardens.createGarden')}

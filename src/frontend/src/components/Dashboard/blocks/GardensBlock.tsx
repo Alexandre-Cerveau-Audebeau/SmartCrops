@@ -17,10 +17,16 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { visuallyHidden } from '@mui/utils';
 import { useTheme } from '@mui/material/styles';
+import AddIcon from '@mui/icons-material/Add';
+import BalconyIcon from '@mui/icons-material/Balcony';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import DeckIcon from '@mui/icons-material/Deck';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import FilterVintageOutlinedIcon from '@mui/icons-material/FilterVintageOutlined';
+import GrassIcon from '@mui/icons-material/Grass';
 import YardOutlinedIcon from '@mui/icons-material/YardOutlined';
+import type { SvgIconComponent } from '@mui/icons-material';
 import DeleteGardenDialog from '../../Garden/DeleteGardenDialog';
 import DashboardBlock from '../DashboardBlock';
 import ExposureDot from '../ExposureDot';
@@ -40,6 +46,29 @@ import type { GardenView } from '../../../utils/gardenStats';
 
 /** Rows a Medium card shows before it defers the rest to "+N" (_spec.md 4). */
 const MEDIUM_ROWS = 3;
+
+/**
+ * The glyph a MEDIUM row's type chip carries (round 6, N5-1).
+ *
+ * `A2Novice.dc.html` draws `<span class="pill type"><svg class="ic" width="14">…
+ * </svg>Terrasse</span>` with `.pill.type .ic { color: var(--prim) }`, and the
+ * three paths it draws were matched attribute for attribute against
+ * `@mui/icons-material`: `terrace` → `Deck`, `balcony` → `Balcony`,
+ * `inground` → `Grass`. The artboards never draw a `greenhouse` or an `indoor`
+ * garden; rather than invent a glyph for them, those two borrow the Gardens
+ * widget's own (`YardOutlined`, the entry of `BLOCK_ICONS`), so no chip is bare
+ * and nothing is drawn that the design did not draw somewhere.
+ *
+ * MEDIUM only: `Main.dc.html`'s table writes the same chips WITHOUT a glyph
+ * (`<span class="pill type">Terrasse</span>`), and so does the Large row here.
+ */
+const TYPE_CHIP_ICONS: Record<string, SvgIconComponent> = {
+  terrace: DeckIcon,
+  balcony: BalconyIcon,
+  inground: GrassIcon,
+  greenhouse: YardOutlinedIcon,
+  indoor: YardOutlinedIcon,
+};
 
 /**
  * Thumbnail box on a Medium row and in the table's identity cell.
@@ -379,6 +408,14 @@ export default function GardensBlock({
       ? t(`planner.config.type.${garden.config.gardenType}`)
       : null;
 
+  /** The Medium row's type-chip glyph — see `TYPE_CHIP_ICONS`. */
+  const typeChipIcon = (garden: DashboardGardenData) => {
+    const Icon = garden.config.gardenType
+      ? TYPE_CHIP_ICONS[garden.config.gardenType]
+      : undefined;
+    return Icon ? <Icon /> : undefined;
+  };
+
   /**
    * The header chip, FILLED (round 5, A10-5).
    *
@@ -402,16 +439,33 @@ export default function GardensBlock({
     />
   );
 
-  const ornamentalChip = (garden: DashboardGardenData) =>
+  /**
+   * The « Ornemental » chip, in the two forms the artboards draw it (round 6,
+   * N5-1 and N5-2): on a Medium row with a 13 px `FilterVintageOutlined` in
+   * front (`A2Novice.dc.html`, `<span class="pill orn"><svg class="ic"
+   * width="13">…</svg>Ornemental</span>`), in the table without a glyph and
+   * 24 px high (`Main.dc.html`, `.tbl .pill { height: 24px }`).
+   */
+  const ornamentalChip = (
+    garden: DashboardGardenData,
+    where: 'medium' | 'table' = 'medium'
+  ) =>
     garden.isEdible === false ? (
       <Chip
         label={t('dashboard.blocks.gardens.ornamental')}
         size="small"
+        icon={where === 'medium' ? <FilterVintageOutlinedIcon /> : undefined}
         sx={{
-          height: DASHBOARD_TYPE.chipHeight,
+          height:
+            where === 'table'
+              ? DASHBOARD_TYPE.tableChipHeight
+              : DASHBOARD_TYPE.chipHeight,
           fontSize: DASHBOARD_TYPE.chip,
           backgroundColor: tk.ornBg,
           color: tk.ornText,
+          // `.pill.orn` has no `.ic` rule of its own: the glyph takes the chip's
+          // text colour, which MUI would otherwise repaint in its default grey.
+          '& .MuiChip-icon': { color: 'inherit', fontSize: 13, ml: '8px', mr: '-2px' },
         }}
       />
     ) : null;
@@ -593,6 +647,7 @@ export default function GardensBlock({
               sx={{
                 fontSize: DASHBOARD_TYPE.gardenName,
                 fontWeight: 700,
+                lineHeight: 1.25,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
@@ -645,10 +700,14 @@ export default function GardensBlock({
           // make them not, and the answer to that is a scrollbar inside the
           // card — never a line drawn under it.
           overflowY: 'auto',
+          // A plain column (round 6, N5-8): `A2Novice.dc.html` stacks its rows
+          // in `display: flex; flex-direction: column` with `padding: 6px 0`
+          // on each row and the `.dv` rule between them, and pushes the link
+          // to the bottom with `margin-top: auto`. The body had
+          // `space-evenly` and an 8 px gap instead, which floated the rules
+          // between the rows rather than seating them.
           display: 'flex',
           flexDirection: 'column',
-          justifyContent: 'space-evenly',
-          gap: '8px',
         }}
       >
         {shown.map((garden, index) => (
@@ -670,7 +729,7 @@ export default function GardensBlock({
                 sx={{ height: '1px', backgroundColor: 'borderSubtle' }}
               />
             )}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', py: '6px' }}>
               {/* The description, for zero pixels (round 2). The Large table gives
                   it a truncated line of its own; a Medium row is a single 44 px
                   line and has none to spare, so the row's own link carries it as
@@ -727,6 +786,8 @@ export default function GardensBlock({
                       sx={{
                         fontSize: DASHBOARD_TYPE.gardenName,
                         fontWeight: 700,
+                        // `.gname { line-height: 1.25 }` (round 6, N5-10).
+                        lineHeight: 1.25,
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
@@ -754,13 +815,22 @@ export default function GardensBlock({
                           label={typeLabel(garden)}
                           size="small"
                           variant="outlined"
+                          // The type's glyph, primary-coloured, 14 px (N5-1):
+                          // `.pill.type .ic { color: var(--prim) }`.
+                          icon={typeChipIcon(garden)}
                           sx={{
                             height: DASHBOARD_TYPE.chipHeight,
                             fontSize: DASHBOARD_TYPE.chip,
+                            '& .MuiChip-icon': {
+                              color: 'primary.main',
+                              fontSize: 14,
+                              ml: '8px',
+                              mr: '-2px',
+                            },
                           }}
                         />
                       )}
-                      {ornamentalChip(garden)}
+                      {ornamentalChip(garden, 'medium')}
                     </Box>
                   </Box>
                   {/* The GREEN count pill, right-aligned (round 4, A4):
@@ -787,22 +857,28 @@ export default function GardensBlock({
             </Box>
           </Fragment>
         ))}
-        {remaining > 0 && (
+        {/* `<div style="margin-top: auto"><span class="lnk">[+] Créer un
+            jardin</span></div>` — the artboard seats the link at the bottom of
+            the card and gives it the `Add` glyph. */}
+        <Box sx={{ mt: 'auto', display: 'flex', flexDirection: 'column', pt: '6px' }}>
+          {remaining > 0 && (
+            <Button
+              size="small"
+              onClick={onExpand}
+              sx={{ alignSelf: 'flex-start', fontSize: DASHBOARD_TYPE.link }}
+            >
+              {t('dashboard.blocks.gardens.more', { count: remaining })}
+            </Button>
+          )}
           <Button
             size="small"
-            onClick={onExpand}
+            startIcon={<AddIcon />}
+            onClick={onCreateClick}
             sx={{ alignSelf: 'flex-start', fontSize: DASHBOARD_TYPE.link }}
           >
-            {t('dashboard.blocks.gardens.more', { count: remaining })}
+            {t('gardens.createGarden')}
           </Button>
-        )}
-        <Button
-          size="small"
-          onClick={onCreateClick}
-          sx={{ alignSelf: 'flex-start', fontSize: DASHBOARD_TYPE.link }}
-        >
-          {t('gardens.createGarden')}
-        </Button>
+        </Box>
       </Box>
     );
   };
@@ -865,12 +941,22 @@ export default function GardensBlock({
                     // 11px capitals: one of the three sizes the frozen design
                     // allows under 14, and the reason is measured — six labelled
                     // columns plus a chevron only fit a 516 px card at this size.
+                    //
+                    // The rest is `.tbl .th` verbatim (round 6, N5-4):
+                    // `font-weight: 800; letter-spacing: 0.02em; line-height:
+                    // 1.25; padding: 0 10px 10px 0; align-self: end`. The
+                    // header wrote 700 / 0.04em with 4 px above and below.
                     fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: '0.04em',
+                    lineHeight: 1.25,
+                    fontWeight: 800,
+                    letterSpacing: '0.02em',
                     textTransform: 'uppercase',
                     color: 'text.secondary',
-                    py: '4px',
+                    pt: 0,
+                    pr: '10px',
+                    pb: '10px',
+                    pl: 0,
+                    verticalAlign: 'bottom',
                     borderBottom: '1px solid',
                     borderColor: 'borderSubtle',
                     whiteSpace: 'nowrap',
@@ -899,7 +985,7 @@ export default function GardensBlock({
                 showWeatherColumn={showWeatherColumn}
                 showHarvestColumn={showHarvestColumn}
                 typeLabel={typeLabel(garden)}
-                ornamental={ornamentalChip(garden)}
+                ornamental={ornamentalChip(garden, 'table')}
                 actions={rowTrailing(garden)}
                 plannerPath={plannerPath(garden)}
               />
@@ -1187,6 +1273,8 @@ function GardenRow({
               display: 'block',
               fontSize: DASHBOARD_TYPE.gardenName,
               fontWeight: 700,
+              // `.gname { line-height: 1.25 }` (round 6, N5-10).
+              lineHeight: 1.25,
               textDecoration: 'none',
               color: 'inherit',
               overflow: 'hidden',
@@ -1272,13 +1360,16 @@ function GardenRow({
               maxW={TABLE_THUMB_W}
               maxH={TABLE_THUMB_H}
             />
+            {/* 24 px inside the table (round 6, N5-2): `.tbl .pill { height:
+                24px; font-size: 13px; padding: 0 8px }`. No glyph here — the
+                table's chips are drawn bare in `Main.dc.html`. */}
             {typeLabel && (
               <Chip
                 label={typeLabel}
                 size="small"
                 variant="outlined"
                 sx={{
-                  height: DASHBOARD_TYPE.chipHeight,
+                  height: DASHBOARD_TYPE.tableChipHeight,
                   fontSize: DASHBOARD_TYPE.chip,
                 }}
               />

@@ -555,3 +555,31 @@ describe('StatsBlock — figures in the reader’s language (round 1, G5)', () =
     expect(surfaceNode().textContent).not.toContain('NaN');
   });
 });
+
+// ROUND 6 (partie D) — the section titles and the legend, at the artboard's
+// own measurements.
+describe('StatsBlock — the N5 finishes (round 6, partie D)', () => {
+  it('draws section titles as `.sec-t` — 800 / 0.06em (N5-3)', () => {
+    const widget = renderBlock();
+
+    const title = widget.getByText('Occupancy by garden');
+    const rules = rulesFor(title).replace(/\s+/g, '');
+    expect(rules).toContain('font-weight:800');
+    expect(rules).toContain('letter-spacing:0.06em');
+  });
+
+  it('paints the exposure legend in the meta colour, as `A3Expert` does inline (N5-9)', () => {
+    // `<span class="lg" style="color: var(--t-meta);">` — `text.primary`, over
+    // the `.lg` rule's `--t-sci`. Under `createTheme()` that is MUI's default
+    // `rgba(0,0,0,0.87)`.
+    renderBlock();
+
+    // Two « Full sun » on a Large card — the legend and the per-garden
+    // swatch's hidden name — so the legend is reached from its own bar.
+    const legend = widgetNode().querySelector('[data-exposure-bar]')!
+      .nextElementSibling!;
+    const item = within(legend as HTMLElement).getByText('Full sun').parentElement!;
+    const rules = rulesFor(item).toLowerCase().replace(/\s+/g, '');
+    expect(rules).toContain('color:rgba(0,0,0,0.87)');
+  });
+});

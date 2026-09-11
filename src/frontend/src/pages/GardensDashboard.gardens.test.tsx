@@ -1,5 +1,6 @@
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -1835,4 +1836,95 @@ describe('Gardens rows — the chevron opens the garden (V15)', () => {
       expect(screen.queryByText('planner reached')).toBeNull();
     }
   );
+});
+
+// ROUND 6 (partie D) — the finishes of the N5 list, at the artboards' own
+// measurements.
+describe('Gardens rows — the N5 finishes (round 6, partie D)', () => {
+  beforeEach(() => localStorage.setItem('smartcrops-language', 'en'));
+
+  it('gives the Medium type chip the glyph `A2Novice` draws for its type (N5-1)', async () => {
+    // `<span class="pill type"><svg class="ic" width="14">…</svg>Terrasse</span>`
+    // — the path matches `Deck`; `.pill.type .ic { color: var(--prim) }`.
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([
+        gardenWith(3, {
+          config: { orientation: null, gardenType: 'terrace', lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
+        }),
+      ])
+    );
+    await renderNovice();
+
+    const chip = within(gardensWidget()).getByText('Terrace').closest('.MuiChip-root')!;
+    expect(chip.querySelector('svg[data-testid="DeckIcon"]')).not.toBeNull();
+  });
+
+  it('gives the Medium « Ornamental » chip its 13 px glyph, and the table none (N5-1 / N5-2)', async () => {
+    // `A2Novice`: `<span class="pill orn"><svg class="ic" width="13">…</svg>
+    // Ornemental</span>`, matched `FilterVintageOutlined`. `Main.dc.html`'s
+    // table writes the same chip bare, 24 px high (`.tbl .pill`).
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenWith(3, { isEdible: false })])
+    );
+    await renderNovice();
+    const medium = within(gardensWidget()).getByText('Ornamental').closest('.MuiChip-root')!;
+    expect(medium.querySelector('svg[data-testid="FilterVintageOutlinedIcon"]')).not.toBeNull();
+    expect(rulesFor(medium).replace(/\s+/g, '')).toContain('height:26px');
+
+    cleanup();
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level: 'gardener',
+      isPreset: true,
+      blocks: presetFor('gardener'),
+      updatedAt: null,
+    });
+    renderPage();
+    await screen.findByText('Casa Lolo');
+    const table = within(gardensWidget()).getByText('Ornamental').closest('.MuiChip-root')!;
+    expect(table.querySelector('svg')).toBeNull();
+    expect(rulesFor(table).replace(/\s+/g, '')).toContain('height:24px');
+  });
+
+  it('draws the column headers as `.tbl .th` (N5-4)', async () => {
+    // `font-weight: 800; letter-spacing: 0.02em; line-height: 1.25; padding:
+    // 0 10px 10px 0; align-self: end`.
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(3)]));
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    const th = gardensWidget().querySelector('th')!;
+    const rules = rulesFor(th).replace(/\s+/g, '');
+    expect(rules).toContain('font-weight:800');
+    expect(rules).toContain('letter-spacing:0.02em');
+    expect(rules).toContain('line-height:1.25');
+    expect(rules).toContain('padding-bottom:10px');
+    expect(rules).toContain('padding-right:10px');
+    expect(rules).toContain('vertical-align:bottom');
+  });
+
+  it('stacks the Medium rows in a plain column, 6 px of air each, the link at the bottom (N5-8)', async () => {
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(3)]));
+    await renderNovice();
+
+    const link = within(gardensWidget()).getByRole('link', { name: 'Open Casa Lolo' });
+    const row = link.parentElement!;
+    expect(rulesFor(row).replace(/\s+/g, '')).toContain('padding-top:6px');
+
+    const create = within(gardensWidget()).getByRole('button', { name: 'Create Garden' });
+    expect(rulesFor(create.parentElement!).replace(/\s+/g, '')).toContain('margin-top:auto');
+    expect(create.querySelector('svg[data-testid="AddIcon"]')).not.toBeNull();
+
+    const body = row.parentElement!;
+    const rules = rulesFor(body).replace(/\s+/g, '');
+    expect(rules).not.toContain('space-evenly');
+  });
+
+  it('sets the garden name’s line-height to 1.25 (N5-10)', async () => {
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(3)]));
+    await renderNovice();
+
+    const name = within(gardensWidget()).getByText('Casa Lolo');
+    expect(rulesFor(name).replace(/\s+/g, '')).toContain('line-height:1.25');
+  });
 });

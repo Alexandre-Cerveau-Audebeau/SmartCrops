@@ -266,6 +266,26 @@ describe('GardensDashboard — header (SMA-336)', () => {
     ).not.toBeNull();
   });
 
+  it('draws the level chip at `.lvl`’s 32 px, and the two buttons with the artboard’s glyphs (N5-5 / N5-6 / N5-7)', async () => {
+    // `.lvl { height: 32px; padding: 0 13px 0 10px; border-radius: 16px; gap:
+    // 7px; font-size: 13px; font-weight: 600 }` — a `size="small"` chip was
+    // 24 px. « Modifier » draws `EditOutlined`, « Créer un jardin » draws
+    // `Add`, both matched attribute for attribute in `Main.dc.html`.
+    renderPage();
+
+    const chip = (await screen.findByText('Gardener view')).closest('.MuiChip-root')!;
+    const rules = rulesFor(chip).replace(/\s+/g, '');
+    expect(rules).toContain('height:32px');
+    expect(rules).toContain('border-radius:16px');
+    expect(rules).toContain('font-size:13px');
+    expect(rules).toContain('font-weight:600');
+
+    const edit = screen.getByRole('button', { name: 'Edit' });
+    expect(edit.querySelector('svg[data-testid="EditOutlinedIcon"]')).not.toBeNull();
+    const create = screen.getByRole('button', { name: 'Create Garden' });
+    expect(create.querySelector('svg[data-testid="AddIcon"]')).not.toBeNull();
+  });
+
   it('keeps the four header glyphs distinct from one another (A10-11)', async () => {
     // The sliders of `Tune` belong to the level chip; the artboard puts the
     // four squares of `DashboardCustomizeOutlined` on « Personnaliser », and

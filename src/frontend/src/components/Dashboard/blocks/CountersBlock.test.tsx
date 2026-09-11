@@ -199,8 +199,17 @@ describe('CountersBlock', () => {
       // and the option is off.
       expect(widget.queryByRole('img')).toBeNull();
       expect(document.querySelectorAll('[data-widget="counters"] img')).toHaveLength(0);
-      const pastille = widget.getByText('B');
+      // A PLAIN dot, no letter (round 6, partie E1): `Main.dc.html` l. 158,
+      // `.dot { width: 14px; height: 14px; border-radius: 50% }` filled with
+      // the plant's hue. The widget drew the planner's lettered avatar.
+      const pastille = widgetNode().querySelector('[data-variety-dot]')!;
       expect(pastille).toHaveStyle({ backgroundColor: getPlantColor('p-1') });
+      expect(pastille.textContent).toBe('');
+      const rules = rulesFor(pastille).replace(/\s+/g, '');
+      expect(rules).toContain('width:14px');
+      expect(rules).toContain('height:14px');
+      expect(rules).toContain('border-radius:50%');
+      expect(widget.queryByText('B')).toBeNull();
     });
 
     it('draws the photo when the option is on', () => {
@@ -781,7 +790,7 @@ describe('CountersBlock — the density lock survives a resize and a filter chan
     };
   }
 
-  const rows = () => widgetNode().querySelectorAll('[class*="MuiAvatar-root"]').length;
+  const rows = () => widgetNode().querySelectorAll('[data-variety-row]').length;
 
   it('a Medium card expanded then resized to Large is capped again at ten lines', () => {
     // A bare boolean survived the resize: 26 rows on a card whose lock is ten
@@ -817,5 +826,44 @@ describe('CountersBlock — the empty state draws the widget’s own glyph (roun
         .querySelector('svg[data-testid="LocalFloristOutlinedIcon"]')
     ).not.toBeNull();
     expect(widgetNode().querySelector('svg[data-testid="GrassOutlinedIcon"]')).toBeNull();
+  });
+});
+
+// ROUND 6 (partie D / E1) — the ornamental heading and the row, at the
+// artboard's own measurements.
+describe('CountersBlock — the N5 finishes and the row (round 6)', () => {
+  it('draws the ornamental heading as `.sec-t` — 800 / 0.06em (N5-3)', () => {
+    const widget = renderBlock({
+      varieties: [
+        variety({ plantId: 'p-1', commonName: 'Basil', plantType: 'Herb' }),
+        variety({ plantId: 'p-2', commonName: 'Lady fern', plantType: 'Fern', isEdible: false }),
+      ],
+    });
+
+    const heading = widget.getByRole('heading', { level: 3, name: 'Ornamental' });
+    const rules = rulesFor(heading).replace(/\s+/g, '');
+    expect(rules).toContain('font-weight:800');
+    expect(rules).toContain('letter-spacing:0.06em');
+  });
+
+  it('lays the row out as `Main.dc.html` draws it — 10 px gap, name 600, count 700 (E1)', () => {
+    const widget = renderBlock();
+
+    const row = widget.getByText('Basil').parentElement!;
+    expect(rulesFor(row).replace(/\s+/g, '')).toContain('gap:10px');
+    expect(rulesFor(widget.getByText('Basil')).replace(/\s+/g, '')).toContain('font-weight:600');
+    expect(rulesFor(widget.getByText('× 4')).replace(/\s+/g, '')).toContain('font-weight:700');
+  });
+
+  it('draws the photo avatar at the artboard’s 26 px (E1)', () => {
+    renderBlock({
+      options: { photos: true },
+      varieties: [variety({ imageUrl: 'https://bs.plantnet.org/habit.jpg' })],
+    });
+
+    const avatar = widgetNode().querySelector('.MuiAvatar-root')!;
+    const rules = rulesFor(avatar).replace(/\s+/g, '');
+    expect(rules).toContain('width:26px');
+    expect(rules).toContain('height:26px');
   });
 });

@@ -70,6 +70,13 @@ export interface DashboardTokens {
   exposureHatch: string;
   /** Fill of a variety avatar standing in for a photo (`--ph-fill`). */
   avatarFill: string;
+  /**
+   * The 1 px ring of a Counters colour pastille (round 6, partie E1) —
+   * `Main.dc.html` l. 158-159: `.dot { border: 1px solid rgba(0,0,0,0.12) }`
+   * and `.night .dot { border-color: rgba(255,255,255,0.18) }`. It is what keeps
+   * a pale plant hue from dissolving into the card.
+   */
+  dotRing: string;
 }
 
 const LIGHT: DashboardTokens = {
@@ -87,6 +94,7 @@ const LIGHT: DashboardTokens = {
   exposureHatch:
     'repeating-linear-gradient(45deg, rgba(71,94,120,0.18) 0px, rgba(71,94,120,0.18) 3px, transparent 3px, transparent 8px)',
   avatarFill: '#DCE9DF',
+  dotRing: 'rgba(0,0,0,0.12)',
 };
 
 const DARK: DashboardTokens = {
@@ -104,6 +112,7 @@ const DARK: DashboardTokens = {
   exposureHatch:
     'repeating-linear-gradient(45deg, rgba(142,170,206,0.30) 0px, rgba(142,170,206,0.30) 3px, transparent 3px, transparent 8px)',
   avatarFill: '#24395F',
+  dotRing: 'rgba(255,255,255,0.18)',
 };
 
 export function getDashboardTokens(mode: DashboardThemeMode): DashboardTokens {
@@ -144,6 +153,13 @@ export const DASHBOARD_TYPE = {
   /** Chip labels; chips are 26px high. */
   chip: 13,
   chipHeight: 26,
+  /**
+   * Chips INSIDE the comparison table are 24 px (round 6, N5-2):
+   * `Main.dc.html` l. 200, `.tbl .pill { height: 24px; font-size: 13px;
+   * padding: 0 8px; gap: 4px }` — two pixels shorter than the 26 px `.pill`
+   * everywhere else, so a 44 px row keeps its air.
+   */
+  tableChipHeight: 24,
   /** Key numbers (counters, m², %): 28–32; 30 is the default. */
   big: 30,
   bigSmall: 28,

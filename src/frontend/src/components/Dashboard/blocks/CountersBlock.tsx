@@ -48,7 +48,19 @@ const MEDIUM_COLUMNS = 2;
 const LARGE_VARIETIES = 19;
 const LARGE_COLUMNS = 2;
 
-const AVATAR_PX = 34;
+/**
+ * The two marks a Counters row can open on (round 6, partie E1).
+ *
+ * By DEFAULT the artboards draw a plain coloured DOT with no letter in it —
+ * `Main.dc.html` l. 158: `.dot { width: 14px; height: 14px; border-radius:
+ * 50%; border: 1px solid rgba(0,0,0,0.12) }`, filled with the plant's hue. The
+ * widget drew the planner's idiom instead: a 34 px avatar carrying the initial.
+ * The photo option draws the artboard's `.av` — a 26 px circle (`A3Expert.dc.
+ * html`, `.av { width: 26px; height: 26px; border-radius: 50% }`), which was
+ * also 34 here.
+ */
+const DOT_PX = 14;
+const AVATAR_PX = 26;
 
 interface Props {
   size: DashboardSize;
@@ -141,19 +153,22 @@ export default function CountersBlock({
   const avatar = (variety: DashboardVarietyData) => {
     const colour = getPlantColor(variety.plantId);
     if (!photos) {
+      // `.dot` — a plain coloured circle, no letter (partie E1). The name
+      // beside it carries the meaning; the dot is the row's colour key to the
+      // plan, and decorative.
       return (
-        <Avatar
+        <Box
           aria-hidden
+          data-variety-dot
           sx={{
-            width: AVATAR_PX,
-            height: AVATAR_PX,
-            fontSize: 14.5,
-            fontWeight: 800,
-            bgcolor: colour,
+            width: DOT_PX,
+            height: DOT_PX,
+            flexShrink: 0,
+            borderRadius: '50%',
+            backgroundColor: colour,
+            border: `1px solid ${tk.dotRing}`,
           }}
-        >
-          {displayName(variety).charAt(0).toUpperCase()}
-        </Avatar>
+        />
       );
     }
     return (
@@ -182,10 +197,13 @@ export default function CountersBlock({
     );
   };
 
+  // The row as `Main.dc.html` draws it: `gap: 10px`, the name at 15 px / 600,
+  // the count as `.val` — 15 px / 700 (partie E1, taken with the dot).
   const row = (variety: DashboardVarietyData) => (
     <Box
       key={variety.plantId}
-      sx={{ display: 'flex', alignItems: 'center', gap: '8px', minHeight: 42 }}
+      data-variety-row
+      sx={{ display: 'flex', alignItems: 'center', gap: '10px', minHeight: 42 }}
     >
       {avatar(variety)}
       <Typography
@@ -193,6 +211,7 @@ export default function CountersBlock({
           flex: 1,
           minWidth: 0,
           fontSize: DASHBOARD_TYPE.body,
+          fontWeight: 600,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
@@ -201,7 +220,7 @@ export default function CountersBlock({
         {displayName(variety)}
       </Typography>
       <Typography
-        sx={{ fontSize: DASHBOARD_TYPE.body, fontWeight: 800 }}
+        sx={{ fontSize: DASHBOARD_TYPE.body, fontWeight: 700 }}
       >
         {/* Locale-formatted (round 1, G5): a four-digit count concatenated
             into a template literal reads « 1440 » in a French widget that
@@ -391,9 +410,10 @@ export default function CountersBlock({
             <Typography
               component="h3"
               sx={{
+                // `.sec-t` verbatim (round 6, N5-3): 800 / 0.06em.
                 fontSize: 13,
-                fontWeight: 700,
-                letterSpacing: '0.04em',
+                fontWeight: 800,
+                letterSpacing: '0.06em',
                 textTransform: 'uppercase',
                 color: 'text.secondary',
                 mt: '4px',
