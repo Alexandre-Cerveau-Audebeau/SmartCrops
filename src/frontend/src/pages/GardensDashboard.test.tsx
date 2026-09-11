@@ -309,7 +309,13 @@ describe('GardensDashboard — header (SMA-336)', () => {
   it('offers Edit, Customize and Create Garden outside the Edit mode', async () => {
     renderPage();
 
-    expect(await screen.findByRole('button', { name: 'Edit' })).toBeEnabled();
+    // ENABLED is a state the page reaches one render after the preferences
+    // land, not a property of the first paint — `findByRole` resolves on that
+    // first paint, so the enabled state is WAITED for, as `openPanel` does.
+    // Edit and Customize share one `disabled` expression: once Edit is
+    // enabled, the same render enabled Customize.
+    const edit = await screen.findByRole('button', { name: 'Edit' });
+    await waitFor(() => expect(edit).toBeEnabled());
     expect(screen.getByRole('button', { name: 'Customize' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Create Garden' })).toBeEnabled();
   });
@@ -711,7 +717,17 @@ describe('GardensDashboard — the widget header (round 4, A1 / A2)', () => {
 describe('GardensDashboard — Customize panel (SMA-336)', () => {
   const openPanel = async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Customize' }));
+    const customize = await screen.findByRole('button', { name: 'Customize' });
+    // ENABLED, not merely present — the same trap `enterEditMode` and
+    // `openCountersOptions` already guard against (round 1, E17). The page
+    // renders Customize `disabled={loading || loadError}` from its very first
+    // paint, and `findByRole` resolves on its first, synchronous check, so it
+    // can hand back the disabled button; the enabling re-render is one
+    // macrotask away, and so is the `setTimeout(0)` `findByRole` drains before
+    // returning. Whichever fires first decides whether the click is swallowed.
+    // CI run 34626480539 lost that race on two tests of this describe.
+    await waitFor(() => expect(customize).toBeEnabled());
+    fireEvent.click(customize);
     return await screen.findByRole('heading', { name: 'Customize' });
   };
 
@@ -961,7 +977,11 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     servePreferences('expert');
 
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Personnaliser' }));
+    // The French twin of `openPanel`: same button, same `disabled` while the
+    // preferences are in flight, same wait for ENABLED before the click.
+    const personnaliser = await screen.findByRole('button', { name: 'Personnaliser' });
+    await waitFor(() => expect(personnaliser).toBeEnabled());
+    fireEvent.click(personnaliser);
     await screen.findByRole('heading', { name: 'Personnaliser' });
 
     expect(document.body.textContent).not.toMatch(
