@@ -212,6 +212,46 @@ describe('resolveCountersFigures — one resolver for every number (round 6, A)'
 
     expect(varieties.map((v) => v.count)).toEqual(before);
   });
+
+  // ROUND 7 — the 🟠 Major inline of `556f0d0` (`countersOptions.ts` L168)
+  // and Extension #6-10 / #6-11 (S16): the placements are indexed ONCE.
+  it('walks the garden’s placements once, however many varieties it keeps', () => {
+    // A garden of two hundred placements over fifty varieties: the per-variety
+    // filter read the array fifty times — ten thousand element visits for a
+    // list the widget resolves on every render. Counted through a proxy, so
+    // the assertion is on the shape of the work and not on a timing.
+    const many = Array.from({ length: 50 }, (_, index) => `plant-${index}`);
+    const placements = Array.from({ length: 200 }, (_, index) =>
+      placement({
+        id: `pl-${index}`,
+        plantId: many[index % many.length]!,
+        startRow: 0,
+        startCol: index,
+      })
+    );
+    let visits = 0;
+    const counted = new Proxy(placements, {
+      get(target, property, receiver) {
+        if (typeof property === 'string' && /^\d+$/.test(property)) visits += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    // Built on the plain array (the builder reads it), then handed the proxy.
+    const big = { ...garden('big', placements), placements: counted };
+    const rows = many.map((plantId) => variety(plantId, 4, ['big']));
+
+    const figures = resolveCountersFigures(
+      { garden: 'big' },
+      [big],
+      rows,
+      { gardenCount: 1, placementCount: 200, varietyCount: 50, catalogPlantCount: 536 }
+    );
+
+    expect(figures.varieties).toHaveLength(50);
+    expect(figures.varieties.every((row) => row.count === 4 && row.cells === 4)).toBe(true);
+    // One element read per placement — not one per placement per variety.
+    expect(visits).toBeLessThanOrEqual(placements.length);
+  });
 });
 
 // ROUND 6 (Extension #4-11) — the reader carries what it does not interpret.

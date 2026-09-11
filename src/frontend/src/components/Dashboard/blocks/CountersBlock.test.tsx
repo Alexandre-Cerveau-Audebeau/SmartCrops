@@ -835,6 +835,50 @@ describe('CountersBlock — the density lock survives a resize and a filter chan
   });
 });
 
+// ROUND 7 — the 🟡 Minor inline of `556f0d0` (`CountersBlock.tsx` L142): the
+// expansion is keyed on the DATA too.
+describe('CountersBlock — « +N » collapses again when the data under it is replaced (round 7)', () => {
+  const list = () =>
+    Array.from({ length: 26 }, (_, index) =>
+      variety({ plantId: `p-${index}`, commonName: `Variety ${index}`, gardenIds: ['g1'] })
+    );
+
+  it('a refreshed aggregate under the same size and garden is capped again', () => {
+    // A delete or a refetch hands the widget a NEW `varieties` array with the
+    // same size and the same garden filter: the identity string did not
+    // change, so the refreshed list stayed expanded past its ten-line cap.
+    localStorage.setItem('smartcrops-language', 'en');
+    const ui = (varieties: DashboardVarietyData[]) => (
+      <ThemeProvider theme={createTheme()}>
+        <LanguageProvider>
+          <MemoryRouter>
+            <CountersBlock
+              size="large"
+              options={null}
+              varieties={varieties}
+              gardens={[garden('g1', 'Terrasse')]}
+              totals={totals({ placementCount: 26, varietyCount: 26 })}
+              loading={false}
+              loadError={false}
+              onRetry={() => {}}
+            />
+          </MemoryRouter>
+        </LanguageProvider>
+      </ThemeProvider>
+    );
+    const rows = () => widgetNode().querySelectorAll('[data-variety-row]').length;
+    const rendered = render(ui(list()));
+    expect(rows()).toBe(19);
+
+    fireEvent.click(within(widgetNode()).getByText('+7 varieties'));
+    expect(rows()).toBe(26);
+
+    rendered.rerender(ui(list()));
+    expect(rows()).toBe(19);
+    expect(within(widgetNode()).getByText('+7 varieties')).toBeInTheDocument();
+  });
+});
+
 // ROUND 6 (Extension #5-7) — one glyph per widget, from the one table.
 describe('CountersBlock — the empty state draws the widget’s own glyph (round 6)', () => {
   it('reads BLOCK_ICONS.counters rather than restating a glyph', () => {

@@ -144,10 +144,20 @@ export default function CountersBlock({
   // (round 6, Extension #5-6 — the V9 class): a bare boolean survived a filter
   // change and a resize, so an expanded Medium card resized to Large bypassed
   // the ten-line lock and rendered the whole list. The key is the list's
-  // identity — the size and the garden it was opened on.
-  const [expandedFor, setExpandedFor] = useState<string | null>(null);
+  // identity — the size and the garden it was opened on — AND the data it was
+  // opened on (round 7 — the 🟡 Minor inline of `556f0d0`, L142): a delete or
+  // an aggregate refresh replaces `varieties` under the same size and garden,
+  // and the refreshed list stayed expanded past its cap. A new fetch builds
+  // new arrays, so the reference is the data's identity.
+  const [expandedFor, setExpandedFor] = useState<{
+    identity: string;
+    source: readonly DashboardVarietyData[];
+  } | null>(null);
   const listIdentity = `${size}:${activeGarden}`;
-  const expanded = expandedFor === listIdentity;
+  const expanded =
+    expandedFor !== null &&
+    expandedFor.identity === listIdentity &&
+    expandedFor.source === varieties;
 
   // The invitation glyph is the widget's own, from the ONE table (round 6,
   // Extension #5-7): a hardcoded `GrassOutlined` here drew grass in the empty
@@ -264,7 +274,7 @@ export default function CountersBlock({
     hidden > 0 ? (
       <Button
         size="small"
-        onClick={() => setExpandedFor(listIdentity)}
+        onClick={() => setExpandedFor({ identity: listIdentity, source: varieties })}
         sx={{ alignSelf: 'flex-start', fontSize: DASHBOARD_TYPE.link }}
       >
         {t('dashboard.blocks.counters.more', { count: hidden })}

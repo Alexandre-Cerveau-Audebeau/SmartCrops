@@ -160,20 +160,24 @@ export function resolveCountersFigures(
     };
   }
 
+  // ONE pass over the garden's placements, grouped by plant (round 7 — the
+  // 🟠 Major inline of `556f0d0` and Extension #6-10 / #6-11, S16): each kept
+  // variety scanned the whole array, so the resolver was O(varieties ×
+  // placements), on every render by design, over an aggregate that carries
+  // no ceiling. The map is read once per variety instead: linear in both.
+  const byPlant = new Map<string, { count: number; cells: number }>();
+  for (const placement of selected.placements) {
+    const entry = byPlant.get(placement.plantId) ?? { count: 0, cells: 0 };
+    entry.count += 1;
+    entry.cells += placement.spanRows * placement.spanCols;
+    byPlant.set(placement.plantId, entry);
+  }
+
   const kept = varieties
     .filter((variety) => variety.gardenIds.includes(garden))
     .map((variety) => {
-      const own = selected.placements.filter(
-        (placement) => placement.plantId === variety.plantId
-      );
-      return {
-        ...variety,
-        count: own.length,
-        cells: own.reduce(
-          (sum, placement) => sum + placement.spanRows * placement.spanCols,
-          0
-        ),
-      };
+      const own = byPlant.get(variety.plantId) ?? { count: 0, cells: 0 };
+      return { ...variety, count: own.count, cells: own.cells };
     });
 
   return {
