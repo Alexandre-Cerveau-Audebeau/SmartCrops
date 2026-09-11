@@ -910,6 +910,11 @@ export default function GardensBlock({
    * cell cannot carry both.
    */
   const largeBody = () => {
+    // Resolved ONCE for the table (round 7, S07 — Extension #7-13): every row
+    // re-read the theme and the tokens and built a fresh sticky `sx` — with
+    // its nested `&::before` — on every render, per garden, on a table with
+    // no row cap. The header cell and every row share this one object.
+    const stickyActions = stickyActionsSx(ruleColor, paperColor);
     const headers = [
       t('dashboard.blocks.gardens.columns.garden'),
       t('dashboard.blocks.gardens.columns.plants'),
@@ -987,11 +992,7 @@ export default function GardensBlock({
                   {label}
                 </Box>
               ))}
-              <Box
-                component="th"
-                scope="col"
-                sx={stickyActionsSx(ruleColor, paperColor)}
-              >
+              <Box component="th" scope="col" sx={stickyActions}>
                 <Box component="span" sx={visuallyHidden}>
                   {t('dashboard.blocks.gardens.columns.actions')}
                 </Box>
@@ -1001,6 +1002,8 @@ export default function GardensBlock({
           <Box component="tbody">
             {gardens.map((garden) => (
               <GardenRow
+                stickyActions={stickyActions}
+                chipBorder={tk.chipBorder}
                 key={garden.id}
                 garden={garden}
                 view={views.get(garden.id)}
@@ -1203,6 +1206,10 @@ interface RowProps {
   ornamental: React.ReactNode;
   actions: React.ReactNode;
   plannerPath: string;
+  /** Resolved once by the table (round 7, S07) — see `stickyActionsSx`. */
+  stickyActions: ReturnType<typeof stickyActionsSx>;
+  /** The outlined-chip border token, read once by the table. */
+  chipBorder: string;
 }
 
 /** One line of the comparison table. */
@@ -1215,12 +1222,10 @@ function GardenRow({
   ornamental,
   actions,
   plannerPath,
+  stickyActions,
+  chipBorder,
 }: RowProps) {
   const { t, i18n } = useTranslation();
-  const palette = useTheme().palette;
-  const ruleColor = palette.borderSubtle;
-  const paperColor = palette.background.paper;
-  const { chipBorder } = useDashboardTokens();
 
   const cellSx = {
     // >= 44px rows (_spec.md 3): the line is a touch target as much as a row.
@@ -1490,7 +1495,7 @@ function GardenRow({
         component="td"
         sx={{
           ...cellSx,
-          ...stickyActionsSx(ruleColor, paperColor),
+          ...stickyActions,
           pl: '2px',
           pr: 0,
         }}

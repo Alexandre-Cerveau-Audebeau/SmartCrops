@@ -4,7 +4,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SmartCrops.Api.Controllers;
 using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Entities;
@@ -259,6 +261,66 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         var garden = Assert.Single((await GetDashboardAsync()).Gardens);
         Assert.Null(garden.Config.LightSchedule);
         Assert.Equal(1, garden.PlacementCount);
+    }
+
+    // ROUND 7 (S06 — Extension #7-6): the degradation is no longer silent.
+    [Theory]
+    [InlineData("not json", "not a JSON schedule")]
+    [InlineData("[{\"start\":\"8:00\",\"end\":\"20:00\"}]", "24h HH:mm")]
+    [InlineData("[{\"start\":\"20:00\",\"end\":\"08:00\"}]", "start < end")]
+    public async Task GetDashboard_ADegradedLightSchedule_IsLoggedWithTheGardenAndTheRule(
+        string storedJson,
+        string ruleFragment)
+    {
+        // A row that needs repair looked exactly like a garden with no schedule:
+        // both failure paths of the reader were silent, and the next config
+        // save wrote null over the stored value. The response cannot say it —
+        // degrading IS the response — so the endpoint says it in the log, with
+        // the garden and the rule the document broke.
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Serre");
+        await SetLightScheduleJsonAsync(gardenId, storedJson);
+
+        var capture = new CapturingLoggerProvider();
+        using var factory = Fixture.Factory.WithWebHostBuilder(builder =>
+            builder.ConfigureLogging(logging => logging.AddProvider(capture)));
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
+
+        var body = await client.GetFromJsonAsync<DashboardResponse>(Url);
+        Assert.NotNull(body);
+        Assert.Null(Assert.Single(body.Gardens).Config.LightSchedule);
+
+        var warning = Assert.Single(capture.Entries, entry =>
+            entry.Level == LogLevel.Warning && entry.Message.Contains(gardenId.ToString()));
+        Assert.Contains("light schedule read as none", warning.Message);
+        Assert.Contains(ruleFragment, warning.Message);
+    }
+
+    [Fact]
+    public async Task GetDashboard_AWellFormedOrEmptyLightSchedule_LogsNothing()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var kept = await SeedGardenAsync(userId, "Serre");
+        await SetLightScheduleJsonAsync(kept, "[{\"start\":\"08:00\",\"end\":\"20:00\"}]");
+        await SeedGardenAsync(userId, "Terrasse");
+
+        var capture = new CapturingLoggerProvider();
+        using var factory = Fixture.Factory.WithWebHostBuilder(builder =>
+            builder.ConfigureLogging(logging => logging.AddProvider(capture)));
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
+
+        var body = await client.GetFromJsonAsync<DashboardResponse>(Url);
+        Assert.NotNull(body);
+        Assert.Equal(2, body.Gardens.Count);
+
+        Assert.DoesNotContain(capture.Entries, entry =>
+            entry.Message.Contains("light schedule read as none"));
     }
 
     [Theory]

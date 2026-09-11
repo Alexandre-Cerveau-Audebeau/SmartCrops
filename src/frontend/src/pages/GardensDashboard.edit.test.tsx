@@ -32,10 +32,7 @@ vi.mock('../services/dashboardApi', () => ({
   fetchDashboardData: vi.fn(),
 }));
 
-import type {
-  DashboardData,
-  DashboardGardenData,
-} from '../types/DashboardData';
+import { dashboardFixture as dashboardWith } from '../test/fixtures/dashboard';
 import GardensDashboard from './GardensDashboard';
 
 import {
@@ -44,17 +41,9 @@ import {
   saveDashboardPreferences,
 } from '../services/dashboardApi';
 
-/** SMA-336 PR 2/5 — an empty aggregate: these tests are about the GRID, not the data. */
-const dashboardWith = (gardens: DashboardGardenData[]): DashboardData => ({
-  gardens,
-  varieties: [],
-  totals: {
-    gardenCount: gardens.length,
-    placementCount: gardens.reduce((sum, g) => sum + g.placementCount, 0),
-    varietyCount: gardens.reduce((sum, g) => sum + g.varietyCount, 0),
-    catalogPlantCount: 536,
-  },
-});
+// SMA-336 PR 2/5 — an empty aggregate: these tests are about the GRID, not the
+// data. The shape comes from the shared fixture (round 7, S02), so the three
+// dashboard suites cannot disagree about it.
 
 /**
  * jsdom lays nothing out: every `getBoundingClientRect` is a zero rect, so

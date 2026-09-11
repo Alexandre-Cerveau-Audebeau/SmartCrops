@@ -28,7 +28,10 @@ namespace SmartCrops.Api.Controllers;
 [ApiController]
 [Route("api/dashboard")]
 [Authorize]
-public class DashboardController(SmartCropsDbContext context, IMemoryCache cache) : ControllerBase
+public class DashboardController(
+    SmartCropsDbContext context,
+    IMemoryCache cache,
+    ILogger<DashboardController> logger) : ControllerBase
 {
     private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
 
@@ -227,7 +230,7 @@ public class DashboardController(SmartCropsDbContext context, IMemoryCache cache
                 new GardenConfigDto(
                     g.Orientation,
                     g.GardenType,
-                    LightScheduleDocument.Parse(g.LightScheduleJson),
+                    ReadLightSchedule(g.Id, g.LightScheduleJson),
                     g.Hemisphere,
                     g.LatitudeBand),
                 g.UpdatedAt,
@@ -340,6 +343,15 @@ public class DashboardController(SmartCropsDbContext context, IMemoryCache cache
     /// also issued sequentially after the variety read and shares no dependency
     /// with it, so it was pure added latency on the critical path of the page.</para>
     ///
+    /// <para>« Shares no dependency » is about the DATA, not about the
+    /// connection (round 7, S05 — Extension #8-1): both reads use the injected
+    /// scoped <c>context</c>, and a <c>DbContext</c> rejects a second concurrent
+    /// operation on the same instance, so this count must NOT be run alongside
+    /// <see cref="LoadVarietyDisplayAsync"/> with <c>Task.WhenAll</c>. If the
+    /// cold-window latency ever matters, the shape is an
+    /// <c>IDbContextFactory&lt;SmartCropsDbContext&gt;</c> for this one count —
+    /// with a measurement behind it, as every note on this gate already says.</para>
+    ///
     /// <para>The value is deliberately allowed to be STALE inside the window: a
     /// caption saying 536 for five minutes after a 537th plant arrives is the
     /// intended behaviour, not a tolerated one.</para>
@@ -380,6 +392,25 @@ public class DashboardController(SmartCropsDbContext context, IMemoryCache cache
     /// What the Counters widget needs about one placed variety beyond its counts:
     /// the catalog facts SQL alone can answer, and its display name and cover.
     /// </summary>
+    /// <summary>
+    /// The stored light schedule, and a WARNING when it read as none (round 7,
+    /// S06 — Extension #7-6). The degradation is the right call for
+    /// availability — one unreadable row must not take the page down — but it
+    /// was silent on both failure paths, so a row that needed repair looked
+    /// like a garden with no schedule. The reader stays pure; the entry point
+    /// that has the request context says it, with the garden and the rule it
+    /// broke, once per read.
+    /// </summary>
+    private List<LightSlotDto>? ReadLightSchedule(Guid gardenId, string? json)
+    {
+        var slots = LightScheduleDocument.Parse(json, out var reason);
+        if (reason is not null)
+            logger.LogWarning(
+                "Garden {GardenId}: stored light schedule read as none — {Reason}",
+                gardenId, reason);
+        return slots;
+    }
+
     /// <param name="CommonName">Localised name, requested language then English; null when neither exists.</param>
     /// <param name="PlantType">The catalog type name — half of the R4 edible rule.</param>
     /// <param name="IsEdible">The catalog's own flag — the other half of R4.</param>

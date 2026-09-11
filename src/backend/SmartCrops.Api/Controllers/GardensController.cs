@@ -78,7 +78,9 @@ public record SavePlacementRequest(
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class GardensController(SmartCropsDbContext context) : ControllerBase
+public class GardensController(
+    SmartCropsDbContext context,
+    ILogger<GardensController> logger) : ControllerBase
 {
     /// <summary>
     /// Garden cards list (SMA-6 / SMA-155): each garden ships its DISTINCT placed
@@ -380,14 +382,30 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         return null;
     }
 
-    private static GardenConfigDto ToConfigDto(Garden garden) => new(
+    /// <summary>
+    /// The stored light schedule, and a WARNING when it read as none (round 7,
+    /// S06 — Extension #7-6): the same signal <c>DashboardController</c> gives,
+    /// for the same reason — a row that needs repair must not look like a
+    /// garden with no schedule, on any of the three endpoints that read it.
+    /// </summary>
+    private List<LightSlotDto>? ReadLightSchedule(Garden garden)
+    {
+        var slots = LightScheduleDocument.Parse(garden.LightScheduleJson, out var reason);
+        if (reason is not null)
+            logger.LogWarning(
+                "Garden {GardenId}: stored light schedule read as none — {Reason}",
+                garden.Id, reason);
+        return slots;
+    }
+
+    private GardenConfigDto ToConfigDto(Garden garden) => new(
         garden.Orientation,
         garden.GardenType,
-        LightScheduleDocument.Parse(garden.LightScheduleJson),
+        ReadLightSchedule(garden),
         garden.Hemisphere,
         garden.LatitudeBand);
 
-    private static GardenResponse ToGardenResponse(Garden garden) => new(
+    private GardenResponse ToGardenResponse(Garden garden) => new(
         garden.Id,
         garden.Name,
         garden.Description,
@@ -396,7 +414,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         garden.CellSize,
         garden.Orientation,
         garden.GardenType,
-        LightScheduleDocument.Parse(garden.LightScheduleJson),
+        ReadLightSchedule(garden),
         garden.Hemisphere,
         garden.LatitudeBand);
 }

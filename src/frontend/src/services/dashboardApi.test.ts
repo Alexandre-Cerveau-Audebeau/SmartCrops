@@ -46,6 +46,50 @@ const AGGREGATE = {
   },
 };
 
+/**
+ * The wire records, ONCE, and UNTYPED on purpose (round 7, S01 — Extension
+ * #6-17, #7-23, #8-15, the one finding all three closing runs made): two
+ * `describe`s below each spelled them out, so a field added to the wire record
+ * cost two edits in this one file. They stay plain object literals rather than
+ * `gardenFixture` from `src/test/fixtures/dashboard.ts`: these suites `delete`
+ * keys and assign wrong types on purpose, which the typed builder would reject.
+ */
+const GARDEN = {
+  id: 'g1',
+  name: 'Terrasse',
+  description: null,
+  width: 4,
+  height: 2,
+  cellSize: '50cm',
+  cellsJson: null,
+  config: {
+    orientation: 'S',
+    gardenType: null,
+    lightSchedule: null,
+    hemisphere: 'N',
+    latitudeBand: 'mid',
+  },
+  updatedAt: '2026-05-01T00:00:00Z',
+  placements: [],
+  placementCount: 0,
+  varietyCount: 0,
+  occupiedCells: 0,
+  isEdible: null,
+};
+
+const VARIETY = {
+  plantId: 'p1',
+  scientificName: 'Ocimum basilicum',
+  commonName: 'Basil',
+  plantType: 'Herb',
+  isEdible: true,
+  imageUrl: null,
+  imageAttribution: null,
+  count: 1,
+  cells: 1,
+  gardenIds: ['g1'],
+};
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -349,42 +393,6 @@ describe('fetchDashboardData — the aggregate boundary (round 1, E19 / G8)', ()
 // ── Round 3 (E″8): validate the RECORDS, not only their containers ───────────
 
 describe('fetchDashboardData — a garden record is checked before it is trusted', () => {
-  /** A garden with everything the page dereferences. */
-  const GARDEN = {
-    id: 'g1',
-    name: 'Terrasse',
-    description: null,
-    width: 4,
-    height: 2,
-    cellSize: '50cm',
-    cellsJson: null,
-    config: {
-      orientation: 'S',
-      gardenType: null,
-      lightSchedule: null,
-      hemisphere: 'N',
-      latitudeBand: 'mid',
-    },
-    updatedAt: '2026-05-01T00:00:00Z',
-    placements: [],
-    placementCount: 0,
-    varietyCount: 0,
-    occupiedCells: 0,
-    isEdible: null,
-  };
-
-  const VARIETY = {
-    plantId: 'p1',
-    scientificName: 'Ocimum basilicum',
-    commonName: 'Basil',
-    plantType: 'Herb',
-    isEdible: true,
-    imageUrl: null,
-    imageAttribution: null,
-    count: 1,
-    cells: 1,
-    gardenIds: ['g1'],
-  };
 
   const full = () => ({
     gardens: [{ ...GARDEN }],
@@ -637,41 +645,6 @@ describe('fetchDashboardData — a garden record is checked before it is trusted
 // ROUND 6 (Extension #5-17 / #4-18 / #4-17) — the variety row is checked as
 // completely as the garden row has been since rounds 3 and 4.
 describe('fetchDashboardData — a variety row is checked before it is trusted (round 6)', () => {
-  const GARDEN = {
-    id: 'g1',
-    name: 'Terrasse',
-    description: null,
-    width: 4,
-    height: 2,
-    cellSize: '50cm',
-    cellsJson: null,
-    config: {
-      orientation: 'S',
-      gardenType: null,
-      lightSchedule: null,
-      hemisphere: 'N',
-      latitudeBand: 'mid',
-    },
-    updatedAt: '2026-05-01T00:00:00Z',
-    placements: [],
-    placementCount: 0,
-    varietyCount: 0,
-    occupiedCells: 0,
-    isEdible: null,
-  };
-
-  const VARIETY = {
-    plantId: 'p1',
-    scientificName: 'Ocimum basilicum',
-    commonName: 'Basil',
-    plantType: 'Herb',
-    isEdible: true,
-    imageUrl: null,
-    imageAttribution: null,
-    count: 1,
-    cells: 1,
-    gardenIds: ['g1'],
-  };
 
   const withVariety = (over: Record<string, unknown>) => ({
     gardens: [{ ...GARDEN }],

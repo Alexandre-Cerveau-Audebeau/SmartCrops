@@ -1,4 +1,7 @@
-import type { DashboardGardenData } from '../../types/DashboardData';
+import type {
+  DashboardData,
+  DashboardGardenData,
+} from '../../types/DashboardData';
 
 /**
  * SMA-336 round 6 (Extension #4-6) — ONE builder for the `DashboardGardenData`
@@ -37,5 +40,34 @@ export const gardenFixture = (
   varietyCount: 0,
   occupiedCells: 0,
   isEdible: null,
+  ...over,
+});
+
+/**
+ * An aggregate whose totals AGREE with its gardens (round 7, S02 — Extension
+ * #6-12 / #6-13, #7-21, #8-12): the three dashboard page suites each carried an
+ * identical `dashboardWith`, and three copies of one contract are three chances
+ * for one to drift into pinning a `placementCount` its gardens do not hold — an
+ * aggregate the server never emits, on which every assertion is weaker without
+ * anything failing.
+ *
+ * `varietyCount` is the sum of the per-garden counts, which equals the DISTINCT
+ * count the server sends (decision D11) only while no variety spans two
+ * gardens — true of every page fixture, which carries `varieties: []`. A test
+ * that models an overlap says so through `over.totals`, on the same line it
+ * models it.
+ */
+export const dashboardFixture = (
+  gardens: DashboardGardenData[],
+  over: Partial<DashboardData> = {}
+): DashboardData => ({
+  gardens,
+  varieties: [],
+  totals: {
+    gardenCount: gardens.length,
+    placementCount: gardens.reduce((sum, g) => sum + g.placementCount, 0),
+    varietyCount: gardens.reduce((sum, g) => sum + g.varietyCount, 0),
+    catalogPlantCount: 536,
+  },
   ...over,
 });

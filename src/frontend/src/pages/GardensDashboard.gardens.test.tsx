@@ -16,7 +16,11 @@ import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { useLanguage } from '../hooks/useLanguage';
 import { presetFor } from '../constants/dashboardPresets';
-import { gardenFixture } from '../test/fixtures/dashboard';
+import {
+  dashboardFixture as dashboardWith,
+  gardenFixture,
+} from '../test/fixtures/dashboard';
+import { placement } from '../test/fixtures/placements';
 import { rulesFor } from '../test/dashboardDom';
 import type {
   DashboardData,
@@ -73,16 +77,8 @@ const gardenWith = (
     ...over,
   });
 
-const dashboardWith = (gardens: DashboardGardenData[]): DashboardData => ({
-  gardens,
-  varieties: [],
-  totals: {
-    gardenCount: gardens.length,
-    placementCount: gardens.reduce((sum, g) => sum + g.placementCount, 0),
-    varietyCount: gardens.reduce((sum, g) => sum + g.varietyCount, 0),
-    catalogPlantCount: 536,
-  },
-});
+// The aggregate around them comes from the shared `dashboardFixture` (round 7,
+// S02): totals derived from the gardens, once, for the three page suites.
 
 /** The Gardens widget — the frozen design's own `data-widget` handle. */
 const gardensWidget = () =>
@@ -1711,12 +1707,17 @@ describe('The occupancy figure never breaks in two', () => {
     // squeezed OCCUPATION column was free to wrap there — and a percentage
     // split over two lines is not a percentage. Asserted on the declaration:
     // jsdom lays nothing out, so a measured line count would be zero here.
+    // A fixture that PRODUCES the figure the test is about (round 7, S09 —
+    // Extension #7-19 / #8-13): the twelve `cellsJson` entries it used to
+    // carry had no `row` / `col` and a `soil` no `SoilType` knows, so the
+    // parser dropped every one and the figure under test was « 0 % » — which
+    // still matched. Six of the twelve cells of the 4 × 3 fixture are taken by
+    // one 2 × 3 placement: « 50% », two digits and a sign, the width that
+    // wrapped.
     vi.mocked(fetchDashboardData).mockResolvedValue(
       dashboardWith([
         gardenWith(3, {
-          cellsJson: JSON.stringify(
-            Array.from({ length: 12 }, () => ({ soil: 'soil' }))
-          ),
+          placements: [placement({ spanRows: 2, spanCols: 3 })],
         }),
       ])
     );
@@ -1724,9 +1725,9 @@ describe('The occupancy figure never breaks in two', () => {
     renderPage();
     await screen.findAllByText('Casa Lolo');
 
-    // « 0% » in English since round 7 (S46): the sign follows the figure the
-    // way the language writes it, and the figure is what the cell holds.
-    const figure = within(gardensWidget()).getByText(/^\d+\s?%$/);
+    // « 50% » in English since round 7 (S46): the sign follows the figure the
+    // way the language writes it.
+    const figure = within(gardensWidget()).getByText('50%');
     expect(rulesFor(figure)).toContain('white-space:nowrap');
   });
 });

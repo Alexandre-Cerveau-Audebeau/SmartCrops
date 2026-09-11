@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { presetFor } from '../constants/dashboardPresets';
-import { gardenFixture } from '../test/fixtures/dashboard';
+import {
+  dashboardFixture as dashboardWith,
+  gardenFixture,
+} from '../test/fixtures/dashboard';
 import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
 import {
   DASHBOARD_BLOCK_KEYS,
@@ -50,20 +53,10 @@ const garden = (
   over: Partial<DashboardGardenData> = {}
 ): DashboardGardenData => gardenFixture({ id, name, ...over });
 
-// The two sums DERIVED from the gardens (round 6, Extension #4-15), as the
-// sibling fixture in `GardensDashboard.gardens.test.tsx` already does: a
-// builder that pins them at zero can express an aggregate that contradicts its
-// own gardens, and every assertion built on it is weaker for it.
-const dashboardWith = (gardens: DashboardGardenData[]): DashboardData => ({
-  gardens,
-  varieties: [],
-  totals: {
-    gardenCount: gardens.length,
-    placementCount: gardens.reduce((sum, g) => sum + g.placementCount, 0),
-    varietyCount: gardens.reduce((sum, g) => sum + g.varietyCount, 0),
-    catalogPlantCount: 536,
-  },
-});
+// The two sums DERIVED from the gardens (round 6, Extension #4-15): a builder
+// that pins them at zero can express an aggregate that contradicts its own
+// gardens. ONE builder for the three page suites since round 7 (S02) — see
+// `dashboardFixture`.
 
 /**
  * Round 1 (E14): `blocks` no longer carries a default value, so

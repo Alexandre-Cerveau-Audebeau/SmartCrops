@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { gardenFixture } from '../test/fixtures/dashboard';
 import { placement } from '../test/fixtures/placements';
 import type { DashboardGardenData } from '../types/DashboardData';
 import { parseCellsJson, type CellData } from '../types/GardenLayout';
@@ -265,31 +266,24 @@ describe('isOrnamentalGarden', () => {
 });
 
 describe('deriveGardenView', () => {
+  // On the shared builder (round 7, S10 — Extension #6-22 / #8-17): the
+  // sixteen-field record was spelled out three times in this file. Kept here:
+  // 4 × 2 and oriented south — the height and the orientation are what these
+  // cases are about.
   const garden = (
     over: Partial<DashboardGardenData> = {}
-  ): DashboardGardenData => ({
-    id: 'g1',
-    name: 'Terrasse',
-    description: null,
-    width: 4,
-    height: 2,
-    cellSize: '50cm',
-    cellsJson: null,
-    config: {
-      orientation: 'S',
-      gardenType: null,
-      lightSchedule: null,
-      hemisphere: 'N',
-      latitudeBand: 'mid',
-    },
-    updatedAt: '2026-05-01T00:00:00Z',
-    placements: [],
-    placementCount: 0,
-    varietyCount: 0,
-    occupiedCells: 0,
-    isEdible: null,
-    ...over,
-  });
+  ): DashboardGardenData =>
+    gardenFixture({
+      height: 2,
+      config: {
+        orientation: 'S',
+        gardenType: null,
+        lightSchedule: null,
+        hemisphere: 'N',
+        latitudeBand: 'mid',
+      },
+      ...over,
+    });
 
   it('reads the plan the server transported, without the server having parsed it', () => {
     // ADAPTED by round 3 (E″9). It used to hand `occupiedCells: 2` on the
@@ -354,16 +348,7 @@ describe('deriveGardenView', () => {
       garden({
         occupiedCells: 4,
         placements: [
-          {
-            id: 'pl-1',
-            plantId: 'p-1',
-            plantScientificName: null,
-            startRow: 0,
-            startCol: 0,
-            spanRows: 2,
-            spanCols: 2,
-            notes: null,
-          },
+          placement({ startRow: 0, startCol: 0, spanRows: 2, spanCols: 2 }),
         ],
       })
     );
@@ -398,28 +383,22 @@ describe('sumExposureTallies', () => {
 });
 
 describe('gardenViewOf — one derivation per garden (round 1, E10 / G4 / E22)', () => {
-  const plannedGarden = (): DashboardGardenData => ({
-    id: 'g1',
-    name: 'Terrasse',
-    description: null,
-    width: 4,
-    height: 2,
-    cellSize: '50cm',
-    cellsJson: null,
-    config: {
-      orientation: 'S',
-      gardenType: null,
-      lightSchedule: null,
-      hemisphere: 'N',
-      latitudeBand: 'mid',
-    },
-    updatedAt: '2026-05-01T00:00:00Z',
-    placements: [placement()],
-    placementCount: 1,
-    varietyCount: 1,
-    occupiedCells: 1,
-    isEdible: true,
-  });
+  const plannedGarden = (): DashboardGardenData =>
+    gardenFixture({
+      height: 2,
+      config: {
+        orientation: 'S',
+        gardenType: null,
+        lightSchedule: null,
+        hemisphere: 'N',
+        latitudeBand: 'mid',
+      },
+      placements: [placement()],
+      placementCount: 1,
+      varietyCount: 1,
+      occupiedCells: 1,
+      isEdible: true,
+    });
 
   it('answers the identical object on a second call', () => {
     // Reference equality is the measurement: `deriveGardenView` allocates a new
@@ -509,29 +488,18 @@ describe('placementCoverage — the single source of every occupancy figure', ()
 describe('deriveGardenView — the figures agree with each other (E″9 / G″6)', () => {
   const gardenWith = (
     over: Partial<DashboardGardenData> = {}
-  ): DashboardGardenData => ({
-    id: 'g1',
-    name: 'Terrasse',
-    description: null,
-    width: 4,
-    height: 2,
-    cellSize: '50cm',
-    cellsJson: null,
-    config: {
-      orientation: 'S',
-      gardenType: null,
-      lightSchedule: null,
-      hemisphere: 'N',
-      latitudeBand: 'mid',
-    },
-    updatedAt: '2026-05-01T00:00:00Z',
-    placements: [],
-    placementCount: 0,
-    varietyCount: 0,
-    occupiedCells: 0,
-    isEdible: null,
-    ...over,
-  });
+  ): DashboardGardenData =>
+    gardenFixture({
+      height: 2,
+      config: {
+        orientation: 'S',
+        gardenType: null,
+        lightSchedule: null,
+        hemisphere: 'N',
+        latitudeBand: 'mid',
+      },
+      ...over,
+    });
 
   /** Every case below must satisfy the same three identities. */
   const expectConsistent = (view: ReturnType<typeof deriveGardenView>) => {

@@ -453,16 +453,14 @@ describe('CountersBlock — the density lock (V9, _spec.md § 4)', () => {
     variety({ plantId: `p-${i}`, commonName: `Plant ${i}`, count: 26 - i })
   );
 
-  /** Rows actually drawn, and the grid they are drawn in. */
+  /** Rows actually drawn. (The `grid` query that used to ride along was read
+      by nobody, and rested on MUI's class token and nesting — round 7, S03.) */
   function listShape(size: 'medium' | 'large') {
     const widget = renderBlock({ size, varieties: many });
     const rows = many
       .map((v) => widget.queryByText(v.commonName!))
       .filter(Boolean);
-    const grid = widgetNode().querySelector<HTMLElement>(
-      '[class*="MuiBox-root"] > div'
-    );
-    return { rows: rows.length, widget, grid };
+    return { rows: rows.length, widget };
   }
 
   it('Medium shows eight varieties over two columns — four data lines, cap six', () => {

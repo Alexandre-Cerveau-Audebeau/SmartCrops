@@ -9,7 +9,15 @@ describe('formatNumber — formatters are built once per locale and options', ()
 
   it('formats as before, in both languages', () => {
     expect(formatCount(1440, 'en')).toBe('1,440');
-    expect(formatCount(1440, 'fr')).toBe('1\u202f440');
+    // GROUPED, the French way, without naming the separator (round 7, S04 —
+    // Extension #6-20 / #7-26): the repository pins neither Node nor ICU, and
+    // the runtime at hand emits U+202F where another may emit U+00A0. What is
+    // asserted is the grouping — one whitespace, no ordinary space, not the
+    // English comma.
+    const fr = formatCount(1440, 'fr');
+    expect(fr).toMatch(/^1\s440$/u);
+    expect(fr).not.toContain(' ');
+    expect(fr).not.toBe(formatCount(1440, 'en'));
     expect(formatDecimal(1.75, 'en', 1)).toBe('1.8');
     expect(formatDecimal(1.75, 'fr', 1)).toBe('1,8');
   });

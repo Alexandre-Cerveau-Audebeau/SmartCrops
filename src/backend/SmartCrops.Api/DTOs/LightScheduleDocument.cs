@@ -101,8 +101,27 @@ internal static class LightScheduleDocument
     /// applies (<see cref="ValidateSlots"/>), and anything that fails them reads
     /// as no schedule at all.</para>
     /// </summary>
-    internal static List<LightSlotDto>? Parse(string? json)
+    internal static List<LightSlotDto>? Parse(string? json) => Parse(json, out _);
+
+    /// <summary>
+    /// <see cref="Parse(string?)"/>, and WHY the document read as none (round 7,
+    /// S06 — Extension #7-6 / #8-2).
+    ///
+    /// <para>Both degradations were silent: a corrupt row produced a garden whose
+    /// exposure engine ran on default inputs, and the next config save wrote
+    /// <c>null</c> over the stored value, with no signal anywhere that the data
+    /// needed repair — invisible until a user reported their light slots gone.
+    /// This reader is <c>static</c> and stays a pure function; it hands the
+    /// reason to the HTTP entry point that has the request context and a logger,
+    /// which is where the decision about how loudly to say it belongs.</para>
+    /// </summary>
+    /// <param name="reason">
+    /// Why a NON-EMPTY document read as none — the parse failure or the slot
+    /// rule it broke — and null when it was empty or well-formed.
+    /// </param>
+    internal static List<LightSlotDto>? Parse(string? json, out string? reason)
     {
+        reason = null;
         if (string.IsNullOrEmpty(json)) return null;
 
         List<LightSlotDto?>? slots;
@@ -113,12 +132,23 @@ internal static class LightScheduleDocument
             // the serializer does not enforce.
             slots = JsonSerializer.Deserialize<List<LightSlotDto?>>(json, JsonWeb);
         }
-        catch (JsonException)
+        catch (JsonException exception)
         {
+            reason = $"not a JSON schedule: {exception.Message}";
             return null;
         }
 
-        if (slots is null || ValidateSlots(slots) is not null) return null;
+        if (slots is null)
+        {
+            reason = "the document is JSON null.";
+            return null;
+        }
+
+        if (ValidateSlots(slots) is { } broken)
+        {
+            reason = broken;
+            return null;
+        }
 
         return [.. slots.Select(slot => slot!)];
     }
