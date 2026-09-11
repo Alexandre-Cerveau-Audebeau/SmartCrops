@@ -374,6 +374,11 @@ describe('deriveGardenView', () => {
       view.freeExposure.shade;
 
     expect(free).toBe(4);
+    // And it IS the free-cell count: the sunny figure the Statistics widget
+    // prints is a share of the free cells, never an independent count (round
+    // 7, S47 — the French « dont » states this relation).
+    expect(free).toBe(view.freeCells);
+    expect(view.freeExposure.full).toBeLessThanOrEqual(view.freeCells);
   });
 });
 

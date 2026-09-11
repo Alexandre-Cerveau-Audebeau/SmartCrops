@@ -16,6 +16,17 @@ import {
 interface Props {
   options: Record<string, unknown> | null;
   gardens: DashboardGardenData[];
+  /**
+   * Whether `gardens` is the aggregate's answer (round 7, S13 — Extension
+   * #6-5). It is ALSO what the hook hands out while the aggregate is still
+   * loading, and after a failed replacement: an empty list both times, from
+   * which `resolveCountersGarden` can only answer « all ». Edit mode is gated
+   * on the LAYOUT being loaded, not on the aggregate, so this panel is
+   * reachable in both states — and a photos toggle taken then would have
+   * written « all » over a garden the user had chosen. Not `gardens.length`:
+   * a successful empty answer is a known state, and « all » is its truth.
+   */
+  ready: boolean;
   onChange: (options: Record<string, unknown>) => void;
 }
 
@@ -37,6 +48,7 @@ interface Props {
 export default function CountersOptionsPanel({
   options,
   gardens,
+  ready,
   onChange,
 }: Props) {
   const { t } = useTranslation();
@@ -52,6 +64,12 @@ export default function CountersOptionsPanel({
     ...parsed,
     garden: resolveCountersGarden(parsed.garden, gardens),
   };
+  // What a write carries for the garden the user did NOT touch: the resolved
+  // id once the aggregate has answered, the STORED id while it has not (round
+  // 7, S13). The select still shows the resolved value — « all » is the only
+  // garden an empty list can name — but showing it is not the same as
+  // persisting it over a choice this render cannot see.
+  const written = ready ? current : { ...current, garden: parsed.garden };
 
   /**
    * One option row (round 4, A7) — `A8Options.dc.html`'s `.pop-r`:
@@ -98,7 +116,7 @@ export default function CountersOptionsPanel({
               size="small"
               checked={current.photos}
               onChange={(event) =>
-                onChange({ ...current, photos: event.target.checked })
+                onChange({ ...written, photos: event.target.checked })
               }
             />
           }
@@ -122,7 +140,7 @@ export default function CountersOptionsPanel({
         // widget's own list cannot drift apart (round 1, E8). Resolved once,
         // above, so the value shown is the value written.
         value={current.garden}
-        onChange={(event) => onChange({ ...current, garden: event.target.value })}
+        onChange={(event) => onChange({ ...written, garden: event.target.value })}
       >
         <MenuItem value={COUNTERS_GARDEN_ALL}>
           {t('dashboard.blocks.counters.allGardens')}

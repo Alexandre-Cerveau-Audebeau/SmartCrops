@@ -25,7 +25,7 @@ import {
   type ExposureTally,
 } from '../../../utils/gardenStats';
 import { useGardenViews } from '../../../hooks/useGardenViews';
-import { formatCount, formatDecimal } from '../../../utils/formatNumber';
+import { formatDecimal, formatPercent } from '../../../utils/formatNumber';
 
 interface Props {
   size: DashboardSize;
@@ -33,6 +33,12 @@ interface Props {
   gardens: DashboardGardenData[];
   loading: boolean;
   loadError: boolean;
+  /**
+   * A replacement is in flight while the error (or the figures) is still on
+   * screen (round 7, S33 — Extension #7-17): the Retry button says so by
+   * disabling itself, instead of taking a click that changed nothing visible.
+   */
+  refreshing?: boolean;
   onRetry: () => void;
 }
 
@@ -67,6 +73,7 @@ export default function StatsBlock({
   gardens,
   loading,
   loadError,
+  refreshing = false,
   onRetry,
 }: Props) {
   const { t, i18n } = useTranslation();
@@ -142,8 +149,10 @@ export default function StatsBlock({
       value: formatDecimal(value, i18n.language, 1),
     });
 
-  const percentText = (value: number) =>
-    `${formatCount(Math.round(value), i18n.language)} %`;
+  // Through `Intl` (round 7, S46 — Extension #8-8): « 17 % » in French with
+  // its non-breaking space, « 17% » in English — not a figure, an ordinary
+  // space and a sign, which was neither language's rule.
+  const percentText = (value: number) => formatPercent(value, i18n.language);
 
   const share = (part: number, whole: number) =>
     whole > 0 ? percentText((part / whole) * 100) : '—';
@@ -600,7 +609,7 @@ export default function StatsBlock({
           >
             {t('dashboard.loadError')}
           </Typography>
-          <Button size="small" onClick={onRetry}>
+          <Button size="small" onClick={onRetry} disabled={refreshing}>
             {t('dashboard.retry')}
           </Button>
         </Box>

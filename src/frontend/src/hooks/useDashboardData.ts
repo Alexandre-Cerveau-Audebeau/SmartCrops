@@ -21,6 +21,17 @@ export function useDashboardData(language: string) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [epoch, setEpoch] = useState(0);
+  // The request that last SETTLED (round 7, S33 — Extension #7-17). `loading`
+  // never returns to `true` by design (see above), and `loadError` is cleared
+  // only by an answer: a Retry click therefore changed nothing a widget could
+  // read until the response landed, and on a slow network the button read as
+  // a dead control — the failure mode the Counters chips fixed in round 1
+  // (E7). `refreshing` is DERIVED from what has settled against what was
+  // asked, so the skeleton rule stays intact: the figures — or the error —
+  // stay on screen, and only the Retry buttons learn that a request is out.
+  const [settled, setSettled] = useState<{ epoch: number; language: string } | null>(
+    null
+  );
   const latestRequestRef = useRef(0);
   const inFlightRef = useRef<AbortController | null>(null);
 
@@ -64,9 +75,14 @@ export function useDashboardData(language: string) {
         setLoadError(true);
       })
       .finally(() => {
-        if (isCurrent()) setLoading(false);
+        if (!isCurrent()) return;
+        setLoading(false);
+        setSettled({ epoch, language });
       });
   }, [language, epoch]);
 
-  return { data, loading, loadError, refetch };
+  const refreshing =
+    settled === null || settled.epoch !== epoch || settled.language !== language;
+
+  return { data, loading, refreshing, loadError, refetch };
 }

@@ -93,7 +93,13 @@ const LIGHT: DashboardTokens = {
   thumbCellOn: '#F1F7EE',
   thumbCellFrame: '#BCCBB6',
   ornBg: '#F8E3EC',
-  ornText: '#A34D74',
+  // NOT the artboards' `--orn-tx` `#A34D74` (round 7, S40 — Extension #7-25):
+  // on `--orn-bg` it measures 4,44:1, under the 4,5:1 floor WCAG AA sets for
+  // 13 px text, and § 7 of the design contract makes « contraste conforme » an
+  // invariant the artboards' own point 31 already amended a colour for. One
+  // step darker on the same hue: 5,29:1. The night pair (5,84:1 over the card)
+  // needed nothing.
+  ornText: '#93436A',
   okBg: '#E4F3E9',
   okText: '#20713F',
   pillBg: '#EFF3EE',

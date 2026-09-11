@@ -116,7 +116,7 @@ describe('StatsBlock', () => {
 
     // Two of four plantable, not two of eight — and the row carries the
     // SURFACE beside the share now (A6): four cells of 50 cm make 1 m².
-    expect(widget.getByText('1.0 m² · 50 %')).toBeInTheDocument();
+    expect(widget.getByText('1.0 m² · 50%')).toBeInTheDocument();
   });
 
   it('counts free cells, and how many of them are in full sun', () => {
@@ -487,7 +487,7 @@ describe('StatsBlock — the header chip of the Large card (A10-7)', () => {
     // 2.0 m² — with nothing planted in it.
     renderBlock();
 
-    expect(chipNode().textContent).toBe('2.0 m² · 0 % average occupancy');
+    expect(chipNode().textContent).toBe('2.0 m² · 0% average occupancy');
   });
 
   it('states the occupancy as a share of every plantable cell', () => {
@@ -504,7 +504,7 @@ describe('StatsBlock — the header chip of the Large card (A10-7)', () => {
     });
 
     // 2 planted of 12 plantable = 17 %; the mean of 25 % and 0 % is 13 %.
-    expect(chipNode().textContent).toContain('17 %');
+    expect(chipNode().textContent).toContain('17%');
   });
 
   it('does not repeat the surface in the body of the Large card', () => {

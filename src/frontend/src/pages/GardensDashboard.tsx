@@ -95,6 +95,7 @@ export default function GardensDashboard() {
   const {
     data: dashboardData,
     loading: gardensLoading,
+    refreshing: gardensRefreshing,
     loadError: gardensError,
     refetch,
   } = useDashboardData(language);
@@ -205,6 +206,7 @@ export default function GardensDashboard() {
             editing={editing}
             gardens={gardens}
             loading={gardensLoading}
+            refreshing={gardensRefreshing}
             loadError={gardensError}
             showWeatherColumn={isBlockVisible('weather')}
             showHarvestColumn={isBlockVisible('harvest')}
@@ -226,6 +228,7 @@ export default function GardensDashboard() {
             gardens={gardens}
             totals={dashboardData.totals}
             loading={gardensLoading}
+            refreshing={gardensRefreshing}
             loadError={gardensError}
             onRetry={refetch}
             // The widget's filter chips write the SAME options document the
@@ -242,6 +245,7 @@ export default function GardensDashboard() {
             editing={editing}
             gardens={gardens}
             loading={gardensLoading}
+            refreshing={gardensRefreshing}
             loadError={gardensError}
             onRetry={refetch}
           />
@@ -262,6 +266,10 @@ export default function GardensDashboard() {
       <CountersOptionsPanel
         options={block.options ?? null}
         gardens={gardens}
+        // The aggregate, not the layout: Edit mode opens on the layout being
+        // loaded, and the gear can be reached while the gardens are not
+        // (round 7, S13).
+        ready={!gardensLoading && !gardensError}
         onChange={(options) =>
           patchBlock('counters', (current) => ({ ...current, options }))
         }

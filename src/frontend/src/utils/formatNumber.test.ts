@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { formatCount, formatDecimal } from './formatNumber';
+import { formatCount, formatDecimal, formatPercent } from './formatNumber';
 
 // ROUND 6 (Extension #4-20) — one `Intl.NumberFormat` per (language, digits),
 // built on first use. The Gardens table and the Statistics rows format a figure
@@ -35,5 +35,25 @@ describe('formatNumber — formatters are built once per locale and options', ()
 
     // Two distinct keys — (de, 0) and (de, 1) — however many calls.
     expect(constructed.mock.calls.length - before).toBe(2);
+  });
+});
+
+// ROUND 7 (S46 — Extension #8-8) — a percentage is written the way the
+// language writes one, sign included.
+describe('formatPercent', () => {
+  it('writes « 17% » in English and « 17 % » in French, with a NON-breaking space', () => {
+    expect(formatPercent(17, 'en')).toBe('17%');
+
+    const fr = formatPercent(17, 'fr');
+    expect(fr).toMatch(/^17\s%$/u);
+    // Whichever no-break space the runtime's ICU chooses, never the ordinary
+    // one a squeezed column is free to wrap at.
+    expect(fr).not.toContain(' ');
+  });
+
+  it('takes the percentage as the widgets hold it, and rounds it whole', () => {
+    expect(formatPercent(66.6, 'en')).toBe('67%');
+    expect(formatPercent(0, 'en')).toBe('0%');
+    expect(formatPercent(100, 'en')).toBe('100%');
   });
 });

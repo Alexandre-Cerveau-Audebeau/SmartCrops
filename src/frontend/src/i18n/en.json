@@ -435,6 +435,7 @@
         "plants_other": "{{count, number}} plants",
         "more_one": "+{{count, number}} variety",
         "more_other": "+{{count, number}} varieties",
+        "less": "Show fewer",
         "allGardens": "All gardens",
         "ornamentalSection": "Ornamental",
         "addFromLibrary": "Add from the Library →",

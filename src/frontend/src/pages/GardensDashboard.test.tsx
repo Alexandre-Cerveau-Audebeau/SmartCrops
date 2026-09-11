@@ -368,6 +368,45 @@ describe('GardensDashboard — page states (SMA-336)', () => {
     expect(fetchDashboardPreferences).toHaveBeenCalledTimes(2);
   });
 
+  it('a widget’s Retry says a request is out, instead of taking a click that changes nothing (round 7, S33 — Extension #7-17)', async () => {
+    // The aggregate fails; the three data widgets show their error and a
+    // Retry. `loading` never returns to `true` (a refetch keeps the figures —
+    // or the error — on screen, SMA-288 / SMA-421) and `loadError` is cleared
+    // only by an answer, so the click used to change nothing a widget could
+    // read until the response landed. The button now disables itself while
+    // the replacement is in flight, and comes back with the answer.
+    let answer: (data: DashboardData) => void = () => {};
+    vi.mocked(fetchDashboardData)
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockImplementationOnce(
+        () =>
+          new Promise<DashboardData>((resolve) => {
+            answer = resolve;
+          })
+      );
+    servePreferences('gardener');
+
+    renderPage();
+    const counters = () =>
+      within(document.querySelector('[data-widget="counters"]') as HTMLElement);
+    // Three widgets, three Retry buttons: the Counters one is the witness.
+    await screen.findAllByRole('button', { name: 'Try again' }, { timeout: 10000 });
+    const button = counters().getByRole('button', { name: 'Try again' });
+    expect(button).toBeEnabled();
+
+    fireEvent.click(button);
+
+    // Still the error, still the button — disabled, because the request is out.
+    await waitFor(() => expect(counters().getByRole('button', { name: 'Try again' })).toBeDisabled());
+    expect(counters().getByText('Couldn’t load your dashboard.')).toBeInTheDocument();
+    expect(fetchDashboardData).toHaveBeenCalledTimes(2);
+
+    answer(dashboardWith([garden('g1', 'Casa Lolo')]));
+
+    await waitFor(() => expect(counters().queryByRole('button', { name: 'Try again' })).toBeNull());
+    expect(await screen.findByText('Casa Lolo')).toBeInTheDocument();
+  });
+
   it('disables Edit and Customize while the layout is unavailable', async () => {
     vi.mocked(fetchDashboardPreferences).mockRejectedValue(new Error('boom'));
 
@@ -587,10 +626,13 @@ describe('GardensDashboard — invitation layout (SMA-336 round 1, V3)', () => {
     // the ACTIONS header sat one column right of the actions cells, and
     // assistive technology announced « Modified » over the edit and delete
     // buttons.
+    // Cells, not `td`s: the identity cell is the row's `th` since round 7
+    // (S31), and it fills a column like the others.
     const bodyRows = [...table!.querySelectorAll('tbody tr')];
     expect(bodyRows).not.toHaveLength(0);
     for (const row of bodyRows) {
-      expect(row.querySelectorAll('td')).toHaveLength(headerTexts.length);
+      expect(row.querySelectorAll('th, td')).toHaveLength(headerTexts.length);
+      expect(row.querySelectorAll('th[scope="row"]')).toHaveLength(1);
     }
   });
 });

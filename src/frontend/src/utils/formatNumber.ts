@@ -22,11 +22,16 @@
  */
 const formatters = new Map<string, Intl.NumberFormat>();
 
-function formatterFor(language: string, digits: number): Intl.NumberFormat {
-  const key = `${language}|${digits}`;
+function formatterFor(
+  language: string,
+  digits: number,
+  style: 'decimal' | 'percent' = 'decimal'
+): Intl.NumberFormat {
+  const key = `${language}|${digits}|${style}`;
   let formatter = formatters.get(key);
   if (!formatter) {
     formatter = new Intl.NumberFormat(language, {
+      style,
       minimumFractionDigits: digits,
       maximumFractionDigits: digits,
     });
@@ -50,4 +55,18 @@ export function formatDecimal(
   digits: number
 ): string {
   return formatterFor(language, digits).format(value);
+}
+
+/**
+ * A whole percentage, written the way the language writes one (round 7, S46 —
+ * Extension #8-8): « 17 % » in French, with the NON-BREAKING space the locale
+ * puts before its sign, « 17% » in English, with none. The two widgets that
+ * print one concatenated the figure and an ordinary space: neither language's
+ * rule, and a break opportunity wherever `nowrap` was not declared.
+ *
+ * `value` is the percentage itself (0–100), as every caller already holds it;
+ * `Intl` takes a ratio.
+ */
+export function formatPercent(value: number, language: string): string {
+  return formatterFor(language, 0, 'percent').format(value / 100);
 }

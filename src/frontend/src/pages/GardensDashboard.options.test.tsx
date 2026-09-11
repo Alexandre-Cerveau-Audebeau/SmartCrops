@@ -219,6 +219,43 @@ describe('the Counters widget options (artboard A8)', () => {
     );
   });
 
+  it.each([
+    ['still loading', () => new Promise<DashboardData>(() => {})],
+    ['failed', () => Promise.reject(new Error('boom'))],
+  ])(
+    'keeps the STORED garden while the aggregate is %s (round 7, S13 — Extension #6-5)',
+    async (_state, answer) => {
+      // Edit mode opens on the LAYOUT being loaded, not on the aggregate, so the
+      // gear is reachable while `gardens` is the hook's empty list — during the
+      // first load, and after a failed replacement. `resolveCountersGarden` can
+      // only answer « all » from an empty list, and the photos toggle used to
+      // persist that answer over the garden the user had chosen.
+      const blocks = presetFor('expert');
+      blocks.find((block) => block.key === 'counters')!.options = {
+        photos: false,
+        garden: 'g1',
+      };
+      vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+        schemaVersion: 1,
+        level: 'expert',
+        isPreset: false,
+        blocks,
+        updatedAt: null,
+      });
+      vi.mocked(fetchDashboardData).mockImplementation(answer);
+      const menu = await openCountersOptions();
+
+      fireEvent.click(within(menu).getByRole('switch', { name: 'Plant photos' }));
+
+      await waitFor(() =>
+        expect(countersOptionsOf(lastSaved().blocks)).toEqual({
+          photos: true,
+          garden: 'g1',
+        })
+      );
+    }
+  );
+
   it('turning photos on draws them, and leaves the other widgets alone', async () => {
     const menu = await openCountersOptions();
 

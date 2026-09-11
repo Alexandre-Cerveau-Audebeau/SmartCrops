@@ -84,6 +84,22 @@ describe('the four pluralized dashboard sites', () => {
       expect(mixed).toContain('1');
     });
 
+    it('the French fragment keeps « dont » — the sunny cells ARE free cells (round 7, S47 refused)', () => {
+      // Extension #8-11 read the 1 / 7 of the test above as two independent
+      // counts and asked to drop the subset relation. They are not
+      // independent: `StatsBlock` derives the sunny figure from
+      // `freeExposure`, the exposure tally of the FREE cells alone
+      // (`gardenStats.test.ts` pins `full ≤ freeCells`), so « N cases libres,
+      // dont M en plein soleil » states exactly the relation the figures have.
+      // English dropped its pronoun in round 3 for agreement, not for meaning.
+      const fr = tr('fr', 'dashboard.blocks.stats.freeCells', {
+        free: tr('fr', 'dashboard.blocks.stats.freeCellsCount', { count: 3 }),
+        sunny: tr('fr', 'dashboard.blocks.stats.sunnyCount', { count: 2 }),
+      });
+
+      expect(fr).toBe('3 cases libres, dont 2 en plein soleil');
+    });
+
     it('every count of the three widgets has a singular form', () => {
       // The general rule rather than the four sites: not one label of these
       // widgets renders « 1 » in front of a fixed plural.
@@ -159,5 +175,24 @@ describe('the figures are written in the reader’s language', () => {
 
     expect(fr).not.toContain('1440');
     expect(en).toContain('1,440');
+  });
+
+  it('groups the catalog total too — the KEY formats it, the caller must not (round 7, S11 refused)', () => {
+    // Extension #6-3 asked `CountersBlock` to pass `formatCount(...)` for
+    // `catalog`. The key already reads `{{catalog, number}}`, so the value
+    // reaches Intl through i18next with the active language — and a
+    // pre-formatted STRING handed to that formatter would come out « NaN ».
+    const fr = tr('fr', 'dashboard.blocks.counters.ofCatalog', {
+      count: 12,
+      catalog: 12000,
+    });
+    const en = tr('en', 'dashboard.blocks.counters.ofCatalog', {
+      count: 12,
+      catalog: 12000,
+    });
+
+    expect(fr).not.toContain('12000');
+    expect(fr).toMatch(/12\s000/u);
+    expect(en).toContain('12,000');
   });
 });

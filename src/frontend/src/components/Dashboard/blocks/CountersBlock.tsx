@@ -72,6 +72,12 @@ interface Props {
   totals: DashboardTotals;
   loading: boolean;
   loadError: boolean;
+  /**
+   * A replacement is in flight while the error (or the figures) is still on
+   * screen (round 7, S33 — Extension #7-17): the Retry button says so by
+   * disabling itself, instead of taking a click that changed nothing visible.
+   */
+  refreshing?: boolean;
   onRetry: () => void;
   /**
    * Writes the block's own `options` document — the SAME one
@@ -107,6 +113,7 @@ export default function CountersBlock({
   totals,
   loading,
   loadError,
+  refreshing = false,
   onRetry,
   onOptionsChange,
 }: Props) {
@@ -247,6 +254,12 @@ export default function CountersBlock({
     </Button>
   );
 
+  // A TWO-WAY control (round 7, S28 — Extension #7-9). `setExpandedFor` was
+  // the only writer and the button vanished with `hidden`, so an expanded
+  // Large card scrolled inside the widget for the rest of the session: the
+  // only ways back were a resize or a filter change, which worked by accident
+  // because they change the identity. The inverse gesture takes the same
+  // place the « +N » held.
   const moreButton = (hidden: number) =>
     hidden > 0 ? (
       <Button
@@ -255,6 +268,14 @@ export default function CountersBlock({
         sx={{ alignSelf: 'flex-start', fontSize: DASHBOARD_TYPE.link }}
       >
         {t('dashboard.blocks.counters.more', { count: hidden })}
+      </Button>
+    ) : expanded ? (
+      <Button
+        size="small"
+        onClick={() => setExpandedFor(null)}
+        sx={{ alignSelf: 'flex-start', fontSize: DASHBOARD_TYPE.link }}
+      >
+        {t('dashboard.blocks.counters.less')}
       </Button>
     ) : null;
 
@@ -474,7 +495,7 @@ export default function CountersBlock({
           >
             {t('dashboard.loadError')}
           </Typography>
-          <Button size="small" onClick={onRetry}>
+          <Button size="small" onClick={onRetry} disabled={refreshing}>
             {t('dashboard.retry')}
           </Button>
         </Box>

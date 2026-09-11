@@ -761,8 +761,9 @@ describe('Gardens widget — the garden description (V10, V18)', () => {
     dashboardWith([gardenWith(3, { description })]);
 
   /** The identity cell's stack — the name, the sub-lines, the chip row. */
+  // A `th` since round 7 (S31): the identity cell is the row's header.
   const identityStack = (node: Element) =>
-    node.closest('td')!.firstElementChild!;
+    node.closest('th')!.firstElementChild!;
 
   beforeEach(() => localStorage.setItem('smartcrops-language', 'en'));
 
@@ -867,8 +868,9 @@ describe('Gardens widget — the garden description (V10, V18)', () => {
     renderPage();
     await screen.findByText('Balcon');
 
+    // The identity cell is the row's `th` since round 7 (S31).
     const stacks = [...gardensWidget().querySelectorAll('tbody tr')].map(
-      (row) => row.querySelector('td')!.firstElementChild!
+      (row) => row.querySelector('th')!.firstElementChild!
     );
     expect(stacks).toHaveLength(2);
     expect(stacks[0]!.children).toHaveLength(4);
@@ -1722,7 +1724,9 @@ describe('The occupancy figure never breaks in two', () => {
     renderPage();
     await screen.findAllByText('Casa Lolo');
 
-    const figure = within(gardensWidget()).getByText(/^\d+ %$/);
+    // « 0% » in English since round 7 (S46): the sign follows the figure the
+    // way the language writes it, and the figure is what the cell holds.
+    const figure = within(gardensWidget()).getByText(/^\d+\s?%$/);
     expect(rulesFor(figure)).toContain('white-space:nowrap');
   });
 });
@@ -1926,5 +1930,89 @@ describe('Gardens rows — the N5 finishes (round 6, partie D)', () => {
 
     const name = within(gardensWidget()).getByText('Casa Lolo');
     expect(rulesFor(name).replace(/\s+/g, '')).toContain('line-height:1.25');
+  });
+});
+
+// ROUND 7 — the four table and Small-card findings of the three closing
+// Extension runs (S30, S31, S35, S45), each a thing a user or a screen reader
+// meets.
+describe('Gardens rows — the closing findings (round 7)', () => {
+  beforeEach(() => localStorage.setItem('smartcrops-language', 'en'));
+
+  it('names the comparison table after its widget (S35 — Extension #8-5)', async () => {
+    // Column headers and no name: a screen reader reaching the table from the
+    // rotor announced an unnamed table, with nothing to say whose it is.
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(3)]));
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    expect(
+      within(gardensWidget()).getByRole('table', { name: 'Gardens' })
+    ).toBeInTheDocument();
+  });
+
+  it('makes the identity cell the row’s header, so every cell is read with its garden (S31 — Extension #7-12)', async () => {
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([
+        gardenWith(3, { id: 'g1', name: 'Casa Lolo' }),
+        gardenWith(2, { id: 'g2', name: 'Balcon' }),
+      ])
+    );
+    renderPage();
+    await screen.findByText('Balcon');
+
+    const widget = within(gardensWidget());
+    const headers = widget.getAllByRole('rowheader');
+    expect(headers.map((cell) => cell.getAttribute('scope'))).toEqual(['row', 'row']);
+    expect(headers[0]!.textContent).toContain('Casa Lolo');
+    expect(headers[1]!.textContent).toContain('Balcon');
+    // And it stays a plain cell to the eye: the `th` default bold is
+    // overridden, and the name keeps the weight it always had.
+    expect(rulesFor(headers[0]!).replace(/\s+/g, '')).toContain('font-weight:400');
+  });
+
+  it('declares the 44 px row minimum as a `height`, which a table cell honours (S45 — Extension #8-7)', async () => {
+    // CSS leaves `min-height` on a table cell undefined and browsers ignore
+    // it, so the touch-target minimum was declared and never enforced.
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([gardenWith(3)]));
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    const cell = within(gardensWidget())
+      .getByRole('rowheader')
+      .closest('tr')!
+      .querySelector('td')!;
+    const rules = rulesFor(cell).replace(/\s+/g, '');
+    expect(rules).toContain('height:44px');
+    expect(rules).not.toContain('min-height:44px');
+  });
+
+  it('a wire `updatedAt` it cannot read is the OLDEST garden, never the last modified (S30 — Extension #7-11)', async () => {
+    // The seed branch accepted a first garden whose `updatedAt` parsed to
+    // `NaN`, and every later `>` against `NaN` is false: that garden was named
+    // for good, whatever the others' timestamps.
+    const blocks = presetFor('novice');
+    blocks.find((block) => block.key === 'gardens')!.size = 'small';
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level: 'novice',
+      isPreset: false,
+      blocks,
+      updatedAt: null,
+    });
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([
+        gardenWith(3, { id: 'g1', name: 'Casa Lolo', updatedAt: 'not a date' }),
+        gardenWith(2, { id: 'g2', name: 'Balcon', updatedAt: '2026-09-09T10:00:00Z' }),
+      ])
+    );
+
+    renderPage();
+
+    expect(
+      await screen.findByRole('link', {
+        name: 'Open Balcon, the last modified garden',
+      })
+    ).toBeInTheDocument();
   });
 });

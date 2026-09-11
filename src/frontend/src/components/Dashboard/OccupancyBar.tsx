@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
-import { formatCount } from '../../utils/formatNumber';
+import { formatPercent } from '../../utils/formatNumber';
 
 interface Props {
   percent: number;
@@ -96,8 +96,10 @@ export default function OccupancyBar({
       >
         {/* Locale-formatted, like every other figure of the three widgets
             (round 1, G5) — the percentage is whole, but the rule is that no
-            number reaches the screen through raw concatenation. */}
-        {`${formatCount(clamped, i18n.language)} %`}
+            number reaches the screen through raw concatenation. And the SIGN
+            too (round 7, S46): « 67 % » in French with the locale's own
+            non-breaking space, « 67% » in English. */}
+        {formatPercent(clamped, i18n.language)}
       </Typography>
       )}
     </Box>

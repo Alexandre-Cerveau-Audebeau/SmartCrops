@@ -814,6 +814,25 @@ describe('CountersBlock — the density lock survives a resize and a filter chan
     rerender('large', { garden: 'g2' });
     expect(rows()).toBe(19);
   });
+
+  // ROUND 7 (S28 — Extension #7-9) — the « +N » is a two-way control.
+  it('an expanded list offers « Show fewer », which caps it again in place', () => {
+    // `setExpandedFor` was the only writer and the button left with `hidden`:
+    // an expanded Large card scrolled inside the widget for the rest of the
+    // session, and the only ways back — a resize, a filter change — worked by
+    // accident, because they change the identity.
+    mount('large', null);
+    expect(within(widgetNode()).queryByText('Show fewer')).toBeNull();
+
+    fireEvent.click(within(widgetNode()).getByText('+7 varieties'));
+    expect(rows()).toBe(26);
+    expect(within(widgetNode()).queryByText('+7 varieties')).toBeNull();
+
+    fireEvent.click(within(widgetNode()).getByText('Show fewer'));
+    expect(rows()).toBe(19);
+    expect(within(widgetNode()).getByText('+7 varieties')).toBeInTheDocument();
+    expect(within(widgetNode()).queryByText('Show fewer')).toBeNull();
+  });
 });
 
 // ROUND 6 (Extension #5-7) — one glyph per widget, from the one table.

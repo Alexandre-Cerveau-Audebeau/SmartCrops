@@ -246,6 +246,12 @@ interface Props {
   loading: boolean;
   loadError: boolean;
   /**
+   * A replacement is in flight while the error (or the figures) is still on
+   * screen (round 7, S33 — Extension #7-17): the Retry button says so by
+   * disabling itself, instead of taking a click that changed nothing visible.
+   */
+  refreshing?: boolean;
+  /**
    * Whether the WEATHER and HARVEST columns belong on the Large table.
    *
    * The frozen design ties them to their own widgets: a column for data the user
@@ -292,6 +298,7 @@ export default function GardensBlock({
   gardens,
   loading,
   loadError,
+  refreshing = false,
   showWeatherColumn = false,
   showHarvestColumn = false,
   onCreateClick,
@@ -392,11 +399,19 @@ export default function GardensBlock({
   // Compared as INSTANTS, not as strings (round 6, Extension #4-9):
   // `System.Text.Json` omits zero fractional seconds, so « 10:00:00Z » sorts
   // AFTER the later « 10:00:00.1Z » in a string comparison.
+  //
+  // And a wire value `Date.parse` cannot read counts as the OLDEST, not as the
+  // winner (round 7, S30 — Extension #7-11): the seed branch accepted a first
+  // garden whose `updatedAt` parsed to `NaN`, and every later `>` against
+  // `NaN` is false, so that garden was named for good whatever the others'
+  // timestamps said.
+  const instant = (garden: DashboardGardenData) => {
+    const parsed = Date.parse(garden.updatedAt);
+    return Number.isNaN(parsed) ? -Infinity : parsed;
+  };
   const lastModified = gardens.reduce<DashboardGardenData | null>(
     (latest, garden) =>
-      !latest || Date.parse(garden.updatedAt) > Date.parse(latest.updatedAt)
-        ? garden
-        : latest,
+      !latest || instant(garden) > instant(latest) ? garden : latest,
     null
   );
 
@@ -917,6 +932,11 @@ export default function GardensBlock({
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <Box
           component="table"
+          // NAMED (round 7, S35 — Extension #8-5): with column headers and no
+          // name, a screen reader reaching this table from the rotor announced
+          // an unnamed table, with nothing to say which widget it belongs to.
+          // The widget's own title, which is the name the card above carries.
+          aria-label={t('dashboard.blocks.gardens.title')}
           sx={{
             width: '100%',
             // `separate` rather than `collapse` (round 2, V8). Under
@@ -1017,7 +1037,7 @@ export default function GardensBlock({
           >
             {t('gardens.error')}
           </Typography>
-          <Button size="small" onClick={onChanged}>
+          <Button size="small" onClick={onChanged} disabled={refreshing}>
             {t('dashboard.retry')}
           </Button>
         </Box>
@@ -1204,7 +1224,11 @@ function GardenRow({
 
   const cellSx = {
     // >= 44px rows (_spec.md 3): the line is a touch target as much as a row.
-    minHeight: 44,
+    // `height`, not `min-height` (round 7, S45 — Extension #8-7): CSS leaves
+    // `min-height` on a table cell undefined and browsers ignore it, so the
+    // 44 px were declared and never enforced. On a table cell `height` IS the
+    // minimum — a taller content still grows the row.
+    height: 44,
     py: '6px',
     pr: '8px',
     borderBottom: '1px solid',
@@ -1264,7 +1288,17 @@ function GardenRow({
           11/09 gives the description a line of ITS OWN, and only the rows that
           have one pay for it — a table row takes its own height, so a long
           description on one garden lengthens that row and no other. */}
-      <Box component="td" sx={cellSx}>
+      {/* The row's HEADER, not a plain cell (round 7, S31 — Extension #7-12):
+          every other cell of the row is a fact about the garden named here.
+          With column headers only, a screen reader reading the OCCUPANCY cell
+          announced the column and not the garden; `scope="row"` restores the
+          pairing. Same typography — `cellSx` sets it and the inner nodes carry
+          their own weight, so the `th` default bold never shows. */}
+      <Box
+        component="th"
+        scope="row"
+        sx={{ ...cellSx, textAlign: 'left', fontWeight: 400 }}
+      >
         <Box sx={{ minWidth: 0 }}>
           <Box
             component={RouterLink}
