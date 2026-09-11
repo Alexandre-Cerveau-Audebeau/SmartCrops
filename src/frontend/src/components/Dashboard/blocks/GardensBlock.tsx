@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
@@ -50,8 +50,26 @@ const MEDIUM_ROWS = 3;
  */
 const MEDIUM_THUMB_W = 48;
 const MEDIUM_THUMB_H = 40;
-const TABLE_THUMB_W = 34;
-const TABLE_THUMB_H = 26;
+
+/**
+ * The table's own box (round 5, A10-4): `Main.dc.html` writes
+ * `<span class="tbox" style="width: 40px; height: 30px;">` in the identity
+ * cell, and the widget drew 34 x 26.
+ *
+ * It costs the table NOTHING in width, and that is measured rather than hoped
+ * for: the thumbnail sits inside the wrapping chip row, whose minimum width is
+ * its widest SINGLE item — the ornamental chip, about 85 px (« Ornemental » at
+ * 13 px in a 26 px pill with 8 px of padding a side). 40 is not 85, so the
+ * identity column's minimum does not move at all; only the row's maximum-content
+ * width grows by those 6 px, and a table only reaches its maximum when there is
+ * spare room, which six labelled columns plus the 80 px frozen one never leave
+ * on a 516 px card.
+ *
+ * In HEIGHT it costs 4 px a row: the drawing goes from 26 to 30 inside a cell
+ * whose content was already about 76 px tall, so the rows grow to about 80.
+ */
+const TABLE_THUMB_W = 40;
+const TABLE_THUMB_H = 30;
 
 /**
  * Padding around an action glyph. 3 px on a 20 px icon gives a 26 px control —
@@ -519,6 +537,18 @@ export default function GardensBlock({
           {t('dashboard.blocks.gardens.count', { count: gardens.length })}
         </Typography>
       </Box>
+      {/* THE CARD NAMES ITS GARDEN (round 5, A10-3).
+
+          It never did: the Small card carried a count, « Modifié il y a 4 mois »
+          and a chevron labelled « Ouvrir le dernier jardin modifié », so the one
+          thing it did not say was WHICH garden it was about to open. § 5 of the
+          design contract: « un accès qui ne nomme pas sa destination est un
+          défaut ».
+
+          The MINIMUM, deliberately. The Small card's redesign — a compact list
+          of two or three named gardens, the carousel — is SMA-432 and is not
+          touched here: this puts the name above the line the date already
+          occupied, puts it in the chevron's accessible label, and stops. */}
       {lastModified && (
         <Box
           sx={{
@@ -526,25 +556,45 @@ export default function GardensBlock({
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '8px',
+            minWidth: 0,
           }}
         >
-          <Typography
-            sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary' }}
-          >
-            {t('dashboard.blocks.gardens.lastModified', {
-              when: formatRelativeDate(
-                new Date(lastModified.updatedAt),
-                new Date(),
-                language,
-                'short'
-              ),
-            })}
-          </Typography>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              sx={{
+                fontSize: DASHBOARD_TYPE.gardenName,
+                fontWeight: 700,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {lastModified.name}
+            </Typography>
+            <Typography
+              sx={{
+                fontSize: DASHBOARD_TYPE.secondary,
+                color: 'text.secondary',
+              }}
+            >
+              {t('dashboard.blocks.gardens.lastModified', {
+                when: formatRelativeDate(
+                  new Date(lastModified.updatedAt),
+                  new Date(),
+                  language,
+                  'short'
+                ),
+              })}
+            </Typography>
+          </Box>
           <IconButton
             component={RouterLink}
             to={plannerPath(lastModified)}
             size="small"
-            aria-label={t('dashboard.blocks.gardens.openLast')}
+            sx={{ flexShrink: 0 }}
+            aria-label={t('dashboard.blocks.gardens.openLastNamed', {
+              name: lastModified.name,
+            })}
           >
             <ChevronRightIcon />
           </IconButton>
@@ -572,125 +622,141 @@ export default function GardensBlock({
           gap: '8px',
         }}
       >
-        {shown.map((garden) => (
-          <Box
-            key={garden.id}
-            sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
-            {/* The description, for zero pixels (round 2). The Large table gives
-                it a truncated line of its own; a Medium row is a single 44 px
-                line and has none to spare, so the row's own link carries it as
-                a tooltip. `describeChild` writes the text into the link's
-                `title`, which is what makes it the link's accessible
-                DESCRIPTION — put on the name span instead, it would describe a
-                node no assistive technology stops on. Same touch delays as the
-                table: on a phone there is no hover, and a long-press is how the
-                text is reached. */}
-            <MaybeTooltip description={garden.description}>
+        {shown.map((garden, index) => (
+          <Fragment key={garden.id}>
+            {/* THE RULE BETWEEN ROWS (round 5, A10-2). `A2Novice.dc.html` lays
+                a `<div class="dv"></div>` between each pair of rows —
+                `.dv { height: 1px; background: var(--divider) }` — and the
+                widget had nothing at all, so three rows of a thumbnail, a name
+                and two chips ran into one another.
+
+                BETWEEN, never before the first or after the last: the artboard
+                closes its list on the last row, and a rule under that one would
+                read as a rule under the widget. `--divider` and `--card-bd` are
+                the same value in both themes, which is the `borderSubtle` the
+                table's own row rules already draw. */}
+            {index > 0 && (
               <Box
-                component={RouterLink}
-                to={plannerPath(garden)}
-                aria-label={t('dashboard.blocks.gardens.open', {
-                  name: garden.name,
-                })}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  // `A2Novice.dc.html`: `gap: 12px` between the thumbnail, the
-                  // name group and the count pill.
-                  gap: '12px',
-                  flex: 1,
-                  minWidth: 0,
-                  minHeight: 44,
-                  px: '8px',
-                  borderRadius: '8px',
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  '&:hover': { backgroundColor: 'surfaceSubtle' },
-                }}
-              >
-                <GardenThumbnail
-                  garden={garden}
-                  maxW={MEDIUM_THUMB_W}
-                  maxH={MEDIUM_THUMB_H}
-                />
-                {/* The artboard's own middle group: `flex: 1; min-width: 0;
-                    display: flex; align-items: center; gap: 10px; overflow:
-                    hidden` — the name and the chips share ONE line and yield
-                    together, which is why the chips clip rather than push the
-                    name out. */}
+                data-row-divider
+                sx={{ height: '1px', backgroundColor: 'borderSubtle' }}
+              />
+            )}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {/* The description, for zero pixels (round 2). The Large table gives
+                  it a truncated line of its own; a Medium row is a single 44 px
+                  line and has none to spare, so the row's own link carries it as
+                  a tooltip. `describeChild` writes the text into the link's
+                  `title`, which is what makes it the link's accessible
+                  DESCRIPTION — put on the name span instead, it would describe a
+                  node no assistive technology stops on. Same touch delays as the
+                  table: on a phone there is no hover, and a long-press is how the
+                  text is reached. */}
+              <MaybeTooltip description={garden.description}>
                 <Box
+                  component={RouterLink}
+                  to={plannerPath(garden)}
+                  aria-label={t('dashboard.blocks.gardens.open', {
+                    name: garden.name,
+                  })}
                   sx={{
-                    flex: 1,
-                    minWidth: 0,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px',
-                    overflow: 'hidden',
+                    // `A2Novice.dc.html`: `gap: 12px` between the thumbnail, the
+                    // name group and the count pill.
+                    gap: '12px',
+                    flex: 1,
+                    minWidth: 0,
+                    minHeight: 44,
+                    px: '8px',
+                    borderRadius: '8px',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    '&:hover': { backgroundColor: 'surfaceSubtle' },
                   }}
                 >
-                  <Typography
-                    sx={{
-                      fontSize: DASHBOARD_TYPE.gardenName,
-                      fontWeight: 700,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {garden.name}
-                  </Typography>
-                  {/* NO sub-line under the name (round 4, A4). The row carried
-                      « N plantes · M var. » there; `A2Novice.dc.html` puts the
-                      count in the green pill at the end of the row and leaves
-                      the name on a line of its own. A second line also made the
-                      row taller than the 44 px the artboard draws, which is
-                      what pushed three rows and two links past a Medium card. */}
+                  <GardenThumbnail
+                    garden={garden}
+                    maxW={MEDIUM_THUMB_W}
+                    maxH={MEDIUM_THUMB_H}
+                  />
+                  {/* The artboard's own middle group: `flex: 1; min-width: 0;
+                      display: flex; align-items: center; gap: 10px; overflow:
+                      hidden` — the name and the chips share ONE line and yield
+                      together, which is why the chips clip rather than push the
+                      name out. */}
                   <Box
                     sx={{
-                      display: 'flex',
-                      gap: '6px',
+                      flex: 1,
                       minWidth: 0,
-                      overflow: 'hidden',
+                      display: 'flex',
                       alignItems: 'center',
+                      gap: '10px',
+                      overflow: 'hidden',
                     }}
                   >
-                    {typeLabel(garden) && (
-                      <Chip
-                        label={typeLabel(garden)}
-                        size="small"
-                        variant="outlined"
-                        sx={{
-                          height: DASHBOARD_TYPE.chipHeight,
-                          fontSize: DASHBOARD_TYPE.chip,
-                        }}
-                      />
-                    )}
-                    {ornamentalChip(garden)}
+                    <Typography
+                      sx={{
+                        fontSize: DASHBOARD_TYPE.gardenName,
+                        fontWeight: 700,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {garden.name}
+                    </Typography>
+                    {/* NO sub-line under the name (round 4, A4). The row carried
+                        « N plantes · M var. » there; `A2Novice.dc.html` puts the
+                        count in the green pill at the end of the row and leaves
+                        the name on a line of its own. A second line also made the
+                        row taller than the 44 px the artboard draws, which is
+                        what pushed three rows and two links past a Medium card. */}
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        gap: '6px',
+                        minWidth: 0,
+                        overflow: 'hidden',
+                        alignItems: 'center',
+                      }}
+                    >
+                      {typeLabel(garden) && (
+                        <Chip
+                          label={typeLabel(garden)}
+                          size="small"
+                          variant="outlined"
+                          sx={{
+                            height: DASHBOARD_TYPE.chipHeight,
+                            fontSize: DASHBOARD_TYPE.chip,
+                          }}
+                        />
+                      )}
+                      {ornamentalChip(garden)}
+                    </Box>
                   </Box>
+                  {/* The GREEN count pill, right-aligned (round 4, A4):
+                      `<span class="pill ok num">50 plantes</span>`. Its colours
+                      are the artboards' `--chip-ok-bg` / `--chip-ok-tx` in both
+                      modes, carried as tokens like every other dashboard fill. */}
+                  <Chip
+                    label={t('gardens.plantsCount', {
+                      count: garden.placementCount,
+                    })}
+                    size="small"
+                    sx={{
+                      flexShrink: 0,
+                      height: DASHBOARD_TYPE.chipHeight,
+                      fontSize: DASHBOARD_TYPE.chip,
+                      fontWeight: 700,
+                      backgroundColor: tk.okBg,
+                      color: tk.okText,
+                    }}
+                  />
                 </Box>
-                {/* The GREEN count pill, right-aligned (round 4, A4):
-                    `<span class="pill ok num">50 plantes</span>`. Its colours
-                    are the artboards' `--chip-ok-bg` / `--chip-ok-tx` in both
-                    modes, carried as tokens like every other dashboard fill. */}
-                <Chip
-                  label={t('gardens.plantsCount', {
-                    count: garden.placementCount,
-                  })}
-                  size="small"
-                  sx={{
-                    flexShrink: 0,
-                    height: DASHBOARD_TYPE.chipHeight,
-                    fontSize: DASHBOARD_TYPE.chip,
-                    fontWeight: 700,
-                    backgroundColor: tk.okBg,
-                    color: tk.okText,
-                  }}
-                />
-              </Box>
-            </MaybeTooltip>
-            {rowTrailing(garden)}
-          </Box>
+              </MaybeTooltip>
+              {rowTrailing(garden)}
+            </Box>
+          </Fragment>
         ))}
         {remaining > 0 && (
           <Button

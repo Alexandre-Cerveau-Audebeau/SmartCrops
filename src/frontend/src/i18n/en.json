@@ -391,7 +391,7 @@
         "count_one": "{{count, number}} garden",
         "count_other": "{{count, number}} gardens",
         "lastModified": "Modified {{when}}",
-        "openLast": "Open the last modified garden",
+        "openLastNamed": "Open {{name}}, the last modified garden",
         "more_one": "+{{count, number}} garden →",
         "more_other": "+{{count, number}} gardens →",
         "open": "Open {{name}}",

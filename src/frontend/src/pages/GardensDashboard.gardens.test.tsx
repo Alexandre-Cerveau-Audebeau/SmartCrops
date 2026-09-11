@@ -1028,6 +1028,89 @@ describe('Gardens Medium row — the artboard’s own five elements (A4)', () =>
   });
 });
 
+// ROUND 5 — the three Gardens deviations of the A10 list.
+describe('Gardens rows — the artboard’s own measurements (round 5)', () => {
+  beforeEach(() => localStorage.setItem('smartcrops-language', 'en'));
+
+  it('lays a 1 px rule BETWEEN the Medium rows, and none under the last (A10-2)', async () => {
+    // `A2Novice.dc.html` writes `<div class="dv"></div>` between each pair of
+    // rows — `.dv { height: 1px; background: var(--divider) }`. The widget drew
+    // nothing at all, so three rows of a thumbnail, a name and two chips ran
+    // into one another. Three rows means two rules, never three: a rule under
+    // the last row reads as a rule under the widget.
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([
+        gardenWith(3),
+        gardenWith(2, { id: 'g2', name: 'Balcon' }),
+        gardenWith(1, { id: 'g3', name: 'Potager' }),
+      ])
+    );
+    await renderNovice();
+
+    const rules = gardensWidget().querySelectorAll('[data-row-divider]');
+    expect(rules).toHaveLength(2);
+    expect(rulesFor(rules[0]!).replace(/\s+/g, '')).toContain('height:1px');
+  });
+
+  it('draws the table thumbnail in the artboard’s 40 x 30 box (A10-4)', async () => {
+    // `Main.dc.html`: `<span class="tbox" style="width: 40px; height: 30px;">`
+    // in the identity cell, where the widget had 34 x 26.
+    //
+    // On the DECLARATIONS, not on a rectangle: jsdom lays nothing out, so
+    // `getBoundingClientRect` is a zero rect here and would pass for any box at
+    // all. `fitPreview` measures the 4 × 3 fixture at 8 px a cell with a 1 px
+    // gap inside 40 x 30 — (40 − 5) / 4 = 8.75 by width, (30 − 4) / 3 = 8.67 by
+    // height — where the old 34 x 26 box gave 7. A regression to either of the
+    // old numbers fails this.
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenWith(3)])
+    );
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    const preview = within(gardensWidget()).getAllByTestId(
+      'template-preview'
+    )[0]!;
+    expect(preview).toHaveStyle({
+      gridTemplateColumns: 'repeat(4, 8px)',
+      gridTemplateRows: 'repeat(3, 8px)',
+      gap: '1px',
+    });
+  });
+
+  it('names the garden the Small card is about to open (A10-3)', async () => {
+    // § 5 of the design contract: « un accès qui ne nomme pas sa destination
+    // est un défaut ». The Small card showed a count, « Modifié il y a 4 mois »
+    // and a chevron labelled « Ouvrir le dernier jardin modifié » — everything
+    // except WHICH garden. The MINIMUM only: the Small card's redesign (a
+    // compact list of named gardens, the carousel) stays SMA-432.
+    const blocks = presetFor('novice');
+    blocks.find((block) => block.key === 'gardens')!.size = 'small';
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level: 'novice',
+      isPreset: false,
+      blocks,
+      updatedAt: null,
+    });
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenWith(3)])
+    );
+
+    renderPage();
+
+    // The accessible label of the chevron names it too — the link is an
+    // `IconButton` rendered as a router `<a>`, so it answers to the link role.
+    expect(
+      await screen.findByRole('link', {
+        name: 'Open Casa Lolo, the last modified garden',
+      })
+    ).toBeInTheDocument();
+    // And it is on screen, not only in the label.
+    expect(within(gardensWidget()).getByText('Casa Lolo')).toBeInTheDocument();
+  });
+});
+
 // ROUND 4 (part B) — the actions zone of § 4 of the design contract.
 describe('Gardens rows — the actions zone (round 4, part B)', () => {
   beforeEach(() => {
