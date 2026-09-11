@@ -77,6 +77,13 @@ export interface DashboardTokens {
    * a pale plant hue from dissolving into the card.
    */
   dotRing: string;
+  /**
+   * The 1 px border of every OUTLINED chip of the page (`--chip-bd`) — the type
+   * chips, the level chip, the unselected garden filters (round 6, N6-4).
+   * MUI's outlined chip draws `grey[400]` by day and `grey[700]` by night; the
+   * artboards draw `#B4C1B4` and `#2C3F63`, and at night the two are not close.
+   */
+  chipBorder: string;
 }
 
 const LIGHT: DashboardTokens = {
@@ -95,6 +102,7 @@ const LIGHT: DashboardTokens = {
     'repeating-linear-gradient(45deg, rgba(71,94,120,0.18) 0px, rgba(71,94,120,0.18) 3px, transparent 3px, transparent 8px)',
   avatarFill: '#DCE9DF',
   dotRing: 'rgba(0,0,0,0.12)',
+  chipBorder: '#B4C1B4',
 };
 
 const DARK: DashboardTokens = {
@@ -113,6 +121,7 @@ const DARK: DashboardTokens = {
     'repeating-linear-gradient(45deg, rgba(142,170,206,0.30) 0px, rgba(142,170,206,0.30) 3px, transparent 3px, transparent 8px)',
   avatarFill: '#24395F',
   dotRing: 'rgba(255,255,255,0.18)',
+  chipBorder: '#2C3F63',
 };
 
 export function getDashboardTokens(mode: DashboardThemeMode): DashboardTokens {

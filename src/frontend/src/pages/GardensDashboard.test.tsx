@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { ThemeProvider } from '@mui/material/styles';
+import { createAppTheme } from '../theme';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
@@ -1188,5 +1190,30 @@ describe('GardensDashboard — Weather and Harvest name two things each (E″7)'
       expect(header.tagName).toBe('TH');
       expect(header).toHaveAttribute('scope', 'col');
     }
+  });
+});
+
+// ROUND 6 (N6-4) — the outlined chips carry the artboards' own border token.
+describe('GardensDashboard — outlined chips draw `--chip-bd` (round 6, N6-4)', () => {
+  it.each([
+    ['light', '#b4c1b4'],
+    ['dark', '#2c3f63'],
+  ])('borders the level chip with the %s token', async (mode, border) => {
+    // `.lvl { border: 1px solid var(--chip-bd) }` — `#B4C1B4` by day,
+    // `#2C3F63` by night, where MUI's outlined chip draws `grey[400]` and
+    // `grey[700]`. Under the product theme, so the token is the one that
+    // resolves.
+    render(
+      <ThemeProvider theme={createAppTheme(mode as 'light' | 'dark')}>
+        <LanguageProvider>
+          <MemoryRouter>
+            <GardensDashboard />
+          </MemoryRouter>
+        </LanguageProvider>
+      </ThemeProvider>
+    );
+
+    const chip = (await screen.findByText('Gardener view')).closest('.MuiChip-root')!;
+    expect(rulesFor(chip).toLowerCase().replace(/\s+/g, '')).toContain(`border-color:${border}`);
   });
 });

@@ -31,6 +31,7 @@ import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useGardenViews } from '../hooks/useGardenViews';
 import { useLanguage } from '../hooks/useLanguage';
+import { useDashboardTokens } from '../theme/useDashboardTokens';
 import { createGarden } from '../services/gardenApi';
 import { DASHBOARD_SPACING, DASHBOARD_TYPE } from '../theme/dashboardTokens';
 import { formatCount, formatDecimal } from '../utils/formatNumber';
@@ -70,6 +71,7 @@ export default function GardensDashboard() {
   // previous language. One source for what is printed together.
   const { t, i18n } = useTranslation();
   const { language } = useLanguage();
+  const tk = useDashboardTokens();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -410,6 +412,9 @@ export default function GardensDashboard() {
                 borderRadius: '16px',
                 fontSize: 13,
                 fontWeight: 600,
+                // `.lvl { border: 1px solid var(--chip-bd); background: var(--card) }`
+                borderColor: tk.chipBorder,
+                backgroundColor: 'background.paper',
                 '& .MuiChip-icon': { color: 'primary.main', fontSize: 18, ml: '10px', mr: 0 },
                 '& .MuiChip-label': { pl: '7px', pr: '13px' },
               }}

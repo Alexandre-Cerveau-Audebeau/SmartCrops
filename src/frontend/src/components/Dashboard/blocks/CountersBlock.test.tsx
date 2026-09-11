@@ -867,3 +867,41 @@ describe('CountersBlock — the N5 finishes and the row (round 6)', () => {
     expect(rules).toContain('height:26px');
   });
 });
+
+// ROUND 6 (N6-1 / N6-3) — the filter row and the grid, at `A3Expert`'s measures.
+describe('CountersBlock — the filter row and the grid (round 6, N6)', () => {
+  const two = [garden('g1', 'Terrasse'), garden('g2', 'Balcon')];
+
+  it('draws the filter chips 30 px high, the selected one in the primary colour (N6-1)', () => {
+    // `<span class="pill" style="height: 30px; padding: 0 13px; background:
+    // var(--prim); color: var(--on-prim)">Tous les jardins</span>` and
+    // `<span class="pill type" style="height: 30px; padding: 0 13px">` for the
+    // others. MUI's default filled chip is grey, and the row was 26 px.
+    const widget = renderBlock({
+      gardens: two,
+      options: { photos: false, garden: 'g2' },
+      onOptionsChange: () => {},
+    });
+
+    const selected = widget.getByText('Balcon').closest('.MuiChip-root')!;
+    const other = widget.getByText('Terrasse').closest('.MuiChip-root')!;
+    expect(selected.className).toContain('MuiChip-colorPrimary');
+    expect(selected.className).toContain('MuiChip-filled');
+    expect(other.className).toContain('MuiChip-outlined');
+    for (const chip of [selected, other]) {
+      expect(rulesFor(chip).replace(/\s+/g, '')).toContain('height:30px');
+    }
+  });
+
+  it('spaces the two columns 24 px apart (N6-3)', () => {
+    const widget = renderBlock({
+      varieties: [
+        variety({ plantId: 'p-1', commonName: 'Basil' }),
+        variety({ plantId: 'p-2', commonName: 'Thyme' }),
+      ],
+    });
+
+    const grid = widget.getByText('Basil').parentElement!.parentElement!;
+    expect(rulesFor(grid).replace(/\s+/g, '')).toContain('column-gap:24px');
+  });
+});

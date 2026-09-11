@@ -821,6 +821,8 @@ export default function GardensBlock({
                           sx={{
                             height: DASHBOARD_TYPE.chipHeight,
                             fontSize: DASHBOARD_TYPE.chip,
+                            // `.pill.type { border: 1px solid var(--chip-bd) }`
+                            borderColor: tk.chipBorder,
                             '& .MuiChip-icon': {
                               color: 'primary.main',
                               fontSize: 14,
@@ -1198,6 +1200,7 @@ function GardenRow({
   const palette = useTheme().palette;
   const ruleColor = palette.borderSubtle;
   const paperColor = palette.background.paper;
+  const { chipBorder } = useDashboardTokens();
 
   const cellSx = {
     // >= 44px rows (_spec.md 3): the line is a touch target as much as a row.
@@ -1371,6 +1374,7 @@ function GardenRow({
                 sx={{
                   height: DASHBOARD_TYPE.tableChipHeight,
                   fontSize: DASHBOARD_TYPE.chip,
+                  borderColor: chipBorder,
                 }}
               />
             )}

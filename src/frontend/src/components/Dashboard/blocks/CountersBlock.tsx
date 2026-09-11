@@ -292,17 +292,30 @@ export default function CountersBlock({
     // The assertion goes on each branch, not on the ternary: `as const` applies
     // to a literal, and `tsc -b` refuses it on a conditional expression.
     variant: interactive && selected ? ('filled' as const) : ('outlined' as const),
+    // The selected chip is the artboard's `background: var(--prim); color:
+    // var(--on-prim)` (round 6, N6-1) — MUI's default filled chip is grey.
+    color: interactive && selected ? ('primary' as const) : ('default' as const),
     'aria-pressed': interactive ? selected : undefined,
   });
 
+  // `A3Expert.dc.html`: `<span class="pill" style="height: 30px; padding: 0
+  // 13px">` for every filter chip, the unselected ones `.pill.type` with the
+  // `--chip-bd` border (round 6, N6-1). They were 26 px with MUI's border.
+  const filterChipSx = {
+    height: 30,
+    fontSize: DASHBOARD_TYPE.chip,
+    '& .MuiChip-label': { px: '13px' },
+    '&.MuiChip-outlined': { borderColor: tk.chipBorder },
+  };
+
   const gardenFilter = gardens.length > 1 && (
-    <Box sx={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+    <Box sx={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
       <Chip
         label={t('dashboard.blocks.counters.allGardens')}
         size="small"
         onClick={selectGarden(COUNTERS_GARDEN_ALL)}
         {...chipState(activeGarden === COUNTERS_GARDEN_ALL)}
-        sx={{ height: DASHBOARD_TYPE.chipHeight, fontSize: DASHBOARD_TYPE.chip }}
+        sx={filterChipSx}
       />
       {gardens.map((g) => (
         <Chip
@@ -311,10 +324,7 @@ export default function CountersBlock({
           size="small"
           onClick={selectGarden(g.id)}
           {...chipState(activeGarden === g.id)}
-          sx={{
-            height: DASHBOARD_TYPE.chipHeight,
-            fontSize: DASHBOARD_TYPE.chip,
-          }}
+          sx={filterChipSx}
         />
       ))}
     </Box>
@@ -391,11 +401,13 @@ export default function CountersBlock({
         }}
       >
         {withFilter && gardenFilter}
+        {/* `column-gap: 24px` on both artboards' grids (round 6, N6-3); the
+            widget had 16. */}
         <Box
           sx={{
             display: 'grid',
             gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-            columnGap: '16px',
+            columnGap: '24px',
           }}
         >
           {shownEdible.map(row)}
@@ -426,7 +438,7 @@ export default function CountersBlock({
               sx={{
                 display: 'grid',
                 gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-                columnGap: '16px',
+                columnGap: '24px',
               }}
             >
               {shownOrnamental.map(row)}
