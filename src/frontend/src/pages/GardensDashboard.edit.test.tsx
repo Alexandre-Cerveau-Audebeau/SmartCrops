@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { presetFor } from '../constants/dashboardPresets';
+import { rulesFor } from '../test/dashboardDom';
 import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
 import { DASHBOARD_SPACING } from '../theme/dashboardTokens';
 import type {
@@ -37,22 +38,23 @@ import type {
 } from '../types/DashboardData';
 import GardensDashboard from './GardensDashboard';
 
+import {
+  fetchDashboardData,
+  fetchDashboardPreferences,
+  saveDashboardPreferences,
+} from '../services/dashboardApi';
+
 /** SMA-336 PR 2/5 — an empty aggregate: these tests are about the GRID, not the data. */
 const dashboardWith = (gardens: DashboardGardenData[]): DashboardData => ({
   gardens,
   varieties: [],
   totals: {
     gardenCount: gardens.length,
-    placementCount: 0,
-    varietyCount: 0,
+    placementCount: gardens.reduce((sum, g) => sum + g.placementCount, 0),
+    varietyCount: gardens.reduce((sum, g) => sum + g.varietyCount, 0),
     catalogPlantCount: 536,
   },
 });
-import {
-  fetchDashboardData,
-  fetchDashboardPreferences,
-  saveDashboardPreferences,
-} from '../services/dashboardApi';
 
 /**
  * jsdom lays nothing out: every `getBoundingClientRect` is a zero rect, so
@@ -304,19 +306,6 @@ const lastSaved = () => {
 };
 const lastSavedKeys = () => lastSaved().blocks.map((block) => block.key);
 
-/** The Emotion class of a node, matched by its `css-` prefix, not by position. */
-const emotionClass = (node: Element) => {
-  const found = [...node.classList].find((name) => name.startsWith('css-'));
-  if (!found) throw new Error('No Emotion class on ' + node.className);
-  return found;
-};
-
-/** The stylesheet rules Emotion emitted for a node, joined. */
-const rulesFor = (node: Element) =>
-  [...document.querySelectorAll('style')]
-    .map((tag) => tag.textContent ?? '')
-    .filter((text) => text.includes(emotionClass(node)))
-    .join(' ');
 
 beforeEach(() => {
   // Four columns for the whole file: `DashboardGrid` reads the column count

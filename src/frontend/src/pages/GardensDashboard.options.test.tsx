@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { presetFor } from '../constants/dashboardPresets';
+import { gardenFixture } from '../test/fixtures/dashboard';
 
 vi.mock('../services/gardenApi', () => ({
   createGarden: vi.fn(),
@@ -34,28 +35,17 @@ import {
 // entries of artboard A8 write to `DashboardBlock.options`, the document PR 1/5
 // stored and round-tripped without ever writing to it.
 
-const garden = (id: string, name: string): DashboardGardenData => ({
-  id,
-  name,
-  description: null,
-  width: 4,
-  height: 3,
-  cellSize: '50cm',
-  cellsJson: null,
-  config: {
-    orientation: null,
-    gardenType: null,
-    lightSchedule: null,
-    hemisphere: 'N',
-    latitudeBand: 'mid',
-  },
-  updatedAt: '2026-05-01T00:00:00Z',
-  placements: [],
-  placementCount: 1,
-  varietyCount: 1,
-  occupiedCells: 1,
-  isEdible: true,
-});
+// One placed edible variety per garden — the overrides that carry meaning
+// for the options tests stay here (round 6, Extension #4-6).
+const garden = (id: string, name: string): DashboardGardenData =>
+  gardenFixture({
+    id,
+    name,
+    placementCount: 1,
+    varietyCount: 1,
+    occupiedCells: 1,
+    isEdible: true,
+  });
 
 const variety = (
   plantId: string,

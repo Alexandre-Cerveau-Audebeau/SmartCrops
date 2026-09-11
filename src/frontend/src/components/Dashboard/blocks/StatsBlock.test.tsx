@@ -5,7 +5,9 @@ import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
 import type { DashboardGardenData } from '../../../types/DashboardData';
 import { serializeCellsJson, type CellData } from '../../../types/GardenLayout';
+import { gardenFixture } from '../../../test/fixtures/dashboard';
 import { at } from '../../../test/fixtures/placements';
+import { rulesFor } from '../../../test/dashboardDom';
 import StatsBlock from './StatsBlock';
 
 // SMA-336 PR 2/5 — the Statistics widget. What it must get right: the surface
@@ -13,29 +15,20 @@ import StatsBlock from './StatsBlock';
 // exposure header names the season and moment it fixed, and a garden with no
 // plan reports a marker rather than a zero.
 
-const garden = (over: Partial<DashboardGardenData> = {}): DashboardGardenData => ({
-  id: 'g1',
-  name: 'Terrasse',
-  description: null,
-  width: 4,
-  height: 2,
-  cellSize: '50cm',
-  cellsJson: null,
-  config: {
-    orientation: 'S',
-    gardenType: null,
-    lightSchedule: null,
-    hemisphere: 'N',
-    latitudeBand: 'mid',
-  },
-  updatedAt: '2026-05-01T00:00:00Z',
-  placements: [],
-  placementCount: 0,
-  varietyCount: 0,
-  occupiedCells: 0,
-  isEdible: null,
-  ...over,
-});
+// The overrides that carry meaning stay here: 4 × 2 (eight cells, 2.0 m²), and
+// a south orientation so the exposure engine rates every cell.
+const garden = (over: Partial<DashboardGardenData> = {}): DashboardGardenData =>
+  gardenFixture({
+    height: 2,
+    config: {
+      orientation: 'S',
+      gardenType: null,
+      lightSchedule: null,
+      hemisphere: 'N',
+      latitudeBand: 'mid',
+    },
+    ...over,
+  });
 
 const widgetNode = () =>
   document.querySelector('[data-widget="stats"]') as HTMLElement;
@@ -63,19 +56,6 @@ const surfaceNode = () =>
 const chipNode = () =>
   widgetNode().querySelector('[data-stats-chip]') as HTMLElement;
 
-/** The Emotion class of a node, matched by its `css-` prefix, not by position. */
-const emotionClass = (node: Element) => {
-  const found = [...node.classList].find((name) => name.startsWith('css-'));
-  if (!found) throw new Error('No Emotion class on ' + node.className);
-  return found;
-};
-
-/** The stylesheet rules Emotion emitted for a node, joined. */
-const rulesFor = (node: Element) =>
-  [...document.querySelectorAll('style')]
-    .map((tag) => tag.textContent ?? '')
-    .filter((text) => text.includes(emotionClass(node)))
-    .join(' ');
 
 function renderBlock(
   props: Partial<React.ComponentProps<typeof StatsBlock>> = {},
@@ -512,11 +492,10 @@ describe('StatsBlock — the header chip of the Large card (A10-7)', () => {
 
   it('states the occupancy as a share of every plantable cell', () => {
     // The OVERALL share, not the mean of the per-garden percentages: a 1 m²
-    // balcony must not weigh as much as a 20 m² terrace. Two gardens of eight
-    // plantable cells each, two planted in the first and none in the second:
-    // 2 of 16, which is 13 % — where the mean of 25 % and 0 % would be 13 %
-    // only by coincidence of this fixture, so the second garden is made half
-    // the size to tell the two apart.
+    // balcony must not weigh as much as a 20 m² terrace. The second garden is
+    // deliberately HALF the size of the first, so the weighted figure and the
+    // mean cannot agree by coincidence: eight plantable cells and four, two
+    // planted in the first and none in the second.
     renderBlock({
       gardens: [
         garden({ occupiedCells: 2, placements: [at(0, 0), at(0, 1)] }),

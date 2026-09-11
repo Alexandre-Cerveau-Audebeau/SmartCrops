@@ -125,10 +125,15 @@ describe('exposureTally', () => {
   });
 
   it('hands out a fresh tally each time', () => {
+    // Read the mutated object BACK (round 6, Extension #4-22): each call
+    // returns a distinct object, and a write to one never reaches the next.
     const first = emptyExposureTally();
     first.full = 9;
+    const second = emptyExposureTally();
 
-    expect(emptyExposureTally().full).toBe(0);
+    expect(second).not.toBe(first);
+    expect(second.full).toBe(0);
+    expect(first.full).toBe(9);
   });
 });
 

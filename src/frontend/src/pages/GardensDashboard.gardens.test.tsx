@@ -15,6 +15,8 @@ import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { useLanguage } from '../hooks/useLanguage';
 import { presetFor } from '../constants/dashboardPresets';
+import { gardenFixture } from '../test/fixtures/dashboard';
+import { rulesFor } from '../test/dashboardDom';
 import type {
   DashboardData,
   DashboardGardenData,
@@ -60,29 +62,15 @@ import {
 const gardenWith = (
   varieties: number,
   over: Partial<DashboardGardenData> = {}
-): DashboardGardenData => ({
-  id: 'g1',
-  name: 'Casa Lolo',
-  description: null,
-  width: 4,
-  height: 3,
-  cellSize: '50cm',
-  cellsJson: null,
-  config: {
-    orientation: null,
-    gardenType: null,
-    lightSchedule: null,
-    hemisphere: 'N',
-    latitudeBand: 'mid',
-  },
-  updatedAt: '2026-05-01T00:00:00Z',
-  placements: [],
-  placementCount: varieties,
-  varietyCount: varieties,
-  occupiedCells: varieties,
-  isEdible: varieties > 0 ? false : null,
-  ...over,
-});
+): DashboardGardenData =>
+  gardenFixture({
+    name: 'Casa Lolo',
+    placementCount: varieties,
+    varietyCount: varieties,
+    occupiedCells: varieties,
+    isEdible: varieties > 0 ? false : null,
+    ...over,
+  });
 
 const dashboardWith = (gardens: DashboardGardenData[]): DashboardData => ({
   gardens,
@@ -798,33 +786,45 @@ describe('Gardens widget — the garden description (V10, V18)', () => {
     expect([...stack.children].indexOf(description)).toBe(2);
   });
 
-  it('is dimmer than the date it sits under (V18)', async () => {
-    // « Une couleur plus discrète que la date, pour qu'elle ne prime pas sur
-    // l'identité. » The step is taken UPWARD on the date rather than downward
-    // on the description: MUI's `text.secondary` is `rgba(0,0,0,0.6)`, 5.7:1 on
-    // white, and the next step down — `rgba(0,0,0,0.5)` — is 3.9:1, under the
-    // 4.5:1 that 13 px text owes (§ 7 of the design contract). `text.disabled`
-    // is 2.9:1 and the product's own `mutedText` 2.0:1.
-    vi.mocked(fetchDashboardData).mockResolvedValue(
-      described('Le coin sud, refait au printemps.')
-    );
+  it.each([
+    ['light', 'rgba(0,0,0,0.87)', 'rgba(0,0,0,0.6)'],
+    ['dark', '#e8eef4', '#9faab6'],
+  ])(
+    'is dimmer than the date it sits under, in %s (V18)',
+    async (mode, primary, secondary) => {
+      // « Une couleur plus discrète que la date, pour qu'elle ne prime pas sur
+      // l'identité. » The step is taken UPWARD on the date rather than downward
+      // on the description: MUI's `text.secondary` is `rgba(0,0,0,0.6)`, 5.7:1
+      // on white, and the next step down — `rgba(0,0,0,0.5)` — is 3.9:1, under
+      // the 4.5:1 that 13 px text owes (§ 7 of the design contract).
+      // `text.disabled` is 2.9:1 and the product's own `mutedText` 2.0:1.
+      //
+      // Under the PRODUCT theme, in BOTH modes (round 6, Extension #4-13): the
+      // light pair agreed with `renderPage()` only because MUI's default palette
+      // is light, and the dark pair — `#E8EEF4` over `#9FAAB6` — was never
+      // measured on the face where the step is hardest to hold. The expected
+      // values are the theme's `text.primary` / `text.secondary`, which is the
+      // semantic step the amendment states rather than two literals.
+      vi.mocked(fetchDashboardData).mockResolvedValue(
+        described('Le coin sud, refait au printemps.')
+      );
 
-    renderPage();
+      await renderIn('gardener', mode as 'light' | 'dark');
 
-    await screen.findByText('Casa Lolo');
-    const widget = within(gardensWidget());
-    const date = rulesFor(widget.getByText('4 × 3'))
-      .toLowerCase()
-      .replace(/\s+/g, '');
-    const description = rulesFor(
-      widget.getByText('Le coin sud, refait au printemps.')
-    )
-      .toLowerCase()
-      .replace(/\s+/g, '');
+      const widget = within(gardensWidget());
+      const date = rulesFor(widget.getByText('4 × 3'))
+        .toLowerCase()
+        .replace(/\s+/g, '');
+      const description = rulesFor(
+        widget.getByText('Le coin sud, refait au printemps.')
+      )
+        .toLowerCase()
+        .replace(/\s+/g, '');
 
-    expect(date).toContain('color:rgba(0,0,0,0.87)');
-    expect(description).toContain('color:rgba(0,0,0,0.6)');
-  });
+      expect(date).toContain(`color:${primary}`);
+      expect(description).toContain(`color:${secondary}`);
+    }
+  );
 
   it('is truncated to one line, and capped so it cannot widen the column (V18)', async () => {
     // « Limiter un peu plus la description visible à l'écran », and « plutôt que
@@ -982,23 +982,6 @@ describe('Gardens widget — the garden description (V10, V18)', () => {
 // browser resolves and on the STRUCTURE that makes them true — a measured width
 // would be zero here and would prove nothing either way.
 
-/** The Emotion class of a node, matched by its `css-` prefix, not by position. */
-function emotionClass(node: Element): string {
-  const found = [...node.classList].find((name) => name.startsWith('css-'));
-  if (!found) {
-    throw new Error(
-      `No Emotion class on <${node.tagName.toLowerCase()} class="${node.className}">`
-    );
-  }
-  return found;
-}
-
-/** The stylesheet rules Emotion emitted for a node, joined. */
-const rulesFor = (node: Element) =>
-  [...document.querySelectorAll('style')]
-    .map((tag) => tag.textContent ?? '')
-    .filter((text) => text.includes(emotionClass(node)))
-    .join(' ');
 
 /** The Gardens table's actions cells: the header cell first, then one per row. */
 function actionCells(): HTMLElement[] {
@@ -1046,11 +1029,20 @@ async function renderNovice() {
  * — is what put a colour on screen.
  */
 async function renderNoviceIn(mode: 'light' | 'dark') {
+  await renderIn('novice', mode);
+}
+
+/**
+ * Any level, either mode, under the product theme (round 6, Extension #4-13):
+ * the V18 contrast assertion needs the Large table, which the Novice preset
+ * does not draw.
+ */
+async function renderIn(level: 'novice' | 'gardener' | 'expert', mode: 'light' | 'dark') {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
-    level: 'novice',
+    level,
     isPreset: true,
-    blocks: presetFor('novice'),
+    blocks: presetFor(level),
     updatedAt: null,
   });
   render(

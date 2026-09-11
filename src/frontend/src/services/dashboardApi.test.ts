@@ -336,9 +336,8 @@ describe('fetchDashboardData — the aggregate boundary (round 1, E19 / G8)', ()
     // The line drawn on purpose, and moved by round 3 (E″8): every field the
     // page DEREFERENCES is required now, on the records as well as on the three
     // containers — but nothing is rebuilt, so a field a newer server adds
-    // travels through untouched. Placement elements stay unwalked: a few
-    // hundred of them per load is the cost round 1 declined, and a bad one
-    // degrades a thumbnail rather than killing the render.
+    // travels through untouched. Round 4 walks placement elements too, so the
+    // forward-compatibility rule holds at every depth the check reaches.
     const withExtra = { ...AGGREGATE, somethingNewer: 42 };
     mockFetch(withExtra);
 

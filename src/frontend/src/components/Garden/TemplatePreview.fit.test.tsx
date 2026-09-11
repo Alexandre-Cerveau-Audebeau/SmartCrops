@@ -223,14 +223,14 @@ describe('TemplatePreview — the two plan kinds are separate (round 1, E21)', (
     // — so this is a type error, and `tsc` in `npm run build` is what runs it.
     const plan = gardenToPreview(null, 2, 2, []);
 
-    const rejected = (
-      // @ts-expect-error a fitted plan carries plant IDs; there is no name to resolve
-      <TemplatePreview
-        template={plan}
-        fitTo={{ maxW: 40, maxH: 40 }}
-        resolvePlantId={(name: string) => name}
-      />
-    );
+    // ONE line (round 6, Extension #5-12): TypeScript may report the union
+    // mismatch on the offending attribute rather than on the tag, and a
+    // `@ts-expect-error` that no longer covers the diagnostic line turns into
+    // TS2578 in `tsc -b`. On a single line the directive covers it wherever
+    // the compiler anchors it.
+    // prettier-ignore
+    // @ts-expect-error a fitted plan carries plant IDs; there is no name to resolve
+    const rejected = <TemplatePreview template={plan} fitTo={{ maxW: 40, maxH: 40 }} resolvePlantId={(name: string) => name} />;
 
     expect(rejected).toBeTruthy();
   });

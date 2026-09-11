@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { presetFor } from '../constants/dashboardPresets';
+import { gardenFixture } from '../test/fixtures/dashboard';
 import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
 import {
   DASHBOARD_BLOCK_KEYS,
@@ -15,6 +16,7 @@ import type {
   DashboardGardenData,
   DashboardVarietyData,
 } from '../types/DashboardData';
+import { emittedRules, gridNode, rulesFor, slotOf } from '../test/dashboardDom';
 
 vi.mock('../services/gardenApi', () => ({
   createGarden: vi.fn(),
@@ -44,37 +46,19 @@ const garden = (
   id: string,
   name: string,
   over: Partial<DashboardGardenData> = {}
-): DashboardGardenData => ({
-  id,
-  name,
-  description: null,
-  width: 4,
-  height: 3,
-  cellSize: '50cm',
-  cellsJson: null,
-  config: {
-    orientation: null,
-    gardenType: null,
-    lightSchedule: null,
-    hemisphere: 'N',
-    latitudeBand: 'mid',
-  },
-  updatedAt: '2026-05-01T00:00:00Z',
-  placements: [],
-  placementCount: 0,
-  varietyCount: 0,
-  occupiedCells: 0,
-  isEdible: null,
-  ...over,
-});
+): DashboardGardenData => gardenFixture({ id, name, ...over });
 
+// The two sums DERIVED from the gardens (round 6, Extension #4-15), as the
+// sibling fixture in `GardensDashboard.gardens.test.tsx` already does: a
+// builder that pins them at zero can express an aggregate that contradicts its
+// own gardens, and every assertion built on it is weaker for it.
 const dashboardWith = (gardens: DashboardGardenData[]): DashboardData => ({
   gardens,
   varieties: [],
   totals: {
     gardenCount: gardens.length,
-    placementCount: 0,
-    varietyCount: 0,
+    placementCount: gardens.reduce((sum, g) => sum + g.placementCount, 0),
+    varietyCount: gardens.reduce((sum, g) => sum + g.varietyCount, 0),
     catalogPlantCount: 536,
   },
 });
@@ -94,49 +78,6 @@ function servePreferences(level: DashboardLevel, blocks?: DashboardBlock[]) {
   });
 }
 
-/**
- * The Emotion class of a node, matched by the `css-` prefix rather than taken
- * as "the last class" (round 3, E″2): MUI puts a `MuiBox-root` before it and
- * may put a component class after it, so position is not a contract. Throws
- * rather than returning nothing, so a structural change is reported as a
- * missing node and not as a missing CSS rule.
- */
-function emotionClass(node: Element): string {
-  const found = [...node.classList].find((name) => name.startsWith('css-'));
-  if (!found) {
-    throw new Error(
-      `No Emotion class on <${node.tagName.toLowerCase()} class="${node.className}">`
-    );
-  }
-  return found;
-}
-
-/** The stylesheet rules Emotion emitted for a node. */
-const rulesFor = (node: Element) =>
-  [...document.querySelectorAll('style')]
-    .map((tag) => tag.textContent ?? '')
-    .filter((text) => text.includes(emotionClass(node)));
-
-/**
- * The grid container: the widget cards sit inside a SortableWidget slot, which
- * sits inside the grid. Guarded at every step (round 3, E″2) so a change of
- * structure fails as "the grid was not found" instead of silently handing back
- * an unrelated node whose rules happen to be empty.
- */
-function gridNode(): HTMLElement {
-  const card = document.querySelector('[data-widget]');
-  if (!card) throw new Error('No widget rendered: the grid cannot be located');
-  const slot = card.parentElement?.parentElement;
-  const grid = slot?.parentElement;
-  if (!grid) throw new Error('The grid container is not where it was expected');
-  const rules = [...document.querySelectorAll('style')]
-    .map((tag) => tag.textContent ?? '')
-    .filter((text) => text.includes(emotionClass(grid)));
-  if (!rules.some((text) => text.includes('display:grid'))) {
-    throw new Error('The node reached is not the display:grid container');
-  }
-  return grid as HTMLElement;
-}
 
 /** The widget keys the grid currently renders, in DOM order. */
 const renderedKeys = () =>
@@ -519,11 +460,11 @@ describe('GardensDashboard — invitation layout (SMA-336 round 1, V3)', () => {
     const panel = document.querySelector('[data-invite-panel]') as HTMLElement;
 
     // The phone geometry the panel has to fit inside: one column, 200px rows.
-    const gridRules = rulesFor(gridNode());
+    const gridRules = emittedRules(gridNode());
     expect(gridRules.some((text) => text.includes('grid-template-columns:1fr'))).toBe(true);
     expect(gridRules.some((text) => text.includes('grid-auto-rows:200px'))).toBe(true);
 
-    const panelRules = rulesFor(panel);
+    const panelRules = emittedRules(panel);
     expect(panelRules.length).toBeGreaterThan(0);
     // Not stacked: that is the ~56px the phone card does not have.
     expect(panelRules.some((text) => text.includes('flex-direction:column'))).toBe(false);
@@ -709,7 +650,7 @@ describe('GardensDashboard — the widget header (round 4, A1 / A2)', () => {
     await screen.findByText('Gardener view');
 
     const heading = document.querySelector('[data-widget] h2')!;
-    const rules = rulesFor(heading).join(' ').replace(/\s+/g, '');
+    const rules = rulesFor(heading).replace(/\s+/g, '');
     expect(rules).toContain('font-size:15px');
     expect(rules).toContain('font-weight:800');
     expect(rules).toContain('text-transform:uppercase');
@@ -858,7 +799,7 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     // A FILLED disc, not a bare glyph: `.plus { width: 36px; height: 36px;
     // border-radius: 50%; background: var(--prim) }`.
     const add = within(gallery).getByRole('button', { name: 'Add Statistics' });
-    const rules = rulesFor(add).join(' ').replace(/\s+/g, '');
+    const rules = rulesFor(add).replace(/\s+/g, '');
     expect(rules).toContain('width:36px');
     expect(rules).toContain('height:36px');
   });
@@ -1034,7 +975,7 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
     // By ROLE, not by text: the Gardens table now labels a WEATHER column, so
     // the bare word matches both a widget title and a column header.
     await screen.findByRole('heading', { level: 2, name: 'Weather' });
-    return rulesFor(gridNode()).join(' ');
+    return rulesFor(gridNode());
   }
 
   it('one column on a phone, and 200px rows', async () => {
@@ -1100,16 +1041,6 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
       .trim();
   }
 
-  /** The SortableWidget slot of a key — the node the spans are declared on. */
-  function slotNode(key: string): HTMLElement {
-    const card = document.querySelector(`[data-widget="${key}"]`);
-    if (!card) throw new Error(`No widget "${key}" rendered`);
-    const slot = card.parentElement?.parentElement;
-    if (!slot) {
-      throw new Error(`The slot of "${key}" is not where it was expected`);
-    }
-    return slot as HTMLElement;
-  }
 
   it('every widget declares the span spanFor gives it at each breakpoint', async () => {
     // Round 4 (E'''1). `DashboardGrid` packs with 1, then 2, then 4 columns;
@@ -1132,7 +1063,7 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
     await screen.findByRole('heading', { level: 2, name: 'Weather' });
 
     for (const block of blocks.slice(0, 3)) {
-      const css = rulesFor(slotNode(block.key)).join(' ');
+      const css = rulesFor(slotOf(block.key));
 
       expect(declaredAt(css, '0px', 'grid-column')).toBe(
         `span ${spanFor(block.size, 1).cols}`
@@ -1154,14 +1085,6 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
 // DECLARATIONS the browser resolves — jsdom lays nothing out, so a measured
 // height would be zero here and would prove nothing either way.
 describe('GardensDashboard — no widget draws outside its card (V7)', () => {
-  /** The SortableWidget slot: the grid ITEM, between the grid and the card. */
-  function slotFor(widget: string): HTMLElement {
-    const card = document.querySelector(`[data-widget="${widget}"]`);
-    if (!card) throw new Error(`No ${widget} widget rendered`);
-    const slot = card.parentElement?.parentElement;
-    if (!slot) throw new Error(`No slot around the ${widget} card`);
-    return slot as HTMLElement;
-  }
 
   async function renderExpert() {
     servePreferences('expert');
@@ -1178,7 +1101,7 @@ describe('GardensDashboard — no widget draws outside its card (V7)', () => {
     await renderExpert();
 
     for (const widget of ['gardens', 'counters', 'stats']) {
-      const rules = rulesFor(slotFor(widget)).join(' ');
+      const rules = rulesFor(slotOf(widget));
       expect(rules).toContain('min-height:0');
     }
   });
@@ -1188,7 +1111,7 @@ describe('GardensDashboard — no widget draws outside its card (V7)', () => {
 
     for (const widget of ['gardens', 'counters', 'stats']) {
       const card = document.querySelector(`[data-widget="${widget}"]`)!;
-      expect(rulesFor(card).join(' ')).toContain('overflow:hidden');
+      expect(rulesFor(card)).toContain('overflow:hidden');
     }
   });
 

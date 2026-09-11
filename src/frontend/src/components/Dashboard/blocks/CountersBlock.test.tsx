@@ -5,12 +5,13 @@ import { describe, expect, it } from 'vitest';
 import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
 import type {
-  DashboardGardenData,
   DashboardTotals,
   DashboardVarietyData,
 } from '../../../types/DashboardData';
 import { getPlantColor } from '../../../utils/plantColor';
+import { gardenFixture } from '../../../test/fixtures/dashboard';
 import { placement } from '../../../test/fixtures/placements';
+import { rulesFor } from '../../../test/dashboardDom';
 import CountersBlock from './CountersBlock';
 import { COUNTERS_GARDEN_ALL, COUNTERS_LINE_CAP } from './countersOptions';
 
@@ -35,42 +36,8 @@ const variety = (
   ...over,
 });
 
-const garden = (id: string, name: string): DashboardGardenData => ({
-  id,
-  name,
-  description: null,
-  width: 4,
-  height: 3,
-  cellSize: '50cm',
-  cellsJson: null,
-  config: {
-    orientation: null,
-    gardenType: null,
-    lightSchedule: null,
-    hemisphere: 'N',
-    latitudeBand: 'mid',
-  },
-  updatedAt: '2026-05-01T00:00:00Z',
-  placements: [],
-  placementCount: 0,
-  varietyCount: 0,
-  occupiedCells: 0,
-  isEdible: null,
-});
+const garden = (id: string, name: string) => gardenFixture({ id, name });
 
-/** The Emotion class of a node, matched by its `css-` prefix, not by position. */
-const emotionClass = (node: Element) => {
-  const found = [...node.classList].find((name) => name.startsWith('css-'));
-  if (!found) throw new Error('No Emotion class on ' + node.className);
-  return found;
-};
-
-/** The stylesheet rules Emotion emitted for a node, joined. */
-const rulesFor = (node: Element) =>
-  [...document.querySelectorAll('style')]
-    .map((tag) => tag.textContent ?? '')
-    .filter((text) => text.includes(emotionClass(node)))
-    .join(' ');
 
 const totals = (over: Partial<DashboardTotals> = {}): DashboardTotals => ({
   gardenCount: 1,
