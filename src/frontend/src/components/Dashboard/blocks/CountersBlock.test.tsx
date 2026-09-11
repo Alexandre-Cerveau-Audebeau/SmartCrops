@@ -10,6 +10,7 @@ import type {
   DashboardVarietyData,
 } from '../../../types/DashboardData';
 import { getPlantColor } from '../../../utils/plantColor';
+import { placement } from '../../../test/fixtures/placements';
 import CountersBlock from './CountersBlock';
 import { COUNTERS_GARDEN_ALL, COUNTERS_LINE_CAP } from './countersOptions';
 
@@ -658,5 +659,121 @@ describe('CountersBlock — the garden chips actually filter (round 1, E7)', () 
     expect(selected).toHaveAttribute('aria-pressed', 'true');
     expect(selected.className).toContain('MuiChip-filled');
     expect(selected).toHaveAttribute('tabindex', '0');
+  });
+});
+
+// ROUND 6 (partie A) — the filter reaches every figure the widget states. Each
+// case below picks a garden whose figure DIFFERS from the page-wide one, so a
+// site that still read the aggregate would print the wrong number.
+describe('CountersBlock — the garden filter reaches every figure (round 6, A)', () => {
+  // Basil once on the terrace and twice on the balcony; thyme twice on the
+  // terrace only. Page-wide: 5 placements, 2 varieties. On the balcony: 2
+  // placements, 1 variety, basil « × 2 ».
+  const terrace = {
+    ...garden('g1', 'Terrasse'),
+    placements: [
+      placement({ id: 'a', plantId: 'p-basil' }),
+      placement({ id: 'b', plantId: 'p-thyme', startCol: 1 }),
+      placement({ id: 'c', plantId: 'p-thyme', startCol: 2 }),
+    ],
+    placementCount: 3,
+    varietyCount: 2,
+  };
+  const balcony = {
+    ...garden('g2', 'Balcon'),
+    placements: [
+      placement({ id: 'd', plantId: 'p-basil' }),
+      placement({ id: 'e', plantId: 'p-basil', startCol: 1 }),
+    ],
+    placementCount: 2,
+    varietyCount: 1,
+  };
+  const twoGardens = [terrace, balcony];
+  const twoVarieties = [
+    variety({ plantId: 'p-basil', commonName: 'Basil', count: 3, gardenIds: ['g1', 'g2'] }),
+    variety({ plantId: 'p-thyme', commonName: 'Thyme', count: 2, gardenIds: ['g1'] }),
+  ];
+  const pageTotals = totals({ gardenCount: 2, placementCount: 5, varietyCount: 2 });
+
+  const onBalcony = (over: Partial<React.ComponentProps<typeof CountersBlock>> = {}) =>
+    renderBlock({
+      gardens: twoGardens,
+      varieties: twoVarieties,
+      totals: pageTotals,
+      options: { garden: 'g2' },
+      ...over,
+    });
+
+  it('control — with no filter, every figure is the page’s', () => {
+    const widget = renderBlock({
+      gardens: twoGardens,
+      varieties: twoVarieties,
+      totals: pageTotals,
+    });
+
+    expect(widget.getByText('2 varieties')).toBeInTheDocument();
+    expect(widget.getByText('× 3')).toBeInTheDocument();
+    expect(widget.getByText('× 2')).toBeInTheDocument();
+  });
+
+  it('the header chip counts the selected garden’s varieties', () => {
+    const widget = onBalcony();
+
+    expect(widget.getByText('1 variety')).toBeInTheDocument();
+    expect(widget.queryByText('2 varieties')).toBeNull();
+  });
+
+  it('each row counts the placements of the selected garden, not the page’s', () => {
+    // GitHub, hors diff, `CountersBlock.tsx:195`: the aggregate groups
+    // placements by plant across every garden, so basil read « × 3 » on a
+    // widget filtered to a balcony that holds two.
+    const widget = onBalcony();
+
+    expect(widget.getByText('Basil')).toBeInTheDocument();
+    expect(widget.getByText('× 2')).toBeInTheDocument();
+    expect(widget.queryByText('× 3')).toBeNull();
+    expect(widget.queryByText('Thyme')).toBeNull();
+  });
+
+  it('the Small card states the selected garden’s placements and varieties', () => {
+    // Extension #4-7: the filter is stored on the block, so it survives a
+    // resize — and the Small card printed the page totals over it.
+    const widget = onBalcony({ size: 'small' });
+
+    expect(widget.getByText('2')).toBeInTheDocument();
+    expect(widget.getByText('2 plants')).toBeInTheDocument();
+    expect(widget.getByText('1 variety of 536 in the catalog')).toBeInTheDocument();
+    expect(widget.queryByText('5')).toBeNull();
+    expect(widget.queryByText('5 plants')).toBeNull();
+  });
+
+  it('« +N » counts what the filter hides, not what the page hides', () => {
+    // Ten varieties on the terrace, nine of them also on the balcony: a Medium
+    // card shows eight, so the page hides two and the balcony hides one.
+    const many = Array.from({ length: 10 }, (_, index) =>
+      variety({
+        plantId: `p-${index}`,
+        commonName: `Variety ${index}`,
+        count: 1,
+        gardenIds: index < 9 ? ['g1', 'g2'] : ['g1'],
+      })
+    );
+    const widget = renderBlock({
+      size: 'medium',
+      gardens: twoGardens,
+      varieties: many,
+      totals: totals({ gardenCount: 2, placementCount: 19, varietyCount: 10 }),
+      options: { garden: 'g2' },
+    });
+
+    expect(widget.getByText('+1 variety')).toBeInTheDocument();
+    expect(widget.queryByText('+2 varieties')).toBeNull();
+  });
+
+  it('a stored garden that is gone falls back to the page figures', () => {
+    const widget = onBalcony({ options: { garden: 'gone' } });
+
+    expect(widget.getByText('2 varieties')).toBeInTheDocument();
+    expect(widget.getByText('× 3')).toBeInTheDocument();
   });
 });

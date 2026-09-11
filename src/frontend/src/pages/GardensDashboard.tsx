@@ -23,11 +23,7 @@ import CustomizePanel from '../components/Dashboard/CustomizePanel';
 import DashboardGrid from '../components/Dashboard/DashboardGrid';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import CountersOptionsPanel from '../components/Dashboard/blocks/CountersOptionsPanel';
-import {
-  COUNTERS_GARDEN_ALL,
-  countersOptions,
-  resolveCountersGarden,
-} from '../components/Dashboard/blocks/countersOptions';
+import { resolveCountersFigures } from '../components/Dashboard/blocks/countersOptions';
 import GardensBlock from '../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
@@ -294,31 +290,22 @@ export default function GardensDashboard() {
       };
     }
     if (key === 'counters') {
-      // THROUGH THE WIDGET'S OWN FILTER (round 5, C4). The branch read
-      // `totals.varietyCount` unconditionally, so a user who had narrowed the
-      // widget to one garden and then hidden it was offered a thumbnail
-      // counting every garden — the card in the gallery said something the
-      // widget it stands for does not say.
-      //
-      // `countersOptions` and `resolveCountersGarden` are the SAME two calls
-      // the widget and its options panel make, in that order: the second is
-      // what makes a filter naming a deleted garden fall back to « all »
-      // instead of counting nothing (round 1, E8). Three readers of one
-      // contract now, and still one owner.
+      // THROUGH THE WIDGET'S OWN FILTER (round 5, C4), and through the SAME
+      // resolver the widget reads (round 6, partie A): round 5 had re-derived
+      // the filtered count here, which was a fourth copy of the rule. The
+      // thumbnail now prints the very `varietyCount` the widget's chip prints,
+      // so the card in the gallery cannot say something the widget it stands
+      // for does not say.
       const stored = blocks.find((block) => block.key === 'counters');
-      const active = resolveCountersGarden(
-        countersOptions(stored?.options ?? null).garden,
-        gardens
+      const { varietyCount } = resolveCountersFigures(
+        stored?.options ?? null,
+        gardens,
+        dashboardData.varieties,
+        dashboardData.totals
       );
-      const count =
-        active === COUNTERS_GARDEN_ALL
-          ? dashboardData.totals.varietyCount
-          : dashboardData.varieties.filter((variety) =>
-              variety.gardenIds.includes(active)
-            ).length;
 
-      if (count === 0) return null;
-      return { value: formatCount(count, language) };
+      if (varietyCount === 0) return null;
+      return { value: formatCount(varietyCount, language) };
     }
     if (key === 'gardens') {
       if (gardens.length === 0) return null;

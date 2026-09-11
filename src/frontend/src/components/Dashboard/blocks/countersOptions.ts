@@ -9,6 +9,12 @@
  * rather than trusted, and anything unrecognised falls back to the default.
  */
 
+import type {
+  DashboardGardenData,
+  DashboardTotals,
+  DashboardVarietyData,
+} from '../../../types/DashboardData';
+
 /** The « all gardens » sentinel — the option's default. */
 export const COUNTERS_GARDEN_ALL = 'all';
 
@@ -66,6 +72,102 @@ export function resolveCountersGarden(
     gardens.some((candidate) => candidate.id === garden)
     ? garden
     : COUNTERS_GARDEN_ALL;
+}
+
+/**
+ * Everything the Counters widget STATES, resolved once from the stored filter
+ * (round 6, partie A).
+ *
+ * Three findings on two surfaces said the same thing in three places: the
+ * garden filter was applied to the LIST and not to the NUMBERS. The header chip
+ * printed `totals.varietyCount`, the Small card `totals.placementCount` and
+ * `totals.varietyCount`, and every row `variety.count` — all four page-wide by
+ * construction — so a widget narrowed to one garden counted every garden in its
+ * chip, in its headline and in each « × N », while its list was filtered. The
+ * round 5 fix of the gallery thumbnail (C4) had closed one such site on its own;
+ * this closes the family: one function derives every figure from the one
+ * filter, and no surface can state a number that did not pass through it.
+ *
+ * What each figure IS under a filter, so no caller has to decide it again:
+ *
+ * - `garden` — the filter that actually applies, after the deleted-garden
+ *   fallback of {@link resolveCountersGarden};
+ * - `varieties` — the rows the filter keeps, each with its `count` and `cells`
+ *   RE-STATED for that garden alone. The aggregate groups placements by plant
+ *   across every garden, so `variety.count` is a page-wide figure; on a filtered
+ *   widget a variety planted once here and twice elsewhere must read « × 1 »,
+ *   not « × 3 ». The garden's own `placements` are on the wire, and they are the
+ *   same rows the server counted, so the figure is derived, never invented;
+ * - `placementCount` — the Small card's big number: the garden's own
+ *   `placementCount`, which the server computes as `Placements.Count` for that
+ *   garden, or the page total;
+ * - `varietyCount` — the chip, the « … of 536 in the catalog » line and the
+ *   gallery thumbnail: the kept rows' length, so the chip and the list agree
+ *   by construction. With no filter it is the aggregate's DISTINCT total
+ *   (decision D11), never a sum of per-garden counts.
+ *
+ * Pure, and owned here beside the reader that validates the document, for the
+ * reason `resolveCountersGarden` gives above: two owners of one contract have
+ * to agree, and nothing makes them.
+ */
+export interface CountersFigures {
+  garden: string;
+  varieties: DashboardVarietyData[];
+  placementCount: number;
+  varietyCount: number;
+}
+
+export function resolveCountersFigures(
+  options: Record<string, unknown> | null | undefined,
+  gardens: readonly DashboardGardenData[],
+  varieties: readonly DashboardVarietyData[],
+  totals: DashboardTotals
+): CountersFigures {
+  const garden = resolveCountersGarden(countersOptions(options).garden, gardens);
+
+  if (garden === COUNTERS_GARDEN_ALL) {
+    return {
+      garden,
+      varieties: [...varieties],
+      placementCount: totals.placementCount,
+      varietyCount: totals.varietyCount,
+    };
+  }
+
+  // Resolved above, so the garden exists; the guard keeps the function total
+  // rather than trusting the resolver from a distance.
+  const selected = gardens.find((candidate) => candidate.id === garden);
+  if (!selected) {
+    return {
+      garden: COUNTERS_GARDEN_ALL,
+      varieties: [...varieties],
+      placementCount: totals.placementCount,
+      varietyCount: totals.varietyCount,
+    };
+  }
+
+  const kept = varieties
+    .filter((variety) => variety.gardenIds.includes(garden))
+    .map((variety) => {
+      const own = selected.placements.filter(
+        (placement) => placement.plantId === variety.plantId
+      );
+      return {
+        ...variety,
+        count: own.length,
+        cells: own.reduce(
+          (sum, placement) => sum + placement.spanRows * placement.spanCols,
+          0
+        ),
+      };
+    });
+
+  return {
+    garden,
+    varieties: kept,
+    placementCount: selected.placementCount,
+    varietyCount: kept.length,
+  };
 }
 
 /**

@@ -25,7 +25,7 @@ import { PLANT_HERO_PLACEHOLDER } from '../../../utils/plantDetail';
 import {
   COUNTERS_GARDEN_ALL,
   countersOptions,
-  resolveCountersGarden,
+  resolveCountersFigures,
 } from './countersOptions';
 
 /**
@@ -100,26 +100,25 @@ export default function CountersBlock({
 }: Props) {
   const { t, i18n } = useTranslation();
   const tk = useDashboardTokens();
-  const { photos, garden: gardenOption } = countersOptions(options);
+  const { photos } = countersOptions(options);
 
-  // A filter naming a garden that has since been deleted must not empty the
-  // widget with no way back: the chip row would no longer offer that garden,
-  // so the user could not clear it. ONE owner for that rule since round 1 (E8)
-  // — the options panel resolves it with the same call.
-  const activeGarden = resolveCountersGarden(gardenOption, gardens);
+  // EVERY figure this widget states comes from here (round 6, partie A): the
+  // filter that applies — with the deleted-garden fallback of round 1 (E8), the
+  // rows it keeps with their counts re-stated for that garden, and the two
+  // totals the chip, the Small card and the catalog line print. The list was
+  // filtered and the numbers were not; now nothing is a number unless it came
+  // through this call. See `resolveCountersFigures` for what each figure is.
+  //
+  // NOT memoized, deliberately: the resolver is an imported function, and the
+  // React Compiler rules refuse to preserve a `useMemo` whose dependency they
+  // cannot prove immutable — keeping one here failed `npm run lint` outright.
+  // The cost is one pass over the caller's varieties per render, against a
+  // body that maps every surviving variety to DOM on the same render.
+  const figures = resolveCountersFigures(options, gardens, varieties, totals);
+  const activeGarden = figures.garden;
+  const filtered = figures.varieties;
 
   const [expanded, setExpanded] = useState(false);
-
-  // NOT memoized, deliberately. `activeGarden` now comes from
-  // `resolveCountersGarden` — an imported function — and the React Compiler
-  // rules refuse to preserve a `useMemo` whose dependency it cannot prove
-  // immutable, so keeping one here failed `npm run lint` outright. The cost of
-  // dropping it is one `Array.filter` over the caller's varieties per render,
-  // against a body that maps every surviving variety to DOM on the same render.
-  const filtered =
-    activeGarden === COUNTERS_GARDEN_ALL
-      ? varieties
-      : varieties.filter((v) => v.gardenIds.includes(activeGarden));
 
   const displayName = (variety: DashboardVarietyData) =>
     variety.commonName ?? variety.scientificName;
@@ -191,7 +190,13 @@ export default function CountersBlock({
       >
         {/* Locale-formatted (round 1, G5): a four-digit count concatenated
             into a template literal reads « 1440 » in a French widget that
-            groups it « 1 440 » two lines above. */}
+            groups it « 1 440 » two lines above.
+
+            And the GARDEN's count, not the page's (round 6, partie A — GitHub,
+            hors diff, `CountersBlock.tsx:195`): the aggregate groups placements
+            by plant across every garden, so a variety planted once here and
+            twice elsewhere read « × 3 » on a widget filtered to here. The row
+            reads `figures.varieties`, whose `count` is re-stated per garden. */}
         {`× ${formatCount(variety.count, i18n.language)}`}
       </Typography>
     </Box>
@@ -292,16 +297,21 @@ export default function CountersBlock({
       }}
     >
       <Box>
+        {/* THROUGH THE FILTER (round 6, partie A — Extension #4-7). The card
+            printed `totals.placementCount` and `totals.varietyCount`, which are
+            page-wide by construction: a user who narrowed Counters to one
+            garden on the Large card and then resized it to Small read every
+            garden's figure on a filtered widget. */}
         <Typography
           sx={{ fontSize: DASHBOARD_TYPE.big, fontWeight: 800, lineHeight: 1.1 }}
         >
-          {formatCount(totals.placementCount, i18n.language)}
+          {formatCount(figures.placementCount, i18n.language)}
         </Typography>
         <Typography
           sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary' }}
         >
           {t('dashboard.blocks.counters.plants', {
-            count: totals.placementCount,
+            count: figures.placementCount,
           })}
         </Typography>
       </Box>
@@ -309,7 +319,7 @@ export default function CountersBlock({
         sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary' }}
       >
         {t('dashboard.blocks.counters.ofCatalog', {
-          count: totals.varietyCount,
+          count: figures.varietyCount,
           catalog: totals.catalogPlantCount,
         })}
       </Typography>
@@ -463,8 +473,11 @@ export default function CountersBlock({
       <Chip
         // DISTINCT varieties (decision D11), which is what the aggregate's
         // totals already count: a variety planted in two gardens is one variety.
+        // And THROUGH THE FILTER (round 6, partie A): the chip printed the page
+        // total over a filtered list, so the header said « 3 variétés » above
+        // one row.
         label={t('dashboard.blocks.counters.varieties', {
-          count: totals.varietyCount,
+          count: figures.varietyCount,
         })}
         size="small"
         // FILLED, and green (round 5, A10-5). `Main.dc.html` l. 145 gives this
