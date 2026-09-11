@@ -368,6 +368,63 @@ describe('StatsBlock — the exposure swatch and the occupancy bar (round 5)', (
   });
 });
 
+// ROUND 5 (B2, B3) — what the rows are worth, and what a garden with no plan
+// puts where its figure would be.
+describe('StatsBlock — row proportions and the « no plan » marker (round 5)', () => {
+  const rows = () => [...widgetNode().querySelectorAll('[data-stat-row]')];
+
+  it('gives the garden name 160 px and pins the figure column at 116 (B2)', () => {
+    // The artboard's own gardens are « Terrasse », « Balcon sud » and « Potager
+    // du fond », and its 120 px label track holds them; real ones do not —
+    // « Test Template… », « Another anoth… » — while the bar beside them took
+    // 248 px to state one percentage. 160 px is about nineteen characters at
+    // 15 px semibold instead of about fourteen.
+    //
+    // The last track is FIXED rather than `auto`, and that is the other half:
+    // each row is its own grid, so an `auto` track sized itself on its own
+    // content — « 20 m² · 68 % » and « 3 m² · 50 % » are not the same width —
+    // and every bar in the section ended at a different x. The `min-content`
+    // floor keeps the figure from being clipped on a card too narrow to grant
+    // the track: the bar collapses first, which is the right order.
+    renderBlock();
+
+    const rules = rulesFor(rows()[0]!).toLowerCase().replace(/\s+/g, '');
+    expect(rules).toContain(
+      'grid-template-columns:minmax(0,160px)minmax(0,1fr)minmax(min-content,116px)'
+    );
+  });
+
+  it('puts the « no plan » marker where the VALUE goes, not across the track (B3)', () => {
+    // It was the row's middle child, and a `MissingDataMark` is a grid item
+    // like any other: stretched across a whole `1fr` track it drew a 212 px
+    // dashed lozenge that read as an empty bar — the one thing rule 4 of the
+    // design contract forbids a missing figure from looking like. In the value
+    // column it keeps its natural width, right-aligned where `A3Expert` writes
+    // « 20 m² · 68 % », and it replaces the « — » that stood there.
+    renderBlock({
+      gardens: [
+        garden(),
+        garden({ id: 'g2', name: 'Jamais dessiné', width: null, height: null }),
+      ],
+    });
+
+    const marks = [...widgetNode().querySelectorAll('[data-missing-mark]')];
+    // One in the occupancy section, one in the per-garden exposure section.
+    expect(marks).toHaveLength(2);
+
+    for (const mark of marks) {
+      const row = mark.closest('[data-stat-row]')!;
+      const value = mark.parentElement!;
+      // THIRD child of the three: the bar's track is left empty above it.
+      expect([...row.children].indexOf(value)).toBe(2);
+      expect(value.textContent).toBe('No plan');
+      // And it is not stretched: the marker is an inline box inside the value
+      // cell, never the cell itself.
+      expect(mark).not.toBe(value);
+    }
+  });
+});
+
 describe('StatsBlock — section labels are headings (round 1, E13)', () => {
   it('gives each Large section a heading one level below the widget title', () => {
     // A Large card carries three of these, each introducing its own list of

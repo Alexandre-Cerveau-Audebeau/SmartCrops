@@ -77,6 +77,25 @@ const TABLE_THUMB_H = 30;
  * the artboards' own `.pill` (26 px), which is what the zone behind the two
  * buttons is.
  */
+/**
+ * How wide the DESCRIPTION line of the identity cell may ever ask to be
+ * (round 5, V18).
+ *
+ * The two numbers are the identity column of the design contract § 2, measured
+ * in the artboards: 130 px on the Gardener table (the MODIFIÉ layout) and 106 on
+ * the Expert one (RÉCOLTE, whose own column is wider). A `white-space: nowrap`
+ * line contributes its WHOLE text to a table column's preferred width, and the
+ * table is inside a horizontal scroller, so one garden with a long description
+ * would otherwise widen the identity column for every row and push the table —
+ * which is exactly what Alexandre asked not to happen: « plutôt que d'impacter
+ * toutes les autres lignes si jamais une seule a une description longue ».
+ *
+ * The cap also does the second half of the ask — « limiter un peu plus la
+ * description visible à l'écran » — while the line still gets the whole column
+ * instead of the 40-odd px it had left over beside the date.
+ */
+const DESCRIPTION_MAX_PX = { gardener: 130, expert: 106 } as const;
+
 const ACTION_PAD_PX = '3px';
 
 /**
@@ -1105,12 +1124,16 @@ function GardenRow({
   } as const;
 
   /**
-   * The ONE sub-line of the identity cell (round 4, A5).
+   * The first sub-line of the identity cell — the artboard's own text: « 10 × 8 »
+   * in Gardener, « modifié il y a 2 h » in Expert, « plan non dessiné » when
+   * there is none (round 4, A5).
    *
-   * The artboard's own text first — « 10 × 8 » in Gardener, « modifié il y a
-   * 2 h » in Expert, « plan non dessiné » when there is none — then the
-   * description after a middle dot when the garden has one. One line, truncated,
-   * the whole of it in the tooltip.
+   * Round 5 (V18) takes the DESCRIPTION back off it. Round 4 had concatenated
+   * the two behind a middle dot to hold the cell to three children, and on a
+   * 106-130 px column that put « Modifié il y a 11 h » and « Blablablaaaa Test »
+   * in a fight neither could win. Alexandre's amendment of 11/09 to § 5 of the
+   * design contract: « deux sous-lignes, PLUS une troisième ligne réservée à la
+   * description lorsqu'elle existe ».
    */
   const primarySub = showHarvestColumn
     ? t('dashboard.blocks.gardens.lastModified', {
@@ -1127,26 +1150,24 @@ function GardenRow({
           rows: garden.height,
         })
       : t('dashboard.blocks.gardens.noPlan');
-  const subLine = garden.description
-    ? `${primarySub} · ${garden.description}`
-    : primarySub;
 
   return (
     <Box component="tr">
-      {/* THREE children and never four (round 4, A5): the name, ONE sub-line,
-          then the wrapping thumbnail-and-chips row — which is exactly what
-          `Main.dc.html` puts in a `.td`:
+      {/* THREE children, FOUR when the garden has a description (round 5, V18).
+
+          `Main.dc.html` puts three in a `.td`:
 
             <div class="gname">Terrasse</div>
             <div class="tsub num">10 × 8 · 50 cm</div>
             <div style="display:flex; …; flex-wrap:wrap;">[thumb][chips]</div>
 
-          The cell stacked four: the description had a line of its own between
-          the name and the dimensions. Every row of the table paid for it in
-          height, for a field one garden in three fills, and that height is what
-          pushed the table. The description has not gone — it is the truncated
-          TAIL of the one sub-line now, with the whole text in the tooltip, so
-          it costs no line at all. */}
+          Round 4 held the cell to those three by making the description the
+          truncated TAIL of the sub-line, behind a middle dot. On a 106-130 px
+          column that produced « Modifié il y a 11 h · Blablablaaaa Test »: two
+          facts sharing one line, and the identity losing. The amendment of
+          11/09 gives the description a line of ITS OWN, and only the rows that
+          have one pay for it — a table row takes its own height, so a long
+          description on one garden lengthens that row and no other. */}
       <Box component="td" sx={cellSx}>
         <Box sx={{ minWidth: 0 }}>
           <Box
@@ -1168,27 +1189,49 @@ function GardenRow({
           >
             {garden.name}
           </Box>
-          {/* V10 — the description is still shown, and A5 is where it sits.
+          {/* The artboard's own sub-line, at `text.primary` (round 5, V18).
+
+              The pair had to be told apart by COLOUR — « une couleur plus
+              discrète que la date, pour qu'elle ne prime pas sur l'identité » —
+              and the step was taken UPWARD on the date rather than downward on
+              the description, because downward breaks the contrast rule of § 7:
+              MUI's `text.secondary` is `rgba(0,0,0,0.6)`, which is 5.7:1 on
+              white, and the next step down, `rgba(0,0,0,0.5)`, is 3.9:1 — under
+              the 4.5:1 that 13 px text owes. `text.disabled` is 2.9:1 and the
+              product's own `mutedText` is 2.0:1. The relation Alexandre asked
+              for holds either way; only this direction keeps both lines
+              legible. */}
+          <Typography sx={{ ...subSx, color: 'text.primary' }}>
+            {primarySub}
+          </Typography>
+          {/* V10 — the description is still shown, and V18 is where it sits.
               « Mes Jardins » printed it on every card; the widget carried it on
               the wire and edited it in the rename dialog, but showed it nowhere.
-              `enterTouchDelay` / `leaveTouchDelay` make the tooltip open on a
+              ONE line, truncated, with the whole text in the tooltip.
+              `enterTouchDelay` / `leaveTouchDelay` make that tooltip open on a
               long-press and stay open — on a phone there is no hover, and a
-              description nobody can reach is the defect this fixes. */}
-          <MaybeTooltip description={garden.description}>
-            <Typography
-              sx={{
-                ...subSx,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                // The tooltip is the way to the rest, and it needs a focusable,
-                // hoverable target of its own.
-                ...(garden.description ? { cursor: 'help' } : null),
-              }}
-              tabIndex={garden.description ? 0 : undefined}
-            >
-              {subLine}
-            </Typography>
-          </MaybeTooltip>
+              description nobody can reach is the defect V10 fixed. */}
+          {garden.description && (
+            <MaybeTooltip description={garden.description}>
+              <Typography
+                data-garden-description
+                sx={{
+                  ...subSx,
+                  maxWidth: showHarvestColumn
+                    ? DESCRIPTION_MAX_PX.expert
+                    : DESCRIPTION_MAX_PX.gardener,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  // The tooltip is the way to the rest, and it needs a
+                  // focusable, hoverable target of its own.
+                  cursor: 'help',
+                }}
+                tabIndex={0}
+              >
+                {garden.description}
+              </Typography>
+            </MaybeTooltip>
+          )}
           {/* V11 — the plan thumbnail is back, at every level.
 
               It was never missing on the Gardener dashboard: it was tied to

@@ -752,31 +752,32 @@ describe('Gardens widget delete flow — transitions (SMA-18 lot 1, moved by SMA
   });
 });
 
-// ── V10: the description is back on the page.
+// ── V10 / V18: the description is back on the page, and on a line of its own.
 //
 // « Mes Jardins » printed it on every card — clamped to two lines, with a
 // « See more » toggle above 80 characters (MyGardens.tsx, deleted by #267). The
 // widget carried it on the wire from the first commit of this lot and edited it
 // in the rename dialog, and showed it nowhere: a regression against the page it
 // replaced, on a field the user can still write.
-describe('Gardens widget — the garden description (V10)', () => {
+//
+// Round 4 (A5) brought it back as the truncated TAIL of the dimensions line, to
+// hold the identity cell to the three children `Main.dc.html` draws. On a
+// 106-130 px column that produced « Modifié il y a 11 h · Blablablaaaa Test »:
+// two facts sharing one line and the identity losing. Alexandre's amendment of
+// 11/09 to § 5 of the design contract — « deux sous-lignes, PLUS une troisième
+// ligne réservée à la description lorsqu'elle existe » — gives it a line of its
+// own, and these tests move with it.
+describe('Gardens widget — the garden description (V10, V18)', () => {
   const described = (description: string | null) =>
     dashboardWith([gardenWith(3, { description })]);
 
-  /**
-   * The identity cell's ONE sub-line (round 4, A5).
-   *
-   * The description used to hold a line of its own between the name and the
-   * dimensions, so the cell stacked four rows where `Main.dc.html` draws three
-   * — and every row of the table paid for it in height. It is the truncated
-   * TAIL of the dimensions line now: same text, same tooltip, same tab stop,
-   * no extra line. The fixture garden is 4 x 3.
-   */
-  const subLine = (description: string) => `4 × 3 · ${description}`;
+  /** The identity cell's stack — the name, the sub-lines, the chip row. */
+  const identityStack = (node: Element) =>
+    node.closest('td')!.firstElementChild!;
 
   beforeEach(() => localStorage.setItem('smartcrops-language', 'en'));
 
-  it('shares the identity cell’s one sub-line on the Large table', async () => {
+  it('gets a line of its OWN, under the date (V18)', async () => {
     vi.mocked(fetchDashboardData).mockResolvedValue(
       described('Le coin sud, refait au printemps.')
     );
@@ -784,15 +785,94 @@ describe('Gardens widget — the garden description (V10)', () => {
     renderPage();
 
     await screen.findByText('Casa Lolo');
-    const line = within(gardensWidget()).getByText(
-      subLine('Le coin sud, refait au printemps.')
-    );
-    expect(line).toBeInTheDocument();
+    const widget = within(gardensWidget());
+    const date = widget.getByText('4 × 3');
+    const description = widget.getByText('Le coin sud, refait au printemps.');
 
-    // THREE children, never four: the name link, this line, and the wrapping
-    // thumbnail-and-chips row — the artboard's own `.td`.
-    const cell = line.closest('td')!;
-    expect(cell.firstElementChild!.children).toHaveLength(3);
+    // FOUR children where a garden without a description has three: the name,
+    // the artboard's own sub-line, the description, then the wrapping
+    // thumbnail-and-chips row.
+    const stack = identityStack(description);
+    expect(stack.children).toHaveLength(4);
+    expect([...stack.children].indexOf(date)).toBe(1);
+    expect([...stack.children].indexOf(description)).toBe(2);
+  });
+
+  it('is dimmer than the date it sits under (V18)', async () => {
+    // « Une couleur plus discrète que la date, pour qu'elle ne prime pas sur
+    // l'identité. » The step is taken UPWARD on the date rather than downward
+    // on the description: MUI's `text.secondary` is `rgba(0,0,0,0.6)`, 5.7:1 on
+    // white, and the next step down — `rgba(0,0,0,0.5)` — is 3.9:1, under the
+    // 4.5:1 that 13 px text owes (§ 7 of the design contract). `text.disabled`
+    // is 2.9:1 and the product's own `mutedText` 2.0:1.
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      described('Le coin sud, refait au printemps.')
+    );
+
+    renderPage();
+
+    await screen.findByText('Casa Lolo');
+    const widget = within(gardensWidget());
+    const date = rulesFor(widget.getByText('4 × 3'))
+      .toLowerCase()
+      .replace(/\s+/g, '');
+    const description = rulesFor(
+      widget.getByText('Le coin sud, refait au printemps.')
+    )
+      .toLowerCase()
+      .replace(/\s+/g, '');
+
+    expect(date).toContain('color:rgba(0,0,0,0.87)');
+    expect(description).toContain('color:rgba(0,0,0,0.6)');
+  });
+
+  it('is truncated to one line, and capped so it cannot widen the column (V18)', async () => {
+    // « Limiter un peu plus la description visible à l'écran », and « plutôt que
+    // d'impacter toutes les autres lignes si jamais une seule a une description
+    // longue ». A `white-space: nowrap` line hands its WHOLE text to a table
+    // column's preferred width, and this table scrolls horizontally, so without
+    // a cap one long description widens the identity column for every row. 130
+    // px is that column in the design contract § 2 (the Gardener table); the
+    // Expert one is 106.
+    const long =
+      'Le coin sud, refait au printemps, avec les tomates contre le mur et ' +
+      'la menthe qui déborde du bac depuis deux étés.';
+    vi.mocked(fetchDashboardData).mockResolvedValue(described(long));
+
+    renderPage();
+    await screen.findByText('Casa Lolo');
+    const line = within(gardensWidget()).getByText(long);
+
+    const rules = rulesFor(line).toLowerCase().replace(/\s+/g, '');
+    expect(rules).toContain('max-width:130px');
+    expect(rules).toContain('text-overflow:ellipsis');
+    expect(rules).toContain('overflow:hidden');
+  });
+
+  it('costs a LINE only to the row that has one (V18)', async () => {
+    // The point of the amendment. Each row of a table takes its own height, so
+    // the described garden's row grows and the other one does not — which is
+    // what Alexandre asked for instead of « impacter toutes les autres lignes ».
+    const long =
+      'Le coin sud, refait au printemps, avec les tomates contre le mur et ' +
+      'la menthe qui déborde du bac depuis deux étés.';
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([
+        gardenWith(3, { description: long }),
+        gardenWith(2, { id: 'g2', name: 'Balcon' }),
+      ])
+    );
+
+    renderPage();
+    await screen.findByText('Balcon');
+
+    const stacks = [...gardensWidget().querySelectorAll('tbody tr')].map(
+      (row) => row.querySelector('td')!.firstElementChild!
+    );
+    expect(stacks).toHaveLength(2);
+    expect(stacks[0]!.children).toHaveLength(4);
+    expect(stacks[1]!.children).toHaveLength(3);
+    expect(stacks[1]!.querySelector('[data-garden-description]')).toBeNull();
   });
 
   it('is reachable by the keyboard, with the whole text on it', async () => {
@@ -813,7 +893,7 @@ describe('Gardens widget — the garden description (V10)', () => {
 
     renderPage();
     await screen.findByText('Casa Lolo');
-    const line = within(gardensWidget()).getByText(subLine(long));
+    const line = within(gardensWidget()).getByText(long);
 
     expect(line).toHaveAttribute('tabindex', '0');
     expect(line).toHaveAttribute('title', long);
@@ -832,7 +912,7 @@ describe('Gardens widget — the garden description (V10)', () => {
     renderPage();
     await screen.findByText('Casa Lolo');
 
-    fireEvent.mouseOver(within(gardensWidget()).getByText(subLine(text)));
+    fireEvent.mouseOver(within(gardensWidget()).getByText(text));
 
     expect(await screen.findByRole('tooltip')).toHaveTextContent(text);
   });
@@ -846,7 +926,7 @@ describe('Gardens widget — the garden description (V10)', () => {
 
     renderPage();
     await screen.findByText('Casa Lolo');
-    const line = within(gardensWidget()).getByText(subLine(text));
+    const line = within(gardensWidget()).getByText(text);
 
     fireEvent.touchStart(line);
 
@@ -861,12 +941,14 @@ describe('Gardens widget — the garden description (V10)', () => {
     await screen.findByText('Casa Lolo');
     const widget = within(gardensWidget());
     expect(widget.queryByRole('tooltip')).toBeNull();
+    expect(gardensWidget().querySelector('[data-garden-description]')).toBeNull();
     // The sub-line is the dimensions ALONE — no separator left dangling, and
     // no tab stop on a line that has nothing more to give.
     const line = widget.getByText('4 × 3');
     expect(line).toBeInTheDocument();
     expect(line).not.toHaveAttribute('tabindex');
     expect(line).not.toHaveAttribute('title');
+    expect(identityStack(line).children).toHaveLength(3);
   });
 
   it('is not on the Medium card, where the row is one 44 px line', async () => {

@@ -153,9 +153,21 @@ export default function StatsBlock({
    * with the bar squeezed between them, so the figures of the two sections did
    * not line up with each other.
    *
-   * The last track is `auto` rather than a hard 120: « 19,5 m² · 77 % » is the
-   * longest string this column ever holds and it must not be the one that
-   * clips, whereas a garden NAME truncating is the artboard's own behaviour.
+   * ROUND 5 (B2) RE-PROPORTIONS IT. The artboard's own gardens are « Terrasse »,
+   * « Balcon sud » and « Potager du fond », and 120 px holds them; real ones do
+   * not fit — « Test Template… », « Another anoth… » — while the bar beside them
+   * took a whole 248 px to say one percentage. The label track goes to 160 px,
+   * which is about nineteen characters at 15 px semibold instead of about
+   * fourteen, and the bar keeps 212 px of the 516 a Large card offers:
+   * 160 + 14 + 212 + 14 + 116.
+   *
+   * The last track becomes 116 px rather than `auto`, and that is the second
+   * half of the fix. Each row is its own grid, so an `auto` track sized itself
+   * on ITS OWN content: « 20 m² · 68 % » and « 3 m² · 50 % » are not the same
+   * width, and every bar in the section therefore ended at a different x. A
+   * fixed maximum is what makes rows of separate grids line up, and the
+   * `min-content` floor is what stops the figure being clipped on a card too
+   * narrow to grant it — the bar collapses first, which is the right order.
    */
   const statRow = (
     key: string,
@@ -165,9 +177,11 @@ export default function StatsBlock({
   ) => (
     <Box
       key={key}
+      data-stat-row
       sx={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 120px) minmax(0, 1fr) auto',
+        gridTemplateColumns:
+          'minmax(0, 160px) minmax(0, 1fr) minmax(min-content, 116px)',
         gap: '14px',
         alignItems: 'center',
         minHeight: 42,
@@ -220,18 +234,28 @@ export default function StatsBlock({
         statRow(
           garden.id,
           garden.name,
+          // B3 — the marker sits where the VALUE goes, and the bar track is
+          // left empty. It used to be the middle child, and a `MissingDataMark`
+          // is a grid item like any other: stretched across a whole `1fr` track
+          // it drew a 212 px dashed lozenge that read as an empty bar, which is
+          // the one thing rule 4 of the design contract forbids a missing
+          // figure from looking like. In the value column it keeps its natural
+          // width, right-aligned where `A3Expert` puts « 20 m² · 68 % » — and
+          // it replaces the « — » that stood there saying nothing.
           view.hasPlan ? (
             <OccupancyBar percent={view.occupancyPercent} valueHidden stretch />
           ) : (
-            <MissingDataMark label={t('dashboard.blocks.stats.noPlan')} />
+            <Box />
           ),
           rowValue(
-            view.hasPlan
-              ? t('dashboard.blocks.stats.occupancyValue', {
-                  surface: surfaceText(view.surfaceM2),
-                  percent: percentText(view.occupancyPercent),
-                })
-              : '—'
+            view.hasPlan ? (
+              t('dashboard.blocks.stats.occupancyValue', {
+                surface: surfaceText(view.surfaceM2),
+                percent: percentText(view.occupancyPercent),
+              })
+            ) : (
+              <MissingDataMark label={t('dashboard.blocks.stats.noPlan')} />
+            )
           )
         )
       )}
@@ -319,7 +343,9 @@ export default function StatsBlock({
           view.dominantExposure ? (
             <ExposureBar tally={view.exposure} height={12} />
           ) : (
-            <MissingDataMark label={t('dashboard.blocks.stats.noPlan')} />
+            // B3, again: the marker belongs in the value column, not stretched
+            // across the bar's track.
+            <Box />
           ),
           view.dominantExposure
             ? rowValue(
@@ -343,7 +369,9 @@ export default function StatsBlock({
                   </Box>
                 </>
               )
-            : rowValue('—')
+            : rowValue(
+                <MissingDataMark label={t('dashboard.blocks.stats.noPlan')} />
+              )
         );
       })}
     </Box>
