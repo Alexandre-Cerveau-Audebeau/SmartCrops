@@ -74,7 +74,6 @@ function renderBoth(gardens: DashboardGardenData[]) {
             gardens={gardens}
             loading={false}
             loadError={false}
-            language="en"
             onCreateClick={() => {}}
             onChanged={() => {}}
             onDeleted={() => {}}

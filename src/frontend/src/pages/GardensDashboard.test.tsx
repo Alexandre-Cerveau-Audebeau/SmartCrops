@@ -956,6 +956,31 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(gallery.getByText('1')).toBeInTheDocument();
   });
 
+  it('exposes the thumbnail’s figure to assistive technology, and hides only the ornament (round 6, #4-5 / #5-4)', async () => {
+    // « 3.0 m² » or « Soon » is the one fact of the row that decides whether
+    // adding the widget is worth doing now — it existed nowhere a screen reader
+    // could reach, because the whole thumbnail was `aria-hidden`. The glyph and
+    // the bars are decorative and stay hidden; the sentence is content.
+    await openPanel();
+    const gallery = screen.getByRole('dialog', { name: 'Customize' });
+
+    const value = within(gallery).getByText('3.0 m²');
+    expect(value.closest('[aria-hidden="true"]')).toBeNull();
+    const soon = within(gallery).getByText('Soon');
+    expect(soon.closest('[aria-hidden="true"]')).toBeNull();
+
+    const thumbnail = value.parentElement!;
+    const glyph = thumbnail.querySelector('svg')!.parentElement!;
+    expect(glyph).toHaveAttribute('aria-hidden', 'true');
+    // Statistics draws two occupancy bars on a two-garden aggregate; here the
+    // fixture holds one garden, so one bar.
+    const bars = [...thumbnail.children].filter(
+      (child) => child !== glyph && child !== value
+    );
+    expect(bars.length).toBeGreaterThan(0);
+    for (const bar of bars) expect(bar).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('says « soon » where a widget has no figure yet, never a zero', async () => {
     // Rule 4 of the design contract: a missing datum is an invitation, never a
     // page blanche and never a misleading zero. Five of the eight widgets are

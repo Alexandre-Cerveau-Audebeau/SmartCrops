@@ -40,7 +40,18 @@ export default function CountersOptionsPanel({
   onChange,
 }: Props) {
   const { t } = useTranslation();
-  const current = countersOptions(options);
+  // Resolved on READ and on WRITE (round 6, Extension #4-8 / #5-8): the select
+  // showed `resolveCountersGarden(...)` while both `onChange` handlers spread
+  // the parsed document with its possibly-dead id, so a user who toggled the
+  // photos switch re-persisted a garden that no longer exists. The document a
+  // reader gets back now names a garden that exists, and a future reader that
+  // skips the resolver cannot regress. `countersOptions` carries the keys this
+  // build does not own (Extension #4-11), and the spread keeps them.
+  const parsed = countersOptions(options);
+  const current = {
+    ...parsed,
+    garden: resolveCountersGarden(parsed.garden, gardens),
+  };
 
   /**
    * One option row (round 4, A7) — `A8Options.dc.html`'s `.pop-r`:
@@ -108,8 +119,9 @@ export default function CountersOptionsPanel({
         // matching item, and MUI renders that as an empty box the user cannot
         // read. Falling back to « all » shows the truth: no filter applies —
         // and the rule is `countersOptions`' now, so this select and the
-        // widget's own list cannot drift apart (round 1, E8).
-        value={resolveCountersGarden(current.garden, gardens)}
+        // widget's own list cannot drift apart (round 1, E8). Resolved once,
+        // above, so the value shown is the value written.
+        value={current.garden}
         onChange={(event) => onChange({ ...current, garden: event.target.value })}
       >
         <MenuItem value={COUNTERS_GARDEN_ALL}>

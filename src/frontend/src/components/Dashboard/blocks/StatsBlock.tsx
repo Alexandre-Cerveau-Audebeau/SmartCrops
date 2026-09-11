@@ -20,6 +20,7 @@ import {
   DASHBOARD_MOMENT,
   DASHBOARD_SEASON,
   EXPOSURE_ORDER,
+  ratedCells,
   sumExposureTallies,
   type ExposureTally,
 } from '../../../utils/gardenStats';
@@ -98,11 +99,11 @@ export default function StatsBlock({
   const freeDistribution = sumExposureTallies(
     planned.map((e) => e.view.freeExposure)
   );
-  const totalRated =
-    distribution.full +
-    distribution.morning +
-    distribution.afternoon +
-    distribution.shade;
+  // ONE denominator for every share (round 6, Extension #4-10): the page
+  // distribution, each garden's spoken label and its printed share divide by
+  // the same helper, so what a screen reader hears and what the eye reads
+  // cannot drift apart.
+  const totalRated = ratedCells(distribution);
 
   /**
    * One section label of a Large card.
@@ -159,7 +160,7 @@ export default function StatsBlock({
    * and the free-cell sentence.
    */
   const exposureSummary = (name: string, tally: ExposureTally) => {
-    const rated = EXPOSURE_ORDER.reduce((sum, key) => sum + tally[key], 0);
+    const rated = ratedCells(tally);
     const fragment = (category: (typeof EXPOSURE_ORDER)[number]) =>
       t('dashboard.blocks.stats.exposureShare', {
         category: t(`planner.exposure.categories.${category}`),
@@ -363,11 +364,7 @@ export default function StatsBlock({
   const perGardenExposureRows = (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
       {views.map(({ garden, view }) => {
-        const rated =
-          view.exposure.full +
-          view.exposure.morning +
-          view.exposure.afternoon +
-          view.exposure.shade;
+        const rated = ratedCells(view.exposure);
 
         return statRow(
           garden.id,

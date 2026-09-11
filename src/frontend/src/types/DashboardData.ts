@@ -111,8 +111,13 @@ export const EMPTY_DASHBOARD_DATA: DashboardData = freezeDeep({
  * the interface has to absorb.
  */
 function freezeDeep(data: DashboardData): DashboardData {
-  Object.freeze(data.gardens);
-  Object.freeze(data.varieties);
-  Object.freeze(data.totals);
+  // Derived from the VALUE, not from the field list (round 6, Extension
+  // #4-19): a container added to `DashboardData` is covered the day it
+  // arrives, where a hard-coded trio would keep compiling and silently stop
+  // covering it — the exact shared-mutable-empty-state the constant exists to
+  // prevent.
+  for (const value of Object.values(data)) {
+    if (typeof value === 'object' && value !== null) Object.freeze(value);
+  }
   return Object.freeze(data);
 }

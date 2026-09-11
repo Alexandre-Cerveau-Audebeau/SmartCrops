@@ -20,29 +20,12 @@ import {
   type DashboardBlock,
   type DashboardBlockKey,
   type DashboardLevel,
+  type GalleryPreview,
 } from '../../types/Dashboard';
 
 /** Stable ids: the drawer names itself by its heading, the group by its label. */
 const TITLE_ID = 'dashboard-customize-title';
 const LEVEL_LABEL_ID = 'dashboard-customize-level-label';
-
-/**
- * What a gallery thumbnail can honestly show of a hidden widget (round 4, A8).
- *
- * `A7Personnaliser.dc.html` fills its `.gal-th` with the widget's own headline —
- * « 42,5 m² » over two occupancy bars for Statistics, « 38 pieds » over one for
- * Harvest — so the card shows what is being put back, not a category name a
- * second time.
- *
- * `value` is a formatted string and `bars` are percentages, both supplied by the
- * page, which is the only place that holds the figures. A widget the aggregate
- * cannot feed yet returns `null` and the thumbnail says « soon » instead — rule
- * 4 of the design contract: a missing figure is an invitation, never a zero.
- */
-export interface GalleryPreview {
-  value: string;
-  bars?: number[];
-}
 
 interface Props {
   open: boolean;
@@ -252,8 +235,14 @@ export default function CustomizePanel({
                       The row carried a bare 20 px icon beside the widget's
                       name, so eight hidden widgets read as eight lines of text
                       and the gallery showed nothing of what it was offering. */}
+                  {/* NOT `aria-hidden` as a whole (round 6, Extension #4-5 /
+                      #5-4): the headline — « 3.0 m² » or « Soon » — is the one
+                      fact of the row that decides whether adding the widget is
+                      worth doing now, and it exists nowhere else in the row. A
+                      screen-reader user read the widget name and « Hidden » and
+                      nothing more. The FRAME stays: only the glyph and the bars
+                      are decorative, and they are marked so below. */}
                   <Box
-                    aria-hidden
                     sx={{
                       width: 116,
                       height: 70,
@@ -269,7 +258,7 @@ export default function CustomizePanel({
                       overflow: 'hidden',
                     }}
                   >
-                    <Box sx={{ display: 'flex', color: 'primary.main' }}>
+                    <Box aria-hidden sx={{ display: 'flex', color: 'primary.main' }}>
                       <Icon sx={{ fontSize: 13 }} />
                     </Box>
                     {/* `.gal-th .v { font-size: 15px; font-weight: 800 }` — the
@@ -297,6 +286,7 @@ export default function CustomizePanel({
                     {(shown?.bars ?? []).map((percent, index) => (
                       <Box
                         key={index}
+                        aria-hidden
                         sx={{
                           height: 5,
                           borderRadius: '3px',

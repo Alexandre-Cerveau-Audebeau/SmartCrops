@@ -777,3 +777,78 @@ describe('CountersBlock — the garden filter reaches every figure (round 6, A)'
     expect(widget.getByText('× 3')).toBeInTheDocument();
   });
 });
+
+// ROUND 6 (Extension #5-6) — « +N » collapses again when the list it was
+// opened against changes.
+describe('CountersBlock — the density lock survives a resize and a filter change (round 6)', () => {
+  const many = Array.from({ length: 26 }, (_, index) =>
+    variety({ plantId: `p-${index}`, commonName: `Variety ${index}`, gardenIds: ['g1', 'g2'] })
+  );
+  const two = [garden('g1', 'Terrasse'), garden('g2', 'Balcon')];
+
+  function mount(size: 'medium' | 'large', options: Record<string, unknown> | null) {
+    localStorage.setItem('smartcrops-language', 'en');
+    const ui = (s: 'medium' | 'large', o: Record<string, unknown> | null) => (
+      <ThemeProvider theme={createTheme()}>
+        <LanguageProvider>
+          <MemoryRouter>
+            <CountersBlock
+              size={s}
+              options={o}
+              varieties={many}
+              gardens={two}
+              totals={totals({ gardenCount: 2, placementCount: 26, varietyCount: 26 })}
+              loading={false}
+              loadError={false}
+              onRetry={() => {}}
+              onOptionsChange={() => {}}
+            />
+          </MemoryRouter>
+        </LanguageProvider>
+      </ThemeProvider>
+    );
+    const rendered = render(ui(size, options));
+    return {
+      rerender: (s: 'medium' | 'large', o: Record<string, unknown> | null) =>
+        rendered.rerender(ui(s, o)),
+    };
+  }
+
+  const rows = () => widgetNode().querySelectorAll('[class*="MuiAvatar-root"]').length;
+
+  it('a Medium card expanded then resized to Large is capped again at ten lines', () => {
+    // A bare boolean survived the resize: 26 rows on a card whose lock is ten
+    // data lines — the V9 defect over again, one size later.
+    const { rerender } = mount('medium', null);
+    expect(rows()).toBe(8);
+
+    fireEvent.click(within(widgetNode()).getByText('+18 varieties'));
+    expect(rows()).toBe(26);
+
+    rerender('large', null);
+    expect(rows()).toBe(19);
+    expect(within(widgetNode()).getByText('+7 varieties')).toBeInTheDocument();
+  });
+
+  it('a Large card expanded then filtered to another garden is capped again', () => {
+    const { rerender } = mount('large', { garden: 'g1' });
+    fireEvent.click(within(widgetNode()).getByText('+7 varieties'));
+    expect(rows()).toBe(26);
+
+    rerender('large', { garden: 'g2' });
+    expect(rows()).toBe(19);
+  });
+});
+
+// ROUND 6 (Extension #5-7) — one glyph per widget, from the one table.
+describe('CountersBlock — the empty state draws the widget’s own glyph (round 6)', () => {
+  it('reads BLOCK_ICONS.counters rather than restating a glyph', () => {
+    const widget = renderBlock({ varieties: [] });
+
+    expect(
+      widget.getByText('No plant placed yet.').closest('[data-widget]')!
+        .querySelector('svg[data-testid="LocalFloristOutlinedIcon"]')
+    ).not.toBeNull();
+    expect(widgetNode().querySelector('svg[data-testid="GrassOutlinedIcon"]')).toBeNull();
+  });
+});

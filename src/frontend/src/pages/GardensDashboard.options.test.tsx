@@ -184,13 +184,39 @@ describe('the Counters widget options (artboard A8)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tips options' }));
 
-    const menu = await screen.findByRole('dialog', { name: 'Tips options' });
+    const menu = await screen.findByRole('dialog', { name: 'Tips Widget options' });
     expect(
       within(menu).getByText('No option for this widget yet.')
     ).toBeInTheDocument();
   });
 
   it('turning photos on persists it on the block', async () => {
+    const menu = await openCountersOptions();
+
+    fireEvent.click(within(menu).getByRole('switch', { name: 'Plant photos' }));
+
+    await waitFor(() =>
+      expect(countersOptionsOf(lastSaved().blocks)).toEqual({
+        photos: true,
+        garden: 'all',
+      })
+    );
+  });
+
+  it('writes the RESOLVED garden back, never a dead id (round 6, #4-8 / #5-8)', async () => {
+    // The select already showed « All gardens » for a stored id no garden
+    // answers to; the switch handler spread the parsed document and persisted
+    // the dead id again on every toggle. The document a reader gets back now
+    // names a garden that exists.
+    const blocks = presetFor('expert');
+    blocks.find((block) => block.key === 'counters')!.options = { garden: 'gone' };
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level: 'expert',
+      isPreset: false,
+      blocks,
+      updatedAt: null,
+    });
     const menu = await openCountersOptions();
 
     fireEvent.click(within(menu).getByRole('switch', { name: 'Plant photos' }));
@@ -278,7 +304,11 @@ describe('the widget settings surface is a Popover, not a Menu (round 1, G6)', (
     const panel = await openCountersOptions();
 
     expect(panel).toHaveAttribute('role', 'dialog');
-    expect(panel).toHaveAccessibleName('Counts by variety options');
+    // Named by its OWN two title lines through `aria-labelledby` (round 6,
+    // Extension #5-5), not by an `aria-label` repeating the widget name the
+    // `h3` inside already renders — one source of truth for the panel's name.
+    expect(panel).toHaveAccessibleName('Counts by variety Widget options');
+    expect(panel).not.toHaveAttribute('aria-label');
   });
 
   it('opens from the keyboard and gives the focus to its content', async () => {

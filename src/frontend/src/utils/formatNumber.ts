@@ -14,9 +14,30 @@
  * are pure, and every dashboard caller already holds `i18n.language`.
  */
 
+/**
+ * One formatter per (language, digits), built on first use (round 6, Extension
+ * #4-20). Each call used to construct an `Intl.NumberFormat`, and the Gardens
+ * table and the Statistics rows format a figure per cell per render.
+ * `digits` is the whole option set both helpers vary on, so it is the key.
+ */
+const formatters = new Map<string, Intl.NumberFormat>();
+
+function formatterFor(language: string, digits: number): Intl.NumberFormat {
+  const key = `${language}|${digits}`;
+  let formatter = formatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(language, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+    formatters.set(key, formatter);
+  }
+  return formatter;
+}
+
 /** A whole number, grouped for the locale — « 1 440 » in French, « 1,440 » in English. */
 export function formatCount(value: number, language: string): string {
-  return new Intl.NumberFormat(language, { maximumFractionDigits: 0 }).format(value);
+  return formatterFor(language, 0).format(value);
 }
 
 /**
@@ -28,8 +49,5 @@ export function formatDecimal(
   language: string,
   digits: number
 ): string {
-  return new Intl.NumberFormat(language, {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(value);
+  return formatterFor(language, digits).format(value);
 }

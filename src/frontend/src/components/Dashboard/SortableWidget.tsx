@@ -144,6 +144,16 @@ export default function SortableWidget({
   const { t } = useTranslation();
   const [optionsAnchor, setOptionsAnchor] = useState<HTMLElement | null>(null);
 
+  // The options panel's NAME comes from its own two title lines (round 6,
+  // Extension #5-5): the paper carried an `aria-label` built from the same
+  // widget name the `h3` inside it renders, so a screen reader announced the
+  // name twice on entry. `aria-labelledby` on the heading and its subtitle
+  // gives the dialog one source of truth — « Compteurs par variété Options du
+  // widget » — and nothing to keep in step. Per widget, so the ids never
+  // collide across eight panels.
+  const optionsHeadingId = `dashboard-options-title-${block.key}`;
+  const optionsSubtitleId = `dashboard-options-subtitle-${block.key}`;
+
   const {
     attributes,
     listeners,
@@ -388,7 +398,7 @@ export default function SortableWidget({
                   // focus to the gear — that is a dialog — and the label says
                   // which widget's settings a user is standing in.
                   role: 'dialog',
-                  'aria-label': t('dashboard.editMode.options', { widget: label }),
+                  'aria-labelledby': `${optionsHeadingId} ${optionsSubtitleId}`,
                 },
               }}
             >
@@ -420,6 +430,7 @@ export default function SortableWidget({
                 }}
               >
                 <Typography
+                  id={optionsHeadingId}
                   component="h3"
                   sx={{
                     fontSize: 15,
@@ -430,7 +441,10 @@ export default function SortableWidget({
                 >
                   {label}
                 </Typography>
-                <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>
+                <Typography
+                  id={optionsSubtitleId}
+                  sx={{ fontSize: 14, color: 'text.secondary' }}
+                >
                   {t('dashboard.editMode.optionsTitle')}
                 </Typography>
               </Box>

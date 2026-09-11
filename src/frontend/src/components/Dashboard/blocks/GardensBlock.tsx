@@ -216,7 +216,6 @@ interface Props {
   gardens: DashboardGardenData[];
   loading: boolean;
   loadError: boolean;
-  language: string;
   /**
    * Whether the WEATHER and HARVEST columns belong on the Large table.
    *
@@ -264,7 +263,6 @@ export default function GardensBlock({
   gardens,
   loading,
   loadError,
-  language,
   showWeatherColumn = false,
   showHarvestColumn = false,
   onCreateClick,
@@ -272,6 +270,12 @@ export default function GardensBlock({
   onDeleted,
   onExpand,
 }: Props) {
+  // ONE locale source (round 6, Extension #5-9 / #5-10): this widget formatted
+  // counts with `i18n.language` and dates with a `language` prop the page
+  // derived from its own provider, and the two disagree for one render after a
+  // switch — a French date beside an English-grouped count in one cell. Every
+  // figure reads i18next's now, which is what `t()` beside it reads too; the
+  // prop is gone from this widget and from `GardenRow`.
   const { t, i18n } = useTranslation();
   const tk = useDashboardTokens();
   // The table's own rule and card colours, resolved once — see
@@ -355,9 +359,15 @@ export default function GardensBlock({
 
   // Most recently touched garden - the Small card subject, and where its arrow
   // leads. `updatedAt` is the one freshness signal every size can rely on.
+  //
+  // Compared as INSTANTS, not as strings (round 6, Extension #4-9):
+  // `System.Text.Json` omits zero fractional seconds, so « 10:00:00Z » sorts
+  // AFTER the later « 10:00:00.1Z » in a string comparison.
   const lastModified = gardens.reduce<DashboardGardenData | null>(
     (latest, garden) =>
-      !latest || garden.updatedAt > latest.updatedAt ? garden : latest,
+      !latest || Date.parse(garden.updatedAt) > Date.parse(latest.updatedAt)
+        ? garden
+        : latest,
     null
   );
 
@@ -600,7 +610,7 @@ export default function GardensBlock({
                 when: formatRelativeDate(
                   new Date(lastModified.updatedAt),
                   new Date(),
-                  language,
+                  i18n.language,
                   'short'
                 ),
               })}
@@ -886,7 +896,6 @@ export default function GardensBlock({
                 key={garden.id}
                 garden={garden}
                 view={views.get(garden.id)}
-                language={language}
                 showWeatherColumn={showWeatherColumn}
                 showHarvestColumn={showHarvestColumn}
                 typeLabel={typeLabel(garden)}
@@ -1080,7 +1089,6 @@ interface RowProps {
   garden: DashboardGardenData;
   /** Derived once for the whole page — see `useGardenViews`. */
   view: GardenView | undefined;
-  language: string;
   showWeatherColumn: boolean;
   showHarvestColumn: boolean;
   typeLabel: string | null;
@@ -1093,7 +1101,6 @@ interface RowProps {
 function GardenRow({
   garden,
   view,
-  language,
   showWeatherColumn,
   showHarvestColumn,
   typeLabel,
@@ -1140,7 +1147,7 @@ function GardenRow({
         when: formatRelativeDate(
           new Date(garden.updatedAt),
           new Date(),
-          language,
+          i18n.language,
           'short'
         ),
       })
@@ -1341,7 +1348,7 @@ function GardenRow({
             {formatRelativeDate(
               new Date(garden.updatedAt),
               new Date(),
-              language,
+              i18n.language,
               'short'
             )}
           </Typography>

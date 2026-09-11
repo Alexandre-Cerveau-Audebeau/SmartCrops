@@ -84,8 +84,21 @@ export function occupancyPercent(
   return Math.round((Math.min(occupiedCells, activeCells) / activeCells) * 100);
 }
 
-/** How many active cells fall in each exposure category. */
-export type ExposureTally = Record<ExposureCategory, number>;
+/**
+ * How many active cells fall in each exposure category.
+ *
+ * READ-ONLY in the type system, not only in the comment (round 6, Extension
+ * #5-19): `gardenViewOf` hands one cached `GardenView` per garden to both the
+ * Gardens and the Statistics widgets, so a tally is a shared object. A consumer
+ * that accumulated into `view.exposure` instead of into a fresh tally would
+ * corrupt every other reader of that garden for the rest of the load, and the
+ * defect would appear in the widget that did not do the write. The builders
+ * below work on the mutable local shape and widen on return.
+ */
+export type ExposureTally = Readonly<Record<ExposureCategory, number>>;
+
+/** The shape a builder accumulates into, before it hands the tally out. */
+type MutableExposureTally = Record<ExposureCategory, number>;
 
 const EMPTY_TALLY: ExposureTally = {
   full: 0,
@@ -95,7 +108,7 @@ const EMPTY_TALLY: ExposureTally = {
 };
 
 /** A fresh zeroed tally — never the shared constant, which callers would mutate. */
-export function emptyExposureTally(): ExposureTally {
+export function emptyExposureTally(): MutableExposureTally {
   return { ...EMPTY_TALLY };
 }
 
@@ -133,6 +146,18 @@ export const EXPOSURE_ORDER: readonly ExposureCategory[] = [
   'afternoon',
   'shade',
 ];
+
+/**
+ * Cells a tally actually rates — the denominator of every exposure share
+ * (round 6, Extension #4-10).
+ *
+ * The same reduction was written three times in the Statistics widget, in two
+ * styles: once for the page distribution, once for a garden's spoken label, once
+ * for its printed share. The last two divide what a screen reader hears and what
+ * the eye reads by figures that could drift apart without anything noticing.
+ */
+export const ratedCells = (tally: ExposureTally): number =>
+  EXPOSURE_ORDER.reduce((sum, key) => sum + tally[key], 0);
 
 export function dominantExposure(
   tally: ExposureTally
@@ -296,17 +321,17 @@ export function isOrnamentalGarden(
  * which is also what keeps the occupancy of a garden identical in all three.
  */
 export interface GardenView {
-  activeCells: number;
-  totalCells: number;
-  surfaceM2: number;
-  occupiedCells: number;
-  freeCells: number;
-  occupancyPercent: number;
-  dominantExposure: ExposureCategory | null;
-  exposure: ExposureTally;
-  freeExposure: ExposureTally;
+  readonly activeCells: number;
+  readonly totalCells: number;
+  readonly surfaceM2: number;
+  readonly occupiedCells: number;
+  readonly freeCells: number;
+  readonly occupancyPercent: number;
+  readonly dominantExposure: ExposureCategory | null;
+  readonly exposure: ExposureTally;
+  readonly freeExposure: ExposureTally;
   /** False when the garden has no saved layout — nothing here can be trusted then. */
-  hasPlan: boolean;
+  readonly hasPlan: boolean;
 }
 
 /**

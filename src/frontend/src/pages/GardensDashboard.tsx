@@ -31,7 +31,6 @@ import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useGardenViews } from '../hooks/useGardenViews';
 import { useLanguage } from '../hooks/useLanguage';
-import type { GalleryPreview } from '../components/Dashboard/CustomizePanel';
 import { createGarden } from '../services/gardenApi';
 import { DASHBOARD_SPACING, DASHBOARD_TYPE } from '../theme/dashboardTokens';
 import { formatCount, formatDecimal } from '../utils/formatNumber';
@@ -39,7 +38,9 @@ import {
   nextDashboardSize,
   type DashboardBlock,
   type DashboardBlockKey,
+  type GalleryPreview,
 } from '../types/Dashboard';
+import type { GardenView } from '../utils/gardenStats';
 
 /**
  * Router state the planner posts when it navigates here after deleting the
@@ -61,7 +62,13 @@ type GardensNavState = { toast?: 'gardenDeleted' } | null;
  * not the browser (design freeze).
  */
 export default function GardensDashboard() {
-  const { t } = useTranslation();
+  // `language` (the provider's state) drives the FETCH; every figure the page
+  // FORMATS reads `i18n.language`, like the three widgets do (round 6,
+  // Extension #5-9 / #5-10). The provider updates i18next in an effect, so for
+  // one render after a switch the two disagree — and a number formatted with
+  // the provider's value would sit beside strings `t()` still renders in the
+  // previous language. One source for what is printed together.
+  const { t, i18n } = useTranslation();
   const { language } = useLanguage();
   const location = useLocation();
   const navigate = useNavigate();
@@ -197,7 +204,6 @@ export default function GardensDashboard() {
             gardens={gardens}
             loading={gardensLoading}
             loadError={gardensError}
-            language={language}
             showWeatherColumn={isBlockVisible('weather')}
             showHarvestColumn={isBlockVisible('harvest')}
             onCreateClick={() => setCreateDialogOpen(true)}
@@ -278,15 +284,18 @@ export default function GardensDashboard() {
     if (gardensLoading || gardensError) return null;
 
     if (key === 'stats') {
+      // A type GUARD rather than a plain predicate (round 6, Extension #5-16):
+      // `Map.get` answers `GardenView | undefined`, and `.filter(Boolean)`-style
+      // predicates do not narrow, which is what the `view!` below was covering.
       const planned = gardens
         .map((garden) => gardenViews.get(garden.id))
-        .filter((view) => view?.hasPlan);
+        .filter((view): view is GardenView => view?.hasPlan === true);
       if (planned.length === 0) return null;
       return {
         value: t('dashboard.blocks.stats.surface', {
-          value: formatDecimal(totalSurface, language, 1),
+          value: formatDecimal(totalSurface, i18n.language, 1),
         }),
-        bars: planned.slice(0, 2).map((view) => view!.occupancyPercent),
+        bars: planned.slice(0, 2).map((view) => view.occupancyPercent),
       };
     }
     if (key === 'counters') {
@@ -305,11 +314,11 @@ export default function GardensDashboard() {
       );
 
       if (varietyCount === 0) return null;
-      return { value: formatCount(varietyCount, language) };
+      return { value: formatCount(varietyCount, i18n.language) };
     }
     if (key === 'gardens') {
       if (gardens.length === 0) return null;
-      return { value: formatCount(gardens.length, language) };
+      return { value: formatCount(gardens.length, i18n.language) };
     }
     return null;
   };
@@ -369,7 +378,7 @@ export default function GardensDashboard() {
                   count: dashboardData.totals.placementCount,
                 }),
                 surface: t('dashboard.metaSurface', {
-                  value: formatDecimal(totalSurface, language, 1),
+                  value: formatDecimal(totalSurface, i18n.language, 1),
                 }),
               })}
             </Typography>

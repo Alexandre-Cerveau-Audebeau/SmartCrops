@@ -7,9 +7,9 @@ import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
-import GrassOutlinedIcon from '@mui/icons-material/GrassOutlined';
 import DashboardBlock from '../DashboardBlock';
 import InviteState from '../InviteState';
+import { BLOCK_ICONS } from '../blockIcons';
 import { DASHBOARD_TYPE } from '../../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../../theme/useDashboardTokens';
 import type { DashboardSize } from '../../../types/Dashboard';
@@ -121,7 +121,19 @@ export default function CountersBlock({
   const activeGarden = figures.garden;
   const filtered = figures.varieties;
 
-  const [expanded, setExpanded] = useState(false);
+  // Collapsed again whenever the list this « +N » was opened against changes
+  // (round 6, Extension #5-6 — the V9 class): a bare boolean survived a filter
+  // change and a resize, so an expanded Medium card resized to Large bypassed
+  // the ten-line lock and rendered the whole list. The key is the list's
+  // identity — the size and the garden it was opened on.
+  const [expandedFor, setExpandedFor] = useState<string | null>(null);
+  const listIdentity = `${size}:${activeGarden}`;
+  const expanded = expandedFor === listIdentity;
+
+  // The invitation glyph is the widget's own, from the ONE table (round 6,
+  // Extension #5-7): a hardcoded `GrassOutlined` here drew grass in the empty
+  // state under a header that draws `BLOCK_ICONS.counters`.
+  const CounterIcon = BLOCK_ICONS.counters;
 
   const displayName = (variety: DashboardVarietyData) =>
     variety.commonName ?? variety.scientificName;
@@ -220,7 +232,7 @@ export default function CountersBlock({
     hidden > 0 ? (
       <Button
         size="small"
-        onClick={() => setExpanded(true)}
+        onClick={() => setExpandedFor(listIdentity)}
         sx={{ alignSelf: 'flex-start', fontSize: DASHBOARD_TYPE.link }}
       >
         {t('dashboard.blocks.counters.more', { count: hidden })}
@@ -440,7 +452,7 @@ export default function CountersBlock({
     if (varieties.length === 0) {
       return (
         <InviteState
-          icon={<GrassOutlinedIcon />}
+          icon={<CounterIcon />}
           message={t('dashboard.blocks.counters.empty')}
           action={libraryLink}
         />
@@ -457,7 +469,7 @@ export default function CountersBlock({
         >
           {gardenFilter}
           <InviteState
-            icon={<GrassOutlinedIcon />}
+            icon={<CounterIcon />}
             message={t('dashboard.blocks.counters.emptyGarden')}
             variant="catalogue"
           />

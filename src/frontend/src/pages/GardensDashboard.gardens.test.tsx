@@ -1214,6 +1214,35 @@ describe('Gardens rows — the artboard’s own measurements (round 5)', () => {
     });
   });
 
+  it('picks the LAST-MODIFIED garden by instant, not by string (round 6, #4-9)', async () => {
+    // `System.Text.Json` omits zero fractional seconds, so « 10:00:00Z » sorts
+    // AFTER the later « 10:00:00.1Z » as a string. The Small card named the
+    // wrong garden on exactly that pair.
+    const blocks = presetFor('novice');
+    blocks.find((block) => block.key === 'gardens')!.size = 'small';
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level: 'novice',
+      isPreset: false,
+      blocks,
+      updatedAt: null,
+    });
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([
+        gardenWith(3, { id: 'g1', name: 'Casa Lolo', updatedAt: '2026-09-09T10:00:00Z' }),
+        gardenWith(2, { id: 'g2', name: 'Balcon', updatedAt: '2026-09-09T10:00:00.1Z' }),
+      ])
+    );
+
+    renderPage();
+
+    expect(
+      await screen.findByRole('link', {
+        name: 'Open Balcon, the last modified garden',
+      })
+    ).toBeInTheDocument();
+  });
+
   it('names the garden the Small card is about to open (A10-3)', async () => {
     // § 5 of the design contract: « un accès qui ne nomme pas sa destination
     // est un défaut ». The Small card showed a count, « Modifié il y a 4 mois »

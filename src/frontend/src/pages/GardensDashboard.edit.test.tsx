@@ -421,7 +421,7 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tips options' }));
 
-    const panel = await screen.findByRole('dialog', { name: 'Tips options' });
+    const panel = await screen.findByRole('dialog', { name: 'Tips Widget options' });
     expect(within(panel).getByText('Widget options')).toBeInTheDocument();
     expect(
       within(panel).getByText('No option for this widget yet.')
@@ -439,7 +439,7 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tips options' }));
 
-    const panel = await screen.findByRole('dialog', { name: 'Tips options' });
+    const panel = await screen.findByRole('dialog', { name: 'Tips Widget options' });
     const heading = within(panel).getByRole('heading', { level: 3 });
     expect(heading).toHaveTextContent('Tips');
     // The name comes FIRST: it is the heading, the generic line its subtitle.
