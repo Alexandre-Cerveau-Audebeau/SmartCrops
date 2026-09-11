@@ -141,13 +141,39 @@ export function gardenToPreview(
     }
   }
 
-  const drawn: PreviewPlacement[] = placements.map((placement) => ({
-    plantKey: placement.plantId,
-    row: placement.startRow,
-    col: placement.startCol,
-    spanRows: placement.spanRows,
-    spanCols: placement.spanCols,
-  }));
+  // CLIPPED to the plan, at both ends (round 6, partie B — the one finding
+  // both Extension runs rated `major`). A stored layout may anchor a placement
+  // outside the plan: the layout PUT refuses neither an overlap nor a footprint
+  // past the edge, and `placementCoverage` in `gardenStats.ts` clips for
+  // exactly that reason — the occupancy figures derive from a BOUNDED mask
+  // (round 3, E″9). The drawing path did not clip. `TemplatePreview` renders a
+  // placement as `gridRow: ${row + 1} / span ${spanRows}`, and a track past the
+  // explicit ones makes CSS grid add implicit tracks; the preview box is
+  // `width: fit-content`, so the thumbnail then grows past the `maxW × maxH`
+  // box `fitPreview` measured — 48 px on a Gardens card, and in the Large table
+  // identity cell it changes the row height. One malformed stored placement
+  // moved the layout of the whole list.
+  //
+  // The adapter is the boundary: every drawable plan passes through here, and
+  // it already re-derives its cells through `parseCellsJson` for the same
+  // reason. A footprint that lands fully outside is dropped, one that crosses
+  // the edge is cut at it, one that overlaps another is left to overlap — the
+  // grid stacks them, which is what the planner draws too.
+  const drawn: PreviewPlacement[] = [];
+  for (const placement of placements) {
+    const row = Math.max(0, placement.startRow);
+    const col = Math.max(0, placement.startCol);
+    const rowEnd = Math.min(height, placement.startRow + placement.spanRows);
+    const colEnd = Math.min(width, placement.startCol + placement.spanCols);
+    if (rowEnd <= row || colEnd <= col) continue;
+    drawn.push({
+      plantKey: placement.plantId,
+      row,
+      col,
+      spanRows: rowEnd - row,
+      spanCols: colEnd - col,
+    });
+  }
 
   return { cols: width, rows: height, cells, placements: drawn };
 }

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { placement } from '../test/fixtures/placements';
 import { serializeCellsJson, type CellData } from '../types/GardenLayout';
+import type { ExposureCategory } from './exposure';
 import { fitPreview, gardenToPreview, plantInsetPx, TINY_CELL_PX } from './gardenPreview';
+import { placementCoverage } from './gardenStats';
 
 // SMA-336 PR 2/5 — the adapter that lets TemplatePreview draw a real garden,
 // and the two sizing rules the frozen design fixes (48 px on a card, 2 px in
@@ -121,6 +123,103 @@ describe('gardenToPreview', () => {
     ]);
 
     expect(plan.placements[0]).toMatchObject({ row: 2, col: 3, spanRows: 2, spanCols: 3 });
+  });
+});
+
+// ROUND 6 (partie B) — the drawing path clips like the counting path.
+describe('gardenToPreview — a footprint never leaves the plan (round 6, B)', () => {
+  // `placementCoverage` clips (round 3, E″9) so the occupancy figures derive
+  // from a bounded mask; the adapter copied the stored coordinates verbatim,
+  // and `TemplatePreview` turned an out-of-grid track into implicit CSS grid
+  // tracks that grew the thumbnail past the box it was fitted to.
+
+  it('cuts a footprint that overflows to the RIGHT at the plan’s edge', () => {
+    // Anchored at column 3 of 4, three wide: only one column is inside.
+    const plan = gardenToPreview(null, 4, 3, [
+      placement({ startRow: 0, startCol: 3, spanRows: 1, spanCols: 3 }),
+    ]);
+
+    expect(plan.placements).toEqual([
+      { plantKey: 'plant-1', row: 0, col: 3, spanRows: 1, spanCols: 1 },
+    ]);
+  });
+
+  it('cuts a footprint that overflows at the BOTTOM at the plan’s edge', () => {
+    // Anchored at row 2 of 3, three tall: only one row is inside.
+    const plan = gardenToPreview(null, 4, 3, [
+      placement({ startRow: 2, startCol: 0, spanRows: 3, spanCols: 1 }),
+    ]);
+
+    expect(plan.placements).toEqual([
+      { plantKey: 'plant-1', row: 2, col: 0, spanRows: 1, spanCols: 1 },
+    ]);
+  });
+
+  it('drops a footprint that lies ENTIRELY outside the plan', () => {
+    // Past the right edge, past the bottom edge, and before the origin: none
+    // of the three has a cell to draw, and none reaches the grid.
+    const plan = gardenToPreview(null, 4, 3, [
+      placement({ id: 'right', startRow: 0, startCol: 4, spanRows: 1, spanCols: 2 }),
+      placement({ id: 'below', startRow: 3, startCol: 0, spanRows: 2, spanCols: 1 }),
+      placement({ id: 'before', startRow: -2, startCol: -2, spanRows: 2, spanCols: 2 }),
+    ]);
+
+    expect(plan.placements).toEqual([]);
+  });
+
+  it('clamps a footprint anchored before the origin to the origin', () => {
+    // Starts one row and one column outside, spans three: two of each are in.
+    const plan = gardenToPreview(null, 4, 3, [
+      placement({ startRow: -1, startCol: -1, spanRows: 3, spanCols: 3 }),
+    ]);
+
+    expect(plan.placements).toEqual([
+      { plantKey: 'plant-1', row: 0, col: 0, spanRows: 2, spanCols: 2 },
+    ]);
+  });
+
+  it('keeps OVERLAPPING footprints both, each clipped on its own', () => {
+    // Two plants sharing cells is a stored fact, not a bound to enforce here:
+    // the grid stacks them, as the planner draws them. The second one also
+    // crosses the right edge and is cut there.
+    const plan = gardenToPreview(null, 4, 3, [
+      placement({ id: 'a', plantId: 'basil', startRow: 0, startCol: 0, spanRows: 2, spanCols: 2 }),
+      placement({ id: 'b', plantId: 'thyme', startRow: 1, startCol: 1, spanRows: 2, spanCols: 4 }),
+    ]);
+
+    expect(plan.placements).toEqual([
+      { plantKey: 'basil', row: 0, col: 0, spanRows: 2, spanCols: 2 },
+      { plantKey: 'thyme', row: 1, col: 1, spanRows: 2, spanCols: 3 },
+    ]);
+  });
+
+  it('leaves a footprint that fits exactly where it is', () => {
+    const plan = gardenToPreview(null, 4, 3, [
+      placement({ startRow: 1, startCol: 2, spanRows: 2, spanCols: 2 }),
+    ]);
+
+    expect(plan.placements).toEqual([
+      { plantKey: 'plant-1', row: 1, col: 2, spanRows: 2, spanCols: 2 },
+    ]);
+  });
+
+  it('agrees with placementCoverage on what is inside', () => {
+    // The two paths must bound the same cells: what the statistics count as
+    // occupied is what the thumbnail draws. A 2 × 2 footprint anchored at
+    // (2, 3) of a 4 × 3 plan keeps exactly one cell on either path.
+    const overflowing = placement({ startRow: 2, startCol: 3, spanRows: 2, spanCols: 2 });
+    const plan = gardenToPreview(null, 4, 3, [overflowing]);
+    const rated: (ExposureCategory | null)[][] = Array.from({ length: 3 }, () =>
+      Array.from({ length: 4 }, () => 'full' as const)
+    );
+    const coverage = placementCoverage(rated, [overflowing], 3, 4);
+
+    const drawnCells = plan.placements.reduce(
+      (sum, p) => sum + p.spanRows * p.spanCols,
+      0
+    );
+    expect(drawnCells).toBe(1);
+    expect(coverage.occupiedCells).toBe(1);
   });
 });
 
