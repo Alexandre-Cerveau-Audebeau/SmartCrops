@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchDashboardData,
   fetchDashboardPreferences,
+  matches,
   saveDashboardPreferences,
 } from './dashboardApi';
 import { presetFor } from '../constants/dashboardPresets';
@@ -573,6 +574,9 @@ describe('fetchDashboardData — a garden record is checked before it is trusted
     ['startRow as a string', { startRow: '0' }],
     ['spanCols as null', { spanCols: null }],
     ['id as a number', { id: 7 }],
+    // ROUND 7 (S43 — Extension #7-28): the four numbers index the grid.
+    ['startRow as a fraction', { startRow: 0.5 }],
+    ['spanRows as a negative', { spanRows: -1 }],
   ])('rejects a malformed placement — %s', async (_label, patch) => {
     const body = full();
     Object.assign(body.gardens[0]!, {
@@ -586,6 +590,34 @@ describe('fetchDashboardData — a garden record is checked before it is trusted
   it('accepts a complete placement', async () => {
     const body = full();
     Object.assign(body.gardens[0]!, { placements: [{ ...PLACEMENT }] });
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).resolves.toEqual(body);
+  });
+
+  // ROUND 7 (S43 — Extension #7-28): a dimension is a whole, non-negative
+  // number, or null. `typeof` let `height: 2.5` through, and the readers then
+  // disagreed on what it meant — `parseCellsJson` built three rows,
+  // `placementCoverage` two, and `freeExposureFrom` dereferenced `taken[2]`
+  // and threw, after the load had succeeded.
+  it.each([
+    ['height as a fraction', { height: 2.5 }],
+    ['width as a fraction', { width: 3.999 }],
+    ['width as a negative', { width: -4 }],
+  ])('rejects a garden with %s', async (_label, patch) => {
+    const body = full();
+    Object.assign(body.gardens[0]!, patch);
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it.each([
+    ['null dimensions — a garden whose layout was never saved', { width: null, height: null }],
+    ['zero dimensions', { width: 0, height: 0 }],
+  ])('still accepts %s', async (_label, patch) => {
+    const body = full();
+    Object.assign(body.gardens[0]!, patch);
     mockFetch(body);
 
     await expect(fetchDashboardData('en')).resolves.toEqual(body);
@@ -695,5 +727,39 @@ describe('fetchDashboardData — a variety row is checked before it is trusted (
     await expect(fetchDashboardData('en')).rejects.toThrow(
       /a garden, a placement, a variety row or the totals block/
     );
+  });
+});
+
+// ── Round 7 (S39 — Extension #7-24): the validators are keyed by `keyof` ──────
+//
+// The record predicates narrow to the wire types, and a hand-listed run of
+// `typeof` checks let a field added to a type travel unverified while every
+// file kept compiling. `matches<T>` takes a `Record<keyof T, Check>`, which
+// TypeScript checks exhaustively — so the proof here is at the TYPE level, and
+// `tsc -b` (part of `npm run build`, which includes `src/` whole) is what runs
+// it: an `@ts-expect-error` with nothing to expect is itself an error.
+describe('matches — a validator that the compiler holds to the type', () => {
+  const isNumber = (value: unknown) => typeof value === 'number';
+
+  it('a field of T with no check is a build error', () => {
+    // @ts-expect-error — `b` has no check: `Record<keyof T, Check>` is exhaustive.
+    const incomplete = matches<{ a: number; b: number }>({ a: isNumber });
+    expect(incomplete({ a: 1, b: 2 })).toBe(true);
+  });
+
+  it('a check for a field T does not have is a build error', () => {
+    // @ts-expect-error — `c` is not a field of T.
+    const surplus = matches<{ a: number }>({ a: isNumber, c: isNumber });
+    expect(surplus({ a: 1 })).toBe(false);
+  });
+
+  it('reads the fields it names, and only them', () => {
+    const isPoint = matches<{ x: number; y: number }>({ x: isNumber, y: isNumber });
+
+    expect(isPoint({ x: 1, y: 2 })).toBe(true);
+    expect(isPoint({ x: 1, y: 2, z: 'travels through' })).toBe(true);
+    expect(isPoint({ x: 1 })).toBe(false);
+    expect(isPoint(null)).toBe(false);
+    expect(isPoint([1, 2])).toBe(false);
   });
 });

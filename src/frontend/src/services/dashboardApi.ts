@@ -7,7 +7,14 @@ import {
   type DashboardPreferences,
   type SaveDashboardPreferences,
 } from '../types/Dashboard';
-import type { DashboardData } from '../types/DashboardData';
+import type {
+  DashboardData,
+  DashboardGardenData,
+  DashboardTotals,
+  DashboardVarietyData,
+} from '../types/DashboardData';
+import type { GardenConfig, LightSlot } from '../types/Garden';
+import type { PlacementData } from './gardenLayoutApi';
 import { DEFAULT_DASHBOARD_LEVEL, presetFor } from '../constants/dashboardPresets';
 import { fetchJson } from './fetchJson';
 
@@ -150,34 +157,74 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+type Check = (value: unknown) => boolean;
+
 /**
- * `number | null`. No finiteness check: JSON carries neither `NaN` nor
- * `Infinity`, so a guard against them would be untestable code standing for a
- * value that cannot arrive.
+ * A record validator keyed by `keyof T` (round 7, S39 — Extension #7-24).
+ *
+ * The predicates below narrow to the wire types, and the compiler cannot tell
+ * a hand-listed run of `typeof` checks from a complete one: a field added to
+ * `DashboardGardenData` kept every file compiling while the new field travelled
+ * unverified — the drift the doc comments of this file argue against. A map
+ * typed `Record<keyof T, Check>` is checked EXHAUSTIVELY by TypeScript: a field
+ * of `T` with no entry is a build error, and so is an entry `T` has no field
+ * for. « Verified » and « narrowed » are the same list, by construction.
+ *
+ * Fields are READ, never rebuilt: an unknown property a newer server adds
+ * travels through untouched, as before.
  */
-function isNullableNumber(value: unknown): boolean {
-  return value === null || typeof value === 'number';
+export function matches<T>(checks: Record<keyof T, Check>): Check {
+  const entries = Object.entries(checks) as [string, Check][];
+  return (value) =>
+    isRecord(value) && entries.every(([key, check]) => check(value[key]));
 }
 
+const isString: Check = (value) => typeof value === 'string';
+const isNumber: Check = (value) => typeof value === 'number';
+const isNullableBoolean: Check = (value) =>
+  value === null || typeof value === 'boolean';
+const arrayOf =
+  (item: Check): Check =>
+  (value) =>
+    Array.isArray(value) && value.every(item);
+
+/**
+ * A grid coordinate or dimension: a whole, non-negative number (round 7, S43 —
+ * Extension #7-28). No finiteness check besides: JSON carries neither `NaN`
+ * nor `Infinity`, so a guard against them would be untestable code standing
+ * for a value that cannot arrive — and `Number.isInteger` refuses both anyway.
+ *
+ * `typeof` let `height: 2.5` through, and the readers disagree on what that
+ * means: `parseCellsJson` builds three rows for it, `placementCoverage` builds
+ * two, and `freeExposureFrom` then dereferences `taken[2]![c]` and throws —
+ * after the load succeeded, where no error state is left to draw it. The same
+ * arithmetic indexes the grid by every placement's four numbers, so they are
+ * held to the same rule. Rejected HERE, at the boundary, not normalised in
+ * `deriveGardenView`: a value the server never sends is a malformed aggregate,
+ * and the page already knows how to say so.
+ */
+const isGridInteger: Check = (value) =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0;
+const isNullableGridInteger: Check = (value) =>
+  value === null || isGridInteger(value);
+
 /** `string | null`. */
-function isNullableString(value: unknown): boolean {
-  return value === null || typeof value === 'string';
-}
+const isNullableString: Check = (value) => value === null || isString(value);
 
 /**
  * One indoor light slot: two `HH:mm` strings, and nothing weaker.
  *
- * The FORM only, not the clock. `GardensController.ValidateSlots` holds the
+ * The FORM only, not the clock. `LightScheduleDocument.ValidateSlots` holds the
  * document to a 24 h pattern, an ordering and a ceiling, and a schedule that
  * fails any of them reads as no schedule at all before it reaches the wire — so
  * repeating those rules here would be a second copy of a contract the server
  * already enforces. What this boundary answers for is that `start` and `end`
  * are strings at all, which is what `computeExposureGrid` reads.
  */
-function isLightSlot(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  return typeof value.start === 'string' && typeof value.end === 'string';
-}
+const isLightSlot = matches<LightSlot>({
+  start: isString,
+  end: isString,
+});
 
 /**
  * The five exposure inputs, each on its own (round 4, C1 — E‴5 / G‴2).
@@ -191,18 +238,13 @@ function isLightSlot(value: unknown): boolean {
  * `lightSchedule` is `null` or an array of slots — the third state the type
  * allows, and the one the finding names.
  */
-function isGardenConfig(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  return (
-    isNullableString(value.orientation) &&
-    isNullableString(value.gardenType) &&
-    isNullableString(value.hemisphere) &&
-    isNullableString(value.latitudeBand) &&
-    (value.lightSchedule === null ||
-      (Array.isArray(value.lightSchedule) &&
-        value.lightSchedule.every(isLightSlot)))
-  );
-}
+const isGardenConfig = matches<GardenConfig>({
+  orientation: isNullableString,
+  gardenType: isNullableString,
+  lightSchedule: (value) => value === null || arrayOf(isLightSlot)(value),
+  hemisphere: isNullableString,
+  latitudeBand: isNullableString,
+});
 
 /**
  * One placed plant, complete (round 4, C1 — G‴2).
@@ -216,56 +258,49 @@ function isGardenConfig(value: unknown): boolean {
  * dereferences four numbers per element with no guard — so one null in the array
  * takes down the whole dashboard, not one thumbnail.
  *
- * The walk this adds is one pass of eight typeof checks over a few hundred
- * elements, next to an exposure engine that already walks width × height
- * several times per garden.
+ * The walk this adds is one pass of eight checks over a few hundred elements,
+ * next to an exposure engine that already walks width × height several times
+ * per garden.
  */
-function isPlacementRecord(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.id === 'string' &&
-    typeof value.plantId === 'string' &&
-    isNullableString(value.plantScientificName) &&
-    typeof value.startRow === 'number' &&
-    typeof value.startCol === 'number' &&
-    typeof value.spanRows === 'number' &&
-    typeof value.spanCols === 'number' &&
-    isNullableString(value.notes)
-  );
-}
+const isPlacementRecord = matches<PlacementData>({
+  id: isString,
+  plantId: isString,
+  plantScientificName: isNullableString,
+  startRow: isGridInteger,
+  startCol: isGridInteger,
+  spanRows: isGridInteger,
+  spanCols: isGridInteger,
+  notes: isNullableString,
+});
 
 /**
- * One garden of the aggregate, checked on the fields the page DEREFERENCES —
- * and, since round 4, on the fields those fields carry.
+ * One garden of the aggregate, checked on EVERY field of the type — the map is
+ * exhaustive by construction (see {@link matches}).
  *
  * `config` is the one round 3 named and the reason the whole check exists:
  * `deriveGardenView` enters its planned branch on positive `width`/`height` and
  * reads `garden.config.orientation` on the next line, so a garden that arrives
  * without a config takes the page down at render — after the load succeeded,
- * where no error state is left to draw it. Round 4 finishes the same argument
+ * where no error state is left to draw it. Round 4 finished the same argument
  * one level down: a config that is an object and a placements array that is an
  * array were still narrowing values nobody had looked inside.
  */
-function isGardenRecord(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.id === 'string' &&
-    typeof value.name === 'string' &&
-    isNullableString(value.description) &&
-    isNullableNumber(value.width) &&
-    isNullableNumber(value.height) &&
-    isNullableString(value.cellSize) &&
-    isNullableString(value.cellsJson) &&
-    isGardenConfig(value.config) &&
-    typeof value.updatedAt === 'string' &&
-    Array.isArray(value.placements) &&
-    value.placements.every(isPlacementRecord) &&
-    typeof value.placementCount === 'number' &&
-    typeof value.varietyCount === 'number' &&
-    typeof value.occupiedCells === 'number' &&
-    (value.isEdible === null || typeof value.isEdible === 'boolean')
-  );
-}
+const isGardenRecord = matches<DashboardGardenData>({
+  id: isString,
+  name: isString,
+  description: isNullableString,
+  width: isNullableGridInteger,
+  height: isNullableGridInteger,
+  cellSize: isNullableString,
+  cellsJson: isNullableString,
+  config: isGardenConfig,
+  updatedAt: isString,
+  placements: arrayOf(isPlacementRecord),
+  placementCount: isNumber,
+  varietyCount: isNumber,
+  occupiedCells: isNumber,
+  isEdible: isNullableBoolean,
+});
 
 /**
  * One Counters row, COMPLETE — every field the narrowing promises (round 6,
@@ -280,35 +315,34 @@ function isGardenRecord(value: unknown): boolean {
  * silently drops a variety from the per-garden filter; a non-string `imageUrl`
  * degrades an avatar. The boundary is the one place where « verified » and
  * « narrowed » have to mean the same thing, or none of the predicates in this
- * file can be trusted.
+ * file can be trusted — which is what `matches` now makes the compiler's job.
  */
-function isVarietyRecord(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.plantId === 'string' &&
-    typeof value.scientificName === 'string' &&
-    isNullableString(value.commonName) &&
-    isNullableString(value.plantType) &&
-    (value.isEdible === null || typeof value.isEdible === 'boolean') &&
-    isNullableString(value.imageUrl) &&
-    isNullableString(value.imageAttribution) &&
-    typeof value.count === 'number' &&
-    typeof value.cells === 'number' &&
-    Array.isArray(value.gardenIds) &&
-    value.gardenIds.every((id) => typeof id === 'string')
-  );
-}
+const isVarietyRecord = matches<DashboardVarietyData>({
+  plantId: isString,
+  scientificName: isString,
+  commonName: isNullableString,
+  plantType: isNullableString,
+  isEdible: isNullableBoolean,
+  imageUrl: isNullableString,
+  imageAttribution: isNullableString,
+  count: isNumber,
+  cells: isNumber,
+  gardenIds: arrayOf(isString),
+});
 
 /** The four page totals. */
-function isTotalsRecord(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.gardenCount === 'number' &&
-    typeof value.placementCount === 'number' &&
-    typeof value.varietyCount === 'number' &&
-    typeof value.catalogPlantCount === 'number'
-  );
-}
+const isTotalsRecord = matches<DashboardTotals>({
+  gardenCount: isNumber,
+  placementCount: isNumber,
+  varietyCount: isNumber,
+  catalogPlantCount: isNumber,
+});
+
+const isAggregate = matches<DashboardData>({
+  gardens: arrayOf(isGardenRecord),
+  varieties: arrayOf(isVarietyRecord),
+  totals: isTotalsRecord,
+});
 
 /**
  * Is this body the aggregate?
@@ -326,24 +360,17 @@ function isTotalsRecord(value: unknown): boolean {
  * had established, and a garden with a width but no `config` walked through a
  * predicate that had declared it well-formed.
  *
- * Round 4 (C1 — E‴5 / G‴2) applies the same argument to the fields those records
- * carry: `GardenConfig` field by field including `lightSchedule`, and every
- * element of `placements` as a complete `PlacementData`. What the page
- * dereferences is now what is verified, at every depth it reaches, and the
- * narrowing is licensed by the check that precedes it.
+ * Round 4 (C1 — E‴5 / G‴2) applied the same argument to the fields those
+ * records carry; round 7 (S39) hands the argument to the compiler: every record
+ * predicate is a `keyof`-keyed map, so the narrowing this signature claims is
+ * exactly what the checks establish, at every depth, and a field added to a
+ * wire type without its check is a build error rather than a runtime surprise.
  *
  * Unknown properties are PRESERVED: this reads fields, it never rebuilds the
  * object, so a field a newer server adds travels through untouched.
  */
 function isDashboardData(value: unknown): value is DashboardData {
-  if (!isRecord(value)) return false;
-  return (
-    Array.isArray(value.gardens) &&
-    value.gardens.every(isGardenRecord) &&
-    Array.isArray(value.varieties) &&
-    value.varieties.every(isVarietyRecord) &&
-    isTotalsRecord(value.totals)
-  );
+  return isAggregate(value);
 }
 
 /**
