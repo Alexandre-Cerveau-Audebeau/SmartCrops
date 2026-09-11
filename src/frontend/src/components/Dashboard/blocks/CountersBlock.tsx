@@ -100,7 +100,10 @@ export default function CountersBlock({
 }: Props) {
   const { t, i18n } = useTranslation();
   const tk = useDashboardTokens();
-  const { photos } = countersOptions(options);
+  // The PARSED document, whole: a writer below spreads it so a key another
+  // build stored survives this build's write (round 6, Extension #4-11).
+  const parsed = countersOptions(options);
+  const { photos } = parsed;
 
   // EVERY figure this widget states comes from here (round 6, partie A): the
   // filter that applies — with the deleted-garden fallback of round 1 (E8), the
@@ -226,7 +229,7 @@ export default function CountersBlock({
 
   /** Writes the same `options` document the panel writes — see `Props`. */
   const selectGarden = (garden: string) =>
-    onOptionsChange ? () => onOptionsChange({ photos, garden }) : undefined;
+    onOptionsChange ? () => onOptionsChange({ ...parsed, garden }) : undefined;
 
   /**
    * The per-garden filter, as the frozen design draws it on the LARGE card

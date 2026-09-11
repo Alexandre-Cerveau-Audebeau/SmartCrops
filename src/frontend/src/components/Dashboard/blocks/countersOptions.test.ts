@@ -213,3 +213,20 @@ describe('resolveCountersFigures — one resolver for every number (round 6, A)'
     expect(varieties.map((v) => v.count)).toEqual(before);
   });
 });
+
+// ROUND 6 (Extension #4-11) — the reader carries what it does not interpret.
+describe('countersOptions — an unknown key survives a read (round 6)', () => {
+  it('carries a key another build stored, beside the two it validates', () => {
+    const read = countersOptions({ photos: true, garden: 'g2', density: 'compact' });
+
+    expect(read).toEqual({ photos: true, garden: 'g2', density: 'compact' });
+  });
+
+  it('still corrects the two keys it owns, without losing the others', () => {
+    const read = countersOptions({ photos: 'yes', garden: 42, later: { a: 1 } });
+
+    expect(read.photos).toBe(false);
+    expect(read.garden).toBe(COUNTERS_GARDEN_ALL);
+    expect(read.later).toEqual({ a: 1 });
+  });
+});

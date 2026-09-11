@@ -267,15 +267,35 @@ function isGardenRecord(value: unknown): boolean {
   );
 }
 
-/** One Counters row, on the fields the widget reads without guarding. */
+/**
+ * One Counters row, COMPLETE — every field the narrowing promises (round 6,
+ * Extension #5-17 and #4-18).
+ *
+ * Same argument as `isGardenRecord`, which rounds 3 and 4 completed for the
+ * gardens: this predicate narrows to `DashboardData`, so a field it does not
+ * check is a field the compiler was told about on this function's word alone.
+ * It verified five of the ten. `commonName` is the one with teeth — an
+ * object-valued name reaching a React child throws AFTER the load succeeded,
+ * where no error state is left to draw; a non-string `gardenIds` element
+ * silently drops a variety from the per-garden filter; a non-string `imageUrl`
+ * degrades an avatar. The boundary is the one place where « verified » and
+ * « narrowed » have to mean the same thing, or none of the predicates in this
+ * file can be trusted.
+ */
 function isVarietyRecord(value: unknown): boolean {
   if (!isRecord(value)) return false;
   return (
     typeof value.plantId === 'string' &&
     typeof value.scientificName === 'string' &&
+    isNullableString(value.commonName) &&
+    isNullableString(value.plantType) &&
+    (value.isEdible === null || typeof value.isEdible === 'boolean') &&
+    isNullableString(value.imageUrl) &&
+    isNullableString(value.imageAttribution) &&
     typeof value.count === 'number' &&
     typeof value.cells === 'number' &&
-    Array.isArray(value.gardenIds)
+    Array.isArray(value.gardenIds) &&
+    value.gardenIds.every((id) => typeof id === 'string')
   );
 }
 
@@ -346,7 +366,15 @@ export async function fetchDashboardData(
   );
 
   if (!isDashboardData(body)) {
-    throw new Error('Malformed dashboard aggregate: gardens, varieties or totals is missing.');
+    // Names every level the predicate can reject at (round 6, Extension #4-17
+    // / #5-17): it used to say the three containers were missing, so a
+    // rejection caused by a malformed placement or variety row sent the next
+    // debugger to the wrong level.
+    throw new Error(
+      'Malformed dashboard aggregate: gardens, varieties or totals is missing, ' +
+        'or a garden, a placement, a variety row or the totals block does not ' +
+        'match the expected shape.'
+    );
   }
 
   return body;

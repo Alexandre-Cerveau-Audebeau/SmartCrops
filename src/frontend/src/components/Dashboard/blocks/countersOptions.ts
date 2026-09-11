@@ -20,6 +20,19 @@ export const COUNTERS_GARDEN_ALL = 'all';
 
 export interface CountersOptions {
   /**
+   * Keys another build owns (round 6, Extension #4-11) — read by nobody here,
+   * replaced by nobody here.
+   *
+   * The reader validated the two known keys and DROPPED everything else, and
+   * both writers persisted that reduced object: a setting a newer build had
+   * stored was gone from the server document the moment an older build — a
+   * stale tab, the other half of a rolling deploy — touched the widget. The
+   * document is free-form by design, so « validate the known keys, carry the
+   * rest » is the honest reading of it; the layout PUT replaces the whole
+   * options document, which is why carrying has to happen on READ.
+   */
+  [key: string]: unknown;
+  /**
    * Show plant photos instead of colour pastilles.
    *
    * Off by default, and the frozen design draws both states on purpose. Photos
@@ -42,6 +55,7 @@ export function countersOptions(
 ): CountersOptions {
   if (!options) return { ...DEFAULTS };
   return {
+    ...options,
     photos: options.photos === true,
     garden:
       typeof options.garden === 'string' && options.garden.length > 0

@@ -602,3 +602,99 @@ describe('fetchDashboardData — a garden record is checked before it is trusted
     await expect(fetchDashboardData('en')).resolves.toEqual(body);
   });
 });
+
+// ROUND 6 (Extension #5-17 / #4-18 / #4-17) — the variety row is checked as
+// completely as the garden row has been since rounds 3 and 4.
+describe('fetchDashboardData — a variety row is checked before it is trusted (round 6)', () => {
+  const GARDEN = {
+    id: 'g1',
+    name: 'Terrasse',
+    description: null,
+    width: 4,
+    height: 2,
+    cellSize: '50cm',
+    cellsJson: null,
+    config: {
+      orientation: 'S',
+      gardenType: null,
+      lightSchedule: null,
+      hemisphere: 'N',
+      latitudeBand: 'mid',
+    },
+    updatedAt: '2026-05-01T00:00:00Z',
+    placements: [],
+    placementCount: 0,
+    varietyCount: 0,
+    occupiedCells: 0,
+    isEdible: null,
+  };
+
+  const VARIETY = {
+    plantId: 'p1',
+    scientificName: 'Ocimum basilicum',
+    commonName: 'Basil',
+    plantType: 'Herb',
+    isEdible: true,
+    imageUrl: null,
+    imageAttribution: null,
+    count: 1,
+    cells: 1,
+    gardenIds: ['g1'],
+  };
+
+  const withVariety = (over: Record<string, unknown>) => ({
+    gardens: [{ ...GARDEN }],
+    varieties: [{ ...VARIETY, ...over }],
+    totals: { gardenCount: 1, placementCount: 1, varietyCount: 1, catalogPlantCount: 536 },
+  });
+
+  it('rejects an object-valued commonName — the one that throws after the load', async () => {
+    // `displayName` hands `commonName ?? scientificName` to a React child, and
+    // an object there throws during render, after the load-error state is no
+    // longer available to draw.
+    mockFetch(withVariety({ commonName: { fr: 'Basilic' } }));
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/variety row/);
+  });
+
+  it.each([
+    ['plantType', 7],
+    ['imageUrl', 42],
+    ['imageAttribution', ['x']],
+    ['isEdible', 'yes'],
+  ])('rejects a %s that is neither null nor its declared type', async (field, bad) => {
+    mockFetch(withVariety({ [field]: bad }));
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it('rejects a gardenIds element that is not a string (Extension #4-18)', async () => {
+    // `gardenIds.includes(activeGarden)` is the per-garden filter; a numeric
+    // element passes `Array.isArray` and silently drops the variety from a
+    // filtered widget.
+    mockFetch(withVariety({ gardenIds: ['g1', 7] }));
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it('accepts every nullable field at null', async () => {
+    const body = withVariety({
+      commonName: null,
+      plantType: null,
+      isEdible: null,
+      imageUrl: null,
+      imageAttribution: null,
+    });
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).resolves.toEqual(body);
+  });
+
+  it('names the levels it rejects at, not only the three containers (Extension #4-17)', async () => {
+    mockFetch(withVariety({ commonName: 3 }));
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(
+      /a garden, a placement, a variety row or the totals block/
+    );
+  });
+});
