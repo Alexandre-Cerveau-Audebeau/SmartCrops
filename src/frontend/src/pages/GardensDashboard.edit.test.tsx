@@ -304,6 +304,20 @@ const lastSaved = () => {
 };
 const lastSavedKeys = () => lastSaved().blocks.map((block) => block.key);
 
+/** The Emotion class of a node, matched by its `css-` prefix, not by position. */
+const emotionClass = (node: Element) => {
+  const found = [...node.classList].find((name) => name.startsWith('css-'));
+  if (!found) throw new Error('No Emotion class on ' + node.className);
+  return found;
+};
+
+/** The stylesheet rules Emotion emitted for a node, joined. */
+const rulesFor = (node: Element) =>
+  [...document.querySelectorAll('style')]
+    .map((tag) => tag.textContent ?? '')
+    .filter((text) => text.includes(emotionClass(node)))
+    .join(' ');
+
 beforeEach(() => {
   // Four columns for the whole file: `DashboardGrid` reads the column count
   // with `useMediaQuery`, and jsdom answers nothing without this.
@@ -340,6 +354,46 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
         name: 'Change the size of Weather — currently Medium',
       })
     ).toBeInTheDocument();
+  });
+
+  it('stands each top control on the artboard’s own 26 px chip (A10-10)', async () => {
+    // `A6Modifier.dc.html` — `.hb { position: absolute; top: 6px; width: 26px;
+    // height: 26px; border-radius: 50%; background: var(--surface); border:
+    // 1px solid var(--card-bd) }` for the « − » and the gear, and `.mv { top:
+    // 6px; left: 50%; height: 26px; padding: 0 12px; border-radius: 14px }` for
+    // the drag handle. The three were bare glyphs in one flex row spanning the
+    // card, floating on the widget's own background.
+    //
+    // The GEOMETRY is what is asserted: this file renders without the product
+    // theme, so `surfaceSubtle` and `borderSubtle` would not resolve here and
+    // an assertion on them would be about MUI's defaults (round 3, V16).
+    await enterEditMode();
+
+    for (const name of ['Hide Weather', 'Weather options']) {
+      const rules = rulesFor(screen.getByRole('button', { name }))
+        .toLowerCase()
+        .replace(/\s+/g, '');
+      expect(rules).toContain('position:absolute');
+      expect(rules).toContain('top:6px');
+      expect(rules).toContain('width:26px');
+      expect(rules).toContain('height:26px');
+      expect(rules).toContain('border-radius:50%');
+      expect(rules).toContain('border:1pxsolid');
+    }
+
+    // The drag handle is the one PILL of the three: wider than it is tall, so a
+    // pointer can tell the control that is dragged from the two that are
+    // clicked. 26 px of height clears the 24 px floor of WCAG 2.2 § 2.5.8, and
+    // the three stand 10 px from the edges and half a card apart, so none falls
+    // inside another's 24 px circle.
+    const handle = rulesFor(screen.getByRole('button', { name: 'Move Weather' }))
+      .toLowerCase()
+      .replace(/\s+/g, '');
+    expect(handle).toContain('top:6px');
+    expect(handle).toContain('left:50%');
+    expect(handle).toContain('height:26px');
+    expect(handle).toContain('border-radius:14px');
+    expect(handle).toContain('padding-left:12px');
   });
 
   it('shows no control at all outside the Edit mode', async () => {

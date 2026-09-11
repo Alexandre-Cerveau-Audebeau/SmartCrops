@@ -467,8 +467,17 @@ export default function CountersBlock({
           count: totals.varietyCount,
         })}
         size="small"
-        variant="outlined"
-        sx={{ height: DASHBOARD_TYPE.chipHeight, fontSize: DASHBOARD_TYPE.chip }}
+        // FILLED, and green (round 5, A10-5). `Main.dc.html` l. 145 gives this
+        // one header chip `.pill.ok` — `--chip-ok-bg` / `--chip-ok-tx` — where
+        // Gardens and Statistics take the neutral `.pill.n`. It was an MUI
+        // outline like the others.
+        sx={{
+          height: DASHBOARD_TYPE.chipHeight,
+          fontSize: DASHBOARD_TYPE.chip,
+          fontWeight: 700,
+          backgroundColor: tk.okBg,
+          color: tk.okText,
+        }}
       />
     ) : undefined;
 

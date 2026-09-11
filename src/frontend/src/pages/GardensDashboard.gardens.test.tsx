@@ -985,6 +985,23 @@ describe('Gardens Medium row — the artboard’s own five elements (A4)', () =>
     expect(rules).toContain('color:#20713f');
   });
 
+  it('draws the widget’s header chip FILLED, not as an outline (A10-5)', async () => {
+    // `Main.dc.html` l. 146 — `<span class="pill n num">3 jardins</span>`,
+    // `.pill.n { background: var(--pill-bg); color: var(--pill-tx) }`. Every
+    // header chip of the eight widgets is filled in the artboards; Gardens and
+    // Statistics take this neutral pair, Counters the green `.pill.ok`.
+    await renderNovice();
+
+    const chip = within(gardensWidget())
+      .getByText('1 garden')
+      .closest('.MuiChip-root')!;
+    const rules = rulesFor(chip).toLowerCase().replace(/\s+/g, '');
+
+    expect(rules).toContain('background-color:#eff3ee');
+    expect(rules).toContain('color:#55645b');
+    expect(chip.className).not.toContain('MuiChip-outlined');
+  });
+
   it('carries NO sub-line under the name', async () => {
     // « 3 plantes · 3 var. » was that sub-line. The varieties figure has not
     // been lost: the Large table's PLANTES column still carries it, which is

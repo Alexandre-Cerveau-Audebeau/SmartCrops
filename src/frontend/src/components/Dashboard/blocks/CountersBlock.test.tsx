@@ -57,6 +57,20 @@ const garden = (id: string, name: string): DashboardGardenData => ({
   isEdible: null,
 });
 
+/** The Emotion class of a node, matched by its `css-` prefix, not by position. */
+const emotionClass = (node: Element) => {
+  const found = [...node.classList].find((name) => name.startsWith('css-'));
+  if (!found) throw new Error('No Emotion class on ' + node.className);
+  return found;
+};
+
+/** The stylesheet rules Emotion emitted for a node, joined. */
+const rulesFor = (node: Element) =>
+  [...document.querySelectorAll('style')]
+    .map((tag) => tag.textContent ?? '')
+    .filter((text) => text.includes(emotionClass(node)))
+    .join(' ');
+
 const totals = (over: Partial<DashboardTotals> = {}): DashboardTotals => ({
   gardenCount: 1,
   placementCount: 10,
@@ -128,6 +142,25 @@ describe('CountersBlock', () => {
     });
 
     expect(widget.getByText('2 varieties')).toBeInTheDocument();
+  });
+
+  it('draws that chip FILLED and green, as the artboard has it (A10-5)', () => {
+    // `Main.dc.html` l. 145 — `<span class="pill ok num">128 plantes</span>`,
+    // `.pill.ok { background: var(--chip-ok-bg); color: var(--chip-ok-tx) }`.
+    // Counters is the one header chip the artboards paint green; Gardens and
+    // Statistics take the neutral `.pill.n`. It was an MUI outline: a bordered
+    // ghost where the design draws a tinted lozenge.
+    const widget = renderBlock({
+      varieties: [variety({ plantId: 'p-1' })],
+      totals: totals({ varietyCount: 1 }),
+    });
+
+    const chip = widget.getByText('1 variety').closest('.MuiChip-root')!;
+    const rules = rulesFor(chip).toLowerCase().replace(/\s+/g, '');
+
+    expect(rules).toContain('background-color:#e4f3e9');
+    expect(rules).toContain('color:#20713f');
+    expect(chip.className).not.toContain('MuiChip-outlined');
   });
 
   describe('the ornamental split (rule R4)', () => {

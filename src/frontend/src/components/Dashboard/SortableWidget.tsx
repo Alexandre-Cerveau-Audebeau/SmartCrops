@@ -63,6 +63,37 @@ function ResizeGrip() {
   );
 }
 
+/**
+ * The chip every Edit-mode control of the card's top edge stands on (round 5,
+ * A10-10) - `A6Modifier.dc.html`'s `.hb` and `.mv`, which differ only by their
+ * width and their radius.
+ *
+ * `surfaceSubtle` is `--surface` and `borderSubtle` is `--card-bd`, the two
+ * tokens the dashboard already uses wherever the artboards ask for a surface one
+ * step away from the card - the Gardens actions zone, the gallery thumbnail.
+ */
+const editChipSx = {
+  width: 26,
+  height: 26,
+  p: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: '50%',
+  backgroundColor: 'surfaceSubtle',
+  border: '1px solid',
+  borderColor: 'borderSubtle',
+  color: 'text.primary',
+} as const;
+
+/** `.hb.rm` / `.hb.lk` - the left chip, 10 px in from the card's edge. */
+const leftChipSx = {
+  position: 'absolute',
+  top: 6,
+  left: 10,
+  zIndex: 3,
+} as const;
+
 interface Props {
   block: DashboardBlock;
   /** Localized widget name, for every control label. */
@@ -210,63 +241,93 @@ export default function SortableWidget({
 
         {editing && (
           <>
-            <Box
+            {/* THREE separate controls, each at its own absolute place (round 5,
+                A10-10). They were one flex row spanning the whole card width
+                with three bare `IconButton`s in it, so each glyph floated on
+                the widget background with nothing under it. The artboard gives
+                every one of them a chip of its own:
+
+                  .hb { position: absolute; top: 6px; width: 26px; height: 26px;
+                        border-radius: 50%; background: var(--surface);
+                        border: 1px solid var(--card-bd); color: var(--t-meta);
+                        z-index: 3 }
+                  .hb.rm { left: 10px }   .hb.gear { right: 10px }
+                  .hb.lk { left: 10px; color: var(--muted) }
+                  .mv { position: absolute; top: 6px; left: 50%;
+                        transform: translateX(-50%); height: 26px;
+                        padding: 0 12px; border-radius: 14px;
+                        background: var(--surface);
+                        border: 1px solid var(--card-bd); color: var(--muted) }
+
+                26 px clears the 24 px floor WCAG 2.2 § 2.5.8 sets for a target,
+                and the three stand 10 px from the edges and half a card apart,
+                so no two fall inside each other's 24 px circle either.
+                `DashboardBlock` already reserves the 34 / 38 px of top padding
+                they sit in, which is the artboard's own `.w.ed`. */}
+            {locked ? (
+              // A generic div forbids an author-supplied name, so assistive
+              // technology may ignore the aria-label; role="img" makes it a
+              // graphic WITH a text alternative (round 1, E6 / G7). The lock is
+              // the only signal that this widget cannot be hidden.
+              <Box
+                role="img"
+                aria-label={t('dashboard.editMode.locked', { widget: label })}
+                sx={{ ...editChipSx, ...leftChipSx, color: 'text.secondary' }}
+              >
+                <LockOutlinedIcon sx={{ fontSize: 15 }} aria-hidden />
+              </Box>
+            ) : (
+              <IconButton
+                size="small"
+                onClick={onHide}
+                aria-label={t('dashboard.editMode.hide', { widget: label })}
+                sx={{ ...editChipSx, ...leftChipSx }}
+              >
+                <RemoveRoundedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            )}
+
+            <IconButton
+              size="small"
+              ref={setActivatorNodeRef}
+              aria-label={t('dashboard.editMode.drag', { widget: label })}
               sx={{
                 position: 'absolute',
-                top: 4,
-                left: 6,
-                right: 6,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
+                top: 6,
+                left: '50%',
+                transform: 'translateX(-50%)',
                 zIndex: 3,
+                ...editChipSx,
+                // `.mv` is a PILL and not a disc: wider than it is tall, so a
+                // pointer finds the one control of the three that is DRAGGED
+                // rather than clicked.
+                width: 'auto',
+                px: '12px',
+                borderRadius: '14px',
+                color: 'text.secondary',
+                cursor: 'grab',
+                touchAction: 'none',
+              }}
+              {...attributes}
+              {...listeners}
+            >
+              <DragIndicatorIcon sx={{ fontSize: 17 }} />
+            </IconButton>
+
+            <IconButton
+              size="small"
+              onClick={(event) => setOptionsAnchor(event.currentTarget)}
+              aria-label={t('dashboard.editMode.options', { widget: label })}
+              sx={{
+                position: 'absolute',
+                top: 6,
+                right: 10,
+                zIndex: 3,
+                ...editChipSx,
               }}
             >
-              {locked ? (
-                // A generic div forbids an author-supplied name, so assistive
-                // technology may ignore the aria-label; role="img" makes it a
-                // graphic WITH a text alternative (round 1, E6 / G7). The lock
-                // is the only signal that this widget cannot be hidden.
-                <Box
-                  role="img"
-                  aria-label={t('dashboard.editMode.locked', { widget: label })}
-                  sx={{
-                    display: 'flex',
-                    p: '5px',
-                    color: 'text.disabled',
-                  }}
-                >
-                  <LockOutlinedIcon fontSize="small" aria-hidden />
-                </Box>
-              ) : (
-                <IconButton
-                  size="small"
-                  onClick={onHide}
-                  aria-label={t('dashboard.editMode.hide', { widget: label })}
-                >
-                  <RemoveRoundedIcon fontSize="small" />
-                </IconButton>
-              )}
-
-              <IconButton
-                size="small"
-                ref={setActivatorNodeRef}
-                aria-label={t('dashboard.editMode.drag', { widget: label })}
-                sx={{ cursor: 'grab', touchAction: 'none' }}
-                {...attributes}
-                {...listeners}
-              >
-                <DragIndicatorIcon fontSize="small" />
-              </IconButton>
-
-              <IconButton
-                size="small"
-                onClick={(event) => setOptionsAnchor(event.currentTarget)}
-                aria-label={t('dashboard.editMode.options', { widget: label })}
-              >
-                <SettingsOutlinedIcon fontSize="small" />
-              </IconButton>
-            </Box>
+              <SettingsOutlinedIcon sx={{ fontSize: 15 }} />
+            </IconButton>
 
             {/* 3 px of offset plus the small IconButton's own 5 px of padding
                 put the 16 px grip exactly where the artboard has it — 8 px in

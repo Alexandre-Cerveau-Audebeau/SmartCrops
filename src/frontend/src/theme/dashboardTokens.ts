@@ -48,6 +48,26 @@ export interface DashboardTokens {
    */
   okBg: string;
   okText: string;
+  /**
+   * The NEUTRAL count pill of a widget header (`--pill-bg` / `--pill-tx`) —
+   * « 3 jardins » on Gardens, « 42,5 m² · occupation moyenne 67 % » on
+   * Statistics (`Main.dc.html` l. 146, `.pill.n`).
+   *
+   * The artboards draw every header chip FILLED; the widgets drew them as MUI
+   * outlines, which is a different object — a bordered ghost where the design
+   * has a tinted lozenge (round 5, A10-5).
+   */
+  pillBg: string;
+  pillText: string;
+  /**
+   * The 45° hatch the artboards lay over the SHADE exposure swatch
+   * (`--hatch`, `Main.dc.html` l. 46 and 77; used by `.ex-shade`, l. 206).
+   *
+   * Shade is the one category whose fill is a cool grey, and the hatch is what
+   * keeps it from reading as « no data » next to three saturated colours. It is
+   * also the one signal of the four that survives a greyscale print.
+   */
+  exposureHatch: string;
   /** Fill of a variety avatar standing in for a photo (`--ph-fill`). */
   avatarFill: string;
 }
@@ -62,6 +82,10 @@ const LIGHT: DashboardTokens = {
   ornText: '#A34D74',
   okBg: '#E4F3E9',
   okText: '#20713F',
+  pillBg: '#EFF3EE',
+  pillText: '#55645B',
+  exposureHatch:
+    'repeating-linear-gradient(45deg, rgba(71,94,120,0.18) 0px, rgba(71,94,120,0.18) 3px, transparent 3px, transparent 8px)',
   avatarFill: '#DCE9DF',
 };
 
@@ -75,6 +99,10 @@ const DARK: DashboardTokens = {
   ornText: '#F4A7C3',
   okBg: 'rgba(76,180,124,0.16)',
   okText: '#7ED0A4',
+  pillBg: 'rgba(126,140,166,0.16)',
+  pillText: '#B4C0D4',
+  exposureHatch:
+    'repeating-linear-gradient(45deg, rgba(142,170,206,0.30) 0px, rgba(142,170,206,0.30) 3px, transparent 3px, transparent 8px)',
   avatarFill: '#24395F',
 };
 

@@ -12,6 +12,7 @@ import RadioGroup from '@mui/material/RadioGroup';
 import Typography from '@mui/material/Typography';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import { BLOCK_ICONS } from './blockIcons';
 import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
 import {
@@ -182,7 +183,18 @@ export default function CustomizePanel({
           >
             {t('dashboard.panel.note')}
           </Typography>
-          <Button variant="outlined" size="small" onClick={onReset}>
+          {/* A GLYPH before the label (round 5, A10-12). `A7Personnaliser.dc.html`
+              draws this control as `<div class="lnk">` opening on an 18 px
+              `<svg class="ic">` whose path is `RestartAltOutlined`, matched
+              attribute for attribute against `@mui/icons-material`. It is the
+              same rule as A10-11 on the page header and A2 on the widget
+              titles: in these artboards a control that acts carries a mark. */}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<RestartAltOutlinedIcon />}
+            onClick={onReset}
+          >
             {t('dashboard.panel.reset', {
               level: t(`dashboard.levels.${level}.name`),
             })}

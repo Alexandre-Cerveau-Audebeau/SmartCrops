@@ -449,6 +449,7 @@
       },
       "stats": {
         "title": "Statistics",
+        "headerChip": "{{surface}} · {{percent}} average occupancy",
         "surface": "{{value}} m²",
         "activeCells": "{{active}} · {{occupied}}",
         "freeCells": "{{free}}, {{sunny}}",

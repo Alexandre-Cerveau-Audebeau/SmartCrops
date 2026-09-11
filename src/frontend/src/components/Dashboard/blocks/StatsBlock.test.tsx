@@ -51,6 +51,18 @@ const widgetNode = () =>
 const surfaceNode = () =>
   widgetNode().querySelector('[data-stats-surface]') as HTMLElement;
 
+/**
+ * The Large card's header chip (round 5, A10-7).
+ *
+ * `A3Expert.dc.html` states the surface THERE — `<span class="pill n num">42,5
+ * m² · occupation moyenne 67 %</span>` — and draws no headline at all under it,
+ * so the Large card no longer carries a `data-stats-surface` node. The tests
+ * that are about the surface DERIVATION render a Medium card, where the
+ * headline still lives; the ones about the chip ask for it by name.
+ */
+const chipNode = () =>
+  widgetNode().querySelector('[data-stats-chip]') as HTMLElement;
+
 function renderBlock(
   props: Partial<React.ComponentProps<typeof StatsBlock>> = {},
   language: 'en' | 'fr' = 'en'
@@ -83,6 +95,7 @@ describe('StatsBlock', () => {
     ];
 
     const widget = renderBlock({
+      size: 'medium',
       gardens: [garden({ cellsJson: serializeCellsJson(grid) })],
     });
 
@@ -217,7 +230,7 @@ describe('StatsBlock', () => {
     });
 
     it('is left out of the totals rather than counted as empty', () => {
-      renderBlock({ gardens: [garden()] });
+      renderBlock({ size: 'medium', gardens: [garden()] });
       const surface = surfaceNode().textContent;
       // UNMOUNT, not « remove the nodes » (round 1, E12). Wiping
       // `document.body.innerHTML` took the first tree's DOM away and left its
@@ -228,7 +241,7 @@ describe('StatsBlock', () => {
       // neighbouring test rather than here.
       cleanup();
 
-      renderBlock({ gardens: [garden(), unplanned] });
+      renderBlock({ size: 'medium', gardens: [garden(), unplanned] });
 
       expect(surfaceNode().textContent).toBe(surface);
     });
@@ -314,17 +327,71 @@ describe('StatsBlock — section labels are headings (round 1, E13)', () => {
   });
 });
 
+// ROUND 5 (A10-7) — the header chip the Large card never had.
+describe('StatsBlock — the header chip of the Large card (A10-7)', () => {
+  it('states the surface and the overall occupancy, as `A3Expert` writes it', () => {
+    // `<span class="pill n num">42,5 m² · occupation moyenne 67 %</span>` in
+    // the widget's `.hd-r`. The fixture is 4 × 2 at 50 cm — eight active cells,
+    // 2.0 m² — with nothing planted in it.
+    renderBlock();
+
+    expect(chipNode().textContent).toBe('2.0 m² · 0 % average occupancy');
+  });
+
+  it('states the occupancy as a share of every plantable cell', () => {
+    // The OVERALL share, not the mean of the per-garden percentages: a 1 m²
+    // balcony must not weigh as much as a 20 m² terrace. Two gardens of eight
+    // plantable cells each, two planted in the first and none in the second:
+    // 2 of 16, which is 13 % — where the mean of 25 % and 0 % would be 13 %
+    // only by coincidence of this fixture, so the second garden is made half
+    // the size to tell the two apart.
+    renderBlock({
+      gardens: [
+        garden({ occupiedCells: 2, placements: [at(0, 0), at(0, 1)] }),
+        garden({ id: 'g2', name: 'Balcon', width: 2, height: 2 }),
+      ],
+    });
+
+    // 2 planted of 12 plantable = 17 %; the mean of 25 % and 0 % is 13 %.
+    expect(chipNode().textContent).toContain('17 %');
+  });
+
+  it('does not repeat the surface in the body of the Large card', () => {
+    // The artboard goes straight from the header to « Occupation par jardin ».
+    // Keeping the headline as well would print « 2.0 m² » twice, 60 px apart.
+    const widget = renderBlock();
+
+    expect(surfaceNode()).toBeNull();
+    expect(widget.getByText('Occupancy by garden')).toBeInTheDocument();
+  });
+
+  it('keeps the active-cell line the Medium card shows', () => {
+    // Rule 3 of the design contract: a bigger card shows MORE, never something
+    // different. The artboard drops this line on its Large card; dropping it
+    // here would make Large the one size that says less than Medium.
+    const widget = renderBlock();
+
+    expect(widget.getByText(/8 active cells/)).toBeInTheDocument();
+  });
+
+  it('is absent while there is nothing to state', () => {
+    renderBlock({ gardens: [garden({ width: null, height: null })] });
+
+    expect(chipNode()).toBeNull();
+  });
+});
+
 describe('StatsBlock — figures in the reader’s language (round 1, G5)', () => {
   it('writes the surface with the French decimal comma', () => {
     // `toFixed(1)` always emits a point, so the French widget printed « 1.8 m² »
     // in a page that writes every other decimal with a comma.
-    renderBlock({ gardens: [garden()] }, 'fr');
+    renderBlock({ size: 'medium', gardens: [garden()] }, 'fr');
 
     expect(surfaceNode().textContent).toMatch(/^\d+,\d m²$/);
   });
 
   it('writes it with a point in English', () => {
-    renderBlock({ gardens: [garden()] });
+    renderBlock({ size: 'medium', gardens: [garden()] });
 
     expect(surfaceNode().textContent).toMatch(/^\d+\.\d m²$/);
   });
@@ -332,7 +399,7 @@ describe('StatsBlock — figures in the reader’s language (round 1, G5)', () =
   it('never reaches the screen through toFixed', () => {
     // The rule, not just the one site: no figure of this widget is formatted by
     // `toFixed` or by bare concatenation.
-    renderBlock({ size: 'large', gardens: [garden()] });
+    renderBlock({ size: 'medium', gardens: [garden()] });
 
     expect(surfaceNode().textContent).not.toContain('NaN');
   });

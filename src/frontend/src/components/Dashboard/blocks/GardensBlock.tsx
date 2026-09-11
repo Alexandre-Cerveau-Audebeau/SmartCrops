@@ -332,12 +332,26 @@ export default function GardensBlock({
       ? t(`planner.config.type.${garden.config.gardenType}`)
       : null;
 
+  /**
+   * The header chip, FILLED (round 5, A10-5).
+   *
+   * `Main.dc.html` l. 146 — `.pill.n { background: var(--pill-bg); color:
+   * var(--pill-tx) }` — and the artboard writes it `<span class="pill n num">3
+   * jardins</span>`. It was an MUI outline, which is a different object: a
+   * bordered ghost where the design draws a tinted lozenge. Every header chip
+   * of the page moves together, on the two tokens.
+   */
   const countChip = (
     <Chip
       label={t('dashboard.blocks.gardens.count', { count: gardens.length })}
       size="small"
-      variant="outlined"
-      sx={{ height: DASHBOARD_TYPE.chipHeight, fontSize: DASHBOARD_TYPE.chip }}
+      sx={{
+        height: DASHBOARD_TYPE.chipHeight,
+        fontSize: DASHBOARD_TYPE.chip,
+        fontWeight: 700,
+        backgroundColor: tk.pillBg,
+        color: tk.pillText,
+      }}
     />
   );
 

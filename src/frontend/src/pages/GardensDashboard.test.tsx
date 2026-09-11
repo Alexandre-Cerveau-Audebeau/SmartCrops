@@ -309,6 +309,39 @@ describe('GardensDashboard — header (SMA-336)', () => {
     ).toBeInTheDocument();
   });
 
+  it('puts the artboard’s own glyph in front of the level chip (A10-11)', async () => {
+    // `Main.dc.html` writes `<span class="lvl"><svg class="ic" …/>Vue
+    // Jardinier</span>`, and gives each of the four header elements a glyph;
+    // this was the one without. The path matches `@mui/icons-material`'s `Tune`
+    // attribute for attribute.
+    renderPage();
+
+    const chip = (await screen.findByText('Gardener view')).closest(
+      '.MuiChip-root'
+    )!;
+    expect(
+      chip.querySelector('svg[data-testid="TuneOutlinedIcon"]')
+    ).not.toBeNull();
+  });
+
+  it('keeps the four header glyphs distinct from one another (A10-11)', async () => {
+    // The sliders of `Tune` belong to the level chip; the artboard puts the
+    // four squares of `DashboardCustomizeOutlined` on « Personnaliser », and
+    // the page had the two swapped. Restoring the chip's glyph without moving
+    // this one would have drawn the same sliders twice, side by side.
+    renderPage();
+
+    const customize = await screen.findByRole('button', { name: 'Customize' });
+    expect(
+      customize.querySelector(
+        'svg[data-testid="DashboardCustomizeOutlinedIcon"]'
+      )
+    ).not.toBeNull();
+    expect(
+      customize.querySelector('svg[data-testid="TuneOutlinedIcon"]')
+    ).toBeNull();
+  });
+
   it('offers Edit, Customize and Create Garden outside the Edit mode', async () => {
     renderPage();
 
@@ -770,6 +803,19 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
 
     await waitFor(() => expect(renderedKeys()).toHaveLength(6));
     expect(await screen.findByText('Gardener view')).toBeInTheDocument();
+  });
+
+  it('puts a glyph in front of the reset, as the artboard has it (A10-12)', async () => {
+    // `A7Personnaliser.dc.html` draws this control as a `.lnk` opening on an
+    // 18 px `<svg class="ic">` whose path is `RestartAltOutlined`.
+    await openPanel();
+
+    const reset = screen.getByRole('button', {
+      name: 'Reset to the Gardener level',
+    });
+    expect(
+      reset.querySelector('svg[data-testid="RestartAltOutlinedIcon"]')
+    ).not.toBeNull();
   });
 
   it('the gallery lists the hidden widgets and « + » puts one back on the page', async () => {

@@ -16,8 +16,9 @@ import Snackbar from '@mui/material/Snackbar';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import DashboardCustomizeOutlinedIcon from '@mui/icons-material/DashboardCustomizeOutlined';
 import EditIcon from '@mui/icons-material/Edit';
-import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
+import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import CustomizePanel from '../components/Dashboard/CustomizePanel';
 import DashboardGrid from '../components/Dashboard/DashboardGrid';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
@@ -364,14 +365,26 @@ export default function GardensDashboard() {
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           {!loading && !loadError && (
+            /* A GLYPH before the label (round 5, A10-11). `Main.dc.html` puts
+               one in front of each of the four header elements, and this was
+               the one without: `<span class="lvl"><svg class="ic" …/>Vue
+               Jardinier</span>`, whose path is `@mui/icons-material`'s `Tune`,
+               matched attribute for attribute. `.lvl .ic { color: var(--prim) }`
+               — the glyph is the chip's one coloured mark, like the glyph of a
+               widget header. The outline stays: `.lvl` is the one chip of the
+               page the artboard draws with a border rather than a fill. */
             <Chip
+              icon={<TuneOutlinedIcon />}
               label={t(
                 adjusted ? 'dashboard.levelChipAdjusted' : 'dashboard.levelChip',
                 { level: levelName }
               )}
               size="small"
               variant="outlined"
-              sx={{ fontWeight: 600 }}
+              sx={{
+                fontWeight: 600,
+                '& .MuiChip-icon': { color: 'primary.main' },
+              }}
             />
           )}
           {saveState !== 'idle' && (
@@ -399,9 +412,18 @@ export default function GardensDashboard() {
               >
                 {t('dashboard.edit')}
               </Button>
+              {/* `DashboardCustomizeOutlined`, and not `TuneRounded` (round 5,
+                  A10-11). The two glyphs were swapped: the artboard draws the
+                  four squares of `DashboardCustomizeOutlined` on « Personnaliser
+                  » and keeps the sliders of `Tune` for the level chip, and the
+                  page had the sliders here and nothing on the chip. Putting the
+                  chip's glyph back without moving this one would have drawn the
+                  same sliders twice, side by side, on two controls that do
+                  different things. Both paths were matched against
+                  `@mui/icons-material` attribute for attribute. */}
               <Button
                 variant="outlined"
-                startIcon={<TuneRoundedIcon />}
+                startIcon={<DashboardCustomizeOutlinedIcon />}
                 onClick={() => setPanelOpen(true)}
                 disabled={loading || loadError}
               >

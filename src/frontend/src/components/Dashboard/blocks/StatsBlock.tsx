@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import { visuallyHidden } from '@mui/utils';
@@ -12,6 +13,7 @@ import InviteState from '../InviteState';
 import MissingDataMark from '../MissingDataMark';
 import OccupancyBar from '../OccupancyBar';
 import { DASHBOARD_TYPE } from '../../../theme/dashboardTokens';
+import { useDashboardTokens } from '../../../theme/useDashboardTokens';
 import type { DashboardSize } from '../../../types/Dashboard';
 import type { DashboardGardenData } from '../../../types/DashboardData';
 import {
@@ -66,6 +68,7 @@ export default function StatsBlock({
   onRetry,
 }: Props) {
   const { t, i18n } = useTranslation();
+  const tk = useDashboardTokens();
 
   // The SAME views the Gardens widget reads (round 1, E22): both are on an
   // Expert page at once, and the exposure engine used to run twice per garden
@@ -368,18 +371,36 @@ export default function StatsBlock({
     </Typography>
   );
 
-  const headline = (
+  /**
+   * The card's own two figures, and where each size states them.
+   *
+   * Small and Medium open on the big surface, as they always have. LARGE states
+   * it in the HEADER CHIP instead (round 5, A10-7) — `A3Expert.dc.html` writes
+   * `<span class="pill n num">42,5 m² · occupation moyenne 67 %</span>` in the
+   * `.hd-r` of this widget and then goes straight to `<div class="sec-t">
+   * Occupation par jardin</div>`, with no headline at all. Printing both would
+   * state « 42,5 m² » twice in one card, 60 px apart.
+   *
+   * The second line — « 68 cases actives · 40 plantées » — STAYS at every size,
+   * chip or no chip. The artboard drops it on the Large card, and rule 3 of the
+   * design contract does not allow that: « plus la taille est grande, plus il y
+   * a d'informations — jamais un contenu différent », and a Large card that
+   * showed less than the Medium one would be exactly that.
+   *
+   * `data-stats-surface` stays on whichever node carries the surface ALONE, so
+   * it never has to be parsed out of a longer sentence — the Large card's total
+   * is asked for through `data-stats-chip` instead.
+   */
+  const headline = (withSurface: boolean) => (
     <Box>
-      {/* `data-stats-surface` names the card's OWN total (round 4, A6): the
-          occupancy rows print a surface each now, so « the m² of this widget »
-          stopped being a unique string. Same idiom as `data-widget` — an
-          attribute the widget declares, not a class a test guesses at. */}
-      <Typography
-        data-stats-surface
-        sx={{ fontSize: DASHBOARD_TYPE.big, fontWeight: 800, lineHeight: 1.1 }}
-      >
-        {surfaceText(totalSurface)}
-      </Typography>
+      {withSurface && (
+        <Typography
+          data-stats-surface
+          sx={{ fontSize: DASHBOARD_TYPE.big, fontWeight: 800, lineHeight: 1.1 }}
+        >
+          {surfaceText(totalSurface)}
+        </Typography>
+      )}
       <Typography
         sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary' }}
       >
@@ -396,6 +417,41 @@ export default function StatsBlock({
     </Box>
   );
 
+  /**
+   * « 42,5 m² · occupation moyenne 67 % » — the header chip of the Large card
+   * (round 5, A10-7), with our own figures.
+   *
+   * `A3Expert.dc.html` gives it `.pill.n`, the same neutral fill as the Gardens
+   * and Conseils chips, so it is drawn from the same two tokens (A10-5).
+   *
+   * The occupancy is the card's own OVERALL share — planted cells over plantable
+   * cells across every drawn garden — and not the mean of the per-garden
+   * percentages. It is the figure every other number on the card is consistent
+   * with, and it is the one that does not let a 3 m² balcony weigh as much as a
+   * 20 m² terrace. (The artboard's own trio, 68 / 50 / 77 on 20 / 3 / 19,5 m²,
+   * gives neither 67 % by mean nor by weight: its numbers are drawn, not
+   * derived.)
+   */
+  const headerChip = (
+    <Chip
+      data-stats-chip
+      label={t('dashboard.blocks.stats.headerChip', {
+        surface: surfaceText(totalSurface),
+        percent: percentText(
+          totalActive > 0 ? (totalOccupied / totalActive) * 100 : 0
+        ),
+      })}
+      size="small"
+      sx={{
+        height: DASHBOARD_TYPE.chipHeight,
+        fontSize: DASHBOARD_TYPE.chip,
+        fontWeight: 700,
+        backgroundColor: tk.pillBg,
+        color: tk.pillText,
+      }}
+    />
+  );
+
   const smallBody = () => (
     <Box
       sx={{
@@ -406,7 +462,7 @@ export default function StatsBlock({
         justifyContent: 'space-between',
       }}
     >
-      {headline}
+      {headline(true)}
       {freeCellsLine}
     </Box>
   );
@@ -422,7 +478,7 @@ export default function StatsBlock({
         gap: '8px',
       }}
     >
-      {headline}
+      {headline(true)}
       {sectionTitle(t('dashboard.blocks.stats.occupancySection'))}
       {occupancyRows}
       {freeCellsLine}
@@ -440,7 +496,7 @@ export default function StatsBlock({
         gap: '8px',
       }}
     >
-      {headline}
+      {headline(false)}
       {sectionTitle(t('dashboard.blocks.stats.occupancySection'))}
       {occupancyRows}
       {sectionTitle(
@@ -515,6 +571,14 @@ export default function StatsBlock({
       title={t('dashboard.blocks.stats.title')}
       size={size}
       editing={editing}
+      // Only where the artboard puts it, and only when the figures exist: a
+      // card that is loading, has failed, has no garden or has no drawn plan
+      // has no surface and no occupancy to state.
+      chip={
+        size === 'large' && !loading && !loadError && planned.length > 0
+          ? headerChip
+          : undefined
+      }
     >
       {body()}
     </DashboardBlock>
