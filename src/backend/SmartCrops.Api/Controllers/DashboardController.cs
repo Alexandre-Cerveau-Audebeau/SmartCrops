@@ -129,6 +129,20 @@ public class DashboardController(SmartCropsDbContext context, IMemoryCache cache
     /// <para>It is also SMALLER than what the product already sends: 10 277 bytes
     /// against the 27 597 of <c>GET /api/gardens</c> for the same two gardens,
     /// because it carries plans rather than full plant catalog rows.</para>
+    ///
+    /// <para>NO CEILING, and that is a recorded trade, not an omission (round 6,
+    /// Extension #4-2 / #5-2). The response carries every garden of the caller
+    /// with every placement; the growth is gardens per account × placements per
+    /// garden, the second bounded by the 100 × 100 grid and the 20 × 20 span.
+    /// A <c>Take(n)</c> here would drop gardens from the one widget that is the
+    /// product's route into the planner, and paging the tail client-side is the
+    /// Small-card / carousel work of SMA-432, out of this lot. The two reads are
+    /// already flat — <c>IX_Gardens_UserId</c> and
+    /// <c>IX_GardenPlacements_GardenId</c> exist, and the per-user set the sort
+    /// runs on is a handful of rows. The day the distribution moves, the answer
+    /// is a metadata-only aggregate with plans fetched per thumbnail, measured
+    /// on real accounts rather than capped on a guess; there is no metrics
+    /// pipeline in this API to hang a size counter on today.</para>
     /// </summary>
     /// <param name="lang">Display language for common names; English fallback, as on the gardens list.</param>
     /// <param name="ct">Cancellation token.</param>
