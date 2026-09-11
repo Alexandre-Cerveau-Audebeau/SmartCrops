@@ -457,6 +457,8 @@
         "occupancyValue": "{{surface}} · {{percent}}",
         "exposureSection": "Exposition dominante — {{season}} · {{moment}}",
         "perGardenExposureSection": "Exposition par jardin",
+        "exposureSummary": "{{garden}} : {{full}}, {{morning}}, {{afternoon}}, {{shade}}",
+        "exposureShare": "{{category}} {{percent}}",
         "noPlan": "Sans plan",
         "empty": "Créez un jardin pour voir ses statistiques.",
         "noPlans": "Dessinez le plan d’un jardin pour voir sa surface et son exposition.",

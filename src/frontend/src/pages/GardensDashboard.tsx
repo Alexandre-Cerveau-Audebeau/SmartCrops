@@ -23,6 +23,11 @@ import CustomizePanel from '../components/Dashboard/CustomizePanel';
 import DashboardGrid from '../components/Dashboard/DashboardGrid';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import CountersOptionsPanel from '../components/Dashboard/blocks/CountersOptionsPanel';
+import {
+  COUNTERS_GARDEN_ALL,
+  countersOptions,
+  resolveCountersGarden,
+} from '../components/Dashboard/blocks/countersOptions';
 import GardensBlock from '../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
@@ -289,10 +294,31 @@ export default function GardensDashboard() {
       };
     }
     if (key === 'counters') {
-      if (dashboardData.totals.varietyCount === 0) return null;
-      return {
-        value: formatCount(dashboardData.totals.varietyCount, language),
-      };
+      // THROUGH THE WIDGET'S OWN FILTER (round 5, C4). The branch read
+      // `totals.varietyCount` unconditionally, so a user who had narrowed the
+      // widget to one garden and then hidden it was offered a thumbnail
+      // counting every garden — the card in the gallery said something the
+      // widget it stands for does not say.
+      //
+      // `countersOptions` and `resolveCountersGarden` are the SAME two calls
+      // the widget and its options panel make, in that order: the second is
+      // what makes a filter naming a deleted garden fall back to « all »
+      // instead of counting nothing (round 1, E8). Three readers of one
+      // contract now, and still one owner.
+      const stored = blocks.find((block) => block.key === 'counters');
+      const active = resolveCountersGarden(
+        countersOptions(stored?.options ?? null).garden,
+        gardens
+      );
+      const count =
+        active === COUNTERS_GARDEN_ALL
+          ? dashboardData.totals.varietyCount
+          : dashboardData.varieties.filter((variety) =>
+              variety.gardenIds.includes(active)
+            ).length;
+
+      if (count === 0) return null;
+      return { value: formatCount(count, language) };
     }
     if (key === 'gardens') {
       if (gardens.length === 0) return null;

@@ -370,6 +370,53 @@ describe('StatsBlock — the exposure swatch and the occupancy bar (round 5)', (
 
 // ROUND 5 (B2, B3) — what the rows are worth, and what a garden with no plan
 // puts where its figure would be.
+// ROUND 5 (C1) — the finding both surfaces raised, with two different anchors:
+// the Extension on `ExposureBar.tsx:54` (the component carries the
+// `aria-hidden`), GitHub on `StatsBlock.tsx:317` (the per-garden call site does
+// not compensate for it).
+describe('StatsBlock — the per-garden exposure, for a screen reader (C1)', () => {
+  it('names each garden’s bar with its COMPLETE distribution', () => {
+    // The rows state the dominant category and its share and nothing else, the
+    // legend above them describes the page rather than a garden, and the bar
+    // that draws the four shares is decorative — so three of every garden's
+    // four shares were nowhere a screen reader could reach.
+    const widget = renderBlock({
+      gardens: [garden(), garden({ id: 'g2', name: 'Balcon' })],
+    });
+
+    for (const name of ['Terrasse', 'Balcon']) {
+      const bar = widget.getByRole('img', {
+        name: new RegExp('^' + name + ':'),
+      });
+      const label = bar.getAttribute('aria-label')!;
+      for (const category of [
+        'Full sun',
+        'Morning sun',
+        'Afternoon sun',
+        'Shade',
+      ]) {
+        expect(label).toContain(category);
+      }
+      // Four shares, four figures — the whole distribution and not the
+      // dominant one repeated.
+      expect(label.match(/%/g)).toHaveLength(4);
+    }
+  });
+
+  it('leaves the AGGREGATE bar decorative, where the legend already says it', () => {
+    // The distribution section prints all four categories with all four
+    // percentages directly under its bar. Naming that bar as well would read
+    // the same distribution twice.
+    renderBlock();
+
+    const bars = [...widgetNode().querySelectorAll('[data-exposure-bar]')];
+    expect(bars[0]).toHaveAttribute('aria-hidden', 'true');
+    expect(bars[0]).not.toHaveAttribute('aria-label');
+    expect(bars[1]).toHaveAttribute('role', 'img');
+    expect(bars[1]).not.toHaveAttribute('aria-hidden');
+  });
+});
+
 describe('StatsBlock — row proportions and the « no plan » marker (round 5)', () => {
   const rows = () => [...widgetNode().querySelectorAll('[data-stat-row]')];
 

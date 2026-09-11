@@ -7,6 +7,14 @@ interface Props {
   tally: ExposureTally;
   /** 16 px for the whole-page bar, 12 px on a per-garden row (`A3Expert`). */
   height: number;
+  /**
+   * The complete distribution in words, for assistive technology (round 5, C1).
+   *
+   * WITH it the bar is an `img` carrying this as its alternative text; WITHOUT
+   * it the bar stays decorative — see the component docstring for which caller
+   * is which, and why.
+   */
+  label?: string;
 }
 
 /**
@@ -32,17 +40,27 @@ interface Props {
  * planner paints « full sun » and a dashboard segment that calls it something
  * else would be the same garden disagreeing with itself.
  *
- * DECORATIVE, and deliberately so — `aria-hidden`. Every caller prints the four
- * percentages beside it in text, so the bar is the picture of a figure that is
- * already written down; announcing it again would read the same distribution
- * twice. Colour is therefore never the only signal, which is the rule § 7 of the
- * design contract sets for every chip and swatch of this page.
+ * DECORATIVE BY DEFAULT — `aria-hidden` — and that is right for the AGGREGATE
+ * bar: the legend directly under it prints all four categories with all four
+ * percentages, so the strip is the picture of a figure already written down, and
+ * announcing it again would read the same distribution twice.
+ *
+ * It is NOT right for a per-garden bar, and round 5 (C1) fixes that. Those rows
+ * print only the dominant category and its share, the legend above them carries
+ * the whole-page distribution and not each garden's, and the bar itself was
+ * hidden — so the other three shares of a given garden existed nowhere a screen
+ * reader could reach. A caller that has no other way to state the distribution
+ * passes `label`, and the bar becomes an `img` with that text as its
+ * alternative; a caller whose figures are already written out passes nothing and
+ * the bar stays what it was. Colour is therefore never the only signal, which is
+ * the rule § 7 of the design contract sets for every chip and swatch of this
+ * page.
  *
  * The empty tally renders the track alone. A garden whose plan rates no cell is
  * the only way there is, and an empty strip says « nothing measured » where four
  * zero-width segments would say nothing at all.
  */
-export default function ExposureBar({ tally, height }: Props) {
+export default function ExposureBar({ tally, height, label }: Props) {
   const tk = usePlannerTokens();
   const total = EXPOSURE_ORDER.reduce(
     (sum, category) => sum + tally[category],
@@ -51,7 +69,9 @@ export default function ExposureBar({ tally, height }: Props) {
 
   return (
     <Box
-      aria-hidden
+      {...(label
+        ? { role: 'img', 'aria-label': label }
+        : { 'aria-hidden': true })}
       data-exposure-bar
       sx={{
         display: 'flex',

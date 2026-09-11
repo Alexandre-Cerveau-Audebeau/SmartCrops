@@ -21,6 +21,7 @@ import {
   DASHBOARD_SEASON,
   EXPOSURE_ORDER,
   sumExposureTallies,
+  type ExposureTally,
 } from '../../../utils/gardenStats';
 import { useGardenViews } from '../../../hooks/useGardenViews';
 import { formatCount, formatDecimal } from '../../../utils/formatNumber';
@@ -142,6 +143,37 @@ export default function StatsBlock({
 
   const share = (part: number, whole: number) =>
     whole > 0 ? percentText((part / whole) * 100) : '—';
+
+  /**
+   * One garden's WHOLE exposure distribution, in words (round 5, C1).
+   *
+   * The per-garden rows state the dominant category and its share and nothing
+   * else; the legend above them describes the page, not a garden. So the other
+   * three shares of a given garden were nowhere a screen reader could reach —
+   * the bar that draws them is decorative by construction. This is the text the
+   * bar carries as its alternative.
+   *
+   * FOUR named fragments in one key rather than a list joined in code: i18next
+   * selects a plural form from one `count`, the separators between the four
+   * belong to the language, and the same rule already governs the page meta line
+   * and the free-cell sentence.
+   */
+  const exposureSummary = (name: string, tally: ExposureTally) => {
+    const rated = EXPOSURE_ORDER.reduce((sum, key) => sum + tally[key], 0);
+    const fragment = (category: (typeof EXPOSURE_ORDER)[number]) =>
+      t('dashboard.blocks.stats.exposureShare', {
+        category: t(`planner.exposure.categories.${category}`),
+        percent: share(tally[category], rated),
+      });
+
+    return t('dashboard.blocks.stats.exposureSummary', {
+      garden: name,
+      full: fragment('full'),
+      morning: fragment('morning'),
+      afternoon: fragment('afternoon'),
+      shade: fragment('shade'),
+    });
+  };
 
   /**
    * One row of a Large section (round 4, A6).
@@ -341,7 +373,13 @@ export default function StatsBlock({
           garden.id,
           garden.name,
           view.dominantExposure ? (
-            <ExposureBar tally={view.exposure} height={12} />
+            // NAMED, where the aggregate bar above is decorative (round 5, C1):
+            // this is the only place a garden's four shares are stated at all.
+            <ExposureBar
+              tally={view.exposure}
+              height={12}
+              label={exposureSummary(garden.name, view.exposure)}
+            />
           ) : (
             // B3, again: the marker belongs in the value column, not stretched
             // across the bar's track.

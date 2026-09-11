@@ -1037,6 +1037,34 @@ async function renderNovice() {
   await screen.findAllByText('Casa Lolo');
 }
 
+/**
+ * The same Novice page under the PRODUCT theme, in either mode (round 5, C3).
+ *
+ * `renderPage` carries no `ThemeProvider`, so a token only resolves there
+ * because MUI's default palette happens to be light. A dark-mode assertion needs
+ * the real theme, and so does any claim that a token — rather than a coincidence
+ * — is what put a colour on screen.
+ */
+async function renderNoviceIn(mode: 'light' | 'dark') {
+  vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+    schemaVersion: 1,
+    level: 'novice',
+    isPreset: true,
+    blocks: presetFor('novice'),
+    updatedAt: null,
+  });
+  render(
+    <ThemeProvider theme={createAppTheme(mode)}>
+      <LanguageProvider>
+        <MemoryRouter>
+          <GardensDashboard />
+        </MemoryRouter>
+      </LanguageProvider>
+    </ThemeProvider>
+  );
+  await screen.findAllByText('Casa Lolo');
+}
+
 // ROUND 4 (A4) — the Medium row is `A2Novice.dc.html` again.
 //
 // The artboard gives it five things in this order: a 48 x 40 thumbnail, the
@@ -1052,20 +1080,30 @@ describe('Gardens Medium row — the artboard’s own five elements (A4)', () =>
     );
   });
 
-  it('puts the count in the green pill at the end of the row', async () => {
-    await renderNovice();
-    const widget = within(gardensWidget());
+  it.each([
+    ['light', '#e4f3e9', '#20713f'],
+    ['dark', 'rgba(76,180,124,0.16)', '#7ed0a4'],
+  ])(
+    'puts the count in the green pill at the end of the row, in %s',
+    async (mode, background, text) => {
+      // ROUND 5 (C3). The pill reads `okBg` and `okText` from
+      // `useDashboardTokens()`, and the test covered the light branch only — so
+      // a dark-token mapping regression passed it. Both faces now, under the
+      // real application theme: `.pill.ok` is the artboards' `--chip-ok-bg` /
+      // `--chip-ok-tx`, and the night pair is a different pair, not a filtered
+      // version of the day one.
+      await renderNoviceIn(mode as 'light' | 'dark');
+      const widget = within(gardensWidget());
 
-    const pill = widget.getByText('3 plants');
-    expect(pill).toBeInTheDocument();
-    // `.pill.ok` — the artboards' `--chip-ok-bg` / `--chip-ok-tx`, carried as a
-    // theme token in both modes like every other dashboard fill.
-    const rules = rulesFor(pill.closest('.MuiChip-root')!)
-      .toLowerCase()
-      .replace(/\s+/g, '');
-    expect(rules).toContain('background-color:#e4f3e9');
-    expect(rules).toContain('color:#20713f');
-  });
+      const pill = widget.getByText('3 plants');
+      expect(pill).toBeInTheDocument();
+      const rules = rulesFor(pill.closest('.MuiChip-root')!)
+        .toLowerCase()
+        .replace(/\s+/g, '');
+      expect(rules).toContain(`background-color:${background}`);
+      expect(rules).toContain(`color:${text}`);
+    }
+  );
 
   it('draws the widget’s header chip FILLED, not as an outline (A10-5)', async () => {
     // `Main.dc.html` l. 146 — `<span class="pill n num">3 jardins</span>`,
@@ -1097,16 +1135,32 @@ describe('Gardens Medium row — the artboard’s own five elements (A4)', () =>
   });
 
   it('draws the thumbnail in the artboard’s 48 x 40 box, not a 48 square', async () => {
+    // ROUND 5 (C2) — this test used to exercise NOTHING. jsdom lays nothing
+    // out, so `getBoundingClientRect` returned a zero rect and both bounds
+    // passed for any box at all; and the 4 × 3 fixture was width-limited, so
+    // even a real browser would have given the same cell for a 48 x 40 box and
+    // for a 48 square.
+    //
+    // A 4 × 6 fixture is HEIGHT-limited, which is the half the box was added
+    // for: `fitPreview` measures (48 − 5) / 4 = 10.75 by width against
+    // (40 − 7) / 6 = 5.5 by height, so the cell is 5 px with a 1 px gap. Let the
+    // box go back to a 48 square and the height allows 6 px cells — a different
+    // declaration, and a failing test. `TemplatePreview` applies the fit through
+    // `gridTemplateColumns`, `gridTemplateRows` and `gap`, which is what
+    // `TemplatePreview.fit.test.tsx` asserts too.
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenWith(3, { height: 6 })])
+    );
     await renderNovice();
 
     const preview = within(gardensWidget()).getAllByTestId(
       'template-preview'
     )[0]!;
-    // `TemplatePreview` fits itself INSIDE the box it is given, so the box is
-    // the ceiling and the drawing is at most that.
-    const box = preview.getBoundingClientRect();
-    expect(box.width).toBeLessThanOrEqual(48);
-    expect(box.height).toBeLessThanOrEqual(40);
+    expect(preview).toHaveStyle({
+      gridTemplateColumns: 'repeat(4, 5px)',
+      gridTemplateRows: 'repeat(6, 5px)',
+      gap: '1px',
+    });
   });
 });
 

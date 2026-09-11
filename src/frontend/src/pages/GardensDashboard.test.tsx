@@ -13,6 +13,7 @@ import {
 import type {
   DashboardData,
   DashboardGardenData,
+  DashboardVarietyData,
 } from '../types/DashboardData';
 
 vi.mock('../services/gardenApi', () => ({
@@ -860,6 +861,99 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     const rules = rulesFor(add).join(' ').replace(/\s+/g, '');
     expect(rules).toContain('width:36px');
     expect(rules).toContain('height:36px');
+  });
+
+  it('counts the Counters thumbnail through the widget’s own filter (C4)', async () => {
+    // ROUND 5 (C4). The branch read `totals.varietyCount` unconditionally, so a
+    // user who had narrowed the widget to one garden and then hidden it was
+    // offered a thumbnail counting every garden: the card in the gallery said
+    // something the widget it stands for does not say.
+    const blocks = presetFor('gardener');
+    const counters = blocks.find((block) => block.key === 'counters')!;
+    counters.hidden = true;
+    counters.options = { garden: 'g2' };
+    servePreferences('gardener', blocks);
+
+    const variety = (
+      plantId: string,
+      commonName: string,
+      gardenIds: string[]
+    ): DashboardVarietyData => ({
+      plantId,
+      scientificName: 'Ocimum basilicum',
+      commonName,
+      plantType: 'Herb',
+      isEdible: true,
+      imageUrl: null,
+      imageAttribution: null,
+      count: 1,
+      cells: 1,
+      gardenIds,
+    });
+
+    vi.mocked(fetchDashboardData).mockResolvedValue({
+      gardens: [garden('g1', 'Terrasse'), garden('g2', 'Balcon')],
+      varieties: [
+        variety('p-1', 'Basil', ['g1']),
+        variety('p-2', 'Thyme', ['g2']),
+        variety('p-3', 'Sage', ['g1']),
+      ],
+      totals: {
+        gardenCount: 2,
+        placementCount: 3,
+        varietyCount: 3,
+        catalogPlantCount: 536,
+      },
+    });
+
+    await openPanel();
+    const gallery = within(screen.getByRole('dialog', { name: 'Customize' }));
+
+    expect(gallery.getByText('Counts by variety')).toBeInTheDocument();
+    // ONE variety in « Balcon », not the three the aggregate holds.
+    expect(gallery.getByText('1')).toBeInTheDocument();
+    expect(gallery.queryByText('3')).toBeNull();
+  });
+
+  it('falls back to every garden when the filtered one is gone (C4)', async () => {
+    // The same fallback the widget and its options panel make, in the same
+    // order: a filter naming a deleted garden resolves to « all » rather than
+    // counting nothing (round 1, E8). Three readers of one contract now, still
+    // one owner.
+    const blocks = presetFor('gardener');
+    const counters = blocks.find((block) => block.key === 'counters')!;
+    counters.hidden = true;
+    counters.options = { garden: 'gone' };
+    servePreferences('gardener', blocks);
+
+    vi.mocked(fetchDashboardData).mockResolvedValue({
+      gardens: [garden('g1', 'Terrasse')],
+      varieties: [
+        {
+          plantId: 'p-1',
+          scientificName: 'Ocimum basilicum',
+          commonName: 'Basil',
+          plantType: 'Herb',
+          isEdible: true,
+          imageUrl: null,
+          imageAttribution: null,
+          count: 1,
+          cells: 1,
+          gardenIds: ['g1'],
+        },
+      ],
+      totals: {
+        gardenCount: 1,
+        placementCount: 1,
+        varietyCount: 1,
+        catalogPlantCount: 536,
+      },
+    });
+
+    await openPanel();
+    const gallery = within(screen.getByRole('dialog', { name: 'Customize' }));
+
+    expect(gallery.getByText('1')).toBeInTheDocument();
   });
 
   it('says « soon » where a widget has no figure yet, never a zero', async () => {
