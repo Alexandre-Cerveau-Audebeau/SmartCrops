@@ -1,5 +1,3 @@
-using SmartCrops.Api.Controllers;
-
 namespace SmartCrops.Api.DTOs;
 
 /// <summary>
@@ -13,7 +11,7 @@ namespace SmartCrops.Api.DTOs;
 /// already owns (<c>parseCellsJson</c>, <c>infrastructureBlockers</c>,
 /// <c>computeExposureView</c>, <c>cellSizeToMeters</c>). Nothing here parses
 /// <see cref="CellsJson"/>: to this server it is an opaque string, exactly as it
-/// is to <see cref="GardensController"/>.</para>
+/// is to <see cref="Controllers.GardensController"/>.</para>
 ///
 /// <para>What it deliberately does NOT carry: the <see cref="PlantListItemResponse"/>
 /// graph the gardens list serves per garden. Those 42 fields — free-text
@@ -41,7 +39,7 @@ namespace SmartCrops.Api.DTOs;
 /// <param name="UpdatedAt">Last write to the garden, for the « modified 2 h ago » line.</param>
 /// <param name="Placements">
 /// Every placement of the garden, in a STABLE order (see
-/// <see cref="DashboardController"/>): row, then column, then plant.
+/// <see cref="Controllers.DashboardController"/>): row, then column, then plant.
 /// </param>
 /// <param name="PlacementCount">Number of placements — the « 50 » of the PLANTS column.</param>
 /// <param name="VarietyCount">Number of distinct plants — the « 12 var. » sub-line.</param>

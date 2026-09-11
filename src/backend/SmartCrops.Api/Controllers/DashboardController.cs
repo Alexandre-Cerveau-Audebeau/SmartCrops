@@ -32,8 +32,18 @@ public class DashboardController(SmartCropsDbContext context, IMemoryCache cache
 {
     private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
 
-    /// <summary>Cache key for <see cref="CatalogPlantCountAsync"/>.</summary>
-    private const string CatalogPlantCountKey = "dashboard:catalogPlantCount";
+    /// <summary>
+    /// Cache key for <see cref="CatalogPlantCountAsync"/>.
+    ///
+    /// <para><c>internal</c> rather than <c>private</c> (round 6, Extension
+    /// #5-1): the TTL test has to OWN the cache window it asserts on. The
+    /// <c>IMemoryCache</c> is a collection-wide singleton the Respawn reset
+    /// does not touch, so an entry written minutes earlier by another test
+    /// could expire between that test's two reads; evicting it by name before
+    /// the first read starts the five-minute window inside the test. Naming the
+    /// key here rather than duplicating the literal keeps one owner.</para>
+    /// </summary>
+    internal const string CatalogPlantCountKey = "dashboard:catalogPlantCount";
 
     /// <summary>
     /// How long the catalog size is reused before it is counted again (round 1,

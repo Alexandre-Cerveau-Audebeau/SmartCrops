@@ -3,7 +3,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using SmartCrops.Api.Controllers;
 using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
@@ -426,6 +428,17 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         await SeedUserAsync(userId);
         AuthAs(userId);
 
+        // Own the window (round 6, Extension #5-1): the cache is a
+        // collection-wide singleton the Respawn reset does not touch, so an
+        // entry written by an earlier test could expire between the two reads
+        // below and the second would recount — a flake with no relation to the
+        // code under test. Evicting it here makes `first` the write.
+        using (var scope = CreateScope())
+        {
+            scope.ServiceProvider.GetRequiredService<IMemoryCache>()
+                .Remove(DashboardController.CatalogPlantCountKey);
+        }
+
         var first = (await GetDashboardAsync()).Totals.CatalogPlantCount;
 
         // A plant lands between the two reads. The caption is ALLOWED to be
@@ -439,6 +452,25 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         var second = (await GetDashboardAsync()).Totals.CatalogPlantCount;
 
         Assert.Equal(first, second);
+    }
+
+    [Fact]
+    public async Task GetDashboard_GardensAreNewestFirst()
+    {
+        // The wire contract `DashboardResponse` documents, pinned (round 6,
+        // Extension #4-1): the caller's gardens arrive newest first. Seeded
+        // OLDER first so a test that read insertion order would fail.
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var older = await SeedGardenAsync(
+            userId, "Ancien", createdAt: DateTime.UtcNow.AddDays(-2));
+        var newer = await SeedGardenAsync(
+            userId, "Récent", createdAt: DateTime.UtcNow);
+        AuthAs(userId);
+
+        var body = await GetDashboardAsync();
+
+        Assert.Equal([newer, older], body.Gardens.Select(g => g.Id));
     }
 
     // ── The R4 edible rule ───────────────────────────────────────────────────
@@ -722,7 +754,8 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         string userId,
         string name,
         string? cellsJson = null,
-        string? description = null)
+        string? description = null,
+        DateTime? createdAt = null)
     {
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
@@ -732,6 +765,11 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
             Name = name,
             Description = description,
             UserId = userId,
+            // DISTINCT by default (round 6, Extension #4-1): the response orders
+            // on CreatedAt, so every seeded garden carrying default(DateTime) tied
+            // on the primary key and handed the order to a random Guid — the
+            // documented « newest first » contract had no way to be tested.
+            CreatedAt = createdAt ?? DateTime.UtcNow,
             LayoutWidth = 10,
             LayoutHeight = 10,
             CellSize = "50cm",
