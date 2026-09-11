@@ -52,14 +52,20 @@ export default function OccupancyBar({
         ...(stretch && { width: '100%', minWidth: 0 }),
       }}
     >
+      {/* 9 px, and fully rounded (round 5, A10-8). `Main.dc.html` l. 172:
+          `.bar { height: 9px; border-radius: 999px; background: var(--track);
+          overflow: hidden }` over `.bar i { height: 100%; border-radius: 999px;
+          background: var(--prim) }`. The bar was 6 px on a 3 px radius, which
+          at a 10 % fill drew a sliver too thin to read as a quantity. */}
       <Box
         aria-hidden
+        data-occupancy-track
         sx={{
           flex: 1,
           minWidth: stretch ? 0 : 28,
           ...(stretch ? null : { maxWidth: 64 }),
-          height: 6,
-          borderRadius: 3,
+          height: 9,
+          borderRadius: '999px',
           backgroundColor: 'action.hover',
           overflow: 'hidden',
         }}
@@ -68,6 +74,7 @@ export default function OccupancyBar({
           sx={{
             width: `${clamped}%`,
             height: '100%',
+            borderRadius: '999px',
             backgroundColor: 'primary.main',
           }}
         />

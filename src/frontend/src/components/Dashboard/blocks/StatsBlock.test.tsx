@@ -63,6 +63,20 @@ const surfaceNode = () =>
 const chipNode = () =>
   widgetNode().querySelector('[data-stats-chip]') as HTMLElement;
 
+/** The Emotion class of a node, matched by its `css-` prefix, not by position. */
+const emotionClass = (node: Element) => {
+  const found = [...node.classList].find((name) => name.startsWith('css-'));
+  if (!found) throw new Error('No Emotion class on ' + node.className);
+  return found;
+};
+
+/** The stylesheet rules Emotion emitted for a node, joined. */
+const rulesFor = (node: Element) =>
+  [...document.querySelectorAll('style')]
+    .map((tag) => tag.textContent ?? '')
+    .filter((text) => text.includes(emotionClass(node)))
+    .join(' ');
+
 function renderBlock(
   props: Partial<React.ComponentProps<typeof StatsBlock>> = {},
   language: 'en' | 'fr' = 'en'
@@ -297,6 +311,60 @@ describe('StatsBlock', () => {
       expect(widget.getByText('Occupancy by garden')).toBeInTheDocument();
       expect(widget.queryByText('Exposure by garden')).toBeNull();
     });
+  });
+});
+
+// ROUND 5 — the two marks of the A10 list, at the artboards' measurements.
+describe('StatsBlock — the exposure swatch and the occupancy bar (round 5)', () => {
+  it('draws the exposure swatch as a rounded SQUARE with a border (A10-9)', () => {
+    // `Main.dc.html` l. 202: `.sw-ex { width: 13px; height: 13px;
+    // border-radius: 4px; border: 1px solid }`. It was a circle, which beside
+    // the planner's own rounded cells reads as a bullet rather than as a piece
+    // of the plan. ONE component for the three sites that render it — this
+    // legend, the per-garden dominant swatch, and the Gardens table's
+    // EXPOSITION cell.
+    renderBlock();
+
+    const dots = widgetNode().querySelectorAll('[data-exposure-dot]');
+    expect(dots.length).toBeGreaterThanOrEqual(4);
+
+    for (const dot of dots) {
+      const rules = rulesFor(dot).toLowerCase().replace(/\s+/g, '');
+      expect(rules).toContain('border-radius:4px');
+      expect(rules).toContain('border:1pxsolid');
+      expect(rules).not.toContain('border-radius:50%');
+    }
+  });
+
+  it('hatches the SHADE swatch, and only that one (A10-9)', () => {
+    // `.ex-shade { background-image: var(--hatch) }` — a 45° trame. Shade is
+    // the one category the design paints in a cool grey, which is also what an
+    // unfilled surface looks like: the trame is the difference between
+    // « shaded » and « nothing measured », and it is the signal of the four
+    // that survives greyscale.
+    renderBlock();
+
+    const shade = widgetNode().querySelector('[data-exposure-dot="shade"]')!;
+    expect(
+      rulesFor(shade).toLowerCase().replace(/\s+/g, '')
+    ).toContain('background-image:repeating-linear-gradient(45deg');
+
+    const full = widgetNode().querySelector('[data-exposure-dot="full"]')!;
+    expect(
+      rulesFor(full).toLowerCase().replace(/\s+/g, '')
+    ).not.toContain('repeating-linear-gradient');
+  });
+
+  it('gives the occupancy bar the artboard’s 9 px (A10-8)', () => {
+    // `Main.dc.html` l. 172: `.bar { height: 9px; border-radius: 999px }`. It
+    // was 6 px on a 3 px radius, which at a 10 % fill drew a sliver too thin to
+    // read as a quantity.
+    renderBlock({ size: 'medium' });
+
+    const track = widgetNode().querySelector('[data-occupancy-track]')!;
+    const rules = rulesFor(track).toLowerCase().replace(/\s+/g, '');
+    expect(rules).toContain('height:9px');
+    expect(rules).toContain('border-radius:999px');
   });
 });
 
