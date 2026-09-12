@@ -200,6 +200,21 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:Account:WindowMinutes", 10)),
                 QueueLimit = 0,
             }));
+    // SMA-336 PR 3a/5 — "geocode" is a FOURTH sister, deliberately not a reuse
+    // of any budget above: it fronts a third-party call an autocomplete field
+    // makes on every pause in the typing, and typing a city must not be able
+    // to drain a password-reset or an account export. 60/10min: a city typed
+    // at normal speed costs one to four calls (debounced, three characters or
+    // more), so the window covers some twenty searches per address.
+    options.AddPolicy("geocode", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ClientIpPartition.FromContext(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = builder.Configuration.GetValue("RateLimiting:Geocode:PermitLimit", 60),
+                Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:Geocode:WindowMinutes", 10)),
+                QueueLimit = 0,
+            }));
 });
 
 // ── External taxonomy API: GBIF ──────────────────────────────────────────

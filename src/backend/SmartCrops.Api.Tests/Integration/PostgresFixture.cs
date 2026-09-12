@@ -14,6 +14,7 @@ using SmartCrops.Core.Interfaces;
 using SmartCrops.Infrastructure.Data;
 using SmartCrops.Infrastructure.ExternalApis.Gbif;
 using SmartCrops.Infrastructure.ExternalApis.Perenual;
+using SmartCrops.Infrastructure.ExternalApis.WeatherApi;
 using Testcontainers.PostgreSql;
 
 namespace SmartCrops.Api.Tests.Integration;
@@ -122,6 +123,17 @@ public sealed class PostgresFixture : IAsyncLifetime
     public StubEmailService EmailStub =>
         Factory.Services.GetRequiredService<StubEmailService>();
 
+    /// <summary>
+    /// Shared programmable HTTP handler backing the <c>WeatherApiClient</c> typed
+    /// client (SMA-336 PR 3a/5). The geocode, location and weather controllers
+    /// inject the concrete client, so its only seam is the transport — tests
+    /// configure canned <c>search.json</c> / <c>forecast.json</c> bodies here
+    /// and read <c>Received</c> as the proof of how many calls were made.
+    /// Reset per test.
+    /// </summary>
+    public StubWeatherApiHttpHandler WeatherApiHttpStub =>
+        Factory.Services.GetRequiredService<StubWeatherApiHttpHandler>();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
@@ -139,6 +151,11 @@ public sealed class PostgresFixture : IAsyncLifetime
             .WithPerenual()
             .WithTypesense()
             .WithSmtp()
+            // SMA-336 PR 3a/5: a non-empty key so the weather client actually
+            // SENDS to the stubbed transport below (without one it answers
+            // MissingKey before any request — the boot-optional proof lives in
+            // BootOptionalUpstreamsTests, not here).
+            .WithWeatherApi()
             // SMA-30: the contact endpoint's "contact" rate-limit policy keys
             // every TestServer request on the same partition (no remote IP), so
             // the production limit (5/10min) would 429 the collection. Pin it
@@ -151,6 +168,9 @@ public sealed class PostgresFixture : IAsyncLifetime
             // would 429 the account-endpoint tests; the dedicated 429 proof
             // pins its own limit of 2.
             .WithConfig("RateLimiting:Account:PermitLimit", "100")
+            // Same deal for the "geocode" policy (SMA-336 PR 3a/5): the
+            // dedicated 429 proof pins its own limit of 2.
+            .WithConfig("RateLimiting:Geocode:PermitLimit", "100")
             .WithConnectionString(ConnectionString)
             .WithServices(services =>
             {
@@ -242,6 +262,14 @@ public sealed class PostgresFixture : IAsyncLifetime
                 services.AddHttpClient<GbifClient>()
                     .ConfigurePrimaryHttpMessageHandler(sp =>
                         sp.GetRequiredService<StubGbifHttpHandler>());
+
+                // SMA-336 PR 3a/5: the weather client the same way — the
+                // production-named registration keeps its base address and
+                // resilience pipeline, only the primary handler is swapped.
+                services.AddSingleton<StubWeatherApiHttpHandler>();
+                services.AddHttpClient<WeatherApiClient>()
+                    .ConfigurePrimaryHttpMessageHandler(sp =>
+                        sp.GetRequiredService<StubWeatherApiHttpHandler>());
             })
             .Build();
 
