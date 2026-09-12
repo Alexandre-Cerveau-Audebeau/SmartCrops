@@ -25,6 +25,7 @@ using SmartCrops.Infrastructure.ExternalApis.Logging;
 using SmartCrops.Infrastructure.ExternalApis.Perenual;
 using SmartCrops.Infrastructure.ExternalApis.Trefle;
 using SmartCrops.Infrastructure.ExternalApis.SearchIndex;
+using SmartCrops.Infrastructure.ExternalApis.WeatherApi;
 using Typesense;
 using Typesense.Setup;
 
@@ -313,6 +314,43 @@ builder.Services.AddSingleton<PerenualResolver>();
 builder.Services.AddScoped<IPlantPerenualEnrichmentService, PlantPerenualEnrichmentService>();
 builder.Services.AddScoped<IPerenualCatalogService, PerenualCatalogService>();
 builder.Services.AddScoped<IPerenualPestCatalogService, PerenualPestCatalogService>();
+
+// ── External weather API: WeatherAPI.com (SMA-336 PR 3a/5) ───────────────
+// Fourth external source, same shape as Perenual: options SHAPE validated at
+// startup, the ApiKey OPTIONAL at boot (the SMA-377 lesson — without it the
+// client answers MissingKey at call time, logs once, and the weather
+// endpoints degrade to their invitation). Typed HttpClient behind the
+// redacting logger: the key rides every request as ?key=..., which the
+// logger's existing key= rule already scrubs.
+//
+// Resilience is TIGHTER than the defaults (10 s attempt / 30 s total): the
+// dashboard calls one place per distinct garden location, in parallel, and
+// the browser's fetch gives up at 15 s — a provider outage must come back as
+// a degraded answer inside that budget, never as a client-side timeout.
+// Constraints the options validator enforces: TotalRequestTimeout >
+// AttemptTimeout, SamplingDuration >= 2 × AttemptTimeout; and
+// WeatherApiOptions.TimeoutSeconds (12 s) stays above the 10 s total so
+// HttpClient never re-cuts the pipeline early.
+builder.Services.AddOptions<WeatherApiOptions>()
+    .Bind(builder.Configuration.GetSection(WeatherApiOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddHttpClient<WeatherApiClient>((sp, client) =>
+{
+    var options = sp.GetRequiredService<IOptions<WeatherApiOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
+})
+.RemoveAllLoggers()
+.AddLogger<RedactingHttpClientLogger>()
+.AddStandardResilienceHandler(options =>
+{
+    options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(5);
+    options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(10);
+    options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(10);
+});
 
 // ── Search engine: Typesense (SMA-255) ───────────────────────────────────
 // Options validated at startup (missing API key fails the host boot), same

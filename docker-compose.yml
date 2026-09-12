@@ -65,6 +65,12 @@ services:
       # docker-compose.override.yml (gitignored); an empty value fails the API
       # boot via ValidateOnStart (same contract as the Typesense/Trefle keys).
       Smtp__Password: ${SMTP_PASSWORD:-}
+      # SMA-336 PR 3a/5 — WeatherAPI.com key (garden weather and geocoding).
+      # Set the real value in docker-compose.override.yml (gitignored); an
+      # EMPTY value does NOT fail the API boot — the weather endpoints degrade
+      # to their invitation and a warning is logged once (the SMA-377 lesson:
+      # a boot must not depend on a non-critical third party).
+      WeatherApi__ApiKey: ${WEATHERAPI_API_KEY:-}
     ports:
       - "5000:8080"
     depends_on:

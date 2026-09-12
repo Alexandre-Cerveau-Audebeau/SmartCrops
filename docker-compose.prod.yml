@@ -118,6 +118,10 @@ services:
       AdminSeed__Emails: ${ADMIN_SEED_EMAILS:-}
       Typesense__ApiKey: ${TYPESENSE_API_KEY:?TYPESENSE_API_KEY is required (VPS .env only)}
       Smtp__Password: ${SMTP_PASSWORD:?SMTP_PASSWORD is required (VPS .env only)}
+      # SMA-336 PR 3a/5 — required at DEPLOY time (a missing .env entry fails
+      # `compose up` loudly, by name), while the API itself boots without it
+      # and degrades: the two guards answer two different mistakes.
+      WeatherApi__ApiKey: ${WEATHERAPI_API_KEY:?WEATHERAPI_API_KEY is required (VPS .env only)}
     volumes:
       - dataprotection-keys:/keys
     # The one service that bridges both planes (R3). gw_priority (R4):

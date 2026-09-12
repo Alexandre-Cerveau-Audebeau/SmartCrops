@@ -31,6 +31,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- SMA-336 PR 3a/5: synthetic WeatherAPI.com bodies, read from disk by the
+         client tests and served by the integration transport stub. -->
+    <None Update="ExternalApis\WeatherApi\Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\SmartCrops.Api\SmartCrops.Api.csproj" />
   </ItemGroup>
 
