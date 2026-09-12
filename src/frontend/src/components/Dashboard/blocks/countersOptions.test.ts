@@ -298,4 +298,44 @@ describe('COUNTERS_LIST — what each size lists fits the lines its card allows'
     // Twenty over two columns would be eleven lines on a ten-line card.
     expect(worstCaseLines(20, 2)).toBe(11);
   });
+
+  // ROUND 8 (Extension #9-15): the general case, at the bounds the closed
+  // form of round 7 got wrong — it was exact for two columns only.
+  it('is the maximum over every split, whatever the column count', () => {
+    // Zero varieties are zero lines, not one.
+    expect(worstCaseLines(0, 2)).toBe(0);
+    expect(worstCaseLines(0, 1)).toBe(0);
+    // One column: a line per variety, however they split.
+    expect(worstCaseLines(1, 1)).toBe(1);
+    expect(worstCaseLines(5, 1)).toBe(5);
+    // Three columns: five split 1 / 4 take 1 + 2 = 3 lines (round 7 said 2);
+    // four take 2 (1 / 3 → 1 + 1); six take 3 (1 / 5 → 1 + 2); two take 2
+    // (1 / 1); one takes 1.
+    expect(worstCaseLines(5, 3)).toBe(3);
+    expect(worstCaseLines(4, 3)).toBe(2);
+    expect(worstCaseLines(6, 3)).toBe(3);
+    expect(worstCaseLines(2, 3)).toBe(2);
+    expect(worstCaseLines(1, 3)).toBe(1);
+  });
+
+  it('agrees with the definition, brute-forced, for every count and column the widget could see', () => {
+    // The definition: two sections, `first` and the rest, each rounding its
+    // last line up, maximised over `first`.
+    const bruteForce = (varieties: number, columns: number) =>
+      Math.max(
+        ...Array.from(
+          { length: varieties + 1 },
+          (_, first) =>
+            Math.ceil(first / columns) +
+            Math.ceil((varieties - first) / columns)
+        )
+      );
+    for (let columns = 1; columns <= 4; columns++) {
+      for (let varieties = 0; varieties <= 40; varieties++) {
+        expect(worstCaseLines(varieties, columns)).toBe(
+          bruteForce(varieties, columns)
+        );
+      }
+    }
+  });
 });

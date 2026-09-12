@@ -226,6 +226,25 @@ export const COUNTERS_LIST = {
 /**
  * The most data lines `varieties` rows can take over `columns` when they are
  * split into two sections that each round their last row up.
+ *
+ * The maximum over every split, computed as such (round 8 — Extension #9-15).
+ * Round 7 wrote the two-column answer in closed form —
+ * `ceil(v / c) + (v % c === 0 ? 1 : 0)` — and that form is exact ONLY for two
+ * columns: over three, five varieties split 1 / 4 take 1 + 2 = 3 lines where
+ * it said 2, and for zero varieties it said 1 line. Both sizes the product
+ * has are two columns, so nothing on screen was wrong; the exported function
+ * promised the general case and did not keep it. The loop below is the
+ * definition itself: a section of `first` rows and one of the rest, each
+ * rounding its last line up, over every `first` from none to all. At most
+ * twenty varieties, so the cost is nothing.
  */
-export const worstCaseLines = (varieties: number, columns: number): number =>
-  Math.ceil(varieties / columns) + (varieties % columns === 0 ? 1 : 0);
+export const worstCaseLines = (varieties: number, columns: number): number => {
+  let lines = 0;
+  for (let first = 0; first <= varieties; first++) {
+    lines = Math.max(
+      lines,
+      Math.ceil(first / columns) + Math.ceil((varieties - first) / columns)
+    );
+  }
+  return lines;
+};
