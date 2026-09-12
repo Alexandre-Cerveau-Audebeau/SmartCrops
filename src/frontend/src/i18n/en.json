@@ -271,8 +271,8 @@
     "title": "My Gardens",
     "createGarden": "Create Garden",
     "noGardens": "You don't have any gardens yet. Create your first garden!",
-    "plantsCount_one": "{{count}} plant",
-    "plantsCount_other": "{{count}} plants",
+    "plantsCount_one": "{{count, number}} plant",
+    "plantsCount_other": "{{count, number}} plants",
     "more_one": "+{{count}} more",
     "more_other": "+{{count}} more",
     "view": "View",
@@ -313,8 +313,12 @@
     "planMyGarden": "Plan my garden"
   },
   "dashboard": {
-    "meta_one": "{{count}} garden",
-    "meta_other": "{{count}} gardens",
+    "meta": "{{gardens}} · {{plants}} · {{surface}}",
+    "metaGardens_one": "{{count, number}} garden",
+    "metaGardens_other": "{{count, number}} gardens",
+    "metaPlants_one": "{{count, number}} plant",
+    "metaPlants_other": "{{count, number}} plants",
+    "metaSurface": "{{value}} m²",
     "edit": "Edit",
     "done": "Done",
     "customize": "Customize",
@@ -366,6 +370,7 @@
       "gallerySection": "Gallery",
       "galleryHint": "Hidden widgets — add them to the page.",
       "galleryEmpty": "No hidden widget.",
+      "gallerySoon": "Soon",
       "hidden": "hidden",
       "add": "Add {{widget}}"
     },
@@ -383,13 +388,33 @@
       },
       "gardens": {
         "title": "Gardens",
-        "count_one": "{{count}} garden",
-        "count_other": "{{count}} gardens",
+        "count_one": "{{count, number}} garden",
+        "count_other": "{{count, number}} gardens",
         "lastModified": "Modified {{when}}",
-        "openLast": "Open the last modified garden",
-        "more_one": "+{{count}} garden →",
-        "more_other": "+{{count}} gardens →",
-        "open": "Open {{name}}"
+        "openLastNamed": "Open {{name}}, the last modified garden",
+        "more_one": "+{{count, number}} garden →",
+        "more_other": "+{{count, number}} gardens →",
+        "open": "Open {{name}}",
+        "varieties_one": "{{count, number}} var.",
+        "varieties_other": "{{count, number}} var.",
+        "ornamental": "Ornamental",
+        "dimensions": "{{cols, number}} × {{rows, number}}",
+        "noPlan": "No plan drawn",
+        "noPlanShort": "No plan",
+        "noDate": "No date",
+        "freeCells_one": "{{count, number}} free",
+        "freeCells_other": "{{count, number}} free",
+        "columns": {
+          "garden": "Garden",
+          "plants": "Plants",
+          "occupancy": "Occupancy",
+          "exposure": "Exposure",
+          "weather": "Weather",
+          "harvest": "Harvest",
+          "modified": "Modified",
+          "actions": "Actions"
+        },
+        "columnSoon": "Soon"
       },
       "tips": {
         "title": "Tips",
@@ -405,15 +430,60 @@
       },
       "counters": {
         "title": "Counts by variety",
-        "invite": "Your varieties will be counted here, garden by garden."
+        "varieties_one": "{{count, number}} variety",
+        "varieties_other": "{{count, number}} varieties",
+        "plants_one": "{{count, number}} plant",
+        "plants_other": "{{count, number}} plants",
+        "more_one": "+{{count, number}} variety",
+        "more_other": "+{{count, number}} varieties",
+        "less": "Show fewer",
+        "allGardens": "All gardens",
+        "ornamentalSection": "Ornamental",
+        "addFromLibrary": "Add from the Library →",
+        "empty": "No plant placed yet.",
+        "emptyGarden": "This garden holds no plant yet.",
+        "options": {
+          "photos": "Plant photos",
+          "garden": "Garden"
+        },
+        "ofCatalog_one": "{{count, number}} variety of {{catalog, number}} in the catalog",
+        "ofCatalog_other": "{{count, number}} varieties of {{catalog, number}} in the catalog"
       },
       "stats": {
         "title": "Statistics",
-        "invite": "The occupancy and exposure of your gardens will be summed up here."
+        "headerChip": "{{surface}} · {{percent}} average occupancy",
+        "surface": "{{value}} m²",
+        "activeCells": "{{active}} · {{occupied}}",
+        "freeCells": "{{free}}, {{sunny}}",
+        "occupancySection": "Occupancy by garden",
+        "occupancyValue": "{{surface}} · {{percent}}",
+        "exposureSection": "Dominant exposure — {{season}} · {{moment}}",
+        "perGardenExposureSection": "Exposure by garden",
+        "exposureSummary": "{{garden}}: {{full}}, {{morning}}, {{afternoon}}, {{shade}}",
+        "exposureShare": "{{category}} {{percent}}",
+        "noPlan": "No plan",
+        "empty": "Create a garden to see its statistics.",
+        "noPlans": "Draw a garden's plan to see its surface and its exposure.",
+        "activeCellsCount_one": "{{count, number}} active cell",
+        "activeCellsCount_other": "{{count, number}} active cells",
+        "occupiedCount_one": "{{count, number}} planted",
+        "occupiedCount_other": "{{count, number}} planted",
+        "freeCellsCount_one": "{{count, number}} free cell",
+        "freeCellsCount_other": "{{count, number}} free cells",
+        "sunnyCount_one": "{{count, number}} in full sun",
+        "sunnyCount_other": "{{count, number}} in full sun"
       },
       "harvest": {
         "title": "Harvest",
         "invite": "Your plants have no growth stage yet — the estimate can’t count them."
+      }
+    },
+    "exposure": {
+      "short": {
+        "full": "Full sun",
+        "morning": "Morning",
+        "afternoon": "Afternoon",
+        "shade": "Shade"
       }
     }
   },
@@ -875,7 +945,10 @@
           "name": "GBIF",
           "desc": "Global Biodiversity Information Facility"
         },
-        "wfo": { "name": "WFO", "desc": "World Flora Online" },
+        "wfo": {
+          "name": "WFO",
+          "desc": "World Flora Online"
+        },
         "perenual": {
           "name": "Perenual",
           "desc": "Care, watering & cultivation"
@@ -1002,16 +1075,31 @@
       "availableTitle": "Available",
       "comingTitle": "Coming · exact measurements",
       "coming": {
-        "light": { "label": "Light received", "unit": "lumens·h" },
+        "light": {
+          "label": "Light received",
+          "unit": "lumens·h"
+        },
         "water": {
           "label": "Water need",
           "unitMetric": "L/day",
           "unitImperial": "gal/day"
         },
-        "npk": { "label": "NPK fertilisation", "unit": "g·week" },
-        "germination": { "label": "Germination", "unit": "days" },
-        "humidity": { "label": "Humidity range", "unit": "%RH" },
-        "temp": { "label": "Temperature range", "unit": "°C exact" }
+        "npk": {
+          "label": "NPK fertilisation",
+          "unit": "g·week"
+        },
+        "germination": {
+          "label": "Germination",
+          "unit": "days"
+        },
+        "humidity": {
+          "label": "Humidity range",
+          "unit": "%RH"
+        },
+        "temp": {
+          "label": "Temperature range",
+          "unit": "°C exact"
+        }
       },
       "wateringPh": "Watering pH range",
       "wateringIdealTemp": "Ideal watering temperature",
@@ -1288,7 +1376,10 @@
       "propagationLabel": "Propagation methods",
       "pruningLabel": "Pruning months",
       "wateringLabel": "Watering rhythm",
-      "units": { "days": "days", "days_one": "day" },
+      "units": {
+        "days": "days",
+        "days_one": "day"
+      },
       "propagationMethods": {
         "airLayeringPropagation": "Air layering",
         "asexualReproduction": "Asexual reproduction",

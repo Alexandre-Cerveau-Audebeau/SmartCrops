@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -33,20 +32,6 @@ public record UpdateGardenRequest(
 );
 
 /// <summary>
-/// Exposure config block (SMA-285 / SMA-17): values are stored as-is, all
-/// nullable — the app-level defaults (hemisphere null -> 'N', latitudeBand
-/// null -> 'mid') belong to the future READ-time exposure engine (5.3-C).
-/// </summary>
-public record GardenConfigDto(
-    string? Orientation,
-    string? GardenType,
-    List<LightSlotDto>? LightSchedule,
-    string? Hemisphere,
-    string? LatitudeBand);
-
-public record LightSlotDto(string? Start, string? End);
-
-/// <summary>
 /// GET /api/gardens/{id} contract (SMA-285): a clean DTO — the raw entity
 /// serialization (and its legacy GardenPlants graph) is retired.
 /// </summary>
@@ -71,19 +56,6 @@ public record GardenLayoutResponse(
     GardenConfigDto Config,
     List<PlacementResponse> Placements);
 
-// PlantName was removed from the placement wire (SMA-285): the front rebuilds
-// every display name from its locale-keyed catalog via the shared resolver
-// (getPlantDisplayName, SMA-194) and never read the server field.
-public record PlacementResponse(
-    Guid Id,
-    Guid PlantId,
-    string? PlantScientificName,
-    int StartRow,
-    int StartCol,
-    int SpanRows,
-    int SpanCols,
-    string? Notes);
-
 public record SaveLayoutRequest(
     [Range(1, 100)] int Width,
     [Range(1, 100)] int Height,
@@ -106,7 +78,9 @@ public record SavePlacementRequest(
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class GardensController(SmartCropsDbContext context) : ControllerBase
+public class GardensController(
+    SmartCropsDbContext context,
+    ILogger<GardensController> logger) : ControllerBase
 {
     /// <summary>
     /// Garden cards list (SMA-6 / SMA-155): each garden ships its DISTINCT placed
@@ -136,7 +110,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
             .Include(g => g.Placements)
             .ThenInclude(p => p.Plant)
             .ThenInclude(p => p.Images.Where(i =>
-                i.Source == PlantSourceType.Trefle || i.Source == PlantSourceType.PlantNet))
+                PlantListItemMapper.StableImageSources.Contains(i.Source)))
             .OrderByDescending(g => g.CreatedAt)
             .AsSplitQuery()
             .AsNoTracking()
@@ -386,12 +360,6 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
     private static readonly string[] AllowedHemispheres = ["N", "S"];
     private static readonly string[] AllowedLatitudeBands = ["low", "mid", "high"];
 
-    // Strict 24h clock: 00:00 .. 23:59.
-    private static readonly Regex TimeSlotPattern =
-        new(@"^([01]\d|2[0-3]):[0-5]\d$", RegexOptions.Compiled);
-
-    private const int MaxLightSlots = 6;
-
     private static string? ValidateConfig(GardenConfigDto config)
     {
         if (config.Orientation != null && !AllowedOrientations.Contains(config.Orientation))
@@ -407,39 +375,37 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         {
             if (config.GardenType != "indoor")
                 return "lightSchedule is only allowed when gardenType is 'indoor'.";
-            if (slots.Count > MaxLightSlots)
-                return $"lightSchedule allows at most {MaxLightSlots} slots.";
-            foreach (var slot in slots)
-            {
-                // A null array element (e.g. `[null]` in the JSON) must be
-                // rejected via the 400 path BEFORE dereferencing Start/End.
-                if (slot is null
-                    || slot.Start is null || slot.End is null
-                    || !TimeSlotPattern.IsMatch(slot.Start)
-                    || !TimeSlotPattern.IsMatch(slot.End))
-                    return "each lightSchedule slot needs start and end in 24h HH:mm format.";
-                // Zero-padded HH:mm makes ordinal comparison chronological.
-                if (string.CompareOrdinal(slot.Start, slot.End) >= 0)
-                    return "each lightSchedule slot must have start < end.";
-            }
+            if (LightScheduleDocument.ValidateSlots(slots) is { } reason)
+                return reason;
         }
 
         return null;
     }
 
-    private static List<LightSlotDto>? ParseLightSchedule(string? json) =>
-        string.IsNullOrEmpty(json)
-            ? null
-            : JsonSerializer.Deserialize<List<LightSlotDto>>(json, JsonWeb);
+    /// <summary>
+    /// The stored light schedule, and a WARNING when it read as none (round 7,
+    /// S06 — Extension #7-6): the same signal <c>DashboardController</c> gives,
+    /// for the same reason — a row that needs repair must not look like a
+    /// garden with no schedule, on any of the three endpoints that read it.
+    /// </summary>
+    private List<LightSlotDto>? ReadLightSchedule(Garden garden)
+    {
+        var slots = LightScheduleDocument.Parse(garden.LightScheduleJson, out var reason);
+        if (reason is not null)
+            logger.LogWarning(
+                "Garden {GardenId}: stored light schedule read as none — {Reason}",
+                garden.Id, reason);
+        return slots;
+    }
 
-    private static GardenConfigDto ToConfigDto(Garden garden) => new(
+    private GardenConfigDto ToConfigDto(Garden garden) => new(
         garden.Orientation,
         garden.GardenType,
-        ParseLightSchedule(garden.LightScheduleJson),
+        ReadLightSchedule(garden),
         garden.Hemisphere,
         garden.LatitudeBand);
 
-    private static GardenResponse ToGardenResponse(Garden garden) => new(
+    private GardenResponse ToGardenResponse(Garden garden) => new(
         garden.Id,
         garden.Name,
         garden.Description,
@@ -448,7 +414,7 @@ public class GardensController(SmartCropsDbContext context) : ControllerBase
         garden.CellSize,
         garden.Orientation,
         garden.GardenType,
-        ParseLightSchedule(garden.LightScheduleJson),
+        ReadLightSchedule(garden),
         garden.Hemisphere,
         garden.LatitudeBand);
 }

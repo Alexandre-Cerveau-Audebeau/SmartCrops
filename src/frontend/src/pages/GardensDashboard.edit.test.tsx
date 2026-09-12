@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { presetFor } from '../constants/dashboardPresets';
+import { emittedRules, rulesFor } from '../test/dashboardDom';
 import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
 import { DASHBOARD_SPACING } from '../theme/dashboardTokens';
 import type {
@@ -20,7 +21,6 @@ import type {
 } from '../types/Dashboard';
 
 vi.mock('../services/gardenApi', () => ({
-  fetchGardens: vi.fn(),
   createGarden: vi.fn(),
   updateGarden: vi.fn(),
   deleteGarden: vi.fn(),
@@ -29,14 +29,21 @@ vi.mock('../services/gardenApi', () => ({
 vi.mock('../services/dashboardApi', () => ({
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
+  fetchDashboardData: vi.fn(),
 }));
 
+import { dashboardFixture as dashboardWith } from '../test/fixtures/dashboard';
 import GardensDashboard from './GardensDashboard';
-import { fetchGardens } from '../services/gardenApi';
+
 import {
+  fetchDashboardData,
   fetchDashboardPreferences,
   saveDashboardPreferences,
 } from '../services/dashboardApi';
+
+// SMA-336 PR 2/5 — an empty aggregate: these tests are about the GRID, not the
+// data. The shape comes from the shared fixture (round 7, S02), so the three
+// dashboard suites cannot disagree about it.
 
 /**
  * jsdom lays nothing out: every `getBoundingClientRect` is a zero rect, so
@@ -288,12 +295,13 @@ const lastSaved = () => {
 };
 const lastSavedKeys = () => lastSaved().blocks.map((block) => block.key);
 
+
 beforeEach(() => {
   // Four columns for the whole file: `DashboardGrid` reads the column count
   // with `useMediaQuery`, and jsdom answers nothing without this.
   stubColumns(4);
   localStorage.setItem('smartcrops-language', 'en');
-  vi.mocked(fetchGardens).mockResolvedValue([]);
+  vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([]));
   vi.mocked(saveDashboardPreferences).mockClear();
   vi.mocked(saveDashboardPreferences).mockResolvedValue(undefined);
 });
@@ -326,6 +334,46 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     ).toBeInTheDocument();
   });
 
+  it('stands each top control on the artboard’s own 26 px chip (A10-10)', async () => {
+    // `A6Modifier.dc.html` — `.hb { position: absolute; top: 6px; width: 26px;
+    // height: 26px; border-radius: 50%; background: var(--surface); border:
+    // 1px solid var(--card-bd) }` for the « − » and the gear, and `.mv { top:
+    // 6px; left: 50%; height: 26px; padding: 0 12px; border-radius: 14px }` for
+    // the drag handle. The three were bare glyphs in one flex row spanning the
+    // card, floating on the widget's own background.
+    //
+    // The GEOMETRY is what is asserted: this file renders without the product
+    // theme, so `surfaceSubtle` and `borderSubtle` would not resolve here and
+    // an assertion on them would be about MUI's defaults (round 3, V16).
+    await enterEditMode();
+
+    for (const name of ['Hide Weather', 'Weather options']) {
+      const rules = rulesFor(screen.getByRole('button', { name }))
+        .toLowerCase()
+        .replace(/\s+/g, '');
+      expect(rules).toContain('position:absolute');
+      expect(rules).toContain('top:6px');
+      expect(rules).toContain('width:26px');
+      expect(rules).toContain('height:26px');
+      expect(rules).toContain('border-radius:50%');
+      expect(rules).toContain('border:1pxsolid');
+    }
+
+    // The drag handle is the one PILL of the three: wider than it is tall, so a
+    // pointer can tell the control that is dragged from the two that are
+    // clicked. 26 px of height clears the 24 px floor of WCAG 2.2 § 2.5.8, and
+    // the three stand 10 px from the edges and half a card apart, so none falls
+    // inside another's 24 px circle.
+    const handle = rulesFor(screen.getByRole('button', { name: 'Move Weather' }))
+      .toLowerCase()
+      .replace(/\s+/g, '');
+    expect(handle).toContain('top:6px');
+    expect(handle).toContain('left:50%');
+    expect(handle).toContain('height:26px');
+    expect(handle).toContain('border-radius:14px');
+    expect(handle).toContain('padding-left:12px');
+  });
+
   it('shows no control at all outside the Edit mode', async () => {
     servePreferences('gardener');
     renderPage();
@@ -351,12 +399,56 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tips options' }));
 
-    const menu = await screen.findByRole('menu');
-    expect(within(menu).getByText('Widget options')).toBeInTheDocument();
+    const panel = await screen.findByRole('dialog', { name: 'Tips Widget options' });
+    expect(within(panel).getByText('Widget options')).toBeInTheDocument();
     expect(
-      within(menu).getByText('No option for this widget yet.')
+      within(panel).getByText('No option for this widget yet.')
     ).toBeInTheDocument();
-    expect(within(menu).getByRole('menuitem', { name: 'Done' })).toBeInTheDocument();
+    // A BUTTON, not a menu item (round 1, G6): the surface is a Popover now.
+    expect(within(panel).getByRole('button', { name: 'Done' })).toBeInTheDocument();
+  });
+
+  it('names the widget on the panel itself, above the generic line (A7)', async () => {
+    // `A8Options.dc.html`'s `.pop-h` carries two lines — the widget's name in
+    // bold, then « Options du widget ». The panel opened on the generic line
+    // alone, so a user who had just clicked one of eight identical gears had
+    // nothing ON SCREEN telling them which widget they were standing in.
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tips options' }));
+
+    const panel = await screen.findByRole('dialog', { name: 'Tips Widget options' });
+    const heading = within(panel).getByRole('heading', { level: 3 });
+    expect(heading).toHaveTextContent('Tips');
+    // The name comes FIRST: it is the heading, the generic line its subtitle.
+    expect(
+      heading.compareDocumentPosition(within(panel).getByText('Widget options'))
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+});
+
+describe('GardensDashboard — the resize grip (round 4, A9)', () => {
+  it('is the artboard’s two diagonal strokes, not a two-headed arrow', async () => {
+    // `A6Modifier.dc.html`:
+    //   <svg class="grip" viewBox="0 0 16 16">
+    //     <path d="M15 1 1 15M15 8l-7 7" stroke="currentColor"
+    //           stroke-width="2" stroke-linecap="round" fill="none"/>
+    //   </svg>
+    //
+    // It was `OpenInFullOutlined` — a drag affordance on a button that steps
+    // through three fixed sizes on a click, and the loudest glyph in Edit mode.
+    await enterEditMode();
+
+    const handle = screen.getByRole('button', {
+      name: 'Change the size of Weather — currently Medium',
+    });
+    const path = handle.querySelector('svg[viewBox="0 0 16 16"] path');
+    expect(path).not.toBeNull();
+    expect(path).toHaveAttribute('d', 'M15 1 1 15M15 8l-7 7');
+    expect(path).toHaveAttribute('fill', 'none');
+    // The gesture it names has not changed: it still resizes, and it is still
+    // a button a keyboard can reach.
+    expect(handle.tagName).toBe('BUTTON');
   });
 });
 
@@ -512,13 +604,17 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
   it('suppresses the wobble under prefers-reduced-motion', async () => {
     await enterEditMode();
 
+    // Through the shared probe (round 7, S34 — Extension #7-18): the last
+    // hand-rolled scan took « the last class » as the Emotion class, the exact
+    // heuristic the deleted helper documented as unsafe — MUI puts
+    // `MuiBox-root` before the `css-` class and may append a component class
+    // after it. `emittedRules` resolves the class by its prefix and throws when
+    // there is none, and the `some` keeps the proof that both declarations sit
+    // in the SAME emitted block.
     const inner = sortableNode('weather').firstElementChild as HTMLElement;
-    const rules = [...document.querySelectorAll('style')]
-      .map((tag) => tag.textContent ?? '')
-      .filter((text) => text.includes(inner.className.split(' ').pop()!));
 
     expect(
-      rules.some(
+      emittedRules(inner).some(
         (text) =>
           text.includes('prefers-reduced-motion: reduce') &&
           text.includes('animation:none')

@@ -52,6 +52,22 @@ export interface DashboardBlock {
   options?: Record<string, unknown> | null;
 }
 
+/**
+ * What a Customize-gallery thumbnail can honestly show of a hidden widget
+ * (round 4, A8) — a formatted headline `value` and, optionally, a few
+ * occupancy `bars` as percentages. Supplied by the page, which is the only
+ * place that holds the figures; a widget the aggregate cannot feed yet answers
+ * `null` and the panel says « soon » instead (rule 4 of the design contract).
+ *
+ * Here beside `DashboardBlock` and not in `CustomizePanel.tsx` (round 6,
+ * Extension #4-4): it is a data contract the page and the panel both read, and
+ * neither should import the other's module for a shape.
+ */
+export interface GalleryPreview {
+  value: string;
+  bars?: number[];
+}
+
 /** GET /api/dashboard/preferences. */
 export interface DashboardPreferences {
   schemaVersion: number;

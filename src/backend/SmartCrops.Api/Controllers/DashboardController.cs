@@ -3,11 +3,13 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Npgsql;
 using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Dashboard;
 using SmartCrops.Core.Entities;
+using SmartCrops.Core.Enums;
 using SmartCrops.Infrastructure.Data;
 
 namespace SmartCrops.Api.Controllers;
@@ -26,9 +28,56 @@ namespace SmartCrops.Api.Controllers;
 [ApiController]
 [Route("api/dashboard")]
 [Authorize]
-public class DashboardController(SmartCropsDbContext context) : ControllerBase
+public class DashboardController(
+    SmartCropsDbContext context,
+    IMemoryCache cache,
+    ILogger<DashboardController> logger) : ControllerBase
 {
     private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
+    /// Cache key for <see cref="CatalogPlantCountAsync"/>.
+    ///
+    /// <para><c>internal</c> rather than <c>private</c> (round 6, Extension
+    /// #5-1): the TTL test has to OWN the cache window it asserts on. The
+    /// <c>IMemoryCache</c> is a collection-wide singleton the Respawn reset
+    /// does not touch, so an entry written minutes earlier by another test
+    /// could expire between that test's two reads; evicting it by name before
+    /// the first read starts the five-minute window inside the test. Naming the
+    /// key here rather than duplicating the literal keeps one owner.</para>
+    /// </summary>
+    internal const string CatalogPlantCountKey = "dashboard:catalogPlantCount";
+
+    /// <summary>
+    /// How long the catalog size is reused before it is counted again (round 1,
+    /// E2). Five minutes: the catalog is reference data an admin import changes,
+    /// the figure only feeds a « … of 536 in the catalog » caption, and a caption
+    /// five minutes behind an import is not a defect anyone can see.
+    /// </summary>
+    private static readonly TimeSpan CatalogPlantCountTtl = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Single-flight gate on the catalog-count refill (round 3, E″2). Static
+    /// because the controller is created per request and the stampede it
+    /// prevents is between requests. See <see cref="CatalogPlantCountAsync"/>.
+    ///
+    /// <para>PER PROCESS, and the deployment topology decides what that is worth
+    /// (round 4, C3 — E‴2 / G‴1). This gate and <c>IMemoryCache</c> have the same
+    /// scope, so they are consistent with each other; what they are not is
+    /// global. N API instances starting cold run N scans, not one. That is the
+    /// intended trade while the catalog is a few hundred rows behind a
+    /// five-minute window and the figure only feeds a « … of 536 in the catalog »
+    /// caption — a shared cache with a distributed single-flight key would move
+    /// the ceiling to one scan, and is not worth its operational weight for this
+    /// caption alone.</para>
+    ///
+    /// <para>The other limit worth writing down: the winner holds the gate for
+    /// the whole <c>CountAsync</c>, so every concurrent dashboard load waits
+    /// behind it. Bounded today by a single indexed count; if that scan ever
+    /// becomes expensive, the answer is a timeout on <c>WaitAsync</c> falling
+    /// back to the uncached path, measured rather than guessed.</para>
+    /// </summary>
+    private static readonly SemaphoreSlim CatalogPlantCountLock = new(1, 1);
 
     /// <summary>
     /// Ceiling on the number of entries one block's options document may carry.
@@ -57,6 +106,406 @@ public class DashboardController(SmartCropsDbContext context) : ControllerBase
     /// — keys, sizes, level, escaping — around them.</para>
     /// </summary>
     private const int MaxRequestBodyBytes = 2 * 8 * MaxOptionsBytesPerBlock;
+
+    /// <summary>
+    /// Plant types whose members are edible whatever their own flag says — the
+    /// first half of the R4 rule. Measured on the catalog: 31 plants of these
+    /// three types carry <c>IsEdible = false</c>, and 38 <c>Ornamental</c> plants
+    /// carry <c>IsEdible = true</c>, so neither signal alone is usable and the
+    /// rule is their union.
+    /// </summary>
+    private static readonly string[] EdiblePlantTypes = ["Vegetable", "Fruit", "Herb"];
+
+    /// <summary>
+    /// GET /api/dashboard — the Gardens, Counters and Statistics widgets in ONE
+    /// call, scoped to the caller.
+    ///
+    /// <para>A TRANSPORT aggregate, not a computing one (orchestrator decision
+    /// D9): every garden ships its <c>CellsJson</c> and its placements verbatim,
+    /// and the browser derives active cells, surface, occupancy, dominant exposure
+    /// and the plan thumbnail with the pure functions the planner already owns and
+    /// tests. Porting that engine to C# would put it in two languages with nothing
+    /// to catch a divergence — <c>dotnet test</c> and <c>npm test</c> never meet.
+    /// What travels here instead is what SQL answers on its own: counts per
+    /// garden, counts per variety, and the edible verdict.</para>
+    ///
+    /// <para>It is also SMALLER than what the product already sends: 10 277 bytes
+    /// against the 27 597 of <c>GET /api/gardens</c> for the same two gardens,
+    /// because it carries plans rather than full plant catalog rows.</para>
+    ///
+    /// <para>NO CEILING, and that is a recorded trade, not an omission (round 6,
+    /// Extension #4-2 / #5-2). The response carries every garden of the caller
+    /// with every placement; the growth is gardens per account × placements per
+    /// garden, the second bounded by the 100 × 100 grid and the 20 × 20 span.
+    /// A <c>Take(n)</c> here would drop gardens from the one widget that is the
+    /// product's route into the planner, and paging the tail client-side is the
+    /// Small-card / carousel work of SMA-432, out of this lot. The two reads are
+    /// already flat — <c>IX_Gardens_UserId</c> and
+    /// <c>IX_GardenPlacements_GardenId</c> exist, and the per-user set the sort
+    /// runs on is a handful of rows. The day the distribution moves, the answer
+    /// is a metadata-only aggregate with plans fetched per thumbnail, measured
+    /// on real accounts rather than capped on a guess; there is no metrics
+    /// pipeline in this API to hang a size counter on today.</para>
+    /// </summary>
+    /// <param name="lang">Display language for common names; English fallback, as on the gardens list.</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpGet]
+    public async Task<ActionResult<DashboardResponse>> GetDashboard(
+        [FromQuery] string lang = "en",
+        CancellationToken ct = default)
+    {
+        var userId = GetCurrentUserId();
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        var language = LanguageCodes.Normalize(lang);
+
+        // The gardens, with their plans. The projection is deliberate: the plant
+        // graph is reduced to the ONE field the thumbnail needs
+        // (ScientificName, for the placement colour hash). Materialising Plant
+        // would drag in the 42-field row — free-text Description included — that
+        // makes the gardens list four times heavier than this whole response.
+        var gardenRows = await context.Gardens
+            .AsNoTracking()
+            .Where(g => g.UserId == userId)
+            .OrderByDescending(g => g.CreatedAt)
+            .ThenBy(g => g.Id)
+            .Select(g => new
+            {
+                g.Id,
+                g.Name,
+                g.Description,
+                g.LayoutWidth,
+                g.LayoutHeight,
+                g.CellSize,
+                g.CellsJson,
+                g.Orientation,
+                g.GardenType,
+                g.LightScheduleJson,
+                g.Hemisphere,
+                g.LatitudeBand,
+                g.UpdatedAt,
+                // STABLE order, and the reason matters: SaveLayout deletes every
+                // placement and re-inserts it (GardensController.SaveLayout), so
+                // BOTH `Id` and `PlacedAt` are new after each save. Ordering on
+                // either would reshuffle the list — and with it the first names a
+                // card previews and the order of the variety pastilles — every
+                // time the user saves a layout without moving anything. Grid
+                // geometry is the only key the server does not rewrite: it is the
+                // user's own arrangement, in reading order. PlantId closes the
+                // tie for the case the layout PUT does not reject, two placements
+                // anchored on one cell.
+                Placements = g.Placements
+                    .OrderBy(p => p.StartRow)
+                    .ThenBy(p => p.StartCol)
+                    .ThenBy(p => p.PlantId)
+                    .Select(p => new
+                    {
+                        p.Id,
+                        p.PlantId,
+                        p.Plant.ScientificName,
+                        p.StartRow,
+                        p.StartCol,
+                        p.SpanRows,
+                        p.SpanCols,
+                        p.Notes,
+                    })
+                    .ToList(),
+                // `VarietyCount` and `OccupiedCells` are NOT projected here any
+                // more (round 7, S26 — Extension #7-4): EF Core translated each
+                // as a correlated subquery over `GardenPlacements`, two extra
+                // scans per garden for figures the placement list above already
+                // carries. They are derived from it below, by the rule this file
+                // states at « Counts by variety »: every figure derivable from
+                // `gardenRows` is derived from it. `EdibleCount` stays in SQL —
+                // it reads `PlantType.Name` and `IsEdible`, which the placement
+                // projection deliberately does not carry.
+                EdibleCount = g.Placements.Count(p =>
+                    p.Plant.IsEdible == true
+                    || EdiblePlantTypes.Contains(p.Plant.PlantType!.Name)),
+            })
+            .ToListAsync(ct);
+
+        var gardens = gardenRows
+            .Select(g => new DashboardGardenDto(
+                g.Id,
+                g.Name,
+                g.Description,
+                g.LayoutWidth,
+                g.LayoutHeight,
+                g.CellSize,
+                g.CellsJson,
+                new GardenConfigDto(
+                    g.Orientation,
+                    g.GardenType,
+                    ReadLightSchedule(g.Id, g.LightScheduleJson),
+                    g.Hemisphere,
+                    g.LatitudeBand),
+                g.UpdatedAt,
+                [.. g.Placements.Select(p => new PlacementResponse(
+                    p.Id,
+                    p.PlantId,
+                    p.ScientificName,
+                    p.StartRow,
+                    p.StartCol,
+                    p.SpanRows,
+                    p.SpanCols,
+                    p.Notes))],
+                g.Placements.Count,
+                g.Placements.Select(p => p.PlantId).Distinct().Count(),
+                g.Placements.Sum(p => p.SpanRows * p.SpanCols),
+                // An EMPTY garden is neither: null, not false. Calling it
+                // ornamental would apply « an ornamental garden never shows a
+                // harvest » to a garden nobody has planted yet.
+                g.Placements.Count == 0 ? null : g.EdibleCount > 0))
+            .ToList();
+
+        // Counts by variety — derived IN MEMORY from the placements query 1 has
+        // already loaded, never re-read (round 1, E3).
+        //
+        // The previous shape asked `GardenPlacements` a second time for the same
+        // rows. Two independent reads of a table the user can rewrite between
+        // them can disagree: `SaveLayout` deletes every placement of a garden and
+        // re-inserts it, so the window is a whole layout save wide, and a
+        // response could ship a variety whose `Count` was non-zero while its
+        // `GardenIds` — derived from the FIRST read — was empty. The frontend
+        // reads `gardenIds` as the per-garden filter, so that chip matched no
+        // garden; `Totals.PlacementCount` and the variety counts could disagree
+        // on the same page for the same reason.
+        //
+        // Every figure here is derivable from `gardenRows`: it already carries
+        // each placement's `PlantId`, `ScientificName`, `SpanRows` and `SpanCols`,
+        // and which garden it belongs to. That makes the whole response ONE
+        // snapshot by construction rather than by timing, and drops a full scan
+        // of the caller's placements. What SQL alone could give — `PlantType` and
+        // `IsEdible` — comes from `LoadVarietyDisplayAsync`, whose per-plant read
+        // is already bounded by the caller's own varieties.
+        var varietyRows = gardenRows
+            .SelectMany(g => g.Placements.Select(p => new
+            {
+                GardenId = g.Id,
+                p.PlantId,
+                p.ScientificName,
+                p.SpanRows,
+                p.SpanCols,
+            }))
+            .GroupBy(p => p.PlantId)
+            .Select(grp => new
+            {
+                PlantId = grp.Key,
+                grp.First().ScientificName,
+                Count = grp.Count(),
+                Cells = grp.Sum(p => p.SpanRows * p.SpanCols),
+                GardenIds = (IReadOnlyList<Guid>)[.. grp.Select(p => p.GardenId).Distinct()],
+            })
+            .OrderByDescending(v => v.Count)
+            // ORDINAL, and stated rather than defaulted: the sort moved from
+            // PostgreSQL's collation to the CLR's, and `StringComparer.Ordinal`
+            // is the one comparison that does not depend on the culture the
+            // server happens to run under. Scientific names are ASCII binomials,
+            // so it orders them the way a reader expects.
+            .ThenBy(v => v.ScientificName, StringComparer.Ordinal)
+            .ToList();
+
+        var display = await LoadVarietyDisplayAsync(
+            [.. varietyRows.Select(v => v.PlantId)], language, ct);
+
+        var varieties = varietyRows
+            .Select(v =>
+            {
+                display.TryGetValue(v.PlantId, out var d);
+                return new VarietyCountDto(
+                    v.PlantId,
+                    v.ScientificName,
+                    d.CommonName,
+                    d.PlantType,
+                    d.IsEdible,
+                    d.ImageUrl,
+                    d.ImageAttribution,
+                    v.Count,
+                    v.Cells,
+                    v.GardenIds);
+            })
+            .ToList();
+
+        var totals = new DashboardTotalsDto(
+            gardens.Count,
+            gardens.Sum(g => g.PlacementCount),
+            // DISTINCT varieties (decision D11): a variety planted in two gardens
+            // is one variety. Summing the per-garden counts would say seventeen
+            // where the catalog says sixteen.
+            varieties.Count,
+            await CatalogPlantCountAsync(ct));
+
+        return Ok(new DashboardResponse(gardens, varieties, totals));
+    }
+
+    /// <summary>
+    /// Size of the plant catalog, counted at most once every
+    /// <see cref="CatalogPlantCountTtl"/> (round 1, E2).
+    ///
+    /// <para><c>context.Plants.CountAsync</c> ran on EVERY dashboard load. On
+    /// PostgreSQL an unqualified <c>COUNT(*)</c> is a scan, so its cost grows with
+    /// the catalog while the number it produces changes about never — it is
+    /// reference data an admin import writes, and it feeds one caption. It is
+    /// also issued sequentially after the variety read and shares no dependency
+    /// with it, so it was pure added latency on the critical path of the page.</para>
+    ///
+    /// <para>« Shares no dependency » is about the DATA, not about the
+    /// connection (round 7, S05 — Extension #8-1): both reads use the injected
+    /// scoped <c>context</c>, and a <c>DbContext</c> rejects a second concurrent
+    /// operation on the same instance, so this count must NOT be run alongside
+    /// <see cref="LoadVarietyDisplayAsync"/> with <c>Task.WhenAll</c>. If the
+    /// cold-window latency ever matters, the shape is an
+    /// <c>IDbContextFactory&lt;SmartCropsDbContext&gt;</c> for this one count —
+    /// with a measurement behind it, as every note on this gate already says.</para>
+    ///
+    /// <para>The value is deliberately allowed to be STALE inside the window: a
+    /// caption saying 536 for five minutes after a 537th plant arrives is the
+    /// intended behaviour, not a tolerated one.</para>
+    ///
+    /// <para>Round 3, E″2 — the refill is SERIALIZED. Every request that arrives
+    /// while the window is empty misses the cache before any of them has written
+    /// it back, so a cold start or a TTL expiry under load ran the same scan once
+    /// per concurrent request — the stampede the cache exists to prevent. One
+    /// waiter goes to the database and the rest take its answer, which is why the
+    /// second <c>TryGetValue</c> inside the lock is the load-bearing line and not
+    /// a belt-and-braces one.</para>
+    /// </summary>
+    private async Task<int> CatalogPlantCountAsync(CancellationToken ct)
+    {
+        if (cache.TryGetValue(CatalogPlantCountKey, out int cached)) return cached;
+
+        // Static: the gate has to span REQUESTS, and this controller is created
+        // per request. It guards a read of reference data whose refill is a
+        // single query, so the wait is bounded by that query.
+        await CatalogPlantCountLock.WaitAsync(ct);
+        try
+        {
+            // The waiter that queued behind the winner finds the value here and
+            // never reaches the database.
+            if (cache.TryGetValue(CatalogPlantCountKey, out cached)) return cached;
+
+            var count = await context.Plants.CountAsync(ct);
+            cache.Set(CatalogPlantCountKey, count, CatalogPlantCountTtl);
+            return count;
+        }
+        finally
+        {
+            CatalogPlantCountLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// The stored light schedule, and a WARNING when it read as none (round 7,
+    /// S06 — Extension #7-6). The degradation is the right call for
+    /// availability — one unreadable row must not take the page down — but it
+    /// was silent on both failure paths, so a row that needed repair looked
+    /// like a garden with no schedule. The reader stays pure; the entry point
+    /// that has the request context says it, with the garden and the rule it
+    /// broke, once per read.
+    /// </summary>
+    private List<LightSlotDto>? ReadLightSchedule(Guid gardenId, string? json)
+    {
+        var slots = LightScheduleDocument.Parse(json, out var reason);
+        if (reason is not null)
+            logger.LogWarning(
+                "Garden {GardenId}: stored light schedule read as none — {Reason}",
+                gardenId, reason);
+        return slots;
+    }
+
+    /// <summary>
+    /// What the Counters widget needs about one placed variety beyond its counts:
+    /// the catalog facts SQL alone can answer, and its display name and cover.
+    /// </summary>
+    /// <param name="CommonName">Localised name, requested language then English; null when neither exists.</param>
+    /// <param name="PlantType">The catalog type name — half of the R4 edible rule.</param>
+    /// <param name="IsEdible">The catalog's own flag — the other half of R4.</param>
+    /// <param name="ImageUrl">A stable-source cover, or null.</param>
+    /// <param name="ImageAttribution">Attribution for <paramref name="ImageUrl"/>; null exactly when it is.</param>
+    private readonly record struct VarietyDisplay(
+        string? CommonName,
+        string? PlantType,
+        bool? IsEdible,
+        string? ImageUrl,
+        string? ImageAttribution);
+
+    /// <summary>
+    /// Catalog facts, localised name and cover photo for the placed varieties, in
+    /// one read.
+    ///
+    /// <para>The cover is picked with <see cref="PlantListItemMapper.StableImageRank"/>
+    /// — the library's own priority — so a plant does not wear one photo on its
+    /// Library card and another in the Counters widget. Ranking happens in memory
+    /// because that method is a C# switch: the alternative is a second copy of the
+    /// priority written as SQL, which is the divergence this lot exists to avoid.
+    /// The set is bounded by the caller's own varieties, and only stable-source
+    /// rows are read.</para>
+    ///
+    /// <para>Round 1, E3: it also carries <c>PlantType</c> and <c>IsEdible</c>.
+    /// They used to come from a second <c>GROUP BY</c> over the caller's
+    /// placements; they are catalog facts about a plant, this read is already
+    /// keyed on exactly those plants, and moving them here is what let the second
+    /// read go.</para>
+    /// </summary>
+    private async Task<Dictionary<Guid, VarietyDisplay>>
+        LoadVarietyDisplayAsync(List<Guid> plantIds, string language, CancellationToken ct)
+    {
+        if (plantIds.Count == 0) return [];
+
+        var rows = await context.Plants
+            .AsNoTracking()
+            .Where(p => plantIds.Contains(p.Id))
+            .Select(p => new
+            {
+                p.Id,
+                PlantType = p.PlantType!.Name,
+                p.IsEdible,
+                Names = p.Translations
+                    .Where(t => t.Language == language || t.Language == "en")
+                    .Select(t => new { t.Language, t.CommonName })
+                    .ToList(),
+                Images = p.Images
+                    .Where(i => PlantListItemMapper.StableImageSources.Contains(i.Source))
+                    .Select(i => new
+                    {
+                        i.Id,
+                        i.ImageType,
+                        i.DisplayOrder,
+                        i.Url,
+                        i.Credit,
+                        i.LicenseName,
+                        i.Source,
+                    })
+                    .ToList(),
+            })
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(
+            r => r.Id,
+            r =>
+            {
+                // Requested language, then English — the independent-field
+                // fallback the list mapper applies (SMA-120).
+                var name = r.Names.FirstOrDefault(t => t.Language == language)?.CommonName
+                    ?? r.Names.FirstOrDefault(t => t.Language == "en")?.CommonName;
+
+                var cover = r.Images
+                    .OrderBy(i => PlantListItemMapper.StableImageRank(i.ImageType))
+                    .ThenBy(i => i.DisplayOrder)
+                    .ThenBy(i => i.Id)
+                    .FirstOrDefault();
+
+                return new VarietyDisplay(
+                    name,
+                    r.PlantType,
+                    r.IsEdible,
+                    cover?.Url,
+                    cover is null
+                        ? null
+                        : ImageAttribution.Compose(cover.Credit, cover.LicenseName, cover.Source));
+            });
+    }
 
     /// <summary>
     /// The caller's layout, or the preset of their level when they have never

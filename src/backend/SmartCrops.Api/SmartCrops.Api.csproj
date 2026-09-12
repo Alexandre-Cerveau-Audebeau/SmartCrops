@@ -19,6 +19,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The integration tests read one internal: the catalog-count cache key,
+         so the TTL test can own the window it asserts on (round 6). -->
+    <InternalsVisibleTo Include="SmartCrops.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\SmartCrops.Core\SmartCrops.Core.csproj" />
     <ProjectReference Include="..\SmartCrops.Infrastructure\SmartCrops.Infrastructure.csproj" />
   </ItemGroup>

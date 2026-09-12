@@ -130,7 +130,7 @@ public static class PlantListItemMapper
         // is deterministic across requests. The source filter is defensive — the
         // list query already loads only stable images.
         var primary = plant.Images
-            .Where(i => i.Source is PlantSourceType.Trefle or PlantSourceType.PlantNet)
+            .Where(i => StableImageSources.Contains(i.Source))
             .OrderBy(i => StableImageRank(i.ImageType))
             .ThenBy(i => i.DisplayOrder)
             .ThenBy(i => i.Id)
@@ -196,11 +196,31 @@ public static class PlantListItemMapper
     }
 
     /// <summary>
+    /// The image sources whose URLs are STABLE (SMA-118), beside the ranking
+    /// they feed (round 7, S24 — Extension #7-3). Perenual is excluded: its
+    /// signed S3 URLs expire and then 403. The predicate was written three times
+    /// — here, in the gardens-list <c>Include</c> and in the dashboard
+    /// aggregate — and three copies of the rule that keeps a plant from wearing
+    /// one photo in the Library and another in the Counters widget were three
+    /// chances to retire a source on two paths and not the third. An array of
+    /// enum constants translates to <c>= ANY(...)</c>, so the query shape is
+    /// unchanged where EF Core reads it.
+    /// </summary>
+    internal static readonly PlantSourceType[] StableImageSources =
+        [PlantSourceType.Trefle, PlantSourceType.PlantNet];
+
+    /// <summary>
     /// Cover-image type priority for the list card (SMA-118): a whole-plant
     /// <c>Habit</c> shot reads best, then <c>Flower</c>, then <c>Leaf</c>, then the
     /// remaining detail types. Lower sorts first; unknown types sort last.
     /// </summary>
-    private static int StableImageRank(PlantImageType type) => type switch
+    /// <remarks>
+    /// SMA-336 PR 2/5: <c>internal</c> rather than <c>private</c> so the dashboard
+    /// aggregate picks its variety avatar with the SAME priority the library card
+    /// uses. A plant must not wear one photo in the Library and another in the
+    /// Counters widget, and that only holds while there is one ranking.
+    /// </remarks>
+    internal static int StableImageRank(PlantImageType type) => type switch
     {
         PlantImageType.Habit => 0,
         PlantImageType.Flower => 1,

@@ -3,15 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
+import Popover from '@mui/material/Popover';
 import Typography from '@mui/material/Typography';
 import { keyframes } from '@mui/material/styles';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import OpenInFullOutlinedIcon from '@mui/icons-material/OpenInFullOutlined';
 import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { spanFor } from '../../utils/dashboardLayoutGrid';
@@ -27,6 +26,74 @@ const wobble = keyframes`
   100% { transform: rotate(-0.5deg); }
 `;
 
+/**
+ * The corner resize grip (round 4, A9) — `A6Modifier.dc.html`, verbatim:
+ *
+ *   .grip { position: absolute; right: 8px; bottom: 8px; width: 16px;
+ *           height: 16px; z-index: 3; color: var(--prim); }
+ *   <svg class="grip" viewBox="0 0 16 16">
+ *     <path d="M15 1 1 15M15 8l-7 7" stroke="currentColor" stroke-width="2"
+ *           stroke-linecap="round" fill="none"/>
+ *   </svg>
+ *
+ * Two diagonal strokes and nothing else. It was `OpenInFullOutlined`, a
+ * two-headed arrow — a control that says « drag me in both directions » on a
+ * button that steps through three fixed sizes on a click, and the one glyph in
+ * Edit mode loud enough to be seen before the widget it sits on.
+ *
+ * A `<path>` rather than an icon from the set: no icon of `@mui/icons-material`
+ * is these two strokes, and the artboard's own drawing is four attributes long.
+ */
+function ResizeGrip() {
+  return (
+    <Box
+      component="svg"
+      viewBox="0 0 16 16"
+      aria-hidden
+      sx={{ width: 16, height: 16, display: 'block' }}
+    >
+      <path
+        d="M15 1 1 15M15 8l-7 7"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        fill="none"
+      />
+    </Box>
+  );
+}
+
+/**
+ * The chip every Edit-mode control of the card's top edge stands on (round 5,
+ * A10-10) - `A6Modifier.dc.html`'s `.hb` and `.mv`, which differ only by their
+ * width and their radius.
+ *
+ * `surfaceSubtle` is `--surface` and `borderSubtle` is `--card-bd`, the two
+ * tokens the dashboard already uses wherever the artboards ask for a surface one
+ * step away from the card - the Gardens actions zone, the gallery thumbnail.
+ */
+const editChipSx = {
+  width: 26,
+  height: 26,
+  p: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: '50%',
+  backgroundColor: 'surfaceSubtle',
+  border: '1px solid',
+  borderColor: 'borderSubtle',
+  color: 'text.primary',
+} as const;
+
+/** `.hb.rm` / `.hb.lk` - the left chip, 10 px in from the card's edge. */
+const leftChipSx = {
+  position: 'absolute',
+  top: 6,
+  left: 10,
+  zIndex: 3,
+} as const;
+
 interface Props {
   block: DashboardBlock;
   /** Localized widget name, for every control label. */
@@ -36,6 +103,14 @@ interface Props {
   sizeLabel: string;
   onHide: () => void;
   onResize: () => void;
+  /**
+   * The widget's own settings, rendered inside the gear menu (SMA-336 PR 2/5).
+   *
+   * Absent for a widget that has none, and the menu then says so rather than
+   * drawing an empty panel — PR 1/5 shipped every widget that way, and five of
+   * the eight still are.
+   */
+  options?: ReactNode;
   children: ReactNode;
 }
 
@@ -63,10 +138,21 @@ export default function SortableWidget({
   sizeLabel,
   onHide,
   onResize,
+  options,
   children,
 }: Props) {
   const { t } = useTranslation();
   const [optionsAnchor, setOptionsAnchor] = useState<HTMLElement | null>(null);
+
+  // The options panel's NAME comes from its own two title lines (round 6,
+  // Extension #5-5): the paper carried an `aria-label` built from the same
+  // widget name the `h3` inside it renders, so a screen reader announced the
+  // name twice on entry. `aria-labelledby` on the heading and its subtitle
+  // gives the dialog one source of truth — « Compteurs par variété Options du
+  // widget » — and nothing to keep in step. Per widget, so the ids never
+  // collide across eight panels.
+  const optionsHeadingId = `dashboard-options-title-${block.key}`;
+  const optionsSubtitleId = `dashboard-options-subtitle-${block.key}`;
 
   const {
     attributes,
@@ -105,6 +191,22 @@ export default function SortableWidget({
       style={{ transform: CSS.Translate.toString(transform), transition }}
       sx={{
         minWidth: 0,
+        // V7 — the widget's content STAYS in its card, at every size.
+        //
+        // A grid item's automatic minimum size in the block axis is
+        // `min-height: auto`, which resolves to its content's min-content
+        // height. The rows of this grid are fixed tracks (`gridAutoRows`,
+        // 200 px on a phone and 273 px above), so an item whose content was
+        // taller than its track grew PAST the track instead of being clipped by
+        // it: the Statistics card's last line — « N cases libres, dont M en
+        // plein soleil » — was drawn below the card's own border and over the
+        // header of whichever widget sat underneath.
+        //
+        // `minHeight: 0` is the block-axis twin of the `minWidth: 0` above it,
+        // and it is what lets `DashboardBlock`'s `overflow: hidden` and each
+        // body's own bounded scroll actually apply. Fixing it here fixes it for
+        // all eight widgets at once, which is why it is not in a widget.
+        minHeight: 0,
         gridColumn: {
           xs: `span ${phone.cols}`,
           sm: `span ${tablet.cols}`,
@@ -149,64 +251,98 @@ export default function SortableWidget({
 
         {editing && (
           <>
-            <Box
+            {/* THREE separate controls, each at its own absolute place (round 5,
+                A10-10). They were one flex row spanning the whole card width
+                with three bare `IconButton`s in it, so each glyph floated on
+                the widget background with nothing under it. The artboard gives
+                every one of them a chip of its own:
+
+                  .hb { position: absolute; top: 6px; width: 26px; height: 26px;
+                        border-radius: 50%; background: var(--surface);
+                        border: 1px solid var(--card-bd); color: var(--t-meta);
+                        z-index: 3 }
+                  .hb.rm { left: 10px }   .hb.gear { right: 10px }
+                  .hb.lk { left: 10px; color: var(--muted) }
+                  .mv { position: absolute; top: 6px; left: 50%;
+                        transform: translateX(-50%); height: 26px;
+                        padding: 0 12px; border-radius: 14px;
+                        background: var(--surface);
+                        border: 1px solid var(--card-bd); color: var(--muted) }
+
+                26 px clears the 24 px floor WCAG 2.2 § 2.5.8 sets for a target,
+                and the three stand 10 px from the edges and half a card apart,
+                so no two fall inside each other's 24 px circle either.
+                `DashboardBlock` already reserves the 34 / 38 px of top padding
+                they sit in, which is the artboard's own `.w.ed`. */}
+            {locked ? (
+              // A generic div forbids an author-supplied name, so assistive
+              // technology may ignore the aria-label; role="img" makes it a
+              // graphic WITH a text alternative (round 1, E6 / G7). The lock is
+              // the only signal that this widget cannot be hidden.
+              <Box
+                role="img"
+                aria-label={t('dashboard.editMode.locked', { widget: label })}
+                sx={{ ...editChipSx, ...leftChipSx, color: 'text.secondary' }}
+              >
+                <LockOutlinedIcon sx={{ fontSize: 15 }} aria-hidden />
+              </Box>
+            ) : (
+              <IconButton
+                size="small"
+                onClick={onHide}
+                aria-label={t('dashboard.editMode.hide', { widget: label })}
+                sx={{ ...editChipSx, ...leftChipSx }}
+              >
+                <RemoveRoundedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            )}
+
+            <IconButton
+              size="small"
+              ref={setActivatorNodeRef}
+              aria-label={t('dashboard.editMode.drag', { widget: label })}
               sx={{
                 position: 'absolute',
-                top: 4,
-                left: 6,
-                right: 6,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
+                top: 6,
+                left: '50%',
+                transform: 'translateX(-50%)',
                 zIndex: 3,
+                ...editChipSx,
+                // `.mv` is a PILL and not a disc: wider than it is tall, so a
+                // pointer finds the one control of the three that is DRAGGED
+                // rather than clicked.
+                width: 'auto',
+                px: '12px',
+                borderRadius: '14px',
+                color: 'text.secondary',
+                cursor: 'grab',
+                touchAction: 'none',
+              }}
+              {...attributes}
+              {...listeners}
+            >
+              <DragIndicatorIcon sx={{ fontSize: 17 }} />
+            </IconButton>
+
+            <IconButton
+              size="small"
+              onClick={(event) => setOptionsAnchor(event.currentTarget)}
+              aria-label={t('dashboard.editMode.options', { widget: label })}
+              sx={{
+                position: 'absolute',
+                top: 6,
+                right: 10,
+                zIndex: 3,
+                ...editChipSx,
               }}
             >
-              {locked ? (
-                // A generic div forbids an author-supplied name, so assistive
-                // technology may ignore the aria-label; role="img" makes it a
-                // graphic WITH a text alternative (round 1, E6 / G7). The lock
-                // is the only signal that this widget cannot be hidden.
-                <Box
-                  role="img"
-                  aria-label={t('dashboard.editMode.locked', { widget: label })}
-                  sx={{
-                    display: 'flex',
-                    p: '5px',
-                    color: 'text.disabled',
-                  }}
-                >
-                  <LockOutlinedIcon fontSize="small" aria-hidden />
-                </Box>
-              ) : (
-                <IconButton
-                  size="small"
-                  onClick={onHide}
-                  aria-label={t('dashboard.editMode.hide', { widget: label })}
-                >
-                  <RemoveRoundedIcon fontSize="small" />
-                </IconButton>
-              )}
+              <SettingsOutlinedIcon sx={{ fontSize: 15 }} />
+            </IconButton>
 
-              <IconButton
-                size="small"
-                ref={setActivatorNodeRef}
-                aria-label={t('dashboard.editMode.drag', { widget: label })}
-                sx={{ cursor: 'grab', touchAction: 'none' }}
-                {...attributes}
-                {...listeners}
-              >
-                <DragIndicatorIcon fontSize="small" />
-              </IconButton>
-
-              <IconButton
-                size="small"
-                onClick={(event) => setOptionsAnchor(event.currentTarget)}
-                aria-label={t('dashboard.editMode.options', { widget: label })}
-              >
-                <SettingsOutlinedIcon fontSize="small" />
-              </IconButton>
-            </Box>
-
+            {/* 3 px of offset plus the small IconButton's own 5 px of padding
+                put the 16 px grip exactly where the artboard has it — 8 px in
+                from both edges — while the button around it stays a full
+                keyboard target. */}
             <IconButton
               size="small"
               onClick={onResize}
@@ -214,37 +350,134 @@ export default function SortableWidget({
                 widget: label,
                 size: sizeLabel,
               })}
-              sx={{ position: 'absolute', bottom: 4, right: 4, zIndex: 3 }}
+              sx={{
+                position: 'absolute',
+                bottom: 3,
+                right: 3,
+                zIndex: 3,
+                color: 'primary.main',
+              }}
             >
-              <OpenInFullOutlinedIcon fontSize="small" />
+              <ResizeGrip />
             </IconButton>
 
-            {/* Generic options shell (_spec.md 8, A8): the frame exists so a
-                later lot drops its real entries in. PR 1/5 ships none, and says
-                so rather than drawing a switch that toggles nothing. */}
-            <Menu
+            {/* Generic options shell (_spec.md 8, A8). PR 1/5 shipped the frame
+                and nothing in it; PR 2/5 drops the Counters entries in. A widget
+                with no settings still says so rather than opening on a blank
+                panel.
+
+                A POPOVER, not a Menu (round 1, G6). What this surface holds is
+                a switch and a select — form controls, not `MenuItem`s — and
+                `Menu` wraps its children in a `MenuList`, which owns the arrow
+                keys and adds character typeahead. Inside it, Up and Down moved
+                the menu's own focus instead of opening the garden select, and
+                typing in a field could jump focus to whatever child started
+                with that letter. `Popover` is the same anchored, focus-trapping,
+                Escape-closing surface with none of the list behaviour, so the
+                controls behave the way they do everywhere else in the product.
+
+                What is preserved: the gear still opens it with Enter or Space
+                (it is an `IconButton`), the popover still moves focus into
+                itself, Escape and a click outside still close it, and closing
+                still returns focus to the gear — `Popover` restores it the same
+                way `Menu` did. « Terminé » is now a `Button`, which is what it
+                always was semantically. */}
+            <Popover
               anchorEl={optionsAnchor}
               open={optionsAnchor !== null}
               onClose={() => setOptionsAnchor(null)}
-              slotProps={{ paper: { sx: { width: 320 } } }}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              slotProps={{
+                paper: {
+                  sx: { width: 320 },
+                  // NAMED, and named after the widget: `Menu` gave this surface
+                  // a `menu` role for free, and dropping to a `Popover` would
+                  // otherwise leave a focus-trapping panel with no role and no
+                  // name at all. It traps focus, closes on Escape and returns
+                  // focus to the gear — that is a dialog — and the label says
+                  // which widget's settings a user is standing in.
+                  role: 'dialog',
+                  'aria-labelledby': `${optionsHeadingId} ${optionsSubtitleId}`,
+                },
+              }}
             >
-              <Box sx={{ px: 2, pt: 1, pb: 0.5 }}>
+              {/* TWO lines, and a rule under them (round 4, A7) —
+                  `A8Options.dc.html`'s `.pop-h`:
+
+                    <div class="pop-h">
+                      <div style="font-size:15px; font-weight:700; …">Compteurs
+                        par variété</div>
+                      <div class="sub">Options du widget</div>
+                    </div>
+                    .pop-h { padding: 16px 18px 12px;
+                             border-bottom: 1px solid var(--divider); }
+
+                  The panel opened on « Options du widget » alone, so a user who
+                  had just clicked one of eight identical gears had nothing on
+                  screen telling them which widget they were standing in. The
+                  `h3` moves to the widget's NAME, which is what the heading is
+                  for; the generic line becomes its subtitle. The Popover's
+                  `aria-label` already carried the name for assistive
+                  technology — this is the same fact, on screen. */}
+              <Box
+                sx={{
+                  px: '18px',
+                  pt: '16px',
+                  pb: '12px',
+                  borderBottom: '1px solid',
+                  borderColor: 'divider',
+                }}
+              >
                 <Typography
-                  sx={{ fontSize: 13, fontWeight: 700, color: 'text.secondary' }}
+                  id={optionsHeadingId}
+                  component="h3"
+                  sx={{
+                    fontSize: 15,
+                    fontWeight: 700,
+                    color: 'text.primary',
+                    m: 0,
+                  }}
+                >
+                  {label}
+                </Typography>
+                <Typography
+                  id={optionsSubtitleId}
+                  sx={{ fontSize: 14, color: 'text.secondary' }}
                 >
                   {t('dashboard.editMode.optionsTitle')}
                 </Typography>
               </Box>
-              <Box sx={{ px: 2, pb: 1 }}>
-                <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>
-                  {t('dashboard.editMode.optionsEmpty')}
-                </Typography>
+              <Box sx={{ px: '18px', py: '8px' }}>
+                {options ?? (
+                  <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>
+                    {t('dashboard.editMode.optionsEmpty')}
+                  </Typography>
+                )}
               </Box>
               <Divider />
-              <MenuItem onClick={() => setOptionsAnchor(null)}>
-                {t('dashboard.editMode.optionsDone')}
-              </MenuItem>
-            </Menu>
+              {/* `.pop-r { justify-content: flex-end }` closing on
+                  `<span class="lnk">Terminé</span>` — `.lnk { color:
+                  var(--prim); font-weight: 700; font-size: 15px }`. MUI's own
+                  primary is that green; the weight and the size are the
+                  artboard's. */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  px: '18px',
+                  py: '8px',
+                }}
+              >
+                <Button
+                  size="small"
+                  onClick={() => setOptionsAnchor(null)}
+                  sx={{ fontSize: 15, fontWeight: 700 }}
+                >
+                  {t('dashboard.editMode.optionsDone')}
+                </Button>
+              </Box>
+            </Popover>
           </>
         )}
       </Box>

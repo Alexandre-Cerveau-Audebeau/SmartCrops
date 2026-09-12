@@ -34,6 +34,8 @@ interface Props {
   onHide: (key: DashboardBlockKey) => void;
   onResize: (key: DashboardBlockKey) => void;
   renderBlock: (block: DashboardBlock) => ReactNode;
+  /** A widget's own settings for the Edit-mode gear; undefined when it has none. */
+  renderBlockOptions?: (block: DashboardBlock) => ReactNode;
 }
 
 /**
@@ -57,6 +59,7 @@ export default function DashboardGrid({
   onHide,
   onResize,
   renderBlock,
+  renderBlockOptions,
 }: Props) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -183,6 +186,7 @@ export default function DashboardGrid({
               sizeLabel={t(`dashboard.sizes.${block.size}`)}
               onHide={() => onHide(block.key)}
               onResize={() => onResize(block.key)}
+              options={renderBlockOptions?.(block)}
             >
               {renderBlock(block)}
             </SortableWidget>

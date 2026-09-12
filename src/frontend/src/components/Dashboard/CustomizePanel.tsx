@@ -12,6 +12,7 @@ import RadioGroup from '@mui/material/RadioGroup';
 import Typography from '@mui/material/Typography';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import { BLOCK_ICONS } from './blockIcons';
 import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
 import {
@@ -19,6 +20,7 @@ import {
   type DashboardBlock,
   type DashboardBlockKey,
   type DashboardLevel,
+  type GalleryPreview,
 } from '../../types/Dashboard';
 
 /** Stable ids: the drawer names itself by its heading, the group by its label. */
@@ -30,6 +32,8 @@ interface Props {
   level: DashboardLevel;
   /** Every block - the gallery reads the hidden ones. */
   blocks: DashboardBlock[];
+  /** A hidden widget's headline figure, or null when it has none yet. */
+  preview?: (key: DashboardBlockKey) => GalleryPreview | null;
   onClose: () => void;
   onLevelChange: (level: DashboardLevel) => void;
   onReset: () => void;
@@ -47,6 +51,7 @@ export default function CustomizePanel({
   open,
   level,
   blocks,
+  preview,
   onClose,
   onLevelChange,
   onReset,
@@ -161,7 +166,18 @@ export default function CustomizePanel({
           >
             {t('dashboard.panel.note')}
           </Typography>
-          <Button variant="outlined" size="small" onClick={onReset}>
+          {/* A GLYPH before the label (round 5, A10-12). `A7Personnaliser.dc.html`
+              draws this control as `<div class="lnk">` opening on an 18 px
+              `<svg class="ic">` whose path is `RestartAltOutlined`, matched
+              attribute for attribute against `@mui/icons-material`. It is the
+              same rule as A10-11 on the page header and A2 on the widget
+              titles: in these artboards a control that acts carries a mark. */}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<RestartAltOutlinedIcon />}
+            onClick={onReset}
+          >
             {t('dashboard.panel.reset', {
               level: t(`dashboard.levels.${level}.name`),
             })}
@@ -195,20 +211,100 @@ export default function CustomizePanel({
             hidden.map((block) => {
               const Icon = BLOCK_ICONS[block.key];
               const name = t(`dashboard.blocks.${block.key}.title`);
+              const shown = preview?.(block.key) ?? null;
               return (
                 <Box
                   key={block.key}
                   sx={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '12px',
-                    p: '12px',
-                    borderRadius: '10px',
+                    // `.gal { gap: 14px; border-radius: 12px; padding: 12px 14px }`
+                    gap: '14px',
+                    p: '12px 14px',
+                    borderRadius: '12px',
                     border: '1px solid',
                     borderColor: 'borderSubtle',
                   }}
                 >
-                  <Icon fontSize="small" sx={{ color: 'text.secondary' }} />
+                  {/* THE THUMBNAIL (round 4, A8) — `.gal-th`, verbatim:
+                      `width: 116px; height: 70px; border-radius: 8px; border:
+                      1px solid var(--card-bd); background: var(--surface);
+                      padding: 9px 10px; display: flex; flex-direction: column;
+                      gap: 5px; overflow: hidden`.
+
+                      The row carried a bare 20 px icon beside the widget's
+                      name, so eight hidden widgets read as eight lines of text
+                      and the gallery showed nothing of what it was offering. */}
+                  {/* NOT `aria-hidden` as a whole (round 6, Extension #4-5 /
+                      #5-4): the headline — « 3.0 m² » or « Soon » — is the one
+                      fact of the row that decides whether adding the widget is
+                      worth doing now, and it exists nowhere else in the row. A
+                      screen-reader user read the widget name and « Hidden » and
+                      nothing more. The FRAME stays: only the glyph and the bars
+                      are decorative, and they are marked so below. */}
+                  <Box
+                    sx={{
+                      width: 116,
+                      height: 70,
+                      flexShrink: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '5px',
+                      p: '9px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid',
+                      borderColor: 'borderSubtle',
+                      backgroundColor: 'surfaceSubtle',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Box aria-hidden sx={{ display: 'flex', color: 'primary.main' }}>
+                      <Icon sx={{ fontSize: 13 }} />
+                    </Box>
+                    {/* `.gal-th .v { font-size: 15px; font-weight: 800 }` — the
+                        widget's own headline when it has one. Five of the eight
+                        widgets have no data at all until PR 3/5 and PR 4/5, and
+                        an empty box would be the « page blanche » rule 4
+                        forbids: they say « soon » in the same place, which is
+                        the word the Gardens table already uses for its WEATHER
+                        and HARVEST cells. */}
+                    <Typography
+                      sx={{
+                        fontSize: `${DASHBOARD_TYPE.body}px`,
+                        fontWeight: 800,
+                        lineHeight: 1.1,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        ...(shown ? null : { color: 'text.secondary' }),
+                      }}
+                    >
+                      {shown ? shown.value : t('dashboard.panel.gallerySoon')}
+                    </Typography>
+                    {/* `.gal-th .b { height: 5px; border-radius: 3px }` over
+                        `--track`, filled with `--prim`. */}
+                    {(shown?.bars ?? []).map((percent, index) => (
+                      <Box
+                        key={index}
+                        aria-hidden
+                        sx={{
+                          height: 5,
+                          borderRadius: '3px',
+                          backgroundColor: 'action.hover',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            width: `${Math.max(0, Math.min(100, percent))}%`,
+                            height: '100%',
+                            borderRadius: '3px',
+                            backgroundColor: 'primary.main',
+                          }}
+                        />
+                      </Box>
+                    ))}
+                  </Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography
                       sx={{
@@ -220,19 +316,31 @@ export default function CustomizePanel({
                     </Typography>
                     <Typography
                       sx={{
-                        fontSize: `${DASHBOARD_TYPE.chip}px`,
+                        fontSize: `${DASHBOARD_TYPE.secondary}px`,
                         color: 'text.secondary',
                       }}
                     >
                       {t('dashboard.panel.hidden')}
                     </Typography>
                   </Box>
+                  {/* `.plus { margin-left: auto; width: 36px; height: 36px;
+                      border-radius: 50%; background: var(--prim); color:
+                      var(--on-prim) }` — a filled green disc, not the bare
+                      glyph the panel had. */}
                   <IconButton
-                    size="small"
                     onClick={() => onShow(block.key)}
                     aria-label={t('dashboard.panel.add', { widget: name })}
+                    sx={{
+                      ml: 'auto',
+                      flexShrink: 0,
+                      width: 36,
+                      height: 36,
+                      backgroundColor: 'primary.main',
+                      color: 'primary.contrastText',
+                      '&:hover': { backgroundColor: 'primary.dark' },
+                    }}
                   >
-                    <AddRoundedIcon fontSize="small" />
+                    <AddRoundedIcon sx={{ fontSize: 20 }} />
                   </IconButton>
                 </Box>
               );
