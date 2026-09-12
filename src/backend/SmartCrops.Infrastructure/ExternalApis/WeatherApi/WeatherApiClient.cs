@@ -110,8 +110,13 @@ public sealed class WeatherApiClient
             $"forecast.json?key={Uri.EscapeDataString(_options.ApiKey)}" +
             $"&q={q}" +
             $"&days={_options.ForecastDays.ToString(CultureInfo.InvariantCulture)}" +
-            "&alerts=yes&aqi=no" +
-            $"&lang={Uri.EscapeDataString(lang)}";
+            "&alerts=yes&aqi=no";
+        // English is the provider's default and is NOT in its documented list
+        // of `lang` codes (read 2026-09-12): it is asked for by omission.
+        if (!string.Equals(lang, "en", StringComparison.OrdinalIgnoreCase))
+        {
+            url += $"&lang={Uri.EscapeDataString(lang)}";
+        }
 
         var result = await GetAsync<WeatherApiForecastResponse>(url, "forecast", ct);
         if (!result.IsSuccess) return result;

@@ -2542,7 +2542,7 @@
   "alerts": {
     "alert": [
       {
-        "headline": "Vigilance orange vent violent publiée le 2026-09-15 à 06:00 par Météo-France",
+        "headline": "Vigilance orange vent violent publiée par Météo-France",
         "msgtype": "Alert",
         "severity": "Moderate",
         "urgency": "Expected",
@@ -2552,9 +2552,24 @@
         "event": "Vent violent",
         "note": "",
         "effective": "2026-09-15T06:00:00+02:00",
-        "expires": "2026-09-15T23:59:00+02:00",
+        "expires": "2099-12-31T23:59:00+02:00",
         "desc": "Rafales jusqu'à 90 km/h attendues en plaine.",
         "instruction": "Rangez les objets légers."
+      },
+      {
+        "headline": "Vigilance jaune crue — levée",
+        "msgtype": "Cancel",
+        "severity": "Minor",
+        "urgency": "Past",
+        "areas": "Rhône",
+        "category": "Met",
+        "certainty": "Observed",
+        "event": "Crue",
+        "note": "",
+        "effective": "2026-01-01T06:00:00+01:00",
+        "expires": "2026-01-02T06:00:00+01:00",
+        "desc": "Alerte expirée — présente pour prouver le filtre.",
+        "instruction": ""
       }
     ]
   }

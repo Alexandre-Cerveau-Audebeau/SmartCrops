@@ -78,6 +78,19 @@ public class WeatherApiClientTests
     }
 
     [Fact]
+    public async Task ForecastAsync_English_OmitsLang()
+    {
+        // English is the provider's default and not a documented lang code.
+        var handler = new RecordingHandler(HttpStatusCode.OK, WeatherApiFixtures.Forecast);
+        var client = NewClient(handler);
+
+        await client.ForecastAsync(45.764, 4.8357, "en", CancellationToken.None);
+
+        Assert.EndsWith("&days=5&alerts=yes&aqi=no", handler.LastRequestUri!.AbsoluteUri);
+        Assert.DoesNotContain("lang=", handler.LastRequestUri.AbsoluteUri);
+    }
+
+    [Fact]
     public async Task ForecastAsync_NegativeCoordinates_AndDefaultLanguage()
     {
         var handler = new RecordingHandler(HttpStatusCode.OK, WeatherApiFixtures.Forecast);
@@ -125,11 +138,15 @@ public class WeatherApiClientTests
         Assert.Equal(55.1, thursday.MaxwindKph);
         Assert.Equal("07:16 AM", days[0].Astro!.Sunrise);
 
-        var alert = Assert.Single(body.Alerts!.Alert!);
-        Assert.Equal("Vent violent", alert.Event);
-        Assert.Equal("Moderate", alert.Severity);
-        Assert.Equal("Alert", alert.MsgType);
-        Assert.Equal("Rafales jusqu'à 90 km/h attendues en plaine.", alert.Description);
+        // Two alerts in the fixture: one current, one long expired (the mapper's
+        // filter is proven on the endpoint; the client binds both).
+        var alerts = body.Alerts!.Alert!;
+        Assert.Equal(2, alerts.Count);
+        Assert.Equal("Vent violent", alerts[0].Event);
+        Assert.Equal("Moderate", alerts[0].Severity);
+        Assert.Equal("Alert", alerts[0].MsgType);
+        Assert.Equal("Rafales jusqu'à 90 km/h attendues en plaine.", alerts[0].Description);
+        Assert.Equal("Crue", alerts[1].Event);
     }
 
     [Fact]

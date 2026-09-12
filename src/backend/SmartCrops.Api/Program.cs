@@ -26,6 +26,7 @@ using SmartCrops.Infrastructure.ExternalApis.Perenual;
 using SmartCrops.Infrastructure.ExternalApis.Trefle;
 using SmartCrops.Infrastructure.ExternalApis.SearchIndex;
 using SmartCrops.Infrastructure.ExternalApis.WeatherApi;
+using SmartCrops.Infrastructure.Weather;
 using Typesense;
 using Typesense.Setup;
 
@@ -366,6 +367,11 @@ builder.Services.AddHttpClient<WeatherApiClient>((sp, client) =>
     options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(10);
     options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(10);
 });
+
+// The forecast cache in front of the client: a singleton because its gates
+// and its two entries per place must span requests; it resolves the typed
+// client in a scope of its own per provider call (see the class).
+builder.Services.AddSingleton<WeatherForecastCache>();
 
 // ── Search engine: Typesense (SMA-255) ───────────────────────────────────
 // Options validated at startup (missing API key fails the host boot), same
