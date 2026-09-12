@@ -178,6 +178,7 @@ public class GardensEndpointsTests : IntegrationTestBase
     [InlineData(null, "rooftop", null, null, "gardenType")]
     [InlineData(null, "balcony", "08:00", "12:00", "indoor")]
     [InlineData(null, "indoor", "8h00", "12:00", "HH:mm")]
+    [InlineData(null, "indoor", "0١:0٢", "12:00", "HH:mm")] // round 8: ASCII digits only
     [InlineData(null, "indoor", "12:00", "12:00", "start < end")]
     public async Task Layout_InvalidConfig_Returns400(
         string? orientation,

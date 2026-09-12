@@ -34,9 +34,26 @@ internal static class LightScheduleDocument
     private static readonly JsonSerializerOptions JsonWeb =
         new(JsonSerializerDefaults.Web);
 
-    /// <summary>Strict 24h clock: 00:00 .. 23:59.</summary>
+    /// <summary>
+    /// Strict 24h clock: 00:00 .. 23:59, in ASCII digits.
+    ///
+    /// <para><c>[0-9]</c> rather than <c>\d</c> (round 8 — GitHub review of
+    /// <c>0bb6325</c>, outside the diff). In .NET a <c>\d</c> matches every
+    /// Unicode decimal digit — the whole <c>Nd</c> category — unless the pattern
+    /// runs under <c>RegexOptions.ECMAScript</c>, which this one does not. So
+    /// <c>0١:0٢</c> (Arabic-Indic digits) matched, passed the ordinal comparison
+    /// and <see cref="Parse"/>, and both write paths stored it as sent. Nothing
+    /// downstream reads such a slot as a time. The class is what the rest of
+    /// this file already assumes: the ordinal comparison below is chronological
+    /// only because the digits are the ASCII ten.</para>
+    ///
+    /// <para>The ASCII set is a subset of what was accepted, so every document a
+    /// stored schedule could have been written with in ASCII reads exactly as
+    /// before; one written with non-ASCII digits — none exists in the product's
+    /// data — now reads as none, with the round-7 warning naming the rule.</para>
+    /// </summary>
     private static readonly Regex TimeSlotPattern =
-        new(@"^([01]\d|2[0-3]):[0-5]\d$", RegexOptions.Compiled);
+        new(@"^([01][0-9]|2[0-3]):[0-5][0-9]$", RegexOptions.Compiled);
 
     /// <summary>
     /// What makes a list of light slots WELL-FORMED, in one place (round 3, E″3).
