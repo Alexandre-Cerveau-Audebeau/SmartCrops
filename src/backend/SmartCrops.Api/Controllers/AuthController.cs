@@ -15,9 +15,11 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using SmartCrops.Api.Configuration;
+using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
+using SmartCrops.Core.Models;
 using SmartCrops.Infrastructure.Data;
 using SmartCrops.Infrastructure.Email;
 
@@ -906,6 +908,49 @@ public class AuthController(
             user.LastName,
             user.City,
             hasPassword));
+    }
+
+    // ── Default location (SMA-336 PR 3a/5) ──────────────────────────────────
+    // The account's default place: every garden without an override inherits
+    // it (ADR-0006). A resource of its OWN, with ZERO coupling to the profile
+    // fields above: City stays the free text the profile page edits, and
+    // neither endpoint here reads, clears or rewrites it — the dashboard's
+    // « use my profile city » link only pre-fills a search field with it.
+
+    /// <summary>Sets the account's default location, every column at once, stamped now (UTC).</summary>
+    [Authorize]
+    [HttpPut("profile/location")]
+    public async Task<IActionResult> PutProfileLocation([FromBody] SaveLocationRequest request)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+        var user = await userManager.FindByIdAsync(userId);
+        if (user == null) return NotFound();
+
+        request.ToGeoLocation(DateTime.UtcNow).ApplyTo(user);
+
+        var result = await userManager.UpdateAsync(user);
+        if (!result.Succeeded) return BadRequest(result.Errors);
+
+        return NoContent();
+    }
+
+    /// <summary>Clears the account's default location; gardens without an override read as not located again.</summary>
+    [Authorize]
+    [HttpDelete("profile/location")]
+    public async Task<IActionResult> DeleteProfileLocation()
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+        var user = await userManager.FindByIdAsync(userId);
+        if (user == null) return NotFound();
+
+        GeoLocation.Clear(user);
+
+        var result = await userManager.UpdateAsync(user);
+        if (!result.Succeeded) return BadRequest(result.Errors);
+
+        return NoContent();
     }
 
     [Authorize]

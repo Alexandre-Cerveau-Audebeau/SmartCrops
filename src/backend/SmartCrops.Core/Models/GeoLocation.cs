@@ -31,7 +31,7 @@ public sealed record GeoLocation(
     DateTime? ResolvedAt)
 {
     /// <summary>The garden's OWN location (its override), or null when it has none.</summary>
-    public static GeoLocation? From(Garden garden) => Build(
+    public static GeoLocation? From(Garden garden) => Create(
         garden.LocationName,
         garden.LocationRegion,
         garden.LocationCountry,
@@ -40,13 +40,29 @@ public sealed record GeoLocation(
         garden.LocationResolvedAt);
 
     /// <summary>The account's DEFAULT location, or null when the user never set one.</summary>
-    public static GeoLocation? From(ApplicationUser user) => Build(
+    public static GeoLocation? From(ApplicationUser user) => Create(
         user.LocationName,
         user.LocationRegion,
         user.LocationCountry,
         user.Latitude,
         user.Longitude,
         user.LocationResolvedAt);
+
+    /// <summary>
+    /// The same projection from the six raw columns — for a query that
+    /// selects them without materializing the carrier.
+    /// </summary>
+    public static GeoLocation? Create(
+        string? name,
+        string? region,
+        string? country,
+        double? latitude,
+        double? longitude,
+        DateTime? resolvedAt)
+    {
+        if (name is null || latitude is null || longitude is null) return null;
+        return new GeoLocation(name, region, country, latitude.Value, longitude.Value, resolvedAt);
+    }
 
     /// <summary>
     /// Writes this location onto a garden, every column at once. The caller
@@ -95,15 +111,4 @@ public sealed record GeoLocation(
         user.LocationResolvedAt = null;
     }
 
-    private static GeoLocation? Build(
-        string? name,
-        string? region,
-        string? country,
-        double? latitude,
-        double? longitude,
-        DateTime? resolvedAt)
-    {
-        if (name is null || latitude is null || longitude is null) return null;
-        return new GeoLocation(name, region, country, latitude.Value, longitude.Value, resolvedAt);
-    }
 }
