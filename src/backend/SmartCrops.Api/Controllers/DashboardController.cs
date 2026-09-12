@@ -396,10 +396,6 @@ public class DashboardController(
     }
 
     /// <summary>
-    /// What the Counters widget needs about one placed variety beyond its counts:
-    /// the catalog facts SQL alone can answer, and its display name and cover.
-    /// </summary>
-    /// <summary>
     /// The stored light schedule, and a WARNING when it read as none (round 7,
     /// S06 — Extension #7-6). The degradation is the right call for
     /// availability — one unreadable row must not take the page down — but it
@@ -418,6 +414,10 @@ public class DashboardController(
         return slots;
     }
 
+    /// <summary>
+    /// What the Counters widget needs about one placed variety beyond its counts:
+    /// the catalog facts SQL alone can answer, and its display name and cover.
+    /// </summary>
     /// <param name="CommonName">Localised name, requested language then English; null when neither exists.</param>
     /// <param name="PlantType">The catalog type name — half of the R4 edible rule.</param>
     /// <param name="IsEdible">The catalog's own flag — the other half of R4.</param>

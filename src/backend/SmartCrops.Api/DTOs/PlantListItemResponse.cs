@@ -196,17 +196,6 @@ public static class PlantListItemMapper
     }
 
     /// <summary>
-    /// Cover-image type priority for the list card (SMA-118): a whole-plant
-    /// <c>Habit</c> shot reads best, then <c>Flower</c>, then <c>Leaf</c>, then the
-    /// remaining detail types. Lower sorts first; unknown types sort last.
-    /// </summary>
-    /// <remarks>
-    /// SMA-336 PR 2/5: <c>internal</c> rather than <c>private</c> so the dashboard
-    /// aggregate picks its variety avatar with the SAME priority the library card
-    /// uses. A plant must not wear one photo in the Library and another in the
-    /// Counters widget, and that only holds while there is one ranking.
-    /// </remarks>
-    /// <summary>
     /// The image sources whose URLs are STABLE (SMA-118), beside the ranking
     /// they feed (round 7, S24 — Extension #7-3). Perenual is excluded: its
     /// signed S3 URLs expire and then 403. The predicate was written three times
@@ -220,6 +209,17 @@ public static class PlantListItemMapper
     internal static readonly PlantSourceType[] StableImageSources =
         [PlantSourceType.Trefle, PlantSourceType.PlantNet];
 
+    /// <summary>
+    /// Cover-image type priority for the list card (SMA-118): a whole-plant
+    /// <c>Habit</c> shot reads best, then <c>Flower</c>, then <c>Leaf</c>, then the
+    /// remaining detail types. Lower sorts first; unknown types sort last.
+    /// </summary>
+    /// <remarks>
+    /// SMA-336 PR 2/5: <c>internal</c> rather than <c>private</c> so the dashboard
+    /// aggregate picks its variety avatar with the SAME priority the library card
+    /// uses. A plant must not wear one photo in the Library and another in the
+    /// Counters widget, and that only holds while there is one ranking.
+    /// </remarks>
     internal static int StableImageRank(PlantImageType type) => type switch
     {
         PlantImageType.Habit => 0,
