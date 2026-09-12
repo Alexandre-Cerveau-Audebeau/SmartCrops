@@ -401,6 +401,7 @@
         "dimensions": "{{cols, number}} × {{rows, number}}",
         "noPlan": "No plan drawn",
         "noPlanShort": "No plan",
+        "noDate": "No date",
         "freeCells_one": "{{count, number}} free",
         "freeCells_other": "{{count, number}} free",
         "columns": {

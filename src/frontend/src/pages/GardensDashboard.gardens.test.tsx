@@ -2023,3 +2023,75 @@ describe('Gardens rows — the closing findings (round 7)', () => {
     ).toBeInTheDocument();
   });
 });
+
+// ROUND 8 — Extension #9-12: the guard S30 gave the SORT, extended to the
+// three places that DISPLAY the date. `new Date('not a date')` is an
+// `Invalid Date`; every branch of `formatRelativeDate` then compares `NaN`,
+// falls through, and answers « now » — so the card, the MODIFIED column and
+// the Expert sub-line stated « Modified now » for a timestamp they could not
+// read. Each site now draws the missing-data mark in the place the date would
+// have been, and never the word « now ».
+describe('Gardens — an unreadable `updatedAt` is never displayed as « now » (round 8)', () => {
+  beforeEach(() => localStorage.setItem('smartcrops-language', 'en'));
+
+  const unreadable = () =>
+    gardenWith(3, { id: 'g1', name: 'Casa Lolo', updatedAt: 'not a date' });
+
+  it('the Small card', async () => {
+    const blocks = presetFor('novice');
+    blocks.find((block) => block.key === 'gardens')!.size = 'small';
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level: 'novice',
+      isPreset: false,
+      blocks,
+      updatedAt: null,
+    });
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([unreadable()]));
+
+    renderPage();
+    await screen.findByRole('link', {
+      name: 'Open Casa Lolo, the last modified garden',
+    });
+
+    const widget = within(gardensWidget());
+    expect(widget.getByText('No date')).toHaveAttribute('data-missing-mark');
+    expect(widget.queryByText(/Modified/)).not.toBeInTheDocument();
+  });
+
+  it('the MODIFIED column of the comparison table', async () => {
+    // Gardener: the HARVEST column is off, so MODIFIED is a column of its own.
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([
+        unreadable(),
+        gardenWith(2, { id: 'g2', name: 'Balcon', updatedAt: '2026-09-09T10:00:00Z' }),
+      ])
+    );
+
+    renderPage();
+    await screen.findByText('Casa Lolo');
+
+    const table = within(gardensWidget()).getByRole('table', { name: 'Gardens' });
+    const rowOf = (name: string) =>
+      within(table).getByText(name).closest('tr')!;
+    const marks = within(rowOf('Casa Lolo')).getAllByText('No date');
+    expect(marks).toHaveLength(1);
+    expect(marks[0]).toHaveAttribute('data-missing-mark');
+    // The readable neighbour keeps its date, and « now » appears nowhere.
+    expect(within(rowOf('Balcon')).queryByText('No date')).not.toBeInTheDocument();
+    expect(within(table).queryByText(/\bnow\b/)).not.toBeInTheDocument();
+  });
+
+  it('the sub-line under the name, at Expert', async () => {
+    // Expert: the HARVEST column is on, and « Modified … » moves under the
+    // garden's name (round 4, A5) — the third display site.
+    vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([unreadable()]));
+
+    await renderExpert();
+
+    const table = within(gardensWidget()).getByRole('table', { name: 'Gardens' });
+    const identity = within(table).getByText('Casa Lolo').closest('th')!;
+    expect(within(identity).getByText('No date')).toHaveAttribute('data-missing-mark');
+    expect(within(table).queryByText(/Modified/)).not.toBeInTheDocument();
+  });
+});

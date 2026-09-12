@@ -415,6 +415,34 @@ export default function GardensBlock({
     null
   );
 
+  // The relative date, or NULL when the wire value is not an instant (round
+  // 8 — Extension #9-12). S30 guarded the SORT and stopped there: the three
+  // places that DISPLAY the date still did `new Date(garden.updatedAt)`, and
+  // an `Invalid Date` makes every branch of `formatRelativeDate` compare
+  // `NaN`, fall through, and answer « now » — the card stated « Modified now »
+  // for a timestamp it could not read. The boundary accepts `updatedAt` as a
+  // string, not as a parsable instant, so one reader owns that contract for
+  // the sort and the three displays alike; a null here is drawn as the
+  // missing-data mark, in the place the date would have been.
+  const modifiedText = (garden: DashboardGardenData): string | null =>
+    Number.isFinite(instant(garden))
+      ? formatRelativeDate(
+          new Date(garden.updatedAt),
+          new Date(),
+          i18n.language,
+          'short'
+        )
+      : null;
+  /** « Modified … », or the mark when the date is unreadable. */
+  const modifiedLine = (garden: DashboardGardenData): React.ReactNode => {
+    const when = modifiedText(garden);
+    return when !== null ? (
+      t('dashboard.blocks.gardens.lastModified', { when })
+    ) : (
+      <MissingDataMark label={t('dashboard.blocks.gardens.noDate')} />
+    );
+  };
+
   const plannerPath = (garden: DashboardGardenData) =>
     `/gardens/${garden.id}/planner`;
 
@@ -676,14 +704,7 @@ export default function GardensBlock({
                 color: 'text.secondary',
               }}
             >
-              {t('dashboard.blocks.gardens.lastModified', {
-                when: formatRelativeDate(
-                  new Date(lastModified.updatedAt),
-                  new Date(),
-                  i18n.language,
-                  'short'
-                ),
-              })}
+              {modifiedLine(lastModified)}
             </Typography>
           </Box>
           <IconButton
@@ -1009,6 +1030,7 @@ export default function GardensBlock({
                 view={views.get(garden.id)}
                 showWeatherColumn={showWeatherColumn}
                 showHarvestColumn={showHarvestColumn}
+                modified={modifiedText(garden)}
                 typeLabel={typeLabel(garden)}
                 ornamental={ornamentalChip(garden, 'table')}
                 actions={rowTrailing(garden)}
@@ -1202,6 +1224,12 @@ interface RowProps {
   view: GardenView | undefined;
   showWeatherColumn: boolean;
   showHarvestColumn: boolean;
+  /**
+   * The relative date, resolved by the block through the one reader that
+   * guards the sort (round 8 — Extension #9-12); null when the wire value is
+   * not an instant. The row keeps no date logic of its own.
+   */
+  modified: string | null;
   typeLabel: string | null;
   ornamental: React.ReactNode;
   actions: React.ReactNode;
@@ -1218,6 +1246,7 @@ function GardenRow({
   view,
   showWeatherColumn,
   showHarvestColumn,
+  modified,
   typeLabel,
   ornamental,
   actions,
@@ -1260,21 +1289,20 @@ function GardenRow({
    * design contract: « deux sous-lignes, PLUS une troisième ligne réservée à la
    * description lorsqu'elle existe ».
    */
-  const primarySub = showHarvestColumn
-    ? t('dashboard.blocks.gardens.lastModified', {
-        when: formatRelativeDate(
-          new Date(garden.updatedAt),
-          new Date(),
-          i18n.language,
-          'short'
-        ),
-      })
-    : view?.hasPlan
-      ? t('dashboard.blocks.gardens.dimensions', {
-          cols: garden.width,
-          rows: garden.height,
-        })
-      : t('dashboard.blocks.gardens.noPlan');
+  const primarySub = showHarvestColumn ? (
+    modified !== null ? (
+      t('dashboard.blocks.gardens.lastModified', { when: modified })
+    ) : (
+      <MissingDataMark label={t('dashboard.blocks.gardens.noDate')} />
+    )
+  ) : view?.hasPlan ? (
+    t('dashboard.blocks.gardens.dimensions', {
+      cols: garden.width,
+      rows: garden.height,
+    })
+  ) : (
+    t('dashboard.blocks.gardens.noPlan')
+  );
 
   return (
     <Box component="tr">
@@ -1478,14 +1506,11 @@ function GardenRow({
         </Box>
       ) : (
         <Box component="td" sx={cellSx}>
-          <Typography sx={subSx}>
-            {formatRelativeDate(
-              new Date(garden.updatedAt),
-              new Date(),
-              i18n.language,
-              'short'
-            )}
-          </Typography>
+          {modified !== null ? (
+            <Typography sx={subSx}>{modified}</Typography>
+          ) : (
+            <MissingDataMark label={t('dashboard.blocks.gardens.noDate')} />
+          )}
         </Box>
       )}
 
