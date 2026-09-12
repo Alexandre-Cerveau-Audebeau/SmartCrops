@@ -15,9 +15,11 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using SmartCrops.Api.Configuration;
+using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Authorization;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Interfaces;
+using SmartCrops.Core.Models;
 using SmartCrops.Infrastructure.Data;
 using SmartCrops.Infrastructure.Email;
 
@@ -63,7 +65,22 @@ public record DeleteAccountRequest([Required] string Confirmation);
 // and suggestions carry the PlantId reference alone. CellsJson /
 // LightScheduleJson are exported as the raw stored strings: faithful to what
 // the service holds, and immune to legacy payloads a re-parse could choke on.
-public record AccountExportProfile(string Email, string? DisplayName, string? FirstName, string? LastName, string? City);
+/// <summary>The profile's personal fields, INCLUDING the account's default
+/// location (SMA-336 PR 3a/5): a place the user typed is theirs to carry away
+/// — art. 20 covers it like the free-text city beside it. Additive, so
+/// <see cref="AccountExportResponse.CurrentSchemaVersion"/> stays at 1.</summary>
+public record AccountExportProfile(
+    string Email,
+    string? DisplayName,
+    string? FirstName,
+    string? LastName,
+    string? City,
+    string? LocationName,
+    string? LocationRegion,
+    string? LocationCountry,
+    double? Latitude,
+    double? Longitude,
+    DateTime? LocationResolvedAt);
 /// <summary>One plant suggestion the user AUTHORED (R2, arts. 17/20 scope
 /// parity): the deletion path anonymizes these rows as the person's data, so
 /// the portability export must carry them too — the two articles cover one
@@ -87,6 +104,15 @@ public record AccountExportGarden(
     string? LightScheduleJson,
     string? Hemisphere,
     string? LatitudeBand,
+    // The garden's OWN location (SMA-336 PR 3a/5): null on a garden that
+    // inherits the profile default — the export carries each fact ONCE, where
+    // it is stored, never a resolved copy.
+    string? LocationName,
+    string? LocationRegion,
+    string? LocationCountry,
+    double? Latitude,
+    double? Longitude,
+    DateTime? LocationResolvedAt,
     List<AccountExportPlacement> Placements);
 /// <summary>Top-level export document: <see cref="ExportedAt"/> dates it,
 /// <see cref="SchemaVersion"/> versions it — an undatable, unversionable
@@ -884,6 +910,49 @@ public class AuthController(
             hasPassword));
     }
 
+    // ── Default location (SMA-336 PR 3a/5) ──────────────────────────────────
+    // The account's default place: every garden without an override inherits
+    // it (ADR-0006). A resource of its OWN, with ZERO coupling to the profile
+    // fields above: City stays the free text the profile page edits, and
+    // neither endpoint here reads, clears or rewrites it — the dashboard's
+    // « use my profile city » link only pre-fills a search field with it.
+
+    /// <summary>Sets the account's default location, every column at once, stamped now (UTC).</summary>
+    [Authorize]
+    [HttpPut("profile/location")]
+    public async Task<IActionResult> PutProfileLocation([FromBody] SaveLocationRequest request)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+        var user = await userManager.FindByIdAsync(userId);
+        if (user == null) return NotFound();
+
+        request.ToGeoLocation(DateTime.UtcNow).ApplyTo(user);
+
+        var result = await userManager.UpdateAsync(user);
+        if (!result.Succeeded) return BadRequest(result.Errors);
+
+        return NoContent();
+    }
+
+    /// <summary>Clears the account's default location; gardens without an override read as not located again.</summary>
+    [Authorize]
+    [HttpDelete("profile/location")]
+    public async Task<IActionResult> DeleteProfileLocation()
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+        var user = await userManager.FindByIdAsync(userId);
+        if (user == null) return NotFound();
+
+        GeoLocation.Clear(user);
+
+        var result = await userManager.UpdateAsync(user);
+        if (!result.Succeeded) return BadRequest(result.Errors);
+
+        return NoContent();
+    }
+
     [Authorize]
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
@@ -1084,7 +1153,13 @@ public class AuthController(
                 user.DisplayName,
                 user.FirstName,
                 user.LastName,
-                user.City),
+                user.City,
+                user.LocationName,
+                user.LocationRegion,
+                user.LocationCountry,
+                user.Latitude,
+                user.Longitude,
+                user.LocationResolvedAt),
             gardens.Select(g => new AccountExportGarden(
                 g.Id,
                 g.Name,
@@ -1100,6 +1175,12 @@ public class AuthController(
                 g.LightScheduleJson,
                 g.Hemisphere,
                 g.LatitudeBand,
+                g.LocationName,
+                g.LocationRegion,
+                g.LocationCountry,
+                g.Latitude,
+                g.Longitude,
+                g.LocationResolvedAt,
                 g.Placements
                     .OrderBy(p => p.PlacedAt)
                     .Select(p => new AccountExportPlacement(

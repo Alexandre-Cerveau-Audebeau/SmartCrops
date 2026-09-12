@@ -46,4 +46,32 @@ public class BootOptionalUpstreamsTests
         response.EnsureSuccessStatusCode();
         Assert.Equal("ok", await response.Content.ReadAsStringAsync());
     }
+
+    [Fact]
+    public async Task BootSucceeds_WhenWeatherApiKeyIsAbsent()
+    {
+        // SMA-336 PR 3a/5 applies the SMA-377 doctrine from day one: the
+        // weather provider is not a boot dependency. No WithWeatherApi(), and
+        // an explicit blank against an inherited WeatherApi__ApiKey on the
+        // runner, so the scenario pinned is the uncredentialed boot.
+        using WebApplicationFactory<Program> factory = new TestWebAppBuilder()
+            .WithEnvironment("Testing")
+            .WithJwtAuth()
+            .WithGoogleOAuth()
+            .WithFrontendUrl()
+            .WithTypesense()
+            .WithSmtp()
+            .WithConfig("Trefle:Token", "")
+            .WithConfig("Perenual:ApiKey", "")
+            .WithConfig("WeatherApi:ApiKey", "")
+            .WithInMemoryDatabase("BootOptionalUpstreamsTests_WeatherApi")
+            .Build();
+
+        using HttpClient client = factory.CreateClient();
+
+        HttpResponseMessage response = await client.GetAsync("/health");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("ok", await response.Content.ReadAsStringAsync());
+    }
 }

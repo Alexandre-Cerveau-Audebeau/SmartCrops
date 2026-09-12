@@ -21,6 +21,11 @@ namespace SmartCrops.Infrastructure.ExternalApis.Logging;
 /// <c>RemoveAllLoggers().AddLogger&lt;RedactingHttpClientLogger&gt;()</c> on the
 /// credential-bearing typed clients replaces that logging entirely.</para>
 ///
+/// <para>WeatherAPI.com (SMA-336 PR 3a/5) carries its credential as <c>key=</c>
+/// too, so the Perenual rule covers the weather client with no change —
+/// <c>RedactingHttpClientLoggerTests</c> pins that coverage on the exact URI
+/// shape the client sends.</para>
+///
 /// <para>Diagnostics are preserved — method, status code and elapsed time are still
 /// logged; only the URI is scrubbed. Redaction reuses the existing
 /// <see cref="PerenualKeyRedactor"/> / <see cref="TrefleTokenRedactor"/> regex with

@@ -55,6 +55,22 @@ public class RedactingHttpClientLoggerTests
     }
 
     [Fact]
+    public void RedactUri_WeatherApiKey_IsRedacted()
+    {
+        // SMA-336 PR 3a/5: WeatherAPI.com carries its credential as `key=` too,
+        // so the Perenual rule covers it with no change — this pins that the
+        // coverage is real, on the exact URI shape the weather client sends.
+        var uri = new Uri($"https://api.weatherapi.com/v1/forecast.json?key={PerenualKey}&q=45.7640,4.8357&days=5&alerts=yes&aqi=no&lang=fr");
+
+        var result = RedactingHttpClientLogger.RedactUri(uri);
+
+        Assert.Contains("key=REDACTED", result);
+        Assert.DoesNotContain(PerenualKey, result);
+        Assert.Contains("q=45.7640,4.8357", result);
+        Assert.Contains("lang=fr", result);
+    }
+
+    [Fact]
     public void RedactUri_NoSecret_IsUnchanged()
     {
         // A GBIF call carries no credential — the URI must pass through verbatim.
