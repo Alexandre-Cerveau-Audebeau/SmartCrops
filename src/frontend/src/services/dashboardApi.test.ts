@@ -607,6 +607,37 @@ describe('fetchDashboardData — a garden record is checked before it is trusted
     await expect(fetchDashboardData('en')).resolves.toEqual(body);
   });
 
+  // ROUND 8 (GitHub 3994206417): the three garden COUNTS are whole,
+  // non-negative numbers too. S43 held the dimensions and the placements to
+  // that rule and left the counts at `typeof`, so `-1` and `1.5` reached the
+  // count and occupancy displays.
+  it.each([
+    ['placementCount', -1],
+    ['placementCount', 1.5],
+    ['varietyCount', -1],
+    ['varietyCount', 1.5],
+    ['occupiedCells', -1],
+    ['occupiedCells', 1.5],
+  ])('rejects a garden whose %s is %s', async (field, bad) => {
+    const body = full();
+    Object.assign(body.gardens[0]!, { [field]: bad });
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it('still accepts a garden whose three counts are zero', async () => {
+    const body = full();
+    Object.assign(body.gardens[0]!, {
+      placementCount: 0,
+      varietyCount: 0,
+      occupiedCells: 0,
+    });
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).resolves.toEqual(body);
+  });
+
   it('preserves an unknown field a newer server adds, on the record too', async () => {
     // The check READS fields, it never rebuilds the object — so forward
     // compatibility survives the stricter boundary.
@@ -690,6 +721,19 @@ describe('fetchDashboardData — a variety row is checked before it is trusted (
       await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
     }
   );
+
+  // ROUND 8 (GitHub 3994206417): `count` and `cells` are whole, non-negative
+  // numbers — a « −1 plant » or « 1.5 cells » is nothing the server produces.
+  it.each([
+    ['count', -1],
+    ['count', 1.5],
+    ['cells', -1],
+    ['cells', 1.5],
+  ])('rejects a variety whose %s is %s', async (field, bad) => {
+    mockFetch(withVariety({ [field]: bad }));
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
 });
 
 describe('fetchDashboardData — the totals block is checked before it is trusted', () => {
@@ -711,21 +755,57 @@ describe('fetchDashboardData — the totals block is checked before it is truste
 
     await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
   });
+
+  // ROUND 8 (GitHub 3994206417): the four totals are whole, non-negative
+  // numbers, like every other count of the aggregate.
+  it.each([
+    ['gardenCount', -1],
+    ['gardenCount', 1.5],
+    ['placementCount', -1],
+    ['placementCount', 1.5],
+    ['varietyCount', -1],
+    ['varietyCount', 1.5],
+    ['catalogPlantCount', -1],
+    ['catalogPlantCount', 1.5],
+  ])('rejects totals whose %s is %s', async (field, bad) => {
+    const body = withTotals();
+    Object.assign(body.totals, { [field]: bad });
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
+  });
+
+  it('still accepts totals at zero — a new account', async () => {
+    const body = {
+      gardens: [],
+      varieties: [],
+      totals: { gardenCount: 0, placementCount: 0, varietyCount: 0, catalogPlantCount: 0 },
+    };
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).resolves.toEqual(body);
+  });
 });
 
 // ── Round 7 (S39 — Extension #7-24): the validators are keyed by `keyof` ──────
 //
 // The record predicates narrow to the wire types, and a hand-listed run of
 // `typeof` checks let a field added to a type travel unverified while every
-// file kept compiling. `matches<T>` takes a `Record<keyof T, Check>`, which
+// file kept compiling. `matches<T>` takes one check per `keyof T`, which
 // TypeScript checks exhaustively — so the proof here is at the TYPE level, and
 // `tsc -b` (part of `npm run build`, which includes `src/` whole) is what runs
 // it: an `@ts-expect-error` with nothing to expect is itself an error.
+//
+// Round 8 (Extension #9-18) — the check is typed by the FIELD, not only keyed
+// by it: each entry is a `Check<T[K]>`, a type guard for that field's own
+// type. The two predicates below are inferred as guards (`value is number`,
+// `value is string`), which is what lets the mismatch be a build error.
 describe('matches — a validator that the compiler holds to the type', () => {
   const isNumber = (value: unknown) => typeof value === 'number';
+  const isText = (value: unknown) => typeof value === 'string';
 
   it('a field of T with no check is a build error', () => {
-    // @ts-expect-error — `b` has no check: `Record<keyof T, Check>` is exhaustive.
+    // @ts-expect-error — `b` has no check: the map is exhaustive over `keyof T`.
     const incomplete = matches<{ a: number; b: number }>({ a: isNumber });
     expect(incomplete({ a: 1, b: 2 })).toBe(true);
   });
@@ -734,6 +814,27 @@ describe('matches — a validator that the compiler holds to the type', () => {
     // @ts-expect-error — `c` is not a field of T.
     const surplus = matches<{ a: number }>({ a: isNumber, c: isNumber });
     expect(surplus({ a: 1 })).toBe(false);
+  });
+
+  it('a check that narrows to the wrong type for its field is a build error (round 8)', () => {
+    // The pairing #9-18 names — `count: isString` — compiled under
+    // `Record<keyof T, Check>`. It no longer does.
+    // @ts-expect-error — `a` is a number; a string guard cannot stand for it.
+    const mispaired = matches<{ a: number }>({ a: isText });
+    expect(mispaired({ a: 1 })).toBe(false);
+  });
+
+  it('narrows the value it accepts — `matches<T>` is itself a `Check<T>` (round 8)', () => {
+    const isPoint = matches<{ x: number; y: number }>({ x: isNumber, y: isNumber });
+    const value: unknown = { x: 1, y: 2 };
+
+    if (isPoint(value)) {
+      // Reads `value.x` without a cast: this line compiles only because the
+      // predicate narrowed `unknown` to the record type.
+      expect(value.x + value.y).toBe(3);
+    } else {
+      throw new Error('a well-formed point was refused');
+    }
   });
 
   it('reads the fields it names, and only them', () => {

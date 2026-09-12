@@ -157,59 +157,86 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-type Check = (value: unknown) => boolean;
+/**
+ * A predicate that NARROWS to `V` — a type guard, not a boolean (round 8 —
+ * Extension #9-18). `(value: unknown) => boolean` says nothing about what a
+ * passing value is, so a map of such checks can be exhaustive over the KEYS of
+ * a type and still pair a field with the wrong test: `count: isString` was a
+ * well-typed entry of `Record<keyof T, Check>`. With the guard in the type, an
+ * entry for a field of type `T[K]` must be a `Check<T[K]>`, and that pairing
+ * no longer compiles.
+ */
+type Check<V = unknown> = (value: unknown) => value is V;
+
+/** The checks a record of `T` needs: one per field, each narrowing to THAT field's type. */
+type Checks<T> = { [K in keyof T]-?: Check<T[K]> };
 
 /**
- * A record validator keyed by `keyof T` (round 7, S39 — Extension #7-24).
+ * A record validator keyed by `keyof T` (round 7, S39 — Extension #7-24), and
+ * typed by `T[K]` (round 8 — Extension #9-18).
  *
  * The predicates below narrow to the wire types, and the compiler cannot tell
  * a hand-listed run of `typeof` checks from a complete one: a field added to
  * `DashboardGardenData` kept every file compiling while the new field travelled
  * unverified — the drift the doc comments of this file argue against. A map
- * typed `Record<keyof T, Check>` is checked EXHAUSTIVELY by TypeScript: a field
- * of `T` with no entry is a build error, and so is an entry `T` has no field
- * for. « Verified » and « narrowed » are the same list, by construction.
+ * typed `Checks<T>` is checked EXHAUSTIVELY by TypeScript: a field of `T` with
+ * no entry is a build error, and so is an entry `T` has no field for — and so,
+ * since round 8, is an entry whose check narrows to something other than the
+ * field's own type. « Verified » and « narrowed » are the same list, by
+ * construction, field by field.
  *
  * Fields are READ, never rebuilt: an unknown property a newer server adds
  * travels through untouched, as before.
  */
-export function matches<T>(checks: Record<keyof T, Check>): Check {
+export function matches<T>(checks: Checks<T>): Check<T> {
   const entries = Object.entries(checks) as [string, Check][];
-  return (value) =>
+  return (value): value is T =>
     isRecord(value) && entries.every(([key, check]) => check(value[key]));
 }
 
-const isString: Check = (value) => typeof value === 'string';
-const isNumber: Check = (value) => typeof value === 'number';
-const isNullableBoolean: Check = (value) =>
-  value === null || typeof value === 'boolean';
+const isString: Check<string> = (value): value is string =>
+  typeof value === 'string';
+const isBoolean: Check<boolean> = (value): value is boolean =>
+  typeof value === 'boolean';
+const nullable =
+  <V>(item: Check<V>): Check<V | null> =>
+  (value): value is V | null =>
+    value === null || item(value);
 const arrayOf =
-  (item: Check): Check =>
-  (value) =>
+  <V>(item: Check<V>): Check<V[]> =>
+  (value): value is V[] =>
     Array.isArray(value) && value.every(item);
 
 /**
- * A grid coordinate or dimension: a whole, non-negative number (round 7, S43 —
- * Extension #7-28). No finiteness check besides: JSON carries neither `NaN`
- * nor `Infinity`, so a guard against them would be untestable code standing
- * for a value that cannot arrive — and `Number.isInteger` refuses both anyway.
+ * A whole, non-negative number — what every count and every grid coordinate or
+ * dimension of the aggregate is.
  *
- * `typeof` let `height: 2.5` through, and the readers disagree on what that
- * means: `parseCellsJson` builds three rows for it, `placementCoverage` builds
- * two, and `freeExposureFrom` then dereferences `taken[2]![c]` and throws —
- * after the load succeeded, where no error state is left to draw it. The same
+ * Grid numbers first (round 7, S43 — Extension #7-28). `typeof` let
+ * `height: 2.5` through, and the readers disagree on what that means:
+ * `parseCellsJson` builds three rows for it, `placementCoverage` builds two,
+ * and `freeExposureFrom` then dereferences `taken[2]![c]` and throws — after
+ * the load succeeded, where no error state is left to draw it. The same
  * arithmetic indexes the grid by every placement's four numbers, so they are
- * held to the same rule. Rejected HERE, at the boundary, not normalised in
- * `deriveGardenView`: a value the server never sends is a malformed aggregate,
- * and the page already knows how to say so.
+ * held to the same rule.
+ *
+ * Then the counts (round 8 — GitHub 3994206417): `placementCount`,
+ * `varietyCount`, `occupiedCells`, a variety's `count` and `cells`, and the
+ * four totals stayed at `typeof`, so `-1` and `1.5` walked through to the
+ * count, occupancy and catalog displays — a « −1 plant » nothing on the server
+ * can produce, drawn as if it could. A count is the same kind of number a grid
+ * index is, and the same rule holds both.
+ *
+ * No finiteness check besides: JSON carries neither `NaN` nor `Infinity`, so
+ * a guard against them would be untestable code standing for a value that
+ * cannot arrive — and `Number.isInteger` refuses both anyway. Rejected HERE,
+ * at the boundary, not normalised downstream: a value the server never sends
+ * is a malformed aggregate, and the page already knows how to say so.
  */
-const isGridInteger: Check = (value) =>
+const isWholeNumber: Check<number> = (value): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= 0;
-const isNullableGridInteger: Check = (value) =>
-  value === null || isGridInteger(value);
 
 /** `string | null`. */
-const isNullableString: Check = (value) => value === null || isString(value);
+const isNullableString = nullable(isString);
 
 /**
  * One indoor light slot: two `HH:mm` strings, and nothing weaker.
@@ -241,7 +268,7 @@ const isLightSlot = matches<LightSlot>({
 const isGardenConfig = matches<GardenConfig>({
   orientation: isNullableString,
   gardenType: isNullableString,
-  lightSchedule: (value) => value === null || arrayOf(isLightSlot)(value),
+  lightSchedule: nullable(arrayOf(isLightSlot)),
   hemisphere: isNullableString,
   latitudeBand: isNullableString,
 });
@@ -266,10 +293,10 @@ const isPlacementRecord = matches<PlacementData>({
   id: isString,
   plantId: isString,
   plantScientificName: isNullableString,
-  startRow: isGridInteger,
-  startCol: isGridInteger,
-  spanRows: isGridInteger,
-  spanCols: isGridInteger,
+  startRow: isWholeNumber,
+  startCol: isWholeNumber,
+  spanRows: isWholeNumber,
+  spanCols: isWholeNumber,
   notes: isNullableString,
 });
 
@@ -289,17 +316,17 @@ const isGardenRecord = matches<DashboardGardenData>({
   id: isString,
   name: isString,
   description: isNullableString,
-  width: isNullableGridInteger,
-  height: isNullableGridInteger,
+  width: nullable(isWholeNumber),
+  height: nullable(isWholeNumber),
   cellSize: isNullableString,
   cellsJson: isNullableString,
   config: isGardenConfig,
   updatedAt: isString,
   placements: arrayOf(isPlacementRecord),
-  placementCount: isNumber,
-  varietyCount: isNumber,
-  occupiedCells: isNumber,
-  isEdible: isNullableBoolean,
+  placementCount: isWholeNumber,
+  varietyCount: isWholeNumber,
+  occupiedCells: isWholeNumber,
+  isEdible: nullable(isBoolean),
 });
 
 /**
@@ -322,20 +349,20 @@ const isVarietyRecord = matches<DashboardVarietyData>({
   scientificName: isString,
   commonName: isNullableString,
   plantType: isNullableString,
-  isEdible: isNullableBoolean,
+  isEdible: nullable(isBoolean),
   imageUrl: isNullableString,
   imageAttribution: isNullableString,
-  count: isNumber,
-  cells: isNumber,
+  count: isWholeNumber,
+  cells: isWholeNumber,
   gardenIds: arrayOf(isString),
 });
 
 /** The four page totals. */
 const isTotalsRecord = matches<DashboardTotals>({
-  gardenCount: isNumber,
-  placementCount: isNumber,
-  varietyCount: isNumber,
-  catalogPlantCount: isNumber,
+  gardenCount: isWholeNumber,
+  placementCount: isWholeNumber,
+  varietyCount: isWholeNumber,
+  catalogPlantCount: isWholeNumber,
 });
 
 const isAggregate = matches<DashboardData>({
@@ -365,6 +392,10 @@ const isAggregate = matches<DashboardData>({
  * predicate is a `keyof`-keyed map, so the narrowing this signature claims is
  * exactly what the checks establish, at every depth, and a field added to a
  * wire type without its check is a build error rather than a runtime surprise.
+ * Round 8 (Extension #9-18) closes the last gap in that argument: each entry
+ * is a `Check<T[K]>`, so a check that narrows to the wrong type for its field
+ * is a build error too, and `isAggregate` IS a `Check<DashboardData>` — this
+ * function only names it.
  *
  * Unknown properties are PRESERVED: this reads fields, it never rebuilds the
  * object, so a field a newer server adds travels through untouched.
