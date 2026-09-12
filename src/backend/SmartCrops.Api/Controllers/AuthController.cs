@@ -63,7 +63,22 @@ public record DeleteAccountRequest([Required] string Confirmation);
 // and suggestions carry the PlantId reference alone. CellsJson /
 // LightScheduleJson are exported as the raw stored strings: faithful to what
 // the service holds, and immune to legacy payloads a re-parse could choke on.
-public record AccountExportProfile(string Email, string? DisplayName, string? FirstName, string? LastName, string? City);
+/// <summary>The profile's personal fields, INCLUDING the account's default
+/// location (SMA-336 PR 3a/5): a place the user typed is theirs to carry away
+/// — art. 20 covers it like the free-text city beside it. Additive, so
+/// <see cref="AccountExportResponse.CurrentSchemaVersion"/> stays at 1.</summary>
+public record AccountExportProfile(
+    string Email,
+    string? DisplayName,
+    string? FirstName,
+    string? LastName,
+    string? City,
+    string? LocationName,
+    string? LocationRegion,
+    string? LocationCountry,
+    double? Latitude,
+    double? Longitude,
+    DateTime? LocationResolvedAt);
 /// <summary>One plant suggestion the user AUTHORED (R2, arts. 17/20 scope
 /// parity): the deletion path anonymizes these rows as the person's data, so
 /// the portability export must carry them too — the two articles cover one
@@ -87,6 +102,15 @@ public record AccountExportGarden(
     string? LightScheduleJson,
     string? Hemisphere,
     string? LatitudeBand,
+    // The garden's OWN location (SMA-336 PR 3a/5): null on a garden that
+    // inherits the profile default — the export carries each fact ONCE, where
+    // it is stored, never a resolved copy.
+    string? LocationName,
+    string? LocationRegion,
+    string? LocationCountry,
+    double? Latitude,
+    double? Longitude,
+    DateTime? LocationResolvedAt,
     List<AccountExportPlacement> Placements);
 /// <summary>Top-level export document: <see cref="ExportedAt"/> dates it,
 /// <see cref="SchemaVersion"/> versions it — an undatable, unversionable
@@ -1084,7 +1108,13 @@ public class AuthController(
                 user.DisplayName,
                 user.FirstName,
                 user.LastName,
-                user.City),
+                user.City,
+                user.LocationName,
+                user.LocationRegion,
+                user.LocationCountry,
+                user.Latitude,
+                user.Longitude,
+                user.LocationResolvedAt),
             gardens.Select(g => new AccountExportGarden(
                 g.Id,
                 g.Name,
@@ -1100,6 +1130,12 @@ public class AuthController(
                 g.LightScheduleJson,
                 g.Hemisphere,
                 g.LatitudeBand,
+                g.LocationName,
+                g.LocationRegion,
+                g.LocationCountry,
+                g.Latitude,
+                g.Longitude,
+                g.LocationResolvedAt,
                 g.Placements
                     .OrderBy(p => p.PlacedAt)
                     .Select(p => new AccountExportPlacement(
