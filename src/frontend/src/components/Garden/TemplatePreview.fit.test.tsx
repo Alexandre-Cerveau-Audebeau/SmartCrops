@@ -145,6 +145,62 @@ describe('TemplatePreview drawing a real garden (SMA-336 PR 2/5)', () => {
   });
 });
 
+// ROUND 8 — the overflow half of the canvas finding (Extension #9-16, raised
+// in round 7 § 5): `fitPreview` floors the cell at 1 px, so a plan with more
+// columns or rows than the box has pixels was drawn PAST the box the caller
+// gave — 100 × 100 px in a 48 px thumbnail — and `width: fit-content` let the
+// overrun move the card and the table row. The grid is unchanged (same tracks,
+// same one node per cell — `TemplatePreview.cost.test.tsx` still pins the
+// counts); it is drawn scaled into a box of the scaled size.
+describe('TemplatePreview — a fitted plan stays in its box (round 8)', () => {
+  const hundred = () => gardenToPreview(null, 100, 100, []);
+
+  it('a 40 × 30 plan in the 34 × 26 table thumbnail occupies 34 × 26 px, not 40 × 30', () => {
+    const { preview } = renderFitted(
+      <TemplatePreview template={bigGarden()} fitTo={{ maxW: 34, maxH: 26 }} />
+    );
+
+    // Measured before: 40 columns at 1 px overran the 34 px box by 6, and 30
+    // rows the 26 px box by 4. The tracks are the same; the box is now the
+    // box.
+    expect(preview).toHaveStyle({
+      gridTemplateColumns: 'repeat(40, 1px)',
+      gridTemplateRows: 'repeat(30, 1px)',
+      width: '34px',
+      height: '26px',
+      transform: 'scale(0.85)',
+      transformOrigin: 'top left',
+    });
+  });
+
+  it('the 100 × 100 layout ceiling in a 48 × 48 thumbnail occupies 48 × 48 px, not 100 × 100', () => {
+    const { preview, cells } = renderFitted(
+      <TemplatePreview template={hundred()} fitTo={{ maxW: 48, maxH: 48 }} />
+    );
+
+    expect(preview).toHaveStyle({
+      gridTemplateColumns: 'repeat(100, 1px)',
+      width: '48px',
+      height: '48px',
+      transform: 'scale(0.48)',
+    });
+    // Still one node per cell: the scale is a drawing rule, not a coarser grid.
+    expect(cells).toHaveLength(100 * 100);
+  });
+
+  it('a plan that fits is drawn exactly as before — fit-content, no transform', () => {
+    const { preview } = renderFitted(
+      <TemplatePreview
+        template={gardenToPreview(null, 10, 8, [])}
+        fitTo={{ maxW: 48, maxH: 48 }}
+      />
+    );
+
+    expect(preview).toHaveStyle({ width: 'fit-content' });
+    expect(preview).not.toHaveStyle({ transformOrigin: 'top left' });
+  });
+});
+
 describe('TemplatePreview cell colours (SMA-336 PR 2/5)', () => {
   it('takes the planner tokens by default', () => {
     const tk = getPlannerTokens('dark');

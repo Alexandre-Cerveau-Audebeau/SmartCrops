@@ -2,7 +2,11 @@ import { memo, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import { alpha } from '@mui/material/styles';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
-import { fitPreview, plantInsetPx } from '../../utils/gardenPreview';
+import {
+  fitPreviewBox,
+  plantInsetPx,
+  type PreviewFit,
+} from '../../utils/gardenPreview';
 import {
   templateGrid,
   type GardenTemplate,
@@ -105,14 +109,38 @@ function TemplatePreview(props: Props) {
   const maxW = props.fitTo?.maxW;
   const maxH = props.fitTo?.maxH;
   const cellPx = props.cellPx;
-  const fit = useMemo(
+  const box = useMemo(
     () =>
       maxW !== undefined && maxH !== undefined
-        ? fitPreview(template.cols, template.rows, maxW, maxH)
-        : { cellPx: cellPx ?? DEFAULT_CELL_PX, gapPx: PREVIEW_GAP_PX },
-    [template.cols, template.rows, maxW, maxH, cellPx]
+        ? fitPreviewBox(template.cols, template.rows, maxW, maxH)
+        : null,
+    [template.cols, template.rows, maxW, maxH]
   );
+  const fit: PreviewFit = box ?? {
+    cellPx: cellPx ?? DEFAULT_CELL_PX,
+    gapPx: PREVIEW_GAP_PX,
+  };
   const inset = plantInsetPx(fit.cellPx);
+
+  // A fitted plan STAYS IN ITS BOX (round 8 — the overflow half of Extension
+  // #9-16, raised in round 7 § 5). `fitPreview` floors the cell at one pixel,
+  // so a plan with more columns or rows than the box has pixels was drawn past
+  // the box — 100 × 100 px for the layout ceiling in a 48 px thumbnail — and
+  // `width: fit-content` let the overrun push the card and the table row. The
+  // grid below is untouched: the same tracks, the same one node per cell the
+  // cost measurement pins. It is DRAWN scaled, from its top-left corner, into
+  // a box of the scaled size — the layout sees the box, the eye sees the whole
+  // plan downsampled into it. See `fitPreviewBox` for why a scale and not a
+  // crop.
+  const bounded =
+    box && box.scale < 1
+      ? {
+          width: box.width,
+          height: box.height,
+          transform: `scale(${box.scale})`,
+          transformOrigin: 'top left',
+        }
+      : { width: 'fit-content' };
 
   /**
    * The string `getPlantColor` hashes for one block.
@@ -140,7 +168,7 @@ function TemplatePreview(props: Props) {
         p: `${fit.gapPx}px`,
         bgcolor: cellColors?.frame ?? tk.cellOnBd,
         borderRadius: '6px',
-        width: 'fit-content',
+        ...bounded,
         pointerEvents: 'none',
         userSelect: 'none',
       }}

@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { placement } from '../test/fixtures/placements';
 import { serializeCellsJson, type CellData } from '../types/GardenLayout';
 import type { ExposureCategory } from './exposure';
-import { fitPreview, gardenToPreview, plantInsetPx, TINY_CELL_PX } from './gardenPreview';
+import {
+  drawnPx,
+  fitPreview,
+  fitPreviewBox,
+  gardenToPreview,
+  plantInsetPx,
+  TINY_CELL_PX,
+} from './gardenPreview';
 import { placementCoverage } from './gardenStats';
 
 // SMA-336 PR 2/5 — the adapter that lets TemplatePreview draw a real garden,
@@ -293,6 +300,103 @@ describe('fitPreview', () => {
   it('answers one pixel for a grid with no cells rather than dividing by zero', () => {
     expect(fitPreview(0, 0, 48, 48)).toEqual({ cellPx: 1, gapPx: 0 });
     expect(fitPreview(-3, 4, 48, 48)).toEqual({ cellPx: 1, gapPx: 0 });
+  });
+});
+
+// ROUND 8 — the overflow half of the canvas finding (Extension #7-16 / #8-9 /
+// #9-16), raised in round 7 § 5 and never examined by the six refusals. The
+// one-pixel floor is honest about the cell and silent about the box: a plan
+// with more columns or rows than the box has pixels was drawn PAST the box.
+describe('fitPreviewBox — the thumbnail stays in its box', () => {
+  it('a 40 × 30 plan in the 34 × 26 table thumbnail: 40 × 30 px before, 34 × 26 now', () => {
+    // Measured before the fix: {1, 0} drew 40 × 30 px, 6 px too wide and 4 px
+    // too tall. The grid is the same; it is drawn at 0.85.
+    const box = fitPreviewBox(40, 30, 34, 26);
+
+    expect(box).toEqual({
+      cellPx: 1,
+      gapPx: 0,
+      scale: 0.85,
+      width: 34,
+      height: 26,
+    });
+    expect(drawnPx(40, box) * box.scale).toBeLessThanOrEqual(34);
+    expect(drawnPx(30, box) * box.scale).toBeLessThanOrEqual(26);
+  });
+
+  it('the 100 × 100 layout ceiling in a 48 × 48 thumbnail: 100 × 100 px before, 48 × 48 now', () => {
+    // The finding's own case: « renders a 100 × 100-pixel grid » in a 48 px
+    // bound — 52 px past it on each side. Ten thousand nodes still, at 0.48.
+    const box = fitPreviewBox(100, 100, 48, 48);
+
+    expect(box).toEqual({
+      cellPx: 1,
+      gapPx: 0,
+      scale: 0.48,
+      width: 48,
+      height: 48,
+    });
+  });
+
+  it('a plan that fits is drawn exactly as before — scale 1, the measured size', () => {
+    // 10 × 8 at 3 px with 1 px gaps: 10 × 3 + 11 = 41 by 8 × 3 + 9 = 33.
+    expect(fitPreviewBox(10, 8, 48, 48)).toEqual({
+      cellPx: 3,
+      gapPx: 1,
+      scale: 1,
+      width: 41,
+      height: 33,
+    });
+    // And the edge: 40 × 30 in exactly 40 × 30 fits at 1 px, unscaled.
+    expect(fitPreviewBox(40, 30, 40, 30).scale).toBe(1);
+  });
+
+  it('never exceeds the box, at every plan shape the layout contract allows', () => {
+    // The product's two boxes (Medium card, Large table cell) and the two the
+    // cost measurement uses, against 1..100 × 1..100. Before the fix 8 080 of
+    // these shapes overran the Medium card and 8 800 the table cell.
+    for (const [maxW, maxH] of [[48, 40], [40, 30], [48, 48], [34, 26]]) {
+      for (let cols = 1; cols <= 100; cols++) {
+        for (let rows = 1; rows <= 100; rows++) {
+          const box = fitPreviewBox(cols, rows, maxW!, maxH!);
+          expect(box.width).toBeLessThanOrEqual(maxW!);
+          expect(box.height).toBeLessThanOrEqual(maxH!);
+          // The drawing is inside the box it reports, on both axes — up to
+          // floating-point noise on the deciding axis (`70 × (30 / 70)` is
+          // `30.000000000000004`), which is below anything a screen can draw.
+          expect(drawnPx(cols, box) * box.scale).toBeLessThanOrEqual(
+            box.width + 1e-9
+          );
+          expect(drawnPx(rows, box) * box.scale).toBeLessThanOrEqual(
+            box.height + 1e-9
+          );
+          // And scaling is only ever a shrink of a grid that did not fit.
+          expect(box.scale).toBeLessThanOrEqual(1);
+          expect(box.scale).toBeGreaterThan(0);
+          if (box.scale < 1) expect(box.cellPx).toBe(1);
+        }
+      }
+    }
+  });
+
+  it('keeps the proportion: the tighter axis decides, the other stays in ratio', () => {
+    // 60 × 20 in 48 × 40: width decides (0.8), height follows — 48 × 16, not
+    // a cropped 48 × 20.
+    expect(fitPreviewBox(60, 20, 48, 40)).toMatchObject({
+      scale: 0.8,
+      width: 48,
+      height: 16,
+    });
+  });
+
+  it('answers a grid with no cells without dividing by zero', () => {
+    expect(fitPreviewBox(0, 0, 48, 48)).toEqual({
+      cellPx: 1,
+      gapPx: 0,
+      scale: 1,
+      width: 0,
+      height: 0,
+    });
   });
 });
 

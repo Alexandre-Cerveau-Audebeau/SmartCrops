@@ -99,6 +99,80 @@ export function fitPreview(
   return { cellPx: Math.max(1, fitWithGap(cols, rows, maxW, maxH, 0)), gapPx: 0 };
 }
 
+/** What `count` tracks measure once drawn: cells, gaps between, and the padding either side. */
+export function drawnPx(count: number, fit: PreviewFit): number {
+  return count * fit.cellPx + fit.gapPx * (count + 1);
+}
+
+/** The box a fitted plan occupies, and how it is drawn into it. */
+export interface PreviewBox extends PreviewFit {
+  /** Layout size of the thumbnail, in whole px — never more than the box it was given. */
+  width: number;
+  height: number;
+  /**
+   * 1 when the whole-pixel grid fits by itself; below 1 when the plan has more
+   * columns or rows than the box has pixels, and the 1 px grid is drawn scaled
+   * down to it.
+   */
+  scale: number;
+}
+
+/**
+ * {@link fitPreview}, and the guarantee it could not give on its own: the
+ * thumbnail STAYS IN ITS BOX (round 8 — the overflow half of the canvas
+ * finding, Extension #7-16 / #8-9 / #9-16, raised in round 7 § 5 and never
+ * examined by the six refusals, which were about node counts and legibility).
+ *
+ * The one-pixel floor is honest about drawing — a cell cannot be less than a
+ * pixel — but it is silent about the box: a plan with more columns than the
+ * box has pixels of width, or more rows than its height, is drawn at 1 px a
+ * cell and simply OVERRUNS. Measured on the product's two boxes before this
+ * fix: the Medium card (48 × 40) overran from 49 columns or 41 rows up, by up
+ * to 52 × 60 px at the 100 × 100 layout ceiling; the Large table cell
+ * (40 × 30) from 41 columns or 31 rows, by up to 60 × 70 px — 8 080 and 8 800
+ * of the 10 000 plan shapes the layout contract allows. The preview is
+ * `width: fit-content`, so the overrun moved the card and the table row around
+ * it.
+ *
+ * The answer is a SCALE, not a crop and not a coarser grid. A crop shows the
+ * top-left corner of the plan as if it were the plan — the wrong shape, with a
+ * confident look. A coarser grid changes what a cell means and how many nodes
+ * are drawn, which the cost measurement behind the canvas refusal pins on
+ * purpose. Scaling keeps the grid exactly as `fitPreview` measured it — one
+ * node per cell, whole-pixel tracks, no ragged edge — and lets the compositor
+ * downsample the finished picture into the box: the whole plan, in proportion,
+ * too small to read rather than not there. The frozen design's own thumbnails
+ * are a fixed box the plan fills (`repeat(n, 1fr)` in a fixed height), which
+ * is this rule stated in CSS.
+ *
+ * `scale` is exactly 1 whenever the grid already fits, so a plan that fits is
+ * drawn precisely as before. Otherwise it is the tighter of the two ratios,
+ * and `width` / `height` are the scaled size rounded UP — a whole-pixel box
+ * that contains the drawing — and held to the box, because the deciding axis
+ * lands on `maxW` or `maxH` only up to floating-point noise: `70 × (30 / 70)`
+ * is `30.000000000000004`, which a bare `ceil` would round to 31.
+ */
+export function fitPreviewBox(
+  cols: number,
+  rows: number,
+  maxW: number,
+  maxH: number
+): PreviewBox {
+  const fit = fitPreview(cols, rows, maxW, maxH);
+  const naturalW = drawnPx(Math.max(0, cols), fit);
+  const naturalH = drawnPx(Math.max(0, rows), fit);
+  const scale =
+    naturalW > 0 && naturalH > 0
+      ? Math.min(1, maxW / naturalW, maxH / naturalH)
+      : 1;
+  return {
+    ...fit,
+    scale,
+    width: Math.min(maxW, Math.ceil(naturalW * scale)),
+    height: Math.min(maxH, Math.ceil(naturalH * scale)),
+  };
+}
+
 /**
  * A stored garden plan, as a drawable {@link PreviewPlan}.
  *
