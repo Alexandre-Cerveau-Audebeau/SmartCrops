@@ -375,15 +375,21 @@ public class WeatherForecastCacheTests
     [Fact]
     public void LogTag_IsOpaque_StableWithinTheProcess_AndDistinctPerPlace()
     {
-        // Review round 2 (S6): the tag carries no digit of the key, reads the
-        // same for the same key throughout a run, and differs between places.
+        // Review round 2 (S6): the tag reads the same for the same key
+        // throughout a run, differs between places, and has the documented
+        // opaque shape — « place- » and twelve hexadecimal digits. Opacity is
+        // asserted on the coordinates as they are FORMATTED, under either
+        // decimal separator: a bare « 45 » can occur in any hexadecimal
+        // digest by chance (about one run in twenty-four), so it is not
+        // asserted (review round 3, D4).
         var lyon = WeatherLocationKey.ToLogTag(WeatherLocationKey.From(45.76, 4.84));
         var annecy = WeatherLocationKey.ToLogTag(WeatherLocationKey.From(45.9, 6.12));
 
-        Assert.StartsWith("place-", lyon);
-        Assert.Equal(6 + 12, lyon.Length);
-        Assert.DoesNotContain("45", lyon);
+        Assert.Matches("^place-[0-9a-f]{12}$", lyon);
+        Assert.DoesNotContain("45.76", lyon);
+        Assert.DoesNotContain("45,76", lyon);
         Assert.DoesNotContain("4.84", lyon);
+        Assert.DoesNotContain("4,84", lyon);
         Assert.Equal(lyon, WeatherLocationKey.ToLogTag("45.76,4.84"));
         Assert.NotEqual(lyon, annecy);
     }
