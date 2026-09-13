@@ -130,6 +130,102 @@ public class WeatherForecastCacheTests
     }
 
     [Fact]
+    public async Task GetAsync_ConcurrentMissesOnOnePlace_ProviderFailing_ShareOneFailure_AndTheNextRequestTriesAgain()
+    {
+        // Review round 2 (C6): five requests for one cold place while the
+        // provider refuses. The winner's answer is EVERYONE'S answer — one
+        // call, five identical failures — and nothing is memorized: the
+        // request that comes after the wave goes to the provider again.
+        var (cache, handler) = Build();
+        handler.Respond(HttpStatusCode.Forbidden, "{\"error\":{\"code\":2009,\"message\":\"synthetic\"}}");
+        handler.Hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var wave = Enumerable.Range(0, 5)
+            .Select(_ => cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None))
+            .ToArray();
+        await handler.Started.Task;
+        // Every chance for the four others to reach the provider — they must not.
+        await Task.Delay(200);
+        Assert.Equal(1, handler.Calls);
+
+        handler.Hold.SetResult();
+        var outcomes = await Task.WhenAll(wave);
+
+        Assert.Equal(1, handler.Calls);
+        Assert.All(outcomes, o =>
+        {
+            Assert.Null(o.Data);
+            Assert.False(o.Stale);
+            Assert.Equal(WeatherApiFailureKind.Refused, o.Failure!.Kind);
+        });
+
+        handler.Respond(HttpStatusCode.OK, WeatherApiFixtures.Forecast);
+        var after = await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+
+        Assert.NotNull(after.Data);
+        Assert.False(after.Stale);
+        Assert.Equal(2, handler.Calls);
+    }
+
+    [Fact]
+    public async Task GetAsync_AWaiterThatGivesUp_DoesNotStopTheFlight()
+    {
+        // A caller queued behind the winner may leave (its token): the
+        // refresh it was waiting for goes on and serves the winner.
+        var (cache, handler) = Build();
+        handler.Hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var winner = cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+        await handler.Started.Task;
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => cache.GetAsync(45.76, 4.84, "fr", cts.Token));
+
+        handler.Hold.SetResult();
+        var outcome = await winner;
+
+        Assert.NotNull(outcome.Data);
+        Assert.Equal(1, handler.Calls);
+        Assert.Equal(0, cache.GateCount);
+    }
+
+    [Fact]
+    public async Task LastKnown_IsNotRenewedByReads_AndExpiresAfterItsTtl()
+    {
+        // Review round 2 (C7), under the memory cache's own clock
+        // (MemoryCacheOptions.Clock): a success at T0, then a day of hourly
+        // reads during an outage. A sliding expiration renewed the last known
+        // entry on every read, so a forecast could be served stale for ever
+        // under traffic; the entry has an ABSOLUTE age now — stale through
+        // the 23rd hour, unavailable from the 24th.
+        var clock = new ManualClock(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
+        var (cache, handler) = Build(clock: clock);
+        var first = await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+        Assert.False(first.Stale);
+        handler.Respond(HttpStatusCode.Forbidden, "{\"error\":{\"code\":2009,\"message\":\"synthetic\"}}");
+
+        for (var hour = 1; hour <= 23; hour++)
+        {
+            clock.Advance(TimeSpan.FromHours(1));
+            var outcome = await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+            Assert.True(outcome.Stale, $"hour {hour}: expected the last known forecast");
+            Assert.Equal(first.Data!.FetchedAtUtc, outcome.Data!.FetchedAtUtc);
+        }
+
+        clock.Advance(TimeSpan.FromHours(1));
+        var expired = await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+        Assert.Null(expired.Data);
+        Assert.False(expired.Stale);
+        Assert.Equal(WeatherApiFailureKind.Refused, expired.Failure!.Kind);
+
+        clock.Advance(TimeSpan.FromHours(1));
+        var stillExpired = await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+        Assert.Null(stillExpired.Data);
+        // Every hour tried the provider again: the failure was never memorized.
+        Assert.Equal(1 + 25, handler.Calls);
+    }
+
+    [Fact]
     public async Task GetAsync_DistinctPlaces_NeverExceedTheProviderWideCeiling()
     {
         // Review round 1 (S3): six cold places at once and a ceiling of two.
@@ -299,6 +395,14 @@ public class WeatherForecastCacheTests
         Assert.Equal("weather:last:45.76,4.84:fr", WeatherForecastCache.LastKnownKey(WeatherLocationKey.From(45.764, 4.8357), "fr"));
         Assert.Equal(TimeSpan.FromMinutes(15), WeatherForecastCache.FreshTtl);
         Assert.Equal(TimeSpan.FromHours(24), WeatherForecastCache.LastKnownTtl);
+    }
+
+    /// <summary>The memory cache's clock, advanced by hand.</summary>
+    private sealed class ManualClock(DateTimeOffset start) : ISystemClock
+    {
+        public DateTimeOffset UtcNow { get; private set; } = start;
+
+        public void Advance(TimeSpan by) => UtcNow += by;
     }
 
     /// <summary>

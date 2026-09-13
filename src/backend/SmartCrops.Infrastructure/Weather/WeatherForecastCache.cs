@@ -36,29 +36,39 @@ public sealed record WeatherFetchOutcome(CachedForecast? Data, bool Stale, Weath
 ///   <item><b>fresh</b> — absolute TTL of <see cref="FreshTtl"/> (15 minutes:
 ///   the provider itself refreshes every 10 to 15, and its terms allow up to
 ///   60 for current conditions);</item>
-///   <item><b>last known</b> — sliding TTL of <see cref="LastKnownTtl"/>
-///   (24 hours, the terms' ceiling for a forecast), rewritten on every
-///   success and read ONLY when a refresh fails: the answer is then the last
-///   weather known, flagged stale with its own instant.</item>
+///   <item><b>last known</b> — ABSOLUTE TTL of <see cref="LastKnownTtl"/>
+///   (24 hours, the terms' ceiling for a forecast), counted from the success
+///   that wrote it, rewritten on every success and read ONLY when a refresh
+///   fails: the answer is then the last weather known, flagged stale with its
+///   own instant. Reading it never extends it (review round 2, C7): a sliding
+///   window would have been renewed by every failed refresh, and under steady
+///   traffic during an outage a forecast could have been served stale for
+///   ever.</item>
 /// </list>
 ///
-/// <para><b>Single-flight per key.</b> Every request that misses the fresh
-/// entry queues behind one gate for THAT place; the winner calls the
-/// provider, the others find its answer on the second look. A global gate —
-/// the shape the catalog count uses — would serialize every user behind a
-/// network call of several seconds, so the gate is per key. The winner's
-/// call runs on <see cref="CancellationToken.None"/> with its own service
-/// scope: the browser that started it may leave, the answer still serves
-/// everyone queued behind it. A gate lives exactly as long as its callers —
-/// the last one out removes it — so the gate set never outgrows the places
-/// being refreshed right now.</para>
+/// <para><b>Single-flight per key: one call per wave, one outcome for the
+/// wave.</b> Every request that misses the fresh entry goes through one gate
+/// for THAT place. The first one in — the winner — calls the provider;
+/// everyone who arrives while that call is in flight awaits the SAME task and
+/// receives the SAME outcome, success or failure (review round 2, C6). A
+/// global gate — the shape the catalog count uses — would serialize every
+/// user behind a network call of several seconds, so the gate is per key.
+/// The winner's call runs on <see cref="CancellationToken.None"/> with its
+/// own service scope: the browser that started it may leave, the answer
+/// still serves everyone waiting behind it; a waiter that leaves takes only
+/// itself. A gate lives exactly as long as its callers — the last one out
+/// removes it — so the gate set never outgrows the places being refreshed
+/// right now.</para>
 ///
-/// <para><b>A failure is never memorized.</b> Nothing is written on a failed
-/// refresh, so the next request tries the provider again — through the same
-/// gate, so a dead provider costs one call per place per request wave, not
-/// per request. No entry carries a <c>Size</c>: the shared
-/// <see cref="IMemoryCache"/> has no size limit, and setting one would make
-/// every other entry require a size too.</para>
+/// <para><b>The wave shares a failure; the cache never keeps one.</b> Nothing
+/// is written on a failed refresh. The callers already waiting on the gate
+/// receive the failure the winner got — one provider call for the whole wave,
+/// not one per waiter — and the NEXT request, the one that arrives after the
+/// wave, tries the provider again. A dead provider therefore costs one call
+/// per place per wave, and the weather is back the instant the provider is.
+/// No entry carries a <c>Size</c>: the shared <see cref="IMemoryCache"/> has
+/// no size limit, and setting one would make every other entry require a
+/// size too.</para>
 ///
 /// <para>PER PROCESS, like the catalog count: lost on restart, not shared
 /// between instances. The intended trade for a widget behind a 15-minute
@@ -69,7 +79,7 @@ public sealed class WeatherForecastCache
     /// <summary>How long a forecast is reused before the provider is asked again.</summary>
     public static readonly TimeSpan FreshTtl = TimeSpan.FromMinutes(15);
 
-    /// <summary>How long the last successful answer is kept for a failed refresh.</summary>
+    /// <summary>How long the last successful answer is kept for a failed refresh, counted from that success.</summary>
     public static readonly TimeSpan LastKnownTtl = TimeSpan.FromHours(24);
 
     private readonly IMemoryCache _cache;
@@ -90,10 +100,15 @@ public sealed class WeatherForecastCache
 
     private sealed class Gate
     {
-        public readonly SemaphoreSlim Slot = new(1, 1);
-
         /// <summary>Callers inside or waiting; −1 once retired.</summary>
         public int Callers;
+
+        /// <summary>
+        /// The refresh in flight for this key, whose outcome every caller of
+        /// the wave receives (review round 2, C6); null between waves. Guarded
+        /// by the lock on the gate.
+        /// </summary>
+        public TaskCompletionSource<WeatherFetchOutcome>? Flight;
     }
 
     public WeatherForecastCache(
@@ -122,7 +137,7 @@ public sealed class WeatherForecastCache
     /// <param name="latitude">Exact latitude of the place asked for.</param>
     /// <param name="longitude">Exact longitude of the place asked for.</param>
     /// <param name="language">The <c>lang=</c> of the condition texts; part of the key.</param>
-    /// <param name="ct">The CALLER's token — honoured while waiting for the gate, never handed to the provider call.</param>
+    /// <param name="ct">The CALLER's token — honoured while waiting for the wave's outcome, never handed to the provider call.</param>
     public async Task<WeatherFetchOutcome> GetAsync(
         double latitude,
         double longitude,
@@ -141,52 +156,102 @@ public sealed class WeatherForecastCache
         var gate = Acquire(freshKey);
         try
         {
-            await gate.Slot.WaitAsync(ct);
+            TaskCompletionSource<WeatherFetchOutcome>? flight = null;
+            Task<WeatherFetchOutcome> shared;
+            lock (gate)
+            {
+                if (gate.Flight is null)
+                {
+                    flight = new TaskCompletionSource<WeatherFetchOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    gate.Flight = flight;
+                }
+
+                shared = gate.Flight.Task;
+            }
+
+            if (flight is null)
+            {
+                // A refresh is in flight for this place: its outcome is ours,
+                // success or failure. The wait honours our token; the flight
+                // does not depend on it.
+                return await shared.WaitAsync(ct);
+            }
+
+            // We are the winner: the refresh is ours to run, and its outcome
+            // is handed to everyone who queued behind us meanwhile.
             try
             {
-                // The waiter that queued behind the winner finds the value here and
-                // never reaches the provider — the load-bearing second look.
-                if (_cache.TryGetValue(freshKey, out fresh) && fresh is not null)
-                {
-                    return WeatherFetchOutcome.Fresh(fresh);
-                }
-
-                var result = await FetchAsync(latitude, longitude, language);
-
-                if (result.IsSuccess)
-                {
-                    var entry = new CachedForecast(result.Value, DateTime.UtcNow);
-                    _cache.Set(freshKey, entry, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = FreshTtl });
-                    _cache.Set(lastKnownKey, entry, new MemoryCacheEntryOptions { SlidingExpiration = LastKnownTtl });
-                    return WeatherFetchOutcome.Fresh(entry);
-                }
-
-                // The key is the rounded coordinates, so a log line names the
-                // place by an opaque tag instead (review round 2, S6).
-                var placeTag = WeatherLocationKey.ToLogTag(locationKey);
-
-                if (_cache.TryGetValue(lastKnownKey, out CachedForecast? lastKnown) && lastKnown is not null)
-                {
-                    _logger.LogWarning(
-                        "Weather refresh failed for {PlaceTag} ({Kind}, code {Code}); serving the last known forecast from {FetchedAt:O}",
-                        placeTag, result.Failure.Kind, result.Failure.ProviderCode, lastKnown.FetchedAtUtc);
-                    return WeatherFetchOutcome.StaleFrom(lastKnown, result.Failure);
-                }
-
-                _logger.LogWarning(
-                    "Weather unavailable for {PlaceTag} ({Kind}, code {Code}) and nothing known before",
-                    placeTag, result.Failure.Kind, result.Failure.ProviderCode);
-                return WeatherFetchOutcome.Unavailable(result.Failure);
+                var outcome = await RefreshAsync(freshKey, lastKnownKey, locationKey, latitude, longitude, language);
+                flight.SetResult(outcome);
+                return outcome;
+            }
+            catch (Exception ex)
+            {
+                flight.SetException(ex);
+                throw;
             }
             finally
             {
-                gate.Slot.Release();
+                // The wave is over: the next caller starts a refresh of its own.
+                lock (gate)
+                {
+                    gate.Flight = null;
+                }
             }
         }
         finally
         {
             Release(freshKey, gate);
         }
+    }
+
+    /// <summary>
+    /// The winner's work: a second look at the fresh entry (a wave that just
+    /// ended may have written it), else the provider call, then the two
+    /// entries on success, the last known answer or nothing on failure.
+    /// </summary>
+    private async Task<WeatherFetchOutcome> RefreshAsync(
+        string freshKey,
+        string lastKnownKey,
+        string locationKey,
+        double latitude,
+        double longitude,
+        string language)
+    {
+        if (_cache.TryGetValue(freshKey, out CachedForecast? fresh) && fresh is not null)
+        {
+            return WeatherFetchOutcome.Fresh(fresh);
+        }
+
+        var result = await FetchAsync(latitude, longitude, language);
+
+        if (result.IsSuccess)
+        {
+            var entry = new CachedForecast(result.Value, DateTime.UtcNow);
+            _cache.Set(freshKey, entry, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = FreshTtl });
+            // Absolute, not sliding (review round 2, C7): the age of the last
+            // known forecast is counted from the success that wrote it, and
+            // reading it during an outage never extends it.
+            _cache.Set(lastKnownKey, entry, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = LastKnownTtl });
+            return WeatherFetchOutcome.Fresh(entry);
+        }
+
+        // The key is the rounded coordinates, so a log line names the
+        // place by an opaque tag instead (review round 2, S6).
+        var placeTag = WeatherLocationKey.ToLogTag(locationKey);
+
+        if (_cache.TryGetValue(lastKnownKey, out CachedForecast? lastKnown) && lastKnown is not null)
+        {
+            _logger.LogWarning(
+                "Weather refresh failed for {PlaceTag} ({Kind}, code {Code}); serving the last known forecast from {FetchedAt:O}",
+                placeTag, result.Failure.Kind, result.Failure.ProviderCode, lastKnown.FetchedAtUtc);
+            return WeatherFetchOutcome.StaleFrom(lastKnown, result.Failure);
+        }
+
+        _logger.LogWarning(
+            "Weather unavailable for {PlaceTag} ({Kind}, code {Code}) and nothing known before",
+            placeTag, result.Failure.Kind, result.Failure.ProviderCode);
+        return WeatherFetchOutcome.Unavailable(result.Failure);
     }
 
     /// <summary>
@@ -225,7 +290,6 @@ public sealed class WeatherForecastCache
 
             gate.Callers = -1;
             _gates.TryRemove(new KeyValuePair<string, Gate>(key, gate));
-            gate.Slot.Dispose();
         }
     }
 
@@ -253,7 +317,8 @@ public sealed class WeatherForecastCache
     /// The provider call, in a scope of its own and on no cancellation token:
     /// the typed client's <see cref="HttpClient"/> is a scoped dependency, and
     /// the request that won the gate must not take the answer down with it
-    /// when its own browser gives up. Bounded by the resilience pipeline.
+    /// when its own browser gives up. Bounded by the resilience pipeline — and
+    /// by the bulkhead's own wait budget before it.
     /// </summary>
     private async Task<WeatherApiResult<WeatherApiForecastResponse>> FetchAsync(
         double latitude,
