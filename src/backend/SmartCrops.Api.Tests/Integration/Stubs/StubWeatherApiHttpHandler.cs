@@ -87,17 +87,23 @@ public sealed class StubWeatherApiHttpHandler : HttpMessageHandler
         else if (path.EndsWith("/forecast.json", StringComparison.OrdinalIgnoreCase))
         {
             kind = "forecast";
-            if (ForecastDelay is { } delay)
-            {
-                await Task.Delay(delay, cancellationToken);
-            }
         }
         else
         {
             return new HttpResponseMessage(HttpStatusCode.NotFound);
         }
 
+        // Recorded BEFORE any delay (review round 1, F1): an attempt the
+        // pipeline cancels while the stub is being slow on purpose still
+        // reached the transport, and the counter that serves as proof must
+        // say so — it used to be recorded after the delay and under-count
+        // exactly the timed-out attempts ForecastDelay exists to produce.
         Received.Add(Key(kind, q));
+
+        if (kind == "forecast" && ForecastDelay is { } delay)
+        {
+            await Task.Delay(delay, cancellationToken);
+        }
 
         if (_responses.TryGetValue(Key(kind, q), out var canned))
         {
