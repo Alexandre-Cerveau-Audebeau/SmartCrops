@@ -161,17 +161,21 @@ public sealed class WeatherForecastCache
                     return WeatherFetchOutcome.Fresh(entry);
                 }
 
+                // The key is the rounded coordinates, so a log line names the
+                // place by an opaque tag instead (review round 2, S6).
+                var placeTag = WeatherLocationKey.ToLogTag(locationKey);
+
                 if (_cache.TryGetValue(lastKnownKey, out CachedForecast? lastKnown) && lastKnown is not null)
                 {
                     _logger.LogWarning(
-                        "Weather refresh failed for {LocationKey} ({Kind}, code {Code}); serving the last known forecast from {FetchedAt:O}",
-                        locationKey, result.Failure.Kind, result.Failure.ProviderCode, lastKnown.FetchedAtUtc);
+                        "Weather refresh failed for {PlaceTag} ({Kind}, code {Code}); serving the last known forecast from {FetchedAt:O}",
+                        placeTag, result.Failure.Kind, result.Failure.ProviderCode, lastKnown.FetchedAtUtc);
                     return WeatherFetchOutcome.StaleFrom(lastKnown, result.Failure);
                 }
 
                 _logger.LogWarning(
-                    "Weather unavailable for {LocationKey} ({Kind}, code {Code}) and nothing known before",
-                    locationKey, result.Failure.Kind, result.Failure.ProviderCode);
+                    "Weather unavailable for {PlaceTag} ({Kind}, code {Code}) and nothing known before",
+                    placeTag, result.Failure.Kind, result.Failure.ProviderCode);
                 return WeatherFetchOutcome.Unavailable(result.Failure);
             }
             finally

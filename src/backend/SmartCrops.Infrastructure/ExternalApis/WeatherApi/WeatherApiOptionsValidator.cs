@@ -4,22 +4,38 @@ namespace SmartCrops.Infrastructure.ExternalApis.WeatherApi;
 
 /// <summary>
 /// Startup validation of <see cref="WeatherApiOptions"/> beyond what data
-/// annotations can say (SMA-336 PR 3a/5, review round 1, C4): the User-Agent
-/// must PARSE as a header value. The typed client sets it with
-/// <c>ParseAdd</c>, which throws <see cref="FormatException"/> on a malformed
-/// value — at the first geocoding call or the first cold weather fetch, outside
-/// every catch of <see cref="WeatherApiClient"/>. Registered as
+/// annotations can say (SMA-336 PR 3a/5, review rounds 1 and 2). Registered as
 /// <see cref="IValidateOptions{TOptions}"/> and armed by <c>ValidateOnStart</c>,
 /// so a bad value fails the boot with a message naming the setting, never the
 /// first dashboard with a 500.
 ///
-/// <para>The probe is the same parser the client uses, on a throwaway request:
-/// what passes here is exactly what <c>ParseAdd</c> accepts.</para>
+/// <list type="bullet">
+///   <item><b>BaseUrl must be an absolute https URL</b> (review round 2, S5).
+///   <c>[Url]</c> admits <c>http://</c> and <c>ftp://</c>, and the key and the
+///   user's place travel in the query string of every call: any scheme but
+///   <c>https</c> would put both on the wire in clear. The same rule
+///   <c>Frontend:BaseUrl</c> applies to itself in <c>Program.cs</c>, minus the
+///   tolerance for <c>http</c> a browser-facing link can afford.</item>
+///   <item><b>UserAgent must PARSE as a header value</b> (review round 1, C4).
+///   The typed client sets it with <c>ParseAdd</c>, which throws
+///   <see cref="FormatException"/> on a malformed value — at the first
+///   geocoding call or the first cold weather fetch, outside every catch of
+///   <see cref="WeatherApiClient"/>. The probe is the same parser the client
+///   uses, on a throwaway request: what passes here is exactly what
+///   <c>ParseAdd</c> accepts.</item>
+/// </list>
 /// </summary>
 public sealed class WeatherApiOptionsValidator : IValidateOptions<WeatherApiOptions>
 {
     public ValidateOptionsResult Validate(string? name, WeatherApiOptions options)
     {
+        if (!IsHttpsBaseUrl(options.BaseUrl))
+        {
+            return ValidateOptionsResult.Fail(
+                $"{WeatherApiOptions.SectionName}:BaseUrl must be an absolute https URL " +
+                "(the key and the place travel in the query string of every call).");
+        }
+
         if (!IsValidUserAgent(options.UserAgent))
         {
             return ValidateOptionsResult.Fail(
@@ -29,6 +45,11 @@ public sealed class WeatherApiOptionsValidator : IValidateOptions<WeatherApiOpti
 
         return ValidateOptionsResult.Success;
     }
+
+    /// <summary>True when <paramref name="value"/> is an absolute URL whose scheme is <c>https</c>.</summary>
+    public static bool IsHttpsBaseUrl(string? value)
+        => Uri.TryCreate(value, UriKind.Absolute, out var uri)
+           && uri.Scheme == Uri.UriSchemeHttps;
 
     /// <summary>True when <paramref name="value"/> parses as a User-Agent header — the client's own <c>ParseAdd</c> rule.</summary>
     public static bool IsValidUserAgent(string? value)

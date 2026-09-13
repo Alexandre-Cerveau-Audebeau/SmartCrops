@@ -24,6 +24,12 @@ public class WeatherApiOptions
 {
     public const string SectionName = "WeatherApi";
 
+    /// <summary>
+    /// The provider's base address. <c>[Url]</c> alone admits <c>http://</c>
+    /// and <c>ftp://</c>; <see cref="WeatherApiOptionsValidator"/> requires an
+    /// absolute <c>https</c> URL at boot, because the key and the user's place
+    /// travel in the query string of every call (review round 2, S5).
+    /// </summary>
     [Required]
     [Url]
     public string BaseUrl { get; set; } = "https://api.weatherapi.com/v1/";
@@ -80,7 +86,10 @@ public class WeatherApiOptions
     /// of the process and both endpoints (<see cref="WeatherApiBulkhead"/>).
     /// Four: a dashboard with more distinct places than that queues the rest
     /// behind the first four rather than bursting them all against the shared
-    /// key.
+    /// key. The queue itself is bounded — at most
+    /// <see cref="WeatherApiBulkhead.QueueDepthPerSlot"/> times this many
+    /// waiting calls, none for longer than the pipeline's total budget
+    /// (review round 2, S4).
     /// </summary>
     [Range(1, 64)]
     public int MaxConcurrentCalls { get; set; } = 4;

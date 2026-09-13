@@ -68,6 +68,41 @@ public class WeatherApiOptionsTests
         Assert.Contains("UserAgent", ex.Message);
     }
 
+    [Theory]
+    [InlineData("http://api.weatherapi.com/v1/")]
+    [InlineData("http://weather-proxy.internal/")]
+    [InlineData("ftp://api.weatherapi.com/v1/")]
+    public void BaseUrl_NotHttps_IsRefusedByName(string baseUrl)
+    {
+        // Review round 2 (S5): the key and the user's place travel in the
+        // query string of every call. [Url] alone admits http:// (and ftp://),
+        // which would put both on the wire in clear — the validator refuses
+        // any scheme but https at boot, by name.
+        var ex = Assert.Throws<OptionsValidationException>(() => Resolve(o => o.BaseUrl = baseUrl).Value);
+
+        Assert.Contains("WeatherApi:BaseUrl", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("https://api.weatherapi.com/v1/")]
+    [InlineData("https://weather-proxy.internal/v1/")]
+    public void BaseUrl_Https_IsAccepted(string baseUrl)
+    {
+        var options = Resolve(o => o.BaseUrl = baseUrl).Value;
+
+        Assert.Equal(baseUrl, options.BaseUrl);
+    }
+
+    [Theory]
+    [InlineData("v1/")]
+    [InlineData("api.weatherapi.com/v1/")]
+    public void BaseUrl_Relative_IsRefused(string baseUrl)
+    {
+        var ex = Assert.Throws<OptionsValidationException>(() => Resolve(o => o.BaseUrl = baseUrl).Value);
+
+        Assert.Contains("BaseUrl", ex.Message);
+    }
+
     [Fact]
     public void TimeoutSeconds_MinimumIsDerivedFromThePipelineTotal()
     {

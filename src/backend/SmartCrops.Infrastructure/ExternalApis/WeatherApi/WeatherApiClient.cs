@@ -37,7 +37,10 @@ namespace SmartCrops.Infrastructure.ExternalApis.WeatherApi;
 /// <para><b>One key for everyone</b>: every call takes a slot of the
 /// process-wide <see cref="WeatherApiBulkhead"/> first, so no single request —
 /// a dashboard with many distinct places, a burst of geocoding — can spend the
-/// shared key's goodwill in one instant.</para>
+/// shared key's goodwill in one instant. A call the bulkhead does not admit
+/// (its queue full, or its wait past the pipeline's total budget) is
+/// classified <see cref="WeatherApiFailureKind.Transport"/> without a request,
+/// exactly like a provider that stalled (review round 2, S4).</para>
 /// </summary>
 public sealed class WeatherApiClient
 {
@@ -173,8 +176,18 @@ public sealed class WeatherApiClient
 
         // The provider-wide ceiling (review round 1): a slot is held from the
         // request to the end of the body read, retries included. Waiting for
-        // one honours the caller's token exactly like the call itself.
+        // one honours the caller's token exactly like the call itself — and
+        // the wait is bounded (review round 2, S4): a full queue or a wait
+        // past the pipeline's total budget comes back as a REFUSAL, which is
+        // a Transport failure like a stalled provider, never an exception.
         using var slot = await _bulkhead.EnterAsync(ct);
+        if (!slot.Admitted)
+        {
+            _logger.LogWarning(
+                "WeatherAPI {Operation} was not admitted by the provider-wide ceiling ({Refusal}); classified Transport",
+                operation, slot.Refusal);
+            return WeatherApiResult<T>.Failed(WeatherApiFailureKind.Transport);
+        }
 
         try
         {

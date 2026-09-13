@@ -1,7 +1,10 @@
 using System.Net;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Internal;
+using Microsoft.Extensions.Logging;
 using SmartCrops.Api.Tests.ExternalApis.WeatherApi;
+using SmartCrops.Api.Tests.Integration;
 using SmartCrops.Infrastructure.ExternalApis.WeatherApi;
 using SmartCrops.Infrastructure.Weather;
 
@@ -19,12 +22,32 @@ namespace SmartCrops.Api.Tests.Weather;
 /// </summary>
 public class WeatherForecastCacheTests
 {
-    private static (WeatherForecastCache Cache, CountingHandler Handler) Build(int maxConcurrentCalls = 4)
+    /// <summary>
+    /// The cache on a provider of its own. <paramref name="logs"/> captures
+    /// what it says; <paramref name="clock"/> is the memory cache's own clock
+    /// (<c>MemoryCacheOptions.Clock</c>), so a test can make a day pass.
+    /// </summary>
+    private static (WeatherForecastCache Cache, CountingHandler Handler) Build(
+        int maxConcurrentCalls = 4,
+        CapturingLoggerProvider? logs = null,
+        ISystemClock? clock = null)
     {
         var handler = new CountingHandler();
         var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddMemoryCache();
+        services.AddLogging(logging =>
+        {
+            if (logs is not null)
+            {
+                logging.AddProvider(logs);
+            }
+        });
+        services.AddMemoryCache(options =>
+        {
+            if (clock is not null)
+            {
+                options.Clock = clock;
+            }
+        });
         services.AddOptions<WeatherApiOptions>().Configure(o =>
         {
             o.ApiKey = "test-key-FAKE-DO-NOT-USE";
@@ -216,6 +239,57 @@ public class WeatherForecastCacheTests
 
         Assert.Equal(1, handler.Calls);
         Assert.Equal(0, cache.GateCount);
+    }
+
+    [Fact]
+    public async Task Warnings_NeverCarryThePlacesCoordinates()
+    {
+        // Review round 2 (S6): the cache key IS the rounded coordinates, so
+        // the two warnings of a failed refresh must name the place some other
+        // way — an opaque tag — and carry no digit of latitude or longitude.
+        var logs = new CapturingLoggerProvider();
+        var (cache, handler) = Build(logs: logs);
+        await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+
+        // Failed refresh with a last known answer, then one with nothing known.
+        cache.EvictFresh(45.76, 4.84, "fr");
+        handler.Respond(HttpStatusCode.Forbidden, "{\"error\":{\"code\":2007,\"message\":\"synthetic\"}}");
+        var stale = await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+        cache.Evict(45.76, 4.84, "fr");
+        var gone = await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+
+        Assert.True(stale.Stale);
+        Assert.Null(gone.Data);
+        var warnings = logs.Entries
+            .Where(e => e.Category == typeof(WeatherForecastCache).FullName && e.Level == LogLevel.Warning)
+            .ToList();
+        Assert.Equal(2, warnings.Count);
+        Assert.Contains(warnings, w => w.Message.Contains("serving the last known forecast"));
+        Assert.Contains(warnings, w => w.Message.Contains("nothing known before"));
+        var tag = WeatherLocationKey.ToLogTag(WeatherLocationKey.From(45.76, 4.84));
+        Assert.All(warnings, w =>
+        {
+            Assert.Contains(tag, w.Message);
+            Assert.DoesNotContain("45.76", w.Message);
+            Assert.DoesNotContain("4.84", w.Message);
+            Assert.DoesNotContain("45.7", w.Message);
+        });
+    }
+
+    [Fact]
+    public void LogTag_IsOpaque_StableWithinTheProcess_AndDistinctPerPlace()
+    {
+        // Review round 2 (S6): the tag carries no digit of the key, reads the
+        // same for the same key throughout a run, and differs between places.
+        var lyon = WeatherLocationKey.ToLogTag(WeatherLocationKey.From(45.76, 4.84));
+        var annecy = WeatherLocationKey.ToLogTag(WeatherLocationKey.From(45.9, 6.12));
+
+        Assert.StartsWith("place-", lyon);
+        Assert.Equal(6 + 12, lyon.Length);
+        Assert.DoesNotContain("45", lyon);
+        Assert.DoesNotContain("4.84", lyon);
+        Assert.Equal(lyon, WeatherLocationKey.ToLogTag("45.76,4.84"));
+        Assert.NotEqual(lyon, annecy);
     }
 
     [Fact]

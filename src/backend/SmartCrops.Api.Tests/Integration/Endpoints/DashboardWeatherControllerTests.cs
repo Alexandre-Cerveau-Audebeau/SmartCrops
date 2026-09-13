@@ -1,9 +1,12 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SmartCrops.Api.Tests.ExternalApis.WeatherApi;
 using SmartCrops.Api.Tests.Integration.Stubs;
 using SmartCrops.Core.Entities;
@@ -304,6 +307,47 @@ public class DashboardWeatherControllerTests : IntegrationTestBase
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("unavailable", doc.RootElement.GetProperty("locations")[0].GetProperty("status").GetString());
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(15), $"took {watch.Elapsed}");
+    }
+
+    [Fact]
+    public async Task Get_Degraded_LeavesNoCoordinateInAnyLogLine()
+    {
+        // Review round 2 (S6), extending the round 1 proof (S2, the HTTP
+        // logger's q= redaction) to the cache's own warnings: with the
+        // production logging wired, a degraded refresh leaves the place's
+        // coordinates in NO line of NO category — neither the four-decimal
+        // query nor the two-decimal cache key. A host of its own, so its
+        // cache is cold and its transport unconfigured (404 → Transport).
+        const double lat = 43.2965;
+        const double lon = 5.3698;
+        var userId = await SeedUserAsync();
+        await SeedGardenAsync(userId, "Terrasse", lat, lon, name: "Marseille");
+        var capture = new CapturingLoggerProvider();
+        using var factory = Fixture.Factory.WithWebHostBuilder(builder =>
+            builder.ConfigureLogging(logging => logging.AddProvider(capture)));
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
+
+        var response = await client.GetAsync($"{Url}?lang=fr");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("unavailable", doc.RootElement.GetProperty("locations")[0].GetProperty("status").GetString());
+
+        // The cache DID warn — the assertion below is about a line that exists.
+        var warning = Assert.Single(capture.Entries, e =>
+            e.Category == typeof(WeatherForecastCache).FullName && e.Level == LogLevel.Warning);
+        Assert.Contains("nothing known before", warning.Message);
+
+        var forbidden = new[]
+        {
+            lat.ToString("F2", CultureInfo.InvariantCulture),
+            lat.ToString("F4", CultureInfo.InvariantCulture),
+            lon.ToString("F2", CultureInfo.InvariantCulture),
+            lon.ToString("F4", CultureInfo.InvariantCulture),
+        };
+        Assert.All(capture.Entries, e => Assert.All(forbidden, f => Assert.DoesNotContain(f, e.Message)));
     }
 
     // ── Partial, inherited, overridden ───────────────────────────────────────

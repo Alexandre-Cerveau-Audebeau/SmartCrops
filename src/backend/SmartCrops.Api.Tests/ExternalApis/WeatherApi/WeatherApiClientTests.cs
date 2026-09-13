@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Reflection;
@@ -31,11 +32,17 @@ public class WeatherApiClientTests
         HttpMessageHandler handler,
         string apiKey = TestKey,
         ILogger<WeatherApiClient>? logger = null,
-        int forecastDays = 5)
+        int forecastDays = 5,
+        int maxConcurrentCalls = 4)
     {
         // The same HttpClient shape the host builds (base address, timeout,
         // User-Agent, buffered-body ceiling) — the tests pin the real thing.
-        var options = Options.Create(new WeatherApiOptions { ApiKey = apiKey, ForecastDays = forecastDays });
+        var options = Options.Create(new WeatherApiOptions
+        {
+            ApiKey = apiKey,
+            ForecastDays = forecastDays,
+            MaxConcurrentCalls = maxConcurrentCalls,
+        });
         var http = new HttpClient(handler);
         WeatherApiClient.ConfigureHttpClient(http, options.Value);
         return new WeatherApiClient(http, new WeatherApiBulkhead(options), options, logger ?? NullLogger<WeatherApiClient>.Instance);
@@ -482,7 +489,127 @@ public class WeatherApiClientTests
             () => client.ForecastAsync(45.75, 4.85, "fr", cts.Token));
     }
 
+    // ── The provider-wide ceiling: a bounded queue, a bounded wait ───────────
+
+    [Fact]
+    public async Task ForecastAsync_BeyondTheCeilingAndItsQueue_TheExcessIsTransport_WithoutAProviderCall()
+    {
+        // Review round 2 (S4): a ceiling of two and a queue of twice that.
+        // Eight cold places at once: two go through, four wait, and the last
+        // two are refused ON THE SPOT — a Transport result, no request, no
+        // exception — instead of queuing for the life of the process.
+        var handler = new HoldingHandler();
+        var client = NewClient(handler, maxConcurrentCalls: 2);
+
+        var calls = Enumerable.Range(0, 8)
+            .Select(i => client.ForecastAsync(40 + i, 3.5, "fr", CancellationToken.None))
+            .ToArray();
+        await handler.WaitForInFlightAsync(2);
+
+        // The two refusals are already over, before anything is released.
+        var refused = calls.Where(c => c.IsCompleted).ToList();
+        Assert.Equal(2, refused.Count);
+        Assert.All(refused, c =>
+        {
+            Assert.False(c.Result.IsSuccess);
+            Assert.Equal(WeatherApiFailureKind.Transport, c.Result.Failure.Kind);
+        });
+        Assert.Equal(2, handler.Calls);
+
+        handler.Hold.SetResult();
+        var results = await Task.WhenAll(calls);
+
+        // Six reached the provider — two at a time — and succeeded.
+        Assert.Equal(6, handler.Calls);
+        Assert.Equal(2, handler.MaxInFlight);
+        Assert.Equal(6, results.Count(r => r.IsSuccess));
+    }
+
+    [Fact]
+    public async Task ForecastAsync_QueuedPastTheWaitBudget_IsTransport_InsideTheBrowserBudget()
+    {
+        // Review round 2 (S4): a ceiling of one whose slot is held for the
+        // whole test. The second call queues, and its wait must END BY ITSELF
+        // inside the pipeline's total budget — as Transport, never an
+        // exception — well within the browser's 15 s, with no request made.
+        var handler = new HoldingHandler();
+        var client = NewClient(handler, maxConcurrentCalls: 1);
+        var held = client.ForecastAsync(45.75, 4.85, "fr", CancellationToken.None);
+        await handler.WaitForInFlightAsync(1);
+
+        var watch = Stopwatch.StartNew();
+        var queued = await client.ForecastAsync(45.76, 4.86, "fr", CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(20));
+        watch.Stop();
+
+        Assert.False(queued.IsSuccess);
+        Assert.Equal(WeatherApiFailureKind.Transport, queued.Failure.Kind);
+        Assert.InRange(watch.Elapsed, TimeSpan.FromSeconds(9), TimeSpan.FromSeconds(15));
+        Assert.Equal(1, handler.Calls);
+
+        handler.Hold.SetResult();
+        Assert.True((await held).IsSuccess);
+    }
+
     // ── Handlers ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Holds every answer until released, counts requests and how many are
+    /// inside it at once — the proof the ceiling and its queue rest on.
+    /// </summary>
+    private sealed class HoldingHandler : HttpMessageHandler
+    {
+        private int _calls;
+        private int _inFlight;
+        private int _maxInFlight;
+
+        public TaskCompletionSource Hold { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public int MaxInFlight => Volatile.Read(ref _maxInFlight);
+
+        private int InFlight => Volatile.Read(ref _inFlight);
+
+        /// <summary>Waits until at least <paramref name="count"/> requests are inside the handler (five seconds at most).</summary>
+        public async Task WaitForInFlightAsync(int count)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (InFlight < count)
+            {
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException($"Expected {count} requests in flight, saw {InFlight}");
+                }
+
+                await Task.Delay(10);
+            }
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _calls);
+            var now = Interlocked.Increment(ref _inFlight);
+            int seen;
+            while ((seen = Volatile.Read(ref _maxInFlight)) < now
+                   && Interlocked.CompareExchange(ref _maxInFlight, now, seen) != seen)
+            {
+            }
+
+            try
+            {
+                await Hold.Task.WaitAsync(cancellationToken);
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(WeatherApiFixtures.Forecast, Encoding.UTF8, "application/json"),
+                };
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _inFlight);
+            }
+        }
+    }
 
     private sealed class RecordingHandler : HttpMessageHandler
     {
