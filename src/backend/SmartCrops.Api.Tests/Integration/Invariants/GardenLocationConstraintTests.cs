@@ -62,11 +62,19 @@ public class GardenLocationConstraintTests : IntegrationTestBase
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
+    [InlineData("\t")]
+    [InlineData("\n")]
+    [InlineData("\t \r\n")]
+    [InlineData(" ")]
+    [InlineData("  ")]
+    [InlineData("　")]
     public async Task Garden_PairWithoutAName_IsRejectedByPostgres(string? locationName)
     {
         // Review round 1 (K4): the endpoints refuse a blank name; a direct
         // write must be refused by the database too — a pair is not a place
-        // without a name.
+        // without a name. Review round 2 (K5): « blank » is what
+        // string.IsNullOrWhiteSpace says, not « made of spaces » — a tab, a
+        // line break, a no-break space are no name either.
         var userId = await SeedUserAsync();
 
         using var scope = CreateScope();
@@ -75,6 +83,25 @@ public class GardenLocationConstraintTests : IntegrationTestBase
 
         var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
         Assert.Contains("CK_Gardens_Location_Name", ex.InnerException?.Message ?? string.Empty);
+    }
+
+    [Theory]
+    [InlineData("Lyon Part-Dieu")]
+    [InlineData("Villeurbanne  Cusset")]
+    [InlineData("\tLyon\n")]
+    public async Task Garden_NameWithSomethingInIt_IsAccepted(string locationName)
+    {
+        // The rule refuses a name made ONLY of whitespace; whitespace inside or
+        // around a real name is the endpoint's business (it trims), not the
+        // database's.
+        var userId = await SeedUserAsync();
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        db.Gardens.Add(NewGarden(userId, latitude: 45.76, longitude: 4.84, locationName));
+
+        var ex = await Record.ExceptionAsync(() => db.SaveChangesAsync());
+        Assert.Null(ex);
     }
 
     [Fact]
@@ -165,6 +192,9 @@ public class GardenLocationConstraintTests : IntegrationTestBase
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
+    [InlineData("\t")]
+    [InlineData("\r\n")]
+    [InlineData("  ")]
     public async Task User_PairWithoutAName_IsRejectedByPostgres(string? locationName)
     {
         using var scope = CreateScope();

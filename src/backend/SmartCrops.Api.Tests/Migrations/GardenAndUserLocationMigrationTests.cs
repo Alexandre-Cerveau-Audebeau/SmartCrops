@@ -31,6 +31,17 @@ public class GardenAndUserLocationMigrationTests
 
     private static readonly string[] Tables = ["Gardens", "AspNetUsers"];
 
+    /// <summary>
+    /// The name rule as PostgreSQL receives it (review round 2, K5): a pair
+    /// never travels with a name that is NULL or made only of whitespace —
+    /// whitespace in the .NET sense of <c>string.IsNullOrWhiteSpace</c>, the
+    /// rule the endpoints and <c>GeoLocation.Create</c> apply, spelled out
+    /// as an explicit character class so the database and the code agree
+    /// character for character (<see cref="NameRule_WhitespaceClass_IsExactlyDotNetWhitespace"/>).
+    /// </summary>
+    private const string NameRule =
+        "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND \"LocationName\" !~ '^[\\t\\n\\v\\f\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*$')";
+
     [Fact]
     public void Migration_AddsSixNullableColumns_OnBothCarriers()
     {
@@ -105,10 +116,107 @@ public class GardenAndUserLocationMigrationTests
         // The pair rule, verbatim: a latitude alone is not half a place.
         Assert.Contains("(\\\"Latitude\\\" IS NULL) = (\\\"Longitude\\\" IS NULL)", source);
         // The name rule, verbatim, on both carriers: a pair never travels
-        // without a non-blank name.
-        Assert.Equal(
-            2,
-            Regex.Matches(source, Regex.Escape("\\\"Latitude\\\" IS NULL OR (\\\"LocationName\\\" IS NOT NULL AND btrim(\\\"LocationName\\\") <> '')")).Count);
+        // without a name made of something other than whitespace.
+        Assert.Equal(2, Regex.Matches(source, Regex.Escape(AsCSharpSourceText(NameRule))).Count);
+        // And the round 1 spelling is gone: btrim only knew the space.
+        Assert.DoesNotContain("btrim(\\\"LocationName\\\")", source);
+    }
+
+    [Fact]
+    public void NameRule_WhitespaceClass_IsExactlyDotNetWhitespace()
+    {
+        // Review round 2 (K5): the SQL character class must cover the SAME
+        // characters as char.IsWhiteSpace — no more (a real name refused), no
+        // fewer (a blank name accepted, as btrim did for a tab). Every BMP code
+        // point is checked against the class parsed out of the rule.
+        var inClass = ParseBracketClass(NameRule);
+
+        var dotNet = Enumerable.Range(0, 0x10000).Where(c => char.IsWhiteSpace((char)c)).ToHashSet();
+        Assert.Equal(dotNet, inClass);
+
+        // The documented .NET list, by name, so a drift in either direction
+        // reads as a character: 0009–000D, 0020, 0085, 00A0, 1680, 2000–200A,
+        // 2028, 2029, 202F, 205F, 3000 — twenty-five characters.
+        Assert.Equal(25, inClass.Count);
+        Assert.Contains(0x0009, inClass);
+        Assert.Contains(0x000B, inClass);
+        Assert.Contains(0x0085, inClass);
+        Assert.Contains(0x00A0, inClass);
+        Assert.Contains(0x2007, inClass);
+        Assert.Contains(0x202F, inClass);
+        Assert.Contains(0x3000, inClass);
+        Assert.DoesNotContain(0x200B, inClass);
+        Assert.DoesNotContain(0x180E, inClass);
+    }
+
+    /// <summary>The rule as it reads in the migration's C# source: quotes and backslashes escaped.</summary>
+    private static string AsCSharpSourceText(string value) =>
+        value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+    /// <summary>
+    /// The code points of the <c>[...]</c> class of the rule: PostgreSQL ARE
+    /// character-entry escapes (<c>\t \n \v \f \r \uXXXX</c>), literals, and
+    /// <c>a-b</c> ranges.
+    /// </summary>
+    private static HashSet<int> ParseBracketClass(string rule)
+    {
+        var start = rule.IndexOf("'^[", StringComparison.Ordinal) + 3;
+        var end = rule.IndexOf("]*$'", StringComparison.Ordinal);
+        var body = rule[start..end];
+
+        var atoms = new List<int>();
+        var ranges = new List<(int From, int To)>();
+        var i = 0;
+        int? pendingFrom = null;
+        while (i < body.Length)
+        {
+            int code;
+            if (body[i] == '\\')
+            {
+                switch (body[i + 1])
+                {
+                    case 't': code = 0x09; i += 2; break;
+                    case 'n': code = 0x0A; i += 2; break;
+                    case 'v': code = 0x0B; i += 2; break;
+                    case 'f': code = 0x0C; i += 2; break;
+                    case 'r': code = 0x0D; i += 2; break;
+                    case 'u':
+                        code = Convert.ToInt32(body.Substring(i + 2, 4), 16);
+                        i += 6;
+                        break;
+                    default:
+                        throw new InvalidOperationException($"Unexpected escape \\{body[i + 1]} in the rule");
+                }
+            }
+            else if (body[i] == '-' && pendingFrom is not null)
+            {
+                i++;
+                var to = body[i] == '\\'
+                    ? Convert.ToInt32(body.Substring(i + 2, 4), 16)
+                    : body[i];
+                i += body[i] == '\\' ? 6 : 1;
+                ranges.Add((pendingFrom.Value, to));
+                atoms.Remove(pendingFrom.Value);
+                pendingFrom = null;
+                continue;
+            }
+            else
+            {
+                code = body[i];
+                i++;
+            }
+
+            atoms.Add(code);
+            pendingFrom = code;
+        }
+
+        var set = atoms.ToHashSet();
+        foreach (var (from, to) in ranges)
+        {
+            for (var c = from; c <= to; c++) set.Add(c);
+        }
+
+        return set;
     }
 
     [Fact]

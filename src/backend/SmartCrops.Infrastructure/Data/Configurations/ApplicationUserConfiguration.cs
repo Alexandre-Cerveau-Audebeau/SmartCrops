@@ -18,7 +18,8 @@ namespace SmartCrops.Infrastructure.Data.Configurations;
 /// for name with the table swapped, so the two carriers of a location can
 /// never diverge on what a valid place is: each coordinate in range, the
 /// pair complete, and a non-blank name whenever there is a pair (review
-/// round 1, K4).</para>
+/// round 1, K4) — blank in the sense of <c>string.IsNullOrWhiteSpace</c>,
+/// spelled out as a character class (review round 2, K5).</para>
 /// </summary>
 public class ApplicationUserConfiguration : IEntityTypeConfiguration<ApplicationUser>
 {
@@ -41,7 +42,7 @@ public class ApplicationUserConfiguration : IEntityTypeConfiguration<Application
                 "(\"Latitude\" IS NULL) = (\"Longitude\" IS NULL)");
             t.HasCheckConstraint(
                 "CK_AspNetUsers_Location_Name",
-                "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND btrim(\"LocationName\") <> '')");
+                "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND \"LocationName\" !~ '^[\\t\\n\\v\\f\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*$')");
         });
     }
 }

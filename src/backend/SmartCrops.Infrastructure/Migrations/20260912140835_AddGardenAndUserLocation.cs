@@ -122,16 +122,19 @@ namespace SmartCrops.Infrastructure.Migrations
             // Review round 1 (K4), added to this SAME migration while the lot is
             // unmerged: a coordinate pair never travels without a non-blank
             // name. NULL-tolerant like the three above — an unlocated row is
-            // untouched.
+            // untouched. Review round 2 (K5), same migration, same reason:
+            // « blank » is what string.IsNullOrWhiteSpace says — the twenty-five
+            // characters of the class below, spelled out — where btrim knew only
+            // the space and let a tab or a no-break space through.
             migrationBuilder.AddCheckConstraint(
                 name: "CK_Gardens_Location_Name",
                 table: "Gardens",
-                sql: "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND btrim(\"LocationName\") <> '')");
+                sql: "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND \"LocationName\" !~ '^[\\t\\n\\v\\f\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*$')");
 
             migrationBuilder.AddCheckConstraint(
                 name: "CK_AspNetUsers_Location_Name",
                 table: "AspNetUsers",
-                sql: "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND btrim(\"LocationName\") <> '')");
+                sql: "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND \"LocationName\" !~ '^[\\t\\n\\v\\f\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*$')");
         }
 
         /// <inheritdoc />

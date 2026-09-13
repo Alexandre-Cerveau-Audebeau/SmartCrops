@@ -255,7 +255,7 @@ namespace SmartCrops.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_AspNetUsers_Latitude_Range", "\"Latitude\" IS NULL OR (\"Latitude\" >= -90 AND \"Latitude\" <= 90)");
 
-                            t.HasCheckConstraint("CK_AspNetUsers_Location_Name", "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND btrim(\"LocationName\") <> '')");
+                            t.HasCheckConstraint("CK_AspNetUsers_Location_Name", "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND \"LocationName\" !~ '^[\\t\\n\\v\\f\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*$')");
 
                             t.HasCheckConstraint("CK_AspNetUsers_Location_Pair", "(\"Latitude\" IS NULL) = (\"Longitude\" IS NULL)");
 
@@ -354,7 +354,7 @@ namespace SmartCrops.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_Gardens_Latitude_Range", "\"Latitude\" IS NULL OR (\"Latitude\" >= -90 AND \"Latitude\" <= 90)");
 
-                            t.HasCheckConstraint("CK_Gardens_Location_Name", "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND btrim(\"LocationName\") <> '')");
+                            t.HasCheckConstraint("CK_Gardens_Location_Name", "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND \"LocationName\" !~ '^[\\t\\n\\v\\f\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*$')");
 
                             t.HasCheckConstraint("CK_Gardens_Location_Pair", "(\"Latitude\" IS NULL) = (\"Longitude\" IS NULL)");
 

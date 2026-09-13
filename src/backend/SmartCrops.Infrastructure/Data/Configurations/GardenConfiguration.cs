@@ -21,9 +21,12 @@ public class GardenConfiguration : IEntityTypeConfiguration<Garden>
         // enforces: each coordinate in its range, NEVER one without the other
         // — a latitude alone is not half a place — and NEVER a pair without a
         // non-blank name (review round 1, K4): the endpoints refuse a blank
-        // name, this makes a direct write refuse it too. All four are
-        // NULL-tolerant (NULL is « not located »), so existing rows are
-        // unaffected, as with the Plants range checks.
+        // name, this makes a direct write refuse it too. « Blank » is what
+        // string.IsNullOrWhiteSpace says (review round 2, K5): the SQL class
+        // spells out its twenty-five characters, so a tab or a no-break space
+        // is no name for the database either. All four are NULL-tolerant
+        // (NULL is « not located »), so existing rows are unaffected, as with
+        // the Plants range checks.
         builder.Property(g => g.LocationName).HasMaxLength(120);
         builder.Property(g => g.LocationRegion).HasMaxLength(120);
         builder.Property(g => g.LocationCountry).HasMaxLength(80);
@@ -41,7 +44,7 @@ public class GardenConfiguration : IEntityTypeConfiguration<Garden>
                 "(\"Latitude\" IS NULL) = (\"Longitude\" IS NULL)");
             t.HasCheckConstraint(
                 "CK_Gardens_Location_Name",
-                "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND btrim(\"LocationName\") <> '')");
+                "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND \"LocationName\" !~ '^[\\t\\n\\v\\f\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]*$')");
         });
 
         builder.Property(g => g.CreatedAt)
