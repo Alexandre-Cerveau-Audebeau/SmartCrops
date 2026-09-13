@@ -48,17 +48,27 @@ public sealed record WeatherFetchOutcome(CachedForecast? Data, bool Stale, Weath
 ///
 /// <para><b>Single-flight per key: one call per wave, one outcome for the
 /// wave.</b> Every request that misses the fresh entry goes through one gate
-/// for THAT place. The first one in — the winner — calls the provider;
-/// everyone who arrives while that call is in flight awaits the SAME task and
-/// receives the SAME outcome, success or failure (review round 2, C6). A
-/// global gate — the shape the catalog count uses — would serialize every
-/// user behind a network call of several seconds, so the gate is per key.
-/// The winner's call runs on <see cref="CancellationToken.None"/> with its
-/// own service scope: the browser that started it may leave, the answer
-/// still serves everyone waiting behind it; a waiter that leaves takes only
-/// itself. A gate lives exactly as long as its callers — the last one out
-/// removes it — so the gate set never outgrows the places being refreshed
-/// right now.</para>
+/// for THAT place. The first one in — the winner — STARTS the refresh; it
+/// and everyone who arrives while that refresh is in flight await the SAME
+/// task and receive the SAME outcome, success or failure (review round 2,
+/// C6). A global gate — the shape the catalog count uses — would serialize
+/// every user behind a network call of several seconds, so the gate is per
+/// key.</para>
+///
+/// <para><b>The refresh finishes alone; the wait is each caller's own.</b>
+/// Two lifetimes, kept apart (review round 3, D3). The REFRESH runs detached
+/// from the request that started it — on <see cref="CancellationToken.None"/>,
+/// in a service scope of its own, holding the gate itself until it ends — so
+/// the browser that started it may leave and the answer still serves
+/// everyone behind it, and no request arriving meanwhile can start a second
+/// call for the same place: the gate it would need is still held by the
+/// refresh in flight. The WAIT, on the other hand, is every caller's own,
+/// the winner's included: a request whose token is cancelled leaves at once
+/// with <see cref="OperationCanceledException"/>, not when the provider's
+/// pipeline gives up, and takes only itself. A gate lives exactly as long as
+/// someone holds it — a caller inside or waiting, or the refresh in flight —
+/// and the last one out removes it, so the gate set never outgrows the
+/// places being refreshed right now.</para>
 ///
 /// <para><b>The wave shares a failure; the cache never keeps one.</b> Nothing
 /// is written on a failed refresh. The callers already waiting on the gate
@@ -86,21 +96,24 @@ public sealed class WeatherForecastCache
     private readonly IServiceScopeFactory _scopes;
     private readonly ILogger<WeatherForecastCache> _logger;
 
-    // One gate per fresh key, held only while a caller is inside or waiting
-    // (review round 1, C1). The key set is the users' stored places — not a
-    // fixed catalogue — so a gate that outlived its callers would let this
-    // dictionary grow for the life of the process. A holder counts its
-    // callers; the last one out retires it and removes it, comparing the
-    // holder itself so a caller that just took a NEW holder for the same key
-    // is never dropped. Chosen over a gate stored in the cache entry: an
-    // IMemoryCache entry can expire while a refresh holds its gate, and two
-    // GetOrCreate calls can race into two gates — either breaks single-flight
-    // for exactly the wave it exists to coalesce.
+    // One gate per fresh key, held only while a caller is inside or waiting,
+    // or a refresh is in flight (review round 1, C1; round 3, D3). The key
+    // set is the users' stored places — not a fixed catalogue — so a gate
+    // that outlived its holders would let this dictionary grow for the life
+    // of the process. A holder counts its holders — the callers, plus one
+    // for the refresh in flight, which must keep the gate after every caller
+    // has left or a newcomer would start a second call; the last one out
+    // retires it and removes it, comparing the holder itself so a caller
+    // that just took a NEW holder for the same key is never dropped. Chosen
+    // over a gate stored in the cache entry: an IMemoryCache entry can expire
+    // while a refresh holds its gate, and two GetOrCreate calls can race into
+    // two gates — either breaks single-flight for exactly the wave it exists
+    // to coalesce.
     private readonly ConcurrentDictionary<string, Gate> _gates = new();
 
     private sealed class Gate
     {
-        /// <summary>Callers inside or waiting; −1 once retired.</summary>
+        /// <summary>Holders: callers inside or waiting, plus one for the refresh in flight; −1 once retired.</summary>
         public int Callers;
 
         /// <summary>
@@ -137,7 +150,7 @@ public sealed class WeatherForecastCache
     /// <param name="latitude">Exact latitude of the place asked for.</param>
     /// <param name="longitude">Exact longitude of the place asked for.</param>
     /// <param name="language">The <c>lang=</c> of the condition texts; part of the key.</param>
-    /// <param name="ct">The CALLER's token — honoured while waiting for the wave's outcome, never handed to the provider call.</param>
+    /// <param name="ct">The CALLER's token — honoured while waiting for the wave's outcome, by the request that started the refresh too; never handed to the provider call.</param>
     public async Task<WeatherFetchOutcome> GetAsync(
         double latitude,
         double longitude,
@@ -156,52 +169,89 @@ public sealed class WeatherForecastCache
         var gate = Acquire(freshKey);
         try
         {
-            TaskCompletionSource<WeatherFetchOutcome>? flight = null;
+            TaskCompletionSource<WeatherFetchOutcome>? started = null;
             Task<WeatherFetchOutcome> shared;
             lock (gate)
             {
                 if (gate.Flight is null)
                 {
-                    flight = new TaskCompletionSource<WeatherFetchOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    gate.Flight = flight;
+                    // We are the winner: the refresh is ours to START. The
+                    // flight takes a hold on the gate of its own, given back
+                    // when the refresh ends — not when we leave (D3).
+                    started = new TaskCompletionSource<WeatherFetchOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    gate.Flight = started;
+                    gate.Callers++;
                 }
 
                 shared = gate.Flight.Task;
             }
 
-            if (flight is null)
+            if (started is not null)
             {
-                // A refresh is in flight for this place: its outcome is ours,
-                // success or failure. The wait honours our token; the flight
-                // does not depend on it.
-                return await shared.WaitAsync(ct);
+                // Detached on purpose: the refresh depends neither on this
+                // request's token nor on its staying. It never throws — its
+                // outcome or its exception goes to the flight, and the flight
+                // gives the gate back itself.
+                _ = FlyAsync(gate, started, freshKey, lastKnownKey, locationKey, latitude, longitude, language);
             }
 
-            // We are the winner: the refresh is ours to run, and its outcome
-            // is handed to everyone who queued behind us meanwhile.
-            try
-            {
-                var outcome = await RefreshAsync(freshKey, lastKnownKey, locationKey, latitude, longitude, language);
-                flight.SetResult(outcome);
-                return outcome;
-            }
-            catch (Exception ex)
-            {
-                flight.SetException(ex);
-                throw;
-            }
-            finally
-            {
-                // The wave is over: the next caller starts a refresh of its own.
-                lock (gate)
-                {
-                    gate.Flight = null;
-                }
-            }
+            // Winner or not, the wave's outcome is ours — and the wait is on
+            // OUR token: a caller that gives up leaves here, at once, and
+            // takes only itself.
+            return await shared.WaitAsync(ct);
         }
         finally
         {
             Release(freshKey, gate);
+        }
+    }
+
+    /// <summary>
+    /// The refresh in flight for a gate, as a task of its own: runs
+    /// <see cref="RefreshAsync"/> to the end whatever the callers do, then
+    /// closes the wave and gives the gate back, then hands the outcome — or
+    /// the exception — to every caller of the wave. The wave is closed
+    /// (<see cref="Gate.Flight"/> cleared) BEFORE the outcome is published,
+    /// so a request that arrives after it starts a refresh of its own.
+    /// </summary>
+    private async Task FlyAsync(
+        Gate gate,
+        TaskCompletionSource<WeatherFetchOutcome> flight,
+        string freshKey,
+        string lastKnownKey,
+        string locationKey,
+        double latitude,
+        double longitude,
+        string language)
+    {
+        WeatherFetchOutcome? outcome = null;
+        Exception? failure = null;
+        try
+        {
+            outcome = await RefreshAsync(freshKey, lastKnownKey, locationKey, latitude, longitude, language);
+        }
+        catch (Exception ex)
+        {
+            failure = ex;
+        }
+
+        lock (gate)
+        {
+            gate.Flight = null;
+        }
+
+        // The flight's own hold on the gate (taken when it was started): with
+        // every caller gone, this is what kept a newcomer from starting a
+        // second call for the same place while this one was in flight.
+        Release(freshKey, gate);
+
+        if (failure is null)
+        {
+            flight.SetResult(outcome!);
+        }
+        else
+        {
+            flight.SetException(failure);
         }
     }
 
@@ -276,8 +326,9 @@ public sealed class WeatherForecastCache
     }
 
     /// <summary>
-    /// One caller fewer; the last one retires the holder and removes it — by
-    /// value, so a newer holder under the same key is left alone.
+    /// One holder fewer — a caller leaving, or the refresh in flight ending;
+    /// the last one retires the gate and removes it — by value, so a newer
+    /// gate under the same key is left alone.
     /// </summary>
     private void Release(string key, Gate gate)
     {

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
@@ -185,6 +186,43 @@ public class WeatherForecastCacheTests
         var outcome = await winner;
 
         Assert.NotNull(outcome.Data);
+        Assert.Equal(1, handler.Calls);
+        Assert.Equal(0, cache.GateCount);
+    }
+
+    [Fact]
+    public async Task GetAsync_TheCreatorThatGivesUp_LeavesAtOnce_AndTheFlightGoesOn_WithoutADuplicate()
+    {
+        // Review round 3 (D3): the request that STARTED the refresh leaves
+        // (its token) while the provider still holds the answer. It must get
+        // a clean OperationCanceledException at once — not the outcome after
+        // the pipeline's ten seconds — and the refresh must go on, holding
+        // the gate itself: a second request for the same place, arriving
+        // while the first is gone and the refresh still runs, joins that
+        // refresh instead of starting a second provider call.
+        var (cache, handler) = Build();
+        handler.Hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cts = new CancellationTokenSource();
+
+        var creator = cache.GetAsync(45.76, 4.84, "fr", cts.Token);
+        await handler.Started.Task;
+        var watch = Stopwatch.StartNew();
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => creator.WaitAsync(TimeSpan.FromSeconds(2)));
+        watch.Stop();
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(1), $"the creator left after {watch.Elapsed}");
+
+        var second = cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+        // Every chance for a second provider call to start — it must not.
+        await Task.Delay(200);
+        Assert.Equal(1, handler.Calls);
+        Assert.Equal(1, cache.GateCount);
+
+        handler.Hold.SetResult();
+        var outcome = await second;
+
+        Assert.NotNull(outcome.Data);
+        Assert.False(outcome.Stale);
         Assert.Equal(1, handler.Calls);
         Assert.Equal(0, cache.GateCount);
     }
