@@ -592,7 +592,103 @@ public class WeatherApiClientTests
         Assert.True((await held).IsSuccess);
     }
 
+    [Fact]
+    public async Task ForecastAsync_AdmittedLate_ThenStalled_IsTransport_AtTheCallDeadline()
+    {
+        // Review round 3 (D2): a ceiling of one. The first call holds the
+        // slot for nine seconds, so the second waits almost its whole queue
+        // budget; the slot is then freed, the second call is admitted, and
+        // the provider stalls on it for good. Two budgets of ten seconds in
+        // a row would end it near twenty — past the browser's fifteen. One
+        // end-to-end deadline per call ends it at twelve, as Transport, never
+        // an exception, whatever the caller's token.
+        var handler = new PerCallHoldingHandler();
+        var client = NewClient(handler, maxConcurrentCalls: 1);
+        var held = client.ForecastAsync(45.75, 4.85, "fr", CancellationToken.None);
+        await handler.WaitForCallsAsync(1);
+
+        var watch = Stopwatch.StartNew();
+        var late = client.ForecastAsync(45.76, 4.86, "fr", CancellationToken.None);
+        await Task.Delay(TimeSpan.FromSeconds(9));
+        handler.Release(0);
+        Assert.True((await held).IsSuccess);
+        await handler.WaitForCallsAsync(2);
+        var admittedAfter = watch.Elapsed;
+
+        var result = await late.WaitAsync(TimeSpan.FromSeconds(25));
+        watch.Stop();
+
+        Assert.InRange(admittedAfter, TimeSpan.FromSeconds(9), TimeSpan.FromSeconds(10));
+        Assert.False(result.IsSuccess);
+        Assert.Equal(WeatherApiFailureKind.Transport, result.Failure.Kind);
+        Assert.InRange(watch.Elapsed, TimeSpan.FromSeconds(11), TimeSpan.FromSeconds(13));
+        Assert.Equal(2, handler.Calls);
+    }
+
     // ── Handlers ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Holds each answer behind a release of ITS OWN, in arrival order — so a
+    /// test can let the first call through and leave the next one stalled.
+    /// </summary>
+    private sealed class PerCallHoldingHandler : HttpMessageHandler
+    {
+        private readonly List<TaskCompletionSource> _holds = new();
+
+        /// <summary>Requests that reached this handler, released or not.</summary>
+        public int Calls
+        {
+            get
+            {
+                lock (_holds)
+                {
+                    return _holds.Count;
+                }
+            }
+        }
+
+        /// <summary>Lets the <paramref name="index"/>-th request (zero-based) answer.</summary>
+        public void Release(int index)
+        {
+            TaskCompletionSource hold;
+            lock (_holds)
+            {
+                hold = _holds[index];
+            }
+
+            hold.SetResult();
+        }
+
+        /// <summary>Waits until at least <paramref name="count"/> requests have reached the handler (five seconds at most).</summary>
+        public async Task WaitForCallsAsync(int count)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (Calls < count)
+            {
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException($"Expected {count} requests, saw {Calls}");
+                }
+
+                await Task.Delay(10);
+            }
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            lock (_holds)
+            {
+                _holds.Add(hold);
+            }
+
+            await hold.Task.WaitAsync(cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(WeatherApiFixtures.Forecast, Encoding.UTF8, "application/json"),
+            };
+        }
+    }
 
     /// <summary>
     /// Holds every answer until released, counts requests and how many are

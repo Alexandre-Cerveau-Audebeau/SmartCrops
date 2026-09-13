@@ -121,6 +121,20 @@ public class WeatherApiOptionsTests
         Assert.True(WeatherApiOptions.PipelineSamplingDurationSeconds >= 2 * WeatherApiOptions.PipelineAttemptTimeoutSeconds);
     }
 
+    [Fact]
+    public void CallDeadline_SitsBetweenThePipelineTotalAndTheBrowserBudget()
+    {
+        // Review round 3 (D2): one end-to-end budget per call — the wait for
+        // a slot and the pipeline together — above the pipeline's total (a
+        // call admitted at once keeps its retries) and under the browser's
+        // 15 s (a late admission followed by a stalled provider ends inside
+        // the dashboard request that carries it).
+        Assert.Equal(12, WeatherApiOptions.CallDeadlineSeconds);
+        Assert.True(WeatherApiOptions.CallDeadlineSeconds > WeatherApiOptions.PipelineTotalTimeoutSeconds);
+        Assert.True(WeatherApiOptions.CallDeadlineSeconds < 15);
+        Assert.Equal(TimeSpan.FromSeconds(12), WeatherApiClient.CallDeadline);
+    }
+
     [Theory]
     [InlineData(10)]
     [InlineData(1)]

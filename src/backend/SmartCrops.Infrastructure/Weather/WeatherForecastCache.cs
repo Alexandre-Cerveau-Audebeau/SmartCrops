@@ -317,8 +317,9 @@ public sealed class WeatherForecastCache
     /// The provider call, in a scope of its own and on no cancellation token:
     /// the typed client's <see cref="HttpClient"/> is a scoped dependency, and
     /// the request that won the gate must not take the answer down with it
-    /// when its own browser gives up. Bounded by the resilience pipeline — and
-    /// by the bulkhead's own wait budget before it.
+    /// when its own browser gives up. Bounded by the client's own end-to-end
+    /// deadline, which covers its wait for a slot and the resilience pipeline
+    /// together (review round 3, D2).
     /// </summary>
     private async Task<WeatherApiResult<WeatherApiForecastResponse>> FetchAsync(
         double latitude,

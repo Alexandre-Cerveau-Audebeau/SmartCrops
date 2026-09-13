@@ -310,6 +310,39 @@ public class DashboardWeatherControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Get_ThreeSlowPlaces_DegradeTogether_InsideTheBrowserBudget()
+    {
+        // Review round 3 (D2): three distinct places at once, under the
+        // provider-wide ceiling of four — all three are admitted at once and
+        // stall together, the pipeline gives up on each at ten seconds IN
+        // PARALLEL, and the one response lands well inside the browser's
+        // 15 s with three unavailable places. Each call carries an end-to-end
+        // deadline of its own besides, so a place queued behind the ceiling
+        // could not push the response past that budget either.
+        var places = new[] { FreshPlace(), FreshPlace(), FreshPlace() };
+        var userId = await SeedUserAsync();
+        foreach (var (lat, lon) in places)
+        {
+            await SeedGardenAsync(userId, $"Jardin {lat:F2}", lat, lon, name: $"Lieu {lat:F2}");
+            Stub.SetForecast(lat, lon, WeatherApiFixtures.Forecast);
+        }
+
+        Stub.ForecastDelay = TimeSpan.FromSeconds(20);
+        AuthAs(userId);
+        var watch = Stopwatch.StartNew();
+
+        var response = await Client.GetAsync($"{Url}?lang=fr");
+        watch.Stop();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var locations = doc.RootElement.GetProperty("locations").EnumerateArray().ToList();
+        Assert.Equal(3, locations.Count);
+        Assert.All(locations, l => Assert.Equal("unavailable", l.GetProperty("status").GetString()));
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(15), $"took {watch.Elapsed}");
+    }
+
+    [Fact]
     public async Task Get_Degraded_LeavesNoCoordinateInAnyLogLine()
     {
         // Review round 2 (S6), extending the round 1 proof (S2, the HTTP

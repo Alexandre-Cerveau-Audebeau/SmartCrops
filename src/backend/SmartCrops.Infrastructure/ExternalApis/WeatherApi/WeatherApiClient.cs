@@ -40,7 +40,10 @@ namespace SmartCrops.Infrastructure.ExternalApis.WeatherApi;
 /// shared key's goodwill in one instant. A call the bulkhead does not admit
 /// (its queue full, or its wait past the pipeline's total budget) is
 /// classified <see cref="WeatherApiFailureKind.Transport"/> without a request,
-/// exactly like a provider that stalled (review round 2, S4).</para>
+/// exactly like a provider that stalled (review round 2, S4). And the wait
+/// and the call share ONE deadline besides — <see cref="CallDeadline"/>,
+/// under the browser's 15 s — so a slot freed late does not buy a stalled
+/// provider a second full budget (review round 3, D2).</para>
 /// </summary>
 public sealed class WeatherApiClient
 {
@@ -51,6 +54,13 @@ public sealed class WeatherApiClient
     /// typed client refuses to buffer past it (review round 1, C3).
     /// </summary>
     public const int MaxResponseContentBytes = 1024 * 1024;
+
+    /// <summary>
+    /// The end-to-end deadline of one call — the wait for a slot and the HTTP
+    /// pipeline together: <see cref="WeatherApiOptions.CallDeadlineSeconds"/>
+    /// (review round 3, D2).
+    /// </summary>
+    public static readonly TimeSpan CallDeadline = TimeSpan.FromSeconds(WeatherApiOptions.CallDeadlineSeconds);
 
     private readonly HttpClient _http;
     private readonly WeatherApiBulkhead _bulkhead;
@@ -174,28 +184,39 @@ public sealed class WeatherApiClient
             return WeatherApiResult<T>.Failed(WeatherApiFailureKind.MissingKey);
         }
 
-        // The provider-wide ceiling (review round 1): a slot is held from the
-        // request to the end of the body read, retries included. Waiting for
-        // one honours the caller's token exactly like the call itself — and
-        // the wait is bounded (review round 2, S4): a full queue or a wait
-        // past the pipeline's total budget comes back as a REFUSAL, which is
-        // a Transport failure like a stalled provider, never an exception.
-        using var slot = await _bulkhead.EnterAsync(ct);
-        if (!slot.Admitted)
-        {
-            _logger.LogWarning(
-                "WeatherAPI {Operation} was not admitted by the provider-wide ceiling ({Refusal}); classified Transport",
-                operation, slot.Refusal);
-            return WeatherApiResult<T>.Failed(WeatherApiFailureKind.Transport);
-        }
+        // ONE deadline for the whole call (review round 3, D2): the wait for
+        // a slot and the HTTP pipeline together, linked to the caller's token.
+        // Each of the two has a budget of its own — the queue wait and the
+        // pipeline's total, ten seconds each — and a slot freed late followed
+        // by a stalled provider would otherwise stack them past the browser's
+        // fifteen. Past the deadline the call is Transport, wherever it stands.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(CallDeadline);
+        var budget = deadline.Token;
 
         try
         {
-            using var response = await _http.GetAsync(url, ct);
+            // The provider-wide ceiling (review round 1): a slot is held from
+            // the request to the end of the body read, retries included.
+            // Waiting for one honours the caller's token and the deadline
+            // exactly like the call itself — and the wait is bounded on its
+            // own too (review round 2, S4): a full queue or a wait past the
+            // pipeline's total budget comes back as a REFUSAL, which is a
+            // Transport failure like a stalled provider, never an exception.
+            using var slot = await _bulkhead.EnterAsync(budget);
+            if (!slot.Admitted)
+            {
+                _logger.LogWarning(
+                    "WeatherAPI {Operation} was not admitted by the provider-wide ceiling ({Refusal}); classified Transport",
+                    operation, slot.Refusal);
+                return WeatherApiResult<T>.Failed(WeatherApiFailureKind.Transport);
+            }
+
+            using var response = await _http.GetAsync(url, budget);
 
             // The body FIRST, whatever the status: a 4xx carries the envelope
             // this client exists to read, and a 2xx may not be JSON at all.
-            var body = await response.Content.ReadAsStringAsync(ct);
+            var body = await response.Content.ReadAsStringAsync(budget);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -236,9 +257,21 @@ public sealed class WeatherApiClient
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
-            // HttpClient.Timeout surfaces as a cancellation whose token is not
-            // the caller's — a transport failure, not a caller's decision.
-            _logger.LogWarning(ex, "WeatherAPI {Operation} timed out", operation);
+            // Not the caller's decision: the call's own end-to-end deadline,
+            // or HttpClient.Timeout — both surface as a cancellation whose
+            // token is not the caller's. A transport failure either way.
+            if (budget.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "WeatherAPI {Operation} exceeded the call's end-to-end deadline of {DeadlineSeconds} s (slot wait and pipeline together); classified Transport",
+                    operation, WeatherApiOptions.CallDeadlineSeconds);
+            }
+            else
+            {
+                _logger.LogWarning(ex, "WeatherAPI {Operation} timed out", operation);
+            }
+
             return WeatherApiResult<T>.Failed(WeatherApiFailureKind.Transport);
         }
         catch (ExecutionRejectedException ex)

@@ -53,6 +53,18 @@ public class WeatherApiOptions
     public const int PipelineSamplingDurationSeconds = 10;
 
     /// <summary>
+    /// End-to-end budget of ONE call, in seconds — the wait for a bulkhead
+    /// slot and the resilience pipeline together (review round 3, D2). Past
+    /// it the call is classified <c>Transport</c>, wherever it stands.
+    /// Strictly above the pipeline's total, so a call admitted at once keeps
+    /// its whole budget and its retries; strictly under the browser's 15 s
+    /// fetch budget, so a slot freed late followed by a stalled provider —
+    /// the queue wait plus the pipeline's total otherwise, twenty seconds —
+    /// can no longer outlast the dashboard request that carries it.
+    /// </summary>
+    public const int CallDeadlineSeconds = 12;
+
+    /// <summary>
     /// Lowest <see cref="TimeoutSeconds"/> accepted: strictly ABOVE the
     /// pipeline's total, so <see cref="HttpClient.Timeout"/> can never cut the
     /// pipeline short and turn its retries and its budget into a plain

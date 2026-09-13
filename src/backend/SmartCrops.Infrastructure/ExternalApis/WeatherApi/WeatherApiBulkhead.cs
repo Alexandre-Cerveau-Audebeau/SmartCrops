@@ -35,7 +35,10 @@ public enum BulkheadRefusal
 /// that started it), so without this bound a cold burst of distinct places
 /// would queue work for the life of the process. A refusal, either way, is a
 /// RESULT — <see cref="Lease.Refusal"/>, classified <c>Transport</c> by the
-/// client — never an exception.</para>
+/// client — never an exception. The wait is counted, besides, against the
+/// call's end-to-end deadline (<see cref="WeatherApiOptions.CallDeadlineSeconds"/>,
+/// held by the client, review round 3, D2): a slot freed late followed by a
+/// stalled provider cannot stack the two budgets past the browser's.</para>
 ///
 /// <para>Not an <c>IHostedService</c>, not a Polly strategy inside the HTTP
 /// pipeline (where retries would re-enter it): a semaphore around the whole
@@ -52,9 +55,13 @@ public sealed class WeatherApiBulkhead
     public const int QueueDepthPerSlot = 2;
 
     /// <summary>
-    /// Longest a call waits for a slot — the pipeline's total budget
-    /// (<see cref="WeatherApiOptions.PipelineTotalTimeoutSeconds"/>), so a
-    /// queued call costs the caller no more than a stalled provider would.
+    /// Longest a call waits for a slot on its own — the pipeline's total
+    /// budget (<see cref="WeatherApiOptions.PipelineTotalTimeoutSeconds"/>):
+    /// a call that never gets a slot costs its caller no more than a stalled
+    /// provider would. The wait and the call that follows it share ONE
+    /// deadline besides, <see cref="WeatherApiOptions.CallDeadlineSeconds"/>,
+    /// held by the client: a late admission does not buy the provider a
+    /// second full budget (review round 3, D2).
     /// </summary>
     public static readonly TimeSpan QueueWait = TimeSpan.FromSeconds(WeatherApiOptions.PipelineTotalTimeoutSeconds);
 
