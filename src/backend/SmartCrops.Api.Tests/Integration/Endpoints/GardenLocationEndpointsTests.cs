@@ -2,8 +2,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SmartCrops.Core.Entities;
 using SmartCrops.Infrastructure.Data;
 
@@ -89,6 +91,70 @@ public class GardenLocationEndpointsTests : IntegrationTestBase
         var garden = await LoadGardenAsync(gardenId);
         Assert.Equal("S", garden.Hemisphere);
         Assert.Equal("mid", garden.LatitudeBand);
+    }
+
+    [Fact]
+    public async Task PutLocation_SaysInTheLog_WhatItPreFilled_AndNeverThePlace()
+    {
+        // Review round 1 (C5): no provenance column, so the log is the trace
+        // that a value came from the latitude — the garden id and the two
+        // derived words, never the coordinates or the name.
+        var userId = await SeedUserAsync();
+        var gardenId = await SeedGardenAsync(userId, hemisphere: null, band: null);
+        var capture = new CapturingLoggerProvider();
+        using var factory = Fixture.Factory.WithWebHostBuilder(builder =>
+            builder.ConfigureLogging(logging => logging.AddProvider(capture)));
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
+
+        var response = await client.PutAsJsonAsync($"/api/gardens/{gardenId}/location", Lyon);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var entry = Assert.Single(capture.Entries, e =>
+            e.Level == LogLevel.Information && e.Message.Contains("pre-filled") && e.Message.Contains(gardenId.ToString()));
+        Assert.Contains("hemisphere: N", entry.Message);
+        Assert.Contains("latitude band: mid", entry.Message);
+        Assert.DoesNotContain("45.76", entry.Message);
+        Assert.DoesNotContain("4.84", entry.Message);
+        Assert.DoesNotContain("Lyon", entry.Message);
+    }
+
+    [Fact]
+    public async Task PutLocation_OnlyTheMissingHalf_IsSaidToBePreFilled()
+    {
+        var userId = await SeedUserAsync();
+        var gardenId = await SeedGardenAsync(userId, hemisphere: "S", band: null);
+        var capture = new CapturingLoggerProvider();
+        using var factory = Fixture.Factory.WithWebHostBuilder(builder =>
+            builder.ConfigureLogging(logging => logging.AddProvider(capture)));
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
+
+        await client.PutAsJsonAsync($"/api/gardens/{gardenId}/location", Lyon);
+
+        var entry = Assert.Single(capture.Entries, e => e.Message.Contains("pre-filled") && e.Message.Contains(gardenId.ToString()));
+        Assert.Contains("hemisphere: kept", entry.Message);
+        Assert.Contains("latitude band: mid", entry.Message);
+    }
+
+    [Fact]
+    public async Task PutLocation_HandSetExposure_LogsNoPreFill()
+    {
+        var userId = await SeedUserAsync();
+        var gardenId = await SeedGardenAsync(userId, hemisphere: "S", band: "high");
+        var capture = new CapturingLoggerProvider();
+        using var factory = Fixture.Factory.WithWebHostBuilder(builder =>
+            builder.ConfigureLogging(logging => logging.AddProvider(capture)));
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", Fixture.GenerateToken(userId));
+
+        var response = await client.PutAsJsonAsync($"/api/gardens/{gardenId}/location", Lyon);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.DoesNotContain(capture.Entries, e => e.Message.Contains("pre-filled"));
     }
 
     [Fact]

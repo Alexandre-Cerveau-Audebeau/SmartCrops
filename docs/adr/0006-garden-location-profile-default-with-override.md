@@ -43,6 +43,7 @@ The criterion that decided it is **a garden created after the invitation**. With
 - Any new reader of a garden's place MUST go through `GeoLocation.From(garden) ?? GeoLocation.From(user)`; reading `Garden.Latitude` alone silently ignores the default.
 - The six columns are duplicated on purpose across the two tables; a change to one set (a new column, a new constraint) applies to both, in the same migration.
 - `PUT /api/gardens/{id}/location` bumps `UpdatedAt` through the shared interceptor: a garden that learnt where it is reads as « modified just now » on the dashboard. Assumed, documented at the endpoint.
+- **The pre-fill leaves no provenance in the row** (review round 1 of PR 3a, C5). A pre-filled `Hemisphere` / `LatitudeBand` and a hand-set one are the same column: a later location in another hemisphere does not revisit them, and clearing the location keeps them. The derivation is therefore made VISIBLE where it happens — the endpoint logs, at Information level, the garden id and the derived words it wrote, never the place — and documented on the endpoint. Two alternatives were weighed and set aside for this lot: a provenance column (a schema extension to settle with the front, after the migration this lot already carries), and an on-the-fly « derived » flag computed from the stored latitude — rejected because it could only say « consistent with the stored latitude », which a hand-set value matches by coincidence (« N » / « mid » on a Lyon garden) and which a relocated garden's genuinely pre-filled value no longer does.
 
 ## When to revisit
 

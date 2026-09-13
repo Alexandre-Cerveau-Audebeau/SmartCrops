@@ -49,7 +49,9 @@ public sealed record WeatherFetchOutcome(CachedForecast? Data, bool Stale, Weath
 /// network call of several seconds, so the gate is per key. The winner's
 /// call runs on <see cref="CancellationToken.None"/> with its own service
 /// scope: the browser that started it may leave, the answer still serves
-/// everyone queued behind it.</para>
+/// everyone queued behind it. A gate lives exactly as long as its callers —
+/// the last one out removes it — so the gate set never outgrows the places
+/// being refreshed right now.</para>
 ///
 /// <para><b>A failure is never memorized.</b> Nothing is written on a failed
 /// refresh, so the next request tries the provider again — through the same
@@ -74,10 +76,25 @@ public sealed class WeatherForecastCache
     private readonly IServiceScopeFactory _scopes;
     private readonly ILogger<WeatherForecastCache> _logger;
 
-    // One gate per fresh key. Bounded by the number of distinct places the
-    // process has seen; a gate is a few dozen bytes and is never contended
-    // outside a refresh, so nothing evicts it.
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _gates = new();
+    // One gate per fresh key, held only while a caller is inside or waiting
+    // (review round 1, C1). The key set is the users' stored places — not a
+    // fixed catalogue — so a gate that outlived its callers would let this
+    // dictionary grow for the life of the process. A holder counts its
+    // callers; the last one out retires it and removes it, comparing the
+    // holder itself so a caller that just took a NEW holder for the same key
+    // is never dropped. Chosen over a gate stored in the cache entry: an
+    // IMemoryCache entry can expire while a refresh holds its gate, and two
+    // GetOrCreate calls can race into two gates — either breaks single-flight
+    // for exactly the wave it exists to coalesce.
+    private readonly ConcurrentDictionary<string, Gate> _gates = new();
+
+    private sealed class Gate
+    {
+        public readonly SemaphoreSlim Slot = new(1, 1);
+
+        /// <summary>Callers inside or waiting; −1 once retired.</summary>
+        public int Callers;
+    }
 
     public WeatherForecastCache(
         IMemoryCache cache,
@@ -88,6 +105,9 @@ public sealed class WeatherForecastCache
         _scopes = scopes;
         _logger = logger;
     }
+
+    /// <summary>Single-flight gates currently held in memory; for the test that pins their lifetime.</summary>
+    internal int GateCount => _gates.Count;
 
     /// <summary>Cache key of the fresh entry for a place and a language.</summary>
     internal static string FreshKey(string locationKey, string language) => $"weather:fresh:{locationKey}:{language}";
@@ -118,43 +138,90 @@ public sealed class WeatherForecastCache
             return WeatherFetchOutcome.Fresh(fresh);
         }
 
-        var gate = _gates.GetOrAdd(freshKey, _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(ct);
+        var gate = Acquire(freshKey);
         try
         {
-            // The waiter that queued behind the winner finds the value here and
-            // never reaches the provider — the load-bearing second look.
-            if (_cache.TryGetValue(freshKey, out fresh) && fresh is not null)
+            await gate.Slot.WaitAsync(ct);
+            try
             {
-                return WeatherFetchOutcome.Fresh(fresh);
-            }
+                // The waiter that queued behind the winner finds the value here and
+                // never reaches the provider — the load-bearing second look.
+                if (_cache.TryGetValue(freshKey, out fresh) && fresh is not null)
+                {
+                    return WeatherFetchOutcome.Fresh(fresh);
+                }
 
-            var result = await FetchAsync(latitude, longitude, language);
+                var result = await FetchAsync(latitude, longitude, language);
 
-            if (result.IsSuccess)
-            {
-                var entry = new CachedForecast(result.Value, DateTime.UtcNow);
-                _cache.Set(freshKey, entry, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = FreshTtl });
-                _cache.Set(lastKnownKey, entry, new MemoryCacheEntryOptions { SlidingExpiration = LastKnownTtl });
-                return WeatherFetchOutcome.Fresh(entry);
-            }
+                if (result.IsSuccess)
+                {
+                    var entry = new CachedForecast(result.Value, DateTime.UtcNow);
+                    _cache.Set(freshKey, entry, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = FreshTtl });
+                    _cache.Set(lastKnownKey, entry, new MemoryCacheEntryOptions { SlidingExpiration = LastKnownTtl });
+                    return WeatherFetchOutcome.Fresh(entry);
+                }
 
-            if (_cache.TryGetValue(lastKnownKey, out CachedForecast? lastKnown) && lastKnown is not null)
-            {
+                if (_cache.TryGetValue(lastKnownKey, out CachedForecast? lastKnown) && lastKnown is not null)
+                {
+                    _logger.LogWarning(
+                        "Weather refresh failed for {LocationKey} ({Kind}, code {Code}); serving the last known forecast from {FetchedAt:O}",
+                        locationKey, result.Failure.Kind, result.Failure.ProviderCode, lastKnown.FetchedAtUtc);
+                    return WeatherFetchOutcome.StaleFrom(lastKnown, result.Failure);
+                }
+
                 _logger.LogWarning(
-                    "Weather refresh failed for {LocationKey} ({Kind}, code {Code}); serving the last known forecast from {FetchedAt:O}",
-                    locationKey, result.Failure.Kind, result.Failure.ProviderCode, lastKnown.FetchedAtUtc);
-                return WeatherFetchOutcome.StaleFrom(lastKnown, result.Failure);
+                    "Weather unavailable for {LocationKey} ({Kind}, code {Code}) and nothing known before",
+                    locationKey, result.Failure.Kind, result.Failure.ProviderCode);
+                return WeatherFetchOutcome.Unavailable(result.Failure);
             }
-
-            _logger.LogWarning(
-                "Weather unavailable for {LocationKey} ({Kind}, code {Code}) and nothing known before",
-                locationKey, result.Failure.Kind, result.Failure.ProviderCode);
-            return WeatherFetchOutcome.Unavailable(result.Failure);
+            finally
+            {
+                gate.Slot.Release();
+            }
         }
         finally
         {
-            gate.Release();
+            Release(freshKey, gate);
+        }
+    }
+
+    /// <summary>
+    /// The gate of a key, counted as one more caller. A holder the last caller
+    /// retired between our lookup and our lock is skipped: the loop asks the
+    /// dictionary again and gets a fresh one.
+    /// </summary>
+    private Gate Acquire(string key)
+    {
+        while (true)
+        {
+            var gate = _gates.GetOrAdd(key, _ => new Gate());
+            lock (gate)
+            {
+                if (gate.Callers >= 0)
+                {
+                    gate.Callers++;
+                    return gate;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// One caller fewer; the last one retires the holder and removes it — by
+    /// value, so a newer holder under the same key is left alone.
+    /// </summary>
+    private void Release(string key, Gate gate)
+    {
+        lock (gate)
+        {
+            if (--gate.Callers > 0)
+            {
+                return;
+            }
+
+            gate.Callers = -1;
+            _gates.TryRemove(new KeyValuePair<string, Gate>(key, gate));
+            gate.Slot.Dispose();
         }
     }
 

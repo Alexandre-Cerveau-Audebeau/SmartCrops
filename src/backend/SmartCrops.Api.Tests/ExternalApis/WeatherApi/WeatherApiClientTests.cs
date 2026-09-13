@@ -3,9 +3,11 @@ using System.Net;
 using System.Reflection;
 using System.Text;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Polly.CircuitBreaker;
 using Polly.Timeout;
 using SmartCrops.Infrastructure.ExternalApis.WeatherApi;
 
@@ -31,8 +33,11 @@ public class WeatherApiClientTests
         ILogger<WeatherApiClient>? logger = null,
         int forecastDays = 5)
     {
-        var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.weatherapi.com/v1/") };
+        // The same HttpClient shape the host builds (base address, timeout,
+        // User-Agent, buffered-body ceiling) — the tests pin the real thing.
         var options = Options.Create(new WeatherApiOptions { ApiKey = apiKey, ForecastDays = forecastDays });
+        var http = new HttpClient(handler);
+        WeatherApiClient.ConfigureHttpClient(http, options.Value);
         return new WeatherApiClient(http, new WeatherApiBulkhead(options), options, logger ?? NullLogger<WeatherApiClient>.Instance);
     }
 
@@ -398,6 +403,75 @@ public class WeatherApiClientTests
     }
 
     [Fact]
+    public async Task ForecastAsync_OpenCircuit_IsTransport()
+    {
+        // Review round 1 (C2): the circuit breaker's rejection is a sibling of
+        // the timeout's under ExecutionRejectedException — an open circuit must
+        // read as Transport exactly like an exhausted budget, never escape.
+        var client = NewClient(new ThrowingHandler(new BrokenCircuitException("synthetic open circuit")));
+
+        var result = await client.ForecastAsync(45.75, 4.85, "fr", CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(WeatherApiFailureKind.Transport, result.Failure.Kind);
+    }
+
+    [Fact]
+    public async Task ForecastAsync_CircuitOpenedByThePipeline_IsTransport_NotAnException()
+    {
+        // The real resilience pipeline, tuned so two failed attempts open the
+        // circuit: the first call retries once and its second attempt trips
+        // the breaker; the second call is refused outright. Both must come
+        // back classified — nothing may escape the client as an exception.
+        var handler = new RecordingHandler(HttpStatusCode.ServiceUnavailable, "");
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddOptions<WeatherApiOptions>().Configure(o => o.ApiKey = TestKey);
+        services.AddSingleton<WeatherApiBulkhead>();
+        services.AddHttpClient<WeatherApiClient>(client => client.BaseAddress = new Uri("https://api.weatherapi.com/v1/"))
+            .ConfigurePrimaryHttpMessageHandler(() => handler)
+            .AddStandardResilienceHandler(o =>
+            {
+                o.Retry.MaxRetryAttempts = 1;
+                o.Retry.Delay = TimeSpan.Zero;
+                o.CircuitBreaker.MinimumThroughput = 2;
+                o.CircuitBreaker.FailureRatio = 0.1;
+                o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(10);
+                o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(5);
+                o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(10);
+            });
+        using var provider = services.BuildServiceProvider();
+        var client = provider.GetRequiredService<WeatherApiClient>();
+
+        var first = await client.ForecastAsync(45.75, 4.85, "fr", CancellationToken.None);
+        var second = await client.ForecastAsync(45.75, 4.85, "fr", CancellationToken.None);
+
+        Assert.False(first.IsSuccess);
+        Assert.Equal(WeatherApiFailureKind.Transport, first.Failure.Kind);
+        Assert.False(second.IsSuccess);
+        Assert.Equal(WeatherApiFailureKind.Transport, second.Failure.Kind);
+        // Two attempts reached the transport; the open circuit refused the rest.
+        Assert.Equal(2, handler.Calls);
+    }
+
+    [Fact]
+    public async Task ForecastAsync_OversizedBody_IsTransport_NotBuffered()
+    {
+        // Review round 1 (C3): a valid JSON document padded past the ceiling.
+        // The typed client must refuse to buffer it (HttpRequestException →
+        // Transport) rather than hold megabytes per call for a body the widget
+        // could not use anyway.
+        var padding = new string('x', WeatherApiClient.MaxResponseContentBytes + 1024);
+        var body = $"{{\"location\":{{\"name\":\"Lyon\"}},\"_pad\":\"{padding}\"}}";
+        var client = NewClient(new RecordingHandler(HttpStatusCode.OK, body));
+
+        var result = await client.ForecastAsync(45.75, 4.85, "fr", CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(WeatherApiFailureKind.Transport, result.Failure.Kind);
+    }
+
+    [Fact]
     public async Task ForecastAsync_CallerCancellation_Propagates()
     {
         using var cts = new CancellationTokenSource();
@@ -416,6 +490,9 @@ public class WeatherApiClientTests
         private readonly string _json;
         public Uri? LastRequestUri { get; private set; }
 
+        /// <summary>Requests that reached this handler — retries included.</summary>
+        public int Calls { get; private set; }
+
         public RecordingHandler(HttpStatusCode status, string json)
         {
             _status = status;
@@ -426,6 +503,7 @@ public class WeatherApiClientTests
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            Calls++;
             LastRequestUri = request.RequestUri;
             return Task.FromResult(new HttpResponseMessage(_status)
             {

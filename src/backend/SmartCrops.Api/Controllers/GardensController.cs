@@ -245,6 +245,16 @@ public class GardensController(
     /// latitude band yet, the latitude pre-fills them (<see cref="LatitudeBands"/>);
     /// a value the user set by hand is never overwritten.
     ///
+    /// <para><b>The pre-fill leaves no provenance in the row</b> (review
+    /// round 1, C5): a pre-filled value and a hand-set one are the same
+    /// column, and a later location — another hemisphere, another band —
+    /// does not revisit them, nor does clearing the location. The derivation
+    /// is made VISIBLE instead: this endpoint logs, at Information level, the
+    /// garden id and the derived words it wrote — never the place — so an
+    /// operator can trace where an exposure value came from. A provenance
+    /// column is a schema extension to settle with the front, not this
+    /// lot's.</para>
+    ///
     /// <para><c>UpdatedAt</c> moves with this write, by the shared interceptor:
     /// a garden that just learnt where it is reads as « modified just now » on
     /// the dashboard. Assumed rather than avoided — the location IS a change
@@ -265,11 +275,23 @@ public class GardensController(
 
         request.ToGeoLocation(DateTime.UtcNow).ApplyTo(garden);
 
-        if (garden.Hemisphere is null || garden.LatitudeBand is null)
+        var hemisphereFilled = garden.Hemisphere is null;
+        var bandFilled = garden.LatitudeBand is null;
+        if (hemisphereFilled || bandFilled)
         {
             var (hemisphere, band) = LatitudeBands.Derive(request.Latitude);
             garden.Hemisphere ??= hemisphere;
             garden.LatitudeBand ??= band;
+
+            // The only trace that a value came from the latitude (no
+            // provenance column): the garden id and the derived words, and
+            // NOT the coordinates or the place name — the log is not the
+            // place to keep where someone lives.
+            logger.LogInformation(
+                "Garden {GardenId}: exposure pre-filled from its latitude (hemisphere: {Hemisphere}, latitude band: {LatitudeBand}); hand-set values kept",
+                garden.Id,
+                hemisphereFilled ? hemisphere : "kept",
+                bandFilled ? band : "kept");
         }
 
         garden.UpdatedAt = DateTime.UtcNow;
@@ -282,7 +304,9 @@ public class GardensController(
     /// Clears the garden's own location: it then inherits the account's
     /// default again. The hemisphere and band a previous location may have
     /// pre-filled are KEPT — they are the garden's exposure config now, and
-    /// nothing can tell a pre-filled value from one the user confirmed.
+    /// nothing in the row can tell a pre-filled value from one the user
+    /// confirmed (the trace is the <c>PUT</c>'s log line, see
+    /// <see cref="PutLocation"/>).
     /// </summary>
     [HttpDelete("{id:guid}/location")]
     public async Task<IActionResult> DeleteLocation(Guid id, CancellationToken ct = default)

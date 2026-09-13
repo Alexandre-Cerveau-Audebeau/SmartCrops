@@ -3,7 +3,7 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Polly.Timeout;
+using Polly;
 
 namespace SmartCrops.Infrastructure.ExternalApis.WeatherApi;
 
@@ -41,6 +41,14 @@ namespace SmartCrops.Infrastructure.ExternalApis.WeatherApi;
 /// </summary>
 public sealed class WeatherApiClient
 {
+    /// <summary>
+    /// Ceiling on a buffered response body, in bytes. A five-day forecast with
+    /// its hours is a few dozen kilobytes; one megabyte leaves room for every
+    /// documented field and none for a body the widget could not use — the
+    /// typed client refuses to buffer past it (review round 1, C3).
+    /// </summary>
+    public const int MaxResponseContentBytes = 1024 * 1024;
+
     private readonly HttpClient _http;
     private readonly WeatherApiBulkhead _bulkhead;
     private readonly ILogger<WeatherApiClient> _logger;
@@ -220,13 +228,35 @@ public sealed class WeatherApiClient
             _logger.LogWarning(ex, "WeatherAPI {Operation} timed out", operation);
             return WeatherApiResult<T>.Failed(WeatherApiFailureKind.Transport);
         }
-        catch (TimeoutRejectedException ex)
+        catch (ExecutionRejectedException ex)
         {
-            // The resilience handler's TotalRequestTimeout: retries could not
-            // complete within the pipeline's budget.
-            _logger.LogWarning(ex, "WeatherAPI {Operation} hit the resilience-handler timeout", operation);
+            // The resilience pipeline refused or gave up on the call — its
+            // TotalRequestTimeout (retries could not complete within the
+            // budget) or its circuit breaker (the circuit is open). The base
+            // class catches both: a rejection is never allowed past this
+            // classification boundary (review round 1, C2).
+            _logger.LogWarning(
+                ex,
+                "WeatherAPI {Operation} was rejected by the resilience pipeline ({Rejection})",
+                operation, ex.GetType().Name);
             return WeatherApiResult<T>.Failed(WeatherApiFailureKind.Transport);
         }
+    }
+
+    /// <summary>
+    /// The typed client's <see cref="HttpClient"/> shape, in ONE place for the
+    /// host and the tests: the base address, the per-request timeout, the
+    /// identity header and the buffered-body ceiling
+    /// (<see cref="MaxResponseContentBytes"/>). The User-Agent is parsed here
+    /// by <c>ParseAdd</c>; <see cref="WeatherApiOptionsValidator"/> proves it
+    /// parses at boot so this can never throw at the first call.
+    /// </summary>
+    public static void ConfigureHttpClient(HttpClient http, WeatherApiOptions options)
+    {
+        http.BaseAddress = new Uri(options.BaseUrl);
+        http.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        http.MaxResponseContentBufferSize = MaxResponseContentBytes;
+        http.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
     }
 
     /// <summary>

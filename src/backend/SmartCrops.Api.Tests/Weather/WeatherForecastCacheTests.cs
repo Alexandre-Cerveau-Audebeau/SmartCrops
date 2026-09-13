@@ -184,6 +184,41 @@ public class WeatherForecastCacheTests
     }
 
     [Fact]
+    public async Task Gates_AreReleased_OnceNoCallerIsInFlight()
+    {
+        // Review round 1 (C1): the single-flight gate of a place lives while a
+        // caller holds or waits for it, and not one instant longer — five
+        // places fetched one after the other leave nothing behind.
+        var (cache, handler) = Build();
+
+        for (var i = 0; i < 5; i++)
+        {
+            await cache.GetAsync(40 + i, 3.5, "fr", CancellationToken.None);
+        }
+
+        Assert.Equal(5, handler.Calls);
+        Assert.Equal(0, cache.GateCount);
+    }
+
+    [Fact]
+    public async Task Gates_ExistOnlyWhileACallIsInFlight()
+    {
+        var (cache, handler) = Build();
+        handler.Hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var first = cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+        var second = cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+        await handler.Started.Task;
+        Assert.Equal(1, cache.GateCount);
+
+        handler.Hold.SetResult();
+        await Task.WhenAll(first, second);
+
+        Assert.Equal(1, handler.Calls);
+        Assert.Equal(0, cache.GateCount);
+    }
+
+    [Fact]
     public void Keys_AreTheDocumentedShape()
     {
         Assert.Equal("weather:fresh:45.76,4.84:fr", WeatherForecastCache.FreshKey(WeatherLocationKey.From(45.764, 4.8357), "fr"));

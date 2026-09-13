@@ -351,6 +351,10 @@ builder.Services.AddOptions<WeatherApiOptions>()
     .Bind(builder.Configuration.GetSection(WeatherApiOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
+// Beyond the annotations (review round 1, C4): the User-Agent must PARSE as a
+// header value, or ParseAdd would throw at the first call, outside every
+// catch. ValidateOnStart above runs this validator too, so it fails the boot.
+builder.Services.AddSingleton<IValidateOptions<WeatherApiOptions>, WeatherApiOptionsValidator>();
 
 // Provider-wide ceiling on calls in flight (review round 1): one singleton
 // for the process, shared by every request and both endpoints, because what
@@ -358,13 +362,11 @@ builder.Services.AddOptions<WeatherApiOptions>()
 // places than the ceiling queues the rest behind the first few.
 builder.Services.AddSingleton<WeatherApiBulkhead>();
 
+// The HttpClient shape lives on the client class (one place for the host and
+// the tests): base address, timeout, User-Agent, and the buffered-body
+// ceiling (review round 1, C3).
 builder.Services.AddHttpClient<WeatherApiClient>((sp, client) =>
-{
-    var options = sp.GetRequiredService<IOptions<WeatherApiOptions>>().Value;
-    client.BaseAddress = new Uri(options.BaseUrl);
-    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-    client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
-})
+    WeatherApiClient.ConfigureHttpClient(client, sp.GetRequiredService<IOptions<WeatherApiOptions>>().Value))
 .RemoveAllLoggers()
 .AddLogger<RedactingHttpClientLogger>()
 .AddStandardResilienceHandler(options =>
