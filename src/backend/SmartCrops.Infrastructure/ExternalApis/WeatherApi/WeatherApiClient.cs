@@ -266,10 +266,34 @@ public sealed class WeatherApiClient
     /// </summary>
     public static void ConfigureHttpClient(HttpClient http, WeatherApiOptions options)
     {
-        http.BaseAddress = new Uri(options.BaseUrl);
+        http.BaseAddress = BaseAddressFrom(options.BaseUrl);
         http.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
         http.MaxResponseContentBufferSize = MaxResponseContentBytes;
         http.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
+    }
+
+    /// <summary>
+    /// The base address the two relative routes resolve against: the
+    /// configured <see cref="WeatherApiOptions.BaseUrl"/>, its path ending
+    /// with a slash — added when the setting has none. <see cref="Uri"/>
+    /// resolves a relative route against the PARENT of a base path's last
+    /// segment, so <c>https://api.weatherapi.com/v1</c> would have sent
+    /// <c>search.json</c> and <c>forecast.json</c> to the host root under a
+    /// valid-looking setting; both spellings are the same address here,
+    /// before any request (review round 3, D1). The validator requires the
+    /// scheme, not the slash.
+    /// </summary>
+    public static Uri BaseAddressFrom(string baseUrl)
+    {
+        var uri = new Uri(baseUrl, UriKind.Absolute);
+        if (uri.AbsolutePath.EndsWith('/'))
+        {
+            return uri;
+        }
+
+        var builder = new UriBuilder(uri);
+        builder.Path += "/";
+        return builder.Uri;
     }
 
     /// <summary>

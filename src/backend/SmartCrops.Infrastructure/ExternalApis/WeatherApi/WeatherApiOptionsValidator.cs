@@ -15,7 +15,12 @@ namespace SmartCrops.Infrastructure.ExternalApis.WeatherApi;
 ///   user's place travel in the query string of every call: any scheme but
 ///   <c>https</c> would put both on the wire in clear. The same rule
 ///   <c>Frontend:BaseUrl</c> applies to itself in <c>Program.cs</c>, minus the
-///   tolerance for <c>http</c> a browser-facing link can afford.</item>
+///   tolerance for <c>http</c> a browser-facing link can afford. The path's
+///   trailing slash is NOT required: with or without it the setting is
+///   accepted as given, and <see cref="WeatherApiClient.BaseAddressFrom"/>
+///   makes both the same base address before any request (review round 3,
+///   D1) — otherwise <c>https://…/v1</c> would have resolved every route at
+///   the host root.</item>
 ///   <item><b>UserAgent must PARSE as a header value</b> (review round 1, C4).
 ///   The typed client sets it with <c>ParseAdd</c>, which throws
 ///   <see cref="FormatException"/> on a malformed value — at the first
@@ -46,7 +51,7 @@ public sealed class WeatherApiOptionsValidator : IValidateOptions<WeatherApiOpti
         return ValidateOptionsResult.Success;
     }
 
-    /// <summary>True when <paramref name="value"/> is an absolute URL whose scheme is <c>https</c>.</summary>
+    /// <summary>True when <paramref name="value"/> is an absolute URL whose scheme is <c>https</c> — the path's trailing slash is the client's business, not this rule's.</summary>
     public static bool IsHttpsBaseUrl(string? value)
         => Uri.TryCreate(value, UriKind.Absolute, out var uri)
            && uri.Scheme == Uri.UriSchemeHttps;

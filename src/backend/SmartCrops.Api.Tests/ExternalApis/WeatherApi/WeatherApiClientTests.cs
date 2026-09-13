@@ -33,7 +33,8 @@ public class WeatherApiClientTests
         string apiKey = TestKey,
         ILogger<WeatherApiClient>? logger = null,
         int forecastDays = 5,
-        int maxConcurrentCalls = 4)
+        int maxConcurrentCalls = 4,
+        string baseUrl = "https://api.weatherapi.com/v1/")
     {
         // The same HttpClient shape the host builds (base address, timeout,
         // User-Agent, buffered-body ceiling) — the tests pin the real thing.
@@ -42,6 +43,7 @@ public class WeatherApiClientTests
             ApiKey = apiKey,
             ForecastDays = forecastDays,
             MaxConcurrentCalls = maxConcurrentCalls,
+            BaseUrl = baseUrl,
         });
         var http = new HttpClient(handler);
         WeatherApiClient.ConfigureHttpClient(http, options.Value);
@@ -112,6 +114,45 @@ public class WeatherApiClientTests
 
         Assert.Contains("&q=-33.8688,-151.2093&", handler.LastRequestUri!.AbsoluteUri);
         Assert.EndsWith("&lang=fr", handler.LastRequestUri.AbsoluteUri);
+    }
+
+    [Theory]
+    [InlineData("https://api.weatherapi.com/v1/")]
+    [InlineData("https://api.weatherapi.com/v1")]
+    public async Task BaseUrl_WithOrWithoutItsTrailingSlash_ReachesTheSameRoutes(string baseUrl)
+    {
+        // Review round 3 (D1): System.Uri resolves a relative route against
+        // the PARENT of a base path's last segment — pinned here as the
+        // reason — so a base URL without its trailing slash would send both
+        // routes to the host root. The client adds the slash before any
+        // request: both spellings of the setting reach /v1/.
+        Assert.Equal(
+            "https://api.weatherapi.com/forecast.json",
+            new Uri(new Uri("https://api.weatherapi.com/v1"), "forecast.json").AbsoluteUri);
+
+        var handler = new RecordingHandler(HttpStatusCode.OK, WeatherApiFixtures.Forecast);
+        var client = NewClient(handler, baseUrl: baseUrl);
+
+        await client.ForecastAsync(45.764, 4.8357, "fr", CancellationToken.None);
+        var forecast = handler.LastRequestUri!.AbsoluteUri;
+        await client.SearchAsync("Lyon", CancellationToken.None);
+        var search = handler.LastRequestUri!.AbsoluteUri;
+
+        Assert.Equal(
+            $"https://api.weatherapi.com/v1/forecast.json?key={TestKey}&q=45.7640,4.8357&days=5&alerts=yes&aqi=no&lang=fr",
+            forecast);
+        Assert.Equal($"https://api.weatherapi.com/v1/search.json?key={TestKey}&q=Lyon", search);
+    }
+
+    [Theory]
+    [InlineData("https://api.weatherapi.com/v1/", "https://api.weatherapi.com/v1/")]
+    [InlineData("https://api.weatherapi.com/v1", "https://api.weatherapi.com/v1/")]
+    [InlineData("https://weather-proxy.internal", "https://weather-proxy.internal/")]
+    [InlineData("https://weather-proxy.internal/", "https://weather-proxy.internal/")]
+    [InlineData("https://weather-proxy.internal/weather/v1", "https://weather-proxy.internal/weather/v1/")]
+    public void BaseAddressFrom_EndsThePathWithASlash_AndChangesNothingElse(string configured, string expected)
+    {
+        Assert.Equal(expected, WeatherApiClient.BaseAddressFrom(configured).AbsoluteUri);
     }
 
     // ── Binding the documented shapes ────────────────────────────────────────

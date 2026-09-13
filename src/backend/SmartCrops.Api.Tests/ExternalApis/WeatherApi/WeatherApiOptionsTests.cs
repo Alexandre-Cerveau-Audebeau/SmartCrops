@@ -70,6 +70,7 @@ public class WeatherApiOptionsTests
 
     [Theory]
     [InlineData("http://api.weatherapi.com/v1/")]
+    [InlineData("http://api.weatherapi.com/v1")]
     [InlineData("http://weather-proxy.internal/")]
     [InlineData("ftp://api.weatherapi.com/v1/")]
     public void BaseUrl_NotHttps_IsRefusedByName(string baseUrl)
@@ -77,7 +78,8 @@ public class WeatherApiOptionsTests
         // Review round 2 (S5): the key and the user's place travel in the
         // query string of every call. [Url] alone admits http:// (and ftp://),
         // which would put both on the wire in clear — the validator refuses
-        // any scheme but https at boot, by name.
+        // any scheme but https at boot, by name, with or without the path's
+        // trailing slash (review round 3, D1).
         var ex = Assert.Throws<OptionsValidationException>(() => Resolve(o => o.BaseUrl = baseUrl).Value);
 
         Assert.Contains("WeatherApi:BaseUrl", ex.Message);
@@ -85,9 +87,15 @@ public class WeatherApiOptionsTests
 
     [Theory]
     [InlineData("https://api.weatherapi.com/v1/")]
+    [InlineData("https://api.weatherapi.com/v1")]
     [InlineData("https://weather-proxy.internal/v1/")]
+    [InlineData("https://weather-proxy.internal/v1")]
     public void BaseUrl_Https_IsAccepted(string baseUrl)
     {
+        // With or without the trailing slash (review round 3, D1): the
+        // validator accepts both spellings as given; the client makes them
+        // the same base address before any request
+        // (WeatherApiClientTests.BaseUrl_WithOrWithoutItsTrailingSlash_…).
         var options = Resolve(o => o.BaseUrl = baseUrl).Value;
 
         Assert.Equal(baseUrl, options.BaseUrl);

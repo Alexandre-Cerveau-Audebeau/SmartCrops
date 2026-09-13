@@ -28,7 +28,10 @@ public class WeatherApiOptions
     /// The provider's base address. <c>[Url]</c> alone admits <c>http://</c>
     /// and <c>ftp://</c>; <see cref="WeatherApiOptionsValidator"/> requires an
     /// absolute <c>https</c> URL at boot, because the key and the user's place
-    /// travel in the query string of every call (review round 2, S5).
+    /// travel in the query string of every call (review round 2, S5). With or
+    /// without its trailing slash: the client adds one before any request
+    /// (<see cref="WeatherApiClient.BaseAddressFrom"/>, review round 3, D1),
+    /// so the two routes resolve under <c>/v1/</c> either way.
     /// </summary>
     [Required]
     [Url]
