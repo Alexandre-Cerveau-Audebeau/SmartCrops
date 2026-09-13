@@ -29,13 +29,20 @@ namespace SmartCrops.Infrastructure.ExternalApis.WeatherApi;
 /// <para><b>Key leakage</b>: the key travels as a query-string parameter on
 /// every request. The client's logging goes through
 /// <c>RedactingHttpClientLogger</c>, whose <c>key=</c> rule already covers this
-/// provider; nothing here logs a URI. A missing key is answered without any
-/// request (<see cref="WeatherApiFailureKind.MissingKey"/>) and logged ONCE
-/// per process: the boot is allowed without it (SMA-377), the weather is not.</para>
+/// provider (and whose <c>q=</c> rule scrubs the user's place); nothing here
+/// logs a URI. A missing key is answered without any request
+/// (<see cref="WeatherApiFailureKind.MissingKey"/>) and logged ONCE per
+/// process: the boot is allowed without it (SMA-377), the weather is not.</para>
+///
+/// <para><b>One key for everyone</b>: every call takes a slot of the
+/// process-wide <see cref="WeatherApiBulkhead"/> first, so no single request —
+/// a dashboard with many distinct places, a burst of geocoding — can spend the
+/// shared key's goodwill in one instant.</para>
 /// </summary>
 public sealed class WeatherApiClient
 {
     private readonly HttpClient _http;
+    private readonly WeatherApiBulkhead _bulkhead;
     private readonly ILogger<WeatherApiClient> _logger;
     private readonly WeatherApiOptions _options;
 
@@ -51,10 +58,12 @@ public sealed class WeatherApiClient
 
     public WeatherApiClient(
         HttpClient http,
+        WeatherApiBulkhead bulkhead,
         IOptions<WeatherApiOptions> options,
         ILogger<WeatherApiClient> logger)
     {
         _http = http;
+        _bulkhead = bulkhead;
         _logger = logger;
         _options = options.Value;
     }
@@ -153,6 +162,11 @@ public sealed class WeatherApiClient
 
             return WeatherApiResult<T>.Failed(WeatherApiFailureKind.MissingKey);
         }
+
+        // The provider-wide ceiling (review round 1): a slot is held from the
+        // request to the end of the body read, retries included. Waiting for
+        // one honours the caller's token exactly like the call itself.
+        using var slot = await _bulkhead.EnterAsync(ct);
 
         try
         {

@@ -33,7 +33,7 @@ public class WeatherApiClientTests
     {
         var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.weatherapi.com/v1/") };
         var options = Options.Create(new WeatherApiOptions { ApiKey = apiKey, ForecastDays = forecastDays });
-        return new WeatherApiClient(http, options, logger ?? NullLogger<WeatherApiClient>.Instance);
+        return new WeatherApiClient(http, new WeatherApiBulkhead(options), options, logger ?? NullLogger<WeatherApiClient>.Instance);
     }
 
     private static string ErrorBody(int code) =>

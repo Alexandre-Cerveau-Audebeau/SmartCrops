@@ -57,6 +57,16 @@ public class WeatherApiOptions
     [Required]
     public string Language { get; set; } = "fr";
 
+    /// <summary>
+    /// Provider-wide ceiling on calls in flight at once, across every request
+    /// of the process and both endpoints (<see cref="WeatherApiBulkhead"/>).
+    /// Four: a dashboard with more distinct places than that queues the rest
+    /// behind the first four rather than bursting them all against the shared
+    /// key.
+    /// </summary>
+    [Range(1, 64)]
+    public int MaxConcurrentCalls { get; set; } = 4;
+
     /// <summary>User-Agent sent on every call, same identity string as the other external clients.</summary>
     [Required]
     public string UserAgent { get; set; } = "SmartCrops/1.0 (https://github.com/Alexandre-Cerveau-Audebeau/SmartCrops)";

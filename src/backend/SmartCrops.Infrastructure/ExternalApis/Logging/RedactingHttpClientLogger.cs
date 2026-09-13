@@ -2,6 +2,7 @@ using Microsoft.Extensions.Http.Logging;
 using Microsoft.Extensions.Logging;
 using SmartCrops.Infrastructure.ExternalApis.Perenual;
 using SmartCrops.Infrastructure.ExternalApis.Trefle;
+using SmartCrops.Infrastructure.ExternalApis.WeatherApi;
 
 namespace SmartCrops.Infrastructure.ExternalApis.Logging;
 
@@ -22,9 +23,13 @@ namespace SmartCrops.Infrastructure.ExternalApis.Logging;
 /// credential-bearing typed clients replaces that logging entirely.</para>
 ///
 /// <para>WeatherAPI.com (SMA-336 PR 3a/5) carries its credential as <c>key=</c>
-/// too, so the Perenual rule covers the weather client with no change —
-/// <c>RedactingHttpClientLoggerTests</c> pins that coverage on the exact URI
-/// shape the client sends.</para>
+/// too, so the Perenual rule covers the weather client with no change. Its
+/// <c>q=</c> is scrubbed as well, on that provider's requests only
+/// (<see cref="WeatherApiQueryRedactor"/>): not a secret, but the user's own
+/// place — an address typed into the geocoding field, a garden's coordinates —
+/// which an Information-level log line must not carry.
+/// <c>RedactingHttpClientLoggerTests</c> pins both on the exact URI shapes the
+/// client sends.</para>
 ///
 /// <para>Diagnostics are preserved — method, status code and elapsed time are still
 /// logged; only the URI is scrubbed. Redaction reuses the existing
@@ -42,14 +47,16 @@ public sealed class RedactingHttpClientLogger : IHttpClientLogger
         => _logger = logger;
 
     /// <summary>
-    /// Returns the request URI as a string with any <c>key=</c> (Perenual) and
-    /// <c>token=</c> (Trefle) credential value replaced by
-    /// <see cref="PerenualKeyRedactor.Placeholder"/>. A URI carrying no credential
+    /// Returns the request URI as a string with any <c>key=</c> (Perenual,
+    /// WeatherAPI) and <c>token=</c> (Trefle) credential value replaced by
+    /// <see cref="PerenualKeyRedactor.Placeholder"/> — and, on a WeatherAPI
+    /// request only, the <c>q=</c> place replaced too
+    /// (<see cref="WeatherApiQueryRedactor"/>). A URI carrying none of them
     /// (e.g. a GBIF call) is returned unchanged. <c>null</c> → empty string.
     ///
     /// <para><c>internal</c> by design: this is an implementation detail of the
-    /// logger, not a shared redaction primitive (it covers only this logger's two
-    /// known credential parameters — unlike the public
+    /// logger, not a shared redaction primitive (it covers only this logger's
+    /// known parameters — unlike the public
     /// <see cref="PerenualKeyRedactor"/> / <see cref="TrefleTokenRedactor"/>).
     /// Exposed to the test assembly via <c>InternalsVisibleTo</c>.</para>
     /// </summary>
@@ -67,7 +74,14 @@ public sealed class RedactingHttpClientLogger : IHttpClientLogger
         // Regex-only redaction (secret arg null): a request URI only ever carries
         // the credential as ?key=.../?token=..., so neutralising the value after
         // those parameter names fully covers the log path without the exact key.
-        return TrefleTokenRedactor.Redact(PerenualKeyRedactor.Redact(raw, null), null);
+        var scrubbed = TrefleTokenRedactor.Redact(PerenualKeyRedactor.Redact(raw, null), null);
+
+        // The weather provider's q= is the user's place (a typed address, a
+        // garden's coordinates): scrubbed on that provider's requests only, so
+        // the Perenual catalog's q= (a plant name) stays readable.
+        return WeatherApiQueryRedactor.IsWeatherApiRequest(uri)
+            ? WeatherApiQueryRedactor.Redact(scrubbed)
+            : scrubbed;
     }
 
     public object? LogRequestStart(HttpRequestMessage request)

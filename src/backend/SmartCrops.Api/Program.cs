@@ -352,6 +352,12 @@ builder.Services.AddOptions<WeatherApiOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+// Provider-wide ceiling on calls in flight (review round 1): one singleton
+// for the process, shared by every request and both endpoints, because what
+// it protects is the deployment's single key. A dashboard with more distinct
+// places than the ceiling queues the rest behind the first few.
+builder.Services.AddSingleton<WeatherApiBulkhead>();
+
 builder.Services.AddHttpClient<WeatherApiClient>((sp, client) =>
 {
     var options = sp.GetRequiredService<IOptions<WeatherApiOptions>>().Value;
