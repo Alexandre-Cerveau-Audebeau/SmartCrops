@@ -18,8 +18,10 @@ public class GardenConfiguration : IEntityTypeConfiguration<Garden>
 
         // ── Location (SMA-336 PR 3a/5) ──────────────────────────────────────
         // Lengths of the three text columns, and the invariants the database
-        // enforces on the coordinates: each in its range, and NEVER one without
-        // the other — a latitude alone is not half a place. All three are
+        // enforces: each coordinate in its range, NEVER one without the other
+        // — a latitude alone is not half a place — and NEVER a pair without a
+        // non-blank name (review round 1, K4): the endpoints refuse a blank
+        // name, this makes a direct write refuse it too. All four are
         // NULL-tolerant (NULL is « not located »), so existing rows are
         // unaffected, as with the Plants range checks.
         builder.Property(g => g.LocationName).HasMaxLength(120);
@@ -37,6 +39,9 @@ public class GardenConfiguration : IEntityTypeConfiguration<Garden>
             t.HasCheckConstraint(
                 "CK_Gardens_Location_Pair",
                 "(\"Latitude\" IS NULL) = (\"Longitude\" IS NULL)");
+            t.HasCheckConstraint(
+                "CK_Gardens_Location_Name",
+                "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND btrim(\"LocationName\") <> '')");
         });
 
         builder.Property(g => g.CreatedAt)

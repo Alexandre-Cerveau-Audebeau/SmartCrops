@@ -9,9 +9,11 @@ namespace SmartCrops.Api.DTOs;
 /// SMA-336 PR 3a/5 — projects a cached provider answer (or its absence) onto
 /// <see cref="WeatherLocationDto"/>. Pure and total: every provider field is
 /// nullable, so the mapper DROPS what it cannot state — an hour without a
-/// temperature, a day without its bounds, an alert without a headline — rather
-/// than inventing a zero the browser would draw. The place's name comes from
-/// what the user stored, never from the provider.
+/// temperature, a day without its bounds, an alert without a headline — and
+/// passes null for what it may state without (a missing chance of rain, a
+/// missing day/night flag), rather than inventing a zero or a night the
+/// browser would draw. The place's name comes from what the user stored, never
+/// from the provider.
 ///
 /// <para>Here, in the Api project, because it produces wire records and the
 /// Infrastructure project cannot reference them — the cache it reads from
@@ -81,7 +83,7 @@ public static class WeatherDtoMapper
             current.FeelslikeC,
             code,
             current.Condition.Text,
-            current.IsDay == 1,
+            IsDay(current.IsDay),
             current.WindKph,
             current.GustKph,
             current.Humidity,
@@ -145,7 +147,7 @@ public static class WeatherDtoMapper
                 hour.Time,
                 temp,
                 code,
-                hour.IsDay == 1,
+                IsDay(hour.IsDay),
                 Percent(hour.ChanceOfRain),
                 hour.PrecipMm,
                 hour.WindKph));
@@ -191,6 +193,21 @@ public static class WeatherDtoMapper
                && at.UtcDateTime <= nowUtc;
     }
 
-    /// <summary>A percentage the browser can trust: 0..100, unknown reads as 0.</summary>
-    private static int Percent(int? value) => Math.Clamp(value ?? 0, 0, 100);
+    /// <summary>
+    /// A percentage the browser can trust: 0..100 when the provider gave one,
+    /// null when it did not — an unknown chance of rain is not a dry day
+    /// (review round 1, K3).
+    /// </summary>
+    private static int? Percent(int? value) => value is { } v ? Math.Clamp(v, 0, 100) : null;
+
+    /// <summary>
+    /// The provider's <c>is_day</c> flag (1 or 0) as a bool, null when absent
+    /// or outside those two values — an unknown is not a night.
+    /// </summary>
+    private static bool? IsDay(int? value) => value switch
+    {
+        1 => true,
+        0 => false,
+        _ => null,
+    };
 }

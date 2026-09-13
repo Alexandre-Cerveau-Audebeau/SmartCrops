@@ -72,7 +72,7 @@ public record WeatherLocationDto(
 /// <param name="FeelsLikeC">Feels-like temperature, °C, or null.</param>
 /// <param name="ConditionCode">The provider's condition code; the browser maps it to an icon.</param>
 /// <param name="ConditionText">The condition in the requested language.</param>
-/// <param name="IsDay">Day or night, for the icon variant.</param>
+/// <param name="IsDay">Day or night, for the icon variant — null when the provider did not say (never a guessed « night »).</param>
 /// <param name="WindKph">Wind, km/h, or null.</param>
 /// <param name="GustKph">Gusts, km/h, or null.</param>
 /// <param name="Humidity">Relative humidity, %, or null.</param>
@@ -84,7 +84,7 @@ public record WeatherCurrentDto(
     double? FeelsLikeC,
     int ConditionCode,
     string? ConditionText,
-    bool IsDay,
+    bool? IsDay,
     double? WindKph,
     double? GustKph,
     int? Humidity,
@@ -99,8 +99,8 @@ public record WeatherCurrentDto(
 /// <param name="AvgTempC">Average, °C, or null.</param>
 /// <param name="ConditionCode">The day's condition code.</param>
 /// <param name="ConditionText">The day's condition in the requested language.</param>
-/// <param name="ChanceOfRain">0..100.</param>
-/// <param name="ChanceOfSnow">0..100.</param>
+/// <param name="ChanceOfRain">0..100, or null when the provider did not say (never a guessed « 0 »).</param>
+/// <param name="ChanceOfSnow">0..100, or null when the provider did not say.</param>
 /// <param name="TotalPrecipMm">Total precipitation, mm, or null.</param>
 /// <param name="MaxWindKph">Maximum wind, km/h, or null.</param>
 /// <param name="Sunrise">As the provider formats it (« 07:16 AM »).</param>
@@ -113,8 +113,8 @@ public record WeatherDayDto(
     double? AvgTempC,
     int ConditionCode,
     string? ConditionText,
-    int ChanceOfRain,
-    int ChanceOfSnow,
+    int? ChanceOfRain,
+    int? ChanceOfSnow,
     double? TotalPrecipMm,
     double? MaxWindKph,
     string? Sunrise,
@@ -125,16 +125,16 @@ public record WeatherDayDto(
 /// <param name="Time">« yyyy-MM-dd HH:mm », local to the place.</param>
 /// <param name="TempC">Temperature, °C.</param>
 /// <param name="ConditionCode">The slot's condition code.</param>
-/// <param name="IsDay">Day or night, for the icon variant.</param>
-/// <param name="ChanceOfRain">0..100.</param>
+/// <param name="IsDay">Day or night, for the icon variant — null when the provider did not say.</param>
+/// <param name="ChanceOfRain">0..100, or null when the provider did not say.</param>
 /// <param name="PrecipMm">Precipitation, mm, or null.</param>
 /// <param name="WindKph">Wind, km/h, or null.</param>
 public record WeatherHourDto(
     string Time,
     double TempC,
     int ConditionCode,
-    bool IsDay,
-    int ChanceOfRain,
+    bool? IsDay,
+    int? ChanceOfRain,
     double? PrecipMm,
     double? WindKph);
 

@@ -34,12 +34,30 @@ public class WeatherApiOptions
     /// </summary>
     public string ApiKey { get; set; } = string.Empty;
 
+    /// <summary>Resilience pipeline — one attempt's timeout, in seconds. The host builds the handler from these three.</summary>
+    public const int PipelineAttemptTimeoutSeconds = 5;
+
+    /// <summary>Resilience pipeline — the whole call's budget, retries included, in seconds.</summary>
+    public const int PipelineTotalTimeoutSeconds = 10;
+
+    /// <summary>Resilience pipeline — the circuit breaker's sampling window, in seconds (at least twice the attempt timeout).</summary>
+    public const int PipelineSamplingDurationSeconds = 10;
+
+    /// <summary>
+    /// Lowest <see cref="TimeoutSeconds"/> accepted: strictly ABOVE the
+    /// pipeline's total, so <see cref="HttpClient.Timeout"/> can never cut the
+    /// pipeline short and turn its retries and its budget into a plain
+    /// cancellation (review round 1, K2 — the SMA-71 lesson, enforced).
+    /// </summary>
+    public const int MinTimeoutSeconds = PipelineTotalTimeoutSeconds + 1;
+
     /// <summary>
     /// Per-request <see cref="HttpClient.Timeout"/> ceiling (seconds). Kept
-    /// ABOVE the resilience pipeline's 10 s total so the pipeline governs the
-    /// call and HttpClient never re-cuts it early (the SMA-71 lesson).
+    /// ABOVE the resilience pipeline's total (<see cref="PipelineTotalTimeoutSeconds"/>)
+    /// so the pipeline governs the call and HttpClient never re-cuts it early;
+    /// the range enforces it at boot.
     /// </summary>
-    [Range(1, int.MaxValue)]
+    [Range(MinTimeoutSeconds, int.MaxValue)]
     public int TimeoutSeconds { get; set; } = 12;
 
     /// <summary>

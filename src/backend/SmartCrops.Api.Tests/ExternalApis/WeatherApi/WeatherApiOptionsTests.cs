@@ -67,4 +67,38 @@ public class WeatherApiOptionsTests
 
         Assert.Contains("UserAgent", ex.Message);
     }
+
+    [Fact]
+    public void TimeoutSeconds_MinimumIsDerivedFromThePipelineTotal()
+    {
+        // Review round 1 (K2): the floor is a named constant, one above the
+        // pipeline's total budget — never a literal that could drift.
+        Assert.Equal(10, WeatherApiOptions.PipelineTotalTimeoutSeconds);
+        Assert.Equal(11, WeatherApiOptions.MinTimeoutSeconds);
+        Assert.True(WeatherApiOptions.PipelineSamplingDurationSeconds >= 2 * WeatherApiOptions.PipelineAttemptTimeoutSeconds);
+    }
+
+    [Theory]
+    [InlineData(10)]
+    [InlineData(1)]
+    [InlineData(0)]
+    public void TimeoutSeconds_AtOrBelowThePipelineTotal_IsRefused(int seconds)
+    {
+        // At 10 s HttpClient would cut the pipeline at the same instant it
+        // gives up, turning its budget into a plain cancellation.
+        var ex = Assert.Throws<OptionsValidationException>(() => Resolve(o => o.TimeoutSeconds = seconds).Value);
+
+        Assert.Contains("TimeoutSeconds", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(11)]
+    [InlineData(12)]
+    [InlineData(60)]
+    public void TimeoutSeconds_AboveThePipelineTotal_IsAccepted(int seconds)
+    {
+        var options = Resolve(o => o.TimeoutSeconds = seconds).Value;
+
+        Assert.Equal(seconds, options.TimeoutSeconds);
+    }
 }

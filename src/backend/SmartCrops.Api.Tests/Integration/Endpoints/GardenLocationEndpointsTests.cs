@@ -232,6 +232,31 @@ public class GardenLocationEndpointsTests : IntegrationTestBase
         Assert.Null(garden.Hemisphere);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("\t")]
+    public async Task PutLocation_BlankName_Returns400_AndStoresNothing(string name)
+    {
+        // Review round 1 (K4): a blank name is no name — refused before any
+        // write, exactly like a missing one.
+        var userId = await SeedUserAsync();
+        var gardenId = await SeedGardenAsync(userId, hemisphere: null, band: null);
+        AuthAs(userId);
+
+        var response = await Client.PutAsJsonAsync($"/api/gardens/{gardenId}/location", new
+        {
+            name,
+            latitude = 45.76,
+            longitude = 4.84,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var garden = await LoadGardenAsync(gardenId);
+        Assert.Null(garden.LocationName);
+        Assert.Null(garden.Latitude);
+    }
+
     [Fact]
     public async Task PutLocation_MissingName_Returns400()
     {
@@ -241,7 +266,6 @@ public class GardenLocationEndpointsTests : IntegrationTestBase
 
         var response = await Client.PutAsJsonAsync($"/api/gardens/{gardenId}/location", new
         {
-            name = "",
             latitude = 45.76,
             longitude = 4.84,
         });

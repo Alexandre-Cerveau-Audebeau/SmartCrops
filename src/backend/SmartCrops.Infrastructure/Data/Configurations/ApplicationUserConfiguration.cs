@@ -14,9 +14,11 @@ namespace SmartCrops.Infrastructure.Data.Configurations;
 /// convention-mapped <c>text</c> shape on purpose: changing them is a migration
 /// with no reader behind it.
 ///
-/// <para>The three CHECK constraints mirror <c>GardenConfiguration</c>'s, name
+/// <para>The four CHECK constraints mirror <c>GardenConfiguration</c>'s, name
 /// for name with the table swapped, so the two carriers of a location can
-/// never diverge on what a valid coordinate pair is.</para>
+/// never diverge on what a valid place is: each coordinate in range, the
+/// pair complete, and a non-blank name whenever there is a pair (review
+/// round 1, K4).</para>
 /// </summary>
 public class ApplicationUserConfiguration : IEntityTypeConfiguration<ApplicationUser>
 {
@@ -37,6 +39,9 @@ public class ApplicationUserConfiguration : IEntityTypeConfiguration<Application
             t.HasCheckConstraint(
                 "CK_AspNetUsers_Location_Pair",
                 "(\"Latitude\" IS NULL) = (\"Longitude\" IS NULL)");
+            t.HasCheckConstraint(
+                "CK_AspNetUsers_Location_Name",
+                "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND btrim(\"LocationName\") <> '')");
         });
     }
 }

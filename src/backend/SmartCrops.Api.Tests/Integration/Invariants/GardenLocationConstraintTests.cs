@@ -8,9 +8,10 @@ namespace SmartCrops.Api.Tests.Integration.Invariants;
 /// <summary>
 /// SMA-336 PR 3a/5 — the location CHECK constraints, exercised against
 /// PostgreSQL (the in-memory provider enforces none of them). Proof by failure
-/// on both carriers: a latitude of 91, a longitude of 181 and a latitude
-/// without its longitude must each be REJECTED by the database, by the named
-/// constraint; a valid pair and an all-NULL row must be accepted.
+/// on both carriers: a latitude of 91, a longitude of 181, a latitude without
+/// its longitude and a pair without a non-blank name (review round 1, K4)
+/// must each be REJECTED by the database, by the named constraint; a valid
+/// pair and an all-NULL row must be accepted.
 /// </summary>
 public class GardenLocationConstraintTests : IntegrationTestBase
 {
@@ -55,6 +56,43 @@ public class GardenLocationConstraintTests : IntegrationTestBase
 
         var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
         Assert.Contains("CK_Gardens_Location_Pair", ex.InnerException?.Message ?? string.Empty);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Garden_PairWithoutAName_IsRejectedByPostgres(string? locationName)
+    {
+        // Review round 1 (K4): the endpoints refuse a blank name; a direct
+        // write must be refused by the database too — a pair is not a place
+        // without a name.
+        var userId = await SeedUserAsync();
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        db.Gardens.Add(NewGarden(userId, latitude: 45.76, longitude: 4.84, locationName));
+
+        var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        Assert.Contains("CK_Gardens_Location_Name", ex.InnerException?.Message ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task Garden_NameWithoutAPair_IsTolerated_AndReadsAsNotLocated()
+    {
+        // The name rule guards the pair, not the name: a name alone breaks no
+        // constraint and GeoLocation reads it as « not located ».
+        var userId = await SeedUserAsync();
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var garden = NewGarden(userId, latitude: null, longitude: null);
+        garden.LocationName = "Lyon";
+        db.Gardens.Add(garden);
+
+        var ex = await Record.ExceptionAsync(() => db.SaveChangesAsync());
+        Assert.Null(ex);
+        Assert.Null(SmartCrops.Core.Models.GeoLocation.From(garden));
     }
 
     [Theory]
@@ -123,6 +161,20 @@ public class GardenLocationConstraintTests : IntegrationTestBase
         Assert.Contains("CK_AspNetUsers_Location_Pair", ex.InnerException?.Message ?? string.Empty);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task User_PairWithoutAName_IsRejectedByPostgres(string? locationName)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        db.Users.Add(NewUser(latitude: 45.76, longitude: 4.84, locationName));
+
+        var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        Assert.Contains("CK_AspNetUsers_Location_Name", ex.InnerException?.Message ?? string.Empty);
+    }
+
     [Fact]
     public async Task User_ValidPair_IsAccepted()
     {
@@ -136,18 +188,20 @@ public class GardenLocationConstraintTests : IntegrationTestBase
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private static Garden NewGarden(string userId, double? latitude, double? longitude) => new()
+    // The name defaults to « Lyon » whenever a coordinate is present and to
+    // null otherwise; a test of the name rule passes its own.
+    private static Garden NewGarden(string userId, double? latitude, double? longitude, string? locationName = "Lyon") => new()
     {
         Id = Guid.NewGuid(),
         Name = "Terrasse",
         UserId = userId,
-        LocationName = latitude is null && longitude is null ? null : "Lyon",
+        LocationName = latitude is null && longitude is null ? null : locationName,
         Latitude = latitude,
         Longitude = longitude,
         LocationResolvedAt = latitude is null && longitude is null ? null : DateTime.UtcNow,
     };
 
-    private static ApplicationUser NewUser(double? latitude, double? longitude)
+    private static ApplicationUser NewUser(double? latitude, double? longitude, string? locationName = "Lyon")
     {
         var id = $"u-{Guid.NewGuid():N}";
         return new ApplicationUser
@@ -155,7 +209,7 @@ public class GardenLocationConstraintTests : IntegrationTestBase
             Id = id,
             UserName = id,
             NormalizedUserName = id.ToUpperInvariant(),
-            LocationName = latitude is null && longitude is null ? null : "Lyon",
+            LocationName = latitude is null && longitude is null ? null : locationName,
             Latitude = latitude,
             Longitude = longitude,
             LocationResolvedAt = latitude is null && longitude is null ? null : DateTime.UtcNow,

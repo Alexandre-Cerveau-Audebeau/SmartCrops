@@ -50,7 +50,10 @@ public sealed record GeoLocation(
 
     /// <summary>
     /// The same projection from the six raw columns — for a query that
-    /// selects them without materializing the carrier.
+    /// selects them without materializing the carrier. A blank name reads as
+    /// no name (review round 1, K4): the endpoints refuse one and the database
+    /// checks it, so a row with coordinates and a blank name is data this
+    /// build did not write — « not located », never a place without a name.
     /// </summary>
     public static GeoLocation? Create(
         string? name,
@@ -60,7 +63,7 @@ public sealed record GeoLocation(
         double? longitude,
         DateTime? resolvedAt)
     {
-        if (name is null || latitude is null || longitude is null) return null;
+        if (string.IsNullOrWhiteSpace(name) || latitude is null || longitude is null) return null;
         return new GeoLocation(name, region, country, latitude.Value, longitude.Value, resolvedAt);
     }
 

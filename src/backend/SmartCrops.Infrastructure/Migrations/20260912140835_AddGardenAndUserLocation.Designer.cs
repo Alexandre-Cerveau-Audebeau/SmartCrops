@@ -258,6 +258,8 @@ namespace SmartCrops.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_AspNetUsers_Latitude_Range", "\"Latitude\" IS NULL OR (\"Latitude\" >= -90 AND \"Latitude\" <= 90)");
 
+                            t.HasCheckConstraint("CK_AspNetUsers_Location_Name", "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND btrim(\"LocationName\") <> '')");
+
                             t.HasCheckConstraint("CK_AspNetUsers_Location_Pair", "(\"Latitude\" IS NULL) = (\"Longitude\" IS NULL)");
 
                             t.HasCheckConstraint("CK_AspNetUsers_Longitude_Range", "\"Longitude\" IS NULL OR (\"Longitude\" >= -180 AND \"Longitude\" <= 180)");
@@ -354,6 +356,8 @@ namespace SmartCrops.Infrastructure.Migrations
                     b.ToTable("Gardens", null, t =>
                         {
                             t.HasCheckConstraint("CK_Gardens_Latitude_Range", "\"Latitude\" IS NULL OR (\"Latitude\" >= -90 AND \"Latitude\" <= 90)");
+
+                            t.HasCheckConstraint("CK_Gardens_Location_Name", "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND btrim(\"LocationName\") <> '')");
 
                             t.HasCheckConstraint("CK_Gardens_Location_Pair", "(\"Latitude\" IS NULL) = (\"Longitude\" IS NULL)");
 

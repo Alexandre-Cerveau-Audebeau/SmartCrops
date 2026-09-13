@@ -12,9 +12,10 @@ namespace SmartCrops.Api.Tests.Migrations;
 ///
 /// <para>What the shape is: six columns on EACH of the two carriers — the
 /// garden (override) and the account (default) — every one nullable with no
-/// default, three CHECK constraints per table (two ranges and the pair), and
-/// NO time zone column: the provider returns it with every forecast (pre-flight
-/// § A.2-ter), so persisting it was ruled out.</para>
+/// default, four CHECK constraints per table (two ranges, the pair, and the
+/// non-blank name whenever there is a pair), and NO time zone column: the
+/// provider returns it with every forecast (pre-flight § A.2-ter), so
+/// persisting it was ruled out.</para>
 /// </summary>
 public class GardenAndUserLocationMigrationTests
 {
@@ -74,7 +75,7 @@ public class GardenAndUserLocationMigrationTests
     }
 
     [Fact]
-    public void Migration_AddsSixNamedCheckConstraints_AndDropsThemOnDown()
+    public void Migration_AddsEightNamedCheckConstraints_AndDropsThemOnDown()
     {
         var source = ReadMigrationSource();
 
@@ -83,9 +84,11 @@ public class GardenAndUserLocationMigrationTests
             "CK_Gardens_Latitude_Range",
             "CK_Gardens_Longitude_Range",
             "CK_Gardens_Location_Pair",
+            "CK_Gardens_Location_Name",
             "CK_AspNetUsers_Latitude_Range",
             "CK_AspNetUsers_Longitude_Range",
             "CK_AspNetUsers_Location_Pair",
+            "CK_AspNetUsers_Location_Name",
         };
 
         foreach (var name in expected)
@@ -93,12 +96,19 @@ public class GardenAndUserLocationMigrationTests
             Assert.Contains($"name: \"{name}\"", source);
         }
 
-        Assert.Equal(6, Regex.Matches(source, @"\.AddCheckConstraint\(").Count);
-        Assert.Equal(6, Regex.Matches(source, @"\.DropCheckConstraint\(").Count);
+        // Four per carrier (review round 1, K4 added the name rule to this
+        // same migration while the lot was unmerged), every one dropped on Down.
+        Assert.Equal(8, Regex.Matches(source, @"\.AddCheckConstraint\(").Count);
+        Assert.Equal(8, Regex.Matches(source, @"\.DropCheckConstraint\(").Count);
         Assert.Equal(12, Regex.Matches(source, @"\.DropColumn\(").Count);
 
         // The pair rule, verbatim: a latitude alone is not half a place.
         Assert.Contains("(\\\"Latitude\\\" IS NULL) = (\\\"Longitude\\\" IS NULL)", source);
+        // The name rule, verbatim, on both carriers: a pair never travels
+        // without a non-blank name.
+        Assert.Equal(
+            2,
+            Regex.Matches(source, Regex.Escape("\\\"Latitude\\\" IS NULL OR (\\\"LocationName\\\" IS NOT NULL AND btrim(\\\"LocationName\\\") <> '')")).Count);
     }
 
     [Fact]

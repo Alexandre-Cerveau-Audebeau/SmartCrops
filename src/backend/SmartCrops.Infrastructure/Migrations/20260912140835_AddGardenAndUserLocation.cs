@@ -118,11 +118,33 @@ namespace SmartCrops.Infrastructure.Migrations
                 name: "CK_AspNetUsers_Longitude_Range",
                 table: "AspNetUsers",
                 sql: "\"Longitude\" IS NULL OR (\"Longitude\" >= -180 AND \"Longitude\" <= 180)");
+
+            // Review round 1 (K4), added to this SAME migration while the lot is
+            // unmerged: a coordinate pair never travels without a non-blank
+            // name. NULL-tolerant like the three above — an unlocated row is
+            // untouched.
+            migrationBuilder.AddCheckConstraint(
+                name: "CK_Gardens_Location_Name",
+                table: "Gardens",
+                sql: "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND btrim(\"LocationName\") <> '')");
+
+            migrationBuilder.AddCheckConstraint(
+                name: "CK_AspNetUsers_Location_Name",
+                table: "AspNetUsers",
+                sql: "\"Latitude\" IS NULL OR (\"LocationName\" IS NOT NULL AND btrim(\"LocationName\") <> '')");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropCheckConstraint(
+                name: "CK_Gardens_Location_Name",
+                table: "Gardens");
+
+            migrationBuilder.DropCheckConstraint(
+                name: "CK_AspNetUsers_Location_Name",
+                table: "AspNetUsers");
+
             migrationBuilder.DropCheckConstraint(
                 name: "CK_Gardens_Latitude_Range",
                 table: "Gardens");

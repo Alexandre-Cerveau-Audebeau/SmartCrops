@@ -123,6 +123,21 @@ public class ProfileLocationEndpointsTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task PutProfileLocation_BlankName_Returns400_AndStoresNothing(string name)
+    {
+        // Review round 1 (K4): a blank name is no name, on the account too.
+        var userId = await RegisterAsync();
+        AuthAs(userId);
+
+        var response = await Client.PutAsJsonAsync(Url, new { name, latitude = 45.76, longitude = 4.84 });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null((await LoadUserAsync(userId)).LocationName);
+    }
+
     [Fact]
     public async Task DeleteProfileLocation_ClearsSixColumns()
     {

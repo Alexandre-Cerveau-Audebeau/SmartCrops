@@ -343,10 +343,11 @@ builder.Services.AddScoped<IPerenualPestCatalogService, PerenualPestCatalogServi
 // dashboard calls one place per distinct garden location, in parallel, and
 // the browser's fetch gives up at 15 s — a provider outage must come back as
 // a degraded answer inside that budget, never as a client-side timeout.
-// Constraints the options validator enforces: TotalRequestTimeout >
-// AttemptTimeout, SamplingDuration >= 2 × AttemptTimeout; and
-// WeatherApiOptions.TimeoutSeconds (12 s) stays above the 10 s total so
-// HttpClient never re-cuts the pipeline early.
+// The three durations are named constants on WeatherApiOptions, whose
+// TimeoutSeconds range is derived from the total (K2): HttpClient can never
+// re-cut the pipeline early. Constraints the handler's own validator
+// enforces: TotalRequestTimeout > AttemptTimeout, SamplingDuration >= 2 ×
+// AttemptTimeout.
 builder.Services.AddOptions<WeatherApiOptions>()
     .Bind(builder.Configuration.GetSection(WeatherApiOptions.SectionName))
     .ValidateDataAnnotations()
@@ -371,9 +372,9 @@ builder.Services.AddHttpClient<WeatherApiClient>((sp, client) =>
 .AddLogger<RedactingHttpClientLogger>()
 .AddStandardResilienceHandler(options =>
 {
-    options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(5);
-    options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(10);
-    options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(10);
+    options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(WeatherApiOptions.PipelineAttemptTimeoutSeconds);
+    options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(WeatherApiOptions.PipelineTotalTimeoutSeconds);
+    options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(WeatherApiOptions.PipelineSamplingDurationSeconds);
 });
 
 // The forecast cache in front of the client: a singleton because its gates
