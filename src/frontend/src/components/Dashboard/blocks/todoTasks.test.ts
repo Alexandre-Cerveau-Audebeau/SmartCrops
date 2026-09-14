@@ -230,6 +230,54 @@ describe('todoTasks — the cold, two rules (Q9)', () => {
   });
 });
 
+describe('todoTasks — a day before the place’s own today plans NOTHING (round 2, D1)', () => {
+  // Extension 19db11e4: the G2 guard of round 1 kept « Arroser ce soir » off a
+  // finished day, but the cold and frost loops still picked yesterday FIRST when
+  // a stale aggregate is read after the place's midnight. Friday 11th, −1° or
+  // 9°, is over on Saturday 12th at 00:30.
+  const yesterdayFrost = [
+    dayFixture({ date: '2026-09-11', minTempC: -1, chanceOfRain: 90 }),
+    dayFixture({ date: '2026-09-12', minTempC: 14, chanceOfRain: 90 }),
+  ];
+  const yesterdayCold = [
+    dayFixture({ date: '2026-09-11', minTempC: 9, chanceOfRain: 90 }),
+    dayFixture({ date: '2026-09-12', minTempC: 14, chanceOfRain: 90 }),
+  ];
+
+  it('no frost and no cold task on a day that is over', () => {
+    expect(todoTasks([terrasse], varieties, lyon(yesterdayFrost, '2026-09-12 00:30'))).toEqual([]);
+    expect(todoTasks([terrasse], varieties, lyon(yesterdayCold, '2026-09-12 00:30'))).toEqual([]);
+  });
+
+  it('the same days read ON their first date plan normally, on today', () => {
+    expect(todoTasks([terrasse], varieties, lyon(yesterdayFrost, '2026-09-11 14:30'))).toEqual([
+      expect.objectContaining({ kind: 'frost', date: '2026-09-11', today: true, count: 6 }),
+    ]);
+    expect(todoTasks([terrasse], varieties, lyon(yesterdayCold, '2026-09-11 14:30'))).toEqual([
+      expect.objectContaining({ kind: 'cold', date: '2026-09-11', today: true, count: 3 }),
+    ]);
+  });
+
+  it('drops the past, not the future: a cold today behind a finished yesterday is still planned', () => {
+    const yesterdayThenCold = [
+      dayFixture({ date: '2026-09-11', minTempC: 14, chanceOfRain: 90 }),
+      dayFixture({ date: '2026-09-12', minTempC: 9, chanceOfRain: 90 }),
+    ];
+
+    const tasks = todoTasks([terrasse], varieties, lyon(yesterdayThenCold, '2026-09-12 00:30'));
+
+    expect(tasks).toEqual([
+      expect.objectContaining({ kind: 'cold', date: '2026-09-12', today: true, count: 3, dayIndex: 0 }),
+    ]);
+  });
+
+  it('an unknown clock trusts every day, as before', () => {
+    expect(
+      todoTasks([terrasse], varieties, lyon(yesterdayFrost, null as unknown as string), () => null)
+    ).toEqual([expect.objectContaining({ kind: 'frost', date: '2026-09-11' })]);
+  });
+});
+
 describe('todoTasks — gardens without weather', () => {
   it('produces NO task for an unlocated garden, and names it for the invitation', () => {
     const weather = lyon([dryToday()]);

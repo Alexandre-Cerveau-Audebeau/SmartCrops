@@ -97,7 +97,7 @@ export interface TodoTask {
    * block says so beside it.
    */
   stale: boolean;
-  /** Its index in the place's `days[]` — the tie-break between the two cold rules. */
+  /** Its index in the place's PLANNABLE `days[]` — today and after — the tie-break between the two cold rules. */
   dayIndex: number;
 }
 
@@ -175,6 +175,15 @@ export function todoTasks(
     // located.
     const stale = location.status === 'stale';
 
+    // A day BEFORE the place's own today is over, for EVERY rule (round 2, D1 —
+    // Extension 19db11e4): the G2 guard of round 1 kept « Arroser ce soir » off
+    // a finished day, but the cold and frost loops still picked yesterday first
+    // when a stale aggregate is read after the place's midnight. ONE filter,
+    // upstream of the three rules; an unknown date trusts every day, as before.
+    const days =
+      today === null ? location.days : location.days.filter((day) => day.date >= today);
+    if (days.length === 0) continue;
+
     // Placements per variety — the unit every count is stated in.
     const placementsOf = new Map<string, number>();
     for (const placement of garden.placements) {
@@ -182,16 +191,17 @@ export function todoTasks(
     }
 
     // ── Watering tonight ────────────────────────────────────────────────
-    const day0 = location.days[0]!;
+    const day0 = days[0]!;
     const highNeed = [...placementsOf].reduce((sum, [plantId, count]) => {
       const level = byPlant.get(plantId)?.wateringNeedLevel;
       return level && TODO_RULES.watering.highNeedLevels.includes(level) ? sum + count : sum;
     }, 0);
     const eveningAhead = nowHour === null || nowHour <= TODO_RULES.watering.eveningUntilHour - 1;
     // « Ce soir » is the PLACE's own evening (round 1, G2 — GitHub 4008082494):
-    // a stale aggregate read after the place's midnight still carries
-    // yesterday as `days[0]`, and « Arroser ce soir » for a day that has ended
-    // is a wrong instruction, not a late one. Unknown date: trusted, as before.
+    // « Arroser ce soir » for a day that has ended is a wrong instruction, not
+    // a late one. The filter above drops the past; this keeps the task off a
+    // `days[0]` that is TOMORROW when today itself did not travel. Unknown
+    // date: trusted, as before.
     const day0IsToday = today === null || day0.date === today;
     if (highNeed > 0 && day0IsToday && eveningAhead && isDryDay(day0) && isDryEvening(day0)) {
       tasks.push({
@@ -211,7 +221,7 @@ export function todoTasks(
 
     // ── Cold, rule (a): the placements whose tolerance is KNOWN ────────
     let cold: TodoTask | null = null;
-    location.days.some((day, index) => {
+    days.some((day, index) => {
       // O1: no cold warning above the named ceiling, whatever a plant tolerates.
       if (day.minTempC > TODO_RULES.cold.maxC) return false;
       let sensitive = 0;
@@ -242,7 +252,7 @@ export function todoTasks(
 
     // ── Cold, rule (b): frost on EVERY placement ───────────────────────
     let frost: TodoTask | null = null;
-    location.days.some((day, index) => {
+    days.some((day, index) => {
       if (day.minTempC > TODO_RULES.frost.maxC) return false;
       frost = {
         id: `frost:${garden.id}:${day.date}:${garden.placements.length}:${day.minTempC}`,
