@@ -499,7 +499,7 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
     renderPage();
 
     await screen.findByText('The weather needs to know where your gardens are.');
-    expect(screen.getByLabelText('City or postal code')).toBeInTheDocument();
+    expect(screen.getByLabelText('City')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Use' })).toBeDisabled();
     expect(screen.queryByText('Coming soon', { selector: '[data-widget="weather"] *' })).toBeNull();
   });
@@ -535,7 +535,7 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
       )
     ).toBeInTheDocument();
     expect(screen.getAllByText('Bientôt disponible')).toHaveLength(3);
-    expect(screen.getByLabelText('Ville ou code postal')).toBeInTheDocument();
+    expect(screen.getByLabelText('Ville')).toBeInTheDocument();
   });
 });
 

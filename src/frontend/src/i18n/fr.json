@@ -576,7 +576,9 @@
     "location": {
       "titleGarden": "Localiser {{name}}",
       "titleProfile": "Localiser mes jardins",
-      "field": "Ville ou code postal",
+      "field": "Ville",
+      "placeholder": "Écully, France",
+      "help": "Le code postal n’est pas pris en charge — précisez le pays pour lever les homonymes.",
       "minChars_one": "Saisissez au moins {{count, number}} caractère",
       "minChars_other": "Saisissez au moins {{count, number}} caractères",
       "searching": "Recherche…",

@@ -41,10 +41,10 @@ interface SearchResults {
 }
 
 /**
- * SMA-336 PR 3b/5 — the « Ville ou code postal » field (arbitrage Q4): a MUI
- * `Autocomplete` over `GET /api/geocode/search`, so the ambiguity of « Paris »
- * is settled by the user BEFORE anything is stored — the list shows name,
- * region and country, and only a result the server handed back can be picked.
+ * SMA-336 PR 3b/5 — the « Ville » field (arbitrage Q4): a MUI `Autocomplete`
+ * over `GET /api/geocode/search`, so the ambiguity of « Paris » is settled by
+ * the user BEFORE anything is stored — the list shows name, region and
+ * country, and only a result the server handed back can be picked.
  *
  * Four rules, all of them tested:
  * - NO request under {@link LOCATION_QUERY_MIN_LENGTH} characters;
@@ -57,9 +57,14 @@ interface SearchResults {
  *
  * The results are DERIVED from the text they answered: `options` is empty the
  * moment the text no longer matches, without any state written from the
- * effect body. The label keeps the artboard's « Ville ou code postal » (Q5 —
- * whether a French postal code resolves is Alexandre's check at the visual
- * pass, never a call from a test).
+ * effect body.
+ *
+ * Q5, settled by the measure (round 1, V22): the artboard's « Ville ou code
+ * postal » promised what the provider does not do — « 69130 » answered a town
+ * in the United States. The label is « Ville », the placeholder shows the
+ * form that works (« Écully, France »), and the help line says the postal
+ * code is not supported and that the country lifts the namesakes. NOTHING is
+ * added behind the user's back: the text goes to the server as typed.
  */
 export default function LocationField({
   value,
@@ -143,6 +148,8 @@ export default function LocationField({
         <TextField
           {...params}
           label={t('dashboard.location.field')}
+          placeholder={t('dashboard.location.placeholder')}
+          helperText={t('dashboard.location.help')}
           autoFocus={autoFocus}
           inputRef={inputRef}
           slotProps={{

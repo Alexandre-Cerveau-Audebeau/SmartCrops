@@ -54,7 +54,7 @@ const flush = () =>
 
 /** Focus then change — MUI resets a controlled input text changed while unfocused. */
 function type(value: string) {
-  const input = screen.getByLabelText('City or postal code');
+  const input = screen.getByLabelText('City');
   fireEvent.focus(input);
   fireEvent.change(input, { target: { value } });
 }

@@ -480,7 +480,7 @@ describe('WeatherBlock — the mandatory states', () => {
     const { widget } = renderBlock({ weather: EMPTY_WEATHER_DATA, gardens: [] });
 
     expect(widget.getByText('Create a garden to see the weather where it is.')).toBeInTheDocument();
-    expect(widget.queryByLabelText('City or postal code')).toBeNull();
+    expect(widget.queryByLabelText('City')).toBeNull();
   });
 
   it('unavailable: the place line stays, and the statement replaces the figures', () => {
@@ -516,14 +516,14 @@ describe('WeatherBlock — the invitations (F.4)', () => {
     fireEvent.click(widget.getByRole('button', { name: 'Add a city' }));
 
     expect(onLocate).toHaveBeenCalledWith(null);
-    expect(widget.queryByLabelText('City or postal code')).toBeNull();
+    expect(widget.queryByLabelText('City')).toBeNull();
   });
 
   it('Medium, none located: the sentence, the field, a disabled « Use » and the note', () => {
     const { widget } = renderBlock({ size: 'medium', weather: unlocated() });
 
     expect(widget.getByText('The weather needs to know where your gardens are.')).toBeInTheDocument();
-    expect(widget.getByLabelText('City or postal code')).toBeInTheDocument();
+    expect(widget.getByLabelText('City')).toBeInTheDocument();
     expect(widget.getByRole('button', { name: 'Use' })).toBeDisabled();
     expect(
       widget.getByText('One city is enough for all your gardens; you will be able to set one per garden in Settings.')
@@ -545,7 +545,7 @@ describe('WeatherBlock — the invitations (F.4)', () => {
     const link = await widget.findByRole('button', { name: 'Use my profile city' });
     fireEvent.click(link);
 
-    expect((widget.getByLabelText('City or postal code') as HTMLInputElement).value).toBe('Annecy');
+    expect((widget.getByLabelText('City') as HTMLInputElement).value).toBe('Annecy');
     expect(saveProfileLocation).not.toHaveBeenCalled();
     expect(widget.getByRole('button', { name: 'Use' })).toBeDisabled();
   });
@@ -563,7 +563,7 @@ describe('WeatherBlock — the invitations (F.4)', () => {
     vi.mocked(searchLocations).mockResolvedValue([pickFixture()]);
     const { widget } = renderBlock({ size: 'medium', weather: unlocated(), onLocated });
 
-    const input = widget.getByLabelText('City or postal code');
+    const input = widget.getByLabelText('City');
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: 'Lyon' } });
     act(() => vi.advanceTimersByTime(LOCATION_SEARCH_DEBOUNCE_MS));
@@ -592,7 +592,7 @@ describe('WeatherBlock — the invitations (F.4)', () => {
 
     expect(widget.getByText('Balcon sud and Potager du fond have no location.')).toBeInTheDocument();
     expect(widget.getByText('One city is enough for your 3 gardens.')).toBeInTheDocument();
-    expect(widget.getByLabelText('City or postal code')).toBeInTheDocument();
+    expect(widget.getByLabelText('City')).toBeInTheDocument();
     expect(widget.getByRole('button', { name: 'Use' })).toBeDisabled();
 
     // Replaced, not added to (_spec.md § 10.25).
@@ -651,7 +651,7 @@ describe('WeatherBlock — the invitations (F.4)', () => {
     fireEvent.click(widget.getByRole('button', { name: '1/3 located — add a city' }));
 
     expect(onLocate).toHaveBeenCalledWith(null);
-    expect(widget.queryByLabelText('City or postal code')).toBeNull();
+    expect(widget.queryByLabelText('City')).toBeNull();
     expect(widget.getByText('No rain expected — water in the evening.')).toBeInTheDocument();
   });
 });

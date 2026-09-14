@@ -576,7 +576,9 @@
     "location": {
       "titleGarden": "Locate {{name}}",
       "titleProfile": "Locate my gardens",
-      "field": "City or postal code",
+      "field": "City",
+      "placeholder": "Écully, France",
+      "help": "Postal codes are not supported — add the country to tell namesakes apart.",
       "minChars_one": "Type at least {{count, number}} character",
       "minChars_other": "Type at least {{count, number}} characters",
       "searching": "Searching…",

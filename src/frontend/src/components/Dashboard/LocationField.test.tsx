@@ -12,7 +12,7 @@ import { LOCATION_QUERY_MIN_LENGTH, LOCATION_SEARCH_DEBOUNCE_MS } from './locati
 
 vi.mock('../../services/weatherApi', () => ({ searchLocations: vi.fn() }));
 
-// SMA-336 PR 3b/5 — the « Ville ou code postal » field (Q4): no request under
+// SMA-336 PR 3b/5 — the « Ville » field (Q4): no request under
 // three characters, one request 400 ms after the last keystroke, one request
 // in flight, and never a real provider call — `searchLocations` is a mock.
 
@@ -40,7 +40,7 @@ function renderField(onChange?: (pick: LocationPick | null) => void) {
       <Harness onChange={onChange} />
     </LanguageProvider>
   );
-  return screen.getByLabelText('City or postal code') as HTMLInputElement;
+  return screen.getByLabelText('City') as HTMLInputElement;
 }
 
 /**
@@ -241,7 +241,7 @@ describe('LocationField — what it shows', () => {
     expect(screen.getByText('Searching…')).toBeInTheDocument();
   });
 
-  it('is labelled « Ville ou code postal » in French (Q5 — the label stays the artboard’s)', () => {
+  it('is labelled « Ville » in French, with the example and the help (Q5, settled by the measure — V22)', () => {
     localStorage.setItem('smartcrops-language', 'fr');
     render(
       <LanguageProvider>
@@ -249,6 +249,27 @@ describe('LocationField — what it shows', () => {
       </LanguageProvider>
     );
 
-    expect(screen.getByLabelText('Ville ou code postal')).toBeInTheDocument();
+    const input = screen.getByLabelText('Ville') as HTMLInputElement;
+    expect(input.placeholder).toBe('Écully, France');
+    expect(
+      screen.getByText('Le code postal n’est pas pris en charge — précisez le pays pour lever les homonymes.')
+    ).toBeInTheDocument();
+    expect(input).toHaveAccessibleDescription(
+      'Le code postal n’est pas pris en charge — précisez le pays pour lever les homonymes.'
+    );
+  });
+
+  it('carries the example and the help in English too, and sends the typed text AS IS — no country added in secret (V22)', () => {
+    const input = renderField();
+
+    expect(input.placeholder).toBe('Écully, France');
+    expect(
+      screen.getByText('Postal codes are not supported — add the country to tell namesakes apart.')
+    ).toBeInTheDocument();
+
+    type(input, 'Écully');
+    advance(LOCATION_SEARCH_DEBOUNCE_MS);
+
+    expect(vi.mocked(searchLocations).mock.calls[0]![0]).toBe('Écully');
   });
 });

@@ -72,7 +72,7 @@ export function removeProfileLocation(): Promise<void> {
   return clearProfileLocation();
 }
 
-/** The « Ville ou code postal » field never asks the server under this many characters (Q4). */
+/** The « Ville » field never asks the server under this many characters (Q4). */
 export const LOCATION_QUERY_MIN_LENGTH = 3;
 
 /** …and waits this long after the last keystroke before it does (Q4). */

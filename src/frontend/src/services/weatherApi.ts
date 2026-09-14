@@ -205,7 +205,7 @@ export async function fetchDashboardWeather(
 
 /**
  * `GET /api/geocode/search?q=` — the places matching a typed query, for the
- * « Ville ou code postal » field.
+ * « Ville » field.
  *
  * The server answers `200 []` when nothing matches and `503` when the
  * geocoder is unavailable; the 503 reaches the caller as an `HttpStatusError`
