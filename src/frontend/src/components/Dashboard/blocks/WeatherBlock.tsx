@@ -228,10 +228,24 @@ export default function WeatherBlock({
     />
   );
 
+  /**
+   * The place line's gesture (round 1, V21 b): the name is a button that opens
+   * the location dialog on the profile default — the SAME dialog the gear's
+   * « Localisation… » opens — in every state the line is drawn in.
+   */
+  const editPlace = () => onLocate(null);
+  const editPlaceLabel = (location: WeatherLocation) =>
+    t('dashboard.blocks.weather.editLocation', { place: location.name });
+
   /** A place the server could not describe: its line, and an honest statement. */
   const unavailable = (location: WeatherLocation) => (
     <>
-      <WeatherPlace name={location.name} trailing={locatedChip} />
+      <WeatherPlace
+        name={location.name}
+        trailing={locatedChip}
+        onEdit={editPlace}
+        editLabel={editPlaceLabel(location)}
+      />
       <InviteState
         icon={<WeatherIcon />}
         message={t('dashboard.blocks.weather.unavailable')}
@@ -252,6 +266,8 @@ export default function WeatherBlock({
         size="small"
         system={system}
         trailing={locatedChip}
+        onEditPlace={editPlace}
+        editPlaceLabel={editPlaceLabel(location)}
         footer={
           today && scale ? (
             <>
@@ -302,6 +318,8 @@ export default function WeatherBlock({
         size={size}
         system={system}
         trailing={locatedChip}
+        onEditPlace={editPlace}
+        editPlaceLabel={editPlaceLabel(location)}
       />
       <WeatherHours hours={upcomingHours(location)} system={system} />
     </Box>

@@ -11,6 +11,7 @@ import Typography from '@mui/material/Typography';
 import LocationField from './LocationField';
 import {
   locationLabel,
+  removeProfileLocation,
   revertToProfile,
   writeLocation,
   type LocationTarget,
@@ -40,6 +41,11 @@ interface Props {
  * reported INLINE and the dialog STAYS OPEN with the pick intact, so a retry is
  * one click; every close path is refused while a write is in flight, because
  * the Alert the failure would land in lives inside the dialog.
+ *
+ * Since round 1 (V21) it is also the ONE door to CHANGE or REMOVE a location:
+ * it states the place the target currently holds — « Lieu actuel : Écully » —
+ * before the field, and a profile target that holds one offers « Retirer »
+ * (`DELETE /api/auth/profile/location`, then the caller re-fetches).
  */
 export default function LocationDialog({ open, target, onClose, onSaved }: Props) {
   const { t } = useTranslation();
@@ -81,6 +87,14 @@ export default function LocationDialog({ open, target, onClose, onSaved }: Props
       ? t('dashboard.location.titleGarden', { name: target.gardenName })
       : t('dashboard.location.titleProfile');
 
+  // What the target holds TODAY, said before anything is changed (V21).
+  const canRemove = target?.kind === 'profile' && target.canRemove === true;
+  const currentLine = target?.current
+    ? t('dashboard.location.current', { place: target.current })
+    : canRemove
+      ? t('dashboard.location.currentUnknown')
+      : t('dashboard.location.currentNone');
+
   return (
     <Dialog open={open} onClose={close} maxWidth="sm" fullWidth>
       <DialogTitle>{title}</DialogTitle>
@@ -90,6 +104,12 @@ export default function LocationDialog({ open, target, onClose, onSaved }: Props
             {t('dashboard.location.saveError')}
           </Alert>
         )}
+        <Typography
+          data-location-current
+          sx={{ mb: 2, fontSize: DASHBOARD_TYPE.body, color: 'text.secondary' }}
+        >
+          {currentLine}
+        </Typography>
         <LocationField
           value={pick}
           onChange={setPick}
@@ -126,6 +146,11 @@ export default function LocationDialog({ open, target, onClose, onSaved }: Props
         {target?.kind === 'garden' && target.canRevert && (
           <Button onClick={() => run(() => revertToProfile(target))} disabled={saving}>
             {t('dashboard.location.revert')}
+          </Button>
+        )}
+        {canRemove && (
+          <Button onClick={() => run(removeProfileLocation)} disabled={saving}>
+            {t('dashboard.location.remove')}
           </Button>
         )}
         <Button onClick={close} disabled={saving}>

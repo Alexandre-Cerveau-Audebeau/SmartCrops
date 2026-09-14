@@ -406,6 +406,44 @@ describe('WeatherBlock — the place tabs (F.3)', () => {
     expect(widget.getByRole('button', { name: '1/3 located — add a city' })).toBeInTheDocument();
   });
 
+  it('the place name is a BUTTON that opens the location dialog on the profile default (V21 b), in every state', () => {
+    // Round 1, V21: PR 3b/5 had three doors to ADD a location and none to
+    // change one. The title line — the place — is now the door, a discreet
+    // link that a keyboard reaches, in the fed states and in the unavailable
+    // one alike.
+    const onLocate = vi.fn();
+    const { card } = renderBlock({ size: 'large', onLocate });
+
+    const place = card.querySelector('[data-weather-place]') as HTMLElement;
+    const door = within(place).getByRole('button', { name: 'Lyon — change the location' });
+    expect(door).toHaveTextContent('Lyon');
+    expect(door).not.toHaveAttribute('tabindex', '-1');
+    door.focus();
+    expect(document.activeElement).toBe(door);
+    const rules = rulesFor(door).replace(/\s+/g, '');
+    expect(rules).toContain('cursor:pointer');
+    expect(rules).toContain('text-decoration:underlinedotted');
+    expect(rules).toContain('min-width:0');
+
+    fireEvent.click(door);
+    expect(onLocate).toHaveBeenCalledWith(null);
+  });
+
+  it('…and in the unavailable state too', () => {
+    const onLocate = vi.fn();
+    const { widget } = renderBlock({
+      size: 'medium',
+      onLocate,
+      weather: weatherFixture(
+        [locationFixture({ status: 'unavailable', current: null, days: [], localTime: null })],
+        [linkFixture()]
+      ),
+    });
+
+    fireEvent.click(widget.getByRole('button', { name: 'Lyon — change the location' }));
+    expect(onLocate).toHaveBeenCalledWith(null);
+  });
+
   it('Small and Medium show the FIRST place and no tabs (arbitrage Q8)', () => {
     const { widget, card } = renderBlock({ size: 'medium', weather: twoPlaces() });
 

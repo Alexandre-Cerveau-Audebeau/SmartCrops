@@ -1026,27 +1026,70 @@ export default function GardensBlock({
       );
     }
 
+    /**
+     * A LOCATED garden's cell is the door to its own location (round 1, V21 c):
+     * a button that opens the shared dialog PRE-TARGETED on this garden — an
+     * override to set, or « Revenir à la ville du profil » — named with the
+     * garden, since several rows carry it. Plain when nobody can open the
+     * dialog (the table drawn outside the dashboard page).
+     */
+    const located = (content: React.ReactNode) => {
+      const columnSx = { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' } as const;
+      if (!onLocate) return <Box sx={columnSx}>{content}</Box>;
+      return (
+        <Box
+          component="button"
+          type="button"
+          data-weather-cell-edit
+          onClick={() => onLocate(garden.id)}
+          aria-label={t('dashboard.blocks.weather.cellEditNamed', { name: garden.name })}
+          sx={{
+            ...columnSx,
+            background: 'none',
+            border: 0,
+            p: 0,
+            m: 0,
+            font: 'inherit',
+            color: 'inherit',
+            textAlign: 'left',
+            cursor: 'pointer',
+            borderRadius: '8px',
+            '&:hover [data-weather-cell-place]': { textDecoration: 'underline dotted', textUnderlineOffset: '3px' },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+          }}
+        >
+          {content}
+        </Box>
+      );
+    };
+    // A `span`, not Typography's `<p>`: the cell may be a `<button>`, whose content must be phrasing.
+    const placeLine = (
+      <Typography component="span" data-weather-cell-place sx={{ ...subSx, display: 'block' }}>
+        {place.name}
+      </Typography>
+    );
+
     if (!place.current) {
       // Located, but the provider had nothing to say: the place, and a dash
       // where the temperature would be — never an invented figure. The dash
       // is for the eye; assistive technology hears « Sans météo » (round 1,
       // G1 — GitHub 4008082465), the same words the other empty states of
       // this column carry through `MissingDataMark`.
-      return (
-        <Box>
+      return located(
+        <>
           <Box component="span" aria-hidden sx={{ fontWeight: 700, color: 'text.disabled' }}>
             —
           </Box>
           <Box component="span" sx={visuallyHidden}>
             {t('dashboard.blocks.weather.cellUnavailable')}
           </Box>
-          <Typography sx={subSx}>{place.name}</Typography>
-        </Box>
+          {placeLine}
+        </>
       );
     }
 
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+    return located(
+      <>
         <Box
           component="span"
           data-weather-cell
@@ -1075,8 +1118,8 @@ export default function GardensBlock({
             value: displayTemperature(place.current.tempC, system),
           })}
         </Box>
-        <Typography sx={subSx}>{place.name}</Typography>
-      </Box>
+        {placeLine}
+      </>
     );
   };
 

@@ -439,6 +439,12 @@
         "cellNotLocated": "Non localisé",
         "cellAdd": "Ajouter",
         "cellAddNamed": "Ajouter une ville pour {{name}}",
+        "cellEditNamed": "Modifier la localisation de {{name}}",
+        "editLocation": "{{place}} — modifier la localisation",
+        "options": {
+          "hint": "Ville par défaut de vos jardins",
+          "location": "Localisation…"
+        },
         "attribution": "Données météo : WeatherAPI.com"
       },
       "gardens": {
@@ -581,7 +587,11 @@
       "revert": "Revenir à la ville du profil",
       "saving": "Enregistrement…",
       "saveError": "Impossible d’enregistrer ce lieu. Réessayez.",
-      "selected": "Lieu choisi : {{place}}"
+      "selected": "Lieu choisi : {{place}}",
+      "current": "Lieu actuel : {{place}}",
+      "currentNone": "Aucun lieu enregistré pour le moment.",
+      "currentUnknown": "Un lieu par défaut est enregistré pour vos jardins.",
+      "remove": "Retirer"
     }
   },
   "common": {

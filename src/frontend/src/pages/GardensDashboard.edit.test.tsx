@@ -437,6 +437,27 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     expect(within(panel).getByRole('button', { name: 'Done' })).toBeInTheDocument();
   });
 
+  it('the Weather gear carries « Location… », which opens the location dialog on the profile default (round 1, V21 a)', async () => {
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    expect(within(panel).getByText('Default city of your gardens')).toBeInTheDocument();
+    // An empty aggregate: nothing stored yet, and the panel says so.
+    expect(within(panel).getByText('No place saved yet.')).toBeInTheDocument();
+    expect(within(panel).queryByText('No option for this widget yet.')).toBeNull();
+
+    const door = within(panel).getByRole('button', { name: 'Location…' });
+    door.focus();
+    expect(document.activeElement).toBe(door);
+    fireEvent.click(door);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+    expect(within(dialog).getByText('No place saved yet.')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Remove' })).toBeNull();
+  });
+
   it('names the widget on the panel itself, above the generic line (A7)', async () => {
     // `A8Options.dc.html`'s `.pop-h` carries two lines — the widget's name in
     // bold, then « Options du widget ». The panel opened on the generic line

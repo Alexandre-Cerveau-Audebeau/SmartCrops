@@ -439,6 +439,12 @@
         "cellNotLocated": "Not located",
         "cellAdd": "Add",
         "cellAddNamed": "Add a city for {{name}}",
+        "cellEditNamed": "Change the location of {{name}}",
+        "editLocation": "{{place}} — change the location",
+        "options": {
+          "hint": "Default city of your gardens",
+          "location": "Location…"
+        },
         "attribution": "Weather data: WeatherAPI.com"
       },
       "gardens": {
@@ -581,7 +587,11 @@
       "revert": "Back to the profile city",
       "saving": "Saving…",
       "saveError": "Couldn’t save this place. Try again.",
-      "selected": "Selected place: {{place}}"
+      "selected": "Selected place: {{place}}",
+      "current": "Current place: {{place}}",
+      "currentNone": "No place saved yet.",
+      "currentUnknown": "A default place is saved for your gardens.",
+      "remove": "Remove"
     }
   },
   "common": {

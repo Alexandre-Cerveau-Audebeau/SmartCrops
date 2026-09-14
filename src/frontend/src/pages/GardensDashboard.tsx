@@ -31,6 +31,7 @@ import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
 import TodoBlock from '../components/Dashboard/blocks/TodoBlock';
 import WeatherBlock from '../components/Dashboard/blocks/WeatherBlock';
+import WeatherOptionsPanel from '../components/Dashboard/blocks/WeatherOptionsPanel';
 import LocationDialog from '../components/Dashboard/LocationDialog';
 import type { LocationTarget } from '../components/Dashboard/locationTools';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
@@ -128,10 +129,30 @@ export default function GardensDashboard() {
   const [locateTarget, setLocateTarget] = useState<LocationTarget | null>(null);
   const [locateOpen, setLocateOpen] = useState(false);
 
-  /** Opens the dialog on a garden's override, or on the profile default when `gardenId` is null. */
+  /** The stored name of the place a link reads, when the aggregate carries it. */
+  const placeNamed = (key: string | null | undefined): string | null =>
+    key ? (weatherData.locations.find((place) => place.key === key)?.name ?? null) : null;
+
+  // The profile default is the place every garden WITHOUT an override reads
+  // (ADR-0006); the aggregate names it through any link that inherits. When
+  // every garden overrides it, its name is unknown here — the dialog then says
+  // « a default is stored » and still offers to remove it (V21).
+  const profileCurrent = placeNamed(
+    weatherData.gardens.find((entry) => entry.source === 'profile')?.locationKey
+  );
+
+  /**
+   * Opens the dialog on a garden's override, or on the profile default when
+   * `gardenId` is null — stating what the target holds today, so the dialog is
+   * the door to CHANGE or REMOVE a location as much as to add one (V21).
+   */
   const openLocate = (gardenId: string | null) => {
     if (gardenId === null) {
-      setLocateTarget({ kind: 'profile' });
+      setLocateTarget({
+        kind: 'profile',
+        current: profileCurrent,
+        canRemove: weatherData.profileLocated,
+      });
     } else {
       const link = weatherData.gardens.find((entry) => entry.gardenId === gardenId);
       setLocateTarget({
@@ -141,6 +162,7 @@ export default function GardensDashboard() {
         // « Revenir à la ville du profil » only when there is a profile city to
         // return to AND an override to drop.
         canRevert: link?.source === 'garden' && weatherData.profileLocated,
+        current: placeNamed(link?.locationKey),
       });
     }
     setLocateOpen(true);
@@ -369,23 +391,32 @@ export default function GardensDashboard() {
   };
 
   /**
-   * A widget's own settings, for the Edit-mode gear. Only Counters has any —
-   * the other seven open on the panel that says so.
+   * A widget's own settings, for the Edit-mode gear. Counters has its two
+   * options; Weather has « Localisation… » (round 1, V21 a), the door to the
+   * profile default; the other six open on the panel that says so.
    */
-  const renderBlockOptions = (block: DashboardBlock) =>
-    block.key === 'counters' ? (
-      <CountersOptionsPanel
-        options={block.options ?? null}
-        gardens={gardens}
-        // The aggregate, not the layout: Edit mode opens on the layout being
-        // loaded, and the gear can be reached while the gardens are not
-        // (round 7, S13).
-        ready={!gardensLoading && !gardensError}
-        onChange={(options) =>
-          patchBlock('counters', (current) => ({ ...current, options }))
-        }
-      />
-    ) : undefined;
+  const renderBlockOptions = (block: DashboardBlock) => {
+    switch (block.key) {
+      case 'counters':
+        return (
+          <CountersOptionsPanel
+            options={block.options ?? null}
+            gardens={gardens}
+            // The aggregate, not the layout: Edit mode opens on the layout being
+            // loaded, and the gear can be reached while the gardens are not
+            // (round 7, S13).
+            ready={!gardensLoading && !gardensError}
+            onChange={(options) =>
+              patchBlock('counters', (current) => ({ ...current, options }))
+            }
+          />
+        );
+      case 'weather':
+        return <WeatherOptionsPanel current={profileCurrent} onLocate={() => openLocate(null)} />;
+      default:
+        return undefined;
+    }
+  };
 
   /**
    * A hidden widget's headline figure, for its gallery thumbnail (round 4, A8).

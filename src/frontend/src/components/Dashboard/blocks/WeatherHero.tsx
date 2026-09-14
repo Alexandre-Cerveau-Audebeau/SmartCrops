@@ -20,6 +20,9 @@ interface Props {
   trailing?: ReactNode;
   /** Extra blocks under the condition, spread on the same column — the Small card's « Aujourd'hui » line and bar. */
   footer?: ReactNode;
+  /** Makes the place name a button that opens the location dialog (V21 b) — see `WeatherPlace`. */
+  onEditPlace?: () => void;
+  editPlaceLabel?: string;
 }
 
 /**
@@ -43,6 +46,8 @@ export default function WeatherHero({
   system,
   trailing,
   footer,
+  onEditPlace,
+  editPlaceLabel,
 }: Props) {
   const { t } = useTranslation();
   const small = size === 'small';
@@ -69,7 +74,12 @@ export default function WeatherHero({
             }),
       }}
     >
-      <WeatherPlace name={location.name} trailing={trailing} />
+      <WeatherPlace
+        name={location.name}
+        trailing={trailing}
+        onEdit={onEditPlace}
+        editLabel={editPlaceLabel}
+      />
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: small ? '8px' : '12px' }}>
         {/* The glyph is decorative: the condition text beside it names the

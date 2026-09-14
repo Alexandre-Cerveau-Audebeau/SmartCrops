@@ -5,6 +5,7 @@ import { LanguageProvider } from '../../contexts/LanguageContext';
 import { HttpStatusError } from '../../services/httpStatusError';
 import {
   clearGardenLocation,
+  clearProfileLocation,
   saveGardenLocation,
   saveProfileLocation,
   searchLocations,
@@ -73,9 +74,11 @@ beforeEach(() => {
   vi.mocked(saveGardenLocation).mockReset();
   vi.mocked(saveProfileLocation).mockReset();
   vi.mocked(clearGardenLocation).mockReset();
+  vi.mocked(clearProfileLocation).mockReset();
   vi.mocked(saveGardenLocation).mockResolvedValue(undefined);
   vi.mocked(saveProfileLocation).mockResolvedValue(undefined);
   vi.mocked(clearGardenLocation).mockResolvedValue(undefined);
+  vi.mocked(clearProfileLocation).mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -110,6 +113,76 @@ describe('LocationDialog — titles and controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LocationDialog — the door to CHANGE or REMOVE a location (round 1, V21)', () => {
+  it('states the place the profile default holds, and offers « Remove »', () => {
+    renderDialog({ kind: 'profile', current: 'Ecully', canRemove: true });
+
+    expect(screen.getByText('Current place: Ecully')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeEnabled();
+    // The field is still there: « Use » another place is the other half of the door.
+    expect(screen.getByRole('button', { name: 'Use' })).toBeDisabled();
+  });
+
+  it('says so when no place is saved, and offers nothing to remove', () => {
+    renderDialog(PROFILE);
+
+    expect(screen.getByText('No place saved yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
+  });
+
+  it('a stored default the aggregate cannot name is still stated, and still removable', () => {
+    // Every garden overrides the default: no link inherits it, so the widget
+    // cannot say WHICH place it is — but it exists, and « Retirer » drops it.
+    renderDialog({ kind: 'profile', current: null, canRemove: true });
+
+    expect(screen.getByText('A default place is saved for your gardens.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+  });
+
+  it('« Remove » DELETEs the profile default, then asks for a re-fetch', async () => {
+    const { onSaved, onClose } = renderDialog({ kind: 'profile', current: 'Ecully', canRemove: true });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    await flush();
+
+    expect(clearProfileLocation).toHaveBeenCalledTimes(1);
+    expect(saveProfileLocation).not.toHaveBeenCalled();
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('a failed « Remove » is reported inline and the dialog stays open', async () => {
+    vi.mocked(clearProfileLocation).mockRejectedValue(new HttpStatusError('Request failed (500)', 500));
+    const { onSaved } = renderDialog({ kind: 'profile', current: 'Ecully', canRemove: true });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    await flush();
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t save this place. Try again.');
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeEnabled();
+  });
+
+  it('states the place a garden reads today — override or inherited — before offering to change it', () => {
+    renderDialog({ ...GARDEN, current: 'Lyon', canRevert: true });
+
+    expect(screen.getByRole('dialog', { name: 'Locate Balcon sud' })).toBeInTheDocument();
+    expect(screen.getByText('Current place: Lyon')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to the profile city' })).toBeInTheDocument();
+    // « Remove » is the PROFILE's gesture; a garden reverts.
+    expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
+  });
+
+  it('the « Remove » button is a keyboard target like the others', () => {
+    renderDialog({ kind: 'profile', current: 'Ecully', canRemove: true });
+
+    const remove = screen.getByRole('button', { name: 'Remove' });
+    remove.focus();
+    expect(document.activeElement).toBe(remove);
+    expect(remove).not.toHaveAttribute('tabindex', '-1');
   });
 });
 

@@ -94,6 +94,39 @@ describe('GardensBlock — the MÉTÉO column (PR 3b/5)', () => {
     expect(onLocate).toHaveBeenCalledWith('g2');
   });
 
+  it('a LOCATED cell is a button that opens the dialog pre-targeted on its garden (V21 c)', () => {
+    // Round 1, V21: PR 3b/5 opened the dialog from an UNLOCATED cell only; a
+    // garden already located had no door to an override or to « Revenir à la
+    // ville du profil ». The whole cell — pill and place — is the door now,
+    // named with the garden since several rows carry it.
+    const onLocate = vi.fn();
+    const [terrasse, balcon] = renderTable(
+      { status: 'ready', byGarden: new Map([['g1', locationFixture()], ['g2', locationFixture({ current: null })]]) },
+      onLocate
+    );
+
+    const door = within(terrasse!).getByRole('button', { name: 'Change the location of Terrasse' });
+    expect(door).toHaveTextContent('24°');
+    expect(door).toHaveTextContent('Lyon');
+    door.focus();
+    expect(document.activeElement).toBe(door);
+    fireEvent.click(door);
+    expect(onLocate).toHaveBeenCalledWith('g1');
+
+    // A located garden the provider is silent about has the same door.
+    fireEvent.click(within(balcon!).getByRole('button', { name: 'Change the location of Balcon sud' }));
+    expect(onLocate).toHaveBeenLastCalledWith('g2');
+    // No `<p>` inside the `<button>`: phrasing content only.
+    expect(door.querySelector('p')).toBeNull();
+  });
+
+  it('draws the located cell as plain text when nobody can open the dialog', () => {
+    const [terrasse] = renderTable({ status: 'ready', byGarden: new Map([['g1', locationFixture()]]) });
+
+    expect(within(terrasse!).getByText('24°')).toBeInTheDocument();
+    expect(within(terrasse!).queryByRole('button')).toBeNull();
+  });
+
   it('treats a garden the aggregate does not know as not located', () => {
     const onLocate = vi.fn();
     const [, balcon] = renderTable({ status: 'ready', byGarden: new Map() }, onLocate);
