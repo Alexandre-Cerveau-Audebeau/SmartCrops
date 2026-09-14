@@ -124,9 +124,15 @@ export default function GardensDashboard() {
   } = useDashboardWeather(language);
 
   // The ONE location dialog of the page (§ F.4), opened from the widget, the
-  // « 1/3 localisé » chip or a table cell. The target outlives the open flag,
-  // the DeleteGardenDialog idiom: the fading dialog keeps its title.
-  const [locateTarget, setLocateTarget] = useState<LocationTarget | null>(null);
+  // « 1/3 localisé » chip, a table cell or the Weather gear. The state holds the
+  // target's IDENTITY only; what it currently holds is derived from the LIVE
+  // aggregate on every render (round 2, D4 — Extension 7d3f6056 / 458cd620): a
+  // dialog opened while the weather loads fills in when it lands, instead of
+  // keeping the empty photograph it was opened with. The identity outlives the
+  // open flag, the DeleteGardenDialog idiom: the fading dialog keeps its title.
+  const [locateKey, setLocateKey] = useState<
+    { kind: 'profile' } | { kind: 'garden'; gardenId: string } | null
+  >(null);
   const [locateOpen, setLocateOpen] = useState(false);
 
   /** The stored name of the place a link reads, when the aggregate carries it. */
@@ -142,29 +148,37 @@ export default function GardensDashboard() {
   );
 
   /**
-   * Opens the dialog on a garden's override, or on the profile default when
-   * `gardenId` is null — stating what the target holds today, so the dialog is
-   * the door to CHANGE or REMOVE a location as much as to add one (V21).
+   * What the dialog's target holds TODAY, read from the live aggregate — so the
+   * dialog is the door to CHANGE or REMOVE a location as much as to add one
+   * (V21), and says « loading » rather than « nothing stored » while the
+   * aggregate is in flight (D4).
    */
-  const openLocate = (gardenId: string | null) => {
-    if (gardenId === null) {
-      setLocateTarget({
+  const locateTarget: LocationTarget | null = (() => {
+    if (locateKey === null) return null;
+    if (locateKey.kind === 'profile') {
+      return {
         kind: 'profile',
         current: profileCurrent,
         canRemove: weatherData.profileLocated,
-      });
-    } else {
-      const link = weatherData.gardens.find((entry) => entry.gardenId === gardenId);
-      setLocateTarget({
-        kind: 'garden',
-        gardenId,
-        gardenName: gardens.find((garden) => garden.id === gardenId)?.name ?? '',
-        // « Revenir à la ville du profil » only when there is a profile city to
-        // return to AND an override to drop.
-        canRevert: link?.source === 'garden' && weatherData.profileLocated,
-        current: placeNamed(link?.locationKey),
-      });
+        loading: weatherLoading,
+      };
     }
+    const link = weatherData.gardens.find((entry) => entry.gardenId === locateKey.gardenId);
+    return {
+      kind: 'garden',
+      gardenId: locateKey.gardenId,
+      gardenName: gardens.find((garden) => garden.id === locateKey.gardenId)?.name ?? '',
+      // « Revenir à la ville du profil » only when there is a profile city to
+      // return to AND an override to drop.
+      canRevert: link?.source === 'garden' && weatherData.profileLocated,
+      current: placeNamed(link?.locationKey),
+      loading: weatherLoading,
+    };
+  })();
+
+  /** Opens the dialog on a garden's override, or on the profile default when `gardenId` is null. */
+  const openLocate = (gardenId: string | null) => {
+    setLocateKey(gardenId === null ? { kind: 'profile' } : { kind: 'garden', gardenId });
     setLocateOpen(true);
   };
 
@@ -416,6 +430,7 @@ export default function GardensDashboard() {
           <WeatherOptionsPanel
             current={profileCurrent}
             located={weatherData.profileLocated}
+            loading={weatherLoading}
             onLocate={() => openLocate(null)}
           />
         );

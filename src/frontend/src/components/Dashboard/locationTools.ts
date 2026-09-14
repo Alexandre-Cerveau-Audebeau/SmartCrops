@@ -27,6 +27,11 @@ export type LocationTarget =
       current?: string | null;
       /** Whether « Retirer » is offered — the account carries a default to remove. */
       canRemove?: boolean;
+      /**
+       * The aggregate that names the place is still loading (round 2, D4):
+       * neither « nothing stored » nor « Retirer » can be said yet.
+       */
+      loading?: boolean;
     }
   | {
       kind: 'garden';
@@ -41,7 +46,37 @@ export type LocationTarget =
       canRevert: boolean;
       /** The name of the place the garden reads today — its override or the inherited default; null when unlocated. */
       current?: string | null;
+      /** As for the profile: the aggregate is still loading (round 2, D4). */
+      loading?: boolean;
     };
+
+/**
+ * What a surface knows of a stored place, and the ONE sentence for it — the
+ * location dialog and the Weather gear panel both read this function (round
+ * 2, D4 / D5), so the two cannot disagree: the aggregate still loading, a
+ * named place, a place that is stored but that the aggregate cannot name
+ * (every garden overrides it), or nothing stored.
+ */
+export interface StoredPlace {
+  /** The aggregate that would name the place has not landed yet. */
+  loading: boolean;
+  /** The place's name, when the aggregate can tell. */
+  name: string | null;
+  /** Whether a place IS stored, named or not. */
+  stored: boolean;
+}
+
+export type StoredPlaceKey =
+  | 'dashboard.location.loading'
+  | 'dashboard.location.current'
+  | 'dashboard.location.currentUnknown'
+  | 'dashboard.location.currentNone';
+
+export function storedPlaceKey(place: StoredPlace): StoredPlaceKey {
+  if (place.loading) return 'dashboard.location.loading';
+  if (place.name) return 'dashboard.location.current';
+  return place.stored ? 'dashboard.location.currentUnknown' : 'dashboard.location.currentNone';
+}
 
 /** « Lyon, Auvergne-Rhône-Alpes, France » — the pick as the list and the preview print it. */
 export function locationLabel(pick: LocationPick): string {

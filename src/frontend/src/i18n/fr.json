@@ -593,6 +593,7 @@
       "current": "Lieu actuel : {{place}}",
       "currentNone": "Aucun lieu enregistré pour le moment.",
       "currentUnknown": "Un lieu par défaut est enregistré pour vos jardins.",
+      "loading": "Chargement du lieu actuel…",
       "remove": "Retirer"
     }
   },

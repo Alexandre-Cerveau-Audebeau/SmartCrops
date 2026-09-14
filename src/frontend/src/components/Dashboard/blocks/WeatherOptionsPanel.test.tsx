@@ -7,10 +7,15 @@ import WeatherOptionsPanel from './WeatherOptionsPanel';
 // SMA-336 PR 3b/5, round 1 (V21 a) — the Weather widget's gear entry: the
 // current default place, and « Localisation… » that opens the shared dialog.
 
-function renderPanel(current: string | null, located = current !== null, onLocate = vi.fn()) {
+function renderPanel(
+  current: string | null,
+  located = current !== null,
+  onLocate = vi.fn(),
+  loading = false
+) {
   render(
     <LanguageProvider>
-      <WeatherOptionsPanel current={current} located={located} onLocate={onLocate} />
+      <WeatherOptionsPanel current={current} located={located} loading={loading} onLocate={onLocate} />
     </LanguageProvider>
   );
   return onLocate;
@@ -45,6 +50,17 @@ describe('WeatherOptionsPanel', () => {
     renderPanel(null, true);
 
     expect(screen.getByText('Un lieu par défaut est enregistré pour vos jardins.')).toBeInTheDocument();
+    expect(screen.queryByText('Aucun lieu enregistré pour le moment.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Localisation…' })).toBeEnabled();
+  });
+
+  it('says the place is loading while the aggregate is in flight, and keeps the door open (round 2, D4)', () => {
+    // Extension 7d3f6056 / 458cd620: the gear was reachable before the aggregate
+    // landed and the panel printed « Aucun lieu enregistré » over a place it did
+    // not know yet. The door stays open: the dialog says the same and fills in.
+    renderPanel(null, false, vi.fn(), true);
+
+    expect(screen.getByText('Chargement du lieu actuel…')).toBeInTheDocument();
     expect(screen.queryByText('Aucun lieu enregistré pour le moment.')).toBeNull();
     expect(screen.getByRole('button', { name: 'Localisation…' })).toBeEnabled();
   });

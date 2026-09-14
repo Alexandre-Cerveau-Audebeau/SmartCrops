@@ -593,6 +593,7 @@
       "current": "Current place: {{place}}",
       "currentNone": "No place saved yet.",
       "currentUnknown": "A default place is saved for your gardens.",
+      "loading": "Loading the current place…",
       "remove": "Remove"
     }
   },

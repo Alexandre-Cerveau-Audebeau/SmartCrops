@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
-import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
+import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../types/DashboardWeather';
 import { presetFor } from '../constants/dashboardPresets';
 import { emittedRules, rulesFor } from '../test/dashboardDom';
 import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
@@ -484,6 +484,56 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
       await within(panel).findByText('A default place is saved for your gardens.')
     ).toBeInTheDocument();
     expect(within(panel).queryByText('No place saved yet.')).toBeNull();
+  });
+
+  it('opened while the aggregate still loads, the dialog FILLS IN when it lands — a live target, not a snapshot (round 2, D4)', async () => {
+    // Extension 7d3f6056 / 458cd620: `openLocate(null)` photographed
+    // `profileCurrent` null and `profileLocated` false from EMPTY_WEATHER_DATA
+    // into `locateTarget`, and nothing refreshed it when the aggregate landed —
+    // the dialog said « no place saved » and hid Remove over a stored default.
+    let deliver!: (data: DashboardWeatherData) => void;
+    vi.mocked(fetchDashboardWeather).mockImplementation(
+      () =>
+        new Promise<DashboardWeatherData>((resolve) => {
+          deliver = resolve;
+        })
+    );
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenFixture({ id: 'g1', name: 'Terrasse' })])
+    );
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Location…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+    expect(within(dialog).queryByRole('button', { name: 'Remove' })).toBeNull();
+
+    await act(async () => {
+      deliver(weatherFixture([locationFixture({ name: 'Ecully' })], [linkFixture({ gardenId: 'g1' })]));
+    });
+
+    expect(await within(dialog).findByText('Current place: Ecully')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Remove' })).toBeEnabled();
+    expect(within(dialog).queryByText('No place saved yet.')).toBeNull();
+  });
+
+  it('while the aggregate loads, neither the gear panel nor the dialog claims that nothing is stored (round 2, D4)', async () => {
+    vi.mocked(fetchDashboardWeather).mockImplementation(
+      () => new Promise<DashboardWeatherData>(() => undefined)
+    );
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    expect(within(panel).getByText('Loading the current place…')).toBeInTheDocument();
+    expect(within(panel).queryByText('No place saved yet.')).toBeNull();
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Location…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+    expect(within(dialog).getByText('Loading the current place…')).toBeInTheDocument();
+    expect(within(dialog).queryByText('No place saved yet.')).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Remove' })).toBeNull();
   });
 
   it('names the widget on the panel itself, above the generic line (A7)', async () => {

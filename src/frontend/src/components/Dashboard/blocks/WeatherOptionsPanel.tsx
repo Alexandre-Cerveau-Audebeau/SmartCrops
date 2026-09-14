@@ -4,6 +4,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import { DASHBOARD_TYPE } from '../../../theme/dashboardTokens';
+import { storedPlaceKey } from '../locationTools';
 
 interface Props {
   /** The place the profile default points at, when the aggregate can name it; null otherwise. */
@@ -16,6 +17,12 @@ interface Props {
    * défaut est enregistré ».
    */
   located: boolean;
+  /**
+   * The weather aggregate has not landed yet (round 2, D4 — Extension
+   * 7d3f6056 / 458cd620): the panel says so instead of « nothing stored ». The
+   * door stays open — the dialog says the same, and fills in when it lands.
+   */
+  loading: boolean;
   /** Opens the shared location dialog on the profile default. */
   onLocate: () => void;
 }
@@ -31,16 +38,13 @@ interface Props {
  * flex; align-items: center; gap: 14px; height: 48px`, a 22 px glyph — the
  * same row the Counters panel draws, so the eight gears open on one shape.
  */
-export default function WeatherOptionsPanel({ current, located, onLocate }: Props) {
+export default function WeatherOptionsPanel({ current, located, loading, onLocate }: Props) {
   const { t } = useTranslation();
 
-  // The three states of the dialog's own line (`LocationDialog`, V21), in the
-  // same order: named, stored but unnamed, none.
-  const currentLine = current
-    ? t('dashboard.location.current', { place: current })
-    : located
-      ? t('dashboard.location.currentUnknown')
-      : t('dashboard.location.currentNone');
+  // The dialog's own line (`LocationDialog`), from the ONE function both read.
+  const currentLine = t(storedPlaceKey({ loading, name: current, stored: located }), {
+    place: current ?? '',
+  });
 
   return (
     <Box

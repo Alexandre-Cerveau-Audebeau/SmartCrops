@@ -176,6 +176,17 @@ describe('LocationDialog — the door to CHANGE or REMOVE a location (round 1, V
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
   });
 
+  it('says the place is still loading — and offers nothing to remove — while the aggregate is in flight (round 2, D4)', () => {
+    // Extension 7d3f6056 / 458cd620: opened before the aggregate landed, the
+    // dialog printed « No place saved yet. » — the sentence of an account
+    // WITHOUT a default — over a place it simply did not know yet.
+    renderDialog({ kind: 'profile', loading: true });
+
+    expect(screen.getByText('Loading the current place…')).toBeInTheDocument();
+    expect(screen.queryByText('No place saved yet.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
+  });
+
   it('the « Remove » button is a keyboard target like the others', () => {
     renderDialog({ kind: 'profile', current: 'Ecully', canRemove: true });
 

@@ -13,6 +13,7 @@ import {
   locationLabel,
   removeProfileLocation,
   revertToProfile,
+  storedPlaceKey,
   writeLocation,
   type LocationTarget,
 } from './locationTools';
@@ -87,13 +88,18 @@ export default function LocationDialog({ open, target, onClose, onSaved }: Props
       ? t('dashboard.location.titleGarden', { name: target.gardenName })
       : t('dashboard.location.titleProfile');
 
-  // What the target holds TODAY, said before anything is changed (V21).
-  const canRemove = target?.kind === 'profile' && target.canRemove === true;
-  const currentLine = target?.current
-    ? t('dashboard.location.current', { place: target.current })
-    : canRemove
-      ? t('dashboard.location.currentUnknown')
-      : t('dashboard.location.currentNone');
+  // What the target holds TODAY, said before anything is changed (V21) — and
+  // « still loading » while the aggregate is in flight (round 2, D4 —
+  // Extension 7d3f6056 / 458cd620), never « nothing stored » over a place the
+  // page does not know yet. The caller derives `target` from the LIVE
+  // aggregate, so this line and the buttons fill in when it lands.
+  const loading = target?.loading === true;
+  const canRemove = !loading && target?.kind === 'profile' && target.canRemove === true;
+  const canRevert = !loading && target?.kind === 'garden' && target.canRevert;
+  const currentLine = t(
+    storedPlaceKey({ loading, name: target?.current ?? null, stored: canRemove }),
+    { place: target?.current ?? '' }
+  );
 
   return (
     <Dialog open={open} onClose={close} maxWidth="sm" fullWidth>
@@ -143,7 +149,7 @@ export default function LocationDialog({ open, target, onClose, onSaved }: Props
         >
           {saving ? t('dashboard.location.saving') : ''}
         </Typography>
-        {target?.kind === 'garden' && target.canRevert && (
+        {target?.kind === 'garden' && canRevert && (
           <Button onClick={() => run(() => revertToProfile(target))} disabled={saving}>
             {t('dashboard.location.revert')}
           </Button>
