@@ -194,7 +194,7 @@ describe('LocationDialog — the door to CHANGE or REMOVE a location (round 1, V
     // field and « Use » stay: one can re-locate during an outage.
     renderDialog({ kind: 'profile', unavailable: true });
 
-    expect(screen.getByText('Weather unavailable — the saved place could not be read.')).toBeInTheDocument();
+    expect(screen.getByText('Weather unavailable — the saved place could not be checked.')).toBeInTheDocument();
     expect(screen.queryByText('No place saved yet.')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
     expect(screen.getByLabelText('City')).toBeEnabled();

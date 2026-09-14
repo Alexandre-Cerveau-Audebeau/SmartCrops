@@ -594,7 +594,7 @@
       "currentNone": "Aucun lieu enregistré pour le moment.",
       "currentUnknown": "Un lieu par défaut est enregistré pour vos jardins.",
       "loading": "Chargement du lieu actuel…",
-      "weatherUnavailable": "Météo indisponible — le lieu enregistré n’a pas pu être lu.",
+      "weatherUnavailable": "Météo indisponible — impossible de vérifier le lieu enregistré.",
       "remove": "Retirer"
     }
   },

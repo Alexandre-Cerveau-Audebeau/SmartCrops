@@ -547,14 +547,14 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
     const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
     expect(
-      await within(panel).findByText('Weather unavailable — the saved place could not be read.')
+      await within(panel).findByText('Weather unavailable — the saved place could not be checked.')
     ).toBeInTheDocument();
     expect(within(panel).queryByText('No place saved yet.')).toBeNull();
 
     fireEvent.click(within(panel).getByRole('button', { name: 'Location…' }));
     const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
     expect(
-      within(dialog).getByText('Weather unavailable — the saved place could not be read.')
+      within(dialog).getByText('Weather unavailable — the saved place could not be checked.')
     ).toBeInTheDocument();
     expect(within(dialog).queryByText('No place saved yet.')).toBeNull();
     expect(within(dialog).queryByRole('button', { name: 'Remove' })).toBeNull();

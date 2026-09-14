@@ -76,7 +76,7 @@ describe('WeatherOptionsPanel', () => {
     // a default over a place it simply could not read. The door stays open.
     renderPanel({ unavailable: true });
 
-    expect(screen.getByText('Météo indisponible — le lieu enregistré n’a pas pu être lu.')).toBeInTheDocument();
+    expect(screen.getByText('Météo indisponible — impossible de vérifier le lieu enregistré.')).toBeInTheDocument();
     expect(screen.queryByText('Aucun lieu enregistré pour le moment.')).toBeNull();
     expect(screen.getByRole('button', { name: 'Localisation…' })).toBeEnabled();
   });

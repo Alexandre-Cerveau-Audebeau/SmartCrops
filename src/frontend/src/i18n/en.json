@@ -594,7 +594,7 @@
       "currentNone": "No place saved yet.",
       "currentUnknown": "A default place is saved for your gardens.",
       "loading": "Loading the current place…",
-      "weatherUnavailable": "Weather unavailable — the saved place could not be read.",
+      "weatherUnavailable": "Weather unavailable — the saved place could not be checked.",
       "remove": "Remove"
     }
   },
