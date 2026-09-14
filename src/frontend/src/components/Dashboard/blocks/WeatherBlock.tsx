@@ -406,7 +406,12 @@ export default function WeatherBlock({
               tabRefs.current[index] = node;
             }}
             aria-selected={selected}
-            aria-controls={`${tabId(location.key)}-panel`}
+            // Only the ACTIVE place has a panel in the DOM (the one
+            // `role="tabpanel"` below): pointing an unselected tab at an absent
+            // id is an unresolvable IDREF — axe `aria-valid-attr-value`
+            // (round 1, G4 — GitHub 4008082515). The ARIA tabs pattern allows
+            // omitting `aria-controls` when the panel is not rendered.
+            {...(selected ? { 'aria-controls': `${tabId(location.key)}-panel` } : {})}
             tabIndex={selected ? 0 : -1}
             onClick={() => setSelectedKey(location.key)}
             sx={{

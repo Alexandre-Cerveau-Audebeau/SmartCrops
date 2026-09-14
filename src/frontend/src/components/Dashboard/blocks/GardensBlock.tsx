@@ -1028,11 +1028,17 @@ export default function GardensBlock({
 
     if (!place.current) {
       // Located, but the provider had nothing to say: the place, and a dash
-      // where the temperature would be — never an invented figure.
+      // where the temperature would be — never an invented figure. The dash
+      // is for the eye; assistive technology hears « Sans météo » (round 1,
+      // G1 — GitHub 4008082465), the same words the other empty states of
+      // this column carry through `MissingDataMark`.
       return (
         <Box>
-          <Box component="span" sx={{ fontWeight: 700, color: 'text.disabled' }}>
+          <Box component="span" aria-hidden sx={{ fontWeight: 700, color: 'text.disabled' }}>
             —
+          </Box>
+          <Box component="span" sx={visuallyHidden}>
+            {t('dashboard.blocks.weather.cellUnavailable')}
           </Box>
           <Typography sx={subSx}>{place.name}</Typography>
         </Box>

@@ -409,6 +409,9 @@
         "tabGardens_one": "{{count, number}} garden",
         "tabGardens_other": "{{count, number}} gardens",
         "unknownChance": "Chance of rain unknown",
+        "chanceOfRainLabel": "{{value}} chance of rain",
+        "minLabel": "minimum {{value}} degrees",
+        "maxLabel": "maximum {{value}} degrees",
         "units": {
           "metric": "°C · km/h",
           "imperial": "°F · mph"

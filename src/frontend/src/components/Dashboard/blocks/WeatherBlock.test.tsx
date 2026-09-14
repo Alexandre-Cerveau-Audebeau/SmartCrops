@@ -266,12 +266,33 @@ describe('WeatherBlock — Large (A5 l. 296-319)', () => {
     });
 
     const rows = [...card.querySelectorAll('[data-weather-days] li')];
-    const rainy = within(rows[0] as HTMLElement).getByText('80%');
-    const dry = within(rows[1] as HTMLElement).getByText('50%');
+    // The COLOURED node is the Typography around the figure: its class carries the rule.
+    const rainy = within(rows[0] as HTMLElement).getByText('80%').parentElement!;
+    const dry = within(rows[1] as HTMLElement).getByText('50%').parentElement!;
     expect(rulesFor(rainy)).toContain('color:#4677AB');
     expect(rulesFor(dry)).not.toContain('color:#4677AB');
-    expect(widget.getByLabelText('Chance of rain unknown')).toHaveTextContent('—');
+    // The unknown chance: a dash for the eye, the sentence for the ear (E5 / E6
+    // — no `aria-label` on a generic span).
+    const unknown = within(rows[2] as HTMLElement);
+    expect(unknown.getByText('—')).toHaveAttribute('aria-hidden', 'true');
+    expect(unknown.getByText('Chance of rain unknown')).toBeInTheDocument();
+    expect(widget.queryByLabelText('Chance of rain unknown')).toBeNull();
     expect(rows[2]).not.toHaveTextContent('0%');
+  });
+
+  it('names every figure of a row for assistive technology: the chance, the minimum, the maximum (G5)', () => {
+    // GitHub 4008082523: a row read « Tue, Sunny, 80%, 9°, 17° » with nothing
+    // saying which degree was which. The visible figures are hidden from AT,
+    // the sentences sit off-screen — the accessible text comes from content.
+    const { card } = renderBlock({ size: 'large' });
+
+    const tuesday = within(card.querySelectorAll('[data-weather-days] li')[3] as HTMLElement);
+    expect(tuesday.getByText('80%')).toHaveAttribute('aria-hidden', 'true');
+    expect(tuesday.getByText('80% chance of rain')).toBeInTheDocument();
+    expect(tuesday.getByText('9°')).toHaveAttribute('aria-hidden', 'true');
+    expect(tuesday.getByText('minimum 9 degrees')).toBeInTheDocument();
+    expect(tuesday.getByText('17°')).toHaveAttribute('aria-hidden', 'true');
+    expect(tuesday.getByText('maximum 17 degrees')).toBeInTheDocument();
   });
 
   it('shows an official alert as a chip with its headline in the tooltip, dropping the derived twin', () => {
@@ -283,7 +304,13 @@ describe('WeatherBlock — Large (A5 l. 296-319)', () => {
       ),
     });
 
-    expect(widget.getByLabelText('Official alert: Vigilance orange vent violent')).toHaveTextContent('Vent violent');
+    // A NAMED GROUP that takes the focus, so the tooltip with the full headline
+    // opens from the keyboard too (G3 / E3 / E4).
+    const chip = widget.getByRole('group', { name: 'Official alert: Vigilance orange vent violent' });
+    expect(chip).toHaveTextContent('Vent violent');
+    expect(chip).toHaveAttribute('tabindex', '0');
+    chip.focus();
+    expect(document.activeElement).toBe(chip);
     expect(widget.queryByText(/Strong wind/)).toBeNull();
   });
 
@@ -295,6 +322,9 @@ describe('WeatherBlock — Large (A5 l. 296-319)', () => {
     expect(widget.getByText('84° / 61°')).toBeInTheDocument();
     expect(widget.getByText('Strong wind Tuesday · 34 mph')).toBeInTheDocument();
     expect(card.querySelector('[data-weather-units]')).toHaveTextContent('°F · mph');
+    // The spoken figures of the rows follow the same toggle (G5): Tuesday's 9 °C minimum.
+    const tuesday = card.querySelectorAll('[data-weather-days] li')[3] as HTMLElement;
+    expect(within(tuesday).getByText('minimum 48 degrees')).toBeInTheDocument();
   });
 });
 
@@ -310,6 +340,10 @@ describe('WeatherBlock — the place tabs (F.3)', () => {
     expect(tabs[0]).toHaveAttribute('tabindex', '0');
     expect(tabs[1]).toHaveAttribute('tabindex', '-1');
     expect(card).toHaveAttribute('aria-label', 'Lyon');
+    // ONE panel in the DOM, so only the selected tab points at it (G4): an
+    // unselected tab's `aria-controls` would be an IDREF to nothing.
+    expect(tabs[0]).toHaveAttribute('aria-controls', widget.getByRole('tabpanel').id);
+    expect(tabs[1]).not.toHaveAttribute('aria-controls');
 
     fireEvent.click(tabs[1]!);
 
@@ -318,6 +352,8 @@ describe('WeatherBlock — the place tabs (F.3)', () => {
     expect(card.querySelector('[data-weather-temperature]')).toHaveTextContent('21°');
     const panel = widget.getByRole('tabpanel');
     expect(panel).toHaveAttribute('aria-labelledby', tabs[1]!.id);
+    expect(tabs[1]).toHaveAttribute('aria-controls', panel.id);
+    expect(tabs[0]).not.toHaveAttribute('aria-controls');
   });
 
   it('moves with the arrow keys, Home and End, and carries the focus', () => {

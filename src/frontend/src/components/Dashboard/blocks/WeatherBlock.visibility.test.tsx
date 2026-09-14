@@ -76,8 +76,11 @@ function renderLarge(mode: 'light' | 'dark') {
   return { card, paper };
 }
 
-/** Every value Emotion declared for `property` on the node's own class, in order. */
+const hasEmotionClass = (node: Element) => [...node.classList].some((name) => name.startsWith('css-'));
+
+/** Every value Emotion declared for `property` on the node's own class, in order; none for a bare node. */
 function declared(node: Element, property: string): string[] {
+  if (!hasEmotionClass(node)) return [];
   const pattern = new RegExp(`(?:^|[{;])${property}:([^;}]+)`, 'g');
   return [...rulesFor(node).matchAll(pattern)].map((match) => match[1]!.trim());
 }
@@ -100,13 +103,16 @@ function effectiveBackground(node: Element, card: Element, paper: Rgb): Rgb {
   return background;
 }
 
-/** The text colour of a node as its class declares it, over its effective background. */
+/** The text colour a node INHERITS: the nearest declaration up the tree, over its effective background. */
 function textColor(node: Element, card: Element, paper: Rgb): Rgb {
-  const own = declared(node, 'color').at(-1);
-  if (!own) throw new Error(`No colour declared on <${node.tagName.toLowerCase()} class="${node.className}">`);
-  const resolved = resolveColor(own, effectiveBackground(node, card, paper));
-  if (!resolved) throw new Error(`Unreadable colour « ${own} »`);
-  return resolved;
+  for (let current: Element | null = node; current && current !== card.parentElement; current = current.parentElement) {
+    const own = declared(current, 'color').at(-1);
+    if (!own) continue;
+    const resolved = resolveColor(own, effectiveBackground(node, card, paper));
+    if (!resolved) throw new Error(`Unreadable colour « ${own} »`);
+    return resolved;
+  }
+  throw new Error(`No colour declared above <${node.tagName.toLowerCase()} class="${node.className}">`);
 }
 
 const AA = 4.5;
@@ -164,8 +170,11 @@ describe.each(['light', 'dark'] as const)('WeatherBlock — the five days are VI
     const { card, paper } = renderLarge(mode);
 
     for (const row of card.querySelectorAll('[data-weather-days] li')) {
-      const spans = [...row.querySelectorAll('span')].filter((span) => /°|\.$/.test(span.textContent ?? ''));
-      // The label (« Auj. », « Mar. »), the minimum and the maximum.
+      // The STYLED spans — the label (« Auj. », « Mar. »), the minimum and the
+      // maximum; the bare `aria-hidden` / off-screen spans inside them inherit.
+      const spans = [...row.querySelectorAll('span')].filter(
+        (span) => hasEmotionClass(span) && /°|\.$/.test(span.textContent ?? '')
+      );
       expect(spans.length).toBeGreaterThanOrEqual(3);
       for (const span of spans) {
         const ratio = contrast(textColor(span, card, paper), effectiveBackground(span, card, paper));

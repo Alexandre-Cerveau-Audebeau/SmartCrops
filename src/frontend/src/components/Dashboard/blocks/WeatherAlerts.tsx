@@ -109,11 +109,22 @@ export default function WeatherAlerts({ line, today, system, note }: Props) {
     >
       {line.official.map((alert, index) => (
         <Tooltip key={`${alert.headline}-${index}`} title={alert.headline}>
+          {/* A NAMED GROUP that takes the focus (round 1, G3 — GitHub
+              4008082507; Extension bbf99db9 / 698a63fa): the tooltip carries
+              the full headline the chip truncates, and MUI's Tooltip opens on
+              the focus of its child — so the child must be focusable, and a
+              generic `span` cannot carry an author name. `group`, not `img`:
+              the chip groups a glyph and a text, it is not a picture. */}
           <Box
             component="span"
             data-weather-alert="official"
+            role="group"
+            tabIndex={0}
             aria-label={t('dashboard.blocks.weather.officialAlert', { headline: alert.headline })}
-            sx={pillSx}
+            sx={{
+              ...pillSx,
+              '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+            }}
           >
             <WarningAmberOutlinedIcon aria-hidden sx={iconSx} />
             <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>

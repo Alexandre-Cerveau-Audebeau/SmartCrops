@@ -64,7 +64,7 @@ const TASK_ICONS: Record<TodoTaskKind, SvgIconComponent> = {
  * leurs arrosages ne sont pas planifiés — Ajouter une ville → », and « +N ».
  * Large groups by garden (« Terrasse · 3 »), with checkboxes held in React
  * state for the session ONLY — « Cases cochées pour cette session seulement —
- * non enregistré » — never in the browser's storage (§ 7: preferences live on
+ * non enregistrées » — never in the browser's storage (§ 7: preferences live on
  * the server; a tick is not a preference).
  *
  * « Tailler » and « Semer » are PR 4/5, in the same function: until then the

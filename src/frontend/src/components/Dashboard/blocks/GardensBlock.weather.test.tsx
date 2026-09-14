@@ -119,8 +119,12 @@ describe('GardensBlock — the MÉTÉO column (PR 3b/5)', () => {
     });
 
     expect(within(terrasse!).getByText('Lyon')).toBeInTheDocument();
-    expect(within(terrasse!).getByText('—')).toBeInTheDocument();
+    const dash = within(terrasse!).getByText('—');
+    expect(dash).toBeInTheDocument();
     expect(within(terrasse!).queryByText(/°/)).toBeNull();
+    // The dash is for the eye; the ear gets the column's own words (round 1, G1).
+    expect(dash).toHaveAttribute('aria-hidden', 'true');
+    expect(within(terrasse!).getByText('No weather')).toBeInTheDocument();
   });
 
   it('converts the cell to °F under the imperial system — the product’s one toggle', () => {

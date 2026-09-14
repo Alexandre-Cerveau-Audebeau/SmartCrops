@@ -5,6 +5,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
+import { visuallyHidden } from '@mui/utils';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import InviteState from '../InviteState';
 import LocationField from '../LocationField';
@@ -117,8 +118,12 @@ export default function WeatherInvite({ variant, missing, total, onSaved }: Prop
     </Box>
   );
 
+  // Off-screen through the product's ONE recipe, `visuallyHidden` (round 1,
+  // E7 — Extension a4a64059): `fontSize: 0 / height: 0 / overflow: hidden` was
+  // a local one, and the shared utility is the one known to keep the text in
+  // the accessibility tree.
   const status = (
-    <Typography role="status" aria-live="polite" sx={{ fontSize: 0, m: 0, height: 0, overflow: 'hidden' }}>
+    <Typography role="status" aria-live="polite" sx={visuallyHidden}>
       {saving ? t('dashboard.location.saving') : ''}
     </Typography>
   );

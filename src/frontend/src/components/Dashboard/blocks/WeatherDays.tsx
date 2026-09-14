@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import { visuallyHidden } from '@mui/utils';
 import WeatherBar from './WeatherBar';
 import WeatherGlyph from './WeatherGlyph';
 import { displayTemperature } from './weatherFormat';
@@ -20,6 +21,27 @@ interface Props {
 
 /** Above this chance of rain the probability is printed in the rain colour (`_spec.md` § 6 « bleue au-delà de 50 % »). */
 const RAINY_CHANCE = 50;
+
+/**
+ * A figure for the eye and a sentence for the ear (round 1, G5 — GitHub
+ * 4008082523; E5 / E6 — Extension 7779069d / 29ad2a6a). A row read « Tue,
+ * Sunny, 80%, 9°, 17° » with nothing saying which degree was the minimum, and
+ * the dash of an unknown chance carried an `aria-label` on a generic `span`,
+ * which the ARIA contract does not name. The visible text is hidden from
+ * assistive technology and the spoken one sits off-screen — `visuallyHidden`,
+ * the product's one recipe — so the accessible name comes from CONTENT, with
+ * no role to invent for a number.
+ */
+function Spoken({ visible, sentence }: { visible: string; sentence: string }) {
+  return (
+    <>
+      <span aria-hidden>{visible}</span>
+      <Box component="span" sx={visuallyHidden}>
+        {sentence}
+      </Box>
+    </>
+  );
+}
 
 /**
  * The five days of the Large card, `A5MeteoTailles.dc.html` l. 232-235 and
@@ -57,6 +79,9 @@ export default function WeatherDays({ days, today, system }: Props) {
     >
       {days.map((day) => {
         const rainy = day.chanceOfRain !== null && day.chanceOfRain > RAINY_CHANCE;
+        const chance = day.chanceOfRain === null ? null : formatPercent(day.chanceOfRain, i18n.language);
+        const min = displayTemperature(day.minTempC, system);
+        const max = displayTemperature(day.maxTempC, system);
         return (
           <Box
             component="li"
@@ -91,9 +116,6 @@ export default function WeatherDays({ days, today, system }: Props) {
             />
             <Typography
               component="span"
-              aria-label={
-                day.chanceOfRain === null ? t('dashboard.blocks.weather.unknownChance') : undefined
-              }
               sx={{
                 width: DASHBOARD_WEATHER.dayChanceWidth,
                 flexShrink: 0,
@@ -103,7 +125,14 @@ export default function WeatherDays({ days, today, system }: Props) {
                 color: rainy ? tk.rainText : 'text.secondary',
               }}
             >
-              {day.chanceOfRain === null ? '—' : formatPercent(day.chanceOfRain, i18n.language)}
+              {chance === null ? (
+                <Spoken visible="—" sentence={t('dashboard.blocks.weather.unknownChance')} />
+              ) : (
+                <Spoken
+                  visible={chance}
+                  sentence={t('dashboard.blocks.weather.chanceOfRainLabel', { value: chance })}
+                />
+              )}
             </Typography>
             <Typography
               component="span"
@@ -116,9 +145,10 @@ export default function WeatherDays({ days, today, system }: Props) {
                 color: 'text.secondary',
               }}
             >
-              {t('dashboard.blocks.weather.degrees', {
-                value: displayTemperature(day.minTempC, system),
-              })}
+              <Spoken
+                visible={t('dashboard.blocks.weather.degrees', { value: min })}
+                sentence={t('dashboard.blocks.weather.minLabel', { value: min })}
+              />
             </Typography>
             <WeatherBar day={day} scale={scale} />
             <Typography
@@ -132,9 +162,10 @@ export default function WeatherDays({ days, today, system }: Props) {
                 color: 'text.primary',
               }}
             >
-              {t('dashboard.blocks.weather.degrees', {
-                value: displayTemperature(day.maxTempC, system),
-              })}
+              <Spoken
+                visible={t('dashboard.blocks.weather.degrees', { value: max })}
+                sentence={t('dashboard.blocks.weather.maxLabel', { value: max })}
+              />
             </Typography>
           </Box>
         );
