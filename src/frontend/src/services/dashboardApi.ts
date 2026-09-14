@@ -17,6 +17,15 @@ import type { GardenConfig, LightSlot } from '../types/Garden';
 import type { PlacementData } from './gardenLayoutApi';
 import { DEFAULT_DASHBOARD_LEVEL, presetFor } from '../constants/dashboardPresets';
 import { fetchJson } from './fetchJson';
+import {
+  arrayOf,
+  isBoolean,
+  isNullableString,
+  isString,
+  isWholeNumber,
+  matches,
+  nullable,
+} from './wireChecks';
 
 const API_BASE = '/api';
 
@@ -152,91 +161,12 @@ export async function saveDashboardPreferences(
   });
 }
 
-/** A plain object — not null, not an array. */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/**
- * A predicate that NARROWS to `V` — a type guard, not a boolean (round 8 —
- * Extension #9-18). `(value: unknown) => boolean` says nothing about what a
- * passing value is, so a map of such checks can be exhaustive over the KEYS of
- * a type and still pair a field with the wrong test: `count: isString` was a
- * well-typed entry of `Record<keyof T, Check>`. With the guard in the type, an
- * entry for a field of type `T[K]` must be a `Check<T[K]>`, and that pairing
- * no longer compiles.
- */
-type Check<V = unknown> = (value: unknown) => value is V;
-
-/** The checks a record of `T` needs: one per field, each narrowing to THAT field's type. */
-type Checks<T> = { [K in keyof T]-?: Check<T[K]> };
-
-/**
- * A record validator keyed by `keyof T` (round 7, S39 — Extension #7-24), and
- * typed by `T[K]` (round 8 — Extension #9-18).
- *
- * The predicates below narrow to the wire types, and the compiler cannot tell
- * a hand-listed run of `typeof` checks from a complete one: a field added to
- * `DashboardGardenData` kept every file compiling while the new field travelled
- * unverified — the drift the doc comments of this file argue against. A map
- * typed `Checks<T>` is checked EXHAUSTIVELY by TypeScript: a field of `T` with
- * no entry is a build error, and so is an entry `T` has no field for — and so,
- * since round 8, is an entry whose check narrows to something other than the
- * field's own type. « Verified » and « narrowed » are the same list, by
- * construction, field by field.
- *
- * Fields are READ, never rebuilt: an unknown property a newer server adds
- * travels through untouched, as before.
- */
-export function matches<T>(checks: Checks<T>): Check<T> {
-  const entries = Object.entries(checks) as [string, Check][];
-  return (value): value is T =>
-    isRecord(value) && entries.every(([key, check]) => check(value[key]));
-}
-
-const isString: Check<string> = (value): value is string =>
-  typeof value === 'string';
-const isBoolean: Check<boolean> = (value): value is boolean =>
-  typeof value === 'boolean';
-const nullable =
-  <V>(item: Check<V>): Check<V | null> =>
-  (value): value is V | null =>
-    value === null || item(value);
-const arrayOf =
-  <V>(item: Check<V>): Check<V[]> =>
-  (value): value is V[] =>
-    Array.isArray(value) && value.every(item);
-
-/**
- * A whole, non-negative number — what every count and every grid coordinate or
- * dimension of the aggregate is.
- *
- * Grid numbers first (round 7, S43 — Extension #7-28). `typeof` let
- * `height: 2.5` through, and the readers disagree on what that means:
- * `parseCellsJson` builds three rows for it, `placementCoverage` builds two,
- * and `freeExposureFrom` then dereferences `taken[2]![c]` and throws — after
- * the load succeeded, where no error state is left to draw it. The same
- * arithmetic indexes the grid by every placement's four numbers, so they are
- * held to the same rule.
- *
- * Then the counts (round 8 — GitHub 3994206417): `placementCount`,
- * `varietyCount`, `occupiedCells`, a variety's `count` and `cells`, and the
- * four totals stayed at `typeof`, so `-1` and `1.5` walked through to the
- * count, occupancy and catalog displays — a « −1 plant » nothing on the server
- * can produce, drawn as if it could. A count is the same kind of number a grid
- * index is, and the same rule holds both.
- *
- * No finiteness check besides: JSON carries neither `NaN` nor `Infinity`, so
- * a guard against them would be untestable code standing for a value that
- * cannot arrive — and `Number.isInteger` refuses both anyway. Rejected HERE,
- * at the boundary, not normalised downstream: a value the server never sends
- * is a malformed aggregate, and the page already knows how to say so.
- */
-const isWholeNumber: Check<number> = (value): value is number =>
-  typeof value === 'number' && Number.isInteger(value) && value >= 0;
-
-/** `string | null`. */
-const isNullableString = nullable(isString);
+// The primitives — `matches`, `isString`, `isBoolean`, `nullable`, `arrayOf`,
+// `isWholeNumber`, `isNullableString` — MOVED to `wireChecks.ts` (SMA-336 PR
+// 3b/5): the weather aggregate reads its body through the same bricks, and one
+// owner beats two copies. The record validators below are unchanged; `matches`
+// is re-exported so the callers of this module keep their import site.
+export { matches };
 
 /**
  * One indoor light slot: two `HH:mm` strings, and nothing weaker.
