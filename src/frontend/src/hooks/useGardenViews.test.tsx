@@ -4,6 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
+// SMA-336 PR 3b/5 — GardensBlock reads the unit system for its MÉTÉO column.
+import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import GardensBlock from '../components/Dashboard/blocks/GardensBlock';
 import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
 import type { DashboardGardenData } from '../types/DashboardData';
@@ -68,6 +70,7 @@ function renderBoth(gardens: DashboardGardenData[]) {
   return render(
     <ThemeProvider theme={createTheme()}>
       <LanguageProvider>
+        <UnitSystemProvider>
         <MemoryRouter>
           <GardensBlock
             size="large"
@@ -87,6 +90,7 @@ function renderBoth(gardens: DashboardGardenData[]) {
             onRetry={() => {}}
           />
         </MemoryRouter>
+        </UnitSystemProvider>
       </LanguageProvider>
     </ThemeProvider>
   );

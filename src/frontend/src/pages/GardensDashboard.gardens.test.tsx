@@ -13,6 +13,8 @@ import { createAppTheme } from '../theme';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import { UnitSystemProvider } from '../contexts/UnitSystemContext';
+import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
 import { useLanguage } from '../hooks/useLanguage';
 import { presetFor } from '../constants/dashboardPresets';
 import {
@@ -37,6 +39,22 @@ vi.mock('../services/dashboardApi', () => ({
   saveDashboardPreferences: vi.fn(),
   fetchDashboardData: vi.fn(),
 }));
+
+// SMA-336 PR 3b/5 — the Weather widget reads its own aggregate and the
+// profile city; both mocked whole, never a real provider call.
+vi.mock('../services/weatherApi', () => ({
+  fetchDashboardWeather: vi.fn(),
+  searchLocations: vi.fn(),
+  saveGardenLocation: vi.fn(),
+  clearGardenLocation: vi.fn(),
+  saveProfileLocation: vi.fn(),
+  clearProfileLocation: vi.fn(),
+}));
+
+vi.mock('../services/profileApi', () => ({ fetchProfile: vi.fn() }));
+
+import { fetchDashboardWeather } from '../services/weatherApi';
+import { fetchProfile } from '../services/profileApi';
 
 import GardensDashboard from './GardensDashboard';
 import {
@@ -89,6 +107,15 @@ const gardensWidget = () =>
   document.querySelector('[data-widget="gardens"]') as HTMLElement;
 
 beforeEach(() => {
+  vi.mocked(fetchDashboardWeather).mockResolvedValue(EMPTY_WEATHER_DATA);
+  vi.mocked(fetchProfile).mockResolvedValue({
+    email: 'a@example.test',
+    displayName: null,
+    firstName: null,
+    lastName: null,
+    city: null,
+    hasPassword: true,
+  });
   // Gardener preset: Gardens in Large, i.e. the full card list.
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
@@ -105,9 +132,11 @@ afterEach(() => vi.clearAllMocks());
 function renderPage() {
   return render(
     <LanguageProvider>
-      <MemoryRouter>
-        <GardensDashboard />
-      </MemoryRouter>
+      <UnitSystemProvider>
+        <MemoryRouter>
+          <GardensDashboard />
+        </MemoryRouter>
+      </UnitSystemProvider>
     </LanguageProvider>
   );
 }
@@ -201,12 +230,12 @@ describe('Gardens widget cards (SMA-6 / SMA-155, moved by SMA-336)', () => {
     );
 
     render(
-      <LanguageProvider>
+      <LanguageProvider><UnitSystemProvider>
         <SwitchToFrench />
         <MemoryRouter>
           <GardensDashboard />
         </MemoryRouter>
-      </LanguageProvider>
+      </UnitSystemProvider></LanguageProvider>
     );
 
     // Load #1 (EN) is in flight; the switch starts load #2 (FR).
@@ -339,7 +368,7 @@ describe('Gardens widget delete flow (SMA-18 lot 1, moved by SMA-336)', () => {
       );
     }
     render(
-      <LanguageProvider>
+      <LanguageProvider><UnitSystemProvider>
         <MemoryRouter
           initialEntries={[
             {
@@ -355,7 +384,7 @@ describe('Gardens widget delete flow (SMA-18 lot 1, moved by SMA-336)', () => {
             <Route path="/gardens" element={<GardensDashboard />} />
           </Routes>
         </MemoryRouter>
-      </LanguageProvider>
+      </UnitSystemProvider></LanguageProvider>
     );
 
     expect(await screen.findByText('Garden deleted')).toBeInTheDocument();
@@ -1050,11 +1079,11 @@ async function renderIn(level: 'novice' | 'gardener' | 'expert', mode: 'light' |
   });
   render(
     <ThemeProvider theme={createAppTheme(mode)}>
-      <LanguageProvider>
+      <LanguageProvider><UnitSystemProvider>
         <MemoryRouter>
           <GardensDashboard />
         </MemoryRouter>
-      </LanguageProvider>
+      </UnitSystemProvider></LanguageProvider>
     </ThemeProvider>
   );
   await screen.findAllByText('Casa Lolo');
@@ -1394,11 +1423,11 @@ describe('Gardens table — the actions column is frozen to the right (V8)', () 
       // this product's.
       render(
         <ThemeProvider theme={createAppTheme(mode as 'light' | 'dark')}>
-          <LanguageProvider>
+          <LanguageProvider><UnitSystemProvider>
             <MemoryRouter>
               <GardensDashboard />
             </MemoryRouter>
-          </LanguageProvider>
+          </UnitSystemProvider></LanguageProvider>
         </ThemeProvider>
       );
       await screen.findByText('Casa Lolo');
@@ -1756,7 +1785,7 @@ describe('Gardens rows — the chevron opens the garden (V15)', () => {
       return <div>at:{location.pathname}</div>;
     }
     return render(
-      <LanguageProvider>
+      <LanguageProvider><UnitSystemProvider>
         <MemoryRouter initialEntries={['/gardens']}>
           <Probe />
           <Routes>
@@ -1767,7 +1796,7 @@ describe('Gardens rows — the chevron opens the garden (V15)', () => {
             />
           </Routes>
         </MemoryRouter>
-      </LanguageProvider>
+      </UnitSystemProvider></LanguageProvider>
     );
   }
 

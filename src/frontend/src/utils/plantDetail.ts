@@ -123,6 +123,8 @@ export function formatHardinessZone(
 export const cmToInches = (cm: number): number => cm / 2.54;
 export const inchesToCm = (inch: number): number => inch * 2.54;
 export const celsiusToFahrenheit = (c: number): number => (c * 9) / 5 + 32;
+/** SMA-336 PR 3b/5 — wind speeds of the weather widget; 1 mile = 1.609344 km exactly. */
+export const kmhToMph = (kmh: number): number => kmh / 1.609344;
 
 /**
  * Assemble a min/max range with a trailing unit in the shared display

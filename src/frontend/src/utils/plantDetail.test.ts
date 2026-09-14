@@ -10,6 +10,7 @@ import {
   hasAnyXData,
   hasSpacing,
   inchesToCm,
+  kmhToMph,
   parseStringArrayJson,
   toCamelKey,
 } from './plantDetail';
@@ -162,6 +163,13 @@ describe('unit conversions (SMA-178)', () => {
     expect(celsiusToFahrenheit(0)).toBe(32);
     expect(celsiusToFahrenheit(100)).toBe(212);
     expect(celsiusToFahrenheit(18)).toBeCloseTo(64.4);
+  });
+
+  it('converts km/h→mph on the exact mile (SMA-336 PR 3b/5, the weather widget’s wind)', () => {
+    expect(kmhToMph(1.609344)).toBeCloseTo(1);
+    expect(kmhToMph(0)).toBe(0);
+    // The artboard's « Vent fort jeudi · 55 km/h » reads « 34 mph » once rounded.
+    expect(kmhToMph(55)).toBeCloseTo(34.175, 2);
   });
 });
 

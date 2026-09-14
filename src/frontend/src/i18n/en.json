@@ -384,7 +384,58 @@
     "blocks": {
       "weather": {
         "title": "Weather",
-        "invite": "The weather needs to know where your gardens are."
+        "invite": "The weather needs to know where your gardens are.",
+        "inviteNote": "One city is enough for all your gardens; you will be able to set one per garden in Settings.",
+        "addCity": "Add a city",
+        "useProfileCity": "Use my profile city",
+        "located": "{{located}}/{{total}} located",
+        "locatedAction": "{{located}}/{{total}} located — add a city",
+        "partialTitle_one": "{{gardens}} has no location.",
+        "partialTitle_other": "{{gardens}} have no location.",
+        "partialNote": "One city is enough for your {{count, number}} gardens.",
+        "others_one": "{{count, number}} other",
+        "others_other": "{{count, number}} others",
+        "noGardens": "Create a garden to see the weather where it is.",
+        "unavailable": "Weather temporarily unavailable.",
+        "loadError": "Couldn’t load the weather.",
+        "stale": "Last known weather · {{when}}",
+        "today": "Today",
+        "todayLine": "Today",
+        "todayLong": "today",
+        "degrees": "{{value}}°",
+        "minMax": "{{max}} / {{min}}",
+        "places": "Places",
+        "tab": "{{place}} · {{gardens}}",
+        "tabGardens_one": "{{count, number}} garden",
+        "tabGardens_other": "{{count, number}} gardens",
+        "unknownChance": "Chance of rain unknown",
+        "units": {
+          "metric": "°C · km/h",
+          "imperial": "°F · mph"
+        },
+        "wind": {
+          "metric": "{{value}} km/h",
+          "imperial": "{{value}} mph"
+        },
+        "rainMm": "{{value}} mm",
+        "sentence": {
+          "frostTonight": "Frost possible tonight — protect the tender plants.",
+          "rainToday": "Rain expected — no need to water.",
+          "waterEvening": "No rain expected — water in the evening.",
+          "waterAsNeeded": "No rain expected — water as needed."
+        },
+        "chips": {
+          "frost": "Frost {{day}} · {{value}}",
+          "frostRisk": "Frost risk {{day}} · {{value}}",
+          "heat": "High heat {{day}} · {{value}}",
+          "wind": "Strong wind {{day}} · {{value}}",
+          "rain": "Heavy rain {{day}} · {{value}}"
+        },
+        "officialAlert": "Official alert: {{headline}}",
+        "cellUnavailable": "No weather",
+        "cellNotLocated": "Not located",
+        "cellAdd": "Add",
+        "cellAddNamed": "Add a city for {{name}}"
       },
       "gardens": {
         "title": "Gardens",
@@ -485,6 +536,22 @@
         "afternoon": "Afternoon",
         "shade": "Shade"
       }
+    },
+    "location": {
+      "titleGarden": "Locate {{name}}",
+      "titleProfile": "Locate my gardens",
+      "field": "City or postal code",
+      "minChars_one": "Type at least {{count, number}} character",
+      "minChars_other": "Type at least {{count, number}} characters",
+      "searching": "Searching…",
+      "noResults": "No place found for “{{query}}”",
+      "unavailable": "Search temporarily unavailable",
+      "use": "Use",
+      "cancel": "Cancel",
+      "revert": "Back to the profile city",
+      "saving": "Saving…",
+      "saveError": "Couldn’t save this place. Try again.",
+      "selected": "Selected place: {{place}}"
     }
   },
   "common": {

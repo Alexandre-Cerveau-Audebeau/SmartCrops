@@ -384,7 +384,58 @@
     "blocks": {
       "weather": {
         "title": "Météo",
-        "invite": "La météo a besoin de savoir où se trouvent vos jardins."
+        "invite": "La météo a besoin de savoir où se trouvent vos jardins.",
+        "inviteNote": "Une seule ville suffit pour tous vos jardins ; vous pourrez en préciser une par jardin dans Réglages.",
+        "addCity": "Ajouter une ville",
+        "useProfileCity": "Utiliser la ville de mon profil",
+        "located": "{{located}}/{{total}} localisé",
+        "locatedAction": "{{located}}/{{total}} localisé — ajouter une ville",
+        "partialTitle_one": "{{gardens}} n’a pas de localisation.",
+        "partialTitle_other": "{{gardens}} n’ont pas de localisation.",
+        "partialNote": "Une seule ville suffit pour vos {{count, number}} jardins.",
+        "others_one": "{{count, number}} autre",
+        "others_other": "{{count, number}} autres",
+        "noGardens": "Créez un jardin pour voir la météo de son emplacement.",
+        "unavailable": "Météo momentanément indisponible.",
+        "loadError": "Impossible de charger la météo.",
+        "stale": "Dernière météo connue · {{when}}",
+        "today": "Auj.",
+        "todayLine": "Aujourd’hui",
+        "todayLong": "aujourd’hui",
+        "degrees": "{{value}}°",
+        "minMax": "{{max}} / {{min}}",
+        "places": "Lieux",
+        "tab": "{{place}} · {{gardens}}",
+        "tabGardens_one": "{{count, number}} jardin",
+        "tabGardens_other": "{{count, number}} jardins",
+        "unknownChance": "Probabilité de pluie inconnue",
+        "units": {
+          "metric": "°C · km/h",
+          "imperial": "°F · mph"
+        },
+        "wind": {
+          "metric": "{{value}} km/h",
+          "imperial": "{{value}} mph"
+        },
+        "rainMm": "{{value}} mm",
+        "sentence": {
+          "frostTonight": "Gel possible cette nuit — protégez les plants sensibles.",
+          "rainToday": "Pluie prévue — inutile d’arroser.",
+          "waterEvening": "Pas de pluie prévue — arrosez en soirée.",
+          "waterAsNeeded": "Pas de pluie prévue — arrosez selon les besoins."
+        },
+        "chips": {
+          "frost": "Gel {{day}} · {{value}}",
+          "frostRisk": "Risque de gel {{day}} · {{value}}",
+          "heat": "Forte chaleur {{day}} · {{value}}",
+          "wind": "Vent fort {{day}} · {{value}}",
+          "rain": "Pluie forte {{day}} · {{value}}"
+        },
+        "officialAlert": "Alerte officielle : {{headline}}",
+        "cellUnavailable": "Sans météo",
+        "cellNotLocated": "Non localisé",
+        "cellAdd": "Ajouter",
+        "cellAddNamed": "Ajouter une ville pour {{name}}"
       },
       "gardens": {
         "title": "Jardins",
@@ -485,6 +536,22 @@
         "afternoon": "Après-midi",
         "shade": "Ombre"
       }
+    },
+    "location": {
+      "titleGarden": "Localiser {{name}}",
+      "titleProfile": "Localiser mes jardins",
+      "field": "Ville ou code postal",
+      "minChars_one": "Saisissez au moins {{count, number}} caractère",
+      "minChars_other": "Saisissez au moins {{count, number}} caractères",
+      "searching": "Recherche…",
+      "noResults": "Aucun lieu trouvé pour « {{query}} »",
+      "unavailable": "Recherche momentanément indisponible",
+      "use": "Utiliser",
+      "cancel": "Annuler",
+      "revert": "Revenir à la ville du profil",
+      "saving": "Enregistrement…",
+      "saveError": "Impossible d’enregistrer ce lieu. Réessayez.",
+      "selected": "Lieu choisi : {{place}}"
     }
   },
   "common": {

@@ -84,6 +84,41 @@ export interface DashboardTokens {
    * artboards draw `#B4C1B4` and `#2C3F63`, and at night the two are not close.
    */
   chipBorder: string;
+  /**
+   * The weather widget's palette (SMA-336 PR 3b/5, pre-flight § F.1) —
+   * `A5MeteoTailles.dc.html` helmet, verbatim, day l. 51-52 / night l. 82-83:
+   * `--sun` colours the sunny glyphs, `--cloud` the cloudy ones, `--rain` the
+   * rainy ones and the probability of rain above 50 %.
+   */
+  sun: string;
+  cloud: string;
+  rain: string;
+  /**
+   * `--rain` as TEXT (the « 80 % » of a day row, 14 px / 700). NOT the
+   * artboards' `#4A7FB5` by day (same rule as `ornText`, round 7 S40): on the
+   * white card it measures 4,20:1, under the 4,5:1 floor WCAG AA sets for 14 px
+   * text, and § 7 of the design contract makes « contraste conforme » an
+   * invariant. One step darker on the same hue: 4,68:1. The glyphs and the
+   * bars keep `rain` itself — graphics need 3:1, which `#4A7FB5` clears. The
+   * night value (8,28:1 over the card) needed nothing.
+   */
+  rainText: string;
+  /** The two ends of the min–max bar's gradient (`--temp-cold` → `--temp-warm`, l. 51 / 82). */
+  tempCold: string;
+  tempWarm: string;
+  /**
+   * The `.pill.warn` alert chip (l. 34 / 66): fill, text, glyph and 1 px
+   * border — and the `.pill.wx` weather cell of the Gardens table, which draws
+   * the same fill and text (l. 151).
+   */
+  warnBg: string;
+  warnText: string;
+  warnIcon: string;
+  warnBorder: string;
+  /** `--track` (l. 30 / 62): the mask over the gradient outside a day's min–max, and every bar's empty track. */
+  track: string;
+  /** `--tint` (l. 30 / 62): the fill of the ACTIVE place tab (`.wx-tab.on`). */
+  tint: string;
 }
 
 const LIGHT: DashboardTokens = {
@@ -109,6 +144,18 @@ const LIGHT: DashboardTokens = {
   avatarFill: '#DCE9DF',
   dotRing: 'rgba(0,0,0,0.12)',
   chipBorder: '#B4C1B4',
+  sun: '#E8890C',
+  cloud: '#6E7F8E',
+  rain: '#4A7FB5',
+  rainText: '#4677AB',
+  tempCold: '#6E9CC4',
+  tempWarm: '#E8890C',
+  warnBg: '#FFF4D6',
+  warnText: '#8A6A14',
+  warnIcon: '#E8890C',
+  warnBorder: '#EFD27E',
+  track: '#E9EFE7',
+  tint: '#EAF5EE',
 };
 
 const DARK: DashboardTokens = {
@@ -128,6 +175,18 @@ const DARK: DashboardTokens = {
   avatarFill: '#24395F',
   dotRing: 'rgba(255,255,255,0.18)',
   chipBorder: '#2C3F63',
+  sun: '#FFCB54',
+  cloud: '#9FB0C2',
+  rain: '#90CAF9',
+  rainText: '#90CAF9',
+  tempCold: '#7FB0DC',
+  tempWarm: '#FFCB54',
+  warnBg: 'rgba(255,203,84,0.13)',
+  warnText: '#FFD98A',
+  warnIcon: '#FFCB54',
+  warnBorder: 'rgba(255,203,84,0.55)',
+  track: '#31456B',
+  tint: 'rgba(79,179,124,0.16)',
 };
 
 export function getDashboardTokens(mode: DashboardThemeMode): DashboardTokens {
@@ -180,6 +239,75 @@ export const DASHBOARD_TYPE = {
   bigSmall: 28,
   /** Garden name on a Gardens card. */
   gardenName: 15,
+} as const;
+
+/**
+ * T4 — the weather widget's measures (SMA-336 PR 3b/5), in px, transcribed
+ * VERBATIM from the CSS of `A5MeteoTailles.dc.html` (l. 221-237) and
+ * `_spec.md` § 6 / § 10.26 / § 10.30. The widget is the one card without a
+ * title row — « le lieu tient lieu de titre, dans tous ses états »
+ * (`_spec.md:108`) — so its own scale lives beside the shared one.
+ */
+export const DASHBOARD_WEATHER = {
+  /** `.wx-place`: 14 px / 700, a 17 px pin, gap 7. */
+  place: 14,
+  placeIcon: 17,
+  placeGap: 7,
+  /** `.wx-temp`: 56 px / 800, letter-spacing −0.03em, tabular; `.wx-temp.s` 44 px on the Small card. */
+  temperature: 56,
+  temperatureSmall: 44,
+  /** The hero glyph beside the temperature: 44 px on Medium and Large, 36 on Small. */
+  heroIcon: 44,
+  heroIconSmall: 36,
+  /** `.wx-cond`: 16 px / 600 — the three sizes alike (`_spec.md` § 10.28). */
+  condition: 16,
+  /** `.wx-mm`: 15 px, « 29° / 16° ». */
+  minMax: 15,
+  /** The left column of the Medium and Large heads: 160 px; 200 with the « 1/3 localisé » chip (A4). */
+  heroColumn: 160,
+  heroColumnWithChip: 200,
+  /** The Large head is 136 px FIXED: 17 + 12 + 56 + 12 + 39 (`_spec.md` § 10.26). */
+  largeHead: 136,
+  /** `.wx-h`: six columns, each 92–124 px high and centred (§ 10.30); hour 13 / 700, glyph 28, temperature 16 / 800. */
+  hourMinHeight: 92,
+  hourMaxHeight: 124,
+  hourLabel: 13,
+  hourIcon: 28,
+  hourTemperature: 16,
+  hourGap: 6,
+  /** `.gard`: the gardener's band — radius 12, padding 11 / 16, 16 px / 600, a 20 px glyph, gap 10. */
+  bandRadius: 12,
+  bandPaddingY: 11,
+  bandPaddingX: 16,
+  bandText: 16,
+  bandIcon: 20,
+  bandGap: 10,
+  /** `.wx-day`: rows ≥ 44 px, gap 12; day 44 px wide / 15 / 700; glyph 24; probability 42 px / 14 / 700; min 34 px / 15; bar 8 px. */
+  dayRow: 44,
+  dayGap: 12,
+  dayLabelWidth: 44,
+  dayLabel: 15,
+  dayIcon: 24,
+  dayChanceWidth: 42,
+  dayChance: 14,
+  dayTempWidth: 34,
+  dayTemp: 15,
+  bar: 8,
+  /** `.wx-tab`: 28 px high, padding 0 13, radius 15, 14 px / 700. */
+  tab: 28,
+  tabPaddingX: 13,
+  tabRadius: 15,
+  tabText: 14,
+  tabGap: 6,
+  /** `.pill.warn`: 28 px high, 14 px / 700, a 16 px glyph; the line wraps with a 10 px gap. */
+  alertChip: 28,
+  alertChipText: 14,
+  alertChipIcon: 16,
+  alertGap: 10,
+  /** `.pill.wx` of the Gardens table: a 14 px glyph before the temperature. */
+  cellIcon: 14,
+  /** `.dv`: the 1 px divider between the band and the five days. */
+  divider: 1,
 } as const;
 
 /** T2 — air (`_spec.md` § 3). */

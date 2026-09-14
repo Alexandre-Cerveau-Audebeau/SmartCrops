@@ -24,11 +24,17 @@ import DashboardGrid from '../components/Dashboard/DashboardGrid';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import CountersOptionsPanel from '../components/Dashboard/blocks/CountersOptionsPanel';
 import { resolveCountersFigures } from '../components/Dashboard/blocks/countersOptions';
-import GardensBlock from '../components/Dashboard/blocks/GardensBlock';
+import GardensBlock, {
+  type GardensWeather,
+} from '../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
+import WeatherBlock from '../components/Dashboard/blocks/WeatherBlock';
+import LocationDialog from '../components/Dashboard/LocationDialog';
+import type { LocationTarget } from '../components/Dashboard/locationTools';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
+import { useDashboardWeather } from '../hooks/useDashboardWeather';
 import { useGardenViews } from '../hooks/useGardenViews';
 import { useLanguage } from '../hooks/useLanguage';
 import { useDashboardTokens } from '../theme/useDashboardTokens';
@@ -55,9 +61,11 @@ type GardensNavState = { toast?: 'gardenDeleted' } | null;
  * reorderable grid, three experience levels, and preferences persisted
  * SERVER-side. It replaces `MyGardens` on `/gardens`.
  *
- * Only the Gardens widget carries data in this lot (orchestrator decision R1):
- * it is the product's one route into the planner, so it ships fed rather than
- * as an invitation. The seven others are shells that say so.
+ * Only the Gardens widget carried data in PR 1/5 (orchestrator decision R1):
+ * it is the product's one route into the planner, so it shipped fed rather
+ * than as an invitation. PR 2/5 fed Counters and Statistics from the transport
+ * aggregate; PR 3b/5 feeds Weather from the weather aggregate. The others are
+ * shells that say so.
  *
  * No preference is written to `localStorage`: the layout follows the account,
  * not the browser (design freeze).
@@ -100,6 +108,61 @@ export default function GardensDashboard() {
     refetch,
   } = useDashboardData(language);
   const gardens = dashboardData.gardens;
+
+  // SMA-336 PR 3b/5: the weather of every place the gardens sit in, in ONE
+  // call, read by three surfaces — the Weather widget, the MÉTÉO column of the
+  // Gardens table and (PR 3b/5 step 8) the To-do block. Its OWN hook and its
+  // own failure: a provider outage must never empty the gardens (§ D.1).
+  const {
+    data: weatherData,
+    loading: weatherLoading,
+    refreshing: weatherRefreshing,
+    loadError: weatherError,
+    refetch: refetchWeather,
+  } = useDashboardWeather(language);
+
+  // The ONE location dialog of the page (§ F.4), opened from the widget, the
+  // « 1/3 localisé » chip or a table cell. The target outlives the open flag,
+  // the DeleteGardenDialog idiom: the fading dialog keeps its title.
+  const [locateTarget, setLocateTarget] = useState<LocationTarget | null>(null);
+  const [locateOpen, setLocateOpen] = useState(false);
+
+  /** Opens the dialog on a garden's override, or on the profile default when `gardenId` is null. */
+  const openLocate = (gardenId: string | null) => {
+    if (gardenId === null) {
+      setLocateTarget({ kind: 'profile' });
+    } else {
+      const link = weatherData.gardens.find((entry) => entry.gardenId === gardenId);
+      setLocateTarget({
+        kind: 'garden',
+        gardenId,
+        gardenName: gardens.find((garden) => garden.id === gardenId)?.name ?? '',
+        // « Revenir à la ville du profil » only when there is a profile city to
+        // return to AND an override to drop.
+        canRevert: link?.source === 'garden' && weatherData.profileLocated,
+      });
+    }
+    setLocateOpen(true);
+  };
+
+  // What the Gardens table reads for its MÉTÉO column: the place each garden
+  // reads, null when it is not located — resolved from the SAME aggregate the
+  // widget draws, so the cell and the card cannot disagree.
+  const gardensWeather: GardensWeather = weatherLoading
+    ? { status: 'loading' }
+    : weatherError
+      ? { status: 'error' }
+      : {
+          status: 'ready',
+          byGarden: new Map(
+            weatherData.gardens.map((link) => [
+              link.gardenId,
+              link.locationKey
+                ? (weatherData.locations.find((place) => place.key === link.locationKey) ?? null)
+                : null,
+            ])
+          ),
+        };
 
   // The page's own share of the derivation the widgets read — see the meta line
   // below. Shared through `gardenViewOf`'s memo, so the header does not make the
@@ -199,6 +262,21 @@ export default function GardensDashboard() {
 
   const renderBlock = (block: DashboardBlock) => {
     switch (block.key) {
+      case 'weather':
+        return (
+          <WeatherBlock
+            size={block.size}
+            editing={editing}
+            weather={weatherData}
+            gardens={gardens}
+            loading={weatherLoading}
+            refreshing={weatherRefreshing}
+            loadError={weatherError}
+            onRetry={refetchWeather}
+            onLocate={openLocate}
+            onLocated={refetchWeather}
+          />
+        );
       case 'gardens':
         return (
           <GardensBlock
@@ -210,6 +288,8 @@ export default function GardensDashboard() {
             loadError={gardensError}
             showWeatherColumn={isBlockVisible('weather')}
             showHarvestColumn={isBlockVisible('harvest')}
+            weather={gardensWeather}
+            onLocate={openLocate}
             onCreateClick={() => setCreateDialogOpen(true)}
             onChanged={refetch}
             onDeleted={handleDeleted}
@@ -621,6 +701,19 @@ export default function GardensDashboard() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* The shared location dialog (PR 3b/5): a 204 re-fetches the weather
+          aggregate, which re-draws the widget, the MÉTÉO column and the tasks
+          from one response. */}
+      <LocationDialog
+        open={locateOpen}
+        target={locateTarget}
+        onClose={() => setLocateOpen(false)}
+        onSaved={() => {
+          setLocateOpen(false);
+          refetchWeather();
+        }}
+      />
 
       {/* Deletion feedback - from the Gardens widget's own dialog or from the
           planner (router state). Same Snackbar/Alert idiom as the planner. */}

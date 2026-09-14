@@ -5,11 +5,13 @@ import { createAppTheme } from '../theme';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { presetFor } from '../constants/dashboardPresets';
 import {
   dashboardFixture as dashboardWith,
   gardenFixture,
 } from '../test/fixtures/dashboard';
+import { linkFixture, weatherFixture } from '../test/fixtures/weather';
 import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
 import {
   DASHBOARD_BLOCK_KEYS,
@@ -35,12 +37,27 @@ vi.mock('../services/dashboardApi', () => ({
   fetchDashboardData: vi.fn(),
 }));
 
+// SMA-336 PR 3b/5 — the weather aggregate and the profile city the Weather
+// widget reads. NEVER a real provider call: the service is mocked whole.
+vi.mock('../services/weatherApi', () => ({
+  fetchDashboardWeather: vi.fn(),
+  searchLocations: vi.fn(),
+  saveGardenLocation: vi.fn(),
+  clearGardenLocation: vi.fn(),
+  saveProfileLocation: vi.fn(),
+  clearProfileLocation: vi.fn(),
+}));
+
+vi.mock('../services/profileApi', () => ({ fetchProfile: vi.fn() }));
+
 import GardensDashboard from './GardensDashboard';
 import {
   fetchDashboardData,
   fetchDashboardPreferences,
   saveDashboardPreferences,
 } from '../services/dashboardApi';
+import { fetchDashboardWeather } from '../services/weatherApi';
+import { fetchProfile } from '../services/profileApi';
 
 /**
  * SMA-336 PR 2/5 — the page reads the transport aggregate now, so the fixture
@@ -83,9 +100,11 @@ const renderedKeys = () =>
 function renderPage() {
   return render(
     <LanguageProvider>
-      <MemoryRouter>
-        <GardensDashboard />
-      </MemoryRouter>
+      <UnitSystemProvider>
+        <MemoryRouter>
+          <GardensDashboard />
+        </MemoryRouter>
+      </UnitSystemProvider>
     </LanguageProvider>
   );
 }
@@ -94,6 +113,19 @@ beforeEach(() => {
   localStorage.setItem('smartcrops-language', 'en');
   vi.mocked(fetchDashboardData).mockResolvedValue(dashboardWith([garden('g1', 'Casa Lolo')]));
   vi.mocked(saveDashboardPreferences).mockResolvedValue(undefined);
+  // One garden, not located, no profile default: the Weather widget opens on
+  // its invitation, which is what these page tests look at.
+  vi.mocked(fetchDashboardWeather).mockResolvedValue(
+    weatherFixture([], [linkFixture({ gardenId: 'g1', locationKey: null, source: null })])
+  );
+  vi.mocked(fetchProfile).mockResolvedValue({
+    email: 'a@example.test',
+    displayName: null,
+    firstName: null,
+    lastName: null,
+    city: null,
+    hasPassword: true,
+  });
   servePreferences('gardener');
 });
 
@@ -414,7 +446,8 @@ describe('GardensDashboard — page states (SMA-336)', () => {
 
 describe('GardensDashboard — the widget shells still waiting for data (SMA-336)', () => {
   const INVITATIONS_EN: Array<[string, string]> = [
-    ['Weather', 'The weather needs to know where your gardens are.'],
+    // Weather LEFT this list in PR 3b/5: it carries the weather aggregate now,
+    // and its invitation has a field behind it — see the two tests below.
     ['Tips', 'Tips arrive with the exposure and the calendar of your gardens.'],
     [
       'This month',
@@ -451,18 +484,37 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
     renderPage();
 
     await waitFor(() => expect(renderedKeys()).toHaveLength(8));
-    // Five shells: Gardens, Counts by variety and Statistics carry data.
-    expect(screen.getAllByText('Coming soon')).toHaveLength(5);
+    // Four shells: Gardens, Counts by variety, Statistics and — since PR 3b/5 —
+    // Weather carry data.
+    expect(screen.getAllByText('Coming soon')).toHaveLength(4);
   });
 
-  it('the Weather widget offers NO city field in this lot (decision R4)', async () => {
+  it('the Weather widget offers the city field and « Use » in its invitation (PR 3b/5, decision R4 lifted)', async () => {
+    // R4 held while no endpoint stood behind the field; the geocoding and
+    // location endpoints of PR 3a/5 do now, so the frozen design's field is
+    // drawn — disabled « Use » until a place is picked from the list.
     servePreferences('expert');
 
     renderPage();
 
     await screen.findByText('The weather needs to know where your gardens are.');
-    expect(screen.queryByLabelText(/City or postal code/i)).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Use' })).toBeNull();
+    expect(screen.getByLabelText('City or postal code')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Use' })).toBeDisabled();
+    expect(screen.queryByText('Coming soon', { selector: '[data-widget="weather"] *' })).toBeNull();
+  });
+
+  it('the Weather widget has NO title row: the place stands as its title (arbitrage Q1)', async () => {
+    servePreferences('expert');
+
+    renderPage();
+
+    await screen.findByText('The weather needs to know where your gardens are.');
+    const card = document.querySelector('[data-widget="weather"]') as HTMLElement;
+    expect(within(card).queryByRole('heading', { level: 2 })).toBeNull();
+    expect(card).toHaveAttribute('role', 'region');
+    expect(card).toHaveAttribute('aria-label', 'Weather');
+    // The seven others keep their h2 (amendments A1 / A2, untouched).
+    expect(screen.getByRole('heading', { level: 2, name: 'Gardens' })).toBeInTheDocument();
   });
 
   it('renders the invitations in French too', async () => {
@@ -481,7 +533,8 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
         'Les conseils arrivent avec l’exposition et le calendrier de vos jardins.'
       )
     ).toBeInTheDocument();
-    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(5);
+    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(4);
+    expect(screen.getByLabelText('Ville ou code postal')).toBeInTheDocument();
   });
 });
 
@@ -695,6 +748,14 @@ describe('GardensDashboard — the widget header (round 4, A1 / A2)', () => {
     await screen.findByText('Gardener view');
 
     for (const card of document.querySelectorAll('[data-widget]')) {
+      if (card.getAttribute('data-widget') === 'weather') {
+        // The declared exception (PR 3b/5, arbitrage Q1): the one widget the
+        // artboards do not title has no title row at all — the place line is
+        // its title — and names itself as a region instead.
+        expect(card.querySelector('h2')).toBeNull();
+        expect(card).toHaveAttribute('role', 'region');
+        continue;
+      }
       const heading = card.querySelector('h2')!;
       const glyph = heading.previousElementSibling;
       expect(glyph, `${card.getAttribute('data-widget')} has no title glyph`)
@@ -743,10 +804,11 @@ describe('GardensDashboard — the widget header (round 4, A1 / A2)', () => {
     expect(glyphOf('counters')).toBe('LocalFloristOutlinedIcon');
     expect(glyphOf('stats')).toBe('InsightsOutlinedIcon');
     expect(glyphOf('harvest')).toBe('AgricultureOutlinedIcon');
-    // Weather is the one widget the artboards do not title: its card opens on
-    // the place name, so there is no header glyph to match. It keeps the
-    // artboard's own 44 px hero sun.
-    expect(glyphOf('weather')).toBe('WbSunnyOutlinedIcon');
+    // Weather is the one widget the artboards do not title: since PR 3b/5
+    // (arbitrage Q1) its card has no header at all — it opens on the place
+    // line's pin, and its hero glyph is the condition's own (WeatherBlock's
+    // tests). `BLOCK_ICONS.weather` still serves the Customize gallery.
+    expect(document.querySelector('[data-widget="weather"] h2')).toBeNull();
   });
 });
 
@@ -1051,8 +1113,9 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
     servePreferences('gardener');
     renderPage();
     // By ROLE, not by text: the Gardens table now labels a WEATHER column, so
-    // the bare word matches both a widget title and a column header.
-    await screen.findByRole('heading', { level: 2, name: 'Weather' });
+    // the bare word matches both a widget title and a column header. On the
+    // Gardens heading since PR 3b/5 — the Weather card has no h2 (Q1).
+    await screen.findByRole('heading', { level: 2, name: 'Gardens' });
     return rulesFor(gridNode());
   }
 
@@ -1137,8 +1200,9 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
     // `findByText('Weather')` answers on whichever the layout happens to
     // render — here Gardens is Medium and there is no table, which is the only
     // reason it resolved. One fixture change away from failing on « found
-    // multiple elements ».
-    await screen.findByRole('heading', { level: 2, name: 'Weather' });
+    // multiple elements ». Waited on the Gardens heading since PR 3b/5: the
+    // Weather card has no h2 (Q1).
+    await screen.findByRole('heading', { level: 2, name: 'Gardens' });
 
     for (const block of blocks.slice(0, 3)) {
       const css = rulesFor(slotOf(block.key));
@@ -1225,27 +1289,34 @@ describe('GardensDashboard — no widget draws outside its card (V7)', () => {
 // scoped to the Customize drawer, which the table is not part of, so it stays
 // as it is.
 describe('GardensDashboard — Weather and Harvest name two things each (E″7)', () => {
-  it('at Expert, the widget title and the table column carry the same words', async () => {
+  it('at Expert, the widget and the table column carry the same words', async () => {
     servePreferences('expert');
 
     renderPage();
-    await screen.findByRole('heading', { level: 2, name: 'Weather' });
+    await screen.findByRole('heading', { level: 2, name: 'Harvest' });
 
     const gardensWidget = () =>
       document.querySelector('[data-widget="gardens"]') as HTMLElement;
 
-    for (const label of ['Weather', 'Harvest']) {
-      // One heading, one column header — a text query would have to choose.
-      expect(screen.getAllByText(label)).toHaveLength(2);
-      // The role narrows it to the widget, which is what those tests mean...
-      expect(
-        screen.getByRole('heading', { level: 2, name: label })
-      ).toBeInTheDocument();
-      // ...and the second occurrence really is the table's column header.
-      const header = within(gardensWidget()).getByText(label);
-      expect(header.tagName).toBe('TH');
-      expect(header).toHaveAttribute('scope', 'col');
-    }
+    // Harvest: one heading, one column header — a text query would have to
+    // choose. The role narrows it to the widget, which is what those tests
+    // mean, and the second occurrence really is the table's column header.
+    expect(screen.getAllByText('Harvest')).toHaveLength(2);
+    expect(screen.getByRole('heading', { level: 2, name: 'Harvest' })).toBeInTheDocument();
+    const harvestHeader = within(gardensWidget()).getByText('Harvest');
+    expect(harvestHeader.tagName).toBe('TH');
+    expect(harvestHeader).toHaveAttribute('scope', 'col');
+
+    // Weather, since PR 3b/5 (Q1): the widget is a REGION named « Weather »
+    // (or by its place once located), with no h2 — so the word appears as
+    // text once, on the column header, and the widget is reached by its role.
+    expect(screen.getByRole('region', { name: 'Weather' })).toHaveAttribute(
+      'data-widget',
+      'weather'
+    );
+    const weatherHeader = within(gardensWidget()).getByText('Weather');
+    expect(weatherHeader.tagName).toBe('TH');
+    expect(weatherHeader).toHaveAttribute('scope', 'col');
   });
 });
 
@@ -1261,11 +1332,11 @@ describe('GardensDashboard — outlined chips draw `--chip-bd` (round 6, N6-4)',
     // resolves.
     render(
       <ThemeProvider theme={createAppTheme(mode as 'light' | 'dark')}>
-        <LanguageProvider>
+        <LanguageProvider><UnitSystemProvider>
           <MemoryRouter>
             <GardensDashboard />
           </MemoryRouter>
-        </LanguageProvider>
+        </UnitSystemProvider></LanguageProvider>
       </ThemeProvider>
     );
 

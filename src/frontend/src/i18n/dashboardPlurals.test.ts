@@ -128,6 +128,11 @@ describe('the four pluralized dashboard sites', () => {
         'dashboard.blocks.stats.occupiedCount',
         'dashboard.blocks.stats.freeCellsCount',
         'gardens.plantsCount',
+        // SMA-336 PR 3b/5 — the weather widget's counts.
+        'dashboard.blocks.weather.tabGardens',
+        'dashboard.blocks.weather.others',
+        'dashboard.blocks.weather.partialTitle',
+        'dashboard.location.minChars',
       ] as const;
 
       for (const key of singulars) {

@@ -10,6 +10,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import { UnitSystemProvider } from '../contexts/UnitSystemContext';
+import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
 import { presetFor } from '../constants/dashboardPresets';
 import { emittedRules, rulesFor } from '../test/dashboardDom';
 import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
@@ -31,6 +33,22 @@ vi.mock('../services/dashboardApi', () => ({
   saveDashboardPreferences: vi.fn(),
   fetchDashboardData: vi.fn(),
 }));
+
+// SMA-336 PR 3b/5 — the Weather widget reads its own aggregate and the
+// profile city; both mocked whole, never a real provider call.
+vi.mock('../services/weatherApi', () => ({
+  fetchDashboardWeather: vi.fn(),
+  searchLocations: vi.fn(),
+  saveGardenLocation: vi.fn(),
+  clearGardenLocation: vi.fn(),
+  saveProfileLocation: vi.fn(),
+  clearProfileLocation: vi.fn(),
+}));
+
+vi.mock('../services/profileApi', () => ({ fetchProfile: vi.fn() }));
+
+import { fetchDashboardWeather } from '../services/weatherApi';
+import { fetchProfile } from '../services/profileApi';
 
 import { dashboardFixture as dashboardWith } from '../test/fixtures/dashboard';
 import GardensDashboard from './GardensDashboard';
@@ -233,9 +251,11 @@ const sortableNode = (key: string) =>
 function renderPage() {
   return render(
     <LanguageProvider>
-      <MemoryRouter>
-        <GardensDashboard />
-      </MemoryRouter>
+      <UnitSystemProvider>
+        <MemoryRouter>
+          <GardensDashboard />
+        </MemoryRouter>
+      </UnitSystemProvider>
     </LanguageProvider>
   );
 }
@@ -297,6 +317,15 @@ const lastSavedKeys = () => lastSaved().blocks.map((block) => block.key);
 
 
 beforeEach(() => {
+  vi.mocked(fetchDashboardWeather).mockResolvedValue(EMPTY_WEATHER_DATA);
+  vi.mocked(fetchProfile).mockResolvedValue({
+    email: 'a@example.test',
+    displayName: null,
+    firstName: null,
+    lastName: null,
+    city: null,
+    hasPassword: true,
+  });
   // Four columns for the whole file: `DashboardGrid` reads the column count
   // with `useMediaQuery`, and jsdom answers nothing without this.
   stubColumns(4);
