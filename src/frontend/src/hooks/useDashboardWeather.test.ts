@@ -81,7 +81,12 @@ describe('useDashboardWeather (SMA-336 PR 3b/5)', () => {
     expect(result.current.refreshing).toBe(false);
   });
 
-  it('a FAILED replacement clears the weather so the error never sits behind stale figures', async () => {
+  it('a FAILED replacement KEEPS the last known weather and raises loadError (round 3, E2 b)', async () => {
+    // GitHub 4009816076: clearing the aggregate on a failed re-fetch made the
+    // location dialog — live on the aggregate since D4 — say « no place saved »
+    // over a place the page had read a minute ago. The last known aggregate
+    // stays, the way the server cache serves « stale »; `loadError` says the
+    // refresh failed, and the surfaces that draw figures branch on it first.
     vi.mocked(fetchDashboardWeather).mockResolvedValueOnce(lyon());
     const { result } = renderHook(() => useDashboardWeather('fr'));
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -94,7 +99,8 @@ describe('useDashboardWeather (SMA-336 PR 3b/5)', () => {
       pending[0]!.reject(new Error('boom'));
     });
     expect(result.current.loadError).toBe(true);
-    expect(result.current.data).toBe(EMPTY_WEATHER_DATA);
+    expect(result.current.data.locations.map((l) => l.name)).toEqual(['Lyon']);
+    expect(result.current.refreshing).toBe(false);
 
     // And Retry clears the error once an answer lands.
     vi.mocked(fetchDashboardWeather).mockResolvedValueOnce(lyon());

@@ -187,6 +187,20 @@ describe('LocationDialog — the door to CHANGE or REMOVE a location (round 1, V
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
   });
 
+  it('says the weather is unavailable — never « no place saved » — when the aggregate could not be read, and keeps « Use » open (round 3, E2 a)', () => {
+    // GitHub 4009816076: on a failed weather request the dialog printed « No
+    // place saved yet. » and hid Remove over a place that may well exist. The
+    // line now says what happened; Remove stays hidden WITH that reason; the
+    // field and « Use » stay: one can re-locate during an outage.
+    renderDialog({ kind: 'profile', unavailable: true });
+
+    expect(screen.getByText('Weather unavailable — the saved place could not be read.')).toBeInTheDocument();
+    expect(screen.queryByText('No place saved yet.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
+    expect(screen.getByLabelText('City')).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
+  });
+
   it('the « Remove » button is a keyboard target like the others', () => {
     renderDialog({ kind: 'profile', current: 'Ecully', canRemove: true });
 

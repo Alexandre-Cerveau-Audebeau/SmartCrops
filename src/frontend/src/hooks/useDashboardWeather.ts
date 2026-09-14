@@ -14,8 +14,18 @@ import {
  * never returns to `true`, and `refreshing` DERIVED from what has settled
  * against what was asked. A refetch — after a location is saved, or on Retry —
  * keeps the current weather on screen until the new one lands: the widget
- * never blinks back to its skeleton for a refresh. A FAILED replacement clears
- * it, so the error never sits behind figures from a load ago.
+ * never blinks back to its skeleton for a refresh.
+ *
+ * A FAILED replacement KEEPS the last known aggregate and raises `loadError`
+ * (round 3, E2 — GitHub 4009816076), the way the server cache serves a place
+ * as « stale »: the location dialog and the gear panel, live on the aggregate
+ * since round 2, went on saying « no place saved » over a place the page had
+ * read a minute earlier. The surfaces that draw FIGURES — the widget, the
+ * MÉTÉO cells, the To-do block — branch on `loadError` before they read
+ * `data`, so no figure from a load ago sits behind the error; only the stored
+ * PLACES, which the failed request did not change, keep being named. A failed
+ * FIRST load leaves `EMPTY_WEATHER_DATA`, and `loadError` tells the surfaces
+ * that nothing is known.
  *
  * Its own hook rather than a field of `useDashboardData` (pre-flight § D.1):
  * that hook empties the whole aggregate on error, and a provider outage must
@@ -67,7 +77,7 @@ export function useDashboardWeather(language: string) {
       })
       .catch(() => {
         if (!isCurrent()) return;
-        setData(EMPTY_WEATHER_DATA);
+        // The last known aggregate stays (E2): see the note above.
         setLoadError(true);
       })
       .finally(() => {

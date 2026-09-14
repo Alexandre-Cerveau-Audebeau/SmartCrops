@@ -23,6 +23,13 @@ interface Props {
    * door stays open — the dialog says the same, and fills in when it lands.
    */
   loading: boolean;
+  /**
+   * The weather aggregate could not be read (round 3, E2 — GitHub 4009816076):
+   * `current` and `located` are the last known state, or nothing. The panel
+   * says the weather is unavailable rather than « nothing stored »; the door
+   * stays open — one can re-locate during an outage.
+   */
+  unavailable: boolean;
   /** Opens the shared location dialog on the profile default. */
   onLocate: () => void;
 }
@@ -38,13 +45,20 @@ interface Props {
  * flex; align-items: center; gap: 14px; height: 48px`, a 22 px glyph — the
  * same row the Counters panel draws, so the eight gears open on one shape.
  */
-export default function WeatherOptionsPanel({ current, located, loading, onLocate }: Props) {
+export default function WeatherOptionsPanel({
+  current,
+  located,
+  loading,
+  unavailable,
+  onLocate,
+}: Props) {
   const { t } = useTranslation();
 
   // The dialog's own line (`LocationDialog`), from the ONE function both read.
-  const currentLine = t(storedPlaceKey({ loading, name: current, stored: located }), {
-    place: current ?? '',
-  });
+  const currentLine = t(
+    storedPlaceKey({ loading, unavailable, name: current, stored: located }),
+    { place: current ?? '' }
+  );
 
   return (
     <Box

@@ -161,6 +161,9 @@ export default function GardensDashboard() {
         current: profileCurrent,
         canRemove: weatherData.profileLocated,
         loading: weatherLoading,
+        // The aggregate could not be read (E2): `current` / `canRemove` are the
+        // last known state the hook kept, or nothing after a failed first load.
+        unavailable: weatherError,
       };
     }
     const link = weatherData.gardens.find((entry) => entry.gardenId === locateKey.gardenId);
@@ -173,6 +176,7 @@ export default function GardensDashboard() {
       canRevert: link?.source === 'garden' && weatherData.profileLocated,
       current: placeNamed(link?.locationKey),
       loading: weatherLoading,
+      unavailable: weatherError,
     };
   })();
 
@@ -431,6 +435,7 @@ export default function GardensDashboard() {
             current={profileCurrent}
             located={weatherData.profileLocated}
             loading={weatherLoading}
+            unavailable={weatherError}
             onLocate={() => openLocate(null)}
           />
         );

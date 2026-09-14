@@ -92,12 +92,17 @@ export default function LocationDialog({ open, target, onClose, onSaved }: Props
   // « still loading » while the aggregate is in flight (round 2, D4 —
   // Extension 7d3f6056 / 458cd620), never « nothing stored » over a place the
   // page does not know yet. The caller derives `target` from the LIVE
-  // aggregate, so this line and the buttons fill in when it lands.
+  // aggregate, so this line and the buttons fill in when it lands. When the
+  // aggregate could not be read (round 3, E2 — GitHub 4009816076) the line says
+  // so — that sentence is the reason « Retirer » is not offered — and the field
+  // and « Utiliser » stay: one can re-locate during an outage. A place the last
+  // known aggregate names is still named, and still removable.
   const loading = target?.loading === true;
+  const unavailable = target?.unavailable === true;
   const canRemove = !loading && target?.kind === 'profile' && target.canRemove === true;
   const canRevert = !loading && target?.kind === 'garden' && target.canRevert;
   const currentLine = t(
-    storedPlaceKey({ loading, name: target?.current ?? null, stored: canRemove }),
+    storedPlaceKey({ loading, unavailable, name: target?.current ?? null, stored: canRemove }),
     { place: target?.current ?? '' }
   );
 

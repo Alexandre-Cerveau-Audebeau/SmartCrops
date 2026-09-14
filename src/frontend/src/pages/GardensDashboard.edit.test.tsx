@@ -52,6 +52,7 @@ import { fetchProfile } from '../services/profileApi';
 
 import { dashboardFixture as dashboardWith, gardenFixture } from '../test/fixtures/dashboard';
 import { linkFixture, locationFixture, weatherFixture } from '../test/fixtures/weather';
+import { useLanguage } from '../hooks/useLanguage';
 import GardensDashboard from './GardensDashboard';
 
 import {
@@ -534,6 +535,87 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     expect(within(dialog).getByText('Loading the current place…')).toBeInTheDocument();
     expect(within(dialog).queryByText('No place saved yet.')).toBeNull();
     expect(within(dialog).queryByRole('button', { name: 'Remove' })).toBeNull();
+  });
+
+  it('a page whose weather request FAILED says the weather is unavailable — never « no place saved » (round 3, E2 a)', async () => {
+    // GitHub 4009816076: `useDashboardWeather` raised `loadError`, the page
+    // passed only `loading`, and both the gear panel and the dialog printed the
+    // sentence of an account WITHOUT a default over a place they could not read.
+    vi.mocked(fetchDashboardWeather).mockRejectedValue(new Error('provider down'));
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    expect(
+      await within(panel).findByText('Weather unavailable — the saved place could not be read.')
+    ).toBeInTheDocument();
+    expect(within(panel).queryByText('No place saved yet.')).toBeNull();
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Location…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+    expect(
+      within(dialog).getByText('Weather unavailable — the saved place could not be read.')
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText('No place saved yet.')).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Remove' })).toBeNull();
+    // One can still re-locate during an outage: the field and Cancel are live.
+    expect(within(dialog).getByLabelText('City')).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+  });
+
+  it('a dialog open on an existing place KEEPS it when a re-fetch fails (round 3, E2 b)', async () => {
+    // The hook used to clear the aggregate on a failed replacement; live on
+    // the aggregate since D4, the dialog then flipped to « no place saved » in
+    // session. The last known aggregate now stays. The re-fetch is triggered
+    // the one way the page offers with the dialog open: a language switch,
+    // which `useDashboardWeather(language)` follows.
+    function LanguageProbe() {
+      const { setLanguage } = useLanguage();
+      return (
+        <button type="button" onClick={() => setLanguage('fr')}>
+          switch-language-probe
+        </button>
+      );
+    }
+    vi.mocked(fetchDashboardWeather)
+      .mockResolvedValueOnce(
+        weatherFixture([locationFixture({ name: 'Ecully' })], [linkFixture({ gardenId: 'g1' })])
+      )
+      .mockRejectedValue(new Error('provider down'));
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenFixture({ id: 'g1', name: 'Terrasse' })])
+    );
+    servePreferences('gardener');
+    render(
+      <LanguageProvider>
+        <UnitSystemProvider>
+          <MemoryRouter>
+            <GardensDashboard />
+            <LanguageProbe />
+          </MemoryRouter>
+        </UnitSystemProvider>
+      </LanguageProvider>
+    );
+    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    fireEvent.click(edit);
+    await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Location…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+    expect(await within(dialog).findByText('Current place: Ecully')).toBeInTheDocument();
+
+    // The open modal hides the rest of the page from the accessibility tree
+    // (`aria-hidden`), so the probe is reached by its text, not its role.
+    fireEvent.click(screen.getByText('switch-language-probe'));
+    await waitFor(() => expect(fetchDashboardWeather).toHaveBeenCalledTimes(2));
+
+    // The re-fetch failed; the place is still there (now in French), Remove too.
+    expect(await within(dialog).findByText('Lieu actuel : Ecully')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Aucun lieu enregistré pour le moment.')).toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Retirer' })).toBeEnabled();
   });
 
   it('names the widget on the panel itself, above the generic line (A7)', async () => {
