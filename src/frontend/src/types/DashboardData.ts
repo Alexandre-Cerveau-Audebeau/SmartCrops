@@ -57,6 +57,18 @@ export interface DashboardVarietyData {
   cells: number;
   /** Which gardens hold it — the per-garden filter of the widget. */
   gardenIds: string[];
+  /**
+   * SMA-336 PR 3b/5 — the catalog's watering need, as its name (`Low`,
+   * `Average`, `High`, `Frequent`), or null when unknown. « Arroser ce soir »
+   * counts the placements of `High` and `Frequent` varieties.
+   */
+  wateringNeedLevel: string | null;
+  /**
+   * SMA-336 PR 3b/5 — the lowest temperature the plant is known to tolerate,
+   * °C (xData), or null when unknown. « Protéger du froid » counts the
+   * placements whose tolerance is KNOWN and within reach of a day's minimum.
+   */
+  minToleratedTempC: number | null;
 }
 
 export interface DashboardTotals {

@@ -453,7 +453,8 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
       'This month',
       'The month’s calendar arrives with the sowings and harvests of your plantings.',
     ],
-    ['To do today', 'Today’s tasks arrive with the weather and the calendar.'],
+    // To do today LEFT this list in PR 3b/5 (step 8): it derives its tasks
+    // from the weather aggregate — `TodoBlock.test.tsx` covers what it shows.
     // Counts by variety and Statistics LEFT this list in PR 2/5: they carry
     // real data now, and their own tests cover what they show.
     [
@@ -484,9 +485,9 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
     renderPage();
 
     await waitFor(() => expect(renderedKeys()).toHaveLength(8));
-    // Four shells: Gardens, Counts by variety, Statistics and — since PR 3b/5 —
-    // Weather carry data.
-    expect(screen.getAllByText('Coming soon')).toHaveLength(4);
+    // Three shells — Tips, This month, Harvest: Gardens, Counts by variety,
+    // Statistics and, since PR 3b/5, Weather and To do today carry data.
+    expect(screen.getAllByText('Coming soon')).toHaveLength(3);
   });
 
   it('the Weather widget offers the city field and « Use » in its invitation (PR 3b/5, decision R4 lifted)', async () => {
@@ -533,7 +534,7 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
         'Les conseils arrivent avec l’exposition et le calendrier de vos jardins.'
       )
     ).toBeInTheDocument();
-    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(4);
+    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(3);
     expect(screen.getByLabelText('Ville ou code postal')).toBeInTheDocument();
   });
 });
@@ -963,6 +964,8 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
       isEdible: true,
       imageUrl: null,
       imageAttribution: null,
+      wateringNeedLevel: null,
+      minToleratedTempC: null,
       count: 1,
       cells: 1,
       gardenIds,
@@ -1014,6 +1017,8 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
           isEdible: true,
           imageUrl: null,
           imageAttribution: null,
+          wateringNeedLevel: null,
+          minToleratedTempC: null,
           count: 1,
           cells: 1,
           gardenIds: ['g1'],

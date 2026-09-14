@@ -20,6 +20,7 @@ import { fetchJson } from './fetchJson';
 import {
   arrayOf,
   isBoolean,
+  isFiniteNumber,
   isNullableString,
   isString,
   isWholeNumber,
@@ -285,6 +286,11 @@ const isVarietyRecord = matches<DashboardVarietyData>({
   count: isWholeNumber,
   cells: isWholeNumber,
   gardenIds: arrayOf(isString),
+  // SMA-336 PR 3b/5 — the two facts of the « À faire » block. A tolerance is
+  // a temperature: negative, possibly decimal on another provider, hence
+  // `isFiniteNumber` and not the count check.
+  wateringNeedLevel: isNullableString,
+  minToleratedTempC: nullable(isFiniteNumber),
 });
 
 /** The four page totals. */

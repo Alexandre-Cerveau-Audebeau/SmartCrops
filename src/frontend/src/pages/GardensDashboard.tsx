@@ -29,6 +29,7 @@ import GardensBlock, {
 } from '../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
+import TodoBlock from '../components/Dashboard/blocks/TodoBlock';
 import WeatherBlock from '../components/Dashboard/blocks/WeatherBlock';
 import LocationDialog from '../components/Dashboard/LocationDialog';
 import type { LocationTarget } from '../components/Dashboard/locationTools';
@@ -328,6 +329,29 @@ export default function GardensDashboard() {
             refreshing={gardensRefreshing}
             loadError={gardensError}
             onRetry={refetch}
+          />
+        );
+      case 'todo':
+        // Both aggregates feed it: the plans and varieties for the placements,
+        // the weather for the day. Either one missing is a state it draws.
+        return (
+          <TodoBlock
+            size={block.size}
+            editing={editing}
+            gardens={gardens}
+            varieties={dashboardData.varieties}
+            weather={weatherData}
+            loading={gardensLoading || weatherLoading}
+            refreshing={gardensRefreshing || weatherRefreshing}
+            loadError={gardensError || weatherError}
+            onRetry={() => {
+              if (gardensError) refetch();
+              if (weatherError) refetchWeather();
+            }}
+            onLocate={openLocate}
+            onExpand={() =>
+              patchBlock('todo', (current) => ({ ...current, size: 'large' }))
+            }
           />
         );
       default:

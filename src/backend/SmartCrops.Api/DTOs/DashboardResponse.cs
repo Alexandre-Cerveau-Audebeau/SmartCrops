@@ -95,6 +95,22 @@ public record DashboardGardenDto(
 /// <param name="Count">Number of placements of this variety across the caller's gardens.</param>
 /// <param name="Cells">Sum of <c>SpanRows × SpanCols</c> over those placements.</param>
 /// <param name="GardenIds">Which gardens hold it — the per-garden filter of the widget.</param>
+/// <param name="WateringNeedLevel">
+/// SMA-336 PR 3b/5 — the catalog's <c>PlantWateringNeed</c> as its name
+/// (<c>Low</c>, <c>Average</c>, <c>High</c>, <c>Frequent</c>), or null when the
+/// catalog does not know. The « À faire » block counts the placements of
+/// <c>High</c> and <c>Frequent</c> varieties for « Arroser ce soir — N plantes à
+/// besoin élevé » when the garden's own day is dry. A factual value, not the
+/// gated Perenual free text.
+/// </param>
+/// <param name="MinToleratedTempC">
+/// SMA-336 PR 3b/5 — <c>PlantPerenualData.XTemperatureToleranceMinC</c>: the
+/// lowest temperature the plant is known to tolerate, °C, or null when unknown
+/// (about a third of the catalog). « Protéger du froid — N plants connus
+/// sensibles » counts the placements whose tolerance is KNOWN and within three
+/// degrees of a day's minimum; the unknown ones are not guessed at. A factual
+/// value from the xData, not the gated free text (SMA-70).
+/// </param>
 public record VarietyCountDto(
     Guid PlantId,
     string ScientificName,
@@ -105,7 +121,9 @@ public record VarietyCountDto(
     string? ImageAttribution,
     int Count,
     int Cells,
-    IReadOnlyList<Guid> GardenIds);
+    IReadOnlyList<Guid> GardenIds,
+    string? WateringNeedLevel,
+    int? MinToleratedTempC);
 
 /// <summary>
 /// SMA-336 PR 2/5 — the page-level counters, so the header chips do not have to

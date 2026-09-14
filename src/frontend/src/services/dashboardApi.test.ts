@@ -85,6 +85,8 @@ const VARIETY = {
   isEdible: true,
   imageUrl: null,
   imageAttribution: null,
+  wateringNeedLevel: null,
+  minToleratedTempC: null,
   count: 1,
   cells: 1,
   gardenIds: ['g1'],

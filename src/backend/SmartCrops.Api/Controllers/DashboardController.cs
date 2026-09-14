@@ -323,7 +323,9 @@ public class DashboardController(
                     d.ImageAttribution,
                     v.Count,
                     v.Cells,
-                    v.GardenIds);
+                    v.GardenIds,
+                    d.WateringNeedLevel,
+                    d.MinToleratedTempC);
             })
             .ToList();
 
@@ -423,12 +425,16 @@ public class DashboardController(
     /// <param name="IsEdible">The catalog's own flag — the other half of R4.</param>
     /// <param name="ImageUrl">A stable-source cover, or null.</param>
     /// <param name="ImageAttribution">Attribution for <paramref name="ImageUrl"/>; null exactly when it is.</param>
+    /// <param name="WateringNeedLevel">SMA-336 PR 3b/5 — the catalog's watering need, as its enum name, or null.</param>
+    /// <param name="MinToleratedTempC">SMA-336 PR 3b/5 — the xData's minimum tolerated temperature, °C, or null.</param>
     private readonly record struct VarietyDisplay(
         string? CommonName,
         string? PlantType,
         bool? IsEdible,
         string? ImageUrl,
-        string? ImageAttribution);
+        string? ImageAttribution,
+        string? WateringNeedLevel,
+        int? MinToleratedTempC);
 
     /// <summary>
     /// Catalog facts, localised name and cover photo for the placed varieties, in
@@ -461,6 +467,14 @@ public class DashboardController(
                 p.Id,
                 PlantType = p.PlantType!.Name,
                 p.IsEdible,
+                // SMA-336 PR 3b/5 — the two facts the « À faire » block derives
+                // its weather tasks from (pre-flight § F.5): the catalog's
+                // watering need and the xData's cold tolerance, read in the
+                // same pass since it is already keyed on exactly these plants.
+                // The Perenual row is 1-1 and optional: a left join, null when
+                // the plant was never enriched.
+                p.WateringNeedLevel,
+                MinToleratedTempC = p.PerenualData != null ? p.PerenualData.XTemperatureToleranceMinC : null,
                 Names = p.Translations
                     .Where(t => t.Language == language || t.Language == "en")
                     .Select(t => new { t.Language, t.CommonName })
@@ -503,7 +517,12 @@ public class DashboardController(
                     cover?.Url,
                     cover is null
                         ? null
-                        : ImageAttribution.Compose(cover.Credit, cover.LicenseName, cover.Source));
+                        : ImageAttribution.Compose(cover.Credit, cover.LicenseName, cover.Source),
+                    // The enum's NAME, not its number: the browser matches
+                    // « High » / « Frequent », and a number would tie it to
+                    // the storage order of `PlantWateringNeed`.
+                    r.WateringNeedLevel?.ToString(),
+                    r.MinToleratedTempC);
             });
     }
 

@@ -81,6 +81,8 @@ const variety = (
     commonName,
     imageUrl: 'https://bs.plantnet.org/habit.jpg',
     imageAttribution: 'Credit',
+    wateringNeedLevel: null,
+    minToleratedTempC: null,
     count: 2,
     cells: 2,
     gardenIds,

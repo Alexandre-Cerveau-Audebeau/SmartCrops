@@ -75,9 +75,12 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         "imageAttribution",
         "imageUrl",
         "isEdible",
+        // SMA-336 PR 3b/5 — the two facts of the « À faire » block.
+        "minToleratedTempC",
         "plantId",
         "plantType",
         "scientificName",
+        "wateringNeedLevel",
     ];
 
     /// <summary>camelCase keys of <see cref="DashboardTotalsDto"/>, ordinal order.</summary>
@@ -780,6 +783,42 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         Assert.Null(byId[withoutImages].ImageAttribution);
     }
 
+    // ── The two facts of the « À faire » block (SMA-336 PR 3b/5) ────────────
+
+    [Fact]
+    public async Task GetDashboard_CarriesTheWateringNeedAndTheColdTolerance_PerVariety()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Terrasse");
+        // A thirsty, tender basil: the catalog says « Frequent », the xData
+        // says it tolerates nothing under 5 °C.
+        var basil = await SeedPlantAsync("Ocimum basilicum", await PlantTypeIdAsync("Herb"), wateringNeed: PlantWateringNeed.Frequent);
+        await SeedPerenualDataAsync(basil, minToleratedTempC: 5);
+        // A fern the catalog has no watering need for and Perenual never enriched.
+        var fern = await SeedPlantAsync("Athyrium vidalii", await PlantTypeIdAsync("Ornamental"));
+        // A hardy sage: « Low », and an xData row that does NOT know its tolerance.
+        var sage = await SeedPlantAsync("Salvia officinalis", await PlantTypeIdAsync("Herb"), wateringNeed: PlantWateringNeed.Low);
+        await SeedPerenualDataAsync(sage, minToleratedTempC: null);
+
+        await SeedPlacementAsync(gardenId, basil, 0, 0);
+        await SeedPlacementAsync(gardenId, fern, 0, 1);
+        await SeedPlacementAsync(gardenId, sage, 0, 2);
+        AuthAs(userId);
+
+        var byId = (await GetDashboardAsync()).Varieties.ToDictionary(v => v.PlantId);
+
+        // The enum's NAME travels, and the tolerance as the xData holds it.
+        Assert.Equal("Frequent", byId[basil].WateringNeedLevel);
+        Assert.Equal(5, byId[basil].MinToleratedTempC);
+        // Unknown is null, never a guessed « Average » or a « 0 °C ».
+        Assert.Null(byId[fern].WateringNeedLevel);
+        Assert.Null(byId[fern].MinToleratedTempC);
+        // The two facts are independent: one known, the other not.
+        Assert.Equal("Low", byId[sage].WateringNeedLevel);
+        Assert.Null(byId[sage].MinToleratedTempC);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static string[] Keys(JsonElement element) =>
@@ -882,7 +921,8 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
     private async Task<Guid> SeedPlantAsync(
         string scientificName,
         int plantTypeId,
-        bool? isEdible = null)
+        bool? isEdible = null,
+        PlantWateringNeed? wateringNeed = null)
     {
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
@@ -892,10 +932,30 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
             ScientificName = scientificName,
             PlantTypeId = plantTypeId,
             IsEdible = isEdible,
+            WateringNeedLevel = wateringNeed,
         };
         db.Plants.Add(plant);
         await db.SaveChangesAsync();
         return plant.Id;
+    }
+
+    /// <summary>
+    /// A minimal Perenual audit row for a plant (SMA-336 PR 3b/5) — only the
+    /// required columns and the one xData fact the aggregate reads.
+    /// </summary>
+    private async Task SeedPerenualDataAsync(Guid plantId, int? minToleratedTempC)
+    {
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        db.PlantPerenualData.Add(new PlantPerenualData
+        {
+            Id = Guid.NewGuid(),
+            PlantId = plantId,
+            PerenualId = Math.Abs(plantId.GetHashCode() % 1_000_000) + 1,
+            XTemperatureToleranceMinC = minToleratedTempC,
+            LastSyncAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
     }
 
     private async Task SeedPlacementAsync(

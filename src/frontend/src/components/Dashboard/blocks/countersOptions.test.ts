@@ -117,6 +117,8 @@ describe('resolveCountersFigures — one resolver for every number (round 6, A)'
     count,
     cells: count,
     gardenIds,
+    wateringNeedLevel: null,
+    minToleratedTempC: null,
   });
 
   // Basil once on the terrace and twice on the balcony; thyme twice on the
