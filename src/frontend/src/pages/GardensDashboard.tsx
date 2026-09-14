@@ -412,7 +412,13 @@ export default function GardensDashboard() {
           />
         );
       case 'weather':
-        return <WeatherOptionsPanel current={profileCurrent} onLocate={() => openLocate(null)} />;
+        return (
+          <WeatherOptionsPanel
+            current={profileCurrent}
+            located={weatherData.profileLocated}
+            onLocate={() => openLocate(null)}
+          />
+        );
       default:
         return undefined;
     }

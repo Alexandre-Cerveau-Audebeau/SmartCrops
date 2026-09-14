@@ -8,6 +8,14 @@ import { DASHBOARD_TYPE } from '../../../theme/dashboardTokens';
 interface Props {
   /** The place the profile default points at, when the aggregate can name it; null otherwise. */
   current: string | null;
+  /**
+   * Whether the account CARRIES a default at all (round 2, D5 — Extension
+   * cdfbd4df / GitHub 4009200274): when every garden overrides it, the
+   * aggregate cannot name it and `current` is null, yet « Aucun lieu enregistré »
+   * would be false — the panel then says what the dialog says, « Un lieu par
+   * défaut est enregistré ».
+   */
+  located: boolean;
   /** Opens the shared location dialog on the profile default. */
   onLocate: () => void;
 }
@@ -23,8 +31,16 @@ interface Props {
  * flex; align-items: center; gap: 14px; height: 48px`, a 22 px glyph — the
  * same row the Counters panel draws, so the eight gears open on one shape.
  */
-export default function WeatherOptionsPanel({ current, onLocate }: Props) {
+export default function WeatherOptionsPanel({ current, located, onLocate }: Props) {
   const { t } = useTranslation();
+
+  // The three states of the dialog's own line (`LocationDialog`, V21), in the
+  // same order: named, stored but unnamed, none.
+  const currentLine = current
+    ? t('dashboard.location.current', { place: current })
+    : located
+      ? t('dashboard.location.currentUnknown')
+      : t('dashboard.location.currentNone');
 
   return (
     <Box
@@ -40,9 +56,7 @@ export default function WeatherOptionsPanel({ current, onLocate }: Props) {
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography sx={{ fontSize: 15 }}>{t('dashboard.blocks.weather.options.hint')}</Typography>
         <Typography sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary' }}>
-          {current
-            ? t('dashboard.location.current', { place: current })
-            : t('dashboard.location.currentNone')}
+          {currentLine}
         </Typography>
       </Box>
       <Button variant="outlined" size="small" onClick={onLocate} sx={{ flexShrink: 0 }}>

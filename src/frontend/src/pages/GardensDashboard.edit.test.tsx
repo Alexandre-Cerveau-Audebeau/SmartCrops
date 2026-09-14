@@ -50,7 +50,8 @@ vi.mock('../services/profileApi', () => ({ fetchProfile: vi.fn() }));
 import { fetchDashboardWeather } from '../services/weatherApi';
 import { fetchProfile } from '../services/profileApi';
 
-import { dashboardFixture as dashboardWith } from '../test/fixtures/dashboard';
+import { dashboardFixture as dashboardWith, gardenFixture } from '../test/fixtures/dashboard';
+import { linkFixture, locationFixture, weatherFixture } from '../test/fixtures/weather';
 import GardensDashboard from './GardensDashboard';
 
 import {
@@ -456,6 +457,33 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
     expect(within(dialog).getByText('No place saved yet.')).toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: 'Remove' })).toBeNull();
+  });
+
+  it('the Weather gear says a default EXISTS when every garden overrides it, not « no place saved » (round 2, D5)', async () => {
+    // Extension cdfbd4df / GitHub 4009200274: the profile default is named
+    // through a link that inherits it; when every garden carries its own
+    // override no link does, `profileCurrent` is null — and the panel printed
+    // the sentence of an account WITHOUT a default. The dialog had the third
+    // line since round 1 (V21); the panel now says the same.
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenFixture({ id: 'g1', name: 'Terrasse' })])
+    );
+    vi.mocked(fetchDashboardWeather).mockResolvedValue(
+      weatherFixture(
+        [locationFixture({ name: 'Lyon' })],
+        [linkFixture({ gardenId: 'g1', source: 'garden' })],
+        { profileLocated: true }
+      )
+    );
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    expect(
+      await within(panel).findByText('A default place is saved for your gardens.')
+    ).toBeInTheDocument();
+    expect(within(panel).queryByText('No place saved yet.')).toBeNull();
   });
 
   it('names the widget on the panel itself, above the generic line (A7)', async () => {
