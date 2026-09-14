@@ -1,6 +1,7 @@
 import type {
   WeatherAlert,
   WeatherDay,
+  WeatherHour,
   WeatherLocation,
 } from '../../../types/DashboardWeather';
 import { hourOf, localHourOf } from './weatherTime';
@@ -41,9 +42,9 @@ export const WEATHER_RULES = {
     rainMinMm: 2,
     /** « arrosez en soirée » (the artboard's sentence) when the day's maximum reaches this; « selon les besoins » below. */
     warmMinC: 28,
-    /** Night slots for the frost sentence: from this hour on day 0… */
+    /** The night for the frost sentence STARTS at this hour (see {@link nightSlots} for the whole rule)… */
     nightFromHour: 18,
-    /** …to before this hour on day 1. The evening starts at 18 h like the To-do block's « ce soir » (§ H.8). */
+    /** …and ENDS before this hour the next morning. The evening starts at 18 h like the To-do block's « ce soir » (§ H.8). */
     nightUntilHour: 7,
   },
   /** The alert line of the Large card holds at most this many chips (§ E.3, rule 5 « le contenu reste dans sa carte »). */
@@ -223,34 +224,57 @@ export function weatherChips(
 export type GardenerSentence = 'frostTonight' | 'rainToday' | 'waterEvening' | 'waterAsNeeded';
 
 /**
+ * The slots of « cette nuit » — the night the place is IN, or the one it is
+ * heading to — the ONE window the frost sentence reads (round 1 G8, round 2 D3,
+ * round 3 E1 — Extension 8f5fdcf2). The rule, from the place's own clock
+ * (`localTime`), with `nightFromHour` = 18 and `nightUntilHour` = 7:
+ *
+ * - BEFORE `nightUntilHour` (00:00–06:59), the night is the one ENDING this
+ *   morning: the slots of `days[0]` from the current hour to 06 h inclusive.
+ *   Tomorrow's small hours belong to the NEXT night and are not read — at
+ *   01:00 a 03 h frost today is tonight's; a 03 h frost tomorrow is not.
+ * - FROM `nightUntilHour` on (07:00–23:59), the night is the one STARTING this
+ *   evening: the slots of `days[0]` from the later of `nightFromHour` and the
+ *   current hour — a slot the clock has passed is over (D3), the slot being
+ *   lived counts — plus the slots of `days[1]` before `nightUntilHour`.
+ * - Unknown hour: the whole evening-plus-next-morning window, as before.
+ *
+ * A slot whose hour cannot be read is ignored. Empty when the place has no
+ * day, or no hour travelled — the caller then falls back to the day's minimum.
+ * The To-do block's frost task reads the DAY's minimum (rule (b), § F.5),
+ * not this window: the two are different rules, and this is the only night.
+ */
+export function nightSlots(location: WeatherLocation): WeatherHour[] {
+  const today = location.days[0];
+  if (!today) return [];
+  const rules = WEATHER_RULES.sentence;
+  const nowHour = localHourOf(location);
+  const slotsOf = (day: WeatherDay | undefined, keep: (h: number) => boolean) =>
+    (day?.hours ?? []).filter((hour) => {
+      const h = hourOf(hour);
+      return h !== null && keep(h);
+    });
+
+  if (nowHour !== null && nowHour < rules.nightUntilHour) {
+    return slotsOf(today, (h) => h >= nowHour && h < rules.nightUntilHour);
+  }
+  const fromHour = nowHour === null ? rules.nightFromHour : Math.max(rules.nightFromHour, nowHour);
+  return [
+    ...slotsOf(today, (h) => h >= fromHour),
+    ...slotsOf(location.days[1], (h) => h < rules.nightUntilHour),
+  ];
+}
+
+/**
  * The sentence of the day, from `days[0]` and the night slots — null when the
- * place has no day to speak of. Night slots are those of day 0 from
- * `nightFromHour` — or from the place's CURRENT hour when that is later — and
- * those of day 1 before `nightUntilHour`; a slot whose hour cannot be read is
- * ignored.
+ * place has no day to speak of. The night is {@link nightSlots}'s.
  */
 export function gardenerSentence(location: WeatherLocation): GardenerSentence | null {
   const today = location.days[0];
   if (!today) return null;
   const rules = WEATHER_RULES.sentence;
 
-  // A slot the place's clock has passed is not « tonight » (round 2, D3 —
-  // GitHub 4009200265): at 19 h the frozen 18 h slot still decided the frost
-  // over a 5° evening. Day-0 slots start at the later of the night's start and
-  // the current hour — the slot being lived counts; tomorrow's small hours are
-  // always ahead. Unknown hour: the whole window, as before.
-  const nowHour = localHourOf(location);
-  const fromHour = nowHour === null ? rules.nightFromHour : Math.max(rules.nightFromHour, nowHour);
-  const tonight = [
-    ...today.hours.filter((hour) => {
-      const h = hourOf(hour);
-      return h !== null && h >= fromHour;
-    }),
-    ...(location.days[1]?.hours ?? []).filter((hour) => {
-      const h = hourOf(hour);
-      return h !== null && h < rules.nightUntilHour;
-    }),
-  ];
+  const tonight = nightSlots(location);
   // The night slots are the NIGHT's own temperatures (round 1, G8 — GitHub
   // 4008082543, Extension 9ddae1b5 / 1058691c): the day's minimum may have
   // happened at 06 h and says nothing about tonight — 1 °C at dawn and a

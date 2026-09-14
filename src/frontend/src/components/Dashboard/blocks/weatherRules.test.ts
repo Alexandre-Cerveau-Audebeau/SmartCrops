@@ -311,6 +311,47 @@ describe('gardenerSentence — by priority', () => {
     expect(gardenerSentence(locationFixture({ localTime: '2026-09-12 19:00', days: frozenAt03 }))).toBe('frostTonight');
   });
 
+  describe('before 07 h the night is the one ENDING this morning, not the one starting tonight (round 3, E1)', () => {
+    // Extension 8f5fdcf2: D3 opened the window at max(18 h, now) — at 01:00 that
+    // is 18 h, so the rest of THIS night (01–06 h of days[0]) was skipped and
+    // tomorrow's small hours (00–06 h of days[1]), the NEXT night, were read.
+    const mild = (date: string) =>
+      Array.from({ length: 24 }, (_, h) => hourFixture({ time: at(date, h), tempC: 5 }));
+    const frozen = (date: string, h: number) => hourFixture({ time: at(date, h), tempC: 0 });
+    const withSlot = (slots: ReturnType<typeof mild>, slot: ReturnType<typeof frozen>) =>
+      slots.map((s) => (s.time === slot.time ? slot : s));
+
+    const frostToday = [
+      dayFixture({ date: '2026-09-12', hours: withSlot(mild('2026-09-12'), frozen('2026-09-12', 3)) }),
+      dayFixture({ date: '2026-09-13', hours: mild('2026-09-13') }),
+    ];
+    const frostTomorrowOnly = [
+      dayFixture({ date: '2026-09-12', hours: mild('2026-09-12') }),
+      dayFixture({ date: '2026-09-13', hours: withSlot(mild('2026-09-13'), frozen('2026-09-13', 3)) }),
+    ];
+    const frostAtSixToday = [
+      dayFixture({ date: '2026-09-12', hours: withSlot(mild('2026-09-12'), frozen('2026-09-12', 6)) }),
+      dayFixture({ date: '2026-09-13', hours: mild('2026-09-13') }),
+    ];
+
+    it('01:00 — a 0° slot at 03 h TODAY is this very night: frost', () => {
+      expect(gardenerSentence(locationFixture({ localTime: '2026-09-12 01:00', days: frostToday }))).toBe('frostTonight');
+    });
+
+    it('01:00 — a 0° slot at 03 h TOMORROW only is the NEXT night: no frost tonight', () => {
+      expect(gardenerSentence(locationFixture({ localTime: '2026-09-12 01:00', days: frostTomorrowOnly }))).not.toBe('frostTonight');
+    });
+
+    it('19:00 — unchanged: tomorrow’s 03 h IS tonight', () => {
+      expect(gardenerSentence(locationFixture({ localTime: '2026-09-12 19:00', days: frostTomorrowOnly }))).toBe('frostTonight');
+    });
+
+    it('the boundary: 06:59 still reads this morning’s 06 h slot; 07:00 turns to tonight', () => {
+      expect(gardenerSentence(locationFixture({ localTime: '2026-09-12 06:59', days: frostAtSixToday }))).toBe('frostTonight');
+      expect(gardenerSentence(locationFixture({ localTime: '2026-09-12 07:00', days: frostAtSixToday }))).not.toBe('frostTonight');
+    });
+  });
+
   it('frost tonight from a NIGHT slot — 18 h onwards today, before 7 h tomorrow — and not from a day slot', () => {
     const cold = (time: string) => hourFixture({ time, tempC: 1 });
 
