@@ -225,18 +225,26 @@ export type GardenerSentence = 'frostTonight' | 'rainToday' | 'waterEvening' | '
 /**
  * The sentence of the day, from `days[0]` and the night slots — null when the
  * place has no day to speak of. Night slots are those of day 0 from
- * `nightFromHour` and those of day 1 before `nightUntilHour`; a slot whose
- * hour cannot be read is ignored.
+ * `nightFromHour` — or from the place's CURRENT hour when that is later — and
+ * those of day 1 before `nightUntilHour`; a slot whose hour cannot be read is
+ * ignored.
  */
 export function gardenerSentence(location: WeatherLocation): GardenerSentence | null {
   const today = location.days[0];
   if (!today) return null;
   const rules = WEATHER_RULES.sentence;
 
+  // A slot the place's clock has passed is not « tonight » (round 2, D3 —
+  // GitHub 4009200265): at 19 h the frozen 18 h slot still decided the frost
+  // over a 5° evening. Day-0 slots start at the later of the night's start and
+  // the current hour — the slot being lived counts; tomorrow's small hours are
+  // always ahead. Unknown hour: the whole window, as before.
+  const nowHour = localHourOf(location);
+  const fromHour = nowHour === null ? rules.nightFromHour : Math.max(rules.nightFromHour, nowHour);
   const tonight = [
     ...today.hours.filter((hour) => {
       const h = hourOf(hour);
-      return h !== null && h >= rules.nightFromHour;
+      return h !== null && h >= fromHour;
     }),
     ...(location.days[1]?.hours ?? []).filter((hour) => {
       const h = hourOf(hour);

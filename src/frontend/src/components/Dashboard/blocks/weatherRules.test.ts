@@ -288,6 +288,29 @@ describe('gardenerSentence — by priority', () => {
     expect(gardenerSentence(coldNight)).toBe('frostTonight');
   });
 
+  it('an ELAPSED slot no longer decides the frost: at 19 h the 18 h slot is over (round 2, D3)', () => {
+    // GitHub 4009200265: the night window opened at 18 h whatever the place's
+    // clock said, so a frozen 18 h slot kept « Gel possible cette nuit » on a
+    // 5° evening read at 19 h. Day-0 slots now start at the LATER of 18 h and
+    // the current hour; tomorrow's small hours are always ahead.
+    const frozenAt18 = hourFixture({ time: at('2026-09-12', 18), tempC: 0 });
+    const mildEvening = [19, 20, 21, 22, 23].map((h) => hourFixture({ time: at('2026-09-12', h), tempC: 5 }));
+    const mildMorning = [0, 1, 2, 3, 4, 5, 6].map((h) => hourFixture({ time: at('2026-09-13', h), tempC: 5 }));
+    const days = [
+      dayFixture({ date: '2026-09-12', minTempC: 0, hours: [frozenAt18, ...mildEvening] }),
+      dayFixture({ date: '2026-09-13', hours: mildMorning }),
+    ];
+
+    expect(gardenerSentence(locationFixture({ localTime: '2026-09-12 19:00', days }))).not.toBe('frostTonight');
+    // …while at 17 h the same slot is still ahead, and says frost.
+    expect(gardenerSentence(locationFixture({ localTime: '2026-09-12 17:00', days }))).toBe('frostTonight');
+    // The current slot itself counts: at 18:30 the 18 h slot is the one being lived.
+    expect(gardenerSentence(locationFixture({ localTime: '2026-09-12 18:30', days }))).toBe('frostTonight');
+    // Tomorrow's small hours are never elapsed at 19 h.
+    const frozenAt03 = [dayFixture({ date: '2026-09-12', minTempC: 5, hours: mildEvening }), dayFixture({ date: '2026-09-13', hours: [hourFixture({ time: at('2026-09-13', 3), tempC: 1 })] })];
+    expect(gardenerSentence(locationFixture({ localTime: '2026-09-12 19:00', days: frozenAt03 }))).toBe('frostTonight');
+  });
+
   it('frost tonight from a NIGHT slot — 18 h onwards today, before 7 h tomorrow — and not from a day slot', () => {
     const cold = (time: string) => hourFixture({ time, tempC: 1 });
 
