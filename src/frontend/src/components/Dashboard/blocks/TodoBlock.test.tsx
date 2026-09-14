@@ -236,7 +236,9 @@ describe('TodoBlock — Large', () => {
     expect(box).toBeChecked();
     fireEvent.click(box);
     expect(box).not.toBeChecked();
-    expect(setItem.mock.calls.filter(([key]) => /todo|task|done/i.test(String(key)))).toEqual([]);
+    // NO write at all (round 1, E1): a filter on the key let a persistence
+    // under any other name through.
+    expect(setItem).not.toHaveBeenCalled();
     setItem.mockRestore();
   });
 

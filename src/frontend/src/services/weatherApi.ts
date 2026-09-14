@@ -148,13 +148,26 @@ const isWeatherData = matches<DashboardWeatherData>({
   profileLocated: isBoolean,
 });
 
+/**
+ * Decimal degrees within the globe (round 1, G10 — GitHub 4008082556):
+ * `isFiniteNumber` let a latitude of 120 or a longitude of 250 through, and
+ * `searchLocations` handed back a pick the location endpoints would refuse
+ * (`SaveLocationRequest` holds ±90 / ±180). Rejected HERE, as a malformed
+ * answer, the way every other out-of-domain value of the aggregate is.
+ */
+const isLatitude: Check<number> = (value): value is number =>
+  isFiniteNumber(value) && value >= -90 && value <= 90;
+
+const isLongitude: Check<number> = (value): value is number =>
+  isFiniteNumber(value) && value >= -180 && value <= 180;
+
 /** One geocoder match — exactly what the location endpoints accept back. */
 const isLocationPick = matches<LocationPick>({
   name: isString,
   region: isNullableString,
   country: isNullableString,
-  latitude: isFiniteNumber,
-  longitude: isFiniteNumber,
+  latitude: isLatitude,
+  longitude: isLongitude,
 });
 
 const isLocationPickList = arrayOf(isLocationPick);

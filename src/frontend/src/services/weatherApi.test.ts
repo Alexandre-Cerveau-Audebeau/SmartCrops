@@ -269,6 +269,12 @@ describe('searchLocations', () => {
     ['a pick without coordinates', [{ name: 'Lyon', region: null, country: 'France' }]],
     ['a pick with string coordinates', [{ ...pickFixture(), latitude: '45.76' }]],
     ['a pick without a name', [{ ...pickFixture(), name: undefined }]],
+    // Round 1, G10 — off the globe: the location endpoints hold ±90 / ±180,
+    // and a pick they would refuse is a malformed answer, not a valid choice.
+    ['a latitude past the pole', [pickFixture({ latitude: 120 })]],
+    ['a latitude a fraction under −90', [pickFixture({ latitude: -90.5 })]],
+    ['a longitude past the antimeridian', [pickFixture({ longitude: 250 })]],
+    ['a longitude a fraction over 180', [pickFixture({ longitude: 180.5 })]],
   ])('rejects %s', async (_case, body) => {
     mockFetch(body);
 
@@ -285,6 +291,16 @@ describe('searchLocations', () => {
     mockFetch([pickFixture({ region: null, country: null })]);
 
     await expect(searchLocations('Lyon')).resolves.toHaveLength(1);
+  });
+
+  it('accepts the poles and the antimeridian themselves — the bounds are inclusive (G10)', async () => {
+    mockFetch([
+      pickFixture({ name: 'North', latitude: 90, longitude: 0 }),
+      pickFixture({ name: 'South', latitude: -90, longitude: 180 }),
+      pickFixture({ name: 'West', latitude: 0, longitude: -180 }),
+    ]);
+
+    await expect(searchLocations('pole')).resolves.toHaveLength(3);
   });
 });
 

@@ -33,6 +33,17 @@ declare const process: { env: Record<string, string | undefined> };
 
 const originalTz = process.env.TZ;
 
+/**
+ * Locale-dependent whitespace, normalised (round 1, E14 / E15): ICU 72 put a
+ * NARROW NO-BREAK SPACE (U+202F) before « AM » / « PM » and « h », later
+ * engines added compatibility fixes, and the CI's Node 20 may answer either.
+ * `hourLabel` returns `Intl`'s string as is — the DISPLAY is right in both —
+ * so the assertions compare on ordinary spaces and pin the digits and the
+ * words, not the runtime's choice of space.
+ */
+const spaces = (value: string | null): string | null =>
+  value?.replace(/[\u202F\u00A0\u2009]/g, ' ') ?? null;
+
 afterEach(() => {
   if (originalTz === undefined) delete process.env.TZ;
   else process.env.TZ = originalTz;
@@ -61,14 +72,17 @@ describe('parseLocalDate — a local midnight from the components', () => {
 
     // Los Angeles is UTC−7 in September: a UTC midnight is 17:00 the evening
     // BEFORE there, which is what the banned string form would have read. The
-    // components form is a local midnight wherever the browser is.
-    expect(new Date().getTimezoneOffset()).toBe(420);
+    // components form is a local midnight wherever the browser is. The offset
+    // asserted is the DATE UNDER TEST's, not the day the suite runs (round 1,
+    // E13): Los Angeles is UTC−8 from November to March, and `new Date()` made
+    // this line a calendar time bomb.
+    expect(new Date(2026, 8, 12).getTimezoneOffset()).toBe(420);
     expect(parseLocalDate('2026-09-12')!.getDate()).toBe(12);
     expect(parseLocalDate('2026-09-12')!.getHours()).toBe(0);
     expect(weekdayShort('2026-09-12', 'en')).toBe('Sat');
     expect(weekdayShort('2026-09-17', 'en')).toBe('Thu');
     expect(weekdayLong('2026-09-17', 'fr')).toBe('jeudi');
-    expect(hourLabel('2026-09-12 13:00', 'fr')).toBe('13 h');
+    expect(spaces(hourLabel('2026-09-12 13:00', 'fr'))).toBe('13 h');
   });
 
   it('EAST of Greenwich too, of course', () => {
@@ -84,9 +98,9 @@ describe('parseLocalDate — a local midnight from the components', () => {
     // date, `setHours(2)` landed in the gap and read back as 3 AM.
     process.env.TZ = 'America/New_York';
 
-    expect(hourLabel('2026-03-08 02:00', 'en')).toBe('2 AM');
-    expect(hourLabel('2026-03-08 02:00', 'fr')).toBe('02 h');
-    expect(hourLabel('2026-03-08 03:00', 'en')).toBe('3 AM');
+    expect(spaces(hourLabel('2026-03-08 02:00', 'en'))).toBe('2 AM');
+    expect(spaces(hourLabel('2026-03-08 02:00', 'fr'))).toBe('02 h');
+    expect(spaces(hourLabel('2026-03-08 03:00', 'en'))).toBe('3 AM');
   });
 });
 
@@ -139,9 +153,9 @@ describe('the labels — Intl on the local components, capitalised like the artb
   });
 
   it('hourLabel: « 13 h » / « 1 PM », from the slot’s own text', () => {
-    expect(hourLabel('2026-09-12 13:00', 'fr')).toBe('13 h');
-    expect(hourLabel('2026-09-12 13:00', 'en')).toBe('1 PM');
-    expect(hourLabel('2026-09-13 00:00', 'en')).toBe('12 AM');
+    expect(spaces(hourLabel('2026-09-12 13:00', 'fr'))).toBe('13 h');
+    expect(spaces(hourLabel('2026-09-12 13:00', 'en'))).toBe('1 PM');
+    expect(spaces(hourLabel('2026-09-13 00:00', 'en'))).toBe('12 AM');
     expect(hourLabel('2026-09-12', 'en')).toBeNull();
   });
 });
