@@ -409,7 +409,7 @@
         "tabGardens_one": "{{count, number}} jardin",
         "tabGardens_other": "{{count, number}} jardins",
         "unknownChance": "Probabilité de pluie inconnue",
-        "chanceOfRainLabel": "{{value}} de pluie",
+        "chanceOfRainLabel": "{{value}} de probabilité de pluie",
         "minLabel": "minimum {{value}} degrés",
         "maxLabel": "maximum {{value}} degrés",
         "units": {
