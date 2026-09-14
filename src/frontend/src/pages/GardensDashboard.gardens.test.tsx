@@ -303,8 +303,11 @@ describe('Gardens widget delete flow (SMA-18 lot 1, moved by SMA-336)', () => {
     );
 
     await waitFor(() => expect(deleteGarden).toHaveBeenCalledWith('g1'));
-    // The list is re-fetched (the initial load + the post-delete refresh).
+    // The list is re-fetched (the initial load + the post-delete refresh) —
+    // and so is the weather (round 1, G11): its aggregate lists EVERY garden,
+    // and the widget would otherwise keep counting the deleted one.
     await waitFor(() => expect(fetchDashboardData).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchDashboardWeather).toHaveBeenCalledTimes(2));
     expect(await screen.findByText('Garden deleted')).toBeInTheDocument();
     await waitFor(() =>
       expect(
@@ -662,6 +665,10 @@ describe('Gardens dialogs speak their pending state (SMA-336 round 4)', () => {
         screen.queryByRole('dialog', { name: 'Create a new garden' })
       ).toBeNull()
     );
+    // Both aggregates follow a creation (round 1, G11): the new garden has to
+    // enter the weather widget's « N/M localisé » total and the To-do block.
+    await waitFor(() => expect(fetchDashboardData).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchDashboardWeather).toHaveBeenCalledTimes(2));
   });
 });
 

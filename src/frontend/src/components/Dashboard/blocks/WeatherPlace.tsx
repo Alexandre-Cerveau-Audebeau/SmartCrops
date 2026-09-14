@@ -35,6 +35,12 @@ export default function WeatherPlace({ name, trailing }: Props) {
       <Typography
         component="span"
         sx={{
+          // A flex item's automatic minimum is its content width (round 1,
+          // G6): without this the name never shrank, the ellipsis never
+          // engaged, and a long stored name pushed the « 1/3 localisé » chip —
+          // a button — past the 160 / 200 px hero column, where the card's
+          // `overflow: hidden` clipped it out of reach.
+          minWidth: 0,
           fontSize: DASHBOARD_WEATHER.place,
           fontWeight: 700,
           color: 'text.secondary',

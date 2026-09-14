@@ -131,9 +131,23 @@ const THEME_PATTERNS: ReadonlyArray<[AlertTheme, RegExp]> = [
   ['rain', /pluie|rain|inondation|flood|orage|thunder/i],
 ];
 
-export function alertTheme(alert: WeatherAlert): AlertTheme | null {
-  const text = `${alert.event ?? ''} ${alert.headline}`;
+function themeOfText(text: string): AlertTheme | null {
   return THEME_PATTERNS.find(([, pattern]) => pattern.test(text))?.[0] ?? null;
+}
+
+/** The theme of an alert for the chip line — read on the event AND the headline, so a bare « Alerte » still finds « vent » in its headline. */
+export function alertTheme(alert: WeatherAlert): AlertTheme | null {
+  return themeOfText(`${alert.event ?? ''} ${alert.headline}`);
+}
+
+/**
+ * The theme of an alert for its IDENTITY (round 1, G7) — read on the event
+ * alone, the headline only when the event is missing: an « Avalanche »
+ * bulletin whose headline also mentions the wind must not be filed under the
+ * wind alert of the same window.
+ */
+function identityTheme(alert: WeatherAlert): AlertTheme | null {
+  return themeOfText(alert.event ?? alert.headline);
 }
 
 /** CAP severities, ranked. Anything else — « Unknown », a typo, null — ranks 0 and is not shown. */
@@ -151,20 +165,27 @@ function severityRank(severity: string | null): number {
 /**
  * The official alerts worth a chip (Q7): severity at or above Moderate, and
  * DEDUPLICATED when the same alert arrives twice — typically once per language
- * (Météo-France issues FR and EN bulletins of one vigilance). The key is
- * `event` + `effective` + `expires`: two bulletins of one event over one
- * window are one alert, whatever the headline's language. Order preserved.
+ * (Météo-France issues FR and EN bulletins of one vigilance).
+ *
+ * The key carries NO localized text (round 1, G7): keyed on `event`, a French
+ * « Vent violent » and its English « Strong wind » over one window made two
+ * keys, two chips, and ate the three-chip line. It is the validity window,
+ * the severity RANK (« Severe » and « severe » are one), and the alert's
+ * THEME — `alertTheme`'s FR / EN patterns are the language-independent
+ * category the wire does not carry (PR 3a/5 kept neither the provider's
+ * `category` nor its `msgtype`). An alert no pattern recognises keeps its
+ * text as identity: merging two distinct uncategorised alerts would HIDE a
+ * warning, which is worse than showing a duplicate. Order preserved.
  */
 export function officialAlerts(alerts: readonly WeatherAlert[]): WeatherAlert[] {
   const minimum = SEVERITY_RANK[WEATHER_RULES.officialMinSeverity]!;
   const seen = new Set<string>();
   return alerts.filter((alert) => {
-    if (severityRank(alert.severity) < minimum) return false;
-    const key = [
-      (alert.event ?? alert.headline).trim().toLowerCase(),
-      alert.effective ?? '',
-      alert.expires ?? '',
-    ].join('|');
+    const rank = severityRank(alert.severity);
+    if (rank < minimum) return false;
+    const identity =
+      identityTheme(alert) ?? `text:${(alert.event ?? alert.headline).trim().toLowerCase()}`;
+    const key = [alert.effective ?? '', alert.expires ?? '', rank, identity].join('|');
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -222,9 +243,15 @@ export function gardenerSentence(location: WeatherLocation): GardenerSentence | 
       return h !== null && h < rules.nightUntilHour;
     }),
   ];
+  // The night slots are the NIGHT's own temperatures (round 1, G8 — GitHub
+  // 4008082543, Extension 9ddae1b5 / 1058691c): the day's minimum may have
+  // happened at 06 h and says nothing about tonight — 1 °C at dawn and a
+  // 12 °C night printed « Gel possible cette nuit ». The minimum is the
+  // fallback for a place whose hours did not travel, and nothing more.
   const frostTonight =
-    today.minTempC <= rules.frostNightMaxC ||
-    tonight.some((hour) => hour.tempC <= rules.frostNightMaxC);
+    tonight.length > 0
+      ? tonight.some((hour) => hour.tempC <= rules.frostNightMaxC)
+      : today.minTempC <= rules.frostNightMaxC;
   if (frostTonight) return 'frostTonight';
 
   // A null chance is UNKNOWN (K3): it asserts no rain, so the sentence falls to

@@ -77,6 +77,17 @@ describe('parseLocalDate — a local midnight from the components', () => {
     expect(parseLocalDate('2026-09-12')!.getDate()).toBe(12);
     expect(weekdayShort('2026-09-12', 'en')).toBe('Sat');
   });
+
+  it('labels a slot through the browser zone’s DST gap: « 02:00 » stays 2 AM where 2 AM does not exist (G9)', () => {
+    // New York springs forward on 8 March 2026 at 02:00 → 03:00. A slot the
+    // PLACE wrote as « 02:00 » is a real hour there; built as a browser-local
+    // date, `setHours(2)` landed in the gap and read back as 3 AM.
+    process.env.TZ = 'America/New_York';
+
+    expect(hourLabel('2026-03-08 02:00', 'en')).toBe('2 AM');
+    expect(hourLabel('2026-03-08 02:00', 'fr')).toBe('02 h');
+    expect(hourLabel('2026-03-08 03:00', 'en')).toBe('3 AM');
+  });
 });
 
 describe('parseLocalDateTime', () => {

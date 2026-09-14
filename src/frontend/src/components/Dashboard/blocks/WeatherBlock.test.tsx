@@ -344,6 +344,32 @@ describe('WeatherBlock — the place tabs (F.3)', () => {
     expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('lets a long place name ellipsize instead of pushing the chip out of the hero column (G6)', () => {
+    // GitHub 4008082531: the name span declared `nowrap` / `overflow: hidden` /
+    // `ellipsis` but, as a flex item at `min-width: auto`, never shrank — a
+    // long stored name pushed the « 1/3 localisé » BUTTON past the 160 / 200 px
+    // column, where the card's `overflow: hidden` clipped it out of reach.
+    const long = 'Saint-Rémy-en-Bouzemont-Saint-Genest-et-Isson';
+    const { card, widget } = renderBlock({
+      size: 'large',
+      weather: weatherFixture(
+        [locationFixture({ name: long })],
+        [
+          linkFixture({ gardenId: 'g1', source: 'garden' }),
+          linkFixture({ gardenId: 'g2', locationKey: null, source: null }),
+          linkFixture({ gardenId: 'g3', locationKey: null, source: null }),
+        ]
+      ),
+    });
+
+    const name = within(card.querySelector('[data-weather-place]') as HTMLElement).getByText(long);
+    const rules = rulesFor(name).replace(/\s+/g, '');
+    expect(rules).toContain('min-width:0');
+    expect(rules).toContain('text-overflow:ellipsis');
+    expect(rules).toContain('white-space:nowrap');
+    expect(widget.getByRole('button', { name: '1/3 located — add a city' })).toBeInTheDocument();
+  });
+
   it('Small and Medium show the FIRST place and no tabs (arbitrage Q8)', () => {
     const { widget, card } = renderBlock({ size: 'medium', weather: twoPlaces() });
 

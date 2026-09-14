@@ -235,6 +235,11 @@ export default function GardensDashboard() {
       setNewGardenName('');
       setNewGardenDescription('');
       refetch();
+      // BOTH aggregates (round 1, G11 — GitHub outside-diff, GardensDashboard
+      // 237 / 248): `DashboardWeatherData.gardens` lists EVERY garden, so a
+      // weather aggregate fetched before the creation omits the new one from
+      // the widget's « 1/3 localisé » total and from the To-do block.
+      refetchWeather();
     } catch {
       setCreateError(true);
     } finally {
@@ -246,6 +251,8 @@ export default function GardensDashboard() {
     setToastSeq((sequence) => sequence + 1);
     setToastOpen(true);
     refetch();
+    // …and a deleted garden must stop being counted by the weather surfaces.
+    refetchWeather();
   };
 
   const patchBlock = (

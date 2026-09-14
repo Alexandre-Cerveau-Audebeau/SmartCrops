@@ -105,7 +105,7 @@ describe('officialAlerts — severity floor and the two-language dedup (Q7)', ()
     expect(kept.map((a) => a.event)).toEqual(['b', 'c', 'd']);
   });
 
-  it('collapses the same alert issued in two languages — same event, effective and expires', () => {
+  it('collapses the same alert issued in two languages — same window, same theme', () => {
     const kept = officialAlerts([
       alertFixture({ headline: 'Vigilance orange vent violent', event: 'Vent violent' }),
       alertFixture({ headline: 'Orange warning: strong wind', event: 'vent violent ' }),
@@ -113,6 +113,36 @@ describe('officialAlerts — severity floor and the two-language dedup (Q7)', ()
 
     expect(kept).toHaveLength(1);
     expect(kept[0]!.headline).toBe('Vigilance orange vent violent');
+  });
+
+  it('…even when the two bulletins TRANSLATE the event: « Vent violent » and « Strong wind » are one chip (G7)', () => {
+    // GitHub 4008082537: keyed on the localized `event`, the French and the
+    // English copy of one vigilance made two keys and two chips.
+    const kept = officialAlerts([
+      alertFixture({ headline: 'Vigilance orange vent violent', event: 'Vent violent' }),
+      alertFixture({ headline: 'Orange warning: strong wind', event: 'Strong wind' }),
+    ]);
+
+    expect(kept).toHaveLength(1);
+    expect(weatherChips([], kept).official).toHaveLength(1);
+  });
+
+  it('never merges two DISTINCT uncategorised alerts over one window: the text stays their identity', () => {
+    expect(
+      officialAlerts([
+        alertFixture({ event: 'Avalanche', severity: 'Severe' }),
+        alertFixture({ event: 'Crue', severity: 'Severe' }),
+      ])
+    ).toHaveLength(2);
+  });
+
+  it('reads the severity by rank in the key: « Severe » and « severe » are one', () => {
+    expect(
+      officialAlerts([
+        alertFixture({ event: 'Vent violent', severity: 'Severe' }),
+        alertFixture({ event: 'Strong wind', severity: 'severe' }),
+      ])
+    ).toHaveLength(1);
   });
 
   it('keeps two alerts of one event over two windows, and two events over one window', () => {
@@ -127,7 +157,7 @@ describe('officialAlerts — severity floor and the two-language dedup (Q7)', ()
     ).toHaveLength(2);
   });
 
-  it('falls back to the headline as the identity when the event is null', () => {
+  it('falls back to the headline as the identity when the event is null and no theme is recognised', () => {
     expect(
       officialAlerts([
         alertFixture({ event: null, headline: 'Same' }),
@@ -222,13 +252,40 @@ describe('gardenerSentence — by priority', () => {
     expect(gardenerSentence(locationFixture())).toBe('waterEvening');
   });
 
-  it('frost tonight from the day’s minimum, at 2° inclusive', () => {
+  it('frost tonight from the day’s minimum, at 2° inclusive — the FALLBACK, when no hour travelled', () => {
     expect(gardenerSentence(locationFixture({ days: [dayFixture({ minTempC: 2 })] }))).toBe(
       'frostTonight'
     );
     expect(gardenerSentence(locationFixture({ days: [dayFixture({ minTempC: 2.5 })] }))).not.toBe(
       'frostTonight'
     );
+  });
+
+  it('reads TONIGHT from the night slots when they exist: 1° at dawn and a 12° night is no frost tonight (G8)', () => {
+    // GitHub 4008082543 / Extension 9ddae1b5, 1058691c: the day's minimum is
+    // the whole day's — a cold dawn said « Gel possible cette nuit » over a
+    // mild evening. With hours on both days, the night window alone decides.
+    const dawn = hourFixture({ time: at('2026-09-12', 6), tempC: 1 });
+    const mild = (date: string, hour: number) => hourFixture({ time: at(date, hour), tempC: 12 });
+    const location = locationFixture({
+      localTime: '2026-09-12 19:00',
+      days: [
+        dayFixture({
+          date: '2026-09-12',
+          minTempC: 1,
+          hours: [dawn, ...[18, 19, 20, 21, 22, 23].map((h) => mild('2026-09-12', h))],
+        }),
+        dayFixture({ date: '2026-09-13', hours: [0, 1, 2, 3, 4, 5, 6].map((h) => mild('2026-09-13', h)) }),
+      ],
+    });
+
+    expect(gardenerSentence(location)).not.toBe('frostTonight');
+
+    // …and a single cold slot in that window still says frost, minimum or not.
+    const coldNight = locationFixture({
+      days: [dayFixture({ minTempC: 8, hours: [mild('2026-09-12', 18), hourFixture({ time: at('2026-09-12', 23), tempC: 2 })] })],
+    });
+    expect(gardenerSentence(coldNight)).toBe('frostTonight');
   });
 
   it('frost tonight from a NIGHT slot — 18 h onwards today, before 7 h tomorrow — and not from a day slot', () => {

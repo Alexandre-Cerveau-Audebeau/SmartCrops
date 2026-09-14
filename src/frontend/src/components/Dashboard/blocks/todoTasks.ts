@@ -42,12 +42,21 @@ export const TODO_RULES = {
   },
   cold: {
     /**
-     * Rule (a) — « Protéger du froid — N plants connus sensibles »: a
+     * Rule (a) — « Protéger du froid — N plantes sensibles sous T° »: a
      * placement is at risk on a day whose minimum is at or under its variety's
      * KNOWN tolerance plus this margin. ARBITRARY: the 2 m air temperature
      * overestimates the ground, and a forecast minimum is itself uncertain.
      */
     marginC: 3,
+    /**
+     * …and ONLY on a day whose minimum is at or under this (round 1, O1).
+     * ARBITRARY: a tropical houseplant tolerating 15 °C raised « Protéger du
+     * froid — 1 plante connue sensible, 17° ce soir » on a September evening
+     * — exact, and useless. Under 12 °C a cold warning is one a gardener acts
+     * on; above it, the tolerance is shown in the sentence and nothing is
+     * asked. Rule (b), the frost, is untouched.
+     */
+    maxC: 12,
   },
   frost: {
     /** Rule (b) — « Protéger du gel — N plantes »: EVERY placement, on a day whose minimum is at or under this. PHYSICAL. */
@@ -58,7 +67,12 @@ export const TODO_RULES = {
 export type TodoTaskKind = 'water' | 'cold' | 'frost';
 
 export interface TodoTask {
-  /** Stable across renders — the session checkbox key. */
+  /**
+   * The session checkbox key: the kind, the garden AND a digest of the content
+   * — date, count, threshold (round 1, E9 / E10). A weather refresh that moves
+   * a task to another day, another count or another minimum makes ANOTHER
+   * task, whose box starts unticked; a refresh that changes nothing keeps it.
+   */
   id: string;
   kind: TodoTaskKind;
   gardenId: string;
@@ -71,6 +85,18 @@ export interface TodoTask {
   today: boolean;
   /** The day's minimum, °C, for cold and frost; null for watering. */
   tempC: number | null;
+  /**
+   * Rule (a) only: the KNOWN tolerance the sentence names — « sensibles sous
+   * 8° » — the HIGHEST among the placements counted, i.e. the most fragile
+   * plant's (round 1, O1). Null for watering and frost.
+   */
+  toleranceC: number | null;
+  /**
+   * The place's weather is its LAST KNOWN one, not a fresh forecast (round 1,
+   * G2): the task is still planned — a stale forecast beats no plan — and the
+   * block says so beside it.
+   */
+  stale: boolean;
   /** Its index in the place's `days[]` — the tie-break between the two cold rules. */
   dayIndex: number;
 }
@@ -142,6 +168,12 @@ export function todoTasks(
       const stamp = now(location);
       return stamp ? (parseLocalDateTime(stamp)?.hour ?? null) : null;
     })();
+    // Chosen over « no task at all » (round 1, G2): a place whose refresh
+    // failed still holds the best forecast there is, and a gardener told
+    // « d'après la dernière météo connue » can weigh it — while an unlocated
+    // garden's invitation would be the wrong sentence for a garden that IS
+    // located.
+    const stale = location.status === 'stale';
 
     // Placements per variety — the unit every count is stated in.
     const placementsOf = new Map<string, number>();
@@ -156,9 +188,14 @@ export function todoTasks(
       return level && TODO_RULES.watering.highNeedLevels.includes(level) ? sum + count : sum;
     }, 0);
     const eveningAhead = nowHour === null || nowHour <= TODO_RULES.watering.eveningUntilHour - 1;
-    if (highNeed > 0 && eveningAhead && isDryDay(day0) && isDryEvening(day0)) {
+    // « Ce soir » is the PLACE's own evening (round 1, G2 — GitHub 4008082494):
+    // a stale aggregate read after the place's midnight still carries
+    // yesterday as `days[0]`, and « Arroser ce soir » for a day that has ended
+    // is a wrong instruction, not a late one. Unknown date: trusted, as before.
+    const day0IsToday = today === null || day0.date === today;
+    if (highNeed > 0 && day0IsToday && eveningAhead && isDryDay(day0) && isDryEvening(day0)) {
       tasks.push({
-        id: `water:${garden.id}`,
+        id: `water:${garden.id}:${day0.date}:${highNeed}`,
         kind: 'water',
         gardenId: garden.id,
         gardenName: garden.name,
@@ -166,6 +203,8 @@ export function todoTasks(
         date: day0.date,
         today: true,
         tempC: null,
+        toleranceC: null,
+        stale,
         dayIndex: 0,
       });
     }
@@ -173,17 +212,20 @@ export function todoTasks(
     // ── Cold, rule (a): the placements whose tolerance is KNOWN ────────
     let cold: TodoTask | null = null;
     location.days.some((day, index) => {
-      const sensitive = [...placementsOf].reduce((sum, [plantId, count]) => {
+      // O1: no cold warning above the named ceiling, whatever a plant tolerates.
+      if (day.minTempC > TODO_RULES.cold.maxC) return false;
+      let sensitive = 0;
+      let mostFragile: number | null = null;
+      for (const [plantId, count] of placementsOf) {
         const tolerance = byPlant.get(plantId)?.minToleratedTempC;
-        return tolerance !== null &&
-          tolerance !== undefined &&
-          day.minTempC <= tolerance + TODO_RULES.cold.marginC
-          ? sum + count
-          : sum;
-      }, 0);
+        if (tolerance === null || tolerance === undefined) continue;
+        if (day.minTempC > tolerance + TODO_RULES.cold.marginC) continue;
+        sensitive += count;
+        mostFragile = mostFragile === null ? tolerance : Math.max(mostFragile, tolerance);
+      }
       if (sensitive === 0) return false;
       cold = {
-        id: `cold:${garden.id}`,
+        id: `cold:${garden.id}:${day.date}:${sensitive}:${mostFragile}`,
         kind: 'cold',
         gardenId: garden.id,
         gardenName: garden.name,
@@ -191,6 +233,8 @@ export function todoTasks(
         date: day.date,
         today: day.date === today,
         tempC: day.minTempC,
+        toleranceC: mostFragile,
+        stale,
         dayIndex: index,
       };
       return true;
@@ -201,7 +245,7 @@ export function todoTasks(
     location.days.some((day, index) => {
       if (day.minTempC > TODO_RULES.frost.maxC) return false;
       frost = {
-        id: `frost:${garden.id}`,
+        id: `frost:${garden.id}:${day.date}:${garden.placements.length}:${day.minTempC}`,
         kind: 'frost',
         gardenId: garden.id,
         gardenName: garden.name,
@@ -209,6 +253,8 @@ export function todoTasks(
         date: day.date,
         today: day.date === today,
         tempC: day.minTempC,
+        toleranceC: null,
+        stale,
         dayIndex: index,
       };
       return true;

@@ -13,6 +13,7 @@ import {
   locationFixture,
   weatherFixture,
 } from '../../../test/fixtures/weather';
+import { rulesFor } from '../../../test/dashboardDom';
 import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../../../types/DashboardWeather';
 import TodoBlock from './TodoBlock';
 import { todoTasks } from './todoTasks';
@@ -26,7 +27,9 @@ import { todoTasks } from './todoTasks';
 //   Terrasse        — 3 basils (Frequent, tolerate 8°) + 15 tomatoes (High, 5°)
 //                     → water 18 tonight; cold: the 3 basils on Tuesday (9° ≤ 11°).
 //   Balcon sud      — 4 sages (Low, 12°) + 2 mints (Frequent, unknown)
-//                     → water 2; cold: the 4 sages on Sunday (15° ≤ 15°).
+//                     → water 2; cold: the 4 sages on Tuesday (9° ≤ 15°) — not
+//                     on Sunday: 15° is within their margin but above the 12°
+//                     ceiling of rule (a) (round 1, O1).
 //   Potager du fond — 6 tomatoes (High, 5°) + 4 lettuces (Average, 10°)
 //                     → water 6; cold: the 4 lettuces on Tuesday (9° ≤ 13°).
 // Six tasks, two per garden.
@@ -121,9 +124,9 @@ describe('TodoBlock — Medium (Main.dc.html)', () => {
     const rows = [...card.querySelectorAll('[data-todo-task]')];
     expect(rows).toHaveLength(4);
     expect(rows[0]).toHaveTextContent('Water tonight — 18 plants (Terrasse), no rain expected');
-    expect(rows[1]).toHaveTextContent('Protect from cold — 3 known tender plants (Terrasse), 9° Tuesday evening');
+    expect(rows[1]).toHaveTextContent('Protect from cold — 3 plants tender below 8° (Terrasse), 9° Tuesday evening');
     expect(rows[2]).toHaveTextContent('Water tonight — 2 plants (Balcon sud), no rain expected');
-    expect(rows[3]).toHaveTextContent('Protect from cold — 4 known tender plants (Balcon sud), 15° Sunday evening');
+    expect(rows[3]).toHaveTextContent('Protect from cold — 4 plants tender below 12° (Balcon sud), 9° Tuesday evening');
     expect(widget.queryByRole('checkbox')).toBeNull();
 
     fireEvent.click(widget.getByRole('button', { name: '+2 tasks →' }));
@@ -215,7 +218,7 @@ describe('TodoBlock — Large', () => {
       'Water tonight — 18 plants with high needs, no rain expected'
     );
     expect(card.querySelector('[data-todo-group="g3"] [data-todo-task="cold"]')).toHaveTextContent(
-      'Protect from cold — 4 known tender plants, 9° Tuesday evening'
+      'Protect from cold — 4 plants tender below 10°, 9° Tuesday evening'
     );
     expect(card.querySelector('[data-todo-session]')).toHaveTextContent(
       'Boxes ticked for this session only — not saved'
@@ -248,6 +251,56 @@ describe('TodoBlock — Large', () => {
       'Protect from frost — 6 plants, -2° tonight'
     );
     expect(card.querySelector('[data-todo-task="cold"]')).toBeNull();
+  });
+
+  it('keeps the list COMPACT at the top of the card — never stretched (O2, the V3 rule)', () => {
+    // Three tasks in a Large card left a void between them and the notes: the
+    // group list took the leftover height with `flex: 1`. It now takes the
+    // height of what it lists, shrinks (with its own scroll) only when the
+    // card is too short, and the notes follow it directly.
+    const { card } = renderBlock({ size: 'large', gardens: [terrasse], weather: allLocated() });
+
+    const groups = card.querySelector('[data-todo-groups]') as HTMLElement;
+    const rules = rulesFor(groups).replace(/\s+/g, '');
+    expect(rules).not.toMatch(/(?:^|[{;])flex-grow:1/);
+    expect(rules).not.toMatch(/(?:^|[{;])flex:1(?:[;}])/);
+    // `flex: 0 1 auto` — no growth, shrinkable, intrinsic basis.
+    expect(rules).toContain('flex:01auto');
+    expect(getComputedStyle(groups).flexGrow).not.toBe('1');
+    // The notes sit right under the list, in document order.
+    const session = card.querySelector('[data-todo-session]')!;
+    expect(groups.compareDocumentPosition(session)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('says « (last known weather) » on every task planned from a STALE place (G2)', () => {
+    const stale = weatherFixture(
+      [locationFixture({ status: 'stale', days: days() })],
+      [linkFixture({ gardenId: 'g1' })]
+    );
+    const { card } = renderBlock({ size: 'large', gardens: [terrasse], weather: stale });
+
+    const rows = [...card.querySelectorAll('[data-todo-task]')];
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row).toHaveAttribute('data-todo-stale');
+      expect(row.textContent).toMatch(/\(last known weather\)$/);
+    }
+  });
+
+  it('…and says nothing of the kind on a fresh place', () => {
+    const { card } = renderBlock({ size: 'large', gardens: [terrasse], weather: allLocated() });
+
+    expect(card.querySelectorAll('[data-todo-task]')).toHaveLength(2);
+    expect(card.querySelector('[data-todo-stale]')).toBeNull();
+    expect(card.textContent).not.toContain('last known weather');
+  });
+
+  it('never nests the « Add a city → » button in a paragraph (E2)', () => {
+    const { card } = renderBlock({ size: 'large', weather: partial() });
+
+    const invite = card.querySelector('[data-todo-invite]')!;
+    expect(invite.querySelector('p')).toBeNull();
+    expect(invite.querySelector('button')).not.toBeNull();
   });
 });
 

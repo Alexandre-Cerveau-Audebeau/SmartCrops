@@ -116,6 +116,27 @@ describe('todoTasks — watering tonight', () => {
 
     expect(todoTasks([sages], varieties, lyon([dryToday()]))).toEqual([]);
   });
+
+  it('no watering task when days[0] is not the place’s OWN date — a stale aggregate read after its midnight (G2)', () => {
+    // GitHub 4008082494: the same dry Saturday, but the place's clock says
+    // Sunday 00:30 — « ce soir » would name an evening that has ended.
+    expect(todoTasks([terrasse], varieties, lyon([dryToday()], '2026-09-13 00:30'))).toEqual([]);
+    // An unknown clock is trusted, as before.
+    expect(todoTasks([terrasse], varieties, lyon([dryToday()], null as unknown as string), () => null)).toHaveLength(1);
+  });
+
+  it('a STALE place still plans, and every one of its tasks says so (G2, chosen over « no task »)', () => {
+    const stale = weatherFixture(
+      [locationFixture({ status: 'stale', days: [dryToday({ minTempC: 9 })] })],
+      [linkFixture({ gardenId: 'g1' })]
+    );
+
+    const tasks = todoTasks([terrasse], varieties, stale);
+
+    expect(tasks.map((t) => t.kind)).toEqual(['water', 'cold']);
+    expect(tasks.every((t) => t.stale)).toBe(true);
+    expect(todoTasks([terrasse], varieties, lyon([dryToday()])).every((t) => !t.stale)).toBe(true);
+  });
 });
 
 describe('todoTasks — the cold, two rules (Q9)', () => {
@@ -143,6 +164,36 @@ describe('todoTasks — the cold, two rules (Q9)', () => {
     const warmer = [dayFixture({ date: '2026-09-12', minTempC: 11.5, chanceOfRain: 90 })];
     expect(todoTasks([terrasse], varieties, lyon(warmer))).toEqual([]);
     expect(TODO_RULES.cold.marginC).toBe(3);
+  });
+
+  it('rule (a) fires ONLY under the 12 °C ceiling, whatever a plant tolerates (O1)', () => {
+    // The case Alexandre read: a tropical plant tolerating 15 °C, a 17 °C
+    // evening — « Protéger du froid — 1 plante connue sensible, 17° ce soir »
+    // was exact and useless. Above the ceiling nothing is asked.
+    const monstera = varietyFixture({ plantId: 'monstera', commonName: 'Monstera', minToleratedTempC: 15 });
+    const veranda = gardenFixture({ id: 'g1', name: 'Véranda', placements: plants(['monstera', 1]), placementCount: 1 });
+    const day = (minTempC: number) => [dayFixture({ date: '2026-09-12', minTempC, chanceOfRain: 90 })];
+
+    expect(TODO_RULES.cold.maxC).toBe(12);
+    expect(todoTasks([veranda], [monstera], lyon(day(17)))).toEqual([]);
+    expect(todoTasks([veranda], [monstera], lyon(day(12.5)))).toEqual([]);
+    // At the ceiling, inclusive: 12 ≤ 12 and 12 ≤ 15 + 3.
+    expect(todoTasks([veranda], [monstera], lyon(day(12)))).toEqual([
+      expect.objectContaining({ kind: 'cold', count: 1, tempC: 12, toleranceC: 15 }),
+    ]);
+  });
+
+  it('rule (a) names the MOST FRAGILE tolerance among the placements it counts', () => {
+    // Basil tolerates 8, this sage 12: at 9° both are within their margin, and
+    // the sentence says « sensibles sous 12° » — the plant that suffers first.
+    const sage12 = varietyFixture({ plantId: 'sage', commonName: 'Sage', minToleratedTempC: 12 });
+    const days = [dayFixture({ date: '2026-09-12', minTempC: 9, chanceOfRain: 90 })];
+
+    const [task] = todoTasks([terrasse], [basil, sage12, fern], lyon(days));
+
+    expect(task).toMatchObject({ kind: 'cold', count: 5, toleranceC: 12, tempC: 9 });
+    // Watering and frost carry no tolerance.
+    expect(todoTasks([terrasse], varieties, lyon([dryToday()]))[0]).toMatchObject({ kind: 'water', toleranceC: null });
   });
 
   it('rule (b): frost at 0 or under counts EVERY placement, tolerance known or not', () => {
@@ -222,7 +273,31 @@ describe('todoTasks — order and identity', () => {
 
     const tasks = todoTasks([terrasse, balcon], varieties, balconLocated);
 
-    expect(tasks.map((t) => t.id)).toEqual(['water:g1', 'cold:g1', 'water:g2', 'cold:g2']);
+    expect(tasks.map((t) => t.id)).toEqual([
+      'water:g1:2026-09-12:3',
+      'cold:g1:2026-09-12:3:8',
+      'water:g2:2026-09-12:1',
+      'cold:g2:2026-09-12:1:8',
+    ]);
     expect(tasks[2]).toMatchObject({ gardenName: 'Balcon sud', count: 1 });
+  });
+
+  it('the id is a digest of the CONTENT: another day, count or minimum is another task (E9 / E10)', () => {
+    // Extension 3faf2a17 / dc027747: with `kind:garden` alone, a refresh that
+    // moved the cold to Wednesday kept the id, and the box ticked for Tuesday
+    // stayed ticked for a task that no longer said the same thing.
+    const idOf = (days: WeatherDay[]) => todoTasks([terrasse], varieties, lyon(days)).map((t) => t.id);
+
+    const tuesday = idOf([dayFixture({ date: '2026-09-15', minTempC: 9, chanceOfRain: 90 })]);
+    const wednesday = idOf([dayFixture({ date: '2026-09-16', minTempC: 9, chanceOfRain: 90 })]);
+    const colder = idOf([dayFixture({ date: '2026-09-15', minTempC: 7, chanceOfRain: 90 })]);
+    const frost = idOf([dayFixture({ date: '2026-09-15', minTempC: -1, chanceOfRain: 90 })]);
+
+    expect(tuesday).toEqual(['cold:g1:2026-09-15:3:8']);
+    expect(wednesday).not.toEqual(tuesday);
+    expect(colder).toEqual(tuesday); // 7° and 9° are the same three basils under 8° — the same task.
+    expect(frost).toEqual(['frost:g1:2026-09-15:6:-1']);
+    // The same forecast twice is the same id — a refresh that changes nothing keeps the tick.
+    expect(idOf([dayFixture({ date: '2026-09-15', minTempC: 9, chanceOfRain: 90 })])).toEqual(tuesday);
   });
 });

@@ -104,23 +104,32 @@ export default function TodoBlock({
       return next;
     });
 
-  /** The sentence of a task — with the garden in brackets on an ungrouped list of several gardens. */
+  const degrees = (celsius: number) =>
+    t('dashboard.blocks.weather.degrees', { value: displayTemperature(celsius, system) });
+
+  /**
+   * The sentence of a task — with the garden in brackets on an ungrouped list
+   * of several gardens. A cold task names the TOLERANCE it is about (round 1,
+   * O1: « 3 plantes sensibles sous 8° », not « 3 plantes connues sensibles »);
+   * a task planned on a place's LAST KNOWN weather says so (G2).
+   */
   const label = (task: TodoTask, grouped: boolean): string => {
     const plants =
       task.kind === 'cold'
-        ? t('dashboard.blocks.todo.sensitivePlants', { count: task.count })
+        ? t('dashboard.blocks.todo.sensitivePlants', {
+            count: task.count,
+            threshold: task.toleranceC === null ? '' : degrees(task.toleranceC),
+          })
         : t('dashboard.blocks.todo.plants', { count: task.count });
     const when = task.today
       ? t('dashboard.blocks.todo.tonight')
       : t('dashboard.blocks.todo.eveningOf', {
           day: weekdayLong(task.date, i18n.language) ?? task.date,
         });
-    const temp =
-      task.tempC === null
-        ? ''
-        : t('dashboard.blocks.weather.degrees', { value: displayTemperature(task.tempC, system) });
+    const temp = task.tempC === null ? '' : degrees(task.tempC);
     const key = grouped ? `${task.kind}Grouped` : task.kind;
-    return t(`dashboard.blocks.todo.${key}`, { plants, garden: task.gardenName, temp, when });
+    const sentence = t(`dashboard.blocks.todo.${key}`, { plants, garden: task.gardenName, temp, when });
+    return task.stale ? t('dashboard.blocks.todo.stale', { task: sentence }) : sentence;
   };
 
   const row = (task: TodoTask, grouped: boolean, checkbox: boolean) => {
@@ -132,6 +141,7 @@ export default function TodoBlock({
         component="li"
         key={task.id}
         data-todo-task={task.kind}
+        data-todo-stale={task.stale ? '' : undefined}
         sx={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}
       >
         {checkbox ? (
@@ -210,7 +220,14 @@ export default function TodoBlock({
       >
         <LocationOnOutlinedIcon />
       </Box>
-      <Typography sx={{ flex: 1, minWidth: 0, fontSize: DASHBOARD_TYPE.secondary, lineHeight: 1.5, color: 'text.secondary' }}>
+      {/* A `div`, not Typography's default `<p>` (round 1, E2): the « Ajouter
+          une ville → » link below is a `<button>`, which HTML forbids inside a
+          paragraph — the parser would close the `<p>` before it and the two
+          halves of one sentence would come apart. */}
+      <Typography
+        component="div"
+        sx={{ flex: 1, minWidth: 0, fontSize: DASHBOARD_TYPE.secondary, lineHeight: 1.5, color: 'text.secondary' }}
+      >
         {t('dashboard.blocks.todo.noWeather', {
           count: missing.length,
           gardens: nameList(
@@ -334,7 +351,16 @@ export default function TodoBlock({
       .filter((group) => group.tasks.length > 0);
     return (
       <>
-        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {/* COMPACT, at the top, never stretched (round 1, O2 — the V3 rule):
+            with `flex: 1` this list took the leftover height of a Large card
+            and pushed the three notes to the foot, leaving a void under three
+            tasks. It now takes the height of what it lists and shrinks — with
+            its own scroll — only when the card is too short for it; whatever
+            is left over stays at the bottom, under the notes. */}
+        <Box
+          data-todo-groups
+          sx={{ flex: '0 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}
+        >
           {groups.map(({ garden, tasks: own }) => (
             <Box component="section" key={garden.id} data-todo-group={garden.id} aria-label={garden.name}>
               <Typography

@@ -88,9 +88,14 @@ export function weekdayLong(date: string, language: string): string | null {
 export function hourLabel(time: string, language: string): string | null {
   const parts = parseLocalDateTime(time);
   if (!parts) return null;
-  const built = parseLocalDate(parts.date)!;
-  built.setHours(parts.hour, parts.minute, 0, 0);
-  return new Intl.DateTimeFormat(language, { hour: 'numeric' }).format(built);
+  // A UTC sentinel, formatted IN UTC (round 1, G9 — GitHub 4008082551). Built
+  // as a browser-local date, a slot the PLACE wrote as « 02:00 » does not
+  // exist on the day the BROWSER's zone springs forward, and `setHours(2)`
+  // normalised it to 03:00 — one wrong label among the six, once a year, in
+  // another zone than the place's. UTC has no gap, and the date of the
+  // sentinel is irrelevant: only the hour and the minute are printed.
+  const built = new Date(Date.UTC(2000, 0, 1, parts.hour, parts.minute));
+  return new Intl.DateTimeFormat(language, { hour: 'numeric', timeZone: 'UTC' }).format(built);
 }
 
 /** The hour 0..23 written in a slot's own `time`, or null. */
