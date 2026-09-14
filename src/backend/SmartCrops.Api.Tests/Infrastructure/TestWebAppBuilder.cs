@@ -126,6 +126,20 @@ public sealed class TestWebAppBuilder
     }
 
     /// <summary>
+    /// Registers <c>WeatherApi:ApiKey</c>. Optional at boot by design
+    /// (SMA-336 PR 3a/5, the SMA-377 lesson): no factory needs this method for
+    /// the host to start. It is for tests that exercise the weather or
+    /// geocoding endpoints through the stubbed transport and need the client
+    /// to actually SEND — without a key it answers <c>MissingKey</c> before
+    /// any request.
+    /// </summary>
+    public TestWebAppBuilder WithWeatherApi(string apiKey = "test-weatherapi-key")
+    {
+        _config["WeatherApi:ApiKey"] = apiKey;
+        return this;
+    }
+
+    /// <summary>
     /// Registers <c>Typesense:ApiKey</c>. <c>TypesenseOptions.ApiKey</c> is
     /// <c>[Required]</c> with an empty default and validated at host boot via
     /// <c>ValidateOnStart</c>; any non-empty placeholder keeps the host alive.

@@ -25,6 +25,8 @@ using SmartCrops.Infrastructure.ExternalApis.Logging;
 using SmartCrops.Infrastructure.ExternalApis.Perenual;
 using SmartCrops.Infrastructure.ExternalApis.Trefle;
 using SmartCrops.Infrastructure.ExternalApis.SearchIndex;
+using SmartCrops.Infrastructure.ExternalApis.WeatherApi;
+using SmartCrops.Infrastructure.Weather;
 using Typesense;
 using Typesense.Setup;
 
@@ -199,6 +201,21 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:Account:WindowMinutes", 10)),
                 QueueLimit = 0,
             }));
+    // SMA-336 PR 3a/5 — "geocode" is a FOURTH sister, deliberately not a reuse
+    // of any budget above: it fronts a third-party call an autocomplete field
+    // makes on every pause in the typing, and typing a city must not be able
+    // to drain a password-reset or an account export. 60/10min: a city typed
+    // at normal speed costs one to four calls (debounced, three characters or
+    // more), so the window covers some twenty searches per address.
+    options.AddPolicy("geocode", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ClientIpPartition.FromContext(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = builder.Configuration.GetValue("RateLimiting:Geocode:PermitLimit", 60),
+                Window = TimeSpan.FromMinutes(builder.Configuration.GetValue("RateLimiting:Geocode:WindowMinutes", 10)),
+                QueueLimit = 0,
+            }));
 });
 
 // ── External taxonomy API: GBIF ──────────────────────────────────────────
@@ -313,6 +330,57 @@ builder.Services.AddSingleton<PerenualResolver>();
 builder.Services.AddScoped<IPlantPerenualEnrichmentService, PlantPerenualEnrichmentService>();
 builder.Services.AddScoped<IPerenualCatalogService, PerenualCatalogService>();
 builder.Services.AddScoped<IPerenualPestCatalogService, PerenualPestCatalogService>();
+
+// ── External weather API: WeatherAPI.com (SMA-336 PR 3a/5) ───────────────
+// Fourth external source, same shape as Perenual: options SHAPE validated at
+// startup, the ApiKey OPTIONAL at boot (the SMA-377 lesson — without it the
+// client answers MissingKey at call time, logs once, and the weather
+// endpoints degrade to their invitation). Typed HttpClient behind the
+// redacting logger: the key rides every request as ?key=..., which the
+// logger's existing key= rule already scrubs.
+//
+// Resilience is TIGHTER than the defaults (10 s attempt / 30 s total): the
+// dashboard calls one place per distinct garden location, in parallel, and
+// the browser's fetch gives up at 15 s — a provider outage must come back as
+// a degraded answer inside that budget, never as a client-side timeout.
+// The three durations are named constants on WeatherApiOptions, whose
+// TimeoutSeconds range is derived from the total (K2): HttpClient can never
+// re-cut the pipeline early. Constraints the handler's own validator
+// enforces: TotalRequestTimeout > AttemptTimeout, SamplingDuration >= 2 ×
+// AttemptTimeout.
+builder.Services.AddOptions<WeatherApiOptions>()
+    .Bind(builder.Configuration.GetSection(WeatherApiOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+// Beyond the annotations (review round 1, C4): the User-Agent must PARSE as a
+// header value, or ParseAdd would throw at the first call, outside every
+// catch. ValidateOnStart above runs this validator too, so it fails the boot.
+builder.Services.AddSingleton<IValidateOptions<WeatherApiOptions>, WeatherApiOptionsValidator>();
+
+// Provider-wide ceiling on calls in flight (review round 1): one singleton
+// for the process, shared by every request and both endpoints, because what
+// it protects is the deployment's single key. A dashboard with more distinct
+// places than the ceiling queues the rest behind the first few.
+builder.Services.AddSingleton<WeatherApiBulkhead>();
+
+// The HttpClient shape lives on the client class (one place for the host and
+// the tests): base address, timeout, User-Agent, and the buffered-body
+// ceiling (review round 1, C3).
+builder.Services.AddHttpClient<WeatherApiClient>((sp, client) =>
+    WeatherApiClient.ConfigureHttpClient(client, sp.GetRequiredService<IOptions<WeatherApiOptions>>().Value))
+.RemoveAllLoggers()
+.AddLogger<RedactingHttpClientLogger>()
+.AddStandardResilienceHandler(options =>
+{
+    options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(WeatherApiOptions.PipelineAttemptTimeoutSeconds);
+    options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(WeatherApiOptions.PipelineTotalTimeoutSeconds);
+    options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(WeatherApiOptions.PipelineSamplingDurationSeconds);
+});
+
+// The forecast cache in front of the client: a singleton because its gates
+// and its two entries per place must span requests; it resolves the typed
+// client in a scope of its own per provider call (see the class).
+builder.Services.AddSingleton<WeatherForecastCache>();
 
 // ── Search engine: Typesense (SMA-255) ───────────────────────────────────
 // Options validated at startup (missing API key fails the host boot), same

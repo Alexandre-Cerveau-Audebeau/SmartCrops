@@ -40,5 +40,46 @@ public class Garden : IHasUpdatedAt
     [StringLength(10)]
     public string? LatitudeBand { get; set; }
 
+    // ── Location (SMA-336 PR 3a/5) ──────────────────────────────────────────
+    // Six nullable columns with NO database defaults, the same doctrine as the
+    // exposure block above: NULL everywhere IS the « not located » state. These
+    // columns are the garden's OWN location — an override. A garden that has
+    // none inherits the account's default (ApplicationUser.Location*) at READ
+    // time, through GeoLocation.From(garden) ?? GeoLocation.From(user), and
+    // never stores a copy of it (ADR-0006).
+    //
+    // The time zone is deliberately NOT persisted: the weather provider returns
+    // it with every forecast, next to the place's local time, so a stored copy
+    // would only ever be read when there is nothing to display anyway. Lengths
+    // and the range / pair CHECK constraints live in GardenConfiguration.
+
+    /// <summary>Normalized place name as the geocoder returned it (« Lyon »).</summary>
+    public string? LocationName { get; set; }
+
+    /// <summary>Region or state (« Auvergne-Rhône-Alpes »), for disambiguation on screen.</summary>
+    public string? LocationRegion { get; set; }
+
+    /// <summary>
+    /// Country NAME as the geocoder returned it (« France ») — never an ISO
+    /// code: the provider's search endpoint sends none.
+    /// </summary>
+    public string? LocationCountry { get; set; }
+
+    /// <summary>
+    /// Decimal degrees, −90..90 (<c>CK_Gardens_Latitude_Range</c>). Set and
+    /// cleared TOGETHER with <see cref="Longitude"/> (<c>CK_Gardens_Location_Pair</c>).
+    /// </summary>
+    public double? Latitude { get; set; }
+
+    /// <summary>Decimal degrees, −180..180 (<c>CK_Gardens_Longitude_Range</c>).</summary>
+    public double? Longitude { get; set; }
+
+    /// <summary>
+    /// UTC instant the location was resolved (ADR-0001). Stamped explicitly by
+    /// the writer — <c>UpdateTimestampInterceptor</c> only touches
+    /// <see cref="UpdatedAt"/>.
+    /// </summary>
+    public DateTime? LocationResolvedAt { get; set; }
+
     public ICollection<GardenPlacement> Placements { get; set; } = [];
 }

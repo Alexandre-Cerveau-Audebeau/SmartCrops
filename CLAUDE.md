@@ -8,6 +8,7 @@ Operational guide for AI coding agents and context for automated review.
 - Frontend: React 19 + TypeScript + Vite + MUI v7; i18n via react-i18next (`src/frontend/src/i18n/fr.json`, `src/frontend/src/i18n/en.json`).
 - Backend: .NET 8 + EF Core + PostgreSQL; Docker; GitHub Actions CI.
 - Search: **Typesense** is the selected engine (settled over Elasticsearch) and is **live** since SMA-255 — a `typesense` service in `docker-compose`, an API key validated at boot (`ValidateOnStart`), and the Library's single data path through the finder endpoint since T4. It is current stack, not roadmap.
+- Weather + geocoding: **WeatherAPI.com** (SMA-336 PR 3a/5). The key `WeatherApi__ApiKey` is **optional at boot** — without it the client answers `MissingKey` without sending, logs once, and `GET /api/geocode/search` / `GET /api/dashboard/weather` degrade (503 / `unavailable`), never a crash-loop. **Never a real provider call in tests**: unit tests use hand-rolled handlers, integration tests the `StubWeatherApiHttpHandler` transport; the fixtures under `Tests/ExternalApis/WeatherApi/Fixtures` are synthetic (built from the public docs) until a redacted real recording replaces them.
 
 ## Environment & commands
 

@@ -41,6 +41,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         Fixture.PerenualHttpStub.Reset();
         Fixture.GbifHttpStub.Reset();
         Fixture.EmailStub.Reset();
+        Fixture.WeatherApiHttpStub.Reset();
 
         Client = Fixture.Factory.CreateClient();
     }

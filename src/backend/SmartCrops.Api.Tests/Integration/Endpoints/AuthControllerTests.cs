@@ -1169,4 +1169,76 @@ public class AuthControllerTests : IntegrationTestBase
         // suggestions for different locales are the same row in the file.
         Assert.Equal("fr", root.GetProperty("suggestions")[0].GetProperty("language").GetString());
     }
+
+    [Fact]
+    public async Task ExportAccount_CarriesProfileDefaultAndGardenOverrideLocations()
+    {
+        // SMA-336 PR 3a/5 — a place the user typed is personal data (art. 20):
+        // the account's DEFAULT location and a garden's OWN override both travel
+        // in the file, each where it is stored. The second garden inherits the
+        // default and therefore exports NULLs — the file carries facts, never a
+        // resolved copy.
+        var (_, userId) = await RegisterUserAsync();
+        var resolvedAt = new DateTime(2026, 9, 12, 10, 0, 0, DateTimeKind.Utc);
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var user = await db.Users.SingleAsync(u => u.Id == userId);
+            user.LocationName = "Lyon";
+            user.LocationRegion = "Auvergne-Rhône-Alpes";
+            user.LocationCountry = "France";
+            user.Latitude = 45.76;
+            user.Longitude = 4.84;
+            user.LocationResolvedAt = resolvedAt;
+            db.Gardens.Add(new Garden
+            {
+                Id = Guid.NewGuid(),
+                Name = "Potager du fond",
+                UserId = userId,
+                CreatedAt = DateTime.UtcNow.AddMinutes(-1),
+                LocationName = "Annecy",
+                LocationRegion = "Auvergne-Rhône-Alpes",
+                LocationCountry = "France",
+                Latitude = 45.9,
+                Longitude = 6.12,
+                LocationResolvedAt = resolvedAt,
+            });
+            db.Gardens.Add(new Garden
+            {
+                Id = Guid.NewGuid(),
+                Name = "Balcon sud",
+                UserId = userId,
+                CreatedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+        AuthAs(userId);
+
+        var response = await Client.GetAsync("/api/auth/account/export");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var profile = doc.RootElement.GetProperty("profile");
+        Assert.Equal("Lyon", profile.GetProperty("locationName").GetString());
+        Assert.Equal("Auvergne-Rhône-Alpes", profile.GetProperty("locationRegion").GetString());
+        Assert.Equal("France", profile.GetProperty("locationCountry").GetString());
+        Assert.Equal(45.76, profile.GetProperty("latitude").GetDouble());
+        Assert.Equal(4.84, profile.GetProperty("longitude").GetDouble());
+        Assert.Equal(resolvedAt, profile.GetProperty("locationResolvedAt").GetDateTime().ToUniversalTime());
+
+        // Gardens export oldest first.
+        var gardens = doc.RootElement.GetProperty("gardens");
+        var overridden = gardens[0];
+        Assert.Equal("Potager du fond", overridden.GetProperty("name").GetString());
+        Assert.Equal("Annecy", overridden.GetProperty("locationName").GetString());
+        Assert.Equal(45.9, overridden.GetProperty("latitude").GetDouble());
+        Assert.Equal(6.12, overridden.GetProperty("longitude").GetDouble());
+
+        var inheriting = gardens[1];
+        Assert.Equal("Balcon sud", inheriting.GetProperty("name").GetString());
+        Assert.Equal(JsonValueKind.Null, inheriting.GetProperty("locationName").ValueKind);
+        Assert.Equal(JsonValueKind.Null, inheriting.GetProperty("latitude").ValueKind);
+        Assert.Equal(JsonValueKind.Null, inheriting.GetProperty("longitude").ValueKind);
+        Assert.Equal(JsonValueKind.Null, inheriting.GetProperty("locationResolvedAt").ValueKind);
+    }
 }

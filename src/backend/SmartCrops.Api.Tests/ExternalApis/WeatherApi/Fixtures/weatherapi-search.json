@@ -1,0 +1,21 @@
+[
+  {
+    "_synthetic": "SYNTHETIC — built from the public docs on 2026-09-12; replace with a redacted real recording",
+    "id": 803268,
+    "name": "Paris",
+    "region": "Ile-de-France",
+    "country": "France",
+    "lat": 48.87,
+    "lon": 2.33,
+    "url": "paris-ile-de-france-france"
+  },
+  {
+    "id": 2550771,
+    "name": "Paris",
+    "region": "Texas",
+    "country": "United States of America",
+    "lat": 33.66,
+    "lon": -95.56,
+    "url": "paris-texas-united-states-of-america"
+  }
+]

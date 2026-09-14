@@ -1,0 +1,388 @@
+using System.Globalization;
+using System.Net;
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Polly;
+
+namespace SmartCrops.Infrastructure.ExternalApis.WeatherApi;
+
+/// <summary>
+/// Typed <see cref="HttpClient"/> wrapper around the two WeatherAPI.com
+/// endpoints SmartCrops consumes (SMA-336 PR 3a/5): <c>/search.json</c>
+/// (geocoding) and <c>/forecast.json</c> (current weather, daily and hourly
+/// forecast, official alerts — ONE call per place for every widget size).
+/// Resilience (retries / circuit breaker / per-request timeout) is attached at
+/// registration via <c>AddStandardResilienceHandler</c>; this class composes
+/// URLs, reads bodies and CLASSIFIES failures.
+///
+/// <para>Unlike <c>TrefleClient</c> and <c>PerenualClient</c>, it does not
+/// answer « null on failure »: it returns a <see cref="WeatherApiResult{T}"/>
+/// whose <see cref="WeatherApiFailureKind"/> the product branches on — no
+/// match is an invitation, a refusal is served from the last known data, a
+/// bad credential is an operator's problem behind a neutral message. To do
+/// that it reads EVERY body as a string first and, on a non-success status,
+/// binds the provider's <c>{ "error": { "code" } }</c> envelope BEFORE
+/// deciding — never <c>EnsureSuccessStatusCode</c>, which would throw the
+/// envelope away.</para>
+///
+/// <para><b>Key leakage</b>: the key travels as a query-string parameter on
+/// every request. The client's logging goes through
+/// <c>RedactingHttpClientLogger</c>, whose <c>key=</c> rule already covers this
+/// provider (and whose <c>q=</c> rule scrubs the user's place); nothing here
+/// logs a URI. A missing key is answered without any request
+/// (<see cref="WeatherApiFailureKind.MissingKey"/>) and logged ONCE per
+/// process: the boot is allowed without it (SMA-377), the weather is not.</para>
+///
+/// <para><b>One key for everyone</b>: every call takes a slot of the
+/// process-wide <see cref="WeatherApiBulkhead"/> first, so no single request —
+/// a dashboard with many distinct places, a burst of geocoding — can spend the
+/// shared key's goodwill in one instant. A call the bulkhead does not admit
+/// (its queue full, or its wait past the pipeline's total budget) is
+/// classified <see cref="WeatherApiFailureKind.Transport"/> without a request,
+/// exactly like a provider that stalled (review round 2, S4). And the wait
+/// and the call share ONE deadline besides — <see cref="CallDeadline"/>,
+/// under the browser's 15 s — so a slot freed late does not buy a stalled
+/// provider a second full budget (review round 3, D2).</para>
+/// </summary>
+public sealed class WeatherApiClient
+{
+    /// <summary>
+    /// Ceiling on a buffered response body, in bytes. A five-day forecast with
+    /// its hours is a few dozen kilobytes; one megabyte leaves room for every
+    /// documented field and none for a body the widget could not use — the
+    /// typed client refuses to buffer past it (review round 1, C3).
+    /// </summary>
+    public const int MaxResponseContentBytes = 1024 * 1024;
+
+    /// <summary>
+    /// The end-to-end deadline of one call — the wait for a slot and the HTTP
+    /// pipeline together: <see cref="WeatherApiOptions.CallDeadlineSeconds"/>
+    /// (review round 3, D2).
+    /// </summary>
+    public static readonly TimeSpan CallDeadline = TimeSpan.FromSeconds(WeatherApiOptions.CallDeadlineSeconds);
+
+    private readonly HttpClient _http;
+    private readonly WeatherApiBulkhead _bulkhead;
+    private readonly ILogger<WeatherApiClient> _logger;
+    private readonly WeatherApiOptions _options;
+
+    // Matches HttpClientJsonExtensions' default (web) deserialisation: camelCase
+    // tolerant, case-insensitive — which is what lets the documented `msgType`
+    // and the observed `msgtype` both bind.
+    private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
+
+    // One warning per PROCESS for the absent key, not one per request: the
+    // typed client is transient, so an instance field would say it on every
+    // dashboard load.
+    private static int _missingKeyWarned;
+
+    public WeatherApiClient(
+        HttpClient http,
+        WeatherApiBulkhead bulkhead,
+        IOptions<WeatherApiOptions> options,
+        ILogger<WeatherApiClient> logger)
+    {
+        _http = http;
+        _bulkhead = bulkhead;
+        _logger = logger;
+        _options = options.Value;
+    }
+
+    /// <summary>
+    /// Calls <c>/search.json?key=…&amp;q={query}</c>. The provider answers a
+    /// bare array of matches; an empty array and its code 1006 are BOTH
+    /// « nothing matches » — the first surfaces as a success holding no
+    /// location, the second as <see cref="WeatherApiFailureKind.NoLocation"/>,
+    /// and the caller treats them alike.
+    /// </summary>
+    public async Task<WeatherApiResult<WeatherApiSearchResponse>> SearchAsync(string query, CancellationToken ct)
+    {
+        var url = $"search.json?key={Uri.EscapeDataString(_options.ApiKey)}&q={Uri.EscapeDataString(query)}";
+        var result = await GetAsync<List<WeatherApiSearchLocation>>(url, "search", ct);
+        if (!result.IsSuccess)
+        {
+            return WeatherApiResult<WeatherApiSearchResponse>.Failed(
+                result.Failure.Kind, result.Failure.ProviderCode, result.Failure.HttpStatus);
+        }
+
+        // A null element is data the provider did not document; drop it rather
+        // than hand a hole to the caller.
+        var locations = result.Value.Where(l => l is not null).ToList();
+        _logger.LogInformation("WeatherAPI search: matches={Count}", locations.Count);
+        return WeatherApiResult<WeatherApiSearchResponse>.Success(new WeatherApiSearchResponse(locations));
+    }
+
+    /// <summary>
+    /// Calls <c>/forecast.json?key=…&amp;q={lat},{lon}&amp;days={n}&amp;alerts=yes&amp;aqi=no&amp;lang={lang}</c>.
+    /// Coordinates are formatted with the INVARIANT culture (a « 45,76 » under
+    /// fr-FR would be a different query). The provider may answer fewer days
+    /// than requested; the shortfall is logged and the answer is still a
+    /// success — the caller shows what there is.
+    /// </summary>
+    /// <param name="latitude">Decimal degrees, −90..90.</param>
+    /// <param name="longitude">Decimal degrees, −180..180.</param>
+    /// <param name="language">The <c>lang=</c> code for <c>condition:text</c>; null or blank falls back to <see cref="WeatherApiOptions.Language"/>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<WeatherApiResult<WeatherApiForecastResponse>> ForecastAsync(
+        double latitude,
+        double longitude,
+        string? language,
+        CancellationToken ct)
+    {
+        var lang = string.IsNullOrWhiteSpace(language) ? _options.Language : language;
+        // Digits, a dot, a minus and a comma: every character is URL-safe, so
+        // the pair travels verbatim (« 45.7640,4.8357 »), the documented form.
+        var q = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{latitude:F4},{longitude:F4}");
+        var url =
+            $"forecast.json?key={Uri.EscapeDataString(_options.ApiKey)}" +
+            $"&q={q}" +
+            $"&days={_options.ForecastDays.ToString(CultureInfo.InvariantCulture)}" +
+            "&alerts=yes&aqi=no";
+        // English is the provider's default and is NOT in its documented list
+        // of `lang` codes (read 2026-09-12): it is asked for by omission.
+        if (!string.Equals(lang, "en", StringComparison.OrdinalIgnoreCase))
+        {
+            url += $"&lang={Uri.EscapeDataString(lang)}";
+        }
+
+        var result = await GetAsync<WeatherApiForecastResponse>(url, "forecast", ct);
+        if (!result.IsSuccess) return result;
+
+        var days = result.Value.Forecast?.Forecastday?.Count ?? 0;
+        if (days < _options.ForecastDays)
+        {
+            // The documented `days` range is 1..14, but what a given key is
+            // served can be shorter — the answer is still weather, and the
+            // widget draws the rows it has. Said once per call so an operator
+            // can see the shortfall without a failing page.
+            _logger.LogWarning(
+                "WeatherAPI forecast returned {Days} day(s) where {Requested} were requested",
+                days, _options.ForecastDays);
+        }
+        else
+        {
+            _logger.LogInformation("WeatherAPI forecast: days={Days}", days);
+        }
+
+        return result;
+    }
+
+    private async Task<WeatherApiResult<T>> GetAsync<T>(string url, string operation, CancellationToken ct)
+        where T : class
+    {
+        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        {
+            if (Interlocked.Exchange(ref _missingKeyWarned, 1) == 0)
+            {
+                _logger.LogWarning(
+                    "WeatherAPI key is not configured (WeatherApi__ApiKey): weather and geocoding calls are skipped and the endpoints degrade");
+            }
+
+            return WeatherApiResult<T>.Failed(WeatherApiFailureKind.MissingKey);
+        }
+
+        // ONE deadline for the whole call (review round 3, D2): the wait for
+        // a slot and the HTTP pipeline together, linked to the caller's token.
+        // Each of the two has a budget of its own — the queue wait and the
+        // pipeline's total, ten seconds each — and a slot freed late followed
+        // by a stalled provider would otherwise stack them past the browser's
+        // fifteen. Past the deadline the call is Transport, wherever it stands.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(CallDeadline);
+        var budget = deadline.Token;
+
+        try
+        {
+            // The provider-wide ceiling (review round 1): a slot is held from
+            // the request to the end of the body read, retries included.
+            // Waiting for one honours the caller's token and the deadline
+            // exactly like the call itself — and the wait is bounded on its
+            // own too (review round 2, S4): a full queue or a wait past the
+            // pipeline's total budget comes back as a REFUSAL, which is a
+            // Transport failure like a stalled provider, never an exception.
+            using var slot = await _bulkhead.EnterAsync(budget);
+            if (!slot.Admitted)
+            {
+                _logger.LogWarning(
+                    "WeatherAPI {Operation} was not admitted by the provider-wide ceiling ({Refusal}); classified Transport",
+                    operation, slot.Refusal);
+                return WeatherApiResult<T>.Failed(WeatherApiFailureKind.Transport);
+            }
+
+            using var response = await _http.GetAsync(url, budget);
+
+            // The body FIRST, whatever the status: a 4xx carries the envelope
+            // this client exists to read, and a 2xx may not be JSON at all.
+            var body = await response.Content.ReadAsStringAsync(budget);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var code = TryReadProviderCode(body);
+                var kind = Classify(code);
+                Log(kind, operation, (int)response.StatusCode, code);
+                return WeatherApiResult<T>.Failed(kind, code, (int)response.StatusCode);
+            }
+
+            var contentType = response.Content.Headers.ContentType?.MediaType;
+            if (!string.Equals(contentType, "application/json", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "WeatherAPI {Operation} returned non-JSON content-type '{ContentType}'; classified Transport",
+                    operation, contentType ?? "(none)");
+                return WeatherApiResult<T>.Failed(WeatherApiFailureKind.Transport, null, (int)response.StatusCode);
+            }
+
+            var value = JsonSerializer.Deserialize<T>(body, WebJsonOptions);
+            if (value is null)
+            {
+                _logger.LogWarning("WeatherAPI {Operation} returned an empty JSON body; classified Transport", operation);
+                return WeatherApiResult<T>.Failed(WeatherApiFailureKind.Transport, null, (int)response.StatusCode);
+            }
+
+            return WeatherApiResult<T>.Success(value);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "WeatherAPI {Operation} transport failure (status={Status})", operation, ex.StatusCode);
+            return WeatherApiResult<T>.Failed(
+                WeatherApiFailureKind.Transport, null, ex.StatusCode is { } s ? (int)s : null);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "WeatherAPI {Operation} returned malformed JSON", operation);
+            return WeatherApiResult<T>.Failed(WeatherApiFailureKind.Transport);
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            // Not the caller's decision: the call's own end-to-end deadline,
+            // or HttpClient.Timeout — both surface as a cancellation whose
+            // token is not the caller's. A transport failure either way.
+            if (budget.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "WeatherAPI {Operation} exceeded the call's end-to-end deadline of {DeadlineSeconds} s (slot wait and pipeline together); classified Transport",
+                    operation, WeatherApiOptions.CallDeadlineSeconds);
+            }
+            else
+            {
+                _logger.LogWarning(ex, "WeatherAPI {Operation} timed out", operation);
+            }
+
+            return WeatherApiResult<T>.Failed(WeatherApiFailureKind.Transport);
+        }
+        catch (ExecutionRejectedException ex)
+        {
+            // The resilience pipeline refused or gave up on the call — its
+            // TotalRequestTimeout (retries could not complete within the
+            // budget) or its circuit breaker (the circuit is open). The base
+            // class catches both: a rejection is never allowed past this
+            // classification boundary (review round 1, C2).
+            _logger.LogWarning(
+                ex,
+                "WeatherAPI {Operation} was rejected by the resilience pipeline ({Rejection})",
+                operation, ex.GetType().Name);
+            return WeatherApiResult<T>.Failed(WeatherApiFailureKind.Transport);
+        }
+    }
+
+    /// <summary>
+    /// The typed client's <see cref="HttpClient"/> shape, in ONE place for the
+    /// host and the tests: the base address, the per-request timeout, the
+    /// identity header and the buffered-body ceiling
+    /// (<see cref="MaxResponseContentBytes"/>). The User-Agent is parsed here
+    /// by <c>ParseAdd</c>; <see cref="WeatherApiOptionsValidator"/> proves it
+    /// parses at boot so this can never throw at the first call.
+    /// </summary>
+    public static void ConfigureHttpClient(HttpClient http, WeatherApiOptions options)
+    {
+        http.BaseAddress = BaseAddressFrom(options.BaseUrl);
+        http.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        http.MaxResponseContentBufferSize = MaxResponseContentBytes;
+        http.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
+    }
+
+    /// <summary>
+    /// The base address the two relative routes resolve against: the
+    /// configured <see cref="WeatherApiOptions.BaseUrl"/>, its path ending
+    /// with a slash — added when the setting has none. <see cref="Uri"/>
+    /// resolves a relative route against the PARENT of a base path's last
+    /// segment, so <c>https://api.weatherapi.com/v1</c> would have sent
+    /// <c>search.json</c> and <c>forecast.json</c> to the host root under a
+    /// valid-looking setting; both spellings are the same address here,
+    /// before any request (review round 3, D1). The validator requires the
+    /// scheme, not the slash.
+    /// </summary>
+    public static Uri BaseAddressFrom(string baseUrl)
+    {
+        var uri = new Uri(baseUrl, UriKind.Absolute);
+        if (uri.AbsolutePath.EndsWith('/'))
+        {
+            return uri;
+        }
+
+        var builder = new UriBuilder(uri);
+        builder.Path += "/";
+        return builder.Uri;
+    }
+
+    /// <summary>
+    /// The provider's <c>error.code</c> from a 4xx body, or null when the body
+    /// is not the documented envelope (an HTML error page, an empty body).
+    /// </summary>
+    private static int? TryReadProviderCode(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<WeatherApiErrorEnvelope>(body, WebJsonOptions)?.Error?.Code;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Provider code → failure kind. 1006 is « nothing matches »; 2007 and
+    /// 2009 are the provider refusing the call for a reason on the account's
+    /// side; 1002, 2006 and 2008 say the credential itself is wrong; every
+    /// other code (1003, 1005, 9000, 9001, 9999 — request-shape or internal
+    /// errors) is treated as transient.
+    /// </summary>
+    private static WeatherApiFailureKind Classify(int? code) => code switch
+    {
+        1006 => WeatherApiFailureKind.NoLocation,
+        2007 or 2009 => WeatherApiFailureKind.Refused,
+        1002 or 2006 or 2008 => WeatherApiFailureKind.Misconfigured,
+        _ => WeatherApiFailureKind.Transport,
+    };
+
+    private void Log(WeatherApiFailureKind kind, string operation, int status, int? code)
+    {
+        switch (kind)
+        {
+            case WeatherApiFailureKind.NoLocation:
+                _logger.LogInformation("WeatherAPI {Operation}: no location matches the query (code 1006)", operation);
+                break;
+            case WeatherApiFailureKind.Refused:
+                _logger.LogWarning(
+                    "WeatherAPI {Operation}: provider refused the call (HTTP {Status}, code {Code})",
+                    operation, status, code);
+                break;
+            case WeatherApiFailureKind.Misconfigured:
+                _logger.LogError(
+                    "WeatherAPI {Operation}: the configured key was rejected by the provider (HTTP {Status}, code {Code}); check WeatherApi__ApiKey",
+                    operation, status, code);
+                break;
+            default:
+                _logger.LogWarning(
+                    "WeatherAPI {Operation}: unexpected answer (HTTP {Status}, code {Code}); classified Transport",
+                    operation, status, code);
+                break;
+        }
+    }
+}

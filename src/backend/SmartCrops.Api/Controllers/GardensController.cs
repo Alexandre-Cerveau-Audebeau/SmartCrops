@@ -8,6 +8,8 @@ using Microsoft.EntityFrameworkCore;
 using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
+using SmartCrops.Core.Geo;
+using SmartCrops.Core.Models;
 using SmartCrops.Infrastructure.Data;
 
 namespace SmartCrops.Api.Controllers;
@@ -34,6 +36,12 @@ public record UpdateGardenRequest(
 /// <summary>
 /// GET /api/gardens/{id} contract (SMA-285): a clean DTO — the raw entity
 /// serialization (and its legacy GardenPlants graph) is retired.
+///
+/// <para><see cref="Location"/> is the EFFECTIVE location (SMA-336 PR 3a/5):
+/// the garden's own override when it has one, else the account's default,
+/// else null — and <see cref="LocationSource"/> says which (« garden »,
+/// « profile », null), so a settings dialog can offer « revert to the profile
+/// city » only where it means something.</para>
 /// </summary>
 public record GardenResponse(
     Guid Id,
@@ -46,7 +54,9 @@ public record GardenResponse(
     string? GardenType,
     List<LightSlotDto>? LightSchedule,
     string? Hemisphere,
-    string? LatitudeBand);
+    string? LatitudeBand,
+    GardenLocationDto? Location,
+    string? LocationSource);
 
 public record GardenLayoutResponse(
     int? Width,
@@ -151,7 +161,7 @@ public class GardensController(
         if (garden == null)
             return NotFound();
 
-        return Ok(ToGardenResponse(garden));
+        return Ok(ToGardenResponse(garden, await LoadProfileLocationAsync(userId)));
     }
 
     [HttpPost]
@@ -174,7 +184,10 @@ public class GardensController(
         context.Gardens.Add(garden);
         await context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetGarden), new { id = garden.Id }, ToGardenResponse(garden));
+        return CreatedAtAction(
+            nameof(GetGarden),
+            new { id = garden.Id },
+            ToGardenResponse(garden, await LoadProfileLocationAsync(userId)));
     }
 
     [HttpPut("{id:guid}")]
@@ -215,7 +228,101 @@ public class GardensController(
 
         await context.SaveChangesAsync();
 
-        return Ok(ToGardenResponse(garden));
+        return Ok(ToGardenResponse(garden, await LoadProfileLocationAsync(userId)));
+    }
+
+    // ── Location (SMA-336 PR 3a/5) ──────────────────────────────────────────
+    // A garden's OWN place — an override of the account's default (ADR-0006).
+    // Its own resource rather than a member of the config block: a location
+    // comes from a geocoding step, is set or cleared as a whole, and « omitted »
+    // must never be confused with « cleared », which a flat nullable member of
+    // the config PUT could not tell apart. Ownership is checked as everywhere
+    // in this controller: another user's garden answers 404, never 403.
+
+    /// <summary>
+    /// Sets the garden's own location, every column at once, and stamps the
+    /// resolution instant (UTC). Where the garden carries NO hemisphere or NO
+    /// latitude band yet, the latitude pre-fills them (<see cref="LatitudeBands"/>);
+    /// a value the user set by hand is never overwritten.
+    ///
+    /// <para><b>The pre-fill leaves no provenance in the row</b> (review
+    /// round 1, C5): a pre-filled value and a hand-set one are the same
+    /// column, and a later location — another hemisphere, another band —
+    /// does not revisit them, nor does clearing the location. The derivation
+    /// is made VISIBLE instead: this endpoint logs, at Information level, the
+    /// garden id and the derived words it wrote — never the place — so an
+    /// operator can trace where an exposure value came from. A provenance
+    /// column is a schema extension to settle with the front, not this
+    /// lot's.</para>
+    ///
+    /// <para><c>UpdatedAt</c> moves with this write, by the shared interceptor:
+    /// a garden that just learnt where it is reads as « modified just now » on
+    /// the dashboard. Assumed rather than avoided — the location IS a change
+    /// to the garden.</para>
+    /// </summary>
+    [HttpPut("{id:guid}/location")]
+    public async Task<IActionResult> PutLocation(
+        Guid id,
+        [FromBody] SaveLocationRequest request,
+        CancellationToken ct = default)
+    {
+        var userId = GetCurrentUserId();
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        var garden = await context.Gardens.FirstOrDefaultAsync(
+            g => g.Id == id && g.UserId == userId, ct);
+        if (garden == null) return NotFound();
+
+        request.ToGeoLocation(DateTime.UtcNow).ApplyTo(garden);
+
+        var hemisphereFilled = garden.Hemisphere is null;
+        var bandFilled = garden.LatitudeBand is null;
+        if (hemisphereFilled || bandFilled)
+        {
+            var (hemisphere, band) = LatitudeBands.Derive(request.Latitude);
+            garden.Hemisphere ??= hemisphere;
+            garden.LatitudeBand ??= band;
+
+            // The only trace that a value came from the latitude (no
+            // provenance column): the garden id and the derived words, and
+            // NOT the coordinates or the place name — the log is not the
+            // place to keep where someone lives.
+            logger.LogInformation(
+                "Garden {GardenId}: exposure pre-filled from its latitude (hemisphere: {Hemisphere}, latitude band: {LatitudeBand}); hand-set values kept",
+                garden.Id,
+                hemisphereFilled ? hemisphere : "kept",
+                bandFilled ? band : "kept");
+        }
+
+        garden.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync(ct);
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Clears the garden's own location: it then inherits the account's
+    /// default again. The hemisphere and band a previous location may have
+    /// pre-filled are KEPT — they are the garden's exposure config now, and
+    /// nothing in the row can tell a pre-filled value from one the user
+    /// confirmed (the trace is the <c>PUT</c>'s log line, see
+    /// <see cref="PutLocation"/>).
+    /// </summary>
+    [HttpDelete("{id:guid}/location")]
+    public async Task<IActionResult> DeleteLocation(Guid id, CancellationToken ct = default)
+    {
+        var userId = GetCurrentUserId();
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        var garden = await context.Gardens.FirstOrDefaultAsync(
+            g => g.Id == id && g.UserId == userId, ct);
+        if (garden == null) return NotFound();
+
+        GeoLocation.Clear(garden);
+        garden.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync(ct);
+
+        return NoContent();
     }
 
     [HttpDelete("{id:guid}")]
@@ -405,16 +512,49 @@ public class GardensController(
         garden.Hemisphere,
         garden.LatitudeBand);
 
-    private GardenResponse ToGardenResponse(Garden garden) => new(
-        garden.Id,
-        garden.Name,
-        garden.Description,
-        garden.LayoutWidth,
-        garden.LayoutHeight,
-        garden.CellSize,
-        garden.Orientation,
-        garden.GardenType,
-        ReadLightSchedule(garden),
-        garden.Hemisphere,
-        garden.LatitudeBand);
+    /// <summary>
+    /// The account's default location, read by projection (six columns, never
+    /// the Identity row) — the fallback of every garden without an override.
+    /// </summary>
+    private async Task<GeoLocation?> LoadProfileLocationAsync(string userId)
+    {
+        var row = await context.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => new
+            {
+                u.LocationName,
+                u.LocationRegion,
+                u.LocationCountry,
+                u.Latitude,
+                u.Longitude,
+                u.LocationResolvedAt,
+            })
+            .SingleOrDefaultAsync();
+
+        return row is null
+            ? null
+            : GeoLocation.Create(
+                row.LocationName, row.LocationRegion, row.LocationCountry,
+                row.Latitude, row.Longitude, row.LocationResolvedAt);
+    }
+
+    private GardenResponse ToGardenResponse(Garden garden, GeoLocation? profileLocation)
+    {
+        var (location, source) = GardenLocationDto.Resolve(GeoLocation.From(garden), profileLocation);
+        return new GardenResponse(
+            garden.Id,
+            garden.Name,
+            garden.Description,
+            garden.LayoutWidth,
+            garden.LayoutHeight,
+            garden.CellSize,
+            garden.Orientation,
+            garden.GardenType,
+            ReadLightSchedule(garden),
+            garden.Hemisphere,
+            garden.LatitudeBand,
+            location,
+            source);
+    }
 }
