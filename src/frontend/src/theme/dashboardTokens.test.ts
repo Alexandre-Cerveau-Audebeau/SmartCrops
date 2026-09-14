@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { contrast, hex, over } from '../test/contrast';
 import { getDashboardTokens } from './dashboardTokens';
 
 // ROUND 7 (S40 — Extension #7-25) — the ornamental chip's text reads at AA.
@@ -7,46 +8,9 @@ import { getDashboardTokens } from './dashboardTokens';
 // 4,5:1 floor WCAG 2 (1.4.3) sets for text below 18 pt, which 13 px chip text
 // is. The token is the ONE place every ornamental chip reads its colour from,
 // so the ratio is asserted on the token, in both modes, with the formula of the
-// standard rather than a literal that would pass for the wrong reason.
-
-/** Relative luminance, WCAG 2 § 1.4.3 — sRGB, linearised. */
-function luminance([r, g, b]: [number, number, number]): number {
-  const channel = (value: number) => {
-    const c = value / 255;
-    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-}
-
-function hex(value: string): [number, number, number] {
-  const digits = value.replace('#', '');
-  return [0, 2, 4].map((i) => parseInt(digits.slice(i, i + 2), 16)) as [
-    number,
-    number,
-    number,
-  ];
-}
-
-/** `rgba(r,g,b,a)` composited over an opaque background. */
-function over(rgba: string, background: [number, number, number]) {
-  const [r, g, b, a] = rgba
-    .replace(/^rgba?\(|\)$/g, '')
-    .split(',')
-    .map(Number) as [number, number, number, number];
-  return [r, g, b].map((channel, i) =>
-    Math.round(channel * a + background[i]! * (1 - a))
-  ) as [number, number, number];
-}
-
-function contrast(
-  foreground: [number, number, number],
-  background: [number, number, number]
-): number {
-  const [light, dark] = [luminance(foreground), luminance(background)].sort(
-    (a, b) => b - a
-  );
-  return (light! + 0.05) / (dark! + 0.05);
-}
+// standard rather than a literal that would pass for the wrong reason. The
+// arithmetic lives in `src/test/contrast.ts` since PR 3b/5 round 1 (V20), so
+// the weather widget's visibility test reads the same formula.
 
 // SMA-336 PR 3b/5 — the weather palette, transcribed from `A5MeteoTailles.dc.html`.
 describe('the weather tokens (PR 3b/5)', () => {

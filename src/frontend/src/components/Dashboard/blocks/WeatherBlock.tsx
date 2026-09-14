@@ -209,7 +209,24 @@ export default function WeatherBlock({
     );
   };
 
-  const divider = <Box sx={{ height: DASHBOARD_WEATHER.divider, backgroundColor: 'borderSubtle', flexShrink: 0 }} />;
+  /**
+   * `.dv` — the 1 px rule between the band and the five days. In PIXELS, spelled
+   * out (round 1, V20): MUI's `sx` runs every sizing value through
+   * `sizingTransform`, which reads a number in `(0, 1]` as a FRACTION — so
+   * `height: 1` was emitted as `height: 100%`, and this « rule » stood the full
+   * height of the card's column, painted `borderSubtle` (a saturated green on
+   * the night card), with `flexShrink: 0`. The five rows behind it kept their
+   * DOM and lost their space. `WeatherBlock.visibility.test.tsx` pins the pixel.
+   */
+  const divider = (
+    <Box
+      sx={{
+        height: `${DASHBOARD_WEATHER.divider}px`,
+        backgroundColor: 'borderSubtle',
+        flexShrink: 0,
+      }}
+    />
+  );
 
   /** A place the server could not describe: its line, and an honest statement. */
   const unavailable = (location: WeatherLocation) => (
