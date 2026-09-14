@@ -69,9 +69,10 @@ export type TodoTaskKind = 'water' | 'cold' | 'frost';
 export interface TodoTask {
   /**
    * The session checkbox key: the kind, the garden AND a digest of the content
-   * — date, count, threshold (round 1, E9 / E10). A weather refresh that moves
-   * a task to another day, another count or another minimum makes ANOTHER
-   * task, whose box starts unticked; a refresh that changes nothing keeps it.
+   * — date, count, tolerance and minimum (round 1, E9 / E10; round 2, D2). A
+   * weather refresh that moves a task to another day, another count or another
+   * minimum makes ANOTHER task, whose box starts unticked; a refresh that
+   * changes nothing keeps it.
    */
   id: string;
   kind: TodoTaskKind;
@@ -235,7 +236,10 @@ export function todoTasks(
       }
       if (sensitive === 0) return false;
       cold = {
-        id: `cold:${garden.id}:${day.date}:${sensitive}:${mostFragile}`,
+        // The minimum is PRINTED in the sentence (« 9° mardi soir »), so it is
+        // part of the identity (round 2, D2 — GitHub 4009200258 / Extension
+        // 81f75cfb): a box ticked at 9° does not stay ticked at 7°.
+        id: `cold:${garden.id}:${day.date}:${sensitive}:${mostFragile}:${day.minTempC}`,
         kind: 'cold',
         gardenId: garden.id,
         gardenName: garden.name,

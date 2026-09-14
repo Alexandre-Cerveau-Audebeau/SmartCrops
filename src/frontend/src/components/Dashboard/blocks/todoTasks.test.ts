@@ -323,9 +323,9 @@ describe('todoTasks — order and identity', () => {
 
     expect(tasks.map((t) => t.id)).toEqual([
       'water:g1:2026-09-12:3',
-      'cold:g1:2026-09-12:3:8',
+      'cold:g1:2026-09-12:3:8:9',
       'water:g2:2026-09-12:1',
-      'cold:g2:2026-09-12:1:8',
+      'cold:g2:2026-09-12:1:8:9',
     ]);
     expect(tasks[2]).toMatchObject({ gardenName: 'Balcon sud', count: 1 });
   });
@@ -341,9 +341,14 @@ describe('todoTasks — order and identity', () => {
     const colder = idOf([dayFixture({ date: '2026-09-15', minTempC: 7, chanceOfRain: 90 })]);
     const frost = idOf([dayFixture({ date: '2026-09-15', minTempC: -1, chanceOfRain: 90 })]);
 
-    expect(tuesday).toEqual(['cold:g1:2026-09-15:3:8']);
+    expect(tuesday).toEqual(['cold:g1:2026-09-15:3:8:9']);
     expect(wednesday).not.toEqual(tuesday);
-    expect(colder).toEqual(tuesday); // 7° and 9° are the same three basils under 8° — the same task.
+    // Turned round in round 2 (D2 — GitHub 4009200258 / Extension 81f75cfb): 7°
+    // and 9° are the same three basils under 8°, but the sentence PRINTS the
+    // minimum (« 9° mardi soir »), and a box ticked at 9° must not stay ticked
+    // once the night reads 7°.
+    expect(colder).not.toEqual(tuesday);
+    expect(colder).toEqual(['cold:g1:2026-09-15:3:8:7']);
     expect(frost).toEqual(['frost:g1:2026-09-15:6:-1']);
     // The same forecast twice is the same id — a refresh that changes nothing keeps the tick.
     expect(idOf([dayFixture({ date: '2026-09-15', minTempC: 9, chanceOfRain: 90 })])).toEqual(tuesday);
