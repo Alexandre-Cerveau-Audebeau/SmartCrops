@@ -228,6 +228,26 @@ describe('WeatherBlock — Large (A5 l. 296-319)', () => {
     expect(widget.queryByRole('tablist')).toBeNull();
   });
 
+  it('credits the provider at the foot of the Large card (arbitrage Q12)', () => {
+    const { card } = renderBlock({ size: 'large' });
+
+    expect(card.querySelector('[data-weather-attribution]')).toHaveTextContent(
+      'Weather data: WeatherAPI.com'
+    );
+  });
+
+  it.each(['small', 'medium'] as const)('carries no credit line on the %s card', (size) => {
+    const { card } = renderBlock({ size });
+
+    expect(card.querySelector('[data-weather-attribution]')).toBeNull();
+  });
+
+  it('keeps the credit under the partial invitation too', () => {
+    const { card } = renderBlock({ size: 'large', weather: partial() });
+
+    expect(card.querySelector('[data-weather-attribution]')).toHaveTextContent('WeatherAPI.com');
+  });
+
   it('prints the probability in the rain colour above 50 %, and a named dash when unknown', () => {
     const { card, widget } = renderBlock({
       size: 'large',

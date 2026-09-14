@@ -164,6 +164,22 @@ export default function WeatherBlock({
     </Typography>
   );
 
+  /**
+   * « Données météo : WeatherAPI.com » — the provider's credit, at the foot of
+   * the Large card (arbitrage Q12, SMA-336 PR 3b/5 step 10): the terms ask a
+   * free-tier user to credit the provider by name, and crediting a source is
+   * right at any tier. A 14 px secondary line, never smaller (§ 2).
+   */
+  const attribution = (
+    <Typography
+      component="span"
+      data-weather-attribution
+      sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary', whiteSpace: 'nowrap' }}
+    >
+      {t('dashboard.blocks.weather.attribution')}
+    </Typography>
+  );
+
   /** `.gard` — the gardener's band: full width, `--inv-bg`, radius 12, 11 / 16, 16 px / 600, a 20 px glyph. */
   const band = (location: WeatherLocation) => {
     const sentence = gardenerSentence(location);
@@ -305,6 +321,7 @@ export default function WeatherBlock({
               total={totalGardens}
               onSaved={onLocated}
             />
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>{attribution}</Box>
           </>
         ) : (
           <>
@@ -315,7 +332,12 @@ export default function WeatherBlock({
               line={weatherChips(location.days, location.alerts)}
               today={today}
               system={system}
-              note={note ? subLine(note) : undefined}
+              note={
+                <>
+                  {note && subLine(note)}
+                  {attribution}
+                </>
+              }
             />
           </>
         )}

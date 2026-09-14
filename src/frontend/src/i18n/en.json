@@ -435,7 +435,8 @@
         "cellUnavailable": "No weather",
         "cellNotLocated": "Not located",
         "cellAdd": "Add",
-        "cellAddNamed": "Add a city for {{name}}"
+        "cellAddNamed": "Add a city for {{name}}",
+        "attribution": "Weather data: WeatherAPI.com"
       },
       "gardens": {
         "title": "Gardens",

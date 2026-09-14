@@ -12,12 +12,14 @@ interface Props {
 
 /**
  * SMA-336 PR 1/5 — the widgets whose DATA lands in a later lot. Seven at PR
- * 1/5; Compteurs and Statistiques left the list in PR 2/5, Météo in PR 3b/5
- * (`WeatherBlock`, with the « Ville ou code postal » field the geocoding
- * endpoint of PR 3a/5 now stands behind — decision R4 honoured, then lifted).
- * Still here: Conseils, Ce mois-ci, À faire, Récolte. They exist, they take
- * their place in the grid, they can be moved, resized, hidden and brought back
- * — and they say honestly that their content is not there yet.
+ * 1/5; Compteurs and Statistiques left the list in PR 2/5, Météo and À faire
+ * in PR 3b/5 (`WeatherBlock`, with the « Ville ou code postal » field the
+ * geocoding endpoint of PR 3a/5 now stands behind — decision R4 honoured, then
+ * lifted; `TodoBlock`, whose « Tailler » and « Semer » tasks of PR 4/5 are
+ * announced by the block itself, not by this shell). Still here: Conseils, Ce
+ * mois-ci, Récolte. They exist, they take their place in the grid, they can be
+ * moved, resized, hidden and brought back — and they say honestly that their
+ * content is not there yet.
  *
  * One generic component rather than near-identical files: the widgets differ
  * only by their icon and their two strings, and every one of them is replaced
