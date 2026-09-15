@@ -212,8 +212,18 @@ public static class PlantDetailMapper
                     plant.PerenualData.PerenualType,
                     // Factual Perenual fields exposed unconditionally (SMA-231): PropagationMethods,
                     // WateringBenchmark(+Unit), PruningMonths — short factual values (method list / month list),
-                    // non-copyrightable. Remaining free-text (OriginCountries, SunlightPreferences, Maintenance,
-                    // FloweringSeason, HarvestSeason) stays gated behind exposeSourceText (SMA-70).
+                    // non-copyrightable.
+                    //
+                    // FloweringSeason and HarvestSeason joined that list with SMA-336 PR 4a/5
+                    // (decision Q2 of the PR 4 pre-flight): each is ONE word of a closed list of
+                    // five (Spring / Summer / Autumn / Fall / Winter) — of the same nature as the
+                    // month list above, not prose. They had been ranged with the free text only
+                    // because they arrived with it. The dashboard aggregate (GET /api/dashboard)
+                    // transports them for the « Ce mois-ci » calendar; a future lot must NOT
+                    // re-gate them here.
+                    //
+                    // Remaining free-text (OriginCountries, SunlightPreferences, Maintenance)
+                    // stays gated behind exposeSourceText (SMA-70).
                     exposeSourceText ? plant.PerenualData.OriginCountries : null,
                     plant.PerenualData.PropagationMethods,
                     plant.PerenualData.WateringBenchmark,
@@ -221,8 +231,8 @@ public static class PlantDetailMapper
                     exposeSourceText ? plant.PerenualData.SunlightPreferences : null,
                     plant.PerenualData.PruningMonths,
                     exposeSourceText ? plant.PerenualData.Maintenance : null,
-                    exposeSourceText ? plant.PerenualData.FloweringSeason : null,
-                    exposeSourceText ? plant.PerenualData.HarvestSeason : null,
+                    plant.PerenualData.FloweringSeason,
+                    plant.PerenualData.HarvestSeason,
                     plant.PerenualData.HasEdibleFruit,
                     plant.PerenualData.HasEdibleLeaves,
                     plant.PerenualData.IsCulinary,

@@ -12,6 +12,17 @@ namespace SmartCrops.Api.Configuration;
 /// dimensions, numeric xData, flags, taxonomy). Flip it to <c>true</c> (e.g. once
 /// a redistribution agreement is in place) to re-expose the source text with no
 /// recompile.</para>
+///
+/// <para>NOT behind the gate, by decision — short factual values from the
+/// Perenual row: <c>PropagationMethods</c>, <c>WateringBenchmark</c> (+ unit),
+/// <c>PruningMonths</c> (SMA-231), and since SMA-336 PR 4a/5 (decision Q2 of the
+/// PR 4 pre-flight) <c>FloweringSeason</c> and <c>HarvestSeason</c>: each is ONE
+/// word of a closed list of five (Spring / Summer / Autumn / Fall / Winter), of
+/// the same nature as a month list, not prose. The detail mapper exposes them
+/// unconditionally and the dashboard aggregate transports them; a future lot
+/// must not re-gate them. What stays gated: <c>OriginCountries</c>,
+/// <c>SunlightPreferences</c>, <c>Maintenance</c>, the long descriptions, the
+/// sowing / propagation instructions and the edible parts.</para>
 /// </summary>
 public class ContentExposureOptions
 {
