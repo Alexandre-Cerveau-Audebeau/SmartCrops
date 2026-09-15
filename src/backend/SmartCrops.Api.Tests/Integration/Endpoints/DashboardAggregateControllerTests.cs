@@ -71,7 +71,12 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         "cells",
         "commonName",
         "count",
+        // SMA-336 PR 4a/5 (decision Q2) — a season word, factual.
+        "floweringSeason",
         "gardenIds",
+        // SMA-336 PR 4a/5 — the calendar's legacy tokens and season word.
+        "harvestPeriod",
+        "harvestSeason",
         "imageAttribution",
         "imageUrl",
         "isEdible",
@@ -79,7 +84,13 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         "minToleratedTempC",
         "plantId",
         "plantType",
+        // SMA-336 PR 4a/5 — the pruning month list, verbatim.
+        "pruningMonths",
         "scientificName",
+        "sowingPeriod",
+        // SMA-336 PR 4a/5 — the xData sunlight hours, for PR 4b/5.
+        "sunlightHoursMax",
+        "sunlightHoursMin",
         "wateringNeedLevel",
     ];
 
@@ -819,6 +830,76 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         Assert.Null(byId[sage].MinToleratedTempC);
     }
 
+    // ── The calendar and sunlight facts (SMA-336 PR 4a/5) ────────────────────
+
+    [Fact]
+    public async Task GetDashboard_CarriesTheCalendarAndSunlightFacts_PerVariety()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        var gardenId = await SeedGardenAsync(userId, "Terrasse");
+        // A basil with BOTH legacy tokens and a Perenual row: pruning months,
+        // a sunlight range, a flowering season and no harvest season.
+        var basil = await SeedPlantAsync(
+            "Ocimum basilicum",
+            await PlantTypeIdAsync("Herb"),
+            sowingPeriod: "april-may",
+            harvestPeriod: "june-september");
+        await SeedPerenualDataAsync(
+            basil,
+            minToleratedTempC: 10,
+            pruningMonths: "May,June,July",
+            sunlightHoursMin: 8,
+            sunlightHoursMax: 12,
+            floweringSeason: "Summer",
+            harvestSeason: null);
+        // A fern Perenual never enriched and the catalog never dated.
+        var fern = await SeedPlantAsync("Athyrium vidalii", await PlantTypeIdAsync("Ornamental"));
+        // A maple with an UNORDERED, year-wrapping month list — the catalog
+        // holds « December,March,May » as such — and a half-open sunlight range.
+        var maple = await SeedPlantAsync("Acer palmatum", await PlantTypeIdAsync("Ornamental"));
+        await SeedPerenualDataAsync(
+            maple,
+            minToleratedTempC: -10,
+            pruningMonths: "December,March,May",
+            sunlightHoursMin: 3,
+            sunlightHoursMax: null,
+            floweringSeason: "Spring",
+            harvestSeason: "Fall");
+
+        await SeedPlacementAsync(gardenId, basil, 0, 0);
+        await SeedPlacementAsync(gardenId, fern, 0, 1);
+        await SeedPlacementAsync(gardenId, maple, 0, 2);
+        AuthAs(userId);
+
+        var byId = (await GetDashboardAsync()).Varieties.ToDictionary(v => v.PlantId);
+
+        // Every string travels VERBATIM (T1): the browser owns the one parser.
+        Assert.Equal("May,June,July", byId[basil].PruningMonths);
+        Assert.Equal("april-may", byId[basil].SowingPeriod);
+        Assert.Equal("june-september", byId[basil].HarvestPeriod);
+        Assert.Equal(8, byId[basil].SunlightHoursMin);
+        Assert.Equal(12, byId[basil].SunlightHoursMax);
+        Assert.Equal("Summer", byId[basil].FloweringSeason);
+        Assert.Null(byId[basil].HarvestSeason);
+        // Unknown is null on all seven, never an empty string or a zero.
+        Assert.Null(byId[fern].PruningMonths);
+        Assert.Null(byId[fern].SowingPeriod);
+        Assert.Null(byId[fern].HarvestPeriod);
+        Assert.Null(byId[fern].SunlightHoursMin);
+        Assert.Null(byId[fern].SunlightHoursMax);
+        Assert.Null(byId[fern].FloweringSeason);
+        Assert.Null(byId[fern].HarvestSeason);
+        // No reordering, no normalisation: the month list is the stored one.
+        Assert.Equal("December,March,May", byId[maple].PruningMonths);
+        Assert.Equal(3, byId[maple].SunlightHoursMin);
+        Assert.Null(byId[maple].SunlightHoursMax);
+        // The two season words travel (decision Q2) — the calendar's third and
+        // fourth lanes exist because of this line.
+        Assert.Equal("Spring", byId[maple].FloweringSeason);
+        Assert.Equal("Fall", byId[maple].HarvestSeason);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static string[] Keys(JsonElement element) =>
@@ -922,7 +1003,9 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
         string scientificName,
         int plantTypeId,
         bool? isEdible = null,
-        PlantWateringNeed? wateringNeed = null)
+        PlantWateringNeed? wateringNeed = null,
+        string? sowingPeriod = null,
+        string? harvestPeriod = null)
     {
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
@@ -933,6 +1016,9 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
             PlantTypeId = plantTypeId,
             IsEdible = isEdible,
             WateringNeedLevel = wateringNeed,
+            // SMA-336 PR 4a/5 — the two legacy calendar tokens.
+            SowingPeriod = sowingPeriod,
+            HarvestPeriod = harvestPeriod,
         };
         db.Plants.Add(plant);
         await db.SaveChangesAsync();
@@ -941,9 +1027,18 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
 
     /// <summary>
     /// A minimal Perenual audit row for a plant (SMA-336 PR 3b/5) — only the
-    /// required columns and the one xData fact the aggregate reads.
+    /// required columns and the facts the aggregate reads: the cold tolerance
+    /// (PR 3b/5), then the pruning months, the sunlight hours and the two
+    /// season words (PR 4a/5).
     /// </summary>
-    private async Task SeedPerenualDataAsync(Guid plantId, int? minToleratedTempC)
+    private async Task SeedPerenualDataAsync(
+        Guid plantId,
+        int? minToleratedTempC,
+        string? pruningMonths = null,
+        int? sunlightHoursMin = null,
+        int? sunlightHoursMax = null,
+        string? floweringSeason = null,
+        string? harvestSeason = null)
     {
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
@@ -953,6 +1048,11 @@ public class DashboardAggregateControllerTests : IntegrationTestBase
             PlantId = plantId,
             PerenualId = Math.Abs(plantId.GetHashCode() % 1_000_000) + 1,
             XTemperatureToleranceMinC = minToleratedTempC,
+            PruningMonths = pruningMonths,
+            XSunlightHoursMin = sunlightHoursMin,
+            XSunlightHoursMax = sunlightHoursMax,
+            FloweringSeason = floweringSeason,
+            HarvestSeason = harvestSeason,
             LastSyncAt = DateTime.UtcNow,
         });
         await db.SaveChangesAsync();

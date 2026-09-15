@@ -1,4 +1,4 @@
-import { fireEvent, render, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { describe, expect, it, vi } from 'vitest';
 import '../../../i18n/i18n';
@@ -181,15 +181,20 @@ describe('TodoBlock — Medium (Main.dc.html)', () => {
     );
   });
 
-  it('with nothing to do: the honest statement, and the pruning / sowing note (PR 4/5)', () => {
+  it('with nothing to do: the honest statement, and NO promise of what is not shown (PR 4a/5)', () => {
+    // PR 3b/5 pinned « Pruning and sowing tasks are coming soon » here. They
+    // arrived in PR 4a/5, so the note went: the block no longer announces
+    // anything, and the sentence dropped its « weather-wise » — nothing at
+    // all is due today, calendar included.
     const rainyAndMild = weatherFixture(
       [locationFixture({ days: [dayFixture({ date: '2026-09-12', chanceOfRain: 90, minTempC: 20 })] })],
       gardens.map((g) => linkFixture({ gardenId: g.id }))
     );
     const { card, widget } = renderBlock({ weather: rainyAndMild });
 
-    expect(widget.getByText('Nothing to do today, weather-wise.')).toBeInTheDocument();
-    expect(card.querySelector('[data-todo-soon]')).toHaveTextContent('Pruning and sowing tasks are coming soon.');
+    expect(widget.getByText('Nothing to do today.')).toBeInTheDocument();
+    expect(card.querySelector('[data-todo-soon]')).toBeNull();
+    expect(card.textContent).not.toMatch(/coming soon/i);
     expect(card.querySelector('[data-todo-chip]')).toBeNull();
     expect(card.querySelector('[data-todo-invite]')).toBeNull();
     expect(widget.queryByText('Coming soon')).toBeNull();
@@ -303,6 +308,316 @@ describe('TodoBlock — Large', () => {
     const invite = card.querySelector('[data-todo-invite]')!;
     expect(invite.querySelector('p')).toBeNull();
     expect(invite.querySelector('button')).not.toBeNull();
+  });
+});
+
+// ── SMA-336 PR 4a/5 — the calendar rows ───────────────────────────────────
+//
+// The block reads the BROWSER's month when no garden is located (Q10), and a
+// component test may not depend on the day it runs: each fixture below is
+// dated FROM that same month, so the row exists in September and in February
+// alike, and the assertions read the month back rather than spell it.
+
+const MONTH_TOKENS = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+] as const;
+
+/** The month the block is in when nothing is located — 1..12. */
+const currentMonthToken = () => MONTH_TOKENS[new Date().getMonth()]!;
+
+/** A hedge the catalog prunes THIS month, and a lettuce whose sowing window ENDS this month. */
+const hedge = varietyFixture({
+  plantId: 'hedge',
+  commonName: 'Hedge',
+  wateringNeedLevel: 'Low',
+  pruningMonths: currentMonthToken(),
+});
+const sownLettuce = varietyFixture({
+  plantId: 'sown',
+  commonName: 'Lettuce',
+  wateringNeedLevel: 'Low',
+  sowingPeriod: currentMonthToken(),
+});
+
+/** One unlocated garden holding both — no weather task, two calendar ones. */
+const jardin = gardenFixture({
+  id: 'g1',
+  name: 'Terrasse',
+  placements: plants(['hedge', 2], ['sown', 3]),
+  placementCount: 5,
+});
+const unlocated = (): DashboardWeatherData =>
+  weatherFixture([], [linkFixture({ gardenId: 'g1', locationKey: null, source: null })]);
+
+describe('TodoBlock — « Prune » and « Sow » (PR 4a/5)', () => {
+  it('draws the two calendar rows with their glyphs, for a garden with NO city', () => {
+    const { card } = renderBlock({
+      gardens: [jardin],
+      varieties: [hedge, sownLettuce],
+      weather: unlocated(),
+    });
+
+    const rows = [...card.querySelectorAll('[data-todo-task]')];
+    expect(rows.map((row) => row.getAttribute('data-todo-task'))).toEqual(['prune', 'sow']);
+    // The sentence NAMES the plants — it does not count them (2 hedges, one name).
+    expect(rows[0]).toHaveTextContent(/^Prune — Hedge \(\w+\)$/);
+    expect(rows[1]).toHaveTextContent(/^Sow — Lettuce, last month to sow \(\w+\)$/);
+    // `ContentCutOutlined` and `SpaOutlined`, the artboard's own glyphs.
+    expect(rows[0]!.querySelector('svg[data-testid="ContentCutOutlinedIcon"]')).not.toBeNull();
+    expect(rows[1]!.querySelector('svg[data-testid="SpaOutlinedIcon"]')).not.toBeNull();
+    expect(card.querySelector('[data-todo-chip]')).toHaveTextContent('2 tasks');
+  });
+
+  it('still invites a city for the watering the calendar cannot plan', () => {
+    const { card } = renderBlock({
+      gardens: [jardin],
+      varieties: [hedge, sownLettuce],
+      weather: unlocated(),
+    });
+
+    expect(card.querySelector('[data-todo-invite]')).toHaveTextContent(
+      'Without the weather of Terrasse, its watering is not planned —'
+    );
+  });
+
+  it('names the garden when several are listed ungrouped, and drops it under a Large group header', () => {
+    const other = gardenFixture({ id: 'g2', name: 'Balcon sud', placements: plants(['hedge', 1]), placementCount: 1 });
+    const two = (): DashboardWeatherData =>
+      weatherFixture(
+        [],
+        [
+          linkFixture({ gardenId: 'g1', locationKey: null, source: null }),
+          linkFixture({ gardenId: 'g2', locationKey: null, source: null }),
+        ]
+      );
+
+    const medium = renderBlock({ gardens: [jardin, other], varieties: [hedge, sownLettuce], weather: two() });
+    expect(medium.card.querySelector('[data-todo-task="prune"]')).toHaveTextContent(
+      /^Prune — Hedge \(Terrasse, \w+\)$/
+    );
+  });
+
+  it('Large: the calendar rows group by garden and carry a session checkbox', () => {
+    const { card, widget } = renderBlock({
+      size: 'large',
+      gardens: [jardin],
+      varieties: [hedge, sownLettuce],
+      weather: unlocated(),
+    });
+
+    expect(widget.getByRole('heading', { level: 3, name: 'Terrasse · 2' })).toBeInTheDocument();
+    expect(card.querySelector('[data-todo-group="g1"] [data-todo-task="prune"]')).toHaveTextContent(
+      /^Prune — Hedge \(\w+\)$/
+    );
+    expect(widget.getAllByRole('checkbox')).toHaveLength(2);
+    // The note that promised them is gone from the Large foot too.
+    expect(card.querySelector('[data-todo-soon]')).toBeNull();
+    expect(card.querySelector('[data-todo-session]')).toHaveTextContent(
+      'Boxes ticked for this session only — not saved'
+    );
+  });
+
+  it('never says « last known weather » on a calendar row: no forecast is involved', () => {
+    const staleTerrasse = weatherFixture(
+      [locationFixture({ status: 'stale', days: days() })],
+      [linkFixture({ gardenId: 'g1' })]
+    );
+    const { card } = renderBlock({
+      size: 'large',
+      gardens: [jardin],
+      varieties: [hedge, sownLettuce],
+      weather: staleTerrasse,
+    });
+
+    const prune = card.querySelector('[data-todo-task="prune"]')!;
+    expect(prune).not.toHaveAttribute('data-todo-stale');
+    expect(prune.textContent).not.toContain('last known weather');
+  });
+});
+
+// Round 1, C2 (Extension `a0894658` + the GitHub outside-diff) and C4 (GitHub
+// `4016156990`). The page used to hand this block `gardensError || weatherError`
+// and `gardensLoading || weatherLoading`: a provider outage — or merely a
+// weather request in flight — selected the fatal branch and hid tasks the
+// plans and the catalog had already produced. The two aggregates are now two
+// props, and an unknown watering is said rather than rendered as a zero.
+describe('TodoBlock — the weather is half the block, not all of it (round 1, C2 + C4)', () => {
+  const located = (): DashboardWeatherData =>
+    weatherFixture([locationFixture({ days: days() })], [linkFixture({ gardenId: 'g1' })]);
+
+  it('keeps the calendar tasks when the weather FAILED, and says so in one line', () => {
+    const { card } = renderBlock({
+      gardens: [jardin],
+      varieties: [hedge, sownLettuce],
+      // The gardens landed; the weather did not, so the page hands an empty one.
+      weather: EMPTY_WEATHER_DATA,
+      weatherUnavailable: true,
+    });
+
+    expect(card.querySelector('[data-todo-task="prune"]')).toHaveTextContent(/^Prune — Hedge \(\w+\)$/);
+    expect(card.querySelector('[data-todo-task="sow"]')).not.toBeNull();
+    expect(card.querySelector('[data-todo-weather-note]')).toHaveTextContent(
+      'Weather unavailable — watering is not planned for now.'
+    );
+    // Not the fatal branch, and not the A4 invitation either: there is
+    // nothing for the gardener to add — the request is what failed.
+    expect(card.querySelector('[data-todo-skeleton]')).toBeNull();
+    expect(card).not.toHaveTextContent('Couldn’t load today’s tasks.');
+    expect(card.querySelector('[data-todo-invite]')).toBeNull();
+  });
+
+  it('…and while the weather is still LOADING, which used to blank the card too', () => {
+    const { card } = renderBlock({
+      gardens: [jardin],
+      varieties: [hedge, sownLettuce],
+      weather: EMPTY_WEATHER_DATA,
+      weatherUnavailable: true,
+      refreshing: true,
+    });
+
+    expect(card.querySelector('[data-todo-skeleton]')).toBeNull();
+    expect(card.querySelector('[data-todo-task="prune"]')).not.toBeNull();
+  });
+
+  it('still empties the card when the GARDENS fail — no plan, no task of any kind', () => {
+    const { card, widget } = renderBlock({
+      gardens: [jardin],
+      varieties: [hedge, sownLettuce],
+      weather: EMPTY_WEATHER_DATA,
+      loadError: true,
+    });
+
+    expect(widget.getByText('Couldn’t load today’s tasks.')).toBeInTheDocument();
+    expect(card.querySelector('[data-todo-task]')).toBeNull();
+  });
+
+  it('carries the note in Large as well as Medium, once', () => {
+    const { card } = renderBlock({
+      size: 'large',
+      gardens: [jardin],
+      varieties: [hedge, sownLettuce],
+      weather: EMPTY_WEATHER_DATA,
+      weatherUnavailable: true,
+    });
+
+    expect(card.querySelectorAll('[data-todo-weather-note]')).toHaveLength(1);
+  });
+
+  it('C4 — « nothing to do » only when the block KNOWS; otherwise it says it does not', () => {
+    const idle = [varietyFixture({ plantId: 'hedge', commonName: 'Hedge', wateringNeedLevel: 'Low' })];
+    const quiet = gardenFixture({
+      id: 'g1',
+      name: 'Terrasse',
+      placements: plants(['hedge', 2]),
+      placementCount: 2,
+    });
+    const rainyAndMild = weatherFixture(
+      [locationFixture({ days: [dayFixture({ date: '2026-09-12', chanceOfRain: 90, minTempC: 20 })] })],
+      [linkFixture({ gardenId: 'g1' })]
+    );
+
+    // Located, fresh, and genuinely nothing due: the statement may be made.
+    const known = renderBlock({ gardens: [quiet], varieties: idle, weather: rainyAndMild });
+    expect(known.widget.getByText('Nothing to do today.')).toBeInTheDocument();
+
+    // The same empty derivation, but the watering half is unknown — twice
+    // over: once because the aggregate is out…
+    cleanup();
+    const out = renderBlock({
+      gardens: [quiet],
+      varieties: idle,
+      weather: EMPTY_WEATHER_DATA,
+      weatherUnavailable: true,
+    });
+    expect(out.widget.getByText('Nothing planned today — watering is not known yet.')).toBeInTheDocument();
+    expect(out.card).not.toHaveTextContent('Nothing to do today.');
+
+    // …and once because the garden has no city, the aggregate being fine.
+    cleanup();
+    const cityless = renderBlock({
+      gardens: [quiet],
+      varieties: idle,
+      weather: weatherFixture([], [linkFixture({ gardenId: 'g1', locationKey: null, source: null })]),
+    });
+    expect(cityless.widget.getByText('Nothing planned today — watering is not known yet.')).toBeInTheDocument();
+  });
+
+  it('C7 — the Small card says the weather is out ONLY when it has nothing to show', () => {
+    // Round 2, C7 asked for the opposite: a compact « weather unavailable »
+    // line on the 1×1 card even when a calendar task is there. It is REFUSED,
+    // and this is what pins the refusal.
+    //
+    // The 1×1 card has room for two lines: a figure and one sentence (lesson
+    // V7 — nothing may leave the card). Spending that sentence on what the
+    // block does NOT know costs the reader the one thing it DOES know. The
+    // distinction round 1's C4 made is carried by the WORDING of the empty
+    // line, and it is made in the only state where there is a line to spend.
+    const idle = [varietyFixture({ plantId: 'hedge', commonName: 'Hedge', wateringNeedLevel: 'Low' })];
+    const quiet = gardenFixture({ id: 'g1', name: 'Terrasse', placements: plants(['hedge', 2]), placementCount: 2 });
+
+    // ── With something to show: the task, and not a word about the weather.
+    const busy = renderBlock({
+      size: 'small',
+      gardens: [jardin],
+      varieties: [hedge, sownLettuce],
+      weather: EMPTY_WEATHER_DATA,
+      weatherUnavailable: true,
+    });
+    expect(busy.card).toHaveTextContent(/Prune — Hedge/);
+    expect(busy.card.querySelector('[data-todo-weather-note]')).toBeNull();
+    expect(busy.card.querySelector('[data-todo-nothing]')).toBeNull();
+    expect(busy.card).not.toHaveTextContent('Weather unavailable');
+    expect(busy.card).not.toHaveTextContent('watering is not known yet');
+
+    // ── With nothing to show: the same outage, and now it is said.
+    cleanup();
+    const empty = renderBlock({
+      size: 'small',
+      gardens: [quiet],
+      varieties: idle,
+      weather: EMPTY_WEATHER_DATA,
+      weatherUnavailable: true,
+    });
+    expect(empty.card.querySelector('[data-todo-nothing]')).toHaveTextContent(
+      'Nothing planned today — watering is not known yet.'
+    );
+  });
+
+  it('C4 — the Small card makes the same distinction, in its one line', () => {
+    const idle = [varietyFixture({ plantId: 'hedge', commonName: 'Hedge', wateringNeedLevel: 'Low' })];
+    const quiet = gardenFixture({ id: 'g1', name: 'Terrasse', placements: plants(['hedge', 2]), placementCount: 2 });
+
+    const out = renderBlock({
+      size: 'small',
+      gardens: [quiet],
+      varieties: idle,
+      weather: EMPTY_WEATHER_DATA,
+      weatherUnavailable: true,
+    });
+    expect(out.card.querySelector('[data-todo-nothing]')).toHaveTextContent(
+      'Nothing planned today — watering is not known yet.'
+    );
+  });
+
+  it('the A4 invitation survives a HEALTHY aggregate that simply has no city for a garden', () => {
+    const { card } = renderBlock({
+      gardens: [jardin],
+      varieties: [hedge, sownLettuce],
+      weather: unlocated(),
+    });
+
+    expect(card.querySelector('[data-todo-invite]')).toHaveTextContent(
+      'Without the weather of Terrasse, its watering is not planned —'
+    );
+    expect(card.querySelector('[data-todo-weather-note]')).toBeNull();
+  });
+
+  it('a located, healthy aggregate says nothing about the weather at all', () => {
+    const { card } = renderBlock({ gardens: [jardin], varieties: [hedge, sownLettuce], weather: located() });
+
+    expect(card.querySelector('[data-todo-weather-note]')).toBeNull();
+    expect(card.querySelector('[data-todo-invite]')).toBeNull();
   });
 });
 

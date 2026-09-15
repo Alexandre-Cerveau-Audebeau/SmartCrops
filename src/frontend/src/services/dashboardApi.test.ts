@@ -87,6 +87,13 @@ const VARIETY = {
   imageAttribution: null,
   wateringNeedLevel: null,
   minToleratedTempC: null,
+  pruningMonths: null,
+  sowingPeriod: null,
+  harvestPeriod: null,
+  sunlightHoursMin: null,
+  sunlightHoursMax: null,
+  floweringSeason: null,
+  harvestSeason: null,
   count: 1,
   cells: 1,
   gardenIds: ['g1'],
@@ -697,10 +704,52 @@ describe('fetchDashboardData — a variety row is checked before it is trusted (
       isEdible: null,
       imageUrl: null,
       imageAttribution: null,
+      wateringNeedLevel: null,
+      minToleratedTempC: null,
+      // PR 4a/5 — the seven calendar and sunlight facts, unknown.
+      pruningMonths: null,
+      sowingPeriod: null,
+      harvestPeriod: null,
+      sunlightHoursMin: null,
+      sunlightHoursMax: null,
+      floweringSeason: null,
+      harvestSeason: null,
     });
     mockFetch(body);
 
     await expect(fetchDashboardData('en')).resolves.toEqual(body);
+  });
+
+  // SMA-336 PR 4a/5 — the calendar and sunlight facts are checked like the
+  // rest: a verbatim string or null, a whole non-negative hour or null.
+  it('accepts the calendar facts as the server writes them — verbatim, unordered month list included', async () => {
+    const body = withVariety({
+      pruningMonths: 'December,March,May',
+      sowingPeriod: 'april-may',
+      harvestPeriod: 'june-september',
+      sunlightHoursMin: 8,
+      sunlightHoursMax: 12,
+      floweringSeason: 'Summer',
+      harvestSeason: 'Fall',
+    });
+    mockFetch(body);
+
+    await expect(fetchDashboardData('en')).resolves.toEqual(body);
+  });
+
+  it.each([
+    ['pruningMonths', 5],
+    ['sowingPeriod', ['march', 'may']],
+    ['harvestPeriod', { from: 'june' }],
+    ['floweringSeason', ['Spring']],
+    ['harvestSeason', 9],
+    ['sunlightHoursMin', '6'],
+    ['sunlightHoursMax', -1],
+    ['sunlightHoursMax', 6.5],
+  ])('rejects a %s of %s — neither null nor its declared type', async (field, bad) => {
+    mockFetch(withVariety({ [field]: bad }));
+
+    await expect(fetchDashboardData('en')).rejects.toThrow(/aggregate/i);
   });
 
   it('names the levels it rejects at, not only the three containers (Extension #4-17)', async () => {

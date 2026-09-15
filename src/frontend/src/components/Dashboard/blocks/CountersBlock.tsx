@@ -18,6 +18,7 @@ import type {
   DashboardTotals,
   DashboardVarietyData,
 } from '../../../types/DashboardData';
+import { capitalizeFirst } from '../../../utils/capitalizeFirst';
 import { formatCount } from '../../../utils/formatNumber';
 import { isEdibleVariety } from '../../../utils/gardenStats';
 import { getPlantColor } from '../../../utils/plantColor';
@@ -150,8 +151,18 @@ export default function CountersBlock({
   // state under a header that draws `BLOCK_ICONS.counters`.
   const CounterIcon = BLOCK_ICONS.counters;
 
-  const displayName = (variety: DashboardVarietyData) =>
-    variety.commonName ?? variety.scientificName;
+  /**
+   * Round 2, V29 — sentence case at DISPLAY, never in the database: the
+   * catalog keeps the string as its source wrote it (`DATA_PROVENANCE`), and
+   * « langue de cerf » is stored lower-case because Perenual stores it so.
+   * {@link capitalizeFirst} is the product's rule for this (SMA-120); the
+   * title-casing `text-transform: capitalize` would do — « Langue De Cerf » —
+   * is wrong in French and appears nowhere.
+   */
+  const displayName = (variety: DashboardVarietyData) => {
+    const raw = variety.commonName ?? variety.scientificName;
+    return capitalizeFirst(raw) ?? raw;
+  };
 
   const avatar = (variety: DashboardVarietyData) => {
     const colour = getPlantColor(variety.plantId);

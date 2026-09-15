@@ -117,8 +117,47 @@ export interface DashboardTokens {
   warnBorder: string;
   /** `--track` (l. 30 / 62): the mask over the gradient outside a day's min–max, and every bar's empty track. */
   track: string;
-  /** `--tint` (l. 30 / 62): the fill of the ACTIVE place tab (`.wx-tab.on`). */
+  /**
+   * `--tint` (l. 30 / 62): the fill of the ACTIVE place tab (`.wx-tab.on`) and,
+   * since PR 4a/5, of the CURRENT MONTH's column in the calendar grid
+   * (`.cal .mh.now`, `.nowcol` — `A3Expert.dc.html` l. 211, 215).
+   */
   tint: string;
+  /**
+   * The band of every OTHER row of the calendar grid (SMA-336 PR 4a/5, round 2
+   * V33) — « un bleu plus clair en mode nuit », « gris ou bleu clair » by day.
+   *
+   * DERIVED, not invented: it is the palette's own `surfaceSubtle` in each
+   * mode (`theme.ts` — `#F2F6F0` by day, `#1E3358` at night), the surface the
+   * product already uses to lift a band off the card. It lives here rather
+   * than being read from the palette because the dashboard's grounds are
+   * declared in one place, and because the calendar is free to move it
+   * without moving every subtle surface of the product with it.
+   *
+   * It carries WORDS — the variety names — so unlike the four lane tokens it
+   * owes 4,5:1 and not 3:1, and it owes it in both themes. Asserted, not
+   * recorded (`MonthBlock.test.tsx`).
+   */
+  zebraRow: string;
+  /**
+   * The four lanes of the « Ce mois-ci » calendar (SMA-336 PR 4a/5) —
+   * `A3Expert.dc.html` helmet, verbatim, day l. 50 / night l. 81.
+   *
+   * Three of them are the plant detail timeline's own colours, which
+   * `_spec.md` § 5 names as their source (« pistes du calendrier =
+   * LifecycleSection.tsx, récolte éclaircie en nuit `#C8744A` »); the fourth,
+   * {@link stagePrune}, exists nowhere else in the product — the detail page
+   * has no pruning track — and is why these live here rather than being
+   * imported from a component.
+   *
+   * They colour BARS, never text: 4 px lanes and 12 px legend squares are
+   * graphics (3:1), and each legend square is named beside its colour, so the
+   * meaning never rests on the hue alone (§ 7).
+   */
+  stagePrune: string;
+  stageSow: string;
+  stageFlower: string;
+  stageHarvest: string;
 }
 
 const LIGHT: DashboardTokens = {
@@ -156,6 +195,11 @@ const LIGHT: DashboardTokens = {
   warnBorder: '#EFD27E',
   track: '#E9EFE7',
   tint: '#EAF5EE',
+  zebraRow: '#F2F6F0',
+  stagePrune: '#2C3E6B',
+  stageSow: '#8FB996',
+  stageFlower: '#E0A93B',
+  stageHarvest: '#A0522D',
 };
 
 const DARK: DashboardTokens = {
@@ -187,6 +231,13 @@ const DARK: DashboardTokens = {
   warnBorder: 'rgba(255,203,84,0.55)',
   track: '#31456B',
   tint: 'rgba(79,179,124,0.16)',
+  zebraRow: '#1E3358',
+  stagePrune: '#6E8AC8',
+  stageSow: '#8FB996',
+  stageFlower: '#E0A93B',
+  // The one lane the artboards lighten at night, so an earth brown stays
+  // visible on the dark card (`_spec.md` § 5).
+  stageHarvest: '#C8744A',
 };
 
 export function getDashboardTokens(mode: DashboardThemeMode): DashboardTokens {

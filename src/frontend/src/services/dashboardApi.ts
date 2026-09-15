@@ -291,6 +291,18 @@ const isVarietyRecord = matches<DashboardVarietyData>({
   // `isFiniteNumber` and not the count check.
   wateringNeedLevel: isNullableString,
   minToleratedTempC: nullable(isFiniteNumber),
+  // SMA-336 PR 4a/5 — the calendar and sunlight facts, every one nullable:
+  // the catalog knows none of them for part of its rows, and a null is what
+  // the « Pas de calendrier connu pour N variétés » foot counts. The strings
+  // travel verbatim (T1); the hours are whole and non-negative (0–24 by the
+  // database's own CHECK), hence the count check and not `isFiniteNumber`.
+  pruningMonths: isNullableString,
+  sowingPeriod: isNullableString,
+  harvestPeriod: isNullableString,
+  sunlightHoursMin: nullable(isWholeNumber),
+  sunlightHoursMax: nullable(isWholeNumber),
+  floweringSeason: isNullableString,
+  harvestSeason: isNullableString,
 });
 
 /** The four page totals. */

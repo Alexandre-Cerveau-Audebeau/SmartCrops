@@ -483,7 +483,35 @@
       },
       "month": {
         "title": "Ce mois-ci",
-        "invite": "Le calendrier du mois arrive avec les semis et les récoltes de vos plantations."
+        "monthsShort": ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"],
+        "counts": {
+          "prune": "à tailler",
+          "sow": "à semer",
+          "harvest": "à récolter"
+        },
+        "verbs": {
+          "prune": "À tailler",
+          "sow": "À semer",
+          "harvest": "À récolter"
+        },
+        "legend": {
+          "prune": "Taille",
+          "sow": "Semis",
+          "flower": "Floraison",
+          "harvest": "Récolte"
+        },
+        "moreNames": "+{{count, number}}",
+        "moreVarieties_one": "Afficher l’autre variété",
+        "moreVarieties_other": "Afficher les {{count, number}} autres variétés",
+        "collapse": "Réduire",
+        "unknown_one": "Pas de calendrier connu pour {{count, number}} variété",
+        "unknown_other": "Pas de calendrier connu pour {{count, number}} variétés",
+        "empty": "Aucune plante placée — le calendrier se remplit avec vos plantations.",
+        "loadError": "Impossible de charger le calendrier du mois.",
+        "gridLabel": "Calendrier des variétés sur douze mois",
+        "rowSpoken": "{{plant}} — {{lanes}}",
+        "laneSpoken": "{{lane}} : {{months}}",
+        "galleryPrune": "{{count, number}} à tailler"
       },
       "todo": {
         "title": "À faire aujourd’hui",
@@ -500,6 +528,10 @@
         "eveningOf": "{{day}} soir",
         "water": "Arroser ce soir — {{plants}} ({{garden}}), pas de pluie prévue",
         "waterGrouped": "Arroser ce soir — {{plants}} aux besoins élevés, pas de pluie prévue",
+        "prune": "Tailler — {{plants}} ({{garden}}, {{month}})",
+        "pruneGrouped": "Tailler — {{plants}} ({{month}})",
+        "sow": "Semer — {{plants}}, dernier mois de semis ({{garden}}, {{month}})",
+        "sowGrouped": "Semer — {{plants}}, dernier mois de semis ({{month}})",
         "cold": "Protéger du froid — {{plants}} ({{garden}}), {{temp}} {{when}}",
         "coldGrouped": "Protéger du froid — {{plants}}, {{temp}} {{when}}",
         "frost": "Protéger du gel — {{plants}} ({{garden}}), {{temp}} {{when}}",
@@ -508,8 +540,9 @@
         "done": "Marquer « {{task}} » comme faite",
         "sessionOnly": "Cases cochées pour cette session seulement — non enregistrées",
         "stale": "{{task}} (dernière météo connue)",
-        "nothing": "Rien à faire aujourd’hui côté météo.",
-        "soonKinds": "Tailler et Semer arrivent bientôt.",
+        "nothing": "Rien à faire aujourd’hui.",
+        "unknownYet": "Rien de planifié aujourd’hui — les arrosages ne sont pas encore connus.",
+        "weatherUnavailable": "Météo indisponible — les arrosages ne sont pas planifiés pour l’instant.",
         "noWeather_one": "Sans la météo de {{gardens}}, ses arrosages ne sont pas planifiés — ",
         "noWeather_other": "Sans la météo de {{gardens}}, leurs arrosages ne sont pas planifiés — ",
         "addCity": "Ajouter une ville →",

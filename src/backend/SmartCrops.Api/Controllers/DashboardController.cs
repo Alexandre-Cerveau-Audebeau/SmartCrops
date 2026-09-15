@@ -325,7 +325,14 @@ public class DashboardController(
                     v.Cells,
                     v.GardenIds,
                     d.WateringNeedLevel,
-                    d.MinToleratedTempC);
+                    d.MinToleratedTempC,
+                    d.PruningMonths,
+                    d.SowingPeriod,
+                    d.HarvestPeriod,
+                    d.SunlightHoursMin,
+                    d.SunlightHoursMax,
+                    d.FloweringSeason,
+                    d.HarvestSeason);
             })
             .ToList();
 
@@ -427,6 +434,13 @@ public class DashboardController(
     /// <param name="ImageAttribution">Attribution for <paramref name="ImageUrl"/>; null exactly when it is.</param>
     /// <param name="WateringNeedLevel">SMA-336 PR 3b/5 — the catalog's watering need, as its enum name, or null.</param>
     /// <param name="MinToleratedTempC">SMA-336 PR 3b/5 — the xData's minimum tolerated temperature, °C, or null.</param>
+    /// <param name="PruningMonths">SMA-336 PR 4a/5 — the Perenual month list, verbatim, or null.</param>
+    /// <param name="SowingPeriod">SMA-336 PR 4a/5 — the legacy catalog sowing token, verbatim, or null.</param>
+    /// <param name="HarvestPeriod">SMA-336 PR 4a/5 — the legacy catalog harvest token, verbatim, or null.</param>
+    /// <param name="SunlightHoursMin">SMA-336 PR 4a/5 — the xData's daily sunlight hours, minimum, or null.</param>
+    /// <param name="SunlightHoursMax">SMA-336 PR 4a/5 — the xData's daily sunlight hours, maximum, or null.</param>
+    /// <param name="FloweringSeason">SMA-336 PR 4a/5 (decision Q2) — the Perenual season word, verbatim, or null.</param>
+    /// <param name="HarvestSeason">SMA-336 PR 4a/5 (decision Q2) — the Perenual season word, verbatim, or null.</param>
     private readonly record struct VarietyDisplay(
         string? CommonName,
         string? PlantType,
@@ -434,7 +448,14 @@ public class DashboardController(
         string? ImageUrl,
         string? ImageAttribution,
         string? WateringNeedLevel,
-        int? MinToleratedTempC);
+        int? MinToleratedTempC,
+        string? PruningMonths,
+        string? SowingPeriod,
+        string? HarvestPeriod,
+        int? SunlightHoursMin,
+        int? SunlightHoursMax,
+        string? FloweringSeason,
+        string? HarvestSeason);
 
     /// <summary>
     /// Catalog facts, localised name and cover photo for the placed varieties, in
@@ -475,6 +496,21 @@ public class DashboardController(
                 // the plant was never enriched.
                 p.WateringNeedLevel,
                 MinToleratedTempC = p.PerenualData != null ? p.PerenualData.XTemperatureToleranceMinC : null,
+                // SMA-336 PR 4a/5 — the calendar and sunlight facts of the
+                // « Ce mois-ci » block and of the pruning / sowing tasks
+                // (pre-flight § F.1), VERBATIM strings: the browser parses
+                // them with the one parser the product owns (T1). Same left
+                // join on the optional 1-1 Perenual row; the two legacy tokens
+                // live on the plant itself.
+                p.SowingPeriod,
+                p.HarvestPeriod,
+                PruningMonths = p.PerenualData != null ? p.PerenualData.PruningMonths : null,
+                SunlightHoursMin = p.PerenualData != null ? p.PerenualData.XSunlightHoursMin : null,
+                SunlightHoursMax = p.PerenualData != null ? p.PerenualData.XSunlightHoursMax : null,
+                // Decision Q2 (PR 4a/5): season words are FACTUAL — see
+                // PlantDetailMapper, where the gate is documented.
+                FloweringSeason = p.PerenualData != null ? p.PerenualData.FloweringSeason : null,
+                HarvestSeason = p.PerenualData != null ? p.PerenualData.HarvestSeason : null,
                 Names = p.Translations
                     .Where(t => t.Language == language || t.Language == "en")
                     .Select(t => new { t.Language, t.CommonName })
@@ -522,7 +558,14 @@ public class DashboardController(
                     // « High » / « Frequent », and a number would tie it to
                     // the storage order of `PlantWateringNeed`.
                     r.WateringNeedLevel?.ToString(),
-                    r.MinToleratedTempC);
+                    r.MinToleratedTempC,
+                    r.PruningMonths,
+                    r.SowingPeriod,
+                    r.HarvestPeriod,
+                    r.SunlightHoursMin,
+                    r.SunlightHoursMax,
+                    r.FloweringSeason,
+                    r.HarvestSeason);
             });
     }
 

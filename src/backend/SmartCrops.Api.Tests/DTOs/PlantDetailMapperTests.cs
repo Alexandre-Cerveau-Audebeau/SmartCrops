@@ -109,13 +109,16 @@ public class PlantDetailMapperTests
             PerenualId = 398,
             // Gated free-text care fields:
             SunlightPreferences = "full sun, part shade",
-            PruningMonths = "March,April",
             Maintenance = "Low",
+            OriginCountries = "China",
+            // Factual fields that must always survive (never gated): the
+            // method and month lists (SMA-231) and, since SMA-336 PR 4a/5
+            // (decision Q2), the two season words — one word of a closed list
+            // of five, the same nature as the month list.
+            PruningMonths = "March,April",
+            PropagationMethods = "Division",
             FloweringSeason = "spring",
             HarvestSeason = "summer",
-            PropagationMethods = "Division",
-            OriginCountries = "China",
-            // Factual fields that must always survive (never gated):
             WateringBenchmark = "2-3",
             WateringBenchmarkUnit = "days",
             // Factual xData that must always survive:
@@ -137,8 +140,6 @@ public class PlantDetailMapperTests
         Assert.NotNull(dto.PerenualData);
         Assert.Null(dto.PerenualData!.SunlightPreferences);
         Assert.Null(dto.PerenualData.Maintenance);
-        Assert.Null(dto.PerenualData.FloweringSeason);
-        Assert.Null(dto.PerenualData.HarvestSeason);
         Assert.Null(dto.PerenualData.OriginCountries);
 
         // Factual data preserved (incl. PropagationMethods + PruningMonths,
@@ -150,6 +151,12 @@ public class PlantDetailMapperTests
         Assert.Equal("Division", dto.PerenualData.PropagationMethods);
         Assert.Equal("2-3", dto.PerenualData.WateringBenchmark);
         Assert.Equal("days", dto.PerenualData.WateringBenchmarkUnit);
+        // …and the two season words (SMA-336 PR 4a/5, decision Q2): one word
+        // of a closed list of five is a fact of the same nature as the month
+        // list, and the « Ce mois-ci » calendar reads them. A future lot that
+        // put them back behind the gate would fail here.
+        Assert.Equal("spring", dto.PerenualData.FloweringSeason);
+        Assert.Equal("summer", dto.PerenualData.HarvestSeason);
     }
 
     [Fact]
@@ -162,9 +169,10 @@ public class PlantDetailMapperTests
         Assert.Equal("Division; Root Cutting.", dto.PropagationInstructions);
         Assert.Single(dto.LongDescriptions);
         Assert.NotNull(dto.PerenualData);
-        // All seven gated PerenualData free-text fields survive on the expose
-        // path — mirrors the full set the false-path test pins, so a one-sided
-        // regression on either branch of the gating ternary fails the suite.
+        // The three still-gated PerenualData free-text fields survive on the
+        // expose path, beside the factual ones that never leave — mirrors the
+        // full set the false-path test pins, so a one-sided regression on
+        // either branch of a gating ternary fails the suite.
         Assert.Equal("full sun, part shade", dto.PerenualData!.SunlightPreferences);
         Assert.Equal("March,April", dto.PerenualData.PruningMonths);
         Assert.Equal("Low", dto.PerenualData.Maintenance);
