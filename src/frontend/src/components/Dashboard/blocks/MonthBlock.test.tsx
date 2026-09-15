@@ -1,5 +1,5 @@
 import { fireEvent, render, within } from '@testing-library/react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider, createTheme, type Theme } from '@mui/material/styles';
 import { describe, expect, it, vi } from 'vitest';
 import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
@@ -85,7 +85,8 @@ const manyVarieties = (count: number) =>
 
 type Props = React.ComponentProps<typeof MonthBlock>;
 
-function renderBlock(over: Partial<Props> = {}) {
+/** The theme is a parameter so the two-mode assertions render through ONE helper. */
+function renderBlock(over: Partial<Props> = {}, theme: Theme = createTheme()) {
   localStorage.setItem('smartcrops-language', 'en');
   const props: Props = {
     size: 'medium',
@@ -98,7 +99,7 @@ function renderBlock(over: Partial<Props> = {}) {
     ...over,
   };
   render(
-    <ThemeProvider theme={createTheme()}>
+    <ThemeProvider theme={theme}>
       <LanguageProvider>
         <UnitSystemProvider>
           <MonthBlock {...props} />
@@ -632,25 +633,7 @@ describe('MonthBlock — Large: deploying the rest, and folding it back (V26)', 
 describe('MonthBlock — the stuck axis stands on the card’s own ground (V27)', () => {
   it.each([['light'], ['dark']])('%s: the axis row is painted, not see-through', (mode) => {
     const theme = createAppTheme(mode as 'light' | 'dark');
-    localStorage.setItem('smartcrops-language', 'en');
-    render(
-      <ThemeProvider theme={theme}>
-        <LanguageProvider>
-          <UnitSystemProvider>
-            <MonthBlock
-              size="large"
-              gardens={[garden]}
-              varieties={manyVarieties(16)}
-              weather={EMPTY_WEATHER_DATA}
-              loading={false}
-              loadError={false}
-              onRetry={vi.fn()}
-            />
-          </UnitSystemProvider>
-        </LanguageProvider>
-      </ThemeProvider>
-    );
-    const card = document.querySelector('[data-widget="month"]') as HTMLElement;
+    const { card } = renderBlock({ size: 'large', varieties: manyVarieties(16) }, theme);
     const axis = card.querySelector('[data-month-axis="now"]')!.parentElement!;
 
     // The card is a MUI `Card`, so its ground IS `background.paper`: the
@@ -687,7 +670,7 @@ describe('MonthBlock — the calendar is a list of varieties, not a table (C3 + 
   });
 
   it('reads one sentence an item, and never a colour or an empty cell', () => {
-    const { card, widget } = renderBlock({ size: 'large' });
+    const { card } = renderBlock({ size: 'large' });
     const item = card.querySelector('[data-month-plant="thyme"]')!;
     const month = monthLabel(thisMonth(), 'en');
 
