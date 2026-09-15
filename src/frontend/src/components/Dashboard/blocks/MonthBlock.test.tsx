@@ -11,7 +11,7 @@ import { getDashboardTokens } from '../../../theme/dashboardTokens';
 import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../../../types/DashboardWeather';
 import type { DashboardVarietyData } from '../../../types/DashboardData';
 import MonthBlock from './MonthBlock';
-import { monthCalendar, monthLabel } from './plantCalendar';
+import { monthCalendar, monthLabel, zonedYearMonthOf } from './plantCalendar';
 
 // SMA-336 PR 4a/5 — « Ce mois-ci » against `A2Novice.dc.html` (Small),
 // `Main.dc.html` / `A4Manquantes.dc.html` (Medium) and `A3Expert.dc.html`
@@ -316,18 +316,34 @@ describe('MonthBlock — the states', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('reads the PLACE’s month when the gardens are located (Q10)', () => {
-    // The place is in March; the browser is wherever the suite runs. A thyme
-    // pruned in March is due there and, eleven months out of twelve, not here.
-    const marchThyme = varietyFixture({ plantId: 'thyme', commonName: 'Thyme', gardenIds: ['g1'], pruningMonths: 'March' });
+  it('reads the PLACE’s ZONE for the month when the gardens are located (Q10, round 1 C1)', () => {
+    // The place is Sydney and its stored snapshot says March — a photograph
+    // taken at fetch time. The block must read the ZONE and the clock, so the
+    // month it shows is Sydney's own now, whatever the snapshot froze and
+    // whatever zone the suite runs in. Before round 1 it said March.
+    const SYDNEY = '-33.87,151.21';
+    const there = zonedYearMonthOf(new Date(), 'Australia/Sydney')!;
+    const thymeThere = varietyFixture({
+      plantId: 'thyme',
+      commonName: 'Thyme',
+      gardenIds: ['g1'],
+      pruningMonths: MONTH_TOKENS[there.month - 1]!,
+    });
     const located = (): DashboardWeatherData =>
       weatherFixture(
-        [locationFixture({ localTime: '2026-03-12 14:30' })],
-        [linkFixture({ gardenId: 'g1' })]
+        [
+          locationFixture({
+            key: SYDNEY,
+            name: 'Sydney',
+            timeZone: 'Australia/Sydney',
+            localTime: '2026-03-12 14:30',
+          }),
+        ],
+        [linkFixture({ gardenId: 'g1', locationKey: SYDNEY })]
       );
-    const { card } = renderBlock({ varieties: [marchThyme], weather: located() });
+    const { card } = renderBlock({ varieties: [thymeThere], weather: located() });
 
-    expect(card.querySelector('[data-month-chip]')).toHaveTextContent('March');
+    expect(card.querySelector('[data-month-chip]')).toHaveTextContent(monthLabel(there.month, 'en'));
     expect(card.querySelector('[data-month-row="prune"]')).toHaveTextContent('To prune1Thyme');
   });
 

@@ -90,8 +90,9 @@ export interface TodoTask {
   /**
    * The session checkbox key: the kind, the garden AND a digest of the content
    * — date, count, tolerance and minimum (round 1, E9 / E10; round 2, D2) for
-   * the weather tasks; the month and the sorted variety ids for the calendar
-   * ones. A refresh that moves a task to another day, another count, another
+   * the weather tasks; the month and the variety ids IN THE SENTENCE'S OWN
+   * ORDER for the calendar ones (round 1, C5). A refresh that moves a task to
+   * another day, another count, another
    * minimum or another set of varieties makes ANOTHER task, whose box starts
    * unticked; a refresh that changes nothing keeps it.
    */
@@ -222,9 +223,15 @@ function calendarTasks(
 
   const stamp = stampOf(month);
   const task = (kind: 'prune' | 'sow', varieties: DashboardVarietyData[]): TodoTask => ({
-    // The month AND the sorted variety ids (E9 / E10): a variety planted or
-    // removed changes the sentence, so it changes the id.
-    id: `${kind}:${garden.id}:${stamp}:${varieties.map((v) => v.plantId).sort().join('|')}`,
+    // The month AND the variety ids IN THE ORDER THE SENTENCE LISTS THEM
+    // (E9 / E10, then round 1 C5 — Extension `40f66fec` / `7dc15d10`): a
+    // variety planted or removed changes the sentence, so it changes the id.
+    // The ids used to be sorted while `names` below kept the plan's order, so
+    // reordering the same varieties changed the visible sentence and left the
+    // id — and with it the session's tick and the React key — attached to a
+    // task that no longer said the same thing. One order for both, or the
+    // identity is not the sentence's.
+    id: `${kind}:${garden.id}:${stamp}:${varieties.map((v) => v.plantId).join('|')}`,
     kind,
     gardenId: garden.id,
     gardenName: garden.name,

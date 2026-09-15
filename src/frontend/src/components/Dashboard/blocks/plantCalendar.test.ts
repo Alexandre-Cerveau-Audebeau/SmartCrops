@@ -15,11 +15,12 @@ import {
   shiftForHemisphere,
   varietyName,
   yearMonthOf,
+  zonedYearMonthOf,
 } from './plantCalendar';
 import { gardenFixture, varietyFixture } from '../../../test/fixtures/dashboard';
 import { linkFixture, locationFixture, weatherFixture } from '../../../test/fixtures/weather';
 import type { GardenConfig } from '../../../types/Garden';
-import { EMPTY_WEATHER_DATA } from '../../../types/DashboardWeather';
+import { EMPTY_WEATHER_DATA, type WeatherLocation } from '../../../types/DashboardWeather';
 
 // SMA-336 PR 4a/5 — the plant calendar (pre-flight § C, T1, T9, Q9, Q10, Q13).
 // The month lists are the forms MEASURED in the catalog: 102 distinct
@@ -176,51 +177,94 @@ describe('lanesOf — one variety read from one garden', () => {
 });
 
 describe('the month — of a garden, of the block (Q10)', () => {
-  const lyon = (localTime: string | null, gardenIds = ['g1']) =>
+  const SYDNEY = '-33.87,151.21';
+
+  /** The default Lyon place, `Europe/Paris`, linked to the given gardens. */
+  const lyon = (gardenIds = ['g1'], over: Partial<WeatherLocation> = {}) =>
     weatherFixture(
-      [locationFixture({ localTime })],
+      [locationFixture(over)],
       gardenIds.map((gardenId) => linkFixture({ gardenId }))
     );
+
+  const sydney = (gardenIds = ['g1']) =>
+    weatherFixture(
+      [locationFixture({ key: SYDNEY, name: 'Sydney', timeZone: 'Australia/Sydney' })],
+      gardenIds.map((gardenId) => linkFixture({ gardenId, locationKey: SYDNEY }))
+    );
+
+  /**
+   * 31 August 2026, 21:00 UTC — an ABSOLUTE instant, built from components so
+   * the runner's own zone never enters (`new Date("…")` is banned here for the
+   * same reason it is banned in the source). Europe is still on 31 August;
+   * Sydney has already turned the page to 1 September.
+   */
+  const turn = () => new Date(Date.UTC(2026, 7, 31, 21, 0));
 
   it('yearMonthOf reads the clock’s own local month', () => {
     expect(yearMonthOf(september())).toEqual({ year: 2026, month: 9 });
   });
 
-  it('a located garden is in its PLACE’s month, whatever the browser says', () => {
-    expect(placeMonthOf('g1', lyon('2026-09-12 14:30'))).toEqual({ year: 2026, month: 9 });
-    expect(monthOfGarden(north, lyon('2026-09-12 14:30'), may)).toEqual({ year: 2026, month: 9 });
+  it('zonedYearMonthOf reads ONE instant in each zone, and refuses a zone it does not know', () => {
+    expect(zonedYearMonthOf(turn(), 'Europe/Paris')).toEqual({ year: 2026, month: 8 });
+    expect(zonedYearMonthOf(turn(), 'Australia/Sydney')).toEqual({ year: 2026, month: 9 });
+    expect(zonedYearMonthOf(turn(), 'Pacific/Honolulu')).toEqual({ year: 2026, month: 8 });
+    expect(zonedYearMonthOf(turn(), 'Mars/Olympus_Mons')).toBeNull();
   });
 
-  it('an unlocated garden, or a place with no clock, is in the browser’s month', () => {
-    expect(placeMonthOf('g1', EMPTY_WEATHER_DATA)).toBeNull();
+  it('a located garden is in its PLACE’s month — the zone decides, not the browser', () => {
+    // ONE instant, two zones, two months: nothing here reads the runner's clock.
+    expect(placeMonthOf('g1', lyon(), turn)).toEqual({ year: 2026, month: 8 });
+    expect(placeMonthOf('g1', sydney(), turn)).toEqual({ year: 2026, month: 9 });
+    expect(monthOfGarden(north, sydney(), turn)).toEqual({ year: 2026, month: 9 });
+  });
+
+  it('…and it is the month the clock is in NOW, never the one the aggregate was fetched in (round 1, C1)', () => {
+    // The photograph says 31 August and the place is stale; the instant is
+    // 1 September, 10:00 UTC — noon in Paris. Before the fix the whole widget
+    // and both calendar tasks read the photograph and said August.
+    const stale = lyon(['g1'], { localTime: '2026-08-31 18:00', status: 'stale' });
+    const firstOfSeptember = () => new Date(Date.UTC(2026, 8, 1, 10, 0));
+    expect(placeMonthOf('g1', stale, firstOfSeptember)).toEqual({ year: 2026, month: 9 });
+    expect(monthOfGarden(north, stale, firstOfSeptember)).toEqual({ year: 2026, month: 9 });
+    expect(blockMonth([north], stale, firstOfSeptember)).toEqual({ year: 2026, month: 9 });
+    expect(monthCalendar([north], [], stale, firstOfSeptember).month).toEqual({ year: 2026, month: 9 });
+  });
+
+  it('an unlocated garden, or a place with no usable zone, is in the browser’s month', () => {
+    expect(placeMonthOf('g1', EMPTY_WEATHER_DATA, may)).toBeNull();
     expect(monthOfGarden(north, EMPTY_WEATHER_DATA, may)).toEqual({ year: 2026, month: 5 });
-    // The provider could not describe the place: no localTime.
-    expect(placeMonthOf('g1', lyon(null))).toBeNull();
-    expect(monthOfGarden(north, lyon(null), may)).toEqual({ year: 2026, month: 5 });
+    // The provider could not describe the place: no zone to read the instant in.
+    const zoneless = lyon(['g1'], { timeZone: null });
+    expect(placeMonthOf('g1', zoneless, may)).toBeNull();
+    expect(monthOfGarden(north, zoneless, may)).toEqual({ year: 2026, month: 5 });
+    // A stored zone this runtime does not know: unlocated, never a crash.
+    const bogus = lyon(['g1'], { timeZone: 'Mars/Olympus_Mons' });
+    expect(placeMonthOf('g1', bogus, may)).toBeNull();
+    expect(monthOfGarden(north, bogus, may)).toEqual({ year: 2026, month: 5 });
     // A dangling key reads as unlocated.
     const dangling = weatherFixture([], [linkFixture({ gardenId: 'g1', locationKey: '0.00,0.00' })]);
-    expect(placeMonthOf('g1', dangling)).toBeNull();
+    expect(placeMonthOf('g1', dangling, may)).toBeNull();
   });
 
   it('the block takes the places’ month when every located garden agrees', () => {
-    expect(blockMonth([north, south], lyon('2026-09-12 14:30', ['g1', 'g2']), may)).toEqual({
-      year: 2026,
-      month: 9,
-    });
+    expect(blockMonth([north, south], sydney(['g1', 'g2']), turn)).toEqual({ year: 2026, month: 9 });
     // One located, one not: the located one decides.
-    expect(blockMonth([north, unset], lyon('2026-09-12 14:30', ['g1']), may)).toEqual({ year: 2026, month: 9 });
+    expect(blockMonth([north, unset], sydney(['g1']), turn)).toEqual({ year: 2026, month: 9 });
   });
 
-  it('…and the browser’s when no garden is located, or when two places straddle a month end', () => {
+  it('…and the browser’s when no garden is located, or when two zones straddle a month end', () => {
     expect(blockMonth([north, south], EMPTY_WEATHER_DATA, may)).toEqual({ year: 2026, month: 5 });
+    // Read against the fallback rather than a literal month: the browser's
+    // side of this instant is the RUNNER's zone, and the assertion must hold
+    // in Paris as in CI's UTC.
     const straddle = weatherFixture(
       [
-        locationFixture({ key: '45.76,4.84', name: 'Lyon', localTime: '2026-09-30 23:30' }),
-        locationFixture({ key: '-33.87,151.21', name: 'Sydney', localTime: '2026-10-01 08:30' }),
+        locationFixture(),
+        locationFixture({ key: SYDNEY, name: 'Sydney', timeZone: 'Australia/Sydney' }),
       ],
-      [linkFixture({ gardenId: 'g1' }), linkFixture({ gardenId: 'g2', locationKey: '-33.87,151.21' })]
+      [linkFixture({ gardenId: 'g1' }), linkFixture({ gardenId: 'g2', locationKey: SYDNEY })]
     );
-    expect(blockMonth([north, south], straddle, may)).toEqual({ year: 2026, month: 5 });
+    expect(blockMonth([north, south], straddle, turn)).toEqual(yearMonthOf(turn()));
   });
 });
 

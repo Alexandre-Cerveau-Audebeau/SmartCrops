@@ -517,18 +517,32 @@ describe('todoTasks — « Tailler » and « Semer » (PR 4a/5)', () => {
     ]);
   });
 
-  it('dates a task in the GARDEN’s month — its place’s, not the browser’s (Q10)', () => {
+  it('dates a task in the GARDEN’s month — its place’s ZONE, not the browser’s (Q10, round 1 C1)', () => {
+    const septemberThyme = varietyFixture({
+      plantId: 'thyme',
+      commonName: 'Thyme',
+      pruningMonths: 'September',
+    });
+    /** A place with a zone and nothing else to say: no forecast, no snapshot. */
+    const placed = (key: string, timeZone: string) =>
+      weatherFixture(
+        [locationFixture({ key, timeZone, localTime: null, current: null, days: [] })],
+        [linkFixture({ gardenId: 'g1', locationKey: key })]
+      );
     const garden = gardenOf('g1', 'Terrasse', [['thyme', 1]]);
-    const marchThyme = varietyFixture({ plantId: 'thyme', commonName: 'Thyme', pruningMonths: 'March' });
-    const inMarch = weatherFixture(
-      [locationFixture({ days: [dayFixture({ date: '2026-03-12' })], localTime: '2026-03-12 14:30' })],
-      [linkFixture({ gardenId: 'g1' })]
-    );
+    /**
+     * 31 August 2026, 21:00 UTC — ONE instant. Sydney has turned the page to
+     * September; Honolulu is ten hours behind and still in August. Two zones
+     * rather than « the zone against the browser », so the assertion holds in
+     * Paris as in CI's UTC.
+     */
+    const turn = () => new Date(Date.UTC(2026, 7, 31, 21, 0));
 
-    // The browser says September; the place says March, and the place decides.
-    expect(todoTasks([garden], [marchThyme], inMarch, clock('2026-03-12 14:30'))).toEqual([
-      expect.objectContaining({ kind: 'prune', month: { year: 2026, month: 3 }, date: '2026-03-01' }),
-    ]);
+    expect(todoTasks([garden], [septemberThyme], placed('-33.87,151.21', 'Australia/Sydney'), clock(null, turn)))
+      .toEqual([expect.objectContaining({ kind: 'prune', month: { year: 2026, month: 9 }, date: '2026-09-01' })]);
+    expect(
+      todoTasks([garden], [septemberThyme], placed('21.31,-157.86', 'Pacific/Honolulu'), clock(null, turn))
+    ).toEqual([]);
   });
 
   it('orders a garden’s tasks water, prune, sow, then the cold (Main.dc.html)', () => {
@@ -554,11 +568,26 @@ describe('todoTasks — « Tailler » and « Semer » (PR 4a/5)', () => {
 
     expect(idOf(one)).toEqual(['prune:g1:2026-09:thyme']);
     // Another variety in the sentence is another task.
-    expect(idOf(two)).toEqual(['prune:g1:2026-09:rosemary|thyme']);
+    expect(idOf(two)).toEqual(['prune:g1:2026-09:thyme|rosemary']);
     // Another month is another task…
     expect(idOf(two, () => new Date(2026, 9, 15, 10, 30))).toEqual(['prune:g1:2026-10:rosemary']);
     // …and the same plan in the same month is the same task, so the tick stays.
-    expect(idOf(two)).toEqual(['prune:g1:2026-09:rosemary|thyme']);
+    expect(idOf(two)).toEqual(['prune:g1:2026-09:thyme|rosemary']);
+  });
+
+  it('…and it carries the ORDER the sentence lists them in (round 1, C5)', () => {
+    const thymeFirst = gardenOf('g1', 'Terrasse', [['thyme', 1], ['rosemary', 1]]);
+    const rosemaryFirst = gardenOf('g1', 'Terrasse', [['rosemary', 1], ['thyme', 1]]);
+    const taskOf = (garden: typeof thymeFirst) =>
+      todoTasks([garden], calendarVarieties, EMPTY_WEATHER_DATA, clock())[0]!;
+
+    // The same two varieties, two plans, two DIFFERENT sentences…
+    expect(taskOf(thymeFirst).names).toEqual(['Thyme', 'Rosemary']);
+    expect(taskOf(rosemaryFirst).names).toEqual(['Rosemary', 'Thyme']);
+    // …so two different tasks: a tick belongs to the sentence it was ticked on.
+    expect(taskOf(thymeFirst).id).not.toBe(taskOf(rosemaryFirst).id);
+    expect(taskOf(thymeFirst).id).toBe('prune:g1:2026-09:thyme|rosemary');
+    expect(taskOf(rosemaryFirst).id).toBe('prune:g1:2026-09:rosemary|thyme');
   });
 
   it('an empty garden has nothing to prune', () => {

@@ -1,7 +1,6 @@
 import type { DashboardGardenData, DashboardVarietyData } from '../../../types/DashboardData';
 import type { DashboardWeatherData } from '../../../types/DashboardWeather';
 import { periodToMonths } from '../../../utils/formatPeriod';
-import { parseLocalDateTime } from './weatherTime';
 
 /**
  * SMA-336 PR 4a/5 — the plant calendar, PURE: what the catalog says a variety
@@ -132,34 +131,77 @@ export function yearMonthOf(date: Date): YearMonth {
   return { year: date.getFullYear(), month: date.getMonth() + 1 };
 }
 
-/** The month a place is in, from its own `localTime`; null when the aggregate has no place or no clock for the garden. */
-export function placeMonthOf(gardenId: string, weather: DashboardWeatherData): YearMonth | null {
+/**
+ * The year and month an INSTANT falls in, read in an IANA zone. Null for a
+ * zone the runtime does not know — `Intl.DateTimeFormat` throws a `RangeError`
+ * on one, and a place whose stored zone is unusable must read as unlocated
+ * rather than take the whole widget down.
+ *
+ * `en-CA` for its numeric, unambiguous parts; the locale is an implementation
+ * detail here, never a displayed string — {@link monthLabel} owns those.
+ */
+export function zonedYearMonthOf(instant: Date, timeZone: string): YearMonth | null {
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+    }).formatToParts(instant);
+  } catch {
+    return null;
+  }
+  const year = Number(parts.find((part) => part.type === 'year')?.value);
+  const month = Number(parts.find((part) => part.type === 'month')?.value);
+  return Number.isFinite(year) && Number.isFinite(month) ? { year, month } : null;
+}
+
+/**
+ * The month a place is in NOW — the injected instant rendered in the place's
+ * own `timeZone`. Null when the garden reads no place, or when the place
+ * carries no usable zone; {@link monthOfGarden} and {@link blockMonth} then
+ * fall back to the same injected clock, read locally.
+ *
+ * Round 1, C1 (Extension `febfc5be` / `137bdf1b`): this used to read
+ * `location.localTime`, which is the provider's clock AT FETCH TIME and does
+ * not advance. A weather aggregate fetched on 31 August and still held on
+ * 1 September answered « August », and the whole widget followed it — header,
+ * counters, tinted column — as did the Tailler and Semer tasks. The zone is
+ * the durable fact of a place; the timestamp beside it is a photograph. We
+ * keep reading the photograph for the WEATHER (a forecast belongs to the hour
+ * it was taken, `weatherTime.ts`), never for the calendar.
+ */
+export function placeMonthOf(
+  gardenId: string,
+  weather: DashboardWeatherData,
+  clock: BrowserClock = browserClock
+): YearMonth | null {
   const link = weather.gardens.find((entry) => entry.gardenId === gardenId);
   if (!link?.locationKey) return null;
   const location = weather.locations.find((place) => place.key === link.locationKey);
-  const stamp = location?.localTime ? parseLocalDateTime(location.localTime) : null;
-  if (!stamp) return null;
-  const [year, month] = stamp.date.split('-').map(Number);
-  return { year: year!, month: month! };
+  if (!location?.timeZone) return null;
+  return zonedYearMonthOf(clock(), location.timeZone);
 }
 
 /**
  * « This month » for ONE garden (Q10): its place's month when it reads a place
- * with a clock, the browser's otherwise. The tasks of « À faire » are dated by
- * this — a garden in Sydney prunes in Sydney's month.
+ * with a time zone, the browser's otherwise. The tasks of « À faire » are
+ * dated by this — a garden in Sydney prunes in Sydney's month, and on the
+ * morning Sydney has already turned the page and Paris has not, the two
+ * gardens are honestly in two different months.
  */
 export function monthOfGarden(
   garden: DashboardGardenData,
   weather: DashboardWeatherData,
   clock: BrowserClock = browserClock
 ): YearMonth {
-  return placeMonthOf(garden.id, weather) ?? yearMonthOf(clock());
+  return placeMonthOf(garden.id, weather, clock) ?? yearMonthOf(clock());
 }
 
 /**
  * « This month » for the BLOCK (Q10): the places' month when every located
  * garden agrees on one, the browser's otherwise — no located garden, or two
- * places straddling a month end for a few hours. ONE month for the header, the
+ * zones straddling a month end for a few hours. ONE month for the header, the
  * counts and the grid: a calendar with two current months would be two
  * calendars.
  */
@@ -170,7 +212,7 @@ export function blockMonth(
 ): YearMonth {
   const placeMonths = new Map<string, YearMonth>();
   for (const garden of gardens) {
-    const placed = placeMonthOf(garden.id, weather);
+    const placed = placeMonthOf(garden.id, weather, clock);
     if (placed) placeMonths.set(`${placed.year}-${placed.month}`, placed);
   }
   if (placeMonths.size === 1) return [...placeMonths.values()][0]!;
