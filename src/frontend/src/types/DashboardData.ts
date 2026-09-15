@@ -69,6 +69,30 @@ export interface DashboardVarietyData {
    * placements whose tolerance is KNOWN and within reach of a day's minimum.
    */
   minToleratedTempC: number | null;
+  /**
+   * SMA-336 PR 4a/5 — `PlantPerenualData.PruningMonths` VERBATIM: the
+   * comma-separated English month names Perenual lists (« February,March,April »),
+   * unordered and sometimes year-wrapping as stored, or null when unknown.
+   * `plantCalendar.ts` parses it with `periodToMonths` — the one parser the
+   * product owns (pre-flight T1); the server transports (D9).
+   */
+  pruningMonths: string | null;
+  /** The legacy sowing token (« march-may », « year-round »), or null — 5.6 % of the catalog. */
+  sowingPeriod: string | null;
+  /** The legacy harvest token (« june-september »), or null; the calendar reads it before {@link harvestSeason}. */
+  harvestPeriod: string | null;
+  /** xData: recommended daily sunlight hours, minimum, or null — carried for PR 4b/5 (Tips). */
+  sunlightHoursMin: number | null;
+  /** xData: recommended daily sunlight hours, maximum, or null on a half-open range. */
+  sunlightHoursMax: number | null;
+  /**
+   * ONE season word (Spring / Summer / Autumn / Fall / Winter), or null.
+   * Factual by decision Q2 of the PR 4 pre-flight — a word of a closed list of
+   * five, the same nature as the month list — hence transported.
+   */
+  floweringSeason: string | null;
+  /** Same closed list, same decision, or null. */
+  harvestSeason: string | null;
 }
 
 export interface DashboardTotals {

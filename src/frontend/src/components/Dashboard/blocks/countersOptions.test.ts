@@ -119,6 +119,13 @@ describe('resolveCountersFigures — one resolver for every number (round 6, A)'
     gardenIds,
     wateringNeedLevel: null,
     minToleratedTempC: null,
+    pruningMonths: null,
+    sowingPeriod: null,
+    harvestPeriod: null,
+    sunlightHoursMin: null,
+    sunlightHoursMax: null,
+    floweringSeason: null,
+    harvestSeason: null,
   });
 
   // Basil once on the terrace and twice on the balcony; thyme twice on the
