@@ -12,6 +12,7 @@ import ContentCutOutlinedIcon from '@mui/icons-material/ContentCutOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import SpaOutlinedIcon from '@mui/icons-material/SpaOutlined';
 import DashboardBlock from '../DashboardBlock';
+import IconDisc from '../IconDisc';
 import InviteState from '../InviteState';
 import { BLOCK_ICONS } from '../blockIcons';
 import {
@@ -255,23 +256,9 @@ export default function MonthBlock({
           return (
             <Box key={key} data-month-row={key} sx={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               {/* `.inv-ic` at 30 px — the disc the artboard puts before each row. */}
-              <Box
-                aria-hidden
-                sx={{
-                  width: 30,
-                  height: 30,
-                  flexShrink: 0,
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: tk.invIcBg,
-                  color: 'primary.main',
-                  '& .MuiSvgIcon-root': { fontSize: 17 },
-                }}
-              >
+              <IconDisc iconSize={17}>
                 <Icon />
-              </Box>
+              </IconDisc>
               <Box
                 sx={{
                   flex: 1,

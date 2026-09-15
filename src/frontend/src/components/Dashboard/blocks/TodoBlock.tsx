@@ -13,6 +13,7 @@ import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import SpaOutlinedIcon from '@mui/icons-material/SpaOutlined';
 import WaterDropOutlinedIcon from '@mui/icons-material/WaterDropOutlined';
 import DashboardBlock from '../DashboardBlock';
+import IconDisc from '../IconDisc';
 import InviteState from '../InviteState';
 import { BLOCK_ICONS } from '../blockIcons';
 import { monthLabel } from './plantCalendar';
@@ -179,23 +180,9 @@ export default function TodoBlock({
           />
         ) : (
           /* `.inv-ic` at 30 px — the disc before each task of the artboard. */
-          <Box
-            aria-hidden
-            sx={{
-              width: 30,
-              height: 30,
-              flexShrink: 0,
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: tk.invIcBg,
-              color: 'primary.main',
-              '& .MuiSvgIcon-root': { fontSize: 16 },
-            }}
-          >
+          <IconDisc>
             <Icon />
-          </Box>
+          </IconDisc>
         )}
         <Typography
           sx={{
@@ -228,23 +215,9 @@ export default function TodoBlock({
         flexShrink: 0,
       }}
     >
-      <Box
-        aria-hidden
-        sx={{
-          width: 30,
-          height: 30,
-          flexShrink: 0,
-          borderRadius: '50%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: tk.invIcBg,
-          color: 'primary.main',
-          '& .MuiSvgIcon-root': { fontSize: 16 },
-        }}
-      >
+      <IconDisc>
         <LocationOnOutlinedIcon />
-      </Box>
+      </IconDisc>
       {/* A `div`, not Typography's default `<p>` (round 1, E2): the « Ajouter
           une ville → » link below is a `<button>`, which HTML forbids inside a
           paragraph — the parser would close the `<p>` before it and the two
