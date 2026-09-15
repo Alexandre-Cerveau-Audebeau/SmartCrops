@@ -24,11 +24,19 @@ import DashboardGrid from '../components/Dashboard/DashboardGrid';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import CountersOptionsPanel from '../components/Dashboard/blocks/CountersOptionsPanel';
 import { resolveCountersFigures } from '../components/Dashboard/blocks/countersOptions';
-import GardensBlock from '../components/Dashboard/blocks/GardensBlock';
+import GardensBlock, {
+  type GardensWeather,
+} from '../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
+import TodoBlock from '../components/Dashboard/blocks/TodoBlock';
+import WeatherBlock from '../components/Dashboard/blocks/WeatherBlock';
+import WeatherOptionsPanel from '../components/Dashboard/blocks/WeatherOptionsPanel';
+import LocationDialog from '../components/Dashboard/LocationDialog';
+import type { LocationTarget } from '../components/Dashboard/locationTools';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
+import { useDashboardWeather } from '../hooks/useDashboardWeather';
 import { useGardenViews } from '../hooks/useGardenViews';
 import { useLanguage } from '../hooks/useLanguage';
 import { useDashboardTokens } from '../theme/useDashboardTokens';
@@ -55,9 +63,11 @@ type GardensNavState = { toast?: 'gardenDeleted' } | null;
  * reorderable grid, three experience levels, and preferences persisted
  * SERVER-side. It replaces `MyGardens` on `/gardens`.
  *
- * Only the Gardens widget carries data in this lot (orchestrator decision R1):
- * it is the product's one route into the planner, so it ships fed rather than
- * as an invitation. The seven others are shells that say so.
+ * Only the Gardens widget carried data in PR 1/5 (orchestrator decision R1):
+ * it is the product's one route into the planner, so it shipped fed rather
+ * than as an invitation. PR 2/5 fed Counters and Statistics from the transport
+ * aggregate; PR 3b/5 feeds Weather from the weather aggregate. The others are
+ * shells that say so.
  *
  * No preference is written to `localStorage`: the layout follows the account,
  * not the browser (design freeze).
@@ -100,6 +110,109 @@ export default function GardensDashboard() {
     refetch,
   } = useDashboardData(language);
   const gardens = dashboardData.gardens;
+
+  // SMA-336 PR 3b/5: the weather of every place the gardens sit in, in ONE
+  // call, read by three surfaces — the Weather widget, the MÉTÉO column of the
+  // Gardens table and (PR 3b/5 step 8) the To-do block. Its OWN hook and its
+  // own failure: a provider outage must never empty the gardens (§ D.1).
+  const {
+    data: weatherData,
+    loading: weatherLoading,
+    refreshing: weatherRefreshing,
+    loadError: weatherError,
+    refetch: refetchWeather,
+    refetchAfterMutation: refetchWeatherAfterMutation,
+  } = useDashboardWeather(language);
+
+  // The ONE location dialog of the page (§ F.4), opened from the widget, the
+  // « 1/3 localisé » chip, a table cell or the Weather gear. The state holds the
+  // target's IDENTITY only; what it currently holds is derived from the LIVE
+  // aggregate on every render (round 2, D4 — Extension 7d3f6056 / 458cd620): a
+  // dialog opened while the weather loads fills in when it lands, instead of
+  // keeping the empty photograph it was opened with. The identity outlives the
+  // open flag, the DeleteGardenDialog idiom: the fading dialog keeps its title.
+  const [locateKey, setLocateKey] = useState<
+    { kind: 'profile' } | { kind: 'garden'; gardenId: string } | null
+  >(null);
+  const [locateOpen, setLocateOpen] = useState(false);
+
+  /** The stored name of the place a link reads, when the aggregate carries it. */
+  const placeNamed = (key: string | null | undefined): string | null =>
+    key ? (weatherData.locations.find((place) => place.key === key)?.name ?? null) : null;
+
+  // The profile default is the place every garden WITHOUT an override reads
+  // (ADR-0006); the aggregate names it through any link that inherits. When
+  // every garden overrides it, its name is unknown here — the dialog then says
+  // « a default is stored » and still offers to remove it (V21).
+  const profileCurrent = placeNamed(
+    weatherData.gardens.find((entry) => entry.source === 'profile')?.locationKey
+  );
+
+  // The location surfaces say « loading » whenever a request is in flight —
+  // the first load (round 2, D4) and every REPLACEMENT (round 4, F2 — GitHub
+  // 4010193172). The hook's `loading` is false from the first answer on, and a
+  // panel or dialog that read it alone presented the LAST aggregate as settled,
+  // « Retirer » included, while a language switch, Retry or the re-read after
+  // « Utiliser » was still out.
+  const weatherInFlight = weatherLoading || weatherRefreshing;
+
+  /**
+   * What the dialog's target holds TODAY, read from the live aggregate — so the
+   * dialog is the door to CHANGE or REMOVE a location as much as to add one
+   * (V21), and says « loading » rather than « nothing stored » while a request
+   * is in flight (D4, F2).
+   */
+  const locateTarget: LocationTarget | null = (() => {
+    if (locateKey === null) return null;
+    if (locateKey.kind === 'profile') {
+      return {
+        kind: 'profile',
+        current: profileCurrent,
+        canRemove: weatherData.profileLocated,
+        loading: weatherInFlight,
+        // The aggregate could not be read (E2): `current` / `canRemove` are the
+        // last known state the hook kept, or nothing after a failed first load.
+        unavailable: weatherError,
+      };
+    }
+    const link = weatherData.gardens.find((entry) => entry.gardenId === locateKey.gardenId);
+    return {
+      kind: 'garden',
+      gardenId: locateKey.gardenId,
+      gardenName: gardens.find((garden) => garden.id === locateKey.gardenId)?.name ?? '',
+      // « Revenir à la ville du profil » only when there is a profile city to
+      // return to AND an override to drop.
+      canRevert: link?.source === 'garden' && weatherData.profileLocated,
+      current: placeNamed(link?.locationKey),
+      loading: weatherInFlight,
+      unavailable: weatherError,
+    };
+  })();
+
+  /** Opens the dialog on a garden's override, or on the profile default when `gardenId` is null. */
+  const openLocate = (gardenId: string | null) => {
+    setLocateKey(gardenId === null ? { kind: 'profile' } : { kind: 'garden', gardenId });
+    setLocateOpen(true);
+  };
+
+  // What the Gardens table reads for its MÉTÉO column: the place each garden
+  // reads, null when it is not located — resolved from the SAME aggregate the
+  // widget draws, so the cell and the card cannot disagree.
+  const gardensWeather: GardensWeather = weatherLoading
+    ? { status: 'loading' }
+    : weatherError
+      ? { status: 'error' }
+      : {
+          status: 'ready',
+          byGarden: new Map(
+            weatherData.gardens.map((link) => [
+              link.gardenId,
+              link.locationKey
+                ? (weatherData.locations.find((place) => place.key === link.locationKey) ?? null)
+                : null,
+            ])
+          ),
+        };
 
   // The page's own share of the derivation the widgets read — see the meta line
   // below. Shared through `gardenViewOf`'s memo, so the header does not make the
@@ -171,6 +284,14 @@ export default function GardensDashboard() {
       setNewGardenName('');
       setNewGardenDescription('');
       refetch();
+      // BOTH aggregates (round 1, G11 — GitHub outside-diff, GardensDashboard
+      // 237 / 248): `DashboardWeatherData.gardens` lists EVERY garden, so a
+      // weather aggregate fetched before the creation omits the new one from
+      // the widget's « 1/3 localisé » total and from the To-do block. The
+      // PASSIVE form (round 4, F1): a garden created or deleted changes no
+      // STORED PLACE, so an aggregate kept over a failed re-read names nothing
+      // the server has dropped — and the figure surfaces read `loadError` first.
+      refetchWeather();
     } catch {
       setCreateError(true);
     } finally {
@@ -182,6 +303,9 @@ export default function GardensDashboard() {
     setToastSeq((sequence) => sequence + 1);
     setToastOpen(true);
     refetch();
+    // …and a deleted garden must stop being counted by the weather surfaces.
+    // Passive too, for the same reason as above.
+    refetchWeather();
   };
 
   const patchBlock = (
@@ -199,6 +323,23 @@ export default function GardensDashboard() {
 
   const renderBlock = (block: DashboardBlock) => {
     switch (block.key) {
+      case 'weather':
+        return (
+          <WeatherBlock
+            size={block.size}
+            editing={editing}
+            weather={weatherData}
+            gardens={gardens}
+            loading={weatherLoading}
+            refreshing={weatherRefreshing}
+            loadError={weatherError}
+            onRetry={refetchWeather}
+            onLocate={openLocate}
+            // The invitation's inline field WROTE the profile default: the
+            // re-read follows a write (round 4, F1 — Extension adeab24a).
+            onLocated={refetchWeatherAfterMutation}
+          />
+        );
       case 'gardens':
         return (
           <GardensBlock
@@ -210,6 +351,8 @@ export default function GardensDashboard() {
             loadError={gardensError}
             showWeatherColumn={isBlockVisible('weather')}
             showHarvestColumn={isBlockVisible('harvest')}
+            weather={gardensWeather}
+            onLocate={openLocate}
             onCreateClick={() => setCreateDialogOpen(true)}
             onChanged={refetch}
             onDeleted={handleDeleted}
@@ -250,6 +393,29 @@ export default function GardensDashboard() {
             onRetry={refetch}
           />
         );
+      case 'todo':
+        // Both aggregates feed it: the plans and varieties for the placements,
+        // the weather for the day. Either one missing is a state it draws.
+        return (
+          <TodoBlock
+            size={block.size}
+            editing={editing}
+            gardens={gardens}
+            varieties={dashboardData.varieties}
+            weather={weatherData}
+            loading={gardensLoading || weatherLoading}
+            refreshing={gardensRefreshing || weatherRefreshing}
+            loadError={gardensError || weatherError}
+            onRetry={() => {
+              if (gardensError) refetch();
+              if (weatherError) refetchWeather();
+            }}
+            onLocate={openLocate}
+            onExpand={() =>
+              patchBlock('todo', (current) => ({ ...current, size: 'large' }))
+            }
+          />
+        );
       default:
         return (
           <InviteBlock blockKey={block.key} size={block.size} editing={editing} />
@@ -258,23 +424,40 @@ export default function GardensDashboard() {
   };
 
   /**
-   * A widget's own settings, for the Edit-mode gear. Only Counters has any —
-   * the other seven open on the panel that says so.
+   * A widget's own settings, for the Edit-mode gear. Counters has its two
+   * options; Weather has « Localisation… » (round 1, V21 a), the door to the
+   * profile default; the other six open on the panel that says so.
    */
-  const renderBlockOptions = (block: DashboardBlock) =>
-    block.key === 'counters' ? (
-      <CountersOptionsPanel
-        options={block.options ?? null}
-        gardens={gardens}
-        // The aggregate, not the layout: Edit mode opens on the layout being
-        // loaded, and the gear can be reached while the gardens are not
-        // (round 7, S13).
-        ready={!gardensLoading && !gardensError}
-        onChange={(options) =>
-          patchBlock('counters', (current) => ({ ...current, options }))
-        }
-      />
-    ) : undefined;
+  const renderBlockOptions = (block: DashboardBlock) => {
+    switch (block.key) {
+      case 'counters':
+        return (
+          <CountersOptionsPanel
+            options={block.options ?? null}
+            gardens={gardens}
+            // The aggregate, not the layout: Edit mode opens on the layout being
+            // loaded, and the gear can be reached while the gardens are not
+            // (round 7, S13).
+            ready={!gardensLoading && !gardensError}
+            onChange={(options) =>
+              patchBlock('counters', (current) => ({ ...current, options }))
+            }
+          />
+        );
+      case 'weather':
+        return (
+          <WeatherOptionsPanel
+            current={profileCurrent}
+            located={weatherData.profileLocated}
+            loading={weatherInFlight}
+            unavailable={weatherError}
+            onLocate={() => openLocate(null)}
+          />
+        );
+      default:
+        return undefined;
+    }
+  };
 
   /**
    * A hidden widget's headline figure, for its gallery thumbnail (round 4, A8).
@@ -621,6 +804,24 @@ export default function GardensDashboard() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* The shared location dialog (PR 3b/5): a 204 re-fetches the weather
+          aggregate, which re-draws the widget, the MÉTÉO column and the tasks
+          from one response. As AFTER A WRITE (round 4, F1 — Extension adeab24a /
+          6e4d5a7c): « Utiliser », « Retirer » and « Revenir à la ville du
+          profil » have changed what the server stores, so the aggregate on
+          screen is stale before the re-read starts, and a re-read that fails
+          leaves « weather unavailable » — never the old place, never « Retirer »
+          on a default the server has already dropped. */}
+      <LocationDialog
+        open={locateOpen}
+        target={locateTarget}
+        onClose={() => setLocateOpen(false)}
+        onSaved={() => {
+          setLocateOpen(false);
+          refetchWeatherAfterMutation();
+        }}
+      />
 
       {/* Deletion feedback - from the Gardens widget's own dialog or from the
           planner (router state). Same Snackbar/Alert idiom as the planner. */}

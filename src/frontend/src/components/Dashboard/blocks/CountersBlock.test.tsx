@@ -30,6 +30,8 @@ const variety = (
   isEdible: true,
   imageUrl: null,
   imageAttribution: null,
+  wateringNeedLevel: null,
+  minToleratedTempC: null,
   count: 4,
   cells: 4,
   gardenIds: ['g1'],

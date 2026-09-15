@@ -4,6 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import { UnitSystemProvider } from '../contexts/UnitSystemContext';
+import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
 import { presetFor } from '../constants/dashboardPresets';
 import {
   dashboardFixture,
@@ -22,6 +24,22 @@ vi.mock('../services/dashboardApi', () => ({
   saveDashboardPreferences: vi.fn(),
   fetchDashboardData: vi.fn(),
 }));
+
+// SMA-336 PR 3b/5 — the Weather widget reads its own aggregate and the
+// profile city; both mocked whole, never a real provider call.
+vi.mock('../services/weatherApi', () => ({
+  fetchDashboardWeather: vi.fn(),
+  searchLocations: vi.fn(),
+  saveGardenLocation: vi.fn(),
+  clearGardenLocation: vi.fn(),
+  saveProfileLocation: vi.fn(),
+  clearProfileLocation: vi.fn(),
+}));
+
+vi.mock('../services/profileApi', () => ({ fetchProfile: vi.fn() }));
+
+import { fetchDashboardWeather } from '../services/weatherApi';
+import { fetchProfile } from '../services/profileApi';
 
 import type {
   DashboardData,
@@ -63,6 +81,8 @@ const variety = (
     commonName,
     imageUrl: 'https://bs.plantnet.org/habit.jpg',
     imageAttribution: 'Credit',
+    wateringNeedLevel: null,
+    minToleratedTempC: null,
     count: 2,
     cells: 2,
     gardenIds,
@@ -97,6 +117,15 @@ const countersOptionsOf = (
 ) => blocks.find((block) => block.key === 'counters')?.options;
 
 beforeEach(() => {
+  vi.mocked(fetchDashboardWeather).mockResolvedValue(EMPTY_WEATHER_DATA);
+  vi.mocked(fetchProfile).mockResolvedValue({
+    email: 'a@example.test',
+    displayName: null,
+    firstName: null,
+    lastName: null,
+    city: null,
+    hasPassword: true,
+  });
   localStorage.setItem('smartcrops-language', 'en');
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
@@ -115,9 +144,11 @@ afterEach(() => vi.clearAllMocks());
 function renderPage() {
   render(
     <LanguageProvider>
-      <MemoryRouter>
-        <GardensDashboard />
-      </MemoryRouter>
+      <UnitSystemProvider>
+        <MemoryRouter>
+          <GardensDashboard />
+        </MemoryRouter>
+      </UnitSystemProvider>
     </LanguageProvider>
   );
 }

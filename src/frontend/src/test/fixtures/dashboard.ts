@@ -63,6 +63,9 @@ export const varietyFixture = (
   count: 1,
   cells: 1,
   gardenIds: ['g1'],
+  // PR 3b/5 — unknown by default; a To-do test says what it is about.
+  wateringNeedLevel: null,
+  minToleratedTempC: null,
   ...over,
 });
 

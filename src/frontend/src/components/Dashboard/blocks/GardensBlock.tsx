@@ -18,6 +18,7 @@ import Typography from '@mui/material/Typography';
 import { visuallyHidden } from '@mui/utils';
 import { useTheme } from '@mui/material/styles';
 import AddIcon from '@mui/icons-material/Add';
+import AddLocationAltOutlinedIcon from '@mui/icons-material/AddLocationAltOutlined';
 import BalconyIcon from '@mui/icons-material/Balcony';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DeckIcon from '@mui/icons-material/Deck';
@@ -34,15 +35,30 @@ import GardenThumbnail from '../GardenThumbnail';
 import InviteState from '../InviteState';
 import MissingDataMark from '../MissingDataMark';
 import OccupancyBar from '../OccupancyBar';
+import WeatherGlyph from './WeatherGlyph';
+import { displayTemperature } from './weatherFormat';
 import { updateGarden } from '../../../services/gardenApi';
-import { DASHBOARD_TYPE } from '../../../theme/dashboardTokens';
+import { DASHBOARD_TYPE, DASHBOARD_WEATHER } from '../../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../../theme/useDashboardTokens';
 import type { DashboardSize } from '../../../types/Dashboard';
 import type { DashboardGardenData } from '../../../types/DashboardData';
+import type { WeatherLocation } from '../../../types/DashboardWeather';
 import { formatCount } from '../../../utils/formatNumber';
 import { formatRelativeDate } from '../../../utils/formatRelativeDate';
 import { useGardenViews } from '../../../hooks/useGardenViews';
+import { useUnitSystem } from '../../../hooks/useUnitSystem';
 import type { GardenView } from '../../../utils/gardenStats';
+
+/**
+ * What the page knows of the weather for the MÉTÉO column (SMA-336 PR 3b/5,
+ * amendment A6 lifted): the aggregate in flight, failed, or the place each
+ * garden reads — `null` for a garden that is not located. Without the prop
+ * (another page, another lot) the column keeps its « soon » marker.
+ */
+export type GardensWeather =
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'ready'; byGarden: ReadonlyMap<string, WeatherLocation | null> };
 
 /** Rows a Medium card shows before it defers the rest to "+N" (_spec.md 4). */
 const MEDIUM_ROWS = 3;
@@ -260,6 +276,10 @@ interface Props {
    */
   showWeatherColumn?: boolean;
   showHarvestColumn?: boolean;
+  /** The weather each garden reads, for the MÉTÉO column (PR 3b/5). */
+  weather?: GardensWeather;
+  /** Opens the location dialog on this garden — the « Ajouter » of an unlocated cell. */
+  onLocate?: (gardenId: string) => void;
   /** Opens the page create dialog - the same one the header button opens. */
   onCreateClick: () => void;
   /** Re-runs the dashboard fetch after a failed load or a rename. */
@@ -287,10 +307,12 @@ interface Props {
  * untouched, aria-labels included. They cost four review rounds to get right and
  * this lot has no reason to spend them again.
  *
- * WEATHER and HARVEST render a marker with NO gesture (decision D10). The design
- * gives the unlocated weather cell an « Add » link, but the geocoding endpoint
- * behind it lands in PR 3/5 — and PR 1/5 settled the doctrine: a control that
- * accepts a city and does nothing with it is worse than saying « soon ».
+ * HARVEST renders a marker with NO gesture (decision D10) until PR 5/5. WEATHER
+ * is fed since PR 3b/5 (amendment A6 lifted): the `.pill.wx` of `Main.dc.html`
+ * — a 14 px glyph and the temperature — over the place name, or the dashed
+ * marker and the « Ajouter » link of `A4Manquantes.dc.html` (`_spec.md` § 10.20,
+ * no arrow, a 66 px column) that opens the shared location dialog on THAT
+ * garden. PR 1/5's doctrine holds: the link exists because the endpoint does.
  */
 export default function GardensBlock({
   size,
@@ -301,6 +323,8 @@ export default function GardensBlock({
   refreshing = false,
   showWeatherColumn = false,
   showHarvestColumn = false,
+  weather,
+  onLocate,
   onCreateClick,
   onChanged,
   onDeleted,
@@ -314,6 +338,9 @@ export default function GardensBlock({
   // prop is gone from this widget and from `GardenRow`.
   const { t, i18n } = useTranslation();
   const tk = useDashboardTokens();
+  // °C or °F in the MÉTÉO cell follow the product's one global toggle, like
+  // the weather widget beside this table (`_spec.md` § 6).
+  const { system } = useUnitSystem();
   // The table's own rule and card colours, resolved once — see
   // `stickyActionsSx` for why they cannot be left as system strings.
   const palette = useTheme().palette;
@@ -930,6 +957,172 @@ export default function GardensBlock({
    * shown, exactly as the design has it: that column is the wider one, and the
    * cell cannot carry both.
    */
+  /**
+   * The MÉTÉO cell of one row (PR 3b/5, A6 lifted) — `Main.dc.html`: `<span
+   * class="pill wx num">[14 px glyph]24°</span><div class="tsub">Lyon</div>`,
+   * `.pill.wx { background: --warn-bg; color: --warn-tx }`, `.pill.wx .ic
+   * { color: --sun }`, `.pill.wx.cl .ic { color: --cloud }`; `.tbl .pill` is
+   * 24 px high. Unlocated: `A4Manquantes.dc.html`'s `<span class="pill miss"
+   * style="padding: 0 6px">[glyph]</span><span class="lnk">Ajouter</span>` —
+   * the link without an arrow (`_spec.md` § 10.20), named for a screen reader
+   * with the garden it locates, since three rows may carry it.
+   *
+   * Without the `weather` prop the column keeps the « soon » marker of PR 2/5:
+   * the table is drawn elsewhere than the dashboard page.
+   */
+  const weatherCell = (garden: DashboardGardenData): React.ReactNode => {
+    if (!weather) {
+      return <MissingDataMark label={t('dashboard.blocks.gardens.columnSoon')} />;
+    }
+    if (weather.status === 'loading') {
+      return <Skeleton variant="rounded" width={44} height={DASHBOARD_TYPE.tableChipHeight} />;
+    }
+    if (weather.status === 'error') {
+      return <MissingDataMark label={t('dashboard.blocks.weather.cellUnavailable')} />;
+    }
+
+    const place = weather.byGarden.get(garden.id) ?? null;
+    const subSx = { fontSize: 13, color: 'text.secondary', whiteSpace: 'nowrap' } as const;
+
+    if (place === null) {
+      if (!onLocate) {
+        return <MissingDataMark label={t('dashboard.blocks.weather.cellNotLocated')} />;
+      }
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+          <Box
+            component="span"
+            aria-hidden
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              height: DASHBOARD_TYPE.tableChipHeight,
+              px: '6px',
+              borderRadius: '999px',
+              border: `1.5px dashed ${tk.invBd}`,
+              backgroundColor: tk.invBg,
+              color: 'primary.main',
+            }}
+          >
+            <AddLocationAltOutlinedIcon sx={{ fontSize: DASHBOARD_WEATHER.cellIcon }} />
+          </Box>
+          <Button
+            variant="text"
+            size="small"
+            onClick={() => onLocate(garden.id)}
+            aria-label={t('dashboard.blocks.weather.cellAddNamed', { name: garden.name })}
+            sx={{
+              p: 0,
+              minWidth: 0,
+              fontSize: DASHBOARD_TYPE.link,
+              fontWeight: 700,
+              lineHeight: 1.2,
+              textTransform: 'none',
+            }}
+          >
+            {t('dashboard.blocks.weather.cellAdd')}
+          </Button>
+        </Box>
+      );
+    }
+
+    /**
+     * A LOCATED garden's cell is the door to its own location (round 1, V21 c):
+     * a button that opens the shared dialog PRE-TARGETED on this garden — an
+     * override to set, or « Revenir à la ville du profil » — named with the
+     * garden, since several rows carry it. Plain when nobody can open the
+     * dialog (the table drawn outside the dashboard page).
+     */
+    const located = (content: React.ReactNode) => {
+      const columnSx = { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' } as const;
+      if (!onLocate) return <Box sx={columnSx}>{content}</Box>;
+      return (
+        <Box
+          component="button"
+          type="button"
+          data-weather-cell-edit
+          onClick={() => onLocate(garden.id)}
+          aria-label={t('dashboard.blocks.weather.cellEditNamed', { name: garden.name })}
+          sx={{
+            ...columnSx,
+            background: 'none',
+            border: 0,
+            p: 0,
+            m: 0,
+            font: 'inherit',
+            color: 'inherit',
+            textAlign: 'left',
+            cursor: 'pointer',
+            borderRadius: '8px',
+            '&:hover [data-weather-cell-place]': { textDecoration: 'underline dotted', textUnderlineOffset: '3px' },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+          }}
+        >
+          {content}
+        </Box>
+      );
+    };
+    // A `span`, not Typography's `<p>`: the cell may be a `<button>`, whose content must be phrasing.
+    const placeLine = (
+      <Typography component="span" data-weather-cell-place sx={{ ...subSx, display: 'block' }}>
+        {place.name}
+      </Typography>
+    );
+
+    if (!place.current) {
+      // Located, but the provider had nothing to say: the place, and a dash
+      // where the temperature would be — never an invented figure. The dash
+      // is for the eye; assistive technology hears « Sans météo » (round 1,
+      // G1 — GitHub 4008082465), the same words the other empty states of
+      // this column carry through `MissingDataMark`.
+      return located(
+        <>
+          <Box component="span" aria-hidden sx={{ fontWeight: 700, color: 'text.disabled' }}>
+            —
+          </Box>
+          <Box component="span" sx={visuallyHidden}>
+            {t('dashboard.blocks.weather.cellUnavailable')}
+          </Box>
+          {placeLine}
+        </>
+      );
+    }
+
+    return located(
+      <>
+        <Box
+          component="span"
+          data-weather-cell
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            height: DASHBOARD_TYPE.tableChipHeight,
+            px: '8px',
+            borderRadius: '999px',
+            fontSize: DASHBOARD_TYPE.chip,
+            lineHeight: 1,
+            fontWeight: 700,
+            fontVariantNumeric: 'tabular-nums',
+            whiteSpace: 'nowrap',
+            backgroundColor: tk.warnBg,
+            color: tk.warnText,
+          }}
+        >
+          <WeatherGlyph
+            code={place.current.conditionCode}
+            isDay={place.current.isDay}
+            px={DASHBOARD_WEATHER.cellIcon}
+          />
+          {t('dashboard.blocks.weather.degrees', {
+            value: displayTemperature(place.current.tempC, system),
+          })}
+        </Box>
+        {placeLine}
+      </>
+    );
+  };
+
   const largeBody = () => {
     // Resolved ONCE for the table (round 7, S07 — Extension #7-13): every row
     // re-read the theme and the tokens and built a fresh sticky `sx` — with
@@ -1030,6 +1223,7 @@ export default function GardensBlock({
                 view={views.get(garden.id)}
                 showWeatherColumn={showWeatherColumn}
                 showHarvestColumn={showHarvestColumn}
+                weather={weatherCell(garden)}
                 modified={modifiedText(garden)}
                 typeLabel={typeLabel(garden)}
                 ornamental={ornamentalChip(garden, 'table')}
@@ -1224,6 +1418,8 @@ interface RowProps {
   view: GardenView | undefined;
   showWeatherColumn: boolean;
   showHarvestColumn: boolean;
+  /** The MÉTÉO cell, resolved by the block (`weatherCell`); the row keeps no weather logic. */
+  weather: React.ReactNode;
   /**
    * The relative date, resolved by the block through the one reader that
    * guards the sort (round 8 — Extension #9-12); null when the wire value is
@@ -1246,6 +1442,7 @@ function GardenRow({
   view,
   showWeatherColumn,
   showHarvestColumn,
+  weather,
   modified,
   typeLabel,
   ornamental,
@@ -1490,13 +1687,11 @@ function GardenRow({
       </Box>
 
       {showWeatherColumn && (
-        <Box component="td" sx={cellSx}>
-          {/* Decision D10: a marker, no gesture. The design's « Add » link needs
-              the geocoding endpoint of PR 3/5 behind it.
-
-              Its own short word rather than the shells' « Coming soon »: the
-              column is 66 px wide, and a cell marker is not a card's sentence. */}
-          <MissingDataMark label={t('dashboard.blocks.gardens.columnSoon')} />
+        <Box component="td" data-weather-column sx={cellSx}>
+          {/* Resolved by the block — see `weatherCell`: the temperature pill
+              over the place, the « Ajouter » of an unlocated garden, or the
+              marker while the aggregate is not there (PR 3b/5, A6 lifted). */}
+          {weather}
         </Box>
       )}
 

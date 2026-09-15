@@ -1,0 +1,88 @@
+import { useTranslation } from 'react-i18next';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
+import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
+import { DASHBOARD_TYPE } from '../../../theme/dashboardTokens';
+import { storedPlaceKey } from '../locationTools';
+
+interface Props {
+  /** The place the profile default points at, when the aggregate can name it; null otherwise. */
+  current: string | null;
+  /**
+   * Whether the account CARRIES a default at all (round 2, D5 — Extension
+   * cdfbd4df / GitHub 4009200274): when every garden overrides it, the
+   * aggregate cannot name it and `current` is null, yet « Aucun lieu enregistré »
+   * would be false — the panel then says what the dialog says, « Un lieu par
+   * défaut est enregistré ».
+   */
+  located: boolean;
+  /**
+   * The weather aggregate has not landed yet (round 2, D4 — Extension
+   * 7d3f6056 / 458cd620), or a replacement is in flight (round 4, F2 — GitHub
+   * 4010193172): the panel says so instead of the last aggregate's state. The
+   * door stays open — the dialog says the same, and fills in when it lands.
+   */
+  loading: boolean;
+  /**
+   * The weather aggregate could not be read (round 3, E2 — GitHub 4009816076):
+   * `current` and `located` are the last known state when a PASSIVE refresh
+   * failed, or nothing — after a failed first load, or after a failed re-read
+   * that followed a location write (round 4, F1). The panel says the weather
+   * is unavailable rather than « nothing stored »; the door stays open — one
+   * can re-locate during an outage.
+   */
+  unavailable: boolean;
+  /** Opens the shared location dialog on the profile default. */
+  onLocate: () => void;
+}
+
+/**
+ * SMA-336 PR 3b/5, round 1 (V21 a) — the Weather widget's entry in the
+ * Edit-mode gear: « Localisation… », which opens the shared `LocationDialog`
+ * on the profile default — where the current place is stated, another can be
+ * picked with « Utiliser », and « Retirer » drops it. PR 3b/5 had shipped
+ * three doors to ADD a location and none to change or remove one.
+ *
+ * One option row on the geometry of `A8Options.dc.html`'s `.pop-r` — `display:
+ * flex; align-items: center; gap: 14px; height: 48px`, a 22 px glyph — the
+ * same row the Counters panel draws, so the eight gears open on one shape.
+ */
+export default function WeatherOptionsPanel({
+  current,
+  located,
+  loading,
+  unavailable,
+  onLocate,
+}: Props) {
+  const { t } = useTranslation();
+
+  // The dialog's own line (`LocationDialog`), from the ONE function both read.
+  const currentLine = t(
+    storedPlaceKey({ loading, unavailable, name: current, stored: located }),
+    { place: current ?? '' }
+  );
+
+  return (
+    <Box
+      data-weather-options
+      sx={{ display: 'flex', alignItems: 'center', gap: '14px', minHeight: 48 }}
+    >
+      <Box
+        aria-hidden
+        sx={{ display: 'flex', flexShrink: 0, color: 'text.secondary', '& > svg': { fontSize: 22 } }}
+      >
+        <LocationOnOutlinedIcon />
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography sx={{ fontSize: 15 }}>{t('dashboard.blocks.weather.options.hint')}</Typography>
+        <Typography sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary' }}>
+          {currentLine}
+        </Typography>
+      </Box>
+      <Button variant="outlined" size="small" onClick={onLocate} sx={{ flexShrink: 0 }}>
+        {t('dashboard.blocks.weather.options.location')}
+      </Button>
+    </Box>
+  );
+}

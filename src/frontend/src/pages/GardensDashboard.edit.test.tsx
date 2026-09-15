@@ -6,10 +6,13 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import { UnitSystemProvider } from '../contexts/UnitSystemContext';
+import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../types/DashboardWeather';
 import { presetFor } from '../constants/dashboardPresets';
 import { emittedRules, rulesFor } from '../test/dashboardDom';
 import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
@@ -32,7 +35,25 @@ vi.mock('../services/dashboardApi', () => ({
   fetchDashboardData: vi.fn(),
 }));
 
-import { dashboardFixture as dashboardWith } from '../test/fixtures/dashboard';
+// SMA-336 PR 3b/5 — the Weather widget reads its own aggregate and the
+// profile city; both mocked whole, never a real provider call.
+vi.mock('../services/weatherApi', () => ({
+  fetchDashboardWeather: vi.fn(),
+  searchLocations: vi.fn(),
+  saveGardenLocation: vi.fn(),
+  clearGardenLocation: vi.fn(),
+  saveProfileLocation: vi.fn(),
+  clearProfileLocation: vi.fn(),
+}));
+
+vi.mock('../services/profileApi', () => ({ fetchProfile: vi.fn() }));
+
+import { clearProfileLocation, fetchDashboardWeather } from '../services/weatherApi';
+import { fetchProfile } from '../services/profileApi';
+
+import { dashboardFixture as dashboardWith, gardenFixture } from '../test/fixtures/dashboard';
+import { linkFixture, locationFixture, weatherFixture } from '../test/fixtures/weather';
+import { useLanguage } from '../hooks/useLanguage';
 import GardensDashboard from './GardensDashboard';
 
 import {
@@ -230,19 +251,21 @@ const sortableNode = (key: string) =>
     .find((node) => node.getAttribute('data-widget') === key)!
     .parentElement!.parentElement!;
 
-function renderPage() {
+/** The page under its providers — and, when a test needs one, a probe BESIDE it. */
+function renderPage(beside?: ReactNode) {
   return render(
     <LanguageProvider>
-      <MemoryRouter>
-        <GardensDashboard />
-      </MemoryRouter>
+      <UnitSystemProvider>
+        <MemoryRouter>
+          <GardensDashboard />
+          {beside}
+        </MemoryRouter>
+      </UnitSystemProvider>
     </LanguageProvider>
   );
 }
 
 /**
- * Renders, waits for the grid and switches the page into Edit mode.
- *
  * The explicit timeout is the SMA-174 rule applied one level down: `findBy*`
  * carries Testing Library's OWN 1 000 ms default, which the package.json
  * `--testTimeout=20000` does not touch. Both waits are for the page to render,
@@ -255,12 +278,8 @@ function renderPage() {
  */
 const RENDER_TIMEOUT = { timeout: 10000 };
 
-async function enterEditMode(
-  level: DashboardLevel = 'gardener',
-  blocks: DashboardBlock[] = presetFor(level)
-) {
-  servePreferences(level, blocks);
-  renderPage();
+/** Waits for the rendered page's grid and switches it into Edit mode. */
+async function switchToEditMode() {
   const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
   // ENABLED, not merely present. `GardensDashboard` renders Edit
   // `disabled={loading || loadError}`, so clicking it while the preferences are
@@ -270,6 +289,62 @@ async function enterEditMode(
   await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
   fireEvent.click(edit);
   return await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+}
+
+/** Renders, waits for the grid and switches the page into Edit mode. */
+async function enterEditMode(
+  level: DashboardLevel = 'gardener',
+  blocks: DashboardBlock[] = presetFor(level)
+) {
+  servePreferences(level, blocks);
+  renderPage();
+  return await switchToEditMode();
+}
+
+/**
+ * The one way the page offers to re-fetch the weather with the location
+ * dialog open: a language switch, which `useDashboardWeather(language)`
+ * follows. The open modal hides the rest of the page from the accessibility
+ * tree (`aria-hidden`), so a test reaches the probe by its TEXT, not its role.
+ */
+function LanguageProbe() {
+  const { setLanguage } = useLanguage();
+  return (
+    <button type="button" onClick={() => setLanguage('fr')}>
+      switch-language-probe
+    </button>
+  );
+}
+
+/** `enterEditMode` on the gardener preset, with the language probe beside the page. */
+async function enterEditModeWithLanguageProbe() {
+  servePreferences('gardener');
+  renderPage(<LanguageProbe />);
+  return await switchToEditMode();
+}
+
+/**
+ * Weather fetches whose answers the test releases BY HAND — the pattern of
+ * `useDashboardWeather.test.ts` (round 4, F3 — Extension 7291bfa1 / 273c65c4,
+ * GitHub 4010193165). A test that models a failed refresh rejects the promise
+ * itself, inside `act`, and asserts once the rejection handler HAS run —
+ * instead of waiting for the request to START and trusting the microtask
+ * order to have run the handler before the assertion. Installed as the mock's
+ * implementation: a `mockResolvedValueOnce` queued before it still answers
+ * the first call.
+ */
+function deferredWeather() {
+  const resolvers: Array<{
+    resolve: (data: DashboardWeatherData) => void;
+    reject: (error: unknown) => void;
+  }> = [];
+  vi.mocked(fetchDashboardWeather).mockImplementation(
+    () =>
+      new Promise<DashboardWeatherData>((resolve, reject) => {
+        resolvers.push({ resolve, reject });
+      })
+  );
+  return resolvers;
 }
 
 /**
@@ -297,6 +372,15 @@ const lastSavedKeys = () => lastSaved().blocks.map((block) => block.key);
 
 
 beforeEach(() => {
+  vi.mocked(fetchDashboardWeather).mockResolvedValue(EMPTY_WEATHER_DATA);
+  vi.mocked(fetchProfile).mockResolvedValue({
+    email: 'a@example.test',
+    displayName: null,
+    firstName: null,
+    lastName: null,
+    city: null,
+    hasPassword: true,
+  });
   // Four columns for the whole file: `DashboardGrid` reads the column count
   // with `useMediaQuery`, and jsdom answers nothing without this.
   stubColumns(4);
@@ -406,6 +490,252 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     ).toBeInTheDocument();
     // A BUTTON, not a menu item (round 1, G6): the surface is a Popover now.
     expect(within(panel).getByRole('button', { name: 'Done' })).toBeInTheDocument();
+  });
+
+  it('the Weather gear carries « Location… », which opens the location dialog on the profile default (round 1, V21 a)', async () => {
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    expect(within(panel).getByText('Default city of your gardens')).toBeInTheDocument();
+    // An empty aggregate: nothing stored yet, and the panel says so.
+    expect(within(panel).getByText('No place saved yet.')).toBeInTheDocument();
+    expect(within(panel).queryByText('No option for this widget yet.')).toBeNull();
+
+    const door = within(panel).getByRole('button', { name: 'Location…' });
+    door.focus();
+    expect(document.activeElement).toBe(door);
+    fireEvent.click(door);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+    expect(within(dialog).getByText('No place saved yet.')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Remove' })).toBeNull();
+  });
+
+  it('the Weather gear says a default EXISTS when every garden overrides it, not « no place saved » (round 2, D5)', async () => {
+    // Extension cdfbd4df / GitHub 4009200274: the profile default is named
+    // through a link that inherits it; when every garden carries its own
+    // override no link does, `profileCurrent` is null — and the panel printed
+    // the sentence of an account WITHOUT a default. The dialog had the third
+    // line since round 1 (V21); the panel now says the same.
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenFixture({ id: 'g1', name: 'Terrasse' })])
+    );
+    vi.mocked(fetchDashboardWeather).mockResolvedValue(
+      weatherFixture(
+        [locationFixture({ name: 'Lyon' })],
+        [linkFixture({ gardenId: 'g1', source: 'garden' })],
+        { profileLocated: true }
+      )
+    );
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    expect(
+      await within(panel).findByText('A default place is saved for your gardens.')
+    ).toBeInTheDocument();
+    expect(within(panel).queryByText('No place saved yet.')).toBeNull();
+  });
+
+  it('opened while the aggregate still loads, the dialog FILLS IN when it lands — a live target, not a snapshot (round 2, D4)', async () => {
+    // Extension 7d3f6056 / 458cd620: `openLocate(null)` photographed
+    // `profileCurrent` null and `profileLocated` false from EMPTY_WEATHER_DATA
+    // into `locateTarget`, and nothing refreshed it when the aggregate landed —
+    // the dialog said « no place saved » and hid Remove over a stored default.
+    let deliver!: (data: DashboardWeatherData) => void;
+    vi.mocked(fetchDashboardWeather).mockImplementation(
+      () =>
+        new Promise<DashboardWeatherData>((resolve) => {
+          deliver = resolve;
+        })
+    );
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenFixture({ id: 'g1', name: 'Terrasse' })])
+    );
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Location…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+    expect(within(dialog).queryByRole('button', { name: 'Remove' })).toBeNull();
+
+    await act(async () => {
+      deliver(weatherFixture([locationFixture({ name: 'Ecully' })], [linkFixture({ gardenId: 'g1' })]));
+    });
+
+    expect(await within(dialog).findByText('Current place: Ecully')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Remove' })).toBeEnabled();
+    expect(within(dialog).queryByText('No place saved yet.')).toBeNull();
+  });
+
+  it('while the aggregate loads, neither the gear panel nor the dialog claims that nothing is stored (round 2, D4)', async () => {
+    vi.mocked(fetchDashboardWeather).mockImplementation(
+      () => new Promise<DashboardWeatherData>(() => undefined)
+    );
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    expect(within(panel).getByText('Loading the current place…')).toBeInTheDocument();
+    expect(within(panel).queryByText('No place saved yet.')).toBeNull();
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Location…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+    expect(within(dialog).getByText('Loading the current place…')).toBeInTheDocument();
+    expect(within(dialog).queryByText('No place saved yet.')).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Remove' })).toBeNull();
+  });
+
+  it('a page whose weather request FAILED says the weather is unavailable — never « no place saved » (round 3, E2 a)', async () => {
+    // GitHub 4009816076: `useDashboardWeather` raised `loadError`, the page
+    // passed only `loading`, and both the gear panel and the dialog printed the
+    // sentence of an account WITHOUT a default over a place they could not read.
+    vi.mocked(fetchDashboardWeather).mockRejectedValue(new Error('provider down'));
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    expect(
+      await within(panel).findByText('Weather unavailable — the saved place could not be checked.')
+    ).toBeInTheDocument();
+    expect(within(panel).queryByText('No place saved yet.')).toBeNull();
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Location…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+    expect(
+      within(dialog).getByText('Weather unavailable — the saved place could not be checked.')
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText('No place saved yet.')).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Remove' })).toBeNull();
+    // One can still re-locate during an outage: the field and Cancel are live.
+    expect(within(dialog).getByLabelText('City')).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+  });
+
+  it('a dialog open on an existing place KEEPS it when a PASSIVE re-fetch fails (round 3, E2 b)', async () => {
+    // The hook used to clear the aggregate on a failed replacement; live on
+    // the aggregate since D4, the dialog then flipped to « no place saved » in
+    // session. The last known aggregate now stays — for a refresh that follows
+    // no write. The failed re-fetch is a controlled promise, rejected inside
+    // `act` (round 4, F3 — GitHub 4010193165): the assertions run once the
+    // rejection handler HAS run, not while it may still be pending.
+    vi.mocked(fetchDashboardWeather).mockResolvedValueOnce(
+      weatherFixture([locationFixture({ name: 'Ecully' })], [linkFixture({ gardenId: 'g1' })])
+    );
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenFixture({ id: 'g1', name: 'Terrasse' })])
+    );
+    await enterEditModeWithLanguageProbe();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Location…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+    expect(await within(dialog).findByText('Current place: Ecully')).toBeInTheDocument();
+
+    const pending = deferredWeather();
+    fireEvent.click(screen.getByText('switch-language-probe'));
+    await waitFor(() => expect(pending.length).toBe(1));
+    await act(async () => {
+      pending[0]!.reject(new Error('provider down'));
+    });
+
+    // The re-fetch failed; the place is still there (now in French), Remove too.
+    expect(within(dialog).getByText('Lieu actuel : Ecully')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Aucun lieu enregistré pour le moment.')).toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Retirer' })).toBeEnabled();
+  });
+
+  it('after « Remove » SUCCEEDED, a failed re-read never names the old place nor offers « Remove » again (round 4, F1)', async () => {
+    // Extension adeab24a / 6e4d5a7c: E2 (b) kept the last known aggregate on
+    // ANY failed re-fetch — also the one that follows a write the server has
+    // already accepted. The panel then said « Current place: Ecully » and the
+    // reopened dialog offered « Remove » on a default that no longer existed.
+    vi.mocked(fetchDashboardWeather).mockResolvedValueOnce(
+      weatherFixture([locationFixture({ name: 'Ecully' })], [linkFixture({ gardenId: 'g1' })])
+    );
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenFixture({ id: 'g1', name: 'Terrasse' })])
+    );
+    vi.mocked(clearProfileLocation).mockResolvedValue(undefined);
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    expect(await within(panel).findByText('Current place: Ecully')).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Location…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+
+    // The DELETE is accepted; the re-read it asks for fails.
+    const pending = deferredWeather();
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(clearProfileLocation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(pending.length).toBe(1));
+    await act(async () => {
+      pending[0]!.reject(new Error('provider down'));
+    });
+
+    // The panel: the weather is unavailable — not the place the server dropped.
+    expect(within(panel).queryByText('Current place: Ecully')).toBeNull();
+    expect(
+      within(panel).getByText('Weather unavailable — the saved place could not be checked.')
+    ).toBeInTheDocument();
+
+    // The dialog, reopened once the closed one has faded: same sentence, and
+    // nothing to remove.
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Location…' }));
+    const reopened = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+    expect(
+      within(reopened).getByText('Weather unavailable — the saved place could not be checked.')
+    ).toBeInTheDocument();
+    expect(within(reopened).queryByText('Current place: Ecully')).toBeNull();
+    expect(within(reopened).queryByRole('button', { name: 'Remove' })).toBeNull();
+  });
+
+  it('while a replacement is in flight, the gear panel and the dialog say « loading » — not the settled state of the last aggregate (round 4, F2)', async () => {
+    // GitHub 4010193172: the hook's `loading` is false from the first answer
+    // on, and `refreshing` was not passed to the location surfaces — during a
+    // language switch, Retry or the re-read after « Utiliser », the panel and
+    // the dialog presented the LAST aggregate as settled, « Retirer » included.
+    vi.mocked(fetchDashboardWeather).mockResolvedValueOnce(
+      weatherFixture([locationFixture({ name: 'Ecully' })], [linkFixture({ gardenId: 'g1' })])
+    );
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenFixture({ id: 'g1', name: 'Terrasse' })])
+    );
+    await enterEditModeWithLanguageProbe();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Location…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+    expect(await within(dialog).findByText('Current place: Ecully')).toBeInTheDocument();
+
+    const pending = deferredWeather();
+    fireEvent.click(screen.getByText('switch-language-probe'));
+    await waitFor(() => expect(pending.length).toBe(1));
+
+    // In flight: the D4 sentence (now in French) on both surfaces — not the
+    // place of the last aggregate, and nothing to remove yet.
+    expect(await within(dialog).findByText('Chargement du lieu actuel…')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Lieu actuel : Ecully')).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Retirer' })).toBeNull();
+    expect(within(panel).getByText('Chargement du lieu actuel…')).toBeInTheDocument();
+    expect(within(panel).queryByText('Lieu actuel : Ecully')).toBeNull();
+
+    // The answer lands: settled again — the place and Remove are back.
+    await act(async () => {
+      pending[0]!.resolve(
+        weatherFixture([locationFixture({ name: 'Ecully' })], [linkFixture({ gardenId: 'g1' })])
+      );
+    });
+    expect(within(dialog).getByText('Lieu actuel : Ecully')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Retirer' })).toBeEnabled();
+    expect(within(panel).getByText('Lieu actuel : Ecully')).toBeInTheDocument();
   });
 
   it('names the widget on the panel itself, above the generic line (A7)', async () => {

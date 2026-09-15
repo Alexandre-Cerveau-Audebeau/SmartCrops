@@ -17,6 +17,25 @@ interface Props {
   chip?: ReactNode;
   /** Extra top padding for the Edit-mode controls, which sit INSIDE the card. */
   editing?: boolean;
+  /**
+   * NO title row (SMA-336 PR 3b/5, arbitrage Q1) — the declared exception to
+   * amendments A1 / A2, for the ONE widget the artboards do not title: the
+   * weather card opens on its place name (`.wx-place`, `_spec.md:108` « le
+   * lieu tient lieu de titre, dans tous ses états »), and a « MÉTÉO » bar
+   * above it would draw a title the design never drew.
+   *
+   * A prop on the shared frame rather than a sibling `WeatherCard`: the frame
+   * — card, padding, radius, gap, Edit-mode top padding, `data-widget` — stays
+   * owned ONCE, and the exception is visible at the one call site that takes
+   * it. The seven other widgets pass nothing and render exactly as before.
+   *
+   * The card then names itself for assistive technology as a REGION labelled
+   * by {@link Props.regionLabel} (§ 7: « chaque widget est une région nommée »),
+   * since no `h2` is left to name it.
+   */
+  headless?: boolean;
+  /** The region's accessible name when {@link Props.headless}; the place, or the widget title while there is none. */
+  regionLabel?: string;
   children: ReactNode;
 }
 
@@ -45,6 +64,8 @@ export default function DashboardBlock({
   size,
   chip,
   editing = false,
+  headless = false,
+  regionLabel,
   children,
 }: Props) {
   const padding =
@@ -64,6 +85,10 @@ export default function DashboardBlock({
     <Card
       variant="outlined"
       data-widget={blockKey}
+      // A headless card has no heading to be reached by: it is a landmark
+      // region carrying the name its heading would have carried.
+      role={headless ? 'region' : undefined}
+      aria-label={headless ? (regionLabel ?? title) : undefined}
       sx={{
         height: '100%',
         display: 'flex',
@@ -75,6 +100,7 @@ export default function DashboardBlock({
         overflow: 'hidden',
       }}
     >
+      {!headless && (
       <Box
         sx={{
           display: 'flex',
@@ -117,6 +143,7 @@ export default function DashboardBlock({
           {chip}
         </Box>
       </Box>
+      )}
       <Box
         sx={{
           flex: 1,
