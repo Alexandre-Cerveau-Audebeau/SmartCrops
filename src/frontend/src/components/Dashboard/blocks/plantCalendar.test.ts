@@ -1,0 +1,333 @@
+import { describe, expect, it } from 'vitest';
+import {
+  CALENDAR_LANES,
+  MONTHS_OF_YEAR,
+  blockMonth,
+  lanesOf,
+  lastMonthOf,
+  monthCalendar,
+  monthOfGarden,
+  periodMonthsOf,
+  placeMonthOf,
+  pruneMonthsOf,
+  seasonMonthsOf,
+  shiftForHemisphere,
+  varietyName,
+  yearMonthOf,
+} from './plantCalendar';
+import { gardenFixture, varietyFixture } from '../../../test/fixtures/dashboard';
+import { linkFixture, locationFixture, weatherFixture } from '../../../test/fixtures/weather';
+import type { GardenConfig } from '../../../types/Garden';
+import { EMPTY_WEATHER_DATA } from '../../../types/DashboardWeather';
+
+// SMA-336 PR 4a/5 — the plant calendar (pre-flight § C, T1, T9, Q9, Q10, Q13).
+// The month lists are the forms MEASURED in the catalog: 102 distinct
+// `PruningMonths` values, none malformed, unordered and year-wrapping ones
+// among them; the legacy tokens and the season words as the ETL stores them.
+
+const config = (hemisphere: string | null): GardenConfig => ({
+  orientation: 'S',
+  gardenType: null,
+  lightSchedule: null,
+  hemisphere,
+  latitudeBand: 'mid',
+});
+const north = gardenFixture({ id: 'g1', name: 'Terrasse', config: config('N') });
+const south = gardenFixture({ id: 'g2', name: 'Balcon sud', config: config('S') });
+const unset = gardenFixture({ id: 'g3', name: 'Potager du fond', config: config(null) });
+
+/** Clocks pinned by the test, built from COMPONENTS — never from a string. */
+const september = () => new Date(2026, 8, 15, 10, 30);
+const may = () => new Date(2026, 4, 15, 10, 30);
+
+describe('pruneMonthsOf — the Perenual month list, as stored', () => {
+  it('reads the most common form in calendar order', () => {
+    expect(pruneMonthsOf('February,March,April')).toEqual([2, 3, 4]);
+  });
+
+  it('orders an UNORDERED list — « March,April,August,May » is stored as such', () => {
+    expect(pruneMonthsOf('March,April,August,May')).toEqual([3, 4, 5, 8]);
+    expect(pruneMonthsOf('December,March,May')).toEqual([3, 5, 12]);
+  });
+
+  it('keeps a year-wrapping list as twelve-month positions, not as a walk', () => {
+    expect(pruneMonthsOf('December,January,February,March,April,May')).toEqual([1, 2, 3, 4, 5, 12]);
+  });
+
+  it('a single month, a duplicate, stray spaces', () => {
+    expect(pruneMonthsOf('May')).toEqual([5]);
+    expect(pruneMonthsOf('May,May')).toEqual([5]);
+    expect(pruneMonthsOf(' March , April ')).toEqual([3, 4]);
+  });
+
+  it('null, blank and an unknown token contribute nothing — no parser of its own', () => {
+    expect(pruneMonthsOf(null)).toEqual([]);
+    expect(pruneMonthsOf('')).toEqual([]);
+    expect(pruneMonthsOf('March,Brumaire')).toEqual([3]);
+  });
+});
+
+describe('periodMonthsOf / seasonMonthsOf — periodToMonths, untouched', () => {
+  it('a range walks from its first month to its last', () => {
+    expect(periodMonthsOf('march-may')).toEqual([3, 4, 5]);
+  });
+
+  it('a range past December keeps walking — « november-march » is a WALK, not a sort', () => {
+    expect(periodMonthsOf('november-march')).toEqual([11, 12, 1, 2, 3]);
+  });
+
+  it('« year-round » is every month, a single month is itself, null is nothing', () => {
+    expect(periodMonthsOf('year-round')).toEqual([...MONTHS_OF_YEAR]);
+    expect(periodMonthsOf('june')).toEqual([6]);
+    expect(periodMonthsOf(null)).toEqual([]);
+  });
+
+  it('a season word is its northern months; Fall and Autumn are one season', () => {
+    expect(seasonMonthsOf('Spring')).toEqual([3, 4, 5]);
+    expect(seasonMonthsOf('Summer')).toEqual([6, 7, 8]);
+    expect(seasonMonthsOf('Fall')).toEqual([9, 10, 11]);
+    expect(seasonMonthsOf('Autumn')).toEqual([9, 10, 11]);
+    expect(seasonMonthsOf('Winter')).toEqual([12, 1, 2]);
+    expect(seasonMonthsOf(null)).toEqual([]);
+  });
+});
+
+describe('shiftForHemisphere (Q9)', () => {
+  it('shifts a southern garden by six months and keeps the order', () => {
+    expect(shiftForHemisphere([3, 4, 5], 'S')).toEqual([9, 10, 11]);
+    expect(shiftForHemisphere([11, 12, 1, 2, 3], 'S')).toEqual([5, 6, 7, 8, 9]);
+    expect(shiftForHemisphere([9, 10, 11], 'S')).toEqual([3, 4, 5]);
+  });
+
+  it('reads the catalog as is for a northern garden and for one with NO hemisphere', () => {
+    expect(shiftForHemisphere([3, 4, 5], 'N')).toEqual([3, 4, 5]);
+    expect(shiftForHemisphere([3, 4, 5], null)).toEqual([3, 4, 5]);
+    expect(shiftForHemisphere([3, 4, 5], 'X')).toEqual([3, 4, 5]);
+  });
+
+  it('returns a copy, never the input', () => {
+    const months = [3, 4];
+    expect(shiftForHemisphere(months, 'N')).not.toBe(months);
+  });
+});
+
+describe('lastMonthOf — the « dernier mois de semis » (Q11)', () => {
+  it('is the last element of the walk, past December included', () => {
+    expect(lastMonthOf([3, 4, 5])).toBe(5);
+    expect(lastMonthOf([11, 12, 1, 2, 3])).toBe(3);
+    expect(lastMonthOf([6])).toBe(6);
+  });
+
+  it('is nothing for an empty window and for a year-round one', () => {
+    expect(lastMonthOf([])).toBeNull();
+    expect(lastMonthOf([...MONTHS_OF_YEAR])).toBeNull();
+  });
+});
+
+describe('lanesOf — one variety read from one garden', () => {
+  const tomato = varietyFixture({
+    plantId: 'tomato',
+    pruningMonths: 'June,July,August',
+    sowingPeriod: 'march-may',
+    harvestPeriod: 'july-october',
+    floweringSeason: 'Summer',
+    harvestSeason: 'Fall',
+  });
+
+  it('reads the four lanes; harvest takes the legacy token BEFORE the season word', () => {
+    expect(lanesOf(tomato, 'N')).toEqual({
+      prune: [6, 7, 8],
+      sow: [3, 4, 5],
+      flower: [6, 7, 8],
+      harvest: [7, 8, 9, 10],
+    });
+  });
+
+  it('falls back to the harvest season when the legacy token is null or blank', () => {
+    expect(lanesOf(varietyFixture({ harvestSeason: 'Fall' }), 'N').harvest).toEqual([9, 10, 11]);
+    expect(lanesOf(varietyFixture({ harvestPeriod: '  ', harvestSeason: 'Fall' }), 'N').harvest).toEqual([9, 10, 11]);
+  });
+
+  it('shifts every lane for a southern garden', () => {
+    expect(lanesOf(tomato, 'S')).toEqual({
+      prune: [12, 1, 2],
+      sow: [9, 10, 11],
+      flower: [12, 1, 2],
+      harvest: [1, 2, 3, 4],
+    });
+  });
+
+  it('an undated variety has four empty lanes', () => {
+    expect(lanesOf(varietyFixture(), null)).toEqual({ prune: [], sow: [], flower: [], harvest: [] });
+  });
+});
+
+describe('the month — of a garden, of the block (Q10)', () => {
+  const lyon = (localTime: string | null, gardenIds = ['g1']) =>
+    weatherFixture(
+      [locationFixture({ localTime })],
+      gardenIds.map((gardenId) => linkFixture({ gardenId }))
+    );
+
+  it('yearMonthOf reads the clock’s own local month', () => {
+    expect(yearMonthOf(september())).toEqual({ year: 2026, month: 9 });
+  });
+
+  it('a located garden is in its PLACE’s month, whatever the browser says', () => {
+    expect(placeMonthOf('g1', lyon('2026-09-12 14:30'))).toEqual({ year: 2026, month: 9 });
+    expect(monthOfGarden(north, lyon('2026-09-12 14:30'), may)).toEqual({ year: 2026, month: 9 });
+  });
+
+  it('an unlocated garden, or a place with no clock, is in the browser’s month', () => {
+    expect(placeMonthOf('g1', EMPTY_WEATHER_DATA)).toBeNull();
+    expect(monthOfGarden(north, EMPTY_WEATHER_DATA, may)).toEqual({ year: 2026, month: 5 });
+    // The provider could not describe the place: no localTime.
+    expect(placeMonthOf('g1', lyon(null))).toBeNull();
+    expect(monthOfGarden(north, lyon(null), may)).toEqual({ year: 2026, month: 5 });
+    // A dangling key reads as unlocated.
+    const dangling = weatherFixture([], [linkFixture({ gardenId: 'g1', locationKey: '0.00,0.00' })]);
+    expect(placeMonthOf('g1', dangling)).toBeNull();
+  });
+
+  it('the block takes the places’ month when every located garden agrees', () => {
+    expect(blockMonth([north, south], lyon('2026-09-12 14:30', ['g1', 'g2']), may)).toEqual({
+      year: 2026,
+      month: 9,
+    });
+    // One located, one not: the located one decides.
+    expect(blockMonth([north, unset], lyon('2026-09-12 14:30', ['g1']), may)).toEqual({ year: 2026, month: 9 });
+  });
+
+  it('…and the browser’s when no garden is located, or when two places straddle a month end', () => {
+    expect(blockMonth([north, south], EMPTY_WEATHER_DATA, may)).toEqual({ year: 2026, month: 5 });
+    const straddle = weatherFixture(
+      [
+        locationFixture({ key: '45.76,4.84', name: 'Lyon', localTime: '2026-09-30 23:30' }),
+        locationFixture({ key: '-33.87,151.21', name: 'Sydney', localTime: '2026-10-01 08:30' }),
+      ],
+      [linkFixture({ gardenId: 'g1' }), linkFixture({ gardenId: 'g2', locationKey: '-33.87,151.21' })]
+    );
+    expect(blockMonth([north, south], straddle, may)).toEqual({ year: 2026, month: 5 });
+  });
+});
+
+describe('monthCalendar — the month for every placed variety (T9)', () => {
+  const thyme = varietyFixture({
+    plantId: 'thyme',
+    commonName: 'Thyme',
+    count: 3,
+    gardenIds: ['g1', 'g2'],
+    pruningMonths: 'March,April,September',
+  });
+  const lettuce = varietyFixture({
+    plantId: 'lettuce',
+    commonName: 'Lettuce',
+    count: 5,
+    gardenIds: ['g1'],
+    sowingPeriod: 'march-september',
+    harvestPeriod: 'june-october',
+  });
+  const fern = varietyFixture({ plantId: 'fern', commonName: 'Fern', count: 9, gardenIds: ['g1'] });
+
+  it('counts DISTINCT varieties, never placements: a thyme in two gardens is one thyme', () => {
+    const calendar = monthCalendar([north, south], [thyme], EMPTY_WEATHER_DATA, september);
+
+    expect(calendar.month).toEqual({ year: 2026, month: 9 });
+    expect(calendar.active.prune.map((entry) => entry.variety.plantId)).toEqual(['thyme']);
+    expect(calendar.known).toHaveLength(1);
+  });
+
+  it('merges the lanes over the gardens holding the variety — a northern AND a southern one (Q9)', () => {
+    const [entry] = monthCalendar([north, south], [thyme], EMPTY_WEATHER_DATA, september).known;
+
+    // March, April, September from the terrace; September, October, March from the balcony.
+    expect(entry!.lanes.prune).toEqual([3, 4, 9, 10]);
+  });
+
+  it('a southern garden alone reads the catalog six months later', () => {
+    const balconyThyme = varietyFixture({ plantId: 'thyme', gardenIds: ['g2'], pruningMonths: 'March,April' });
+    const inSeptember = monthCalendar([south], [balconyThyme], EMPTY_WEATHER_DATA, september);
+    const inMay = monthCalendar([south], [balconyThyme], EMPTY_WEATHER_DATA, may);
+
+    expect(inSeptember.known[0]!.lanes.prune).toEqual([9, 10]);
+    expect(inSeptember.active.prune).toHaveLength(1);
+    expect(inMay.active.prune).toHaveLength(0);
+  });
+
+  it('a garden with NO hemisphere reads the catalog as northern — the exposure engine’s default', () => {
+    const potagerThyme = varietyFixture({ plantId: 'thyme', gardenIds: ['g3'], pruningMonths: 'September' });
+
+    expect(monthCalendar([unset], [potagerThyme], EMPTY_WEATHER_DATA, september).active.prune).toHaveLength(1);
+  });
+
+  it('a garden the aggregate does not hold reads as northern too', () => {
+    const orphan = varietyFixture({ plantId: 'thyme', gardenIds: ['gone'], pruningMonths: 'September' });
+
+    expect(monthCalendar([north], [orphan], EMPTY_WEATHER_DATA, september).active.prune).toHaveLength(1);
+  });
+
+  it('a variety with no month in any lane is UNKNOWN — counted for the foot, absent from the grid (D2)', () => {
+    const calendar = monthCalendar([north], [thyme, fern], EMPTY_WEATHER_DATA, september);
+
+    expect(calendar.unknown.map((v) => v.plantId)).toEqual(['fern']);
+    expect(calendar.known.map((entry) => entry.variety.plantId)).toEqual(['thyme']);
+  });
+
+  it('fills the four lanes, sow and harvest from the legacy tokens, flower from the season word', () => {
+    const calendar = monthCalendar([north], [lettuce], EMPTY_WEATHER_DATA, september);
+
+    expect(calendar.active.sow.map((e) => e.variety.plantId)).toEqual(['lettuce']);
+    expect(calendar.active.harvest.map((e) => e.variety.plantId)).toEqual(['lettuce']);
+    expect(calendar.active.prune).toEqual([]);
+    expect(calendar.active.flower).toEqual([]);
+    const rose = varietyFixture({ plantId: 'rose', gardenIds: ['g2'], floweringSeason: 'Spring' });
+    // Spring on the southern balcony is September–November.
+    expect(monthCalendar([south], [rose], EMPTY_WEATHER_DATA, september).active.flower).toHaveLength(1);
+  });
+
+  it('a year-round sowing window is active every month', () => {
+    const radish = varietyFixture({ plantId: 'radish', gardenIds: ['g1'], sowingPeriod: 'year-round' });
+
+    expect(monthCalendar([north], [radish], EMPTY_WEATHER_DATA, may).active.sow).toHaveLength(1);
+    expect(monthCalendar([north], [radish], EMPTY_WEATHER_DATA, september).active.sow).toHaveLength(1);
+  });
+
+  it('with no variety at all: the month, and nothing else', () => {
+    const calendar = monthCalendar([north], [], EMPTY_WEATHER_DATA, september);
+
+    expect(calendar).toEqual({
+      month: { year: 2026, month: 9 },
+      known: [],
+      unknown: [],
+      active: { prune: [], sow: [], flower: [], harvest: [] },
+    });
+  });
+
+  it('orders the grid the Q13 way: active this month (prune, sow, flower, harvest), then placements, then name', () => {
+    const pruneOne = varietyFixture({ plantId: 'a', commonName: 'Sage', count: 1, gardenIds: ['g1'], pruningMonths: 'September' });
+    const harvestFive = varietyFixture({ plantId: 'b', commonName: 'Tomato', count: 5, gardenIds: ['g1'], harvestSeason: 'Fall' });
+    const idleNine = varietyFixture({ plantId: 'c', commonName: 'Zinnia', count: 9, gardenIds: ['g1'], pruningMonths: 'March' });
+    const pruneThree = varietyFixture({ plantId: 'd', commonName: 'Thyme', count: 3, gardenIds: ['g1'], pruningMonths: 'September' });
+    const idleNineToo = varietyFixture({ plantId: 'e', commonName: null, scientificName: 'Aster amellus', count: 9, gardenIds: ['g1'], pruningMonths: 'March' });
+    const sowTwo = varietyFixture({ plantId: 'f', commonName: 'Lettuce', count: 2, gardenIds: ['g1'], sowingPeriod: 'august-september' });
+
+    const calendar = monthCalendar(
+      [north],
+      [pruneOne, harvestFive, idleNine, pruneThree, idleNineToo, sowTwo],
+      EMPTY_WEATHER_DATA,
+      september
+    );
+
+    expect(calendar.known.map((entry) => entry.variety.plantId)).toEqual(['d', 'a', 'f', 'b', 'e', 'c']);
+    expect(calendar.known.map((entry) => entry.activeLane)).toEqual(['prune', 'prune', 'sow', 'harvest', null, null]);
+  });
+
+  it('names a variety by its common name, and by the botanical one when there is none', () => {
+    expect(varietyName(varietyFixture({ commonName: 'Basil' }))).toBe('Basil');
+    expect(varietyName(varietyFixture({ commonName: null, scientificName: 'Ocimum basilicum' }))).toBe('Ocimum basilicum');
+  });
+
+  it('the lanes are the legend’s four, in its order', () => {
+    expect(CALENDAR_LANES).toEqual(['prune', 'sow', 'flower', 'harvest']);
+  });
+});
