@@ -483,7 +483,6 @@
       },
       "month": {
         "title": "Ce mois-ci",
-        "invite": "Le calendrier du mois arrive avec les semis et les récoltes de vos plantations.",
         "monthsShort": ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"],
         "counts": {
           "prune": "à tailler",

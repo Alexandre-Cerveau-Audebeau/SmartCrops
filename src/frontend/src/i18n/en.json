@@ -483,7 +483,6 @@
       },
       "month": {
         "title": "This month",
-        "invite": "The month’s calendar arrives with the sowings and harvests of your plantings.",
         "monthsShort": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
         "counts": {
           "prune": "to prune",

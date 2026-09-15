@@ -28,6 +28,8 @@ import GardensBlock, {
   type GardensWeather,
 } from '../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
+import MonthBlock from '../components/Dashboard/blocks/MonthBlock';
+import { monthCalendar } from '../components/Dashboard/blocks/plantCalendar';
 import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
 import TodoBlock from '../components/Dashboard/blocks/TodoBlock';
 import WeatherBlock from '../components/Dashboard/blocks/WeatherBlock';
@@ -381,6 +383,24 @@ export default function GardensDashboard() {
             }
           />
         );
+      case 'month':
+        // The AGGREGATE feeds it; the weather is read for ONE thing, the month
+        // of a located garden's own place (arbitrage Q10). A provider outage
+        // is therefore not an error state here — the block falls back to the
+        // browser's month, which is what an unlocated account reads anyway.
+        return (
+          <MonthBlock
+            size={block.size}
+            editing={editing}
+            gardens={gardens}
+            varieties={dashboardData.varieties}
+            weather={weatherData}
+            loading={gardensLoading}
+            refreshing={gardensRefreshing}
+            loadError={gardensError}
+            onRetry={refetch}
+          />
+        );
       case 'stats':
         return (
           <StatsBlock
@@ -512,6 +532,18 @@ export default function GardensDashboard() {
     if (key === 'gardens') {
       if (gardens.length === 0) return null;
       return { value: formatCount(gardens.length, i18n.language) };
+    }
+    if (key === 'month') {
+      // THROUGH THE WIDGET'S OWN DERIVATION (round 5, C4): the thumbnail
+      // prints « 10 à tailler » from the very `monthCalendar` the widget
+      // counts with, so the card in the gallery cannot state a figure the
+      // widget it stands for does not. It is only ever called for a HIDDEN
+      // widget, so the derivation never runs twice on one page.
+      if (dashboardData.varieties.length === 0) return null;
+      const { active } = monthCalendar(gardens, dashboardData.varieties, weatherData);
+      return {
+        value: t('dashboard.blocks.month.galleryPrune', { count: active.prune.length }),
+      };
     }
     return null;
   };
