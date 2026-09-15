@@ -18,6 +18,7 @@ import { BLOCK_ICONS } from '../blockIcons';
 import {
   CALENDAR_LANES,
   MONTHS_OF_YEAR,
+  browserClock,
   monthCalendar,
   monthLabel,
   varietyName,
@@ -154,8 +155,11 @@ export default function MonthBlock({
   /** Ties the deploy button to the region it opens, for `aria-controls`. */
   const gridId = useId();
 
-  // ONE derivation for the chip, the counters, the names, the grid and the foot.
-  const calendar = monthCalendar(gardens, varieties, weather);
+  // ONE derivation for the chip, the counters, the names, the grid and the
+  // foot. The language is passed for the ALPHABET the rows are ordered by
+  // (V28): « maïs » sits with the M's in French and in English alike, but the
+  // order of the alphabet is the language's own, not the machine's.
+  const calendar = monthCalendar(gardens, varieties, weather, browserClock, i18n.language);
   const { month, known, unknown, active } = calendar;
 
   /** « Septembre » — the header chip and the Small headline. */
@@ -415,69 +419,62 @@ export default function MonthBlock({
             pile up under the legend — « c'est dommage de voir un si grand vide
             en bas de widget ». It CLIPS (`overflow: hidden`) so the deployed
             list of V26 scrolls inside it and never grows the card (lesson V7). */}
+        {/* Round 2, C3 + F4 — this stopped being an ARIA TABLE.
+
+            The two findings are one question. C3 counted the arity (thirteen
+            `columnheader`s over a header, one `rowheader` and one `cell` per
+            row) and F4 the ownership (the scrolling box between `table` and
+            `row` carries no role, so the rows are not owned by anything).
+            Both are true, and both are symptoms of the same thing: there is no
+            table here. A row has ONE name and ONE drawing — the twelve months
+            of a variety are painted by a single element declared across tracks
+            2 to 14, not by twelve cells. Making the table honest would mean
+            emitting twelve real cells a row whose entire content is a colour:
+            192 of them for sixteen varieties, each announced « blank ».
+
+            What a screen reader hears, in each case. As a table: « table,
+            13 columns, 17 rows — row 2, Thyme, column 2 blank, column 3
+            blank… », twelve empty cells a variety and a column header naming
+            a month the reader can do nothing with. As a list: « list, 7 items
+            — Thyme, pruning: September », one sentence a variety, which is
+            what the block means. The second is the block.
+
+            So: a LIST of varieties, the row's sentence as its item, the axis
+            `aria-hidden` beside the bars it labels — a visual scale, like
+            them — and the visible name hidden from the reading too, since the
+            sentence opens with it and the stutter would be the only thing the
+            table roles were still buying. Nothing is announced that a reader
+            cannot act on, and the ownership F4 asked for is exact: a `list`
+            whose every child is a `listitem`. */}
         <Box
           data-month-grid
           id={gridId}
-          role="table"
-          aria-label={t('dashboard.blocks.month.gridLabel')}
           sx={{ mt: '8px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
         >
-          {/* The axis: `.mh` 12 px / 700, each with its left rule; the current month tinted. */}
-          <Box role="row" sx={{ display: 'grid', gridTemplateColumns: gridColumns, alignItems: 'center' }}>
-            {/* `A3Expert.dc.html` l. 336 opens `.cal` with a bare
-                `<div></div>`: the corner cell above the 108 px name column,
-                EMPTY but IN FLOW, and that is what puts « Jan » on track 2,
-                over the first of the lane columns.
+          {/* Round 2, V27 — the scrolling zone now opens on the axis, and the
+              axis is INSIDE it.
 
-                Round 1, V23 (= C3's zone): this cell carried
-                `sx={visuallyHidden}`, whose `position: absolute` takes a grid
-                child out of the flow entirely. It consumed no track, the
-                twelve labels auto-placed on tracks 1 to 12 instead of 2 to
-                13, and the whole axis sat one column to the left of the bars
-                it names — « Jan » stretched across the 108 px name column
-                while the thirteenth track stayed empty. The rows never drifted
-                because their lane container DECLARES `grid-column: 2 / 14`
-                (l. 213) rather than relying on auto-placement.
+              The two grids share one template (`gridColumns`), and until this
+              they resolved it on two different content boxes: the axis on the
+              full width of `[data-month-grid]`, the rows on that width MINUS
+              the scrollbar, the moment `overflow-y: auto` showed one that
+              takes room. The fixed 108 px track is the same on both sides, so
+              the whole difference lands on the twelve `1fr` tracks: month k
+              drifts by `(k − 1) × Δ / 12` — nothing at « Jan », the full Δ at
+              the right edge of « Déc ». Measured at ≈ 17 px on Chrome/Windows,
+              zero on a platform whose scrollbars overlay, and appearing the
+              moment the reader presses the deploy button of V26.
 
-                The plate's own shape is the fix: one empty in-flow box, not
-                twelve `gridColumn` declarations on the labels. The
-                `columnheader` role stays — the ARIA table still needs a
-                header for the name column — and only the box comes back into
-                the grid. The spoken cell of each row below is the one thing
-                that MUST stay out of flow, and does. */}
-            <Box role="columnheader" sx={{ minWidth: 0 }} />
-            {MONTHS_OF_YEAR.map((value, index) => (
-              <Box
-                key={value}
-                role="columnheader"
-                data-month-axis={value === month.month ? 'now' : undefined}
-                sx={{
-                  textAlign: 'center',
-                  fontSize: LARGE_GRID.axisSize,
-                  fontWeight: 700,
-                  color: 'text.secondary',
-                  borderLeft: '1px solid',
-                  borderLeftColor: 'divider',
-                  py: '3px',
-                  backgroundColor: value === month.month ? tk.tint : 'transparent',
-                }}
-              >
-                {monthsShort[index]}
-              </Box>
-            ))}
-          </Box>
-
-          {/* `A3Expert.dc.html` l. 336: `flex: 1; justify-content:
-              space-evenly` — the rows share the height evenly rather than
-              massing at the top (V25, a RETURN to the plate: this shipped at
-              `flex: '0 1 auto'`).
-
-              Deployed, the list scrolls, and even distribution has no meaning
-              there — worse, `space-evenly` on a scrolling box pushes the first
-              rows above the scrollable area, where no scrollbar can reach
-              them. So the deployed state packs from the top (V26, the V7
-              lesson: nothing may leave the card, and nothing may become
-              unreachable inside it). */}
+              One content box is the cure, not a compensation: whatever the
+              scrollbar takes, it now takes from BOTH, and the twelve tracks
+              fall alike by construction — on every platform, including those
+              with nothing to compensate. `scrollbar-gutter: stable` was the
+              wrong tool here (the axis is not the scroller, so it would never
+              receive the reservation: the drift would become permanent instead
+              of intermittent), and a hard-coded right padding worse still —
+              the theme asks `scrollbar-width: thin` on `*`, which Chromium ≥
+              121 makes win over `::-webkit-scrollbar { width: 8px }`, so the
+              effective width is an engine metric no stylesheet can know. */}
           <Box
             data-month-rows
             sx={{
@@ -486,80 +483,174 @@ export default function MonthBlock({
               overflowY: 'auto',
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: expanded ? 'flex-start' : 'space-evenly',
-              gap: expanded ? '2px' : 0,
-              mt: '6px',
             }}
           >
-            {shown.map((entry) => (
-              <Box
-                key={entry.variety.plantId}
-                role="row"
-                data-month-plant={entry.variety.plantId}
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: gridColumns,
-                  alignItems: 'center',
-                  minHeight: LARGE_GRID.rowHeight,
-                  // A scrolling list must not squeeze its rows to fit (V26).
-                  flexShrink: 0,
-                }}
-              >
-                {/* `.pn` — 14 px / 600, ellipsized, with its 8 px gutter. */}
+            {/* The axis: `.mh` 12 px / 700, each with its left rule; the current
+                month tinted. Stuck to the top of the scrolling zone, over an
+                OPAQUE ground — the card's own — without which the bars would
+                scroll visibly under the month names. */}
+            <Box
+              data-month-axis-row
+              aria-hidden
+              sx={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 2,
+                flexShrink: 0,
+                backgroundColor: 'background.paper',
+                display: 'grid',
+                gridTemplateColumns: gridColumns,
+                alignItems: 'center',
+              }}
+            >
+              {/* `A3Expert.dc.html` l. 336 opens `.cal` with a bare
+                  `<div></div>`: the corner cell above the 108 px name column,
+                  EMPTY but IN FLOW, and that is what puts « Jan » on track 2,
+                  over the first of the lane columns.
+
+                  Round 1, V23 (= C3's zone): this cell carried
+                  `sx={visuallyHidden}`, whose `position: absolute` takes a grid
+                  child out of the flow entirely. It consumed no track, the
+                  twelve labels auto-placed on tracks 1 to 12 instead of 2 to
+                  13, and the whole axis sat one column to the left of the bars
+                  it names — « Jan » stretched across the 108 px name column
+                  while the thirteenth track stayed empty. The rows never drifted
+                  because their lane container DECLARES `grid-column: 2 / 14`
+                  (l. 213) rather than relying on auto-placement.
+
+                  The plate's own shape is the fix: one empty in-flow box, not
+                  twelve `gridColumn` declarations on the labels. The
+                  `columnheader` role stays — the ARIA table still needs a
+                  header for the name column — and only the box comes back into
+                  the grid. The spoken cell of each row below is the one thing
+                  that MUST stay out of flow, and does. */}
+              <Box data-month-corner sx={{ minWidth: 0 }} />
+              {MONTHS_OF_YEAR.map((value, index) => (
                 <Box
-                  role="rowheader"
+                  key={value}
+                  data-month-axis={value === month.month ? 'now' : undefined}
                   sx={{
-                    fontSize: LARGE_GRID.nameSize,
-                    fontWeight: 600,
-                    color: 'text.primary',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    pr: '8px',
+                    textAlign: 'center',
+                    fontSize: LARGE_GRID.axisSize,
+                    fontWeight: 700,
+                    color: 'text.secondary',
+                    borderLeft: '1px solid',
+                    borderLeftColor: 'divider',
+                    py: '3px',
+                    backgroundColor: value === month.month ? tk.tint : 'transparent',
                   }}
                 >
-                  {varietyName(entry.variety)}
+                  {monthsShort[index]}
                 </Box>
-                {/* The sentence the bars cannot say. */}
-                <Box role="cell" sx={visuallyHidden}>
-                  {rowSpoken(entry)}
-                </Box>
-                {/* `.lanes` — the twelve month columns of the row, placed
-                    EXPLICITLY at `grid-column: 2 / 14` (`A3Expert.dc.html`
-                    l. 213) rather than auto-placed, so no sibling can shift
-                    them. Round 1, F1: it carries the ONE `aria-hidden` of the
-                    row. Everything under it is decoration — a colour is not a
-                    fact anyone can hear — and the row's sentence is spoken by
-                    the `cell` above, outside this container. */}
+              ))}
+            </Box>
+
+            {/* `A3Expert.dc.html` l. 336: `flex: 1; justify-content:
+                space-evenly` — the rows share the height evenly rather than
+                massing at the top (V25, a RETURN to the plate: this shipped at
+                `flex: '0 1 auto'`).
+
+                Deployed, the list scrolls, and even distribution has no meaning
+                there — worse, `space-evenly` on a scrolling box pushes the first
+                rows above the scrollable area, where no scrollbar can reach
+                them. So the deployed state packs from the top (V26, the V7
+                lesson: nothing may leave the card, and nothing may become
+                unreachable inside it). */}
+            <Box
+              data-month-body
+              role="list"
+              aria-label={t('dashboard.blocks.month.gridLabel')}
+              sx={{
+                // NO `min-height: 0` here, and that omission is the whole of it:
+                // a column flex item's automatic minimum is its CONTENT, so this
+                // box can never be squeezed below the rows it holds. Without
+                // that, `space-evenly` would distribute NEGATIVE free space the
+                // moment the list outgrew the card and push the first rows above
+                // the scrollable area, where no scrollbar reaches them — the
+                // trap V26 met and escaped by packing from the top. The rows are
+                // taller since V30/V31, so the collapsed state can overflow too:
+                // the guard has to hold in BOTH states now, not just the
+                // deployed one.
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: expanded ? 'flex-start' : 'space-evenly',
+                gap: expanded ? '2px' : 0,
+                mt: '6px',
+              }}
+            >
+              {shown.map((entry) => (
                 <Box
-                  aria-hidden
-                  data-month-lanes
+                  key={entry.variety.plantId}
+                  role="listitem"
+                  data-month-plant={entry.variety.plantId}
                   sx={{
-                    position: 'relative',
-                    gridColumn: '2 / 14',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    rowGap: '3px',
+                    display: 'grid',
+                    gridTemplateColumns: gridColumns,
+                    alignItems: 'center',
+                    minHeight: LARGE_GRID.rowHeight,
+                    // A scrolling list must not squeeze its rows to fit (V26).
+                    flexShrink: 0,
                   }}
                 >
-                  {/* `.nowcol` — ONE column behind the four lanes, not four marks. */}
+                  {/* `.pn` — 14 px / 600, ellipsized, with its 8 px gutter. */}
                   <Box
-                    data-month-now
+                    data-month-name
+                    aria-hidden
                     sx={{
-                      position: 'absolute',
-                      top: 0,
-                      bottom: 0,
-                      left: `${((month.month - 1) / 12) * 100}%`,
-                      width: `${100 / 12}%`,
-                      backgroundColor: tk.tint,
-                      borderRadius: '2px',
-                      zIndex: 0,
+                      fontSize: LARGE_GRID.nameSize,
+                      fontWeight: 600,
+                      color: 'text.primary',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      pr: '8px',
                     }}
-                  />
-                  {CALENDAR_LANES.map((key) => lane(entry, key))}
+                  >
+                    {varietyName(entry.variety)}
+                  </Box>
+                  {/* The sentence the bars cannot say — and, since C3 + F4,
+                      the whole of what the item is read as. */}
+                  <Box data-month-spoken sx={visuallyHidden}>
+                    {rowSpoken(entry)}
+                  </Box>
+                  {/* `.lanes` — the twelve month columns of the row, placed
+                      EXPLICITLY at `grid-column: 2 / 14` (`A3Expert.dc.html`
+                      l. 213) rather than auto-placed, so no sibling can shift
+                      them. Round 1, F1: it carries the ONE `aria-hidden` of the
+                      row. Everything under it is decoration — a colour is not a
+                      fact anyone can hear — and the row's sentence is spoken by
+                      the `cell` above, outside this container. */}
+                  <Box
+                    aria-hidden
+                    data-month-lanes
+                    sx={{
+                      position: 'relative',
+                      gridColumn: '2 / 14',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      rowGap: '3px',
+                    }}
+                  >
+                    {/* `.nowcol` — ONE column behind the four lanes, not four marks. */}
+                    <Box
+                      data-month-now
+                      sx={{
+                        position: 'absolute',
+                        top: 0,
+                        bottom: 0,
+                        left: `${((month.month - 1) / 12) * 100}%`,
+                        width: `${100 / 12}%`,
+                        backgroundColor: tk.tint,
+                        borderRadius: '2px',
+                        zIndex: 0,
+                      }}
+                    />
+                    {CALENDAR_LANES.map((key) => lane(entry, key))}
+                  </Box>
                 </Box>
-              </Box>
-            ))}
+              ))}
+            </Box>
           </Box>
         </Box>
 

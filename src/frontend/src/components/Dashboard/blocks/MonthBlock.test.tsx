@@ -13,7 +13,7 @@ import { getDashboardTokens } from '../../../theme/dashboardTokens';
 import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../../../types/DashboardWeather';
 import type { DashboardVarietyData } from '../../../types/DashboardData';
 import MonthBlock from './MonthBlock';
-import { monthCalendar, monthLabel, zonedYearMonthOf } from './plantCalendar';
+import { browserClock, monthCalendar, monthLabel, zonedYearMonthOf } from './plantCalendar';
 
 // SMA-336 PR 4a/5 — « Ce mois-ci » against `A2Novice.dc.html` (Small),
 // `Main.dc.html` / `A4Manquantes.dc.html` (Medium) and `A3Expert.dc.html`
@@ -72,7 +72,7 @@ const fern = varietyFixture({ plantId: 'fern', commonName: 'Fern', count: 7, gar
 
 const garden = gardenFixture({ id: 'g1', name: 'Terrasse' });
 
-/** N varieties all pruned this month, with distinct placement counts so Q13 has an order to keep. */
+/** N varieties all pruned this month; their names are already in alphabetical order (V28). */
 const manyVarieties = (count: number) =>
   Array.from({ length: count }, (_, index) =>
     pruned({
@@ -110,12 +110,18 @@ function renderBlock(over: Partial<Props> = {}) {
   return { card, widget: within(card), props };
 }
 
-/** What the ONE derivation says, for the surfaces to be checked against. */
+/**
+ * What the ONE derivation says, for the surfaces to be checked against — in
+ * the language the block is rendered in, since V28 orders the rows by that
+ * language's own alphabet.
+ */
 const expected = (over: Partial<Props> = {}) =>
   monthCalendar(
     over.gardens ?? [garden],
     over.varieties ?? [thyme, rosemary, courgette, sage, lettuce, tomato, idle, fern],
-    over.weather ?? EMPTY_WEATHER_DATA
+    over.weather ?? EMPTY_WEATHER_DATA,
+    browserClock,
+    'en'
   );
 
 describe('MonthBlock — every surface reads ONE derivation', () => {
@@ -195,12 +201,13 @@ describe('MonthBlock — Medium (Main.dc.html, A4Manquantes.dc.html)', () => {
 });
 
 describe('MonthBlock — Large: the twelve-month grid (A3Expert.dc.html)', () => {
-  it('draws the axis, tints the current month, and names the table', () => {
-    const { card, widget } = renderBlock({ size: 'large' });
+  it('draws the thirteen axis cells and tints the current month', () => {
+    const { card } = renderBlock({ size: 'large' });
+    const axisRow = card.querySelector('[data-month-axis-row]')!;
 
-    const grid = widget.getByRole('table', { name: 'Twelve-month calendar of your varieties' });
-    expect(grid).toBe(card.querySelector('[data-month-grid]'));
-    expect(grid.querySelectorAll('[role="columnheader"]')).toHaveLength(13);
+    // One corner cell plus twelve labels — the arity the LAYOUT needs, which
+    // is not the same question as what a screen reader is told (C3 + F4).
+    expect(axisRow.children).toHaveLength(13);
     // ONE tinted axis cell: the month the block is in.
     const now = card.querySelectorAll('[data-month-axis="now"]');
     expect(now).toHaveLength(1);
@@ -225,15 +232,17 @@ describe('MonthBlock — Large: the twelve-month grid (A3Expert.dc.html)', () =>
     expect(card.querySelector('[data-month-more-varieties]')).toBeNull();
   });
 
-  it('orders the rows the Q13 way, and leaves the undated varieties out of the grid', () => {
+  it('orders the rows by NAME, and leaves the undated varieties out of the grid (V28)', () => {
     const { card } = renderBlock({ size: 'large' });
 
     const rows = [...card.querySelectorAll('[data-month-plant]')].map((row) =>
       row.getAttribute('data-month-plant')
     );
     expect(rows).toEqual(expected().known.map((entry) => entry.variety.plantId));
-    // Pruned first (by placements), then sown, then harvested, then the idle one.
-    expect(rows).toEqual(['thyme', 'rosemary', 'courgette', 'sage', 'lettuce', 'tomato', 'idle']);
+    // Alphabetical — « je ne comprends pas l'ordre dans lequel les plantes sont
+    // listées ». Zinnia is the `idle` one, and it is last because of its NAME,
+    // not because it is idle: the Q13 rank no longer orders anything here.
+    expect(rows).toEqual(['courgette', 'lettuce', 'rosemary', 'sage', 'thyme', 'tomato', 'idle']);
     // The fern has no lane at all: it is counted in the foot, never drawn.
     expect(rows).not.toContain('fern');
   });
@@ -294,14 +303,14 @@ describe('MonthBlock — Large: the twelve-month grid (A3Expert.dc.html)', () =>
 
   it('…because the corner cell is empty but IN the flow, as the plate draws it (V23)', () => {
     const { card } = renderBlock({ size: 'large' });
-    const corner = card.querySelector('[data-month-grid] [role="columnheader"]')!;
+    const corner = card.querySelector('[data-month-corner]')!;
 
     // `A3Expert.dc.html` l. 336: `<div class="cal"><div></div><div class="mh">Jan</div>…`
     expect(corner).toBeEmptyDOMElement();
     expect(rulesFor(corner).replace(/\s/g, '')).not.toContain('position:absolute');
     // The row's spoken sentence is the one thing that MUST stay out of flow:
     // it shifts nothing, which is why the rows never drifted.
-    const spoken = card.querySelector('[data-month-plant="thyme"] [role="cell"]')!;
+    const spoken = card.querySelector('[data-month-plant="thyme"] [data-month-spoken]')!;
     expect(rulesFor(spoken).replace(/\s/g, '')).toContain('position:absolute');
   });
 
@@ -314,14 +323,14 @@ describe('MonthBlock — Large: the twelve-month grid (A3Expert.dc.html)', () =>
     // One owner: the four lane grids and the tinted column no longer repeat it.
     expect(lanes.querySelectorAll('[aria-hidden]')).toHaveLength(0);
     // …and the sentence, which lives outside that container, is still spoken.
-    expect(row.querySelector('[role="cell"]')).toHaveTextContent(/Thyme/);
+    expect(row.querySelector('[data-month-spoken]')).toHaveTextContent(/Thyme/);
   });
 
   it('gives each row a spoken sentence, since a colour cannot be heard', () => {
     const { card } = renderBlock({ size: 'large' });
 
     const row = card.querySelector('[data-month-plant="lettuce"]')!;
-    const spoken = row.querySelector('[role="cell"]')!;
+    const spoken = row.querySelector('[data-month-spoken]')!;
     const month = monthLabel(thisMonth(), 'en');
     expect(spoken).toHaveTextContent(`Lettuce — Sowing: ${month} · Harvest: ${month}`);
     // The bars themselves say nothing.
@@ -443,7 +452,7 @@ describe('MonthBlock — Large: the amended scale (V24)', () => {
 
     // The plate is at 14 / 12 / 28 / 4 (`A3Expert.dc.html` l. 210-214). This
     // is a DEVIATION, taken because that scale does not read on a card.
-    expect(ruleText(row.querySelector('[role="rowheader"]')!)).toContain('font-size:15px');
+    expect(ruleText(row.querySelector('[data-month-name]')!)).toContain('font-size:15px');
     expect(ruleText(card.querySelector('[data-month-axis="now"]')!)).toContain('font-size:13px');
     expect(ruleText(row)).toContain('min-height:32px');
     expect(ruleText(row.querySelector('[data-month-bar="prune"]')!)).toContain('height:5px');
@@ -478,9 +487,12 @@ describe('MonthBlock — Large: the void at the foot, and the legend that closes
     // (`A3Expert.dc.html` l. 336, `flex: 1; justify-content: space-evenly`).
     const { card } = renderBlock({ size: 'large', varieties: [thyme, lettuce] });
     const rows = card.querySelector('[data-month-rows]')!;
+    // Round 2, V27: the axis moved INSIDE the scrolling zone, so the rows have
+    // a wrapper of their own below it — that wrapper is what distributes them.
+    const body = card.querySelector('[data-month-body]')!;
 
     expect(card.querySelectorAll('[data-month-plant]')).toHaveLength(2);
-    expect(ruleText(rows)).toContain('justify-content:space-evenly');
+    expect(ruleText(body)).toContain('justify-content:space-evenly');
     expect(ruleText(rows)).toContain('flex:1');
     // …and the grid takes the slack, so none of it piles up below the legend.
     expect(ruleText(card.querySelector('[data-month-grid]')!)).toContain('flex:1');
@@ -543,8 +555,13 @@ describe('MonthBlock — Large: deploying the rest, and folding it back (V26)', 
     expect(ruleText(rows)).toContain('overflow-y:auto');
     expect(ruleText(rows)).toContain('min-height:0');
     // Packed from the top: `space-evenly` on a scrolling box pushes the first
-    // rows above the scrollable area, where no scrollbar reaches them.
-    expect(ruleText(rows)).toContain('justify-content:flex-start');
+    // rows above the scrollable area, where no scrollbar reaches them. Since
+    // V27 that is declared on the rows' own wrapper, under the stuck axis.
+    const body = card.querySelector('[data-month-body]')!;
+    expect(ruleText(body)).toContain('justify-content:flex-start');
+    // …and it can never be squeezed below its content, which is what stops
+    // `space-evenly` distributing NEGATIVE space in the collapsed state.
+    expect(ruleText(body)).not.toContain('min-height:0');
     expect(ruleText(card.querySelector('[data-month-plant="p0"]')!)).toContain('flex-shrink:0');
     // The legend stays out of the scrolling zone and keeps its place.
     expect(grid.contains(card.querySelector('[data-month-legend-row]'))).toBe(false);
@@ -553,7 +570,7 @@ describe('MonthBlock — Large: deploying the rest, and folding it back (V26)', 
     expect(ruleText(rows)).not.toContain('transition:');
   });
 
-  it('keeps the Q13 order in BOTH states', () => {
+  it('keeps the alphabetical order in BOTH states (V28)', () => {
     const varieties = manyVarieties(16);
     const { card, widget } = renderBlock({ size: 'large', varieties });
     const all = expected({ varieties }).known.map((entry) => entry.variety.plantId);
@@ -561,6 +578,22 @@ describe('MonthBlock — Large: deploying the rest, and folding it back (V26)', 
     expect(namesOf(card)).toEqual(all.slice(0, 10));
     fireEvent.click(widget.getByRole('button', { name: 'Show the 6 other varieties' }));
     expect(namesOf(card)).toEqual(all);
+  });
+
+  it('lays the axis INSIDE the scrolling zone, so one scrollbar narrows both grids (V27)', () => {
+    const { card } = renderBlock({ size: 'large', varieties: manyVarieties(16) });
+    const rows = card.querySelector('[data-month-rows]')!;
+    const axis = card.querySelector('[data-month-axis="now"]')!.parentElement!;
+    const rules = rulesFor(axis).replace(/\s/g, '');
+
+    // ONE content box for the axis and for the bars: whatever a scrollbar
+    // takes, it takes from both, so the twelve 1fr tracks resolve alike.
+    expect(rows.contains(axis)).toBe(true);
+    expect(rules).toContain('position:sticky');
+    expect(rules).toContain('top:0');
+    // …and the fix is structural, never a magic number compensating a
+    // scrollbar width the platform is free to change.
+    expect(rules).not.toMatch(/padding-right:\d/);
   });
 
   it('counts EVERY variety in the chip and the three counters, deployed or not', () => {
@@ -578,5 +611,91 @@ describe('MonthBlock — Large: deploying the rest, and folding it back (V26)', 
 
     expect(readCounters()).toEqual(collapsed);
     expect(card.querySelector('[data-month-chip]')!.textContent).toBe(chip);
+  });
+});
+
+// ROUND 2 — V27: the axis and the bars drifted apart by a scrollbar's width,
+// nothing at « Jan » and the whole of it at « Déc », because the axis resolved
+// the shared thirteen-track template on a content box the scrollbar had not
+// narrowed. The axis now lives inside the scrolling zone. It has to stand on
+// an opaque ground there, or the bars would scroll visibly under the labels.
+
+describe('MonthBlock — the stuck axis stands on the card’s own ground (V27)', () => {
+  it.each([['light'], ['dark']])('%s: the axis row is painted, not see-through', (mode) => {
+    const theme = createAppTheme(mode as 'light' | 'dark');
+    localStorage.setItem('smartcrops-language', 'en');
+    render(
+      <ThemeProvider theme={theme}>
+        <LanguageProvider>
+          <UnitSystemProvider>
+            <MonthBlock
+              size="large"
+              gardens={[garden]}
+              varieties={manyVarieties(16)}
+              weather={EMPTY_WEATHER_DATA}
+              loading={false}
+              loadError={false}
+              onRetry={vi.fn()}
+            />
+          </UnitSystemProvider>
+        </LanguageProvider>
+      </ThemeProvider>
+    );
+    const card = document.querySelector('[data-widget="month"]') as HTMLElement;
+    const axis = card.querySelector('[data-month-axis="now"]')!.parentElement!;
+
+    // The card is a MUI `Card`, so its ground IS `background.paper`: the
+    // stuck row reads as part of the card and not as a band over it.
+    expect(rulesFor(axis).replace(/\s/g, '')).toContain(
+      `background-color:${theme.palette.background.paper}`
+    );
+  });
+});
+
+// ROUND 2 — C3 + F4: the two findings on the ARIA table, answered together by
+// dropping it. C3 counted an arity that never matched (13 columnheaders over
+// 1 rowheader + 1 cell a row); F4 found the scrolling box breaking the
+// ownership of the rows. Both say the same thing — there was no table. A row
+// has one name and one drawing, so the calendar is a LIST of varieties.
+
+describe('MonthBlock — the calendar is a list of varieties, not a table (C3 + F4)', () => {
+  it('declares no table role anywhere, and owns every item with a list', () => {
+    const { card, widget } = renderBlock({ size: 'large' });
+
+    // Nothing of the table vocabulary is left: an incomplete one is worse
+    // than none, and this one could never be completed honestly.
+    for (const role of ['table', 'row', 'rowgroup', 'columnheader', 'rowheader', 'cell']) {
+      expect(card.querySelectorAll(`[role="${role}"]`)).toHaveLength(0);
+    }
+
+    const list = widget.getByRole('list', { name: 'Twelve-month calendar of your varieties' });
+    expect(list).toBe(card.querySelector('[data-month-body]'));
+    // Every child of the list is an item of it — the ownership F4 asked for,
+    // exact this time: the axis is no longer between the two.
+    const items = widget.getAllByRole('listitem');
+    expect(items).toHaveLength(card.querySelectorAll('[data-month-plant]').length);
+    for (const item of items) expect(item.parentElement).toBe(list);
+  });
+
+  it('reads one sentence an item, and never a colour or an empty cell', () => {
+    const { card, widget } = renderBlock({ size: 'large' });
+    const item = card.querySelector('[data-month-plant="thyme"]')!;
+    const month = monthLabel(thisMonth(), 'en');
+
+    // « Thyme — Pruning: September », and that is the whole of the item.
+    expect(item).toHaveTextContent(`Thyme — Pruning: ${month}`);
+    // The visible name is hidden from the reading: the sentence opens with it,
+    // and a listitem that said « Thyme Thyme — Pruning: September » would be
+    // paying the stutter the table roles used to cost.
+    expect(card.querySelector('[data-month-plant="thyme"] [data-month-name]')).toHaveAttribute(
+      'aria-hidden'
+    );
+    // The axis is a visual scale, like the bars it labels: the months a
+    // variety works in are spoken as WORDS inside its own sentence.
+    const axisRow = card.querySelector('[data-month-axis-row]')!;
+    expect(axisRow).toHaveAttribute('aria-hidden');
+    // …and it sits OUTSIDE the list, so no item inherits an « Jan Feb Mar »
+    // the twelve labels would otherwise trail behind every sentence.
+    expect(card.querySelector('[data-month-body]')!.contains(axisRow)).toBe(false);
   });
 });
