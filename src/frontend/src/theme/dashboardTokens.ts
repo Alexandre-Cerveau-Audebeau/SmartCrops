@@ -124,6 +124,22 @@ export interface DashboardTokens {
    */
   tint: string;
   /**
+   * The band of every OTHER row of the calendar grid (SMA-336 PR 4a/5, round 2
+   * V33) — « un bleu plus clair en mode nuit », « gris ou bleu clair » by day.
+   *
+   * DERIVED, not invented: it is the palette's own `surfaceSubtle` in each
+   * mode (`theme.ts` — `#F2F6F0` by day, `#1E3358` at night), the surface the
+   * product already uses to lift a band off the card. It lives here rather
+   * than being read from the palette because the dashboard's grounds are
+   * declared in one place, and because the calendar is free to move it
+   * without moving every subtle surface of the product with it.
+   *
+   * It carries WORDS — the variety names — so unlike the four lane tokens it
+   * owes 4,5:1 and not 3:1, and it owes it in both themes. Asserted, not
+   * recorded (`MonthBlock.test.tsx`).
+   */
+  zebraRow: string;
+  /**
    * The four lanes of the « Ce mois-ci » calendar (SMA-336 PR 4a/5) —
    * `A3Expert.dc.html` helmet, verbatim, day l. 50 / night l. 81.
    *
@@ -179,6 +195,7 @@ const LIGHT: DashboardTokens = {
   warnBorder: '#EFD27E',
   track: '#E9EFE7',
   tint: '#EAF5EE',
+  zebraRow: '#F2F6F0',
   stagePrune: '#2C3E6B',
   stageSow: '#8FB996',
   stageFlower: '#E0A93B',
@@ -214,6 +231,7 @@ const DARK: DashboardTokens = {
   warnBorder: 'rgba(255,203,84,0.55)',
   track: '#31456B',
   tint: 'rgba(79,179,124,0.16)',
+  zebraRow: '#1E3358',
   stagePrune: '#6E8AC8',
   stageSow: '#8FB996',
   stageFlower: '#E0A93B',

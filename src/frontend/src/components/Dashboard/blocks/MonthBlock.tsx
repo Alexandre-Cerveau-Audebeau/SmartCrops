@@ -1,9 +1,10 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useId, useState, type ReactElement, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Skeleton from '@mui/material/Skeleton';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { visuallyHidden } from '@mui/utils';
 import type { SvgIconComponent } from '@mui/icons-material';
@@ -75,13 +76,52 @@ const LARGE_GRID = {
   nameSize: 15,
   /** `.mh` — 12 px on the plate. */
   axisSize: 13,
-  /** `.cal { min-height: 28px }` on the plate. */
-  rowHeight: 32,
-  /** `.lane { height: 4px }` on the plate. */
-  laneHeight: 5,
-  /** `.lane { border-radius: 2px }` — half the height, so the bar stays a pill. */
-  laneRadius: 2.5,
+  /**
+   * `.cal { min-height: 28px }` on the plate, 32 at round 1.
+   *
+   * Round 2, V30 — asked for twice on the visual pass: « plus d'espace entre
+   * les lignes ». The air is taken INSIDE the row rather than as a gap between
+   * rows, so the zebra band of V33 stays one continuous ground and does not
+   * break into floating stripes. It also has to hold the taller bars of V31:
+   * four lanes of 7 px and three 3 px gutters are 37, which 40 clears.
+   */
+  rowHeight: 40,
+  /**
+   * `.lane { height: 4px }` on the plate, 5 at round 1.
+   *
+   * Round 2, V31 — « les cellules de piste un poil plus larges », pointing at
+   * `<div data-month-bar="prune">` and its wrapper. The track grows in the ONE
+   * direction that is free: its height. Its width is a twelfth of the lane
+   * container, and the whole of V27 was making that twelfth agree with the
+   * axis above it — a bar wider than its month would name the wrong month.
+   */
+  laneHeight: 7,
+  /** `.lane { border-radius: 2px }` — HALF the height, so the bar stays a pill. */
+  laneRadius: 3.5,
 } as const;
+
+/**
+ * `.cal` — the name column, and the gutter between a name and the first month.
+ * Named rather than written twice: {@link NAME_BUDGET} is derived from them,
+ * and a column that moved without the budget moving would tell the tooltip of
+ * V32 that a name fits when it no longer does.
+ */
+const NAME_COLUMN = 108;
+const NAME_GUTTER = 8;
+
+/**
+ * Round 2, V32 — the longest name the name column can show WHOLE.
+ *
+ * jsdom lays nothing out and the browser measures glyphs we cannot ask about
+ * from here, so this is DERIVED rather than measured: 100 px of text box at
+ * 15 px / 600, where a Latin glyph of that weight advances about 0.52 em —
+ * twelve characters. It can miss a name of twelve wide letters and fire on one
+ * of thirteen narrow ones; the cost of either is a tooltip repeating a name
+ * already legible, or its absence on a name barely clipped. The alternative,
+ * comparing `scrollWidth` to `clientWidth`, is exact in a browser and answers
+ * zero against zero in every test.
+ */
+const NAME_BUDGET = Math.floor((NAME_COLUMN - NAME_GUTTER) / (LARGE_GRID.nameSize * 0.52));
 
 /** `Main.dc.html` l. 309: « Thym, Romarin, Courgette +7 » — three names, then the rest as a figure. */
 const MEDIUM_NAMES = 3;
@@ -92,6 +132,51 @@ const LANE_ICONS: Record<CountedLane, SvgIconComponent> = {
   sow: SpaOutlinedIcon,
   harvest: AgricultureOutlinedIcon,
 };
+
+/**
+ * Round 2, V29 — the name as it is SHOWN: its first letter capitalised, and
+ * nothing else touched.
+ *
+ * At DISPLAY only. The catalog is the source of the string and keeps it as the
+ * source wrote it (`DATA_PROVENANCE`): « langue de cerf » is stored lower-case
+ * because Perenual stores it lower-case, and the widget is what decides how a
+ * sentence begins. {@link capitalizeFirst} is the product's own rule for this
+ * (SMA-120) and title-case is explicitly NOT it — « Langue De Cerf » is wrong
+ * in French, which is why `text-transform: capitalize` appears nowhere here.
+ */
+const shownName = (variety: DashboardVarietyData): string => {
+  const raw = varietyName(variety);
+  return capitalizeFirst(raw) ?? raw;
+};
+
+/**
+ * Round 2, V32 — the full name over a CLIPPED one, on hover and on a long
+ * press; nothing at all when the name fits.
+ *
+ * The touch delays and `describeChild` are the pattern PR 3b/5 established on
+ * the Gardens rows: on a phone there is no hover, and a long press is how the
+ * text is reached. `describeChild` writes the name into the node's own `title`
+ * — and that node is `aria-hidden` since C3 + F4, which is the point: a screen
+ * reader is never told a truncated name, it is told the row's whole sentence,
+ * which opens with the name in full. This tooltip is a SIGHTED affordance, and
+ * it is honest to say so.
+ */
+function MaybeName({
+  name,
+  clipped,
+  children,
+}: {
+  name: string;
+  clipped: boolean;
+  children: ReactElement;
+}) {
+  if (!clipped) return children;
+  return (
+    <Tooltip title={name} enterTouchDelay={0} leaveTouchDelay={6000} describeChild>
+      {children}
+    </Tooltip>
+  );
+}
 
 /** The token each lane paints with — bars and legend squares only, never a word. */
 const LANE_TOKEN: Record<CalendarLane, keyof DashboardTokens> = {
@@ -174,7 +259,7 @@ export default function MonthBlock({
   })();
 
   const names = (entries: readonly VarietyCalendar[]): string[] =>
-    entries.map((entry) => varietyName(entry.variety));
+    entries.map((entry) => shownName(entry.variety));
 
   /** « Thym, Romarin, Courgette » + « +7 » — the artboard's own truncation. */
   const nameLine = (entries: readonly VarietyCalendar[]) => {
@@ -226,7 +311,7 @@ export default function MonthBlock({
       })
     );
     return t('dashboard.blocks.month.rowSpoken', {
-      plant: varietyName(entry.variety),
+      plant: shownName(entry.variety),
       lanes: spoken.join(' · '),
     });
   };
@@ -374,7 +459,7 @@ export default function MonthBlock({
     // number and the label does not change under the reader's hand.
     const rest = Math.max(0, known.length - LARGE_ROWS);
     // `.cal` — a 108 px name column, then the twelve months.
-    const gridColumns = `108px repeat(12, minmax(0, 1fr))`;
+    const gridColumns = `${NAME_COLUMN}px repeat(12, minmax(0, 1fr))`;
     return (
       <>
         {/* The three counters in a row (`A3Expert.dc.html` l. 334). */}
@@ -579,11 +664,12 @@ export default function MonthBlock({
                 mt: '6px',
               }}
             >
-              {shown.map((entry) => (
+              {shown.map((entry, index) => (
                 <Box
                   key={entry.variety.plantId}
                   role="listitem"
                   data-month-plant={entry.variety.plantId}
+                  data-month-zebra={index % 2 === 1 ? '' : undefined}
                   sx={{
                     display: 'grid',
                     gridTemplateColumns: gridColumns,
@@ -591,24 +677,38 @@ export default function MonthBlock({
                     minHeight: LARGE_GRID.rowHeight,
                     // A scrolling list must not squeeze its rows to fit (V26).
                     flexShrink: 0,
+                    /* Round 2, V33 — one row in two on a ground of its own, so
+                       the eye keeps a line while it crosses twelve columns.
+                       The band is the row ITSELF, full width, name column
+                       included: a stripe under the bars alone would read as a
+                       fifth lane. The names on it are held to the same 4,5:1
+                       as the names on the card (`MonthBlock.test.tsx`), in
+                       both themes — a ground that is legible in one and not in
+                       the other is not a ground, it is a trap. */
+                    backgroundColor: index % 2 === 1 ? tk.zebraRow : 'transparent',
                   }}
                 >
                   {/* `.pn` — 14 px / 600, ellipsized, with its 8 px gutter. */}
-                  <Box
-                    data-month-name
-                    aria-hidden
-                    sx={{
-                      fontSize: LARGE_GRID.nameSize,
-                      fontWeight: 600,
-                      color: 'text.primary',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      pr: '8px',
-                    }}
+                  <MaybeName
+                    name={shownName(entry.variety)}
+                    clipped={shownName(entry.variety).length > NAME_BUDGET}
                   >
-                    {varietyName(entry.variety)}
-                  </Box>
+                    <Box
+                      data-month-name
+                      aria-hidden
+                      sx={{
+                        fontSize: LARGE_GRID.nameSize,
+                        fontWeight: 600,
+                        color: 'text.primary',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        pr: `${NAME_GUTTER}px`,
+                      }}
+                    >
+                      {shownName(entry.variety)}
+                    </Box>
+                  </MaybeName>
                   {/* The sentence the bars cannot say — and, since C3 + F4,
                       the whole of what the item is read as. */}
                   <Box data-month-spoken sx={visuallyHidden}>

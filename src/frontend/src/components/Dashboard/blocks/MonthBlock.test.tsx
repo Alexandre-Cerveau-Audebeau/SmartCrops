@@ -446,16 +446,25 @@ const COUNTERS = ['prune', 'sow', 'harvest'] as const;
 const ruleText = (node: Element) => rulesFor(node).replace(/\s/g, '');
 
 describe('MonthBlock — Large: the amended scale (V24)', () => {
-  it('draws the name at 15 px, the axis at 13, the rows at 32 and the bars at 5', () => {
+  it('draws the name at 15 px, the axis at 13, the rows at 40 and the bars at 7', () => {
     const { card } = renderBlock({ size: 'large' });
     const row = card.querySelector('[data-month-plant="thyme"]')!;
 
     // The plate is at 14 / 12 / 28 / 4 (`A3Expert.dc.html` l. 210-214). This
-    // is a DEVIATION, taken because that scale does not read on a card.
+    // is a DEVIATION, taken because that scale does not read on a card. Round
+    // 2 widened it twice more: V30 for the air between rows, V31 for the bars.
     expect(ruleText(row.querySelector('[data-month-name]')!)).toContain('font-size:15px');
     expect(ruleText(card.querySelector('[data-month-axis="now"]')!)).toContain('font-size:13px');
-    expect(ruleText(row)).toContain('min-height:32px');
-    expect(ruleText(row.querySelector('[data-month-bar="prune"]')!)).toContain('height:5px');
+    expect(ruleText(row)).toContain('min-height:40px');
+    const bar = ruleText(row.querySelector('[data-month-bar="prune"]')!);
+    expect(bar).toContain('height:7px');
+    // …and the bar is still a PILL: the radius is half the height, which is
+    // the whole of round 1's écart n° 5. A bar that grew without its radius
+    // would come back as a rectangle.
+    expect(bar).toContain('border-radius:3.5px');
+    // The row is taller; the four lanes and their three gutters still fit in
+    // it — 4 × 7 + 3 × 3 = 37 — so nothing is clipped by the growth.
+    expect(4 * 7 + 3 * 3).toBeLessThanOrEqual(40);
   });
 });
 
@@ -698,4 +707,102 @@ describe('MonthBlock — the calendar is a list of varieties, not a table (C3 + 
     // the twelve labels would otherwise trail behind every sentence.
     expect(card.querySelector('[data-month-body]')!.contains(axisRow)).toBe(false);
   });
+});
+
+// ROUND 2 — Alexandre's visual pass on the ROW itself: V29 the capital, V30
+// the air, V31 the bars, V32 the clipped names, V33 the zebra. None of these
+// is a finding: no surface reported any of them, and the sort the same pass
+// questioned was in fact approved twice. They are product choices.
+
+/** « langue de cerf » as the catalog stores it — lower-case, and two words. */
+const hartsTongue = pruned({
+  plantId: 'harts',
+  commonName: 'langue de cerf',
+  count: 1,
+  gardenIds: ['g1'],
+});
+/** Short enough for the 108 px column to show whole. */
+const short = pruned({ plantId: 'mint', commonName: 'menthe', count: 1, gardenIds: ['g1'] });
+
+describe('MonthBlock — the name as it is shown (V29)', () => {
+  it('capitalises the FIRST letter only, and only for the eye', () => {
+    const { card } = renderBlock({ size: 'large', varieties: [hartsTongue] });
+    const name = card.querySelector('[data-month-plant="harts"] [data-month-name]')!;
+
+    // « Langue de cerf » — NOT « Langue De Cerf », which is what
+    // `text-transform: capitalize` would draw and which is wrong in French.
+    expect(name).toHaveTextContent('Langue de cerf');
+    expect(ruleText(name)).not.toContain('text-transform:capitalize');
+    // The DATA is untouched: the widget decides how a sentence begins, the
+    // catalog keeps what its source wrote (DATA_PROVENANCE).
+    expect(hartsTongue.commonName).toBe('langue de cerf');
+  });
+
+  it('…and the spoken sentence opens the same way', () => {
+    const { card } = renderBlock({ size: 'large', varieties: [hartsTongue] });
+
+    expect(card.querySelector('[data-month-plant="harts"] [data-month-spoken]')).toHaveTextContent(
+      /^Langue de cerf —/
+    );
+  });
+});
+
+describe('MonthBlock — the full name over a clipped one (V32)', () => {
+  it('describes a name the column cannot show, on hover and on a long press', () => {
+    const { card } = renderBlock({ size: 'large', varieties: [hartsTongue] });
+    const name = card.querySelector('[data-month-plant="harts"] [data-month-name]')!;
+
+    // `describeChild` writes the name into the node's own `title` — the
+    // pattern PR 3b/5 established on the Gardens rows, touch delays included.
+    expect(name).toHaveAttribute('title', 'Langue de cerf');
+  });
+
+  it('…and says nothing at all when the name fits', () => {
+    const { card } = renderBlock({ size: 'large', varieties: [short] });
+    const name = card.querySelector('[data-month-plant="mint"] [data-month-name]')!;
+
+    // A tooltip that repeats a name already legible is noise on every row.
+    expect(name).not.toHaveAttribute('title');
+    expect(name).toHaveTextContent('Menthe');
+  });
+});
+
+describe('MonthBlock — one row in two on a ground of its own (V33)', () => {
+  it('bands every other row, full width, and leaves the first on the card', () => {
+    const { card } = renderBlock({ size: 'large', varieties: manyVarieties(6) });
+    const rows = [...card.querySelectorAll('[data-month-plant]')];
+    const tokens = getDashboardTokens('light');
+
+    expect(rows.map((row) => row.hasAttribute('data-month-zebra'))).toEqual([
+      false, true, false, true, false, true,
+    ]);
+    expect(ruleText(rows[1]!)).toContain(`background-color:${tokens.zebraRow}`);
+    expect(ruleText(rows[0]!)).toContain('background-color:transparent');
+    // The band is the ROW: a stripe under the bars alone would read as a
+    // fifth lane, and the name would sit off it.
+    expect(rows[1]!.querySelector('[data-month-name]')!.parentElement).toBe(rows[1]);
+  });
+
+  it.each([['light'], ['dark']])(
+    '%s: the names clear 4.5:1 on the card AND on the band',
+    (mode) => {
+      const { palette } = createAppTheme(mode as 'light' | 'dark');
+      const tokens = getDashboardTokens(mode as 'light' | 'dark');
+      const card = hex(palette.background.paper);
+      const band = hex(tokens.zebraRow);
+
+      // 15 px / 600 is NORMAL text under WCAG 2 § 1.4.3 — the large-text
+      // relief starts at 18.66 px bold — so the name owes 4.5:1 on BOTH
+      // grounds. A band legible in one theme and not in the other is not a
+      // ground, it is a trap.
+      for (const ground of [card, band]) {
+        const name = resolveColor(palette.text.primary, ground);
+        const secondary = resolveColor(palette.text.secondary, ground);
+        expect(name).not.toBeNull();
+        expect(secondary).not.toBeNull();
+        expect(contrast(name!, ground)).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(secondary!, ground)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  );
 });
