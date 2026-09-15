@@ -3,6 +3,8 @@ import {
   CALENDAR_LANES,
   MONTHS_OF_YEAR,
   blockMonth,
+  byActivity,
+  byName,
   lanesOf,
   lastMonthOf,
   monthCalendar,
@@ -16,6 +18,7 @@ import {
   varietyName,
   yearMonthOf,
   zonedYearMonthOf,
+  type BrowserClock,
 } from './plantCalendar';
 import { gardenFixture, varietyFixture } from '../../../test/fixtures/dashboard';
 import { linkFixture, locationFixture, weatherFixture } from '../../../test/fixtures/weather';
@@ -246,6 +249,64 @@ describe('the month — of a garden, of the block (Q10)', () => {
     expect(placeMonthOf('g1', dangling, may)).toBeNull();
   });
 
+  it('reads the instant ONCE for the whole calculation, not once per garden (round 2, C6)', () => {
+    // Two gardens of the SAME place, and a clock that advances between two
+    // readings the way a real one does: 31 August 23:59:59 in Paris, then
+    // 1 September 00:00:00. Read per garden, the two answered two months, the
+    // map held two keys, and the block concluded that the places disagreed —
+    // falling back to the browser for a state that was in truth unanimous.
+    const instants = [
+      new Date(Date.UTC(2026, 7, 31, 21, 59, 59)),
+      new Date(Date.UTC(2026, 7, 31, 22, 0, 0)),
+      // …and somewhere else entirely, so the old fallback cannot be mistaken
+      // for the right answer in any runner's zone.
+      new Date(Date.UTC(2026, 9, 15, 12, 0)),
+    ];
+    let reads = 0;
+    const ticking: BrowserClock = () => instants[Math.min(reads++, instants.length - 1)]!;
+
+    expect(blockMonth([north, south], lyon(['g1', 'g2']), ticking)).toEqual({ year: 2026, month: 8 });
+    expect(reads).toBe(1);
+  });
+
+  it('…and the fallback is read from that same instant, never a later one (C6)', () => {
+    // Two zones that genuinely disagree — Sydney has turned the page, Honolulu
+    // is most of a day behind — so falling back is right. What must not happen
+    // is falling back onto a DIFFERENT instant from the one the gardens read.
+    const HONOLULU = '21.31,-157.86';
+    const opposed = weatherFixture(
+      [
+        locationFixture({ key: SYDNEY, name: 'Sydney', timeZone: 'Australia/Sydney' }),
+        locationFixture({ key: HONOLULU, name: 'Honolulu', timeZone: 'Pacific/Honolulu' }),
+      ],
+      [
+        linkFixture({ gardenId: 'g1', locationKey: SYDNEY }),
+        linkFixture({ gardenId: 'g2', locationKey: HONOLULU }),
+      ]
+    );
+    let reads = 0;
+    const once: BrowserClock = () => {
+      reads += 1;
+      return turn();
+    };
+
+    expect(blockMonth([north, south], opposed, once)).toEqual(yearMonthOf(turn()));
+    expect(reads).toBe(1);
+  });
+
+  it('answers the same zone alike every time, and remembers the ones it cannot read (round 2, F3)', () => {
+    // The formatter is cached per zone now. What is pinned is the CONTRACT the
+    // cache must not break: one zone's answer is never another's, and a zone
+    // the runtime refuses answers null on every call rather than throwing on
+    // the second — the failure is memoised with the successes.
+    expect(zonedYearMonthOf(turn(), 'Australia/Sydney')).toEqual({ year: 2026, month: 9 });
+    expect(zonedYearMonthOf(turn(), 'Australia/Sydney')).toEqual({ year: 2026, month: 9 });
+    expect(zonedYearMonthOf(turn(), 'Europe/Paris')).toEqual({ year: 2026, month: 8 });
+    expect(zonedYearMonthOf(turn(), 'Mars/Olympus_Mons')).toBeNull();
+    expect(zonedYearMonthOf(turn(), 'Mars/Olympus_Mons')).toBeNull();
+    expect(zonedYearMonthOf(turn(), 'Australia/Sydney')).toEqual({ year: 2026, month: 9 });
+  });
+
   it('the block takes the places’ month when every located garden agrees', () => {
     expect(blockMonth([north, south], sydney(['g1', 'g2']), turn)).toEqual({ year: 2026, month: 9 });
     // One located, one not: the located one decides.
@@ -360,7 +421,7 @@ describe('monthCalendar — the month for every placed variety (T9)', () => {
     });
   });
 
-  it('orders the grid the Q13 way: active this month (prune, sow, flower, harvest), then placements, then name', () => {
+  it('orders the grid by NAME, blind to case and to accents (V28)', () => {
     const pruneOne = varietyFixture({ plantId: 'a', commonName: 'Sage', count: 1, gardenIds: ['g1'], pruningMonths: 'September' });
     const harvestFive = varietyFixture({ plantId: 'b', commonName: 'Tomato', count: 5, gardenIds: ['g1'], harvestSeason: 'Fall' });
     const idleNine = varietyFixture({ plantId: 'c', commonName: 'Zinnia', count: 9, gardenIds: ['g1'], pruningMonths: 'March' });
@@ -375,8 +436,38 @@ describe('monthCalendar — the month for every placed variety (T9)', () => {
       september
     );
 
-    expect(calendar.known.map((entry) => entry.variety.plantId)).toEqual(['d', 'a', 'f', 'b', 'e', 'c']);
-    expect(calendar.known.map((entry) => entry.activeLane)).toEqual(['prune', 'prune', 'sow', 'harvest', null, null]);
+    // Aster amellus, Lettuce, Sage, Thyme, Tomato, Zinnia — the alphabet, and
+    // nothing else. « je ne comprends pas l'ordre dans lequel les plantes sont
+    // listées »: what the list shows is now what the list is ordered by.
+    expect(calendar.known.map((entry) => entry.variety.plantId)).toEqual(['e', 'f', 'a', 'd', 'b', 'c']);
+
+    // Q13 is KEPT as a function — SMA-432 will bind a sort option to it — and
+    // it still ranks exactly as it did: active this month in legend order,
+    // then the busiest, then the name.
+    const q13 = [...calendar.known].sort(byActivity('en'));
+    expect(q13.map((entry) => entry.variety.plantId)).toEqual(['d', 'a', 'f', 'b', 'e', 'c']);
+    expect(q13.map((entry) => entry.activeLane)).toEqual(['prune', 'prune', 'sow', 'harvest', null, null]);
+  });
+
+  it('…and the alphabet is the LANGUAGE’s, with accents and capitals folded in (V28)', () => {
+    const entry = (plantId: string, commonName: string) => ({
+      variety: varietyFixture({ plantId, commonName }),
+      lanes: { prune: [], sow: [], flower: [], harvest: [] },
+      known: true,
+      activeLane: null,
+    });
+    // « Échalote » belongs with the E's, not after Z where a code-point
+    // comparison puts it; « ÉPINARD » belongs beside « épinard », not before
+    // every lower-case name. Both are what `sensitivity: 'base'` buys.
+    const names = ['Zinnia', 'échalote', 'ÉPINARD', 'aubergine', 'Épinard'];
+    const sorted = names.map((name, index) => entry(`p${index}`, name)).sort(byName('fr'));
+    expect(sorted.map((item) => item.variety.commonName)).toEqual([
+      'aubergine',
+      'échalote',
+      'ÉPINARD',
+      'Épinard',
+      'Zinnia',
+    ]);
   });
 
   it('names a variety by its common name, and by the botanical one when there is none', () => {

@@ -545,6 +545,36 @@ describe('todoTasks — « Tailler » and « Semer » (PR 4a/5)', () => {
     ).toEqual([]);
   });
 
+  it('dates every garden from ONE instant, not one reading each (round 2, C6)', () => {
+    // The rule `blockMonth` now keeps, applied here: two gardens of one list
+    // read the browser clock once between them. Read per garden, a list of
+    // « today's tasks » could name two different todays — one 31 August, one
+    // 1 September — the moment the loop crossed midnight.
+    const septemberThyme = varietyFixture({
+      plantId: 'thyme',
+      commonName: 'Thyme',
+      pruningMonths: 'September',
+    });
+    const instants = [
+      new Date(2026, 8, 15, 10, 30),
+      // Any later reading would date the second garden in another month.
+      new Date(2026, 9, 15, 10, 30),
+    ];
+    let reads = 0;
+    const ticking = () => instants[Math.min(reads++, instants.length - 1)]!;
+    const gardens = [
+      gardenOf('g1', 'Terrasse', [['thyme', 1]]),
+      gardenOf('g2', 'Balcon', [['thyme', 1]]),
+    ];
+
+    const tasks = todoTasks(gardens, [septemberThyme], EMPTY_WEATHER_DATA, clock(null, ticking));
+    expect(tasks.map((task) => task.month)).toEqual([
+      { year: 2026, month: 9 },
+      { year: 2026, month: 9 },
+    ]);
+    expect(reads).toBe(1);
+  });
+
   it('orders a garden’s tasks water, prune, sow, then the cold (Main.dc.html)', () => {
     const garden = gardenOf('g1', 'Terrasse', [['basil', 3], ['thyme', 1], ['lettuce', 1]]);
     const weather = weatherFixture(

@@ -260,6 +260,12 @@ export function todoTasks(
 ): TodoTask[] {
   const byPlant = new Map(varieties.map((variety) => [variety.plantId, variety]));
   const tasks: TodoTask[] = [];
+  // Round 2, C6 — the same rule `blockMonth` now keeps: ONE instant for the
+  // whole calculation. Read inside the loop, the browser clock could date two
+  // gardens of one zone in two different months across midnight on the last of
+  // the month, and a list of today's tasks would then name two « today »s.
+  const now = clock.browser();
+  const frozenBrowser: BrowserClock = () => now;
 
   for (const garden of gardens) {
     if (garden.placements.length === 0) continue;
@@ -282,7 +288,7 @@ export function todoTasks(
     const calendar = calendarTasks(
       garden,
       placedVarieties,
-      monthOfGarden(garden, weather, clock.browser)
+      monthOfGarden(garden, weather, frozenBrowser)
     );
 
     const location = locationOfGarden(garden.id, weather);

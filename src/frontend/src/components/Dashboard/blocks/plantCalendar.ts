@@ -131,6 +131,51 @@ export function yearMonthOf(date: Date): YearMonth {
   return { year: date.getFullYear(), month: date.getMonth() + 1 };
 }
 
+/** `en-CA` for its numeric, unambiguous parts — never a displayed string. */
+const ZONE_LOCALE = 'en-CA';
+
+/**
+ * One zone formatter per (locale, zone), built on first use (round 2, F3 —
+ * Extension E2), the rule `formatNumber.formatterFor` already keeps for the
+ * figures. Constructing an `Intl.DateTimeFormat` is one of the costlier calls
+ * of the `Intl` surface, and round 1's C1 moved the month onto one: the block
+ * builds one per garden, `monthCalendar` runs on every render of `MonthBlock`,
+ * and the Customize gallery renders a thumbnail besides — for a value that
+ * changes once a month.
+ *
+ * The FAILURE is memoised with the success. A zone the runtime does not know
+ * throws at construction, and a place whose stored zone is unusable must read
+ * as unlocated on every call, not re-throw on every call: `null` is a cached
+ * answer here, which is why the map holds `null` rather than being missing.
+ */
+const zoneFormatters = new Map<string, Intl.DateTimeFormat | null>();
+
+function zoneFormatterFor(locale: string, timeZone: string): Intl.DateTimeFormat | null {
+  const key = `${locale}|${timeZone}`;
+  const cached = zoneFormatters.get(key);
+  if (cached !== undefined) return cached;
+  let formatter: Intl.DateTimeFormat | null;
+  try {
+    formatter = new Intl.DateTimeFormat(locale, { timeZone, year: 'numeric', month: '2-digit' });
+  } catch {
+    formatter = null;
+  }
+  zoneFormatters.set(key, formatter);
+  return formatter;
+}
+
+/** One month-name formatter per language — the same rule, for the labels. */
+const monthFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function monthFormatterFor(language: string): Intl.DateTimeFormat {
+  let formatter = monthFormatters.get(language);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(language, { month: 'long' });
+    monthFormatters.set(language, formatter);
+  }
+  return formatter;
+}
+
 /**
  * The year and month an INSTANT falls in, read in an IANA zone. Null for a
  * zone the runtime does not know — `Intl.DateTimeFormat` throws a `RangeError`
@@ -141,13 +186,11 @@ export function yearMonthOf(date: Date): YearMonth {
  * detail here, never a displayed string — {@link monthLabel} owns those.
  */
 export function zonedYearMonthOf(instant: Date, timeZone: string): YearMonth | null {
+  const formatter = zoneFormatterFor(ZONE_LOCALE, timeZone);
+  if (!formatter) return null;
   let parts: Intl.DateTimeFormatPart[];
   try {
-    parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-    }).formatToParts(instant);
+    parts = formatter.formatToParts(instant);
   } catch {
     return null;
   }
@@ -204,19 +247,30 @@ export function monthOfGarden(
  * zones straddling a month end for a few hours. ONE month for the header, the
  * counts and the grid: a calendar with two current months would be two
  * calendars.
+ *
+ * Round 2, C6 (Extension E2 / GitHub `4019229413`) — ONE instant for the whole
+ * calculation. The clock used to be passed on and READ once per garden, plus
+ * once more at the fallback: N+1 readings for one answer. Two gardens of the
+ * SAME zone, read either side of midnight on the last of the month, then
+ * answered two different months, the map held two keys, and this concluded
+ * that the places disagreed — falling back to the browser for a state that was
+ * in truth unanimous. The instant is taken here, once, and handed down frozen;
+ * the injected clock keeps its job of pinning that instant in a test.
  */
 export function blockMonth(
   gardens: readonly DashboardGardenData[],
   weather: DashboardWeatherData,
   clock: BrowserClock = browserClock
 ): YearMonth {
+  const now = clock();
+  const frozen: BrowserClock = () => now;
   const placeMonths = new Map<string, YearMonth>();
   for (const garden of gardens) {
-    const placed = placeMonthOf(garden.id, weather, clock);
+    const placed = placeMonthOf(garden.id, weather, frozen);
     if (placed) placeMonths.set(`${placed.year}-${placed.month}`, placed);
   }
   if (placeMonths.size === 1) return [...placeMonths.values()][0]!;
-  return yearMonthOf(clock());
+  return yearMonthOf(now);
 }
 
 /** One variety of the calendar: its lanes, merged over the gardens that hold it. */
@@ -225,14 +279,14 @@ export interface VarietyCalendar {
   lanes: LaneMonths;
   /** True when at least one lane holds a month — the variety HAS a calendar. */
   known: boolean;
-  /** The lane it is active in this month, in legend order; null when idle. Drives the Q13 sort. */
+  /** The lane it is active in this month, in legend order; null when idle. What {@link byActivity} ranks by. */
   activeLane: CalendarLane | null;
 }
 
 /** What `monthCalendar` derives — the ONE source of the chip, the three counters, the names, the grid and the gallery thumbnail. */
 export interface MonthCalendar {
   month: YearMonth;
-  /** EVERY placed variety with a calendar, in the Q13 order: active this month (prune, sow, flower, harvest), then placements, then name. */
+  /** EVERY placed variety with a calendar, in the V28 order: the name, alphabetically, blind to case and to accents. */
   known: VarietyCalendar[];
   /** The placed varieties no lane knows anything about — « Pas de calendrier connu pour N variétés » (D2: counted, never assumed). */
   unknown: DashboardVarietyData[];
@@ -244,6 +298,46 @@ export interface MonthCalendar {
 export function varietyName(variety: DashboardVarietyData): string {
   return variety.commonName ?? variety.scientificName;
 }
+
+/**
+ * The DEFAULT order of the grid (round 2, V28): the name, alphabetically,
+ * blind to case and to accents.
+ *
+ * « je ne comprends pas l'ordre dans lequel les plantes sont listées » — and
+ * that is the whole argument. {@link byActivity} orders by what each variety
+ * is DOING, which is information the reader cannot see in the list itself:
+ * the rank is computed from the month, and two rows that look alike can sit
+ * ten apart. An alphabetical list is one a reader can navigate without being
+ * told the rule, which is what a list of names is for.
+ *
+ * `sensitivity: 'base'` is what makes « Épinard » sit with the E's and
+ * « ÉPINARD » beside « épinard », rather than after Z where a code-point
+ * comparison puts them. The locale is the page's own: the order of the
+ * alphabet is a property of the language, not of the machine.
+ *
+ * Ties (two names equal at base sensitivity) keep their input order — the
+ * sort is stable since ES2019 — so the list never reshuffles between renders.
+ */
+export const byName =
+  (language?: string) =>
+  (a: VarietyCalendar, b: VarietyCalendar): number =>
+    varietyName(a.variety).localeCompare(varietyName(b.variety), language, { sensitivity: 'base' });
+
+/**
+ * Q13 — active this month first (in legend order), then the busiest, then the
+ * name. KEPT, and no longer the default (round 2, V28): SMA-432 will offer it
+ * as a value of a sort option, where it is the right answer to « what needs me
+ * this month » and the wrong one to « where is my thyme ». It is exported and
+ * covered, so the option has a function to bind to rather than a rule to
+ * rebuild.
+ */
+export const byActivity =
+  (language?: string) =>
+  (a: VarietyCalendar, b: VarietyCalendar): number => {
+    const rank = (entry: VarietyCalendar) =>
+      entry.activeLane === null ? CALENDAR_LANES.length : CALENDAR_LANES.indexOf(entry.activeLane);
+    return rank(a) - rank(b) || b.variety.count - a.variety.count || byName(language)(a, b);
+  };
 
 /**
  * The calendar of the month for every placed variety (T9).
@@ -259,7 +353,9 @@ export function monthCalendar(
   gardens: readonly DashboardGardenData[],
   varieties: readonly DashboardVarietyData[],
   weather: DashboardWeatherData,
-  clock: BrowserClock = browserClock
+  clock: BrowserClock = browserClock,
+  /** The page's language, for the alphabet the rows are ordered by (V28). */
+  language?: string
 ): MonthCalendar {
   const month = blockMonth(gardens, weather, clock);
   const hemisphereOf = new Map(gardens.map((garden) => [garden.id, garden.config.hemisphere]));
@@ -292,15 +388,9 @@ export function monthCalendar(
     }
   }
 
-  // Q13 — active this month first (in legend order), then the busiest, then the name.
-  const rank = (entry: VarietyCalendar) =>
-    entry.activeLane === null ? CALENDAR_LANES.length : CALENDAR_LANES.indexOf(entry.activeLane);
-  known.sort(
-    (a, b) =>
-      rank(a) - rank(b) ||
-      b.variety.count - a.variety.count ||
-      varietyName(a.variety).localeCompare(varietyName(b.variety), undefined, { sensitivity: 'base' })
-  );
+  // V28 — alphabetical, blind to case and to accents. {@link byActivity} holds
+  // the Q13 rule this replaced, for the option SMA-432 will add.
+  known.sort(byName(language));
 
   return { month, known, unknown, active };
 }
@@ -315,7 +405,7 @@ export function monthCalendar(
  * irrelevant to the label but pinned so the same month always formats alike.
  */
 export function monthLabel(month: Month, language: string): string {
-  return new Intl.DateTimeFormat(language, { month: 'long' }).format(new Date(2000, month - 1, 1));
+  return monthFormatterFor(language).format(new Date(2000, month - 1, 1));
 }
 
 /** Unique months in calendar order. */
