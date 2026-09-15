@@ -483,7 +483,35 @@
       },
       "month": {
         "title": "Ce mois-ci",
-        "invite": "Le calendrier du mois arrive avec les semis et les récoltes de vos plantations."
+        "invite": "Le calendrier du mois arrive avec les semis et les récoltes de vos plantations.",
+        "monthsShort": ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"],
+        "counts": {
+          "prune": "à tailler",
+          "sow": "à semer",
+          "harvest": "à récolter"
+        },
+        "verbs": {
+          "prune": "À tailler",
+          "sow": "À semer",
+          "harvest": "À récolter"
+        },
+        "legend": {
+          "prune": "Taille",
+          "sow": "Semis",
+          "flower": "Floraison",
+          "harvest": "Récolte"
+        },
+        "moreNames": "+{{count, number}}",
+        "moreVarieties_one": "+{{count, number}} variété",
+        "moreVarieties_other": "+{{count, number}} variétés",
+        "unknown_one": "Pas de calendrier connu pour {{count, number}} variété",
+        "unknown_other": "Pas de calendrier connu pour {{count, number}} variétés",
+        "empty": "Aucune plante placée — le calendrier se remplit avec vos plantations.",
+        "loadError": "Impossible de charger le calendrier du mois.",
+        "gridLabel": "Calendrier des variétés sur douze mois",
+        "rowSpoken": "{{plant}} — {{lanes}}",
+        "laneSpoken": "{{lane}} : {{months}}",
+        "galleryPrune": "{{count, number}} à tailler"
       },
       "todo": {
         "title": "À faire aujourd’hui",
