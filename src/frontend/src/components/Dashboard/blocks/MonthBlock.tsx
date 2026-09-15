@@ -138,7 +138,6 @@ export default function MonthBlock({
   const lane = (entry: VarietyCalendar, key: CalendarLane) => (
     <Box
       key={key}
-      aria-hidden
       sx={{
         // `.lanes` — twelve equal columns that may shrink to nothing.
         display: 'grid',
@@ -372,7 +371,28 @@ export default function MonthBlock({
         >
           {/* The axis: `.mh` 12 px / 700, each with its left rule; the current month tinted. */}
           <Box role="row" sx={{ display: 'grid', gridTemplateColumns: gridColumns, alignItems: 'center' }}>
-            <Box role="columnheader" sx={visuallyHidden} />
+            {/* `A3Expert.dc.html` l. 336 opens `.cal` with a bare
+                `<div></div>`: the corner cell above the 108 px name column,
+                EMPTY but IN FLOW, and that is what puts « Jan » on track 2,
+                over the first of the lane columns.
+
+                Round 1, V23 (= C3's zone): this cell carried
+                `sx={visuallyHidden}`, whose `position: absolute` takes a grid
+                child out of the flow entirely. It consumed no track, the
+                twelve labels auto-placed on tracks 1 to 12 instead of 2 to
+                13, and the whole axis sat one column to the left of the bars
+                it names — « Jan » stretched across the 108 px name column
+                while the thirteenth track stayed empty. The rows never drifted
+                because their lane container DECLARES `grid-column: 2 / 14`
+                (l. 213) rather than relying on auto-placement.
+
+                The plate's own shape is the fix: one empty in-flow box, not
+                twelve `gridColumn` declarations on the labels. The
+                `columnheader` role stays — the ARIA table still needs a
+                header for the name column — and only the box comes back into
+                the grid. The spoken cell of each row below is the one thing
+                that MUST stay out of flow, and does. */}
+            <Box role="columnheader" sx={{ minWidth: 0 }} />
             {MONTHS_OF_YEAR.map((value, index) => (
               <Box
                 key={value}
@@ -436,7 +456,16 @@ export default function MonthBlock({
                 <Box role="cell" sx={visuallyHidden}>
                   {rowSpoken(entry)}
                 </Box>
+                {/* `.lanes` — the twelve month columns of the row, placed
+                    EXPLICITLY at `grid-column: 2 / 14` (`A3Expert.dc.html`
+                    l. 213) rather than auto-placed, so no sibling can shift
+                    them. Round 1, F1: it carries the ONE `aria-hidden` of the
+                    row. Everything under it is decoration — a colour is not a
+                    fact anyone can hear — and the row's sentence is spoken by
+                    the `cell` above, outside this container. */}
                 <Box
+                  aria-hidden
+                  data-month-lanes
                   sx={{
                     position: 'relative',
                     gridColumn: '2 / 14',
@@ -447,7 +476,6 @@ export default function MonthBlock({
                 >
                   {/* `.nowcol` — ONE column behind the four lanes, not four marks. */}
                   <Box
-                    aria-hidden
                     data-month-now
                     sx={{
                       position: 'absolute',

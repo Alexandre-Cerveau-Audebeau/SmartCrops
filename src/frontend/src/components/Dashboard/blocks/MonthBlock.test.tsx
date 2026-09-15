@@ -254,6 +254,57 @@ describe('MonthBlock — Large: the twelve-month grid (A3Expert.dc.html)', () =>
     expect(rulesFor(now[0]!)).toContain(`left:${((thisMonth() - 1) / 12) * 100}%`.replace(/\s/g, ''));
   });
 
+  /**
+   * The grid track a cell of the axis row lands on. jsdom performs no layout,
+   * so the position cannot be measured — it is DERIVED the way the browser
+   * derives it: a grid child in `position: absolute` is out of the flow and
+   * consumes no track, so the index is taken among the IN-FLOW children only.
+   * That distinction is the whole of V23.
+   */
+  const trackOf = (cell: Element): number => {
+    const row = cell.parentElement!;
+    const inFlow = [...row.children].filter(
+      (child) => !rulesFor(child).replace(/\s/g, '').includes('position:absolute')
+    );
+    return inFlow.indexOf(cell) + 1;
+  };
+
+  it('lines the axis up with the lanes: the month’s label sits on the track its bars do (V23)', () => {
+    const { card } = renderBlock({ size: 'large' });
+    const axis = card.querySelector('[data-month-axis="now"]')!;
+    const lanes = card.querySelector('[data-month-plant="thyme"] [data-month-lanes]')!;
+
+    // `.lanes { grid-column: 2 / 14 }` (`A3Expert.dc.html` l. 213): the twelve
+    // month columns of a row begin on track 2, so month m is on track 1 + m.
+    expect(rulesFor(lanes).replace(/\s/g, '')).toContain('grid-column:2/14');
+    expect(trackOf(axis)).toBe(1 + thisMonth());
+  });
+
+  it('…because the corner cell is empty but IN the flow, as the plate draws it (V23)', () => {
+    const { card } = renderBlock({ size: 'large' });
+    const corner = card.querySelector('[data-month-grid] [role="columnheader"]')!;
+
+    // `A3Expert.dc.html` l. 336: `<div class="cal"><div></div><div class="mh">Jan</div>…`
+    expect(corner).toBeEmptyDOMElement();
+    expect(rulesFor(corner).replace(/\s/g, '')).not.toContain('position:absolute');
+    // The row's spoken sentence is the one thing that MUST stay out of flow:
+    // it shifts nothing, which is why the rows never drifted.
+    const spoken = card.querySelector('[data-month-plant="thyme"] [role="cell"]')!;
+    expect(rulesFor(spoken).replace(/\s/g, '')).toContain('position:absolute');
+  });
+
+  it('hides the bars from assistive technology ONCE, on their container (F1)', () => {
+    const { card } = renderBlock({ size: 'large' });
+    const row = card.querySelector('[data-month-plant="thyme"]')!;
+    const lanes = row.querySelector('[data-month-lanes]')!;
+
+    expect(lanes).toHaveAttribute('aria-hidden');
+    // One owner: the four lane grids and the tinted column no longer repeat it.
+    expect(lanes.querySelectorAll('[aria-hidden]')).toHaveLength(0);
+    // …and the sentence, which lives outside that container, is still spoken.
+    expect(row.querySelector('[role="cell"]')).toHaveTextContent(/Thyme/);
+  });
+
   it('gives each row a spoken sentence, since a colour cannot be heard', () => {
     const { card } = renderBlock({ size: 'large' });
 
