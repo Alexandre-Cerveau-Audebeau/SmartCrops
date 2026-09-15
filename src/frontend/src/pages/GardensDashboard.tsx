@@ -423,9 +423,15 @@ export default function GardensDashboard() {
             gardens={gardens}
             varieties={dashboardData.varieties}
             weather={weatherData}
-            loading={gardensLoading || weatherLoading}
+            // Round 1, C2: the two aggregates no longer share one gate. The
+            // PLANS are what the block cannot do without — « Tailler » and
+            // « Semer » come from them and the catalog alone — so only their
+            // loading and their failure empty the card. A weather outage
+            // leaves the calendar tasks standing and is said in one line.
+            loading={gardensLoading}
             refreshing={gardensRefreshing || weatherRefreshing}
-            loadError={gardensError || weatherError}
+            loadError={gardensError}
+            weatherUnavailable={weatherLoading || weatherError}
             onRetry={() => {
               if (gardensError) refetch();
               if (weatherError) refetchWeather();

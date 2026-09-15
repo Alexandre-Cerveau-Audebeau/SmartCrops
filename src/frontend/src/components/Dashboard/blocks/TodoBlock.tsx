@@ -34,10 +34,21 @@ interface Props {
   gardens: DashboardGardenData[];
   varieties: DashboardVarietyData[];
   weather: DashboardWeatherData;
-  /** Either aggregate still loading. */
+  /**
+   * The GARDENS aggregate is still loading. Only that one blocks: without the
+   * plans there is nothing to derive, with or without a forecast.
+   */
   loading: boolean;
-  /** Either aggregate failed — the tasks cannot be derived. */
+  /** The GARDENS aggregate failed — no plan, hence no task of any kind. */
   loadError: boolean;
+  /**
+   * The weather aggregate is loading or failed (round 1, C2 — Extension
+   * `a0894658`, GitHub outside-diff). NOT blocking: `todoTasks` derives
+   * « Tailler » and « Semer » from the plans and the catalog alone, so they
+   * are shown and the block says, in one line, that the watering half is not
+   * planned — the ③b « indisponible » pattern rather than an empty card.
+   */
+  weatherUnavailable?: boolean;
   refreshing?: boolean;
   onRetry: () => void;
   /** « Ajouter une ville → » of the invitation: the location dialog on the profile default. */
@@ -94,6 +105,7 @@ export default function TodoBlock({
   weather,
   loading,
   loadError,
+  weatherUnavailable = false,
   refreshing = false,
   onRetry,
   onLocate,
@@ -108,7 +120,16 @@ export default function TodoBlock({
 
   // ONE derivation for the chip and the list.
   const tasks = todoTasks(gardens, varieties, weather);
-  const missing = gardensWithoutWeather(gardens, weather);
+  /**
+   * The gardens no city has been given to. Meaningful ONLY once the weather
+   * aggregate has landed: while it loads or after it fails, every garden looks
+   * unlocated, and « Sans la météo de X et Y — Ajouter une ville → » would ask
+   * the gardener to fix something that is not broken. The note below says the
+   * true thing in that case.
+   */
+  const missing = weatherUnavailable ? [] : gardensWithoutWeather(gardens, weather);
+  /** Watering cannot be planned — the aggregate is down, or some gardens have no city. */
+  const wateringUnknown = weatherUnavailable || missing.length > 0;
 
   const toggle = (id: string) =>
     setDone((current) => {
@@ -246,9 +267,32 @@ export default function TodoBlock({
     </Box>
   );
 
-  const nothing = (
-    <InviteState icon={<TodoIcon />} message={t('dashboard.blocks.todo.nothing')} variant="catalogue" />
+  /**
+   * « Météo indisponible — les arrosages ne sont pas planifiés » (round 1,
+   * C2): the ③b « indisponible » sentence, said ONCE, beside the tasks the
+   * calendar could still derive. It replaces the A4 invitation while the
+   * weather is out, since there is nothing for the gardener to add.
+   */
+  const weatherNote = weatherUnavailable && (
+    <Typography
+      data-todo-weather-note
+      sx={{ fontSize: DASHBOARD_TYPE.secondary, lineHeight: 1.5, color: 'text.secondary', flexShrink: 0 }}
+    >
+      {t('dashboard.blocks.todo.weatherUnavailable')}
+    </Typography>
   );
+
+  /**
+   * Nothing derived. « Rien à faire aujourd'hui » is a STATEMENT, and it may
+   * only be made when the block knows: with the watering half unknown — no
+   * forecast, or gardens with no city — it says so instead (round 1, C4 —
+   * GitHub `4016156990`). An unknown is not a zero.
+   */
+  const emptyMessage = wateringUnknown
+    ? t('dashboard.blocks.todo.unknownYet')
+    : t('dashboard.blocks.todo.nothing');
+
+  const nothing = <InviteState icon={<TodoIcon />} message={emptyMessage} variant="catalogue" />;
 
   const smallBody = () => (
     <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
@@ -276,12 +320,15 @@ export default function TodoBlock({
       ) : (
         /* The 1×1 card has no room for the tinted panel, and PR 4a/5 left it
            with nothing to say once « Tailler et Semer arrivent bientôt »
-           went: the honest sentence, plain. */
+           went: the honest sentence, plain — and the honest sentence is
+           « nous ne savons pas encore » whenever the watering half is unknown
+           (round 1, C4). No room here for the note the other two sizes carry,
+           so the wording is where the whole distinction is made. */
         <Typography
           data-todo-nothing
           sx={{ fontSize: DASHBOARD_TYPE.body, color: 'text.secondary' }}
         >
-          {t('dashboard.blocks.todo.nothing')}
+          {emptyMessage}
         </Typography>
       )}
     </Box>
@@ -293,6 +340,7 @@ export default function TodoBlock({
         <>
           {nothing}
           {invitation}
+          {weatherNote}
         </>
       );
     }
@@ -318,6 +366,7 @@ export default function TodoBlock({
           {shown.map((task) => row(task, gardens.length <= 1, false))}
         </Box>
         {invitation}
+        {weatherNote}
         {rest > 0 && (
           <Button
             variant="text"
@@ -337,6 +386,7 @@ export default function TodoBlock({
         <>
           {nothing}
           {invitation}
+          {weatherNote}
         </>
       );
     }
@@ -378,6 +428,7 @@ export default function TodoBlock({
           ))}
         </Box>
         {invitation}
+        {weatherNote}
         <Typography data-todo-session sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary' }}>
           {t('dashboard.blocks.todo.sessionOnly')}
         </Typography>

@@ -540,6 +540,8 @@
         "sessionOnly": "Boxes ticked for this session only — not saved",
         "stale": "{{task}} (last known weather)",
         "nothing": "Nothing to do today.",
+        "unknownYet": "Nothing planned today — watering is not known yet.",
+        "weatherUnavailable": "Weather unavailable — watering is not planned for now.",
         "noWeather_one": "Without the weather of {{gardens}}, its watering is not planned — ",
         "noWeather_other": "Without the weather of {{gardens}}, their watering is not planned — ",
         "addCity": "Add a city →",

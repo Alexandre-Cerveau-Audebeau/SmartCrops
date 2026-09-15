@@ -10,7 +10,9 @@ import { presetFor } from '../constants/dashboardPresets';
 import {
   dashboardFixture as dashboardWith,
   gardenFixture,
+  varietyFixture,
 } from '../test/fixtures/dashboard';
+import { placement } from '../test/fixtures/placements';
 import { linkFixture, weatherFixture } from '../test/fixtures/weather';
 import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
 import {
@@ -1417,5 +1419,48 @@ describe('GardensDashboard — outlined chips draw `--chip-bd` (round 6, N6-4)',
 
     const chip = (await screen.findByText('Gardener view')).closest('.MuiChip-root')!;
     expect(rulesFor(chip).toLowerCase().replace(/\s+/g, '')).toContain(`border-color:${border}`);
+  });
+});
+
+// ROUND 1 (C2) — the page hands the To-do block TWO statuses, not their union.
+describe('GardensDashboard — a weather outage no longer empties « À faire » (round 1, C2)', () => {
+  it('keeps the calendar tasks and says the watering half is out', async () => {
+    const MONTHS = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    const hedge: DashboardVarietyData = {
+      ...varietyFixture({ plantId: 'hedge', commonName: 'Hedge', gardenIds: ['g1'] }),
+      pruningMonths: MONTHS[new Date().getMonth()]!,
+    };
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith(
+        [
+          garden('g1', 'Terrasse', {
+            placements: [placement({ id: 'h-0', plantId: 'hedge' })],
+            placementCount: 1,
+            varietyCount: 1,
+          }),
+        ],
+        { varieties: [hedge] }
+      )
+    );
+    // The provider is down. The plans are not.
+    vi.mocked(fetchDashboardWeather).mockRejectedValue(new Error('provider down'));
+
+    renderPage();
+
+    const todo = (await screen.findByRole('heading', { level: 2, name: 'To do today' })).closest(
+      '[data-widget="todo"]'
+    ) as HTMLElement;
+    await waitFor(() =>
+      expect(todo.querySelector('[data-todo-weather-note]')).toHaveTextContent(
+        'Weather unavailable — watering is not planned for now.'
+      )
+    );
+    // The half that never needed a forecast is still there…
+    expect(todo.querySelector('[data-todo-task="prune"]')).toHaveTextContent(/^Prune — Hedge \(\w+\)$/);
+    // …and the fatal branch, which the union used to select, is not.
+    expect(todo).not.toHaveTextContent('Couldn’t load today’s tasks.');
   });
 });

@@ -540,6 +540,8 @@
         "sessionOnly": "Cases cochées pour cette session seulement — non enregistrées",
         "stale": "{{task}} (dernière météo connue)",
         "nothing": "Rien à faire aujourd’hui.",
+        "unknownYet": "Rien de planifié aujourd’hui — les arrosages ne sont pas encore connus.",
+        "weatherUnavailable": "Météo indisponible — les arrosages ne sont pas planifiés pour l’instant.",
         "noWeather_one": "Sans la météo de {{gardens}}, ses arrosages ne sont pas planifiés — ",
         "noWeather_other": "Sans la météo de {{gardens}}, leurs arrosages ne sont pas planifiés — ",
         "addCity": "Ajouter une ville →",
