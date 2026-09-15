@@ -263,6 +263,19 @@ export function monthCalendar(
   return { month, known, unknown, active };
 }
 
+/**
+ * « septembre » / « September » — the month a sentence or a chip names, in the
+ * language's own notation.
+ *
+ * The date is built from COMPONENTS, never from text: `new Date('2026-09-01')`
+ * parses as UTC midnight and reads back as August west of Greenwich — the rule
+ * `weatherTime.ts` keeps for weekdays, applied to months. The year is
+ * irrelevant to the label but pinned so the same month always formats alike.
+ */
+export function monthLabel(month: Month, language: string): string {
+  return new Intl.DateTimeFormat(language, { month: 'long' }).format(new Date(2000, month - 1, 1));
+}
+
 /** Unique months in calendar order. */
 function unique(months: readonly Month[]): Month[] {
   return [...new Set(months)].sort((a, b) => a - b);

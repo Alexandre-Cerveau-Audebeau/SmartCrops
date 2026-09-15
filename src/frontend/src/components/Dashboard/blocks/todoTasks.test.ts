@@ -17,7 +17,11 @@ import {
   weekFixture,
   weatherFixture,
 } from '../../../test/fixtures/weather';
-import type { DashboardWeatherData, WeatherDay } from '../../../types/DashboardWeather';
+import {
+  EMPTY_WEATHER_DATA,
+  type DashboardWeatherData,
+  type WeatherDay,
+} from '../../../types/DashboardWeather';
 
 // SMA-336 PR 3b/5 — the weather tasks (§ F.5, Q9). The fixture: Terrasse in
 // Lyon on Saturday 12 September 2026, 14:30 — three basils (Frequent, tolerate
@@ -63,6 +67,17 @@ const lyon = (days: WeatherDay[] = weekFixture(), localTime = '2026-09-12 14:30'
 const dryToday = (over: Partial<WeatherDay> = {}) =>
   dayFixture({ date: '2026-09-12', chanceOfRain: 0, totalPrecipMm: 0, hours: hoursOf('2026-09-12', 16, 29), ...over });
 
+/**
+ * The block's two clocks (PR 4a/5, T8): the place's instant for the weather
+ * rules, the browser's month for the calendar ones. Both pinned by the test;
+ * the browser one defaults to a September that no fixture's calendar reaches,
+ * so the weather suites below derive exactly what they did before.
+ */
+const clock = (place: string | null = null, browser = () => new Date(2026, 8, 15, 10, 30)) => ({
+  place: () => place,
+  browser,
+});
+
 describe('todoTasks — watering tonight', () => {
   it('counts the PLACEMENTS of High and Frequent varieties on a dry day: three basils, not one variety', () => {
     const tasks = todoTasks([terrasse], varieties, lyon([dryToday()]));
@@ -107,8 +122,8 @@ describe('todoTasks — watering tonight', () => {
     expect(todoTasks([terrasse], varieties, lyon([dryToday()], '2026-09-12 23:00'))).toEqual([]);
     expect(todoTasks([terrasse], varieties, lyon([dryToday()], '2026-09-12 22:59'))).toHaveLength(1);
     // The clock is injectable: the same fixture, the hour pinned by the test.
-    expect(todoTasks([terrasse], varieties, lyon([dryToday()]), () => '2026-09-12 23:30')).toEqual([]);
-    expect(todoTasks([terrasse], varieties, lyon([dryToday()]), () => null)).toHaveLength(1);
+    expect(todoTasks([terrasse], varieties, lyon([dryToday()]), clock('2026-09-12 23:30'))).toEqual([]);
+    expect(todoTasks([terrasse], varieties, lyon([dryToday()]), clock())).toHaveLength(1);
   });
 
   it('no task without a thirsty variety', () => {
@@ -122,7 +137,7 @@ describe('todoTasks — watering tonight', () => {
     // Sunday 00:30 — « ce soir » would name an evening that has ended.
     expect(todoTasks([terrasse], varieties, lyon([dryToday()], '2026-09-13 00:30'))).toEqual([]);
     // An unknown clock is trusted, as before.
-    expect(todoTasks([terrasse], varieties, lyon([dryToday()], null as unknown as string), () => null)).toHaveLength(1);
+    expect(todoTasks([terrasse], varieties, lyon([dryToday()], null as unknown as string), clock())).toHaveLength(1);
   });
 
   it('a STALE place still plans, and every one of its tasks says so (G2, chosen over « no task »)', () => {
@@ -273,7 +288,7 @@ describe('todoTasks — a day before the place’s own today plans NOTHING (roun
 
   it('an unknown clock trusts every day, as before', () => {
     expect(
-      todoTasks([terrasse], varieties, lyon(yesterdayFrost, null as unknown as string), () => null)
+      todoTasks([terrasse], varieties, lyon(yesterdayFrost, null as unknown as string), clock())
     ).toEqual([expect.objectContaining({ kind: 'frost', date: '2026-09-11' })]);
   });
 });
@@ -352,5 +367,212 @@ describe('todoTasks — order and identity', () => {
     expect(frost).toEqual(['frost:g1:2026-09-15:6:-1']);
     // The same forecast twice is the same id — a refresh that changes nothing keeps the tick.
     expect(idOf([dayFixture({ date: '2026-09-15', minTempC: 9, chanceOfRain: 90 })])).toEqual(tuesday);
+  });
+});
+
+// ── SMA-336 PR 4a/5 — the calendar tasks (§ D, T8, Q10, Q11) ───────────────
+//
+// They read the catalog, not the forecast: a garden with no city prunes too,
+// which is why the loop no longer leaves an unlocated garden before the rules
+// (constat 18). September 2026 is the month every case below is read in.
+
+const thyme = varietyFixture({
+  plantId: 'thyme',
+  commonName: 'Thyme',
+  wateringNeedLevel: 'Low',
+  pruningMonths: 'March,April,September',
+});
+const rosemary = varietyFixture({
+  plantId: 'rosemary',
+  commonName: 'Rosemary',
+  wateringNeedLevel: 'Low',
+  pruningMonths: 'August,September,October',
+});
+const lettuce = varietyFixture({
+  plantId: 'lettuce',
+  commonName: 'Lettuce',
+  wateringNeedLevel: 'Low',
+  sowingPeriod: 'march-september',
+});
+const radish = varietyFixture({ plantId: 'radish', commonName: 'Radish', sowingPeriod: 'year-round' });
+const calendarVarieties = [thyme, rosemary, lettuce, radish, basil, sage, fern];
+
+/** A garden of the given hemisphere, with the given plants. */
+const gardenOf = (
+  id: string,
+  name: string,
+  specs: Array<[string, number]>,
+  hemisphere: string | null = 'N'
+) =>
+  gardenFixture({
+    id,
+    name,
+    placements: plants(...specs),
+    placementCount: specs.reduce((sum, [, count]) => sum + count, 0),
+    config: { orientation: null, gardenType: null, lightSchedule: null, hemisphere, latitudeBand: 'mid' },
+  });
+
+describe('todoTasks — « Tailler » and « Semer » (PR 4a/5)', () => {
+  it('names the varieties whose pruning months hold the garden’s month, and counts VARIETIES', () => {
+    const garden = gardenOf('g1', 'Terrasse', [['thyme', 4], ['rosemary', 2], ['fern', 1]]);
+
+    const tasks = todoTasks([garden], calendarVarieties, EMPTY_WEATHER_DATA, clock());
+
+    expect(tasks).toEqual([
+      expect.objectContaining({
+        kind: 'prune',
+        gardenId: 'g1',
+        gardenName: 'Terrasse',
+        // Two varieties — not the six placements the weather tasks count.
+        count: 2,
+        names: ['Thyme', 'Rosemary'],
+        month: { year: 2026, month: 9 },
+        date: '2026-09-01',
+        today: true,
+        tempC: null,
+        toleranceC: null,
+        stale: false,
+      }),
+    ]);
+  });
+
+  it('lists the varieties in the PLAN’s order, each one once however often it is planted', () => {
+    const garden = gardenOf('g1', 'Terrasse', [['rosemary', 1], ['thyme', 3]]);
+
+    expect(todoTasks([garden], calendarVarieties, EMPTY_WEATHER_DATA, clock())[0]).toMatchObject({
+      names: ['Rosemary', 'Thyme'],
+      count: 2,
+    });
+  });
+
+  it('an UNLOCATED garden prunes — and waters nothing (constat 18)', () => {
+    // The whole point of splitting the loop: before PR 4a/5 this garden left
+    // `todoTasks` before any rule ran.
+    const garden = gardenOf('g2', 'Balcon sud', [['thyme', 2], ['basil', 3]]);
+
+    const tasks = todoTasks([garden], calendarVarieties, EMPTY_WEATHER_DATA, clock());
+
+    expect(tasks.map((task) => task.kind)).toEqual(['prune']);
+    expect(gardensWithoutWeather([garden], EMPTY_WEATHER_DATA)).toHaveLength(1);
+  });
+
+  it('…and so does a garden whose place the provider could not describe', () => {
+    const garden = gardenOf('g1', 'Terrasse', [['thyme', 1]]);
+    const unavailable = weatherFixture(
+      [locationFixture({ status: 'unavailable', current: null, days: [] })],
+      [linkFixture({ gardenId: 'g1' })]
+    );
+
+    expect(todoTasks([garden], calendarVarieties, unavailable, clock()).map((t) => t.kind)).toEqual(['prune']);
+  });
+
+  it('a located garden whose forecast is entirely in the past still prunes', () => {
+    const garden = gardenOf('g1', 'Terrasse', [['thyme', 1]]);
+    const yesterdayOnly = weatherFixture(
+      [locationFixture({ days: [dayFixture({ date: '2026-09-11' })], localTime: '2026-09-12 14:30' })],
+      [linkFixture({ gardenId: 'g1' })]
+    );
+
+    expect(todoTasks([garden], calendarVarieties, yesterdayOnly, clock()).map((t) => t.kind)).toEqual(['prune']);
+  });
+
+  it('no month of the catalog in the garden’s month, no task', () => {
+    const garden = gardenOf('g1', 'Terrasse', [['basil', 3], ['fern', 1]]);
+
+    expect(todoTasks([garden], calendarVarieties, EMPTY_WEATHER_DATA, clock())).toEqual([]);
+    // …and a March-only thyme is idle in September.
+    const march = varietyFixture({ plantId: 'thyme', commonName: 'Thyme', pruningMonths: 'March' });
+    const thymeGarden = gardenOf('g1', 'Terrasse', [['thyme', 1]]);
+    expect(todoTasks([thymeGarden], [march], EMPTY_WEATHER_DATA, clock())).toEqual([]);
+  });
+
+  it('« Semer » fires on the LAST month of the window, and only there (Q11)', () => {
+    const garden = gardenOf('g1', 'Terrasse', [['lettuce', 2]]);
+    const august = () => new Date(2026, 7, 15, 10, 30);
+
+    expect(todoTasks([garden], calendarVarieties, EMPTY_WEATHER_DATA, clock())).toEqual([
+      expect.objectContaining({ kind: 'sow', count: 1, names: ['Lettuce'], month: { year: 2026, month: 9 } }),
+    ]);
+    // August is inside the window but not its end: nothing is asked.
+    expect(todoTasks([garden], calendarVarieties, EMPTY_WEATHER_DATA, clock(null, august))).toEqual([]);
+  });
+
+  it('a year-round window has no last month — « Semer » never fires on it', () => {
+    const garden = gardenOf('g1', 'Terrasse', [['radish', 4]]);
+
+    expect(todoTasks([garden], calendarVarieties, EMPTY_WEATHER_DATA, clock())).toEqual([]);
+  });
+
+  it('a southern garden reads the catalog six months on (Q9)', () => {
+    // Thyme prunes in March, April and September up north: in the south that
+    // is September, October and March — September fires in both, so the case
+    // that separates them is a March-only plant.
+    const marchThyme = varietyFixture({ plantId: 'thyme', commonName: 'Thyme', pruningMonths: 'March' });
+    const north = gardenOf('g1', 'Terrasse', [['thyme', 1]], 'N');
+    const south = gardenOf('g2', 'Balcon sud', [['thyme', 1]], 'S');
+
+    expect(todoTasks([north], [marchThyme], EMPTY_WEATHER_DATA, clock())).toEqual([]);
+    expect(todoTasks([south], [marchThyme], EMPTY_WEATHER_DATA, clock())).toEqual([
+      expect.objectContaining({ kind: 'prune', gardenId: 'g2', month: { year: 2026, month: 9 } }),
+    ]);
+  });
+
+  it('dates a task in the GARDEN’s month — its place’s, not the browser’s (Q10)', () => {
+    const garden = gardenOf('g1', 'Terrasse', [['thyme', 1]]);
+    const marchThyme = varietyFixture({ plantId: 'thyme', commonName: 'Thyme', pruningMonths: 'March' });
+    const inMarch = weatherFixture(
+      [locationFixture({ days: [dayFixture({ date: '2026-03-12' })], localTime: '2026-03-12 14:30' })],
+      [linkFixture({ gardenId: 'g1' })]
+    );
+
+    // The browser says September; the place says March, and the place decides.
+    expect(todoTasks([garden], [marchThyme], inMarch, clock('2026-03-12 14:30'))).toEqual([
+      expect.objectContaining({ kind: 'prune', month: { year: 2026, month: 3 }, date: '2026-03-01' }),
+    ]);
+  });
+
+  it('orders a garden’s tasks water, prune, sow, then the cold (Main.dc.html)', () => {
+    const garden = gardenOf('g1', 'Terrasse', [['basil', 3], ['thyme', 1], ['lettuce', 1]]);
+    const weather = weatherFixture(
+      [locationFixture({ days: [dryToday({ minTempC: 9 })] })],
+      [linkFixture({ gardenId: 'g1' })]
+    );
+
+    expect(todoTasks([garden], calendarVarieties, weather, clock()).map((task) => task.kind)).toEqual([
+      'water',
+      'prune',
+      'sow',
+      'cold',
+    ]);
+  });
+
+  it('the id carries the month AND the varieties (E9 / E10)', () => {
+    const one = gardenOf('g1', 'Terrasse', [['thyme', 1]]);
+    const two = gardenOf('g1', 'Terrasse', [['thyme', 1], ['rosemary', 1]]);
+    const idOf = (garden: typeof one, browser?: () => Date) =>
+      todoTasks([garden], calendarVarieties, EMPTY_WEATHER_DATA, clock(null, browser)).map((t) => t.id);
+
+    expect(idOf(one)).toEqual(['prune:g1:2026-09:thyme']);
+    // Another variety in the sentence is another task.
+    expect(idOf(two)).toEqual(['prune:g1:2026-09:rosemary|thyme']);
+    // Another month is another task…
+    expect(idOf(two, () => new Date(2026, 9, 15, 10, 30))).toEqual(['prune:g1:2026-10:rosemary']);
+    // …and the same plan in the same month is the same task, so the tick stays.
+    expect(idOf(two)).toEqual(['prune:g1:2026-09:rosemary|thyme']);
+  });
+
+  it('an empty garden has nothing to prune', () => {
+    expect(
+      todoTasks([gardenFixture({ id: 'g1', name: 'Terrasse' })], calendarVarieties, EMPTY_WEATHER_DATA, clock())
+    ).toEqual([]);
+  });
+
+  it('a placement whose variety the aggregate does not carry is skipped, not guessed', () => {
+    const garden = gardenOf('g1', 'Terrasse', [['ghost', 2], ['thyme', 1]]);
+
+    expect(todoTasks([garden], calendarVarieties, EMPTY_WEATHER_DATA, clock())[0]).toMatchObject({
+      names: ['Thyme'],
+      count: 1,
+    });
   });
 });

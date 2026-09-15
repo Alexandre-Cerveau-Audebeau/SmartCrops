@@ -8,11 +8,14 @@ import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import type { SvgIconComponent } from '@mui/icons-material';
 import AcUnitOutlinedIcon from '@mui/icons-material/AcUnitOutlined';
+import ContentCutOutlinedIcon from '@mui/icons-material/ContentCutOutlined';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
+import SpaOutlinedIcon from '@mui/icons-material/SpaOutlined';
 import WaterDropOutlinedIcon from '@mui/icons-material/WaterDropOutlined';
 import DashboardBlock from '../DashboardBlock';
 import InviteState from '../InviteState';
 import { BLOCK_ICONS } from '../blockIcons';
+import { monthLabel } from './plantCalendar';
 import { gardensWithoutWeather, todoTasks, type TodoTask, type TodoTaskKind } from './todoTasks';
 import { displayTemperature, nameList } from './weatherFormat';
 import { weekdayLong } from './weatherTime';
@@ -47,8 +50,16 @@ const MEDIUM_ROWS = 4;
 /** …and with an invitation sharing the card: « 2 + « +2 tâches → » » (`_spec.md` § 4, § 7). */
 const MEDIUM_ROWS_WITH_INVITE = 2;
 
+/**
+ * The glyph of each kind, matched path-for-path against the artboards:
+ * `WaterDropOutlined`, `AcUnitOutlined` (PR 3b/5), and — PR 4a/5 —
+ * `ContentCutOutlined` for « Tailler » and `SpaOutlined` for « Semer »
+ * (`Main.dc.html`, the four Medium rows).
+ */
 const TASK_ICONS: Record<TodoTaskKind, SvgIconComponent> = {
   water: WaterDropOutlinedIcon,
+  prune: ContentCutOutlinedIcon,
+  sow: SpaOutlinedIcon,
   cold: AcUnitOutlinedIcon,
   frost: AcUnitOutlinedIcon,
 };
@@ -67,10 +78,12 @@ const TASK_ICONS: Record<TodoTaskKind, SvgIconComponent> = {
  * non enregistrées » — never in the browser's storage (§ 7: preferences live on
  * the server; a tick is not a preference).
  *
- * « Tailler » and « Semer » are PR 4/5, in the same function: until then the
- * block says so where it would otherwise stay silent — the empty state and the
- * Large footer carry « Tailler et Semer arrivent bientôt » — and `InviteBlock`
- * no longer draws this widget at all.
+ * SMA-336 PR 4a/5 — « Tailler » and « Semer » arrived in the same function, so
+ * the « Tailler et Semer arrivent bientôt » note went with them: the block no
+ * longer promises anything it does not show. They name PLANTS rather than count
+ * them (« Tailler — Thym, Romarin et Tournesol (septembre) ») and need no
+ * weather, so a garden with no city now has tasks of its own — and the A4
+ * invitation says what is missing, watering, rather than everything.
  */
 export default function TodoBlock({
   size,
@@ -114,6 +127,18 @@ export default function TodoBlock({
    * a task planned on a place's LAST KNOWN weather says so (G2).
    */
   const label = (task: TodoTask, grouped: boolean): string => {
+    // PR 4a/5 — the calendar tasks name PLANTS, not a number of them
+    // (`Main.dc.html`: « Tailler — Thym, Romarin et Tournesol (septembre) »).
+    // Past three, `nameList` closes with the « N autres » the weather
+    // invitation already uses, so the row never grows past one line.
+    if (task.month !== null) {
+      const plants = nameList(task.names, i18n.language, (count) =>
+        t('dashboard.blocks.weather.others', { count })
+      );
+      const month = monthLabel(task.month.month, i18n.language);
+      const key = grouped ? `${task.kind}Grouped` : task.kind;
+      return t(`dashboard.blocks.todo.${key}`, { plants, garden: task.gardenName, month });
+    }
     const plants =
       task.kind === 'cold'
         ? t('dashboard.blocks.todo.sensitivePlants', {
@@ -248,15 +273,6 @@ export default function TodoBlock({
     </Box>
   );
 
-  const soonNote = (
-    <Typography
-      data-todo-soon
-      sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary' }}
-    >
-      {t('dashboard.blocks.todo.soonKinds')}
-    </Typography>
-  );
-
   const nothing = (
     <InviteState icon={<TodoIcon />} message={t('dashboard.blocks.todo.nothing')} variant="catalogue" />
   );
@@ -285,7 +301,15 @@ export default function TodoBlock({
           {label(tasks[0], gardens.length <= 1)}
         </Typography>
       ) : (
-        soonNote
+        /* The 1×1 card has no room for the tinted panel, and PR 4a/5 left it
+           with nothing to say once « Tailler et Semer arrivent bientôt »
+           went: the honest sentence, plain. */
+        <Typography
+          data-todo-nothing
+          sx={{ fontSize: DASHBOARD_TYPE.body, color: 'text.secondary' }}
+        >
+          {t('dashboard.blocks.todo.nothing')}
+        </Typography>
       )}
     </Box>
   );
@@ -296,7 +320,6 @@ export default function TodoBlock({
         <>
           {nothing}
           {invitation}
-          {soonNote}
         </>
       );
     }
@@ -341,7 +364,6 @@ export default function TodoBlock({
         <>
           {nothing}
           {invitation}
-          {soonNote}
         </>
       );
     }
@@ -386,7 +408,6 @@ export default function TodoBlock({
         <Typography data-todo-session sx={{ fontSize: DASHBOARD_TYPE.secondary, color: 'text.secondary' }}>
           {t('dashboard.blocks.todo.sessionOnly')}
         </Typography>
-        {soonNote}
       </>
     );
   };

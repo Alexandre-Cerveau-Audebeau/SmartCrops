@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   CALENDAR_LANES,
   MONTHS_OF_YEAR,
@@ -6,6 +6,7 @@ import {
   lanesOf,
   lastMonthOf,
   monthCalendar,
+  monthLabel,
   monthOfGarden,
   periodMonthsOf,
   placeMonthOf,
@@ -39,6 +40,18 @@ const unset = gardenFixture({ id: 'g3', name: 'Potager du fond', config: config(
 /** Clocks pinned by the test, built from COMPONENTS — never from a string. */
 const september = () => new Date(2026, 8, 15, 10, 30);
 const may = () => new Date(2026, 4, 15, 10, 30);
+
+// The app's tsconfig types the browser only (`types: ["vite/client"]`); the
+// test runs under Node, whose `process` is what moves the clock. Declared
+// minimally, the `weatherTime.test.ts` idiom.
+declare const process: { env: Record<string, string | undefined> };
+
+const originalTz = process.env.TZ;
+
+afterEach(() => {
+  if (originalTz === undefined) delete process.env.TZ;
+  else process.env.TZ = originalTz;
+});
 
 describe('pruneMonthsOf — the Perenual month list, as stored', () => {
   it('reads the most common form in calendar order', () => {
@@ -329,5 +342,23 @@ describe('monthCalendar — the month for every placed variety (T9)', () => {
 
   it('the lanes are the legend’s four, in its order', () => {
     expect(CALENDAR_LANES).toEqual(['prune', 'sow', 'flower', 'harvest']);
+  });
+});
+
+describe('monthLabel', () => {
+  it('names the month in the language’s own notation', () => {
+    expect(monthLabel(9, 'fr')).toBe('septembre');
+    expect(monthLabel(9, 'en')).toBe('September');
+    expect(monthLabel(1, 'fr')).toBe('janvier');
+    expect(monthLabel(12, 'en')).toBe('December');
+  });
+
+  it('never drifts a month west of Greenwich — the date is built from components', () => {
+    // `new Date('2026-09-01')` is UTC midnight, which Los Angeles reads as
+    // 31 August, so the label would say « August »: the `weatherTime.ts` rule,
+    // applied to months, and run rather than described.
+    process.env.TZ = 'America/Los_Angeles';
+    expect(monthLabel(9, 'en')).toBe('September');
+    expect(monthLabel(1, 'fr')).toBe('janvier');
   });
 });
