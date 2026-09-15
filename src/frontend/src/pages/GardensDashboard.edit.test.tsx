@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -250,12 +251,14 @@ const sortableNode = (key: string) =>
     .find((node) => node.getAttribute('data-widget') === key)!
     .parentElement!.parentElement!;
 
-function renderPage() {
+/** The page under its providers — and, when a test needs one, a probe BESIDE it. */
+function renderPage(beside?: ReactNode) {
   return render(
     <LanguageProvider>
       <UnitSystemProvider>
         <MemoryRouter>
           <GardensDashboard />
+          {beside}
         </MemoryRouter>
       </UnitSystemProvider>
     </LanguageProvider>
@@ -263,8 +266,6 @@ function renderPage() {
 }
 
 /**
- * Renders, waits for the grid and switches the page into Edit mode.
- *
  * The explicit timeout is the SMA-174 rule applied one level down: `findBy*`
  * carries Testing Library's OWN 1 000 ms default, which the package.json
  * `--testTimeout=20000` does not touch. Both waits are for the page to render,
@@ -277,12 +278,8 @@ function renderPage() {
  */
 const RENDER_TIMEOUT = { timeout: 10000 };
 
-async function enterEditMode(
-  level: DashboardLevel = 'gardener',
-  blocks: DashboardBlock[] = presetFor(level)
-) {
-  servePreferences(level, blocks);
-  renderPage();
+/** Waits for the rendered page's grid and switches it into Edit mode. */
+async function switchToEditMode() {
   const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
   // ENABLED, not merely present. `GardensDashboard` renders Edit
   // `disabled={loading || loadError}`, so clicking it while the preferences are
@@ -292,6 +289,62 @@ async function enterEditMode(
   await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
   fireEvent.click(edit);
   return await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+}
+
+/** Renders, waits for the grid and switches the page into Edit mode. */
+async function enterEditMode(
+  level: DashboardLevel = 'gardener',
+  blocks: DashboardBlock[] = presetFor(level)
+) {
+  servePreferences(level, blocks);
+  renderPage();
+  return await switchToEditMode();
+}
+
+/**
+ * The one way the page offers to re-fetch the weather with the location
+ * dialog open: a language switch, which `useDashboardWeather(language)`
+ * follows. The open modal hides the rest of the page from the accessibility
+ * tree (`aria-hidden`), so a test reaches the probe by its TEXT, not its role.
+ */
+function LanguageProbe() {
+  const { setLanguage } = useLanguage();
+  return (
+    <button type="button" onClick={() => setLanguage('fr')}>
+      switch-language-probe
+    </button>
+  );
+}
+
+/** `enterEditMode` on the gardener preset, with the language probe beside the page. */
+async function enterEditModeWithLanguageProbe() {
+  servePreferences('gardener');
+  renderPage(<LanguageProbe />);
+  return await switchToEditMode();
+}
+
+/**
+ * Weather fetches whose answers the test releases BY HAND — the pattern of
+ * `useDashboardWeather.test.ts` (round 4, F3 — Extension 7291bfa1 / 273c65c4,
+ * GitHub 4010193165). A test that models a failed refresh rejects the promise
+ * itself, inside `act`, and asserts once the rejection handler HAS run —
+ * instead of waiting for the request to START and trusting the microtask
+ * order to have run the handler before the assertion. Installed as the mock's
+ * implementation: a `mockResolvedValueOnce` queued before it still answers
+ * the first call.
+ */
+function deferredWeather() {
+  const resolvers: Array<{
+    resolve: (data: DashboardWeatherData) => void;
+    reject: (error: unknown) => void;
+  }> = [];
+  vi.mocked(fetchDashboardWeather).mockImplementation(
+    () =>
+      new Promise<DashboardWeatherData>((resolve, reject) => {
+        resolvers.push({ resolve, reject });
+      })
+  );
+  return resolvers;
 }
 
 /**
@@ -563,43 +616,20 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
   });
 
-  it('a dialog open on an existing place KEEPS it when a re-fetch fails (round 3, E2 b)', async () => {
+  it('a dialog open on an existing place KEEPS it when a PASSIVE re-fetch fails (round 3, E2 b)', async () => {
     // The hook used to clear the aggregate on a failed replacement; live on
     // the aggregate since D4, the dialog then flipped to « no place saved » in
-    // session. The last known aggregate now stays. The re-fetch is triggered
-    // the one way the page offers with the dialog open: a language switch,
-    // which `useDashboardWeather(language)` follows.
-    function LanguageProbe() {
-      const { setLanguage } = useLanguage();
-      return (
-        <button type="button" onClick={() => setLanguage('fr')}>
-          switch-language-probe
-        </button>
-      );
-    }
-    vi.mocked(fetchDashboardWeather)
-      .mockResolvedValueOnce(
-        weatherFixture([locationFixture({ name: 'Ecully' })], [linkFixture({ gardenId: 'g1' })])
-      )
-      .mockRejectedValue(new Error('provider down'));
+    // session. The last known aggregate now stays — for a refresh that follows
+    // no write. The failed re-fetch is a controlled promise, rejected inside
+    // `act` (round 4, F3 — GitHub 4010193165): the assertions run once the
+    // rejection handler HAS run, not while it may still be pending.
+    vi.mocked(fetchDashboardWeather).mockResolvedValueOnce(
+      weatherFixture([locationFixture({ name: 'Ecully' })], [linkFixture({ gardenId: 'g1' })])
+    );
     vi.mocked(fetchDashboardData).mockResolvedValue(
       dashboardWith([gardenFixture({ id: 'g1', name: 'Terrasse' })])
     );
-    servePreferences('gardener');
-    render(
-      <LanguageProvider>
-        <UnitSystemProvider>
-          <MemoryRouter>
-            <GardensDashboard />
-            <LanguageProbe />
-          </MemoryRouter>
-        </UnitSystemProvider>
-      </LanguageProvider>
-    );
-    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
-    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
-    fireEvent.click(edit);
-    await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+    await enterEditModeWithLanguageProbe();
 
     fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
     const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
@@ -607,13 +637,15 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
     expect(await within(dialog).findByText('Current place: Ecully')).toBeInTheDocument();
 
-    // The open modal hides the rest of the page from the accessibility tree
-    // (`aria-hidden`), so the probe is reached by its text, not its role.
+    const pending = deferredWeather();
     fireEvent.click(screen.getByText('switch-language-probe'));
-    await waitFor(() => expect(fetchDashboardWeather).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(pending.length).toBe(1));
+    await act(async () => {
+      pending[0]!.reject(new Error('provider down'));
+    });
 
     // The re-fetch failed; the place is still there (now in French), Remove too.
-    expect(await within(dialog).findByText('Lieu actuel : Ecully')).toBeInTheDocument();
+    expect(within(dialog).getByText('Lieu actuel : Ecully')).toBeInTheDocument();
     expect(within(dialog).queryByText('Aucun lieu enregistré pour le moment.')).toBeNull();
     expect(within(dialog).getByRole('button', { name: 'Retirer' })).toBeEnabled();
   });
