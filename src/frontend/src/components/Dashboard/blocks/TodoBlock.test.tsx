@@ -543,6 +543,47 @@ describe('TodoBlock — the weather is half the block, not all of it (round 1, C
     expect(cityless.widget.getByText('Nothing planned today — watering is not known yet.')).toBeInTheDocument();
   });
 
+  it('C7 — the Small card says the weather is out ONLY when it has nothing to show', () => {
+    // Round 2, C7 asked for the opposite: a compact « weather unavailable »
+    // line on the 1×1 card even when a calendar task is there. It is REFUSED,
+    // and this is what pins the refusal.
+    //
+    // The 1×1 card has room for two lines: a figure and one sentence (lesson
+    // V7 — nothing may leave the card). Spending that sentence on what the
+    // block does NOT know costs the reader the one thing it DOES know. The
+    // distinction round 1's C4 made is carried by the WORDING of the empty
+    // line, and it is made in the only state where there is a line to spend.
+    const idle = [varietyFixture({ plantId: 'hedge', commonName: 'Hedge', wateringNeedLevel: 'Low' })];
+    const quiet = gardenFixture({ id: 'g1', name: 'Terrasse', placements: plants(['hedge', 2]), placementCount: 2 });
+
+    // ── With something to show: the task, and not a word about the weather.
+    const busy = renderBlock({
+      size: 'small',
+      gardens: [jardin],
+      varieties: [hedge, sownLettuce],
+      weather: EMPTY_WEATHER_DATA,
+      weatherUnavailable: true,
+    });
+    expect(busy.card).toHaveTextContent(/Prune — Hedge/);
+    expect(busy.card.querySelector('[data-todo-weather-note]')).toBeNull();
+    expect(busy.card.querySelector('[data-todo-nothing]')).toBeNull();
+    expect(busy.card).not.toHaveTextContent('Weather unavailable');
+    expect(busy.card).not.toHaveTextContent('watering is not known yet');
+
+    // ── With nothing to show: the same outage, and now it is said.
+    cleanup();
+    const empty = renderBlock({
+      size: 'small',
+      gardens: [quiet],
+      varieties: idle,
+      weather: EMPTY_WEATHER_DATA,
+      weatherUnavailable: true,
+    });
+    expect(empty.card.querySelector('[data-todo-nothing]')).toHaveTextContent(
+      'Nothing planned today — watering is not known yet.'
+    );
+  });
+
   it('C4 — the Small card makes the same distinction, in its one line', () => {
     const idle = [varietyFixture({ plantId: 'hedge', commonName: 'Hedge', wateringNeedLevel: 'Low' })];
     const quiet = gardenFixture({ id: 'g1', name: 'Terrasse', placements: plants(['hedge', 2]), placementCount: 2 });
