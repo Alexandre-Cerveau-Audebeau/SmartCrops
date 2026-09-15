@@ -148,11 +148,19 @@ export default function GardensDashboard() {
     weatherData.gardens.find((entry) => entry.source === 'profile')?.locationKey
   );
 
+  // The location surfaces say « loading » whenever a request is in flight —
+  // the first load (round 2, D4) and every REPLACEMENT (round 4, F2 — GitHub
+  // 4010193172). The hook's `loading` is false from the first answer on, and a
+  // panel or dialog that read it alone presented the LAST aggregate as settled,
+  // « Retirer » included, while a language switch, Retry or the re-read after
+  // « Utiliser » was still out.
+  const weatherInFlight = weatherLoading || weatherRefreshing;
+
   /**
    * What the dialog's target holds TODAY, read from the live aggregate — so the
    * dialog is the door to CHANGE or REMOVE a location as much as to add one
-   * (V21), and says « loading » rather than « nothing stored » while the
-   * aggregate is in flight (D4).
+   * (V21), and says « loading » rather than « nothing stored » while a request
+   * is in flight (D4, F2).
    */
   const locateTarget: LocationTarget | null = (() => {
     if (locateKey === null) return null;
@@ -161,7 +169,7 @@ export default function GardensDashboard() {
         kind: 'profile',
         current: profileCurrent,
         canRemove: weatherData.profileLocated,
-        loading: weatherLoading,
+        loading: weatherInFlight,
         // The aggregate could not be read (E2): `current` / `canRemove` are the
         // last known state the hook kept, or nothing after a failed first load.
         unavailable: weatherError,
@@ -176,7 +184,7 @@ export default function GardensDashboard() {
       // return to AND an override to drop.
       canRevert: link?.source === 'garden' && weatherData.profileLocated,
       current: placeNamed(link?.locationKey),
-      loading: weatherLoading,
+      loading: weatherInFlight,
       unavailable: weatherError,
     };
   })();
@@ -441,7 +449,7 @@ export default function GardensDashboard() {
           <WeatherOptionsPanel
             current={profileCurrent}
             located={weatherData.profileLocated}
-            loading={weatherLoading}
+            loading={weatherInFlight}
             unavailable={weatherError}
             onLocate={() => openLocate(null)}
           />

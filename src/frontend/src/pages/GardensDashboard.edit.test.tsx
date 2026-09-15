@@ -696,6 +696,48 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     expect(within(reopened).queryByRole('button', { name: 'Remove' })).toBeNull();
   });
 
+  it('while a replacement is in flight, the gear panel and the dialog say « loading » — not the settled state of the last aggregate (round 4, F2)', async () => {
+    // GitHub 4010193172: the hook's `loading` is false from the first answer
+    // on, and `refreshing` was not passed to the location surfaces — during a
+    // language switch, Retry or the re-read after « Utiliser », the panel and
+    // the dialog presented the LAST aggregate as settled, « Retirer » included.
+    vi.mocked(fetchDashboardWeather).mockResolvedValueOnce(
+      weatherFixture([locationFixture({ name: 'Ecully' })], [linkFixture({ gardenId: 'g1' })])
+    );
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenFixture({ id: 'g1', name: 'Terrasse' })])
+    );
+    await enterEditModeWithLanguageProbe();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Location…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+    expect(await within(dialog).findByText('Current place: Ecully')).toBeInTheDocument();
+
+    const pending = deferredWeather();
+    fireEvent.click(screen.getByText('switch-language-probe'));
+    await waitFor(() => expect(pending.length).toBe(1));
+
+    // In flight: the D4 sentence (now in French) on both surfaces — not the
+    // place of the last aggregate, and nothing to remove yet.
+    expect(await within(dialog).findByText('Chargement du lieu actuel…')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Lieu actuel : Ecully')).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Retirer' })).toBeNull();
+    expect(within(panel).getByText('Chargement du lieu actuel…')).toBeInTheDocument();
+    expect(within(panel).queryByText('Lieu actuel : Ecully')).toBeNull();
+
+    // The answer lands: settled again — the place and Remove are back.
+    await act(async () => {
+      pending[0]!.resolve(
+        weatherFixture([locationFixture({ name: 'Ecully' })], [linkFixture({ gardenId: 'g1' })])
+      );
+    });
+    expect(within(dialog).getByText('Lieu actuel : Ecully')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Retirer' })).toBeEnabled();
+    expect(within(panel).getByText('Lieu actuel : Ecully')).toBeInTheDocument();
+  });
+
   it('names the widget on the panel itself, above the generic line (A7)', async () => {
     // `A8Options.dc.html`'s `.pop-h` carries two lines — the widget's name in
     // bold, then « Options du widget ». The panel opened on the generic line

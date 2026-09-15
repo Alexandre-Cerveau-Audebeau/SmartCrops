@@ -19,7 +19,8 @@ interface Props {
   located: boolean;
   /**
    * The weather aggregate has not landed yet (round 2, D4 — Extension
-   * 7d3f6056 / 458cd620): the panel says so instead of « nothing stored ». The
+   * 7d3f6056 / 458cd620), or a replacement is in flight (round 4, F2 — GitHub
+   * 4010193172): the panel says so instead of the last aggregate's state. The
    * door stays open — the dialog says the same, and fills in when it lands.
    */
   loading: boolean;

@@ -28,8 +28,9 @@ export type LocationTarget =
       /** Whether « Retirer » is offered — the account carries a default to remove. */
       canRemove?: boolean;
       /**
-       * The aggregate that names the place is still loading (round 2, D4):
-       * neither « nothing stored » nor « Retirer » can be said yet.
+       * The aggregate that names the place is still loading (round 2, D4), or
+       * a replacement is in flight (round 4, F2 — GitHub 4010193172): neither
+       * « nothing stored » nor « Retirer » can be said yet.
        */
       loading?: boolean;
       /**
@@ -54,7 +55,7 @@ export type LocationTarget =
       canRevert: boolean;
       /** The name of the place the garden reads today — its override or the inherited default; null when unlocated. */
       current?: string | null;
-      /** As for the profile: the aggregate is still loading (round 2, D4). */
+      /** As for the profile: the aggregate is still loading, or a replacement is in flight (round 2, D4; round 4, F2). */
       loading?: boolean;
       /** As for the profile: the aggregate could not be read (round 3, E2; round 4, F1). */
       unavailable?: boolean;
@@ -72,7 +73,7 @@ export type LocationTarget =
  * read and holds no default, nothing stored.
  */
 export interface StoredPlace {
-  /** The aggregate that would name the place has not landed yet. */
+  /** The aggregate that would name the place has not landed yet — the first, or a replacement (F2). */
   loading: boolean;
   /** The aggregate could not be read; `name` and `stored` are the last known state — after a passive refresh — or nothing. */
   unavailable: boolean;
