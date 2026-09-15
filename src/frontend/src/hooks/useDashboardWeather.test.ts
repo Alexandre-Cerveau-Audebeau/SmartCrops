@@ -109,6 +109,95 @@ describe('useDashboardWeather (SMA-336 PR 3b/5)', () => {
     expect(result.current.data.locations).toHaveLength(1);
   });
 
+  describe('refetchAfterMutation() — the re-read that follows a location write (round 4, F1)', () => {
+    // Extension adeab24a / 6e4d5a7c: `refetch()` also ran after « Utiliser »,
+    // « Retirer » and « Revenir à la ville du profil » had been accepted by the
+    // server. When THAT re-read failed, E2 (b) kept the aggregate of BEFORE the
+    // write, and the gear panel and the dialog named the old place and offered
+    // « Retirer » on a default the server had already dropped. A re-read that
+    // follows a write marks the aggregate stale BEFORE the request goes out.
+    it('keeps the current weather on screen while the re-read is in flight — no blink', async () => {
+      vi.mocked(fetchDashboardWeather).mockResolvedValueOnce(lyon());
+      const { result } = renderHook(() => useDashboardWeather('fr'));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      const pending = deferred();
+      act(() => result.current.refetchAfterMutation());
+      await waitFor(() => expect(pending.length).toBe(1));
+
+      expect(result.current.loading).toBe(false);
+      expect(result.current.refreshing).toBe(true);
+      expect(result.current.data.locations.map((l) => l.name)).toEqual(['Lyon']);
+    });
+
+    it('a FAILED re-read drops the pre-write aggregate: nothing is known, and loadError says so', async () => {
+      vi.mocked(fetchDashboardWeather).mockResolvedValueOnce(lyon());
+      const { result } = renderHook(() => useDashboardWeather('fr'));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      const pending = deferred();
+      act(() => result.current.refetchAfterMutation());
+      await waitFor(() => expect(pending.length).toBe(1));
+      await act(async () => {
+        pending[0]!.reject(new Error('boom'));
+      });
+
+      expect(result.current.loadError).toBe(true);
+      expect(result.current.data).toBe(EMPTY_WEATHER_DATA);
+      expect(result.current.refreshing).toBe(false);
+    });
+
+    it('a re-read that lands replaces the aggregate — and a later PASSIVE failure keeps THAT one', async () => {
+      vi.mocked(fetchDashboardWeather).mockResolvedValueOnce(lyon());
+      const { result } = renderHook(() => useDashboardWeather('fr'));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      const pending = deferred();
+      act(() => result.current.refetchAfterMutation());
+      await waitFor(() => expect(pending.length).toBe(1));
+      await act(async () => {
+        pending[0]!.resolve(annecy());
+      });
+      expect(result.current.data.locations.map((l) => l.name)).toEqual(['Annecy']);
+      expect(result.current.loadError).toBe(false);
+
+      // The stale mark was lifted with the answer: E2 (b) applies again.
+      act(() => result.current.refetch());
+      await waitFor(() => expect(pending.length).toBe(2));
+      await act(async () => {
+        pending[1]!.reject(new Error('boom'));
+      });
+      expect(result.current.loadError).toBe(true);
+      expect(result.current.data.locations.map((l) => l.name)).toEqual(['Annecy']);
+    });
+
+    it('the mark outlives a request superseded in flight: the language switch that replaces it, if it fails, drops the aggregate too', async () => {
+      // The write happened; the re-read it asked for was aborted by a language
+      // switch before it settled. The aggregate on screen is still the one
+      // from before the write, so the first answer that lands — whichever
+      // request it comes from — is the first that can be trusted, and a
+      // failure leaves nothing.
+      vi.mocked(fetchDashboardWeather).mockResolvedValueOnce(lyon());
+      const { result, rerender } = renderHook(
+        ({ language }) => useDashboardWeather(language),
+        { initialProps: { language: 'fr' } }
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      const pending = deferred();
+      act(() => result.current.refetchAfterMutation());
+      await waitFor(() => expect(pending.length).toBe(1));
+      rerender({ language: 'en' });
+      await waitFor(() => expect(pending.length).toBe(2));
+      await act(async () => {
+        pending[1]!.reject(new Error('boom'));
+      });
+
+      expect(result.current.loadError).toBe(true);
+      expect(result.current.data).toBe(EMPTY_WEATHER_DATA);
+    });
+  });
+
   it('re-fetches on a language switch and discards the stale response (the SMA-288 race)', async () => {
     const pending = deferred();
     const { result, rerender } = renderHook(

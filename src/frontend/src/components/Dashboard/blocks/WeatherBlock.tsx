@@ -46,7 +46,7 @@ interface Props {
   onRetry: () => void;
   /** Opens the location dialog — on the PROFILE default when `null`. */
   onLocate: (gardenId: string | null) => void;
-  /** The widget's own invitation wrote the profile default — the page re-fetches. */
+  /** The widget's own invitation WROTE the profile default — the page re-reads as after a write (round 4, F1). */
   onLocated: () => void;
 }
 

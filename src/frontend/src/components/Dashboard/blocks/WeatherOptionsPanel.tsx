@@ -25,9 +25,11 @@ interface Props {
   loading: boolean;
   /**
    * The weather aggregate could not be read (round 3, E2 — GitHub 4009816076):
-   * `current` and `located` are the last known state, or nothing. The panel
-   * says the weather is unavailable rather than « nothing stored »; the door
-   * stays open — one can re-locate during an outage.
+   * `current` and `located` are the last known state when a PASSIVE refresh
+   * failed, or nothing — after a failed first load, or after a failed re-read
+   * that followed a location write (round 4, F1). The panel says the weather
+   * is unavailable rather than « nothing stored »; the door stays open — one
+   * can re-locate during an outage.
    */
   unavailable: boolean;
   /** Opens the shared location dialog on the profile default. */

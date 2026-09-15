@@ -48,7 +48,7 @@ vi.mock('../services/weatherApi', () => ({
 
 vi.mock('../services/profileApi', () => ({ fetchProfile: vi.fn() }));
 
-import { fetchDashboardWeather } from '../services/weatherApi';
+import { clearProfileLocation, fetchDashboardWeather } from '../services/weatherApi';
 import { fetchProfile } from '../services/profileApi';
 
 import { dashboardFixture as dashboardWith, gardenFixture } from '../test/fixtures/dashboard';
@@ -648,6 +648,52 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     expect(within(dialog).getByText('Lieu actuel : Ecully')).toBeInTheDocument();
     expect(within(dialog).queryByText('Aucun lieu enregistré pour le moment.')).toBeNull();
     expect(within(dialog).getByRole('button', { name: 'Retirer' })).toBeEnabled();
+  });
+
+  it('after « Remove » SUCCEEDED, a failed re-read never names the old place nor offers « Remove » again (round 4, F1)', async () => {
+    // Extension adeab24a / 6e4d5a7c: E2 (b) kept the last known aggregate on
+    // ANY failed re-fetch — also the one that follows a write the server has
+    // already accepted. The panel then said « Current place: Ecully » and the
+    // reopened dialog offered « Remove » on a default that no longer existed.
+    vi.mocked(fetchDashboardWeather).mockResolvedValueOnce(
+      weatherFixture([locationFixture({ name: 'Ecully' })], [linkFixture({ gardenId: 'g1' })])
+    );
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([gardenFixture({ id: 'g1', name: 'Terrasse' })])
+    );
+    vi.mocked(clearProfileLocation).mockResolvedValue(undefined);
+    await enterEditMode();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weather options' }));
+    const panel = await screen.findByRole('dialog', { name: 'Weather Widget options' });
+    expect(await within(panel).findByText('Current place: Ecully')).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Location…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+
+    // The DELETE is accepted; the re-read it asks for fails.
+    const pending = deferredWeather();
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(clearProfileLocation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(pending.length).toBe(1));
+    await act(async () => {
+      pending[0]!.reject(new Error('provider down'));
+    });
+
+    // The panel: the weather is unavailable — not the place the server dropped.
+    expect(within(panel).queryByText('Current place: Ecully')).toBeNull();
+    expect(
+      within(panel).getByText('Weather unavailable — the saved place could not be checked.')
+    ).toBeInTheDocument();
+
+    // The dialog, reopened once the closed one has faded: same sentence, and
+    // nothing to remove.
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Location…' }));
+    const reopened = await screen.findByRole('dialog', { name: 'Locate my gardens' });
+    expect(
+      within(reopened).getByText('Weather unavailable — the saved place could not be checked.')
+    ).toBeInTheDocument();
+    expect(within(reopened).queryByText('Current place: Ecully')).toBeNull();
+    expect(within(reopened).queryByRole('button', { name: 'Remove' })).toBeNull();
   });
 
   it('names the widget on the panel itself, above the generic line (A7)', async () => {

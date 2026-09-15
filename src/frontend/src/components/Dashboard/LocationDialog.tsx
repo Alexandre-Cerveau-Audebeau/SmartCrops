@@ -25,7 +25,11 @@ interface Props {
   /** What the dialog writes to; kept by the caller while the dialog fades out. */
   target: LocationTarget | null;
   onClose: () => void;
-  /** The server answered 204 — the caller re-fetches the weather. */
+  /**
+   * The server answered 204 — the caller re-reads the weather AS AFTER A WRITE
+   * (`useDashboardWeather().refetchAfterMutation`, round 4, F1): what the
+   * aggregate on screen names is stale from this call on.
+   */
   onSaved: () => void;
 }
 
@@ -96,7 +100,9 @@ export default function LocationDialog({ open, target, onClose, onSaved }: Props
   // aggregate could not be read (round 3, E2 — GitHub 4009816076) the line says
   // so — that sentence is the reason « Retirer » is not offered — and the field
   // and « Utiliser » stay: one can re-locate during an outage. A place the last
-  // known aggregate names is still named, and still removable.
+  // known aggregate names is still named, and still removable, when a PASSIVE
+  // refresh failed; after a write the server accepted, a failed re-read names
+  // nothing (round 4, F1) — the place it would name is the one just changed.
   const loading = target?.loading === true;
   const unavailable = target?.unavailable === true;
   const canRemove = !loading && target?.kind === 'profile' && target.canRemove === true;

@@ -121,6 +121,7 @@ export default function GardensDashboard() {
     refreshing: weatherRefreshing,
     loadError: weatherError,
     refetch: refetchWeather,
+    refetchAfterMutation: refetchWeatherAfterMutation,
   } = useDashboardWeather(language);
 
   // The ONE location dialog of the page (§ F.4), opened from the widget, the
@@ -278,7 +279,10 @@ export default function GardensDashboard() {
       // BOTH aggregates (round 1, G11 — GitHub outside-diff, GardensDashboard
       // 237 / 248): `DashboardWeatherData.gardens` lists EVERY garden, so a
       // weather aggregate fetched before the creation omits the new one from
-      // the widget's « 1/3 localisé » total and from the To-do block.
+      // the widget's « 1/3 localisé » total and from the To-do block. The
+      // PASSIVE form (round 4, F1): a garden created or deleted changes no
+      // STORED PLACE, so an aggregate kept over a failed re-read names nothing
+      // the server has dropped — and the figure surfaces read `loadError` first.
       refetchWeather();
     } catch {
       setCreateError(true);
@@ -292,6 +296,7 @@ export default function GardensDashboard() {
     setToastOpen(true);
     refetch();
     // …and a deleted garden must stop being counted by the weather surfaces.
+    // Passive too, for the same reason as above.
     refetchWeather();
   };
 
@@ -322,7 +327,9 @@ export default function GardensDashboard() {
             loadError={weatherError}
             onRetry={refetchWeather}
             onLocate={openLocate}
-            onLocated={refetchWeather}
+            // The invitation's inline field WROTE the profile default: the
+            // re-read follows a write (round 4, F1 — Extension adeab24a).
+            onLocated={refetchWeatherAfterMutation}
           />
         );
       case 'gardens':
@@ -792,14 +799,19 @@ export default function GardensDashboard() {
 
       {/* The shared location dialog (PR 3b/5): a 204 re-fetches the weather
           aggregate, which re-draws the widget, the MÉTÉO column and the tasks
-          from one response. */}
+          from one response. As AFTER A WRITE (round 4, F1 — Extension adeab24a /
+          6e4d5a7c): « Utiliser », « Retirer » and « Revenir à la ville du
+          profil » have changed what the server stores, so the aggregate on
+          screen is stale before the re-read starts, and a re-read that fails
+          leaves « weather unavailable » — never the old place, never « Retirer »
+          on a default the server has already dropped. */}
       <LocationDialog
         open={locateOpen}
         target={locateTarget}
         onClose={() => setLocateOpen(false)}
         onSaved={() => {
           setLocateOpen(false);
-          refetchWeather();
+          refetchWeatherAfterMutation();
         }}
       />
 

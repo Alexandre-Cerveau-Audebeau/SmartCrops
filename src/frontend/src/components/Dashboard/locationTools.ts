@@ -34,8 +34,10 @@ export type LocationTarget =
       loading?: boolean;
       /**
        * The aggregate could not be read (round 3, E2 — GitHub 4009816076):
-       * what `current` and `canRemove` hold is the LAST KNOWN state, or nothing
-       * when no aggregate ever landed — never a statement that nothing is stored.
+       * what `current` and `canRemove` hold is the LAST KNOWN state when a
+       * PASSIVE refresh failed, or nothing — after a failed first load, or
+       * after a failed re-read that followed a location write (round 4, F1) —
+       * never a statement that nothing is stored.
        */
       unavailable?: boolean;
     }
@@ -54,7 +56,7 @@ export type LocationTarget =
       current?: string | null;
       /** As for the profile: the aggregate is still loading (round 2, D4). */
       loading?: boolean;
-      /** As for the profile: the aggregate could not be read (round 3, E2). */
+      /** As for the profile: the aggregate could not be read (round 3, E2; round 4, F1). */
       unavailable?: boolean;
     };
 
@@ -62,16 +64,17 @@ export type LocationTarget =
  * What a surface knows of a stored place, and the ONE sentence for it — the
  * location dialog and the Weather gear panel both read this function (round
  * 2, D4 / D5; round 3, E2), so the two cannot disagree. In order: the
- * aggregate still loading; a named place (the last known one when a refresh
- * failed); a place that is stored but that the aggregate cannot name (every
- * garden overrides it); the weather UNAVAILABLE with nothing known — never
- * read as « nothing stored »; and, only when an aggregate was read and holds
- * no default, nothing stored.
+ * aggregate still loading; a named place (the last known one when a PASSIVE
+ * refresh failed); a place that is stored but that the aggregate cannot name
+ * (every garden overrides it); the weather UNAVAILABLE with nothing known —
+ * after a failed first load or a failed re-read that followed a write (round
+ * 4, F1) — never read as « nothing stored »; and, only when an aggregate was
+ * read and holds no default, nothing stored.
  */
 export interface StoredPlace {
   /** The aggregate that would name the place has not landed yet. */
   loading: boolean;
-  /** The aggregate could not be read; `name` and `stored` are the last known state, if any. */
+  /** The aggregate could not be read; `name` and `stored` are the last known state — after a passive refresh — or nothing. */
   unavailable: boolean;
   /** The place's name, when the aggregate can tell. */
   name: string | null;
