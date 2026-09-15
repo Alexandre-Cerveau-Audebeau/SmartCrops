@@ -501,8 +501,9 @@
           "harvest": "Harvest"
         },
         "moreNames": "+{{count, number}}",
-        "moreVarieties_one": "+{{count, number}} variety",
-        "moreVarieties_other": "+{{count, number}} varieties",
+        "moreVarieties_one": "Show the {{count, number}} other variety",
+        "moreVarieties_other": "Show the {{count, number}} other varieties",
+        "collapse": "Show less",
         "unknown_one": "No known calendar for {{count, number}} variety",
         "unknown_other": "No known calendar for {{count, number}} varieties",
         "empty": "No plant placed yet — the calendar fills up with your plantings.",

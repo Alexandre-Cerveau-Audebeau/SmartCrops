@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -51,8 +51,36 @@ const COUNTED_LANES = ['prune', 'sow', 'harvest'] as const;
 
 type CountedLane = (typeof COUNTED_LANES)[number];
 
-/** `A3Expert.dc.html` l. 334: eight rows of 28 px, then « +14 variétés » (`_spec.md` § 4). */
-const LARGE_ROWS = 8;
+/**
+ * Rows a Large card lists before the deploy button. Round 1, V26: back to the
+ * frozen design's own cap of TEN (verrou 11) — the widget shipped at eight —
+ * on Alexandre's call: « pas besoin du plafond, mais disons plutôt 10 que 8 ».
+ * It is no longer a ceiling on what can be read, only on what is read at rest:
+ * the button below deploys the rest into the same scrolling zone.
+ */
+const LARGE_ROWS = 10;
+
+/**
+ * Round 1, V24 — an AMENDMENT to the frozen plate, taken by Alexandre on the
+ * visual pass: « mérite une police plus grande, c'est trop peu visible ».
+ * `A3Expert.dc.html` draws `.pn` at 14 px, `.mh` at 12 px, its rows at 28 px
+ * and `.lane` at 4 px. That scale reads on the artboard's own canvas and not
+ * on a card in a grid, so each is raised one step. The plate's figure is kept
+ * beside each value: this is a deviation, and a deviation has to stay legible
+ * as one.
+ */
+const LARGE_GRID = {
+  /** `.pn` — 14 px on the plate. */
+  nameSize: 15,
+  /** `.mh` — 12 px on the plate. */
+  axisSize: 13,
+  /** `.cal { min-height: 28px }` on the plate. */
+  rowHeight: 32,
+  /** `.lane { height: 4px }` on the plate. */
+  laneHeight: 5,
+  /** `.lane { border-radius: 2px }` — half the height, so the bar stays a pill. */
+  laneRadius: 2.5,
+} as const;
 
 /** `Main.dc.html` l. 309: « Thym, Romarin, Courgette +7 » — three names, then the rest as a figure. */
 const MEDIUM_NAMES = 3;
@@ -87,8 +115,14 @@ const LANE_TOKEN: Record<CalendarLane, keyof DashboardTokens> = {
  *
  * Small: the month in 28 px and the three counters. Medium: a row per verb,
  * with the names and « +7 ». Large: the same three counters, then the grid of
- * eight varieties × twelve months — four 4 px lanes a row, the current month's
- * column tinted behind them — the legend, « +14 variétés », and the foot.
+ * ten varieties × twelve months — four lanes a row, the current month's column
+ * tinted behind them — the legend, the button that deploys the rest into the
+ * same scrolling zone, and the foot.
+ *
+ * Round 1 amended the Large grid three times, on Alexandre's visual pass: the
+ * type and the heights are a step above the plate ({@link LARGE_GRID}), the
+ * rows share the card's height instead of leaving a void under the legend, and
+ * « +N variétés » became that button ({@link LARGE_ROWS}).
  *
  * The foot is a COUNT, never an assumption (decision D2): « Pas de calendrier
  * connu pour 4 variétés » names exactly the placed varieties no lane knows a
@@ -109,6 +143,16 @@ export default function MonthBlock({
   const { t, i18n } = useTranslation();
   const tk = useDashboardTokens();
   const MonthIcon = BLOCK_ICONS.month;
+  /**
+   * V26 — the Large grid deployed past its ten rows. Session-only, in React
+   * and nowhere else: this is a reading position, not a preference, and the
+   * dashboard's preferences live on the server (§ 7). The chip and the three
+   * counters never read it — they count the whole calendar, deployed or not
+   * (the `resolveCountersFigures` rule).
+   */
+  const [expanded, setExpanded] = useState(false);
+  /** Ties the deploy button to the region it opens, for `aria-controls`. */
+  const gridId = useId();
 
   // ONE derivation for the chip, the counters, the names, the grid and the foot.
   const calendar = monthCalendar(gardens, varieties, weather);
@@ -154,8 +198,8 @@ export default function MonthBlock({
             <Box
               data-month-bar={on ? key : undefined}
               sx={{
-                height: '4px',
-                borderRadius: '2px',
+                height: `${LARGE_GRID.laneHeight}px`,
+                borderRadius: `${LARGE_GRID.laneRadius}px`,
                 backgroundColor: on ? tk[LANE_TOKEN[key]] : 'transparent',
               }}
             />
@@ -320,8 +364,11 @@ export default function MonthBlock({
   );
 
   const largeBody = () => {
-    const shown = known.slice(0, LARGE_ROWS);
-    const rest = known.length - shown.length;
+    const shown = expanded ? known : known.slice(0, LARGE_ROWS);
+    // What the button offers to reveal — counted on the CAP, not on what is
+    // currently drawn, so the collapsed and the deployed states name the same
+    // number and the label does not change under the reader's hand.
+    const rest = Math.max(0, known.length - LARGE_ROWS);
     // `.cal` — a 108 px name column, then the twelve months.
     const gridColumns = `108px repeat(12, minmax(0, 1fr))`;
     return (
@@ -363,11 +410,17 @@ export default function MonthBlock({
         </Box>
 
         {/* `.s2` — 8 px over the 12 px gap, the artboard's section spacing. */}
+        {/* Round 1, V25: `flex: 1`, where this was `flex: '0 1 auto'`. The
+            grid now takes the card's leftover height instead of leaving it to
+            pile up under the legend — « c'est dommage de voir un si grand vide
+            en bas de widget ». It CLIPS (`overflow: hidden`) so the deployed
+            list of V26 scrolls inside it and never grows the card (lesson V7). */}
         <Box
           data-month-grid
+          id={gridId}
           role="table"
           aria-label={t('dashboard.blocks.month.gridLabel')}
-          sx={{ mt: '8px', flex: '0 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          sx={{ mt: '8px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
         >
           {/* The axis: `.mh` 12 px / 700, each with its left rule; the current month tinted. */}
           <Box role="row" sx={{ display: 'grid', gridTemplateColumns: gridColumns, alignItems: 'center' }}>
@@ -400,7 +453,7 @@ export default function MonthBlock({
                 data-month-axis={value === month.month ? 'now' : undefined}
                 sx={{
                   textAlign: 'center',
-                  fontSize: 12,
+                  fontSize: LARGE_GRID.axisSize,
                   fontWeight: 700,
                   color: 'text.secondary',
                   borderLeft: '1px solid',
@@ -414,14 +467,27 @@ export default function MonthBlock({
             ))}
           </Box>
 
+          {/* `A3Expert.dc.html` l. 336: `flex: 1; justify-content:
+              space-evenly` — the rows share the height evenly rather than
+              massing at the top (V25, a RETURN to the plate: this shipped at
+              `flex: '0 1 auto'`).
+
+              Deployed, the list scrolls, and even distribution has no meaning
+              there — worse, `space-evenly` on a scrolling box pushes the first
+              rows above the scrollable area, where no scrollbar can reach
+              them. So the deployed state packs from the top (V26, the V7
+              lesson: nothing may leave the card, and nothing may become
+              unreachable inside it). */}
           <Box
+            data-month-rows
             sx={{
-              flex: '0 1 auto',
+              flex: 1,
               minHeight: 0,
               overflowY: 'auto',
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'space-evenly',
+              justifyContent: expanded ? 'flex-start' : 'space-evenly',
+              gap: expanded ? '2px' : 0,
               mt: '6px',
             }}
           >
@@ -434,14 +500,16 @@ export default function MonthBlock({
                   display: 'grid',
                   gridTemplateColumns: gridColumns,
                   alignItems: 'center',
-                  minHeight: 28,
+                  minHeight: LARGE_GRID.rowHeight,
+                  // A scrolling list must not squeeze its rows to fit (V26).
+                  flexShrink: 0,
                 }}
               >
                 {/* `.pn` — 14 px / 600, ellipsized, with its 8 px gutter. */}
                 <Box
                   role="rowheader"
                   sx={{
-                    fontSize: 14,
+                    fontSize: LARGE_GRID.nameSize,
                     fontWeight: 600,
                     color: 'text.primary',
                     whiteSpace: 'nowrap',
@@ -495,8 +563,14 @@ export default function MonthBlock({
           </Box>
         </Box>
 
-        {/* The legend, and « +14 variétés » pushed to its right. */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+        {/* The legend, and the deploy button pushed to its right. V25: it
+            sits OUTSIDE the scrolling zone and, the grid above it now taking
+            the slack, at the foot of the card — « fixer la légende en bas de
+            widget ». `flexShrink: 0` so a deployed list never eats it. */}
+        <Box
+          data-month-legend-row
+          sx={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap', flexShrink: 0 }}
+        >
           {CALENDAR_LANES.map((key) => (
             <Box
               key={key}
@@ -518,18 +592,37 @@ export default function MonthBlock({
               {t(`dashboard.blocks.month.legend.${key}`)}
             </Box>
           ))}
+          {/* Round 1, V26: « +14 variétés » was a sentence, and a sentence
+              that promises fourteen rows nobody can reach is a dead end. It
+              is a BUTTON now — focusable, named in full (« Afficher les 14
+              autres variétés »), announcing the region it opens — and it
+              folds back, because a deploy with no way back traps the reader.
+              The state is React's alone: it lives for the session and is
+              written nowhere, the widget's own rule for anything that is not
+              a preference. No transition is attached to the toggle, so there
+              is nothing for `prefers-reduced-motion` to have to neutralise. */}
           {rest > 0 && (
-            <Typography
+            <Button
               data-month-more-varieties
+              variant="text"
+              size="small"
+              onClick={() => setExpanded((open) => !open)}
+              aria-expanded={expanded}
+              aria-controls={gridId}
               sx={{
                 ml: 'auto',
+                p: 0,
+                minWidth: 0,
                 fontSize: DASHBOARD_TYPE.secondary,
-                color: 'text.secondary',
+                fontWeight: 700,
+                textTransform: 'none',
                 fontVariantNumeric: 'tabular-nums',
               }}
             >
-              {t('dashboard.blocks.month.moreVarieties', { count: rest })}
-            </Typography>
+              {expanded
+                ? t('dashboard.blocks.month.collapse')
+                : t('dashboard.blocks.month.moreVarieties', { count: rest })}
+            </Button>
           )}
         </Box>
         {foot}

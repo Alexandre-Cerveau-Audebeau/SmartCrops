@@ -501,8 +501,9 @@
           "harvest": "Récolte"
         },
         "moreNames": "+{{count, number}}",
-        "moreVarieties_one": "+{{count, number}} variété",
-        "moreVarieties_other": "+{{count, number}} variétés",
+        "moreVarieties_one": "Afficher l’autre variété",
+        "moreVarieties_other": "Afficher les {{count, number}} autres variétés",
+        "collapse": "Réduire",
         "unknown_one": "Pas de calendrier connu pour {{count, number}} variété",
         "unknown_other": "Pas de calendrier connu pour {{count, number}} variétés",
         "empty": "Aucune plante placée — le calendrier se remplit avec vos plantations.",

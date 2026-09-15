@@ -7,6 +7,8 @@ import { UnitSystemProvider } from '../../../contexts/UnitSystemContext';
 import { rulesFor } from '../../../test/dashboardDom';
 import { gardenFixture, varietyFixture } from '../../../test/fixtures/dashboard';
 import { linkFixture, locationFixture, weatherFixture } from '../../../test/fixtures/weather';
+import { createAppTheme } from '../../../theme';
+import { contrast, hex, resolveColor } from '../../../test/contrast';
 import { getDashboardTokens } from '../../../theme/dashboardTokens';
 import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../../../types/DashboardWeather';
 import type { DashboardVarietyData } from '../../../types/DashboardData';
@@ -69,6 +71,17 @@ const idle = varietyFixture({
 const fern = varietyFixture({ plantId: 'fern', commonName: 'Fern', count: 7, gardenIds: ['g1'] });
 
 const garden = gardenFixture({ id: 'g1', name: 'Terrasse' });
+
+/** N varieties all pruned this month, with distinct placement counts so Q13 has an order to keep. */
+const manyVarieties = (count: number) =>
+  Array.from({ length: count }, (_, index) =>
+    pruned({
+      plantId: `p${index}`,
+      commonName: `Plant ${String(index).padStart(2, '0')}`,
+      count: count - index,
+      gardenIds: ['g1'],
+    })
+  );
 
 type Props = React.ComponentProps<typeof MonthBlock>;
 
@@ -196,17 +209,16 @@ describe('MonthBlock — Large: the twelve-month grid (A3Expert.dc.html)', () =>
     );
   });
 
-  it('caps the rows at eight and defers the rest to « +N variétés »', () => {
-    const many = Array.from({ length: 11 }, (_, index) =>
-      pruned({ plantId: `p${index}`, commonName: `Plant ${index}`, count: 11 - index, gardenIds: ['g1'] })
-    );
-    const { card } = renderBlock({ size: 'large', varieties: many });
+  it('caps the rows at TEN and offers the rest on a button (V26)', () => {
+    const { card } = renderBlock({ size: 'large', varieties: manyVarieties(16) });
 
-    expect(card.querySelectorAll('[data-month-plant]')).toHaveLength(8);
-    expect(card.querySelector('[data-month-more-varieties]')).toHaveTextContent('+3 varieties');
+    expect(card.querySelectorAll('[data-month-plant]')).toHaveLength(10);
+    expect(card.querySelector('[data-month-more-varieties]')).toHaveTextContent(
+      'Show the 6 other varieties'
+    );
   });
 
-  it('…and says nothing of the kind when the eight rows are all there is', () => {
+  it('…and says nothing of the kind when the ten rows are all there is', () => {
     const { card } = renderBlock({ size: 'large', varieties: [thyme, lettuce, fern] });
 
     expect(card.querySelectorAll('[data-month-plant]')).toHaveLength(2);
@@ -411,3 +423,160 @@ function hexToRgb(value: string): string {
   const [r, g, b] = [0, 2, 4].map((index) => parseInt(digits.slice(index, index + 2), 16));
   return `rgb(${r},${g},${b})`;
 }
+
+// ROUND 1 — V24, V25, V26: the three amendments Alexandre's visual pass took
+// on the Large grid. V24 raises the type and the heights above the plate's own
+// figures; V25 returns the plate's `flex: 1` / `space-evenly` so the rows
+// share the card instead of leaving a void under the legend; V26 turns the
+// « +N variétés » sentence into a deploy button over a scrolling list.
+
+/** The three counted lanes, in the artboard's order. */
+const COUNTERS = ['prune', 'sow', 'harvest'] as const;
+
+/** Emotion's rules for a node, whitespace removed — the suite's own idiom. */
+const ruleText = (node: Element) => rulesFor(node).replace(/\s/g, '');
+
+describe('MonthBlock — Large: the amended scale (V24)', () => {
+  it('draws the name at 15 px, the axis at 13, the rows at 32 and the bars at 5', () => {
+    const { card } = renderBlock({ size: 'large' });
+    const row = card.querySelector('[data-month-plant="thyme"]')!;
+
+    // The plate is at 14 / 12 / 28 / 4 (`A3Expert.dc.html` l. 210-214). This
+    // is a DEVIATION, taken because that scale does not read on a card.
+    expect(ruleText(row.querySelector('[role="rowheader"]')!)).toContain('font-size:15px');
+    expect(ruleText(card.querySelector('[data-month-axis="now"]')!)).toContain('font-size:13px');
+    expect(ruleText(row)).toContain('min-height:32px');
+    expect(ruleText(row.querySelector('[data-month-bar="prune"]')!)).toContain('height:5px');
+  });
+});
+
+describe('MonthBlock — the enlarged labels still read, in both themes (V24)', () => {
+  it.each([['light'], ['dark']])(
+    '%s: the plant name and the month labels clear the 4.5:1 text floor',
+    (mode) => {
+      const { palette } = createAppTheme(mode as 'light' | 'dark');
+      const ground = hex(palette.background.paper);
+      const name = resolveColor(palette.text.primary, ground);
+      const axis = resolveColor(palette.text.secondary, ground);
+
+      // 15 px / 600 and 13 px / 700 are NORMAL text under WCAG 2 § 1.4.3 —
+      // the large-text relief starts at 18.66 px bold — so both owe 4.5:1.
+      // Unlike the four lane tokens, which colour bars, owe 3:1 as graphical
+      // objects and are only RECORDED (`dashboardTokens.test.ts`), these two
+      // carry words: they are asserted.
+      expect(name).not.toBeNull();
+      expect(axis).not.toBeNull();
+      expect(contrast(name!, ground)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(axis!, ground)).toBeGreaterThanOrEqual(4.5);
+    }
+  );
+});
+
+describe('MonthBlock — Large: the void at the foot, and the legend that closes the card (V25)', () => {
+  it('spreads the rows over the card instead of massing them at the top', () => {
+    // Two rows in a Large card: the plate shares the height between them
+    // (`A3Expert.dc.html` l. 336, `flex: 1; justify-content: space-evenly`).
+    const { card } = renderBlock({ size: 'large', varieties: [thyme, lettuce] });
+    const rows = card.querySelector('[data-month-rows]')!;
+
+    expect(card.querySelectorAll('[data-month-plant]')).toHaveLength(2);
+    expect(ruleText(rows)).toContain('justify-content:space-evenly');
+    expect(ruleText(rows)).toContain('flex:1');
+    // …and the grid takes the slack, so none of it piles up below the legend.
+    expect(ruleText(card.querySelector('[data-month-grid]')!)).toContain('flex:1');
+  });
+
+  it('closes the card on the legend, outside the scrolling zone', () => {
+    // No variety without a calendar here, so no foot: the legend is last.
+    const { card } = renderBlock({ size: 'large', varieties: [thyme, rosemary, lettuce] });
+    const legend = card.querySelector('[data-month-legend-row]')!;
+
+    // `DashboardBlock` wraps every widget body in one flex column; « the foot
+    // of the card » is the last child of that column.
+    const body = card.querySelector('[data-month-grid]')!.parentElement!;
+    expect(body.lastElementChild).toBe(legend);
+    expect(card.querySelector('[data-month-grid]')!.contains(legend)).toBe(false);
+    expect(ruleText(legend)).toContain('flex-shrink:0');
+  });
+});
+
+describe('MonthBlock — Large: deploying the rest, and folding it back (V26)', () => {
+  const namesOf = (card: HTMLElement) =>
+    [...card.querySelectorAll('[data-month-plant]')].map((row) => row.getAttribute('data-month-plant'));
+
+  it('names the button in full, ties it to the grid, and deploys every variety', () => {
+    const { card, widget } = renderBlock({ size: 'large', varieties: manyVarieties(16) });
+    const button = widget.getByRole('button', { name: 'Show the 6 other varieties' });
+
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(button).toHaveAttribute('aria-controls', card.querySelector('[data-month-grid]')!.id);
+    expect(card.querySelectorAll('[data-month-plant]')).toHaveLength(10);
+
+    fireEvent.click(button);
+
+    expect(card.querySelectorAll('[data-month-plant]')).toHaveLength(16);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    expect(button).toHaveTextContent('Show less');
+  });
+
+  it('folds back, because a deploy with no way out traps the reader', () => {
+    const { card, widget } = renderBlock({ size: 'large', varieties: manyVarieties(16) });
+
+    fireEvent.click(widget.getByRole('button', { name: 'Show the 6 other varieties' }));
+    expect(card.querySelectorAll('[data-month-plant]')).toHaveLength(16);
+
+    fireEvent.click(widget.getByRole('button', { name: 'Show less' }));
+    expect(card.querySelectorAll('[data-month-plant]')).toHaveLength(10);
+    expect(widget.getByRole('button', { name: 'Show the 6 other varieties' })).toBeInTheDocument();
+  });
+
+  it('keeps the deployed list INSIDE the card, and every row reachable (V7)', () => {
+    const { card, widget } = renderBlock({ size: 'large', varieties: manyVarieties(16) });
+    fireEvent.click(widget.getByRole('button', { name: 'Show the 6 other varieties' }));
+
+    const grid = card.querySelector('[data-month-grid]')!;
+    const rows = card.querySelector('[data-month-rows]')!;
+
+    // The list scrolls inside a clipped grid: the card itself does not grow.
+    expect(ruleText(grid)).toContain('overflow:hidden');
+    expect(ruleText(grid)).toContain('min-height:0');
+    expect(ruleText(rows)).toContain('overflow-y:auto');
+    expect(ruleText(rows)).toContain('min-height:0');
+    // Packed from the top: `space-evenly` on a scrolling box pushes the first
+    // rows above the scrollable area, where no scrollbar reaches them.
+    expect(ruleText(rows)).toContain('justify-content:flex-start');
+    expect(ruleText(card.querySelector('[data-month-plant="p0"]')!)).toContain('flex-shrink:0');
+    // The legend stays out of the scrolling zone and keeps its place.
+    expect(grid.contains(card.querySelector('[data-month-legend-row]'))).toBe(false);
+    // Nothing is animated by the toggle, so `prefers-reduced-motion` has
+    // nothing to neutralise here.
+    expect(ruleText(rows)).not.toContain('transition:');
+  });
+
+  it('keeps the Q13 order in BOTH states', () => {
+    const varieties = manyVarieties(16);
+    const { card, widget } = renderBlock({ size: 'large', varieties });
+    const all = expected({ varieties }).known.map((entry) => entry.variety.plantId);
+
+    expect(namesOf(card)).toEqual(all.slice(0, 10));
+    fireEvent.click(widget.getByRole('button', { name: 'Show the 6 other varieties' }));
+    expect(namesOf(card)).toEqual(all);
+  });
+
+  it('counts EVERY variety in the chip and the three counters, deployed or not', () => {
+    // The `resolveCountersFigures` rule: a figure states what the derivation
+    // holds, never what the grid happens to be drawing.
+    const { card, widget } = renderBlock({ size: 'large', varieties: manyVarieties(16) });
+    const readCounters = () =>
+      COUNTERS.map((key) => card.querySelector(`[data-month-count="${key}"]`)!.textContent);
+
+    const collapsed = readCounters();
+    const chip = card.querySelector('[data-month-chip]')!.textContent;
+    expect(card.querySelector('[data-month-count="prune"]')).toHaveTextContent('16');
+
+    fireEvent.click(widget.getByRole('button', { name: 'Show the 6 other varieties' }));
+
+    expect(readCounters()).toEqual(collapsed);
+    expect(card.querySelector('[data-month-chip]')!.textContent).toBe(chip);
+  });
+});
