@@ -3,7 +3,7 @@ import type { DashboardGardenData } from '../types/DashboardData';
 import { parseCellsJson, type CellData } from '../types/GardenLayout';
 import { computeExposureView } from '../pages/gardenPlanner/exposureView';
 import { cellSizeToMeters } from '../pages/gardenPlanner/placementGeometry';
-import type { ExposureCategory } from './exposure';
+import type { ExposureCategory, MomentsLit } from './exposure';
 import { infrastructureBlockers } from './infrastructure';
 
 /**
@@ -368,6 +368,26 @@ export interface GardenView {
   readonly dominantExposure: ExposureCategory | null;
   readonly exposure: ExposureTally;
   readonly freeExposure: ExposureTally;
+  /**
+   * The engine's verdict per cell, `[row][col]`, null per inactive cell —
+   * the grid the tallies above were counted from (SMA-336 PR 4b/5, decision
+   * T2). Null altogether when the garden has no plan.
+   *
+   * Kept on the view rather than re-derived by the Tips widget so that a
+   * tip about one cell and the Statistics figures about the whole garden
+   * come out of the SAME engine pass — at « summer · noon » (D12) — and
+   * cannot disagree under the same user's eyes. Read-only for the reason
+   * {@link ExposureTally} is: the view is cached and shared.
+   */
+  readonly cells: ReadonlyArray<ReadonlyArray<ExposureCategory | null>> | null;
+  /**
+   * Which of the three moments each cell is lit at (SMA-309), aligned with
+   * {@link GardenView.cells}; null where the category did not come from the
+   * sun path (inactive cell, manual override, indoor garden), and null
+   * altogether without a plan. This is what lets a sentence say « shaded in
+   * the afternoon » exactly rather than guess it from the category.
+   */
+  readonly momentsLit: ReadonlyArray<ReadonlyArray<Readonly<MomentsLit> | null>> | null;
   /** False when the garden has no saved layout — nothing here can be trusted then. */
   readonly hasPlan: boolean;
 }
@@ -406,6 +426,8 @@ export function deriveGardenView(garden: DashboardGardenData): GardenView {
       dominantExposure: null,
       exposure: emptyExposureTally(),
       freeExposure: emptyExposureTally(),
+      cells: null,
+      momentsLit: null,
       hasPlan: false,
     };
   }
@@ -458,7 +480,67 @@ export function deriveGardenView(garden: DashboardGardenData): GardenView {
     freeExposure: view.cells
       ? freeExposureFrom(view.cells, coverage.taken, height, width)
       : emptyExposureTally(),
+    // The engine's own arrays, not copies: nothing downstream writes to a
+    // view, and a copy per garden per load would buy nothing but allocation.
+    cells: view.cells,
+    momentsLit: view.momentsLit,
     hasPlan: true,
+  };
+}
+
+/** What the plan says about the cell a placement is anchored on. */
+export interface PlacementExposure {
+  /** The anchor cell the verdict is about, clipped to the plan — the one a tip names. */
+  readonly row: number;
+  readonly col: number;
+  readonly category: ExposureCategory;
+  /**
+   * The moments that cell is lit at, or null when its category does not come
+   * from the sun path (manual override, indoor garden) — see {@link MomentsLit}.
+   */
+  readonly momentsLit: Readonly<MomentsLit> | null;
+}
+
+/**
+ * The exposure of a placement, read off the view's grid — never recomputed
+ * (SMA-336 PR 4b/5, decision T3).
+ *
+ * ONE cell, the anchor: a footprint may straddle several categories, and a
+ * verdict on « the majority of the footprint » would name no cell for the
+ * sentence to point at. The anchor is what `cellRef` prints as « F3 » in the
+ * planner, so the tip and the plan agree on which cell is meant.
+ *
+ * Clipped by the same {@link clipPlacement} as `placementCoverage` and the
+ * thumbnail, so a placement anchored outside the plan is judged on its first
+ * cell INSIDE it, exactly the cell the occupancy counted and the thumbnail
+ * drew — and one that lands entirely outside is judged on nothing.
+ *
+ * Null, in every case where the plan has no exposure to give: no plan, a
+ * footprint entirely outside it, or an anchor on a cell the user switched off
+ * (the engine rates it null). A caller that gets null has nothing to say about
+ * that placement; it must not fall back to a default category.
+ */
+export function placementExposure(
+  view: GardenView,
+  placement: PlacementData
+): PlacementExposure | null {
+  const cells = view.cells;
+  if (!cells) return null;
+
+  // The engine builds a full `rows × cols` grid, so the array IS the plan's
+  // geometry; reading it here keeps the clip on the same dimensions
+  // `deriveGardenView` clipped the coverage with.
+  const box = clipPlacement(placement, cells.length, cells[0]?.length ?? 0);
+  if (!box) return null;
+
+  const category = cells[box.row]?.[box.col] ?? null;
+  if (!category) return null;
+
+  return {
+    row: box.row,
+    col: box.col,
+    category,
+    momentsLit: view.momentsLit?.[box.row]?.[box.col] ?? null,
   };
 }
 
