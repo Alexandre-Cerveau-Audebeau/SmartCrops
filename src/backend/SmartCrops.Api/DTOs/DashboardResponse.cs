@@ -111,6 +111,45 @@ public record DashboardGardenDto(
 /// degrees of a day's minimum; the unknown ones are not guessed at. A factual
 /// value from the xData, not the gated free text (SMA-70).
 /// </param>
+/// <param name="PruningMonths">
+/// SMA-336 PR 4a/5 — <c>PlantPerenualData.PruningMonths</c> VERBATIM: the
+/// comma-separated English month names Perenual lists for pruning
+/// (« February,March,April »), in the order they are stored — unordered and
+/// year-wrapping lists exist — or null when unknown (5 % of the catalog).
+/// The browser parses it (pre-flight decision T1): the ONE parser the product
+/// owns, <c>periodToMonths</c>, already reads a month name, and this server
+/// transports rather than calculates (D9). A short factual month list, exposed
+/// unconditionally since SMA-231 — never the gated free text.
+/// </param>
+/// <param name="SowingPeriod">
+/// The legacy catalog token (« march-may », « year-round »), verbatim, or null.
+/// Filled on 5.6 % of the catalog; the « Semer — dernier mois de semis » task
+/// reads it (pre-flight arbitrage Q11).
+/// </param>
+/// <param name="HarvestPeriod">
+/// The legacy catalog token (« june-september »), verbatim, or null. The
+/// calendar reads it FIRST and falls back to <see cref="HarvestSeason"/>, the
+/// combination the plant detail page already applies.
+/// </param>
+/// <param name="SunlightHoursMin">
+/// xData: recommended daily sunlight hours, minimum, or null. Carried from this
+/// lot so PR 4b/5 (the Tips widget) does not reopen the contract.
+/// </param>
+/// <param name="SunlightHoursMax">
+/// xData: recommended daily sunlight hours, maximum, or null — a half-open range
+/// on 37 % of the catalog.
+/// </param>
+/// <param name="FloweringSeason">
+/// SMA-336 PR 4a/5, decision Q2 — <c>PlantPerenualData.FloweringSeason</c>:
+/// ONE word of a closed list of five (Spring / Summer / Autumn / Fall /
+/// Winter), verbatim, or null. Reclassified FACTUAL: a season word is of the
+/// same nature as the month list <see cref="PruningMonths"/> already exposes,
+/// not the copyrightable free text SMA-70 gates. The gate's own documentation
+/// records the decision (<c>PlantDetailMapper</c>, <c>ContentExposureOptions</c>).
+/// </param>
+/// <param name="HarvestSeason">
+/// Same closed list, same decision Q2, verbatim, or null (60 % of the catalog).
+/// </param>
 public record VarietyCountDto(
     Guid PlantId,
     string ScientificName,
@@ -123,7 +162,14 @@ public record VarietyCountDto(
     int Cells,
     IReadOnlyList<Guid> GardenIds,
     string? WateringNeedLevel,
-    int? MinToleratedTempC);
+    int? MinToleratedTempC,
+    string? PruningMonths,
+    string? SowingPeriod,
+    string? HarvestPeriod,
+    int? SunlightHoursMin,
+    int? SunlightHoursMax,
+    string? FloweringSeason,
+    string? HarvestSeason);
 
 /// <summary>
 /// SMA-336 PR 2/5 — the page-level counters, so the header chips do not have to

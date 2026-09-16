@@ -483,7 +483,35 @@
       },
       "month": {
         "title": "This month",
-        "invite": "The month’s calendar arrives with the sowings and harvests of your plantings."
+        "monthsShort": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+        "counts": {
+          "prune": "to prune",
+          "sow": "to sow",
+          "harvest": "to harvest"
+        },
+        "verbs": {
+          "prune": "To prune",
+          "sow": "To sow",
+          "harvest": "To harvest"
+        },
+        "legend": {
+          "prune": "Pruning",
+          "sow": "Sowing",
+          "flower": "Flowering",
+          "harvest": "Harvest"
+        },
+        "moreNames": "+{{count, number}}",
+        "moreVarieties_one": "Show the {{count, number}} other variety",
+        "moreVarieties_other": "Show the {{count, number}} other varieties",
+        "collapse": "Show less",
+        "unknown_one": "No known calendar for {{count, number}} variety",
+        "unknown_other": "No known calendar for {{count, number}} varieties",
+        "empty": "No plant placed yet — the calendar fills up with your plantings.",
+        "loadError": "Couldn’t load the month’s calendar.",
+        "gridLabel": "Twelve-month calendar of your varieties",
+        "rowSpoken": "{{plant}} — {{lanes}}",
+        "laneSpoken": "{{lane}}: {{months}}",
+        "galleryPrune": "{{count, number}} to prune"
       },
       "todo": {
         "title": "To do today",
@@ -500,6 +528,10 @@
         "eveningOf": "{{day}} evening",
         "water": "Water tonight — {{plants}} ({{garden}}), no rain expected",
         "waterGrouped": "Water tonight — {{plants}} with high needs, no rain expected",
+        "prune": "Prune — {{plants}} ({{garden}}, {{month}})",
+        "pruneGrouped": "Prune — {{plants}} ({{month}})",
+        "sow": "Sow — {{plants}}, last month to sow ({{garden}}, {{month}})",
+        "sowGrouped": "Sow — {{plants}}, last month to sow ({{month}})",
         "cold": "Protect from cold — {{plants}} ({{garden}}), {{temp}} {{when}}",
         "coldGrouped": "Protect from cold — {{plants}}, {{temp}} {{when}}",
         "frost": "Protect from frost — {{plants}} ({{garden}}), {{temp}} {{when}}",
@@ -508,8 +540,9 @@
         "done": "Mark “{{task}}” as done",
         "sessionOnly": "Boxes ticked for this session only — not saved",
         "stale": "{{task}} (last known weather)",
-        "nothing": "Nothing to do today, weather-wise.",
-        "soonKinds": "Pruning and sowing tasks are coming soon.",
+        "nothing": "Nothing to do today.",
+        "unknownYet": "Nothing planned today — watering is not known yet.",
+        "weatherUnavailable": "Weather unavailable — watering is not planned for now.",
         "noWeather_one": "Without the weather of {{gardens}}, its watering is not planned — ",
         "noWeather_other": "Without the weather of {{gardens}}, their watering is not planned — ",
         "addCity": "Add a city →",

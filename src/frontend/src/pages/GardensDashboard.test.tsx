@@ -10,7 +10,9 @@ import { presetFor } from '../constants/dashboardPresets';
 import {
   dashboardFixture as dashboardWith,
   gardenFixture,
+  varietyFixture,
 } from '../test/fixtures/dashboard';
+import { placement } from '../test/fixtures/placements';
 import { linkFixture, weatherFixture } from '../test/fixtures/weather';
 import { packGrid, spanFor } from '../utils/dashboardLayoutGrid';
 import {
@@ -449,12 +451,10 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
     // Weather LEFT this list in PR 3b/5: it carries the weather aggregate now,
     // and its invitation has a field behind it — see the two tests below.
     ['Tips', 'Tips arrive with the exposure and the calendar of your gardens.'],
-    [
-      'This month',
-      'The month’s calendar arrives with the sowings and harvests of your plantings.',
-    ],
     // To do today LEFT this list in PR 3b/5 (step 8): it derives its tasks
     // from the weather aggregate — `TodoBlock.test.tsx` covers what it shows.
+    // This month LEFT it in PR 4a/5: it carries the calendar of the placed
+    // varieties now — `MonthBlock.test.tsx` covers what it shows.
     // Counts by variety and Statistics LEFT this list in PR 2/5: they carry
     // real data now, and their own tests cover what they show.
     [
@@ -485,9 +485,10 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
     renderPage();
 
     await waitFor(() => expect(renderedKeys()).toHaveLength(8));
-    // Three shells — Tips, This month, Harvest: Gardens, Counts by variety,
-    // Statistics and, since PR 3b/5, Weather and To do today carry data.
-    expect(screen.getAllByText('Coming soon')).toHaveLength(3);
+    // Two shells — Tips and Harvest: Gardens, Counts by variety, Statistics,
+    // Weather and To do today carry data, and This month joined them in
+    // PR 4a/5.
+    expect(screen.getAllByText('Coming soon')).toHaveLength(2);
   });
 
   it('the Weather widget offers the city field and « Use » in its invitation (PR 3b/5, decision R4 lifted)', async () => {
@@ -534,7 +535,7 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
         'Les conseils arrivent avec l’exposition et le calendrier de vos jardins.'
       )
     ).toBeInTheDocument();
-    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(3);
+    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(2);
     expect(screen.getByLabelText('Ville')).toBeInTheDocument();
   });
 });
@@ -966,6 +967,13 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
       imageAttribution: null,
       wateringNeedLevel: null,
       minToleratedTempC: null,
+      pruningMonths: null,
+      sowingPeriod: null,
+      harvestPeriod: null,
+      sunlightHoursMin: null,
+      sunlightHoursMax: null,
+      floweringSeason: null,
+      harvestSeason: null,
       count: 1,
       cells: 1,
       gardenIds,
@@ -995,6 +1003,63 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(gallery.queryByText('3')).toBeNull();
   });
 
+  it('counts the This-month thumbnail through the widget’s own derivation (C4, PR 4a/5)', async () => {
+    // The same rule as the Counters card above: the figure comes from
+    // `monthCalendar`, the function the widget itself counts with, so a hidden
+    // « Ce mois-ci » cannot be offered a number it would not print.
+    const blocks = presetFor('gardener');
+    blocks.find((block) => block.key === 'month')!.hidden = true;
+    servePreferences('gardener', blocks);
+
+    // Two varieties pruned THIS month whatever month the suite runs in, and
+    // one pruned six months away — the figure must be 2, never 3.
+    const MONTHS = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    const now = new Date().getMonth();
+    const pruned = (plantId: string, commonName: string, monthIndex: number): DashboardVarietyData => ({
+      plantId,
+      scientificName: plantId,
+      commonName,
+      plantType: 'Herb',
+      isEdible: true,
+      imageUrl: null,
+      imageAttribution: null,
+      wateringNeedLevel: null,
+      minToleratedTempC: null,
+      pruningMonths: MONTHS[monthIndex % 12]!,
+      sowingPeriod: null,
+      harvestPeriod: null,
+      sunlightHoursMin: null,
+      sunlightHoursMax: null,
+      floweringSeason: null,
+      harvestSeason: null,
+      count: 1,
+      cells: 1,
+      gardenIds: ['g1'],
+    });
+
+    vi.mocked(fetchDashboardData).mockResolvedValue({
+      gardens: [garden('g1', 'Terrasse')],
+      varieties: [
+        pruned('thyme', 'Thyme', now),
+        pruned('rosemary', 'Rosemary', now),
+        pruned('zinnia', 'Zinnia', now + 6),
+      ],
+      totals: { gardenCount: 1, placementCount: 3, varietyCount: 3, catalogPlantCount: 536 },
+    });
+
+    await openPanel();
+    const gallery = within(screen.getByRole('dialog', { name: 'Customize' }));
+
+    expect(gallery.getByText('This month')).toBeInTheDocument();
+    // The two due THIS month — not the three varieties the aggregate holds,
+    // which is the figure a thumbnail deriving its own count would have shown.
+    expect(gallery.getByText('2 to prune')).toBeInTheDocument();
+    expect(gallery.queryByText('3 to prune')).toBeNull();
+  });
+
   it('falls back to every garden when the filtered one is gone (C4)', async () => {
     // The same fallback the widget and its options panel make, in the same
     // order: a filter naming a deleted garden resolves to « all » rather than
@@ -1019,6 +1084,13 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
           imageAttribution: null,
           wateringNeedLevel: null,
           minToleratedTempC: null,
+          pruningMonths: null,
+          sowingPeriod: null,
+          harvestPeriod: null,
+          sunlightHoursMin: null,
+          sunlightHoursMax: null,
+          floweringSeason: null,
+          harvestSeason: null,
           count: 1,
           cells: 1,
           gardenIds: ['g1'],
@@ -1347,5 +1419,48 @@ describe('GardensDashboard — outlined chips draw `--chip-bd` (round 6, N6-4)',
 
     const chip = (await screen.findByText('Gardener view')).closest('.MuiChip-root')!;
     expect(rulesFor(chip).toLowerCase().replace(/\s+/g, '')).toContain(`border-color:${border}`);
+  });
+});
+
+// ROUND 1 (C2) — the page hands the To-do block TWO statuses, not their union.
+describe('GardensDashboard — a weather outage no longer empties « À faire » (round 1, C2)', () => {
+  it('keeps the calendar tasks and says the watering half is out', async () => {
+    const MONTHS = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    const hedge: DashboardVarietyData = {
+      ...varietyFixture({ plantId: 'hedge', commonName: 'Hedge', gardenIds: ['g1'] }),
+      pruningMonths: MONTHS[new Date().getMonth()]!,
+    };
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith(
+        [
+          garden('g1', 'Terrasse', {
+            placements: [placement({ id: 'h-0', plantId: 'hedge' })],
+            placementCount: 1,
+            varietyCount: 1,
+          }),
+        ],
+        { varieties: [hedge] }
+      )
+    );
+    // The provider is down. The plans are not.
+    vi.mocked(fetchDashboardWeather).mockRejectedValue(new Error('provider down'));
+
+    renderPage();
+
+    const todo = (await screen.findByRole('heading', { level: 2, name: 'To do today' })).closest(
+      '[data-widget="todo"]'
+    ) as HTMLElement;
+    await waitFor(() =>
+      expect(todo.querySelector('[data-todo-weather-note]')).toHaveTextContent(
+        'Weather unavailable — watering is not planned for now.'
+      )
+    );
+    // The half that never needed a forecast is still there…
+    expect(todo.querySelector('[data-todo-task="prune"]')).toHaveTextContent(/^Prune — Hedge \(\w+\)$/);
+    // …and the fatal branch, which the union used to select, is not.
+    expect(todo).not.toHaveTextContent('Couldn’t load today’s tasks.');
   });
 });

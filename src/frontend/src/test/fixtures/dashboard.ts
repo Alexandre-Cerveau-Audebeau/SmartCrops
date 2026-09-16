@@ -66,6 +66,16 @@ export const varietyFixture = (
   // PR 3b/5 — unknown by default; a To-do test says what it is about.
   wateringNeedLevel: null,
   minToleratedTempC: null,
+  // PR 4a/5 — the calendar and sunlight facts, unknown by default likewise: a
+  // variety with no calendar is what the « Ce mois-ci » foot counts, so the
+  // default must be the honest « unknown » and a test names what it dates.
+  pruningMonths: null,
+  sowingPeriod: null,
+  harvestPeriod: null,
+  sunlightHoursMin: null,
+  sunlightHoursMax: null,
+  floweringSeason: null,
+  harvestSeason: null,
   ...over,
 });
 

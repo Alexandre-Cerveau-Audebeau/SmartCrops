@@ -7,6 +7,15 @@ import type {
   WeatherDay,
   WeatherLocation,
 } from '../../../types/DashboardWeather';
+import {
+  browserClock,
+  lanesOf,
+  lastMonthOf,
+  monthOfGarden,
+  varietyName,
+  type BrowserClock,
+  type YearMonth,
+} from './plantCalendar';
 import { hourOf, localDateOf, parseLocalDateTime } from './weatherTime';
 
 /**
@@ -17,12 +26,22 @@ import { hourOf, localDateOf, parseLocalDateTime } from './weatherTime';
  * surface that states a number the list did not pass through cannot agree
  * with it.
  *
- * Two tasks in this lot, both PER GARDEN, both counting PLACEMENTS (« 30
+ * Two weather tasks, both PER GARDEN, both counting PLACEMENTS (« 30
  * plantes », never varieties): watering tonight, and protecting from the cold
- * in its two rules (arbitrage Q9). « Tailler » and « Semer » arrive in PR 4/5
- * in this same function; a garden WITHOUT weather — not located, or a place
- * the provider could not describe — produces NO weather task and is named by
- * {@link gardensWithoutWeather} for the block's invitation instead.
+ * in its two rules (arbitrage Q9 of PR 3). A garden WITHOUT weather — not
+ * located, or a place the provider could not describe — produces NO weather
+ * task and is named by {@link gardensWithoutWeather} for the block's
+ * invitation instead.
+ *
+ * SMA-336 PR 4a/5 adds the two CALENDAR tasks of the same function (pre-flight
+ * § D, T8): « Tailler — Thym, Romarin (septembre) » when the garden's month is
+ * in a placed variety's pruning months, « Semer — Laitue, dernier mois de
+ * semis » when it is the last month of its sowing window (Q11). They need no
+ * weather: a garden that reads no place still prunes — in the browser's month
+ * (Q10) — so the loop no longer leaves an unlocated garden before the rules.
+ * Their count is VARIETIES (the sentence lists them), their identity carries
+ * the month and the varieties (lesson E9 / E10: a ticked box must not survive
+ * a task that no longer says the same thing).
  *
  * Every threshold is named and consigned as arbitrary except the freezing
  * point; all live in {@link TODO_RULES}.
@@ -64,42 +83,53 @@ export const TODO_RULES = {
   },
 } as const;
 
-export type TodoTaskKind = 'water' | 'cold' | 'frost';
+/** The five kinds, in the order a garden lists them (`Main.dc.html`: water, prune, sow, then the cold). */
+export type TodoTaskKind = 'water' | 'prune' | 'sow' | 'cold' | 'frost';
 
 export interface TodoTask {
   /**
    * The session checkbox key: the kind, the garden AND a digest of the content
-   * — date, count, tolerance and minimum (round 1, E9 / E10; round 2, D2). A
-   * weather refresh that moves a task to another day, another count or another
-   * minimum makes ANOTHER task, whose box starts unticked; a refresh that
-   * changes nothing keeps it.
+   * — date, count, tolerance and minimum (round 1, E9 / E10; round 2, D2) for
+   * the weather tasks; the month and the variety ids IN THE SENTENCE'S OWN
+   * ORDER for the calendar ones (round 1, C5). A refresh that moves a task to
+   * another day, another count, another
+   * minimum or another set of varieties makes ANOTHER task, whose box starts
+   * unticked; a refresh that changes nothing keeps it.
    */
   id: string;
   kind: TodoTaskKind;
   gardenId: string;
   gardenName: string;
-  /** PLACEMENTS concerned, never varieties. */
+  /** PLACEMENTS concerned for the weather tasks; VARIETIES listed for prune and sow. */
   count: number;
-  /** The day the task names, in the place's own calendar (« jeudi »). */
+  /**
+   * The day the task names, in the place's own calendar (« jeudi ») — for
+   * the calendar tasks, the first day of the month they name (« yyyy-MM-01 »).
+   */
   date: string;
-  /** Whether that day is the place's own today (« ce soir »). */
+  /** Whether that day is the place's own today (« ce soir »); always true for a calendar task. */
   today: boolean;
-  /** The day's minimum, °C, for cold and frost; null for watering. */
+  /** The day's minimum, °C, for cold and frost; null otherwise. */
   tempC: number | null;
   /**
    * Rule (a) only: the KNOWN tolerance the sentence names — « sensibles sous
    * 8° » — the HIGHEST among the placements counted, i.e. the most fragile
-   * plant's (round 1, O1). Null for watering and frost.
+   * plant's (round 1, O1). Null otherwise.
    */
   toleranceC: number | null;
   /**
    * The place's weather is its LAST KNOWN one, not a fresh forecast (round 1,
    * G2): the task is still planned — a stale forecast beats no plan — and the
-   * block says so beside it.
+   * block says so beside it. Never true of a calendar task: no forecast is
+   * involved.
    */
   stale: boolean;
-  /** Its index in the place's PLANNABLE `days[]` — today and after — the tie-break between the two cold rules. */
+  /** Its index in the place's PLANNABLE `days[]` — today and after — the tie-break between the two cold rules; 0 for a calendar task. */
   dayIndex: number;
+  /** prune / sow: the month the task names — the GARDEN's own (Q10); null for the weather tasks. */
+  month: YearMonth | null;
+  /** prune / sow: the varieties the sentence lists, by display name, in the garden's placement order; empty for the weather tasks. */
+  names: string[];
 }
 
 /**
@@ -109,6 +139,18 @@ export interface TodoTask {
 export type LocalClock = (location: WeatherLocation) => string | null;
 
 export const localTimeClock: LocalClock = (location) => location.localTime;
+
+/**
+ * The two clocks of the block (pre-flight T8): the place's own instant for the
+ * weather tasks, the browser's for the month of a garden that reads no place
+ * (Q10). Both injected; neither is a bare `new Date()` in this file.
+ */
+export interface TodoClock {
+  place: LocalClock;
+  browser: BrowserClock;
+}
+
+export const DEFAULT_TODO_CLOCK: TodoClock = { place: localTimeClock, browser: browserClock };
 
 /** The place a garden reads, when the aggregate holds one WITH forecast days; null otherwise. */
 export function locationOfGarden(
@@ -121,7 +163,7 @@ export function locationOfGarden(
   return location && location.days.length > 0 ? location : null;
 }
 
-/** The gardens the block cannot plan for — the subjects of « Sans la météo de X et Y… ». */
+/** The gardens the block cannot plan WEATHER for — the subjects of « Sans la météo de X et Y… ». */
 export function gardensWithoutWeather(
   gardens: readonly DashboardGardenData[],
   weather: DashboardWeatherData
@@ -152,21 +194,111 @@ function isDryEvening(day: WeatherDay): boolean {
     );
 }
 
+/** « yyyy-MM » — the month half of a calendar task's identity and date. */
+function stampOf({ year, month }: YearMonth): string {
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+/**
+ * The calendar tasks of ONE garden — prune, then sow — in its own month.
+ *
+ * The varieties are walked in the garden's placement order (the `Map` keeps
+ * insertion order), so the sentence lists them as the plan does. A variety is
+ * listed ONCE however many times it is planted: the sentence names plants,
+ * not placements.
+ */
+function calendarTasks(
+  garden: DashboardGardenData,
+  placedVarieties: readonly DashboardVarietyData[],
+  month: YearMonth
+): TodoTask[] {
+  const hemisphere = garden.config.hemisphere;
+  const prune: DashboardVarietyData[] = [];
+  const sow: DashboardVarietyData[] = [];
+  for (const variety of placedVarieties) {
+    const lanes = lanesOf(variety, hemisphere);
+    if (lanes.prune.includes(month.month)) prune.push(variety);
+    if (lastMonthOf(lanes.sow) === month.month) sow.push(variety);
+  }
+
+  const stamp = stampOf(month);
+  const task = (kind: 'prune' | 'sow', varieties: DashboardVarietyData[]): TodoTask => ({
+    // The month AND the variety ids IN THE ORDER THE SENTENCE LISTS THEM
+    // (E9 / E10, then round 1 C5 — Extension `40f66fec` / `7dc15d10`): a
+    // variety planted or removed changes the sentence, so it changes the id.
+    // The ids used to be sorted while `names` below kept the plan's order, so
+    // reordering the same varieties changed the visible sentence and left the
+    // id — and with it the session's tick and the React key — attached to a
+    // task that no longer said the same thing. One order for both, or the
+    // identity is not the sentence's.
+    id: `${kind}:${garden.id}:${stamp}:${varieties.map((v) => v.plantId).join('|')}`,
+    kind,
+    gardenId: garden.id,
+    gardenName: garden.name,
+    count: varieties.length,
+    date: `${stamp}-01`,
+    today: true,
+    tempC: null,
+    toleranceC: null,
+    stale: false,
+    dayIndex: 0,
+    month,
+    names: varieties.map(varietyName),
+  });
+
+  const tasks: TodoTask[] = [];
+  if (prune.length > 0) tasks.push(task('prune', prune));
+  if (sow.length > 0) tasks.push(task('sow', sow));
+  return tasks;
+}
+
 export function todoTasks(
   gardens: readonly DashboardGardenData[],
   varieties: readonly DashboardVarietyData[],
   weather: DashboardWeatherData,
-  now: LocalClock = localTimeClock
+  clock: TodoClock = DEFAULT_TODO_CLOCK
 ): TodoTask[] {
   const byPlant = new Map(varieties.map((variety) => [variety.plantId, variety]));
   const tasks: TodoTask[] = [];
+  // Round 2, C6 — the same rule `blockMonth` now keeps: ONE instant for the
+  // whole calculation. Read inside the loop, the browser clock could date two
+  // gardens of one zone in two different months across midnight on the last of
+  // the month, and a list of today's tasks would then name two « today »s.
+  const now = clock.browser();
+  const frozenBrowser: BrowserClock = () => now;
 
   for (const garden of gardens) {
+    if (garden.placements.length === 0) continue;
+
+    // Placements per variety — the unit every weather count is stated in —
+    // in the plan's order, which is also the order the calendar sentences
+    // list the varieties in.
+    const placementsOf = new Map<string, number>();
+    for (const placement of garden.placements) {
+      placementsOf.set(placement.plantId, (placementsOf.get(placement.plantId) ?? 0) + 1);
+    }
+    const placedVarieties = [...placementsOf.keys()]
+      .map((plantId) => byPlant.get(plantId))
+      .filter((variety): variety is DashboardVarietyData => variety !== undefined);
+
+    // ── Calendar tasks: NO weather needed (PR 4a/5, T8) ─────────────────
+    // The garden's own month — its place's when it reads one with a clock,
+    // the browser's otherwise (Q10). Derived BEFORE the weather gate below:
+    // an unlocated garden prunes too.
+    const calendar = calendarTasks(
+      garden,
+      placedVarieties,
+      monthOfGarden(garden, weather, frozenBrowser)
+    );
+
     const location = locationOfGarden(garden.id, weather);
-    if (!location || garden.placements.length === 0) continue;
+    if (!location) {
+      tasks.push(...calendar);
+      continue;
+    }
     const today = localDateOf(location);
     const nowHour = (() => {
-      const stamp = now(location);
+      const stamp = clock.place(location);
       return stamp ? (parseLocalDateTime(stamp)?.hour ?? null) : null;
     })();
     // Chosen over « no task at all » (round 1, G2): a place whose refresh
@@ -183,12 +315,9 @@ export function todoTasks(
     // upstream of the three rules; an unknown date trusts every day, as before.
     const days =
       today === null ? location.days : location.days.filter((day) => day.date >= today);
-    if (days.length === 0) continue;
-
-    // Placements per variety — the unit every count is stated in.
-    const placementsOf = new Map<string, number>();
-    for (const placement of garden.placements) {
-      placementsOf.set(placement.plantId, (placementsOf.get(placement.plantId) ?? 0) + 1);
+    if (days.length === 0) {
+      tasks.push(...calendar);
+      continue;
     }
 
     // ── Watering tonight ────────────────────────────────────────────────
@@ -217,8 +346,13 @@ export function todoTasks(
         toleranceC: null,
         stale,
         dayIndex: 0,
+        month: null,
+        names: [],
       });
     }
+
+    // Water, then the calendar, then the cold — the artboard's order.
+    tasks.push(...calendar);
 
     // ── Cold, rule (a): the placements whose tolerance is KNOWN ────────
     let cold: TodoTask | null = null;
@@ -250,6 +384,8 @@ export function todoTasks(
         toleranceC: mostFragile,
         stale,
         dayIndex: index,
+        month: null,
+        names: [],
       };
       return true;
     });
@@ -270,6 +406,8 @@ export function todoTasks(
         toleranceC: null,
         stale,
         dayIndex: index,
+        month: null,
+        names: [],
       };
       return true;
     });

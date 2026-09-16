@@ -34,7 +34,7 @@ Gauge-worthy data lives in **`PlantPerenualData`** (~96% filled), **not** in the
 
 ## Licensing gate (SMA-70)
 
-`ExposeSourceText=false` in the one tracked `src/backend/SmartCrops.Api/appsettings.json` (the Development variant is gitignored and has never been committed) gates every Perenual free-text care field (full care-guide JSON, propagation/sowing instructions). Only non-copyrightable factual values are exposed. Don't un-gate free text without a product/legal decision.
+`ExposeSourceText=false` in the one tracked `src/backend/SmartCrops.Api/appsettings.json` (the Development variant is gitignored and has never been committed) gates every Perenual free-text care field (full care-guide JSON, propagation/sowing instructions). Only non-copyrightable factual values are exposed. Don't un-gate free text without a product/legal decision. **Season words are factual, not free text** (SMA-336 PR 4a/5, decision Q2): `FloweringSeason` and `HarvestSeason` are one word of a closed list of five, the same nature as the exposed `PruningMonths` month list — exposed by the detail mapper and transported by the dashboard aggregate; don't re-gate them.
 
 ## Plant Detail v2 — structure
 
