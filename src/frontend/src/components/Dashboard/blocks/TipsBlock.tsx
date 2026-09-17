@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
@@ -126,8 +126,11 @@ export default function TipsBlock({
   const [expanded, setExpanded] = useState(false);
   const idPrefix = useId();
 
-  // ONE derivation for the chip, the lists, the groups and the invitations.
-  const advice = gardenAdvice(gardens, views, varieties, weather);
+  // ONE derivation for the chip, the lists, the groups and the invitations —
+  // per input, not per render (round 1, S-1 — Extension `fc64eee0`): the
+  // « Pourquoi » and V26 toggles below change no input of it, and each pass
+  // walks every garden and every placement and rebuilds three catalog maps.
+  const advice = useMemo(() => gardenAdvice(gardens, views, varieties, weather), [gardens, views, varieties, weather]);
   const { tips, byGarden, gardensWithoutOrientation, unknownExposure } = advice;
 
   const toggleWhy = (id: string) =>

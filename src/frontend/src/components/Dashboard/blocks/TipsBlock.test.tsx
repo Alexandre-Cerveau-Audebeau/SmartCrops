@@ -15,6 +15,13 @@ import { gardenViewOf, type GardenView } from '../../../utils/gardenStats';
 import TipsBlock from './TipsBlock';
 import { gardenAdvice } from './gardenAdvice';
 
+// The real `gardenAdvice`, wrapped so its calls can be counted (round 1, S-1):
+// every suite below still runs the true derivation.
+vi.mock('./gardenAdvice', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./gardenAdvice')>();
+  return { ...actual, gardenAdvice: vi.fn(actual.gardenAdvice) };
+});
+
 // SMA-336 PR 4b/5 — « Conseils » against `A2Novice.dc.html` (Small),
 // `Main.dc.html` (Medium: two tips, « +1 conseil → »), `A4Manquantes.dc.html`
 // (one tip, the orientation invitation, « +1 conseil → ») and
@@ -145,6 +152,27 @@ describe('TipsBlock — the chip and the lists come from ONE function', () => {
     expect(expected.tips).toHaveLength(3);
     expect(card.querySelector('[data-tips-chip]')).toHaveTextContent('3 tips');
     expect(rows(card)).toHaveLength(3);
+  });
+});
+
+describe('TipsBlock — the derivation runs per input, not per render (S-1)', () => {
+  it('a « Why » toggle and a same-props render re-run nothing; a new forecast re-runs it once', () => {
+    // Round 1, S-1 (Extension `fc64eee0` / `7b0512aa`): `gardenAdvice` walks
+    // every garden and every placement and builds three catalog maps; the
+    // « Pourquoi » and V26 states change none of its four inputs.
+    vi.mocked(gardenAdvice).mockClear();
+    const { widget, rerender } = renderBlock({ size: 'large' });
+    expect(gardenAdvice).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(widget.getAllByRole('button', { name: 'Why' })[0]!);
+    expect(widget.getAllByRole('button', { name: 'Why' })[0]).toHaveAttribute('aria-expanded', 'true');
+    expect(gardenAdvice).toHaveBeenCalledTimes(1);
+
+    rerender({});
+    expect(gardenAdvice).toHaveBeenCalledTimes(1);
+
+    rerender({ weather: weather() });
+    expect(gardenAdvice).toHaveBeenCalledTimes(2);
   });
 });
 
