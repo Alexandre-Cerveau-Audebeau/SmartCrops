@@ -93,8 +93,9 @@ const TIP_ICONS: Record<TipKind, SvgIconComponent> = {
  * « 2 conseils » — each tip with « Voir la case F3 → » and a « Pourquoi »
  * that unfolds the rule, a 1 px divider between gardens, and « Rien à
  * signaler — vos plantes sont là où elles aiment être. » for a garden that
- * was checked and has nothing to say; every « Pourquoi » folded at rest
- * (`_spec.md` § 4 l. 79).
+ * was checked and has nothing to say; a garden whose orientation is unknown
+ * has its group too, carrying the A4 invitation in that place (round 1,
+ * S-3); every « Pourquoi » folded at rest (`_spec.md` § 4 l. 79).
  *
  * « Voir la case F3 → » opens the garden's planner (arbitrage Q4): the planner
  * reads no cell from the route, so the cell is found by the axes there; the
@@ -302,7 +303,8 @@ export default function TipsBlock({
    * `.inv` with `align-items: center; padding: 10px 14px`, a 30 px disc and a
    * 17 px `HelpOutline`, the link inline in the sentence. The link opens the
    * garden's planner, where the configuration dialog lives (pre-flight
-   * § B.1.5: no route opens the dialog itself).
+   * § B.1.5: no route opens the dialog itself). In the Medium card it takes
+   * a slot in the flow; in the Large card it sits in its garden's group.
    */
   const invitation = (garden: DashboardGardenData) => (
     <Box
@@ -467,10 +469,26 @@ export default function TipsBlock({
    * signaler » (`A3Expert.dc.html` l. 316-334): the type glyph at 17 px in the
    * primary colour, `.gname` 15 px / 700, the chip; the tips in a column with
    * 14 px between them; a 1 px divider between gardens.
+   *
+   * A group holds, in this order: the garden's tips; the A4 invitation when
+   * the garden's orientation is unknown — IN its garden's group, where « rien
+   * à signaler » would go, never under the scrolling zone (round 1, S-3 —
+   * GitHub `4035502545`, arbitrated: outside the zone, with `flexShrink: 0`,
+   * three invitations shrank the zone to 0 px on a phone and the tips went
+   * unseen); « Rien à signaler » when the garden was checked and has nothing
+   * to say (T6). The chip counts the tips, says « rien à signaler » for a
+   * checked garden, and is absent when nothing was checked — a verdict the
+   * widget cannot state.
    */
-  const group = (entry: GardenAdvice, own: Tip[], last: boolean) => {
+  const group = (entry: GardenAdvice, own: Tip[], unoriented: boolean, last: boolean) => {
     const TypeIcon = gardenTypeIcon(entry.garden.config.gardenType);
-    const empty = own.length === 0;
+    const clear = entry.tips.length === 0 && entry.evaluated;
+    const chipLabel =
+      entry.tips.length > 0
+        ? t('dashboard.blocks.tips.count', { count: entry.tips.length })
+        : clear
+          ? t('dashboard.blocks.tips.nothingChip')
+          : null;
     return (
       <Box
         component="section"
@@ -487,14 +505,22 @@ export default function TipsBlock({
           >
             {entry.garden.name}
           </Typography>
-          <Chip
-            data-tips-group-chip
-            label={empty ? t('dashboard.blocks.tips.nothingChip') : t('dashboard.blocks.tips.count', { count: entry.tips.length })}
-            size="small"
-            sx={{ height: DASHBOARD_TYPE.chipHeight, fontSize: DASHBOARD_TYPE.chip, fontWeight: 700, backgroundColor: tk.pillBg, color: tk.pillText, flexShrink: 0 }}
-          />
+          {chipLabel !== null && (
+            <Chip
+              data-tips-group-chip
+              label={chipLabel}
+              size="small"
+              sx={{ height: DASHBOARD_TYPE.chipHeight, fontSize: DASHBOARD_TYPE.chip, fontWeight: 700, backgroundColor: tk.pillBg, color: tk.pillText, flexShrink: 0 }}
+            />
+          )}
         </Box>
-        {empty ? (
+        {own.length > 0 && (
+          <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {own.map((tip) => row(tip, true))}
+          </Box>
+        )}
+        {unoriented && invitation(entry.garden)}
+        {clear && (
           <Typography
             data-tips-nothing={entry.garden.id}
             sx={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: DASHBOARD_TYPE.body, lineHeight: 1.45, color: 'text.secondary' }}
@@ -502,10 +528,6 @@ export default function TipsBlock({
             <CheckBoxOutlinedIcon aria-hidden sx={{ fontSize: 18, color: 'primary.main', flexShrink: 0 }} />
             {t('dashboard.blocks.tips.nothing')}
           </Typography>
-        ) : (
-          <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {own.map((tip) => row(tip, true))}
-          </Box>
         )}
         {!last && <Box aria-hidden sx={{ height: '1px', backgroundColor: 'borderSubtle', mt: '4px' }} />}
       </Box>
@@ -518,14 +540,22 @@ export default function TipsBlock({
     // under the reader's hand (the V26 rule).
     const rest = Math.max(0, tips.length - LARGE_ROWS);
     const shownIds = new Set(shown.map((tip) => tip.id));
-    // A garden with tips shows the ones within the cap; a garden that was
-    // checked and has none says « rien à signaler »; a garden that could not
-    // be checked says nothing here — its reason is drawn below or elsewhere.
+    const unorientedIds = new Set(gardensWithoutOrientation.map((garden) => garden.id));
+    // Every garden the widget has something to say about has its group, in
+    // the gardens' order: one with tips shows the ones within the cap; one
+    // whose orientation is unknown carries its invitation; one that was
+    // checked and has none says « rien à signaler ». A garden that could not
+    // be checked for another reason says nothing here (T6, Q7) — its reason
+    // is drawn elsewhere.
     const groups = byGarden
-      .map((entry) => ({ entry, own: entry.tips.filter((tip) => shownIds.has(tip.id)) }))
-      .filter(({ entry, own }) => own.length > 0 || (entry.tips.length === 0 && entry.evaluated));
+      .map((entry) => ({
+        entry,
+        own: entry.tips.filter((tip) => shownIds.has(tip.id)),
+        unoriented: unorientedIds.has(entry.garden.id),
+      }))
+      .filter(({ entry, own, unoriented }) => own.length > 0 || unoriented || (entry.tips.length === 0 && entry.evaluated));
     const groupsId = `${idPrefix}-groups`;
-    if (groups.length === 0 && gardensWithoutOrientation.length === 0) {
+    if (groups.length === 0) {
       return (
         <>
           {nothing}
@@ -536,16 +566,18 @@ export default function TipsBlock({
     return (
       <>
         {/* COMPACT, at the top, and its own scroll when the card is too short
-            (the O2 / V26 rules): the notes and the button below stay put. */}
+            (the O2 / V26 rules): the foot and the button below stay put. The
+            invitations scroll WITH the groups they belong to (round 1, S-3):
+            drawn under the zone with `flexShrink: 0`, three of them left it
+            0 px on a phone and 13 px on a desktop with six — the tips were
+            not clipped, they were gone. */}
         <Box
           id={groupsId}
           data-tips-groups
           sx={{ flex: '0 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}
         >
-          {groups.map(({ entry, own }, index) => group(entry, own, index === groups.length - 1))}
+          {groups.map(({ entry, own, unoriented }, index) => group(entry, own, unoriented, index === groups.length - 1))}
         </Box>
-        {groups.length === 0 && nothing}
-        {gardensWithoutOrientation.map(invitation)}
         {unknownFoot}
         {rest > 0 && (
           <Button
