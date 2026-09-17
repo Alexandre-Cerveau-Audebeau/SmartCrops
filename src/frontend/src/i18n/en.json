@@ -515,7 +515,8 @@
         "moreTips_one": "Show the remaining tip",
         "moreTips_other": "Show the {{count, number}} other tips",
         "collapse": "Show less",
-        "loadError": "Couldn’t load the tips."
+        "loadError": "Couldn’t load the tips.",
+        "weatherUnavailable": "Weather unavailable — the watering tips can’t be checked for now."
       },
       "month": {
         "title": "This month",

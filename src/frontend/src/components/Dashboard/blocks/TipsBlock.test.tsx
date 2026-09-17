@@ -519,6 +519,60 @@ describe('TipsBlock — states', () => {
     expect(card).not.toHaveTextContent('Nothing to report');
   });
 
+  it('a WEATHER outage keeps the exposure tips, says the watering half is out, and « Try again » retries (S-2)', () => {
+    // Round 1, S-2 (Extension `3e914892`): the page passed the gardens'
+    // failure alone as `loadError`, so a weather-only failure kept the block
+    // on its normal path and the weather half of `onRetry` was unreachable.
+    const onRetry = vi.fn();
+    const { card } = renderBlock({ gardens: [terrasse], weather: EMPTY_WEATHER_DATA, weatherError: true, onRetry });
+
+    // The plans alone give these two; the basil's watering tip is not derived.
+    expect(rows(card).map((row) => row.getAttribute('data-tips-tip'))).toEqual(['sunLover', 'shadeLover']);
+    expect(card.querySelector('[data-tips-chip]')).toHaveTextContent('2 tips');
+    const note = card.querySelector('[data-tips-weather-note]') as HTMLElement;
+    expect(note).toHaveTextContent('Weather unavailable — the watering tips can’t be checked for now.');
+    fireEvent.click(within(note).getByRole('button', { name: 'Try again' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    // Not the fatal branch, not a skeleton.
+    expect(card).not.toHaveTextContent('Couldn’t load the tips.');
+    expect(card.querySelector('[data-tips-skeleton]')).toBeNull();
+  });
+
+  it('the outage note is under the zone in Large — once — and absent from Small, whose tips stand', () => {
+    const large = renderBlock({ size: 'large', gardens: [terrasse], weather: EMPTY_WEATHER_DATA, weatherError: true });
+    const zone = large.card.querySelector('[data-tips-groups]') as HTMLElement;
+    const notes = large.card.querySelectorAll('[data-tips-weather-note]');
+    expect(notes).toHaveLength(1);
+    expect(zone.contains(notes[0]!)).toBe(false);
+    expect(zone.compareDocumentPosition(notes[0]!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(rows(large.card)).toHaveLength(2);
+
+    cleanup();
+    const small = renderBlock({ size: 'small', gardens: [terrasse], weather: EMPTY_WEATHER_DATA, weatherError: true });
+    expect(small.card.querySelector('[data-tips-weather-note]')).toBeNull();
+    expect(small.card.querySelector('[data-tips-count]')).toHaveTextContent('2 tips');
+  });
+
+  it('with nothing to derive during the outage: the honest sentence AND the note; while a retry runs, its button waits', () => {
+    // A basil (Frequent) alone: the exposure family has nothing to say and
+    // the watering family could not be checked — « No tip for now » (T6),
+    // and the reason with its retry.
+    const thirsty = oriented({ id: 'g1', name: 'Terrasse', placements: [plant('basil', 0, 1)] });
+    const { card, widget, rerender } = renderBlock({ gardens: [thirsty], weather: EMPTY_WEATHER_DATA, weatherError: true });
+
+    expect(card).toHaveTextContent('No tip for now — the exposure or the watering of your gardens can’t be assessed yet.');
+    expect(card.querySelector('[data-tips-weather-note]')).not.toBeNull();
+    expect(widget.getByRole('button', { name: 'Try again' })).toBeEnabled();
+    rerender({ refreshing: true });
+    expect(widget.getByRole('button', { name: 'Try again' })).toBeDisabled();
+  });
+
+  it('a healthy forecast draws no outage note', () => {
+    const { card } = renderBlock({ size: 'large' });
+
+    expect(card.querySelector('[data-tips-weather-note]')).toBeNull();
+  });
+
   it('mentions no price, no quota and no plan', () => {
     const { card } = renderBlock({ size: 'large' });
 

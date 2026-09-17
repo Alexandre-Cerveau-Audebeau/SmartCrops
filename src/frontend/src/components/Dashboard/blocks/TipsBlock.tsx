@@ -42,6 +42,16 @@ interface Props {
   loading: boolean;
   /** The GARDENS aggregate failed. */
   loadError: boolean;
+  /**
+   * The WEATHER aggregate failed (round 1, S-2 — Extension `3e914892`). NOT
+   * blocking: the exposure family reads the plans and the catalog alone, so
+   * its tips stand; the block says in one line that the watering family
+   * could not be checked, with the « Réessayer » that `onRetry` already
+   * carries for it — the ③b « indisponible » pattern of the To-do block.
+   * Failure only, not loading: while the forecast loads there is nothing to
+   * retry, and a thirsty garden is simply not « checked » yet (T6).
+   */
+  weatherError?: boolean;
   refreshing?: boolean;
   onRetry: () => void;
   /** « +N conseils → »: the rest of the list is reached by growing the widget. */
@@ -113,6 +123,7 @@ export default function TipsBlock({
   weather,
   loading,
   loadError,
+  weatherError = false,
   refreshing = false,
   onRetry,
   onExpand,
@@ -365,6 +376,33 @@ export default function TipsBlock({
   );
 
   /**
+   * « Météo indisponible — les conseils d'arrosage ne peuvent pas être
+   * vérifiés pour l'instant. Réessayer » (round 1, S-2): said ONCE, beside
+   * the tips the plans alone give, with the retry the fatal branch alone
+   * used to reach. Medium and Large; the Small card has no line for it and
+   * its empty sentence already says the watering was not assessed.
+   */
+  const weatherNote = weatherError && (
+    <Box
+      data-tips-weather-note
+      sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 12px', flexShrink: 0 }}
+    >
+      <Typography sx={{ fontSize: DASHBOARD_TYPE.secondary, lineHeight: 1.5, color: 'text.secondary' }}>
+        {t('dashboard.blocks.tips.weatherUnavailable')}
+      </Typography>
+      <Button
+        data-tips-weather-retry
+        size="small"
+        onClick={onRetry}
+        disabled={refreshing}
+        sx={{ p: 0, minWidth: 0, fontSize: DASHBOARD_TYPE.secondary, fontWeight: 700, textTransform: 'none' }}
+      >
+        {t('dashboard.retry')}
+      </Button>
+    </Box>
+  );
+
+  /**
    * What the block says when it has NO tip. « Rien à signaler » is a STATEMENT
    * and may only be made when at least one garden was checked (T6); with no
    * garden checked it says so instead — an unknown is not a zero — and with
@@ -445,6 +483,7 @@ export default function TipsBlock({
       return (
         <>
           {nothing}
+          {weatherNote}
           {unknownFoot}
         </>
       );
@@ -461,6 +500,7 @@ export default function TipsBlock({
         )}
         {shown.length === 0 && tips.length === 0 && nothing}
         {invites.map(invitation)}
+        {weatherNote}
         {unknownFoot}
         {moreButton(rest)}
       </>
@@ -562,6 +602,7 @@ export default function TipsBlock({
       return (
         <>
           {nothing}
+          {weatherNote}
           {unknownFoot}
         </>
       );
@@ -581,6 +622,7 @@ export default function TipsBlock({
         >
           {groups.map(({ entry, own, unoriented }, index) => group(entry, own, unoriented, index === groups.length - 1))}
         </Box>
+        {weatherNote}
         {unknownFoot}
         {rest > 0 && (
           <Button

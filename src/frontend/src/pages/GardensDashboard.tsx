@@ -408,7 +408,9 @@ export default function GardensDashboard() {
         // the weather feed it. The PLANS are what it cannot do without — the
         // exposure family reads them — so their loading and their failure
         // empty the card; a weather outage only silences the watering family,
-        // which is the state `gardenAdvice` draws on its own (T6).
+        // which is the state `gardenAdvice` draws on its own (T6) — and is
+        // said in one line with its « Réessayer » (round 1, S-2), since the
+        // fatal branch alone used to reach the weather half of `onRetry`.
         return (
           <TipsBlock
             size={block.size}
@@ -420,6 +422,7 @@ export default function GardensDashboard() {
             loading={gardensLoading}
             refreshing={gardensRefreshing || weatherRefreshing}
             loadError={gardensError}
+            weatherError={weatherError}
             onRetry={() => {
               if (gardensError) refetch();
               if (weatherError) refetchWeather();

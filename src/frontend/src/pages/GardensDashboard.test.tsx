@@ -1471,6 +1471,48 @@ describe('GardensDashboard — outlined chips draw `--chip-bd` (round 6, N6-4)',
   });
 });
 
+// PR 4b/5 round 1 (S-2) — the same two statuses for the Tips block: the
+// gardens' failure empties it, the weather's is said in one line with a retry.
+describe('GardensDashboard — a weather outage is said in « Conseils », with its retry (round 1, S-2)', () => {
+  it('keeps the exposure tips, says the watering tips are out, and « Try again » refetches the weather', async () => {
+    // A shade lover in full sun on an oriented garden: ONE exposure tip, from
+    // the plans alone (the C4 thumbnail test's scene).
+    const hydrangea = varietyFixture({ plantId: 'hydrangea', scientificName: 'hydrangea', commonName: 'Hydrangea', sunlightHoursMin: 4, sunlightHoursMax: 6 });
+    vi.mocked(fetchDashboardData).mockResolvedValue({
+      gardens: [
+        garden('g1', 'Terrasse', {
+          config: { orientation: 'S', gardenType: null, lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
+          placements: [placement({ id: 'h', plantId: 'hydrangea', startRow: 0, startCol: 0 })],
+          placementCount: 1,
+          varietyCount: 1,
+        }),
+      ],
+      varieties: [hydrangea],
+      totals: { gardenCount: 1, placementCount: 1, varietyCount: 1, catalogPlantCount: 536 },
+    });
+    // The provider is down. The plans are not.
+    vi.mocked(fetchDashboardWeather).mockRejectedValue(new Error('provider down'));
+
+    renderPage();
+
+    const tips = (await screen.findByRole('heading', { level: 2, name: 'Tips' })).closest('[data-widget="tips"]') as HTMLElement;
+    await waitFor(() =>
+      expect(tips.querySelector('[data-tips-weather-note]')).toHaveTextContent(
+        'Weather unavailable — the watering tips can’t be checked for now.'
+      )
+    );
+    // The family that never needed a forecast is still there…
+    expect(tips.querySelector('[data-tips-tip="shadeLover"]')).toHaveTextContent('Your Hydrangea (A1, Terrasse) prefers part shade');
+    // …and the fatal branch, which the gardens' failure alone selects, is not.
+    expect(tips).not.toHaveTextContent('Couldn’t load the tips.');
+
+    // The retry reaches the weather half of the page's `onRetry`.
+    expect(fetchDashboardWeather).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(tips.querySelector('[data-tips-weather-note]') as HTMLElement).getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(fetchDashboardWeather).toHaveBeenCalledTimes(2));
+  });
+});
+
 // ROUND 1 (C2) — the page hands the To-do block TWO statuses, not their union.
 describe('GardensDashboard — a weather outage no longer empties « À faire » (round 1, C2)', () => {
   it('keeps the calendar tasks and says the watering half is out', async () => {

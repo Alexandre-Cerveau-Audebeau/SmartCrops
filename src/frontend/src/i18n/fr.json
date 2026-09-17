@@ -515,7 +515,8 @@
         "moreTips_one": "Afficher le conseil restant",
         "moreTips_other": "Afficher les {{count, number}} autres conseils",
         "collapse": "Réduire",
-        "loadError": "Impossible de charger les conseils."
+        "loadError": "Impossible de charger les conseils.",
+        "weatherUnavailable": "Météo indisponible — les conseils d’arrosage ne peuvent pas être vérifiés pour l’instant."
       },
       "month": {
         "title": "Ce mois-ci",
