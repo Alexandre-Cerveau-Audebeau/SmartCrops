@@ -171,8 +171,13 @@ export function gardensWithoutWeather(
   return gardens.filter((garden) => locationOfGarden(garden.id, weather) === null);
 }
 
-/** Whether a day is dry enough to water: both figures under their ceilings, and at least one of them KNOWN (K3). */
-function isDryDay(day: WeatherDay): boolean {
+/**
+ * Whether a day is dry enough to water: both figures under their ceilings, and
+ * at least one of them KNOWN (K3). Exported for PR 4b/5: the watering TIP
+ * counts its dry spell with this very predicate, so the task and the tip
+ * cannot disagree on what a dry day is.
+ */
+export function isDryDay(day: WeatherDay): boolean {
   const { maxChanceOfRain, maxPrecipMm } = TODO_RULES.watering;
   if (day.chanceOfRain === null && day.totalPrecipMm === null) return false;
   return (
