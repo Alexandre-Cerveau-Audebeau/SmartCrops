@@ -1,0 +1,402 @@
+import { cleanup, fireEvent, render, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import '../../../i18n/i18n';
+import { LanguageProvider } from '../../../contexts/LanguageContext';
+import { UnitSystemProvider } from '../../../contexts/UnitSystemContext';
+import { gardenFixture, varietyFixture } from '../../../test/fixtures/dashboard';
+import { placement } from '../../../test/fixtures/placements';
+import { dayFixture, linkFixture, locationFixture, weekFixture, weatherFixture } from '../../../test/fixtures/weather';
+import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../../../types/DashboardWeather';
+import type { DashboardGardenData } from '../../../types/DashboardData';
+import { gardenViewOf, type GardenView } from '../../../utils/gardenStats';
+import TipsBlock from './TipsBlock';
+import { gardenAdvice } from './gardenAdvice';
+
+// SMA-336 PR 4b/5 — « Conseils » against `A2Novice.dc.html` (Small),
+// `Main.dc.html` (Medium: two tips, « +1 conseil → »), `A4Manquantes.dc.html`
+// (one tip, the orientation invitation, « +1 conseil → ») and
+// `A3Expert.dc.html` (Large: grouped by garden, « Pourquoi », « rien à
+// signaler »).
+//
+// The scene, in Lyon on the artboards' dry Saturday (rain on Tuesday):
+//   Terrasse        — oriented south, a tall wall on A3; a tomato on B3 (shaded
+//                     in the evening → « prefers full sun »), a basil on B1
+//                     (Frequent → the watering tip), a hydrangea on D1 (a shade
+//                     lover in full sun → « prefers part shade »): THREE tips.
+//   Balcon sud      — no orientation, a tomato: the A4 invitation, no tip.
+//   Potager du fond — oriented, a sage (Low) only, no city: checked, nothing
+//                     to say → « Nothing to report ».
+
+const tomato = varietyFixture({ plantId: 'tomato', commonName: 'Tomato', sunlightHoursMin: 8, sunlightHoursMax: 12 });
+const hydrangea = varietyFixture({ plantId: 'hydrangea', commonName: 'Hydrangea', sunlightHoursMin: 4, sunlightHoursMax: 6 });
+const basil = varietyFixture({ plantId: 'basil', commonName: 'Basil', wateringNeedLevel: 'Frequent', sunlightHoursMin: 6, sunlightHoursMax: 8 });
+const mint = varietyFixture({ plantId: 'mint', commonName: 'Mint', wateringNeedLevel: 'High', sunlightHoursMin: 4, sunlightHoursMax: 8 });
+const sage = varietyFixture({ plantId: 'sage', commonName: 'Sage', wateringNeedLevel: 'Low', sunlightHoursMin: 6, sunlightHoursMax: 8 });
+const mystery = varietyFixture({ plantId: 'mystery', commonName: 'Mystery' });
+const varieties = [tomato, hydrangea, basil, mint, sage, mystery];
+
+const plant = (plantId: string, row: number, col: number) =>
+  placement({ id: `${plantId}-${row}-${col}`, plantId, startRow: row, startCol: col });
+
+const oriented = (over: Partial<DashboardGardenData> = {}): DashboardGardenData =>
+  gardenFixture({
+    config: { orientation: 'S', gardenType: 'terrace', lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
+    ...over,
+  });
+
+const terrasse = oriented({
+  id: 'g1',
+  name: 'Terrasse',
+  cellsJson: JSON.stringify([{ row: 2, col: 0, infrastructure: 'wall' }]),
+  placements: [plant('tomato', 2, 1), plant('basil', 0, 1), plant('hydrangea', 0, 3)],
+  placementCount: 3,
+});
+const balcon = gardenFixture({
+  id: 'g2',
+  name: 'Balcon sud',
+  config: { orientation: null, gardenType: 'balcony', lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
+  placements: [plant('tomato', 0, 0)],
+  placementCount: 1,
+});
+const potager = oriented({
+  id: 'g3',
+  name: 'Potager du fond',
+  config: { orientation: 'S', gardenType: 'inground', lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
+  placements: [plant('sage', 0, 0)],
+  placementCount: 1,
+});
+
+/** Terrasse in Lyon on the artboards' week; the two others without a city. */
+const weather = (over: Partial<DashboardWeatherData> = {}): DashboardWeatherData =>
+  weatherFixture(
+    [locationFixture({ days: weekFixture() })],
+    [
+      linkFixture({ gardenId: 'g1' }),
+      linkFixture({ gardenId: 'g2', locationKey: null, source: null }),
+      linkFixture({ gardenId: 'g3', locationKey: null, source: null }),
+    ],
+    over
+  );
+
+const viewsOf = (gardens: DashboardGardenData[]): ReadonlyMap<string, GardenView> =>
+  new Map(gardens.map((garden) => [garden.id, gardenViewOf(garden)]));
+
+type Props = React.ComponentProps<typeof TipsBlock>;
+
+function renderBlock(over: Partial<Props> = {}, language = 'en') {
+  localStorage.setItem('smartcrops-language', language);
+  const gardens = over.gardens ?? [terrasse, balcon, potager];
+  const props: Props = {
+    size: 'medium',
+    gardens,
+    views: viewsOf(gardens),
+    varieties,
+    weather: weather(),
+    loading: false,
+    loadError: false,
+    onRetry: vi.fn(),
+    onExpand: vi.fn(),
+    ...over,
+  };
+  const utils = render(
+    <MemoryRouter>
+      <ThemeProvider theme={createTheme()}>
+        <LanguageProvider>
+          <UnitSystemProvider>
+            <TipsBlock {...props} />
+          </UnitSystemProvider>
+        </LanguageProvider>
+      </ThemeProvider>
+    </MemoryRouter>
+  );
+  const card = document.querySelector('[data-widget="tips"]') as HTMLElement;
+  const rerender = (next: Partial<Props>) =>
+    utils.rerender(
+      <MemoryRouter>
+        <ThemeProvider theme={createTheme()}>
+          <LanguageProvider>
+            <UnitSystemProvider>
+              <TipsBlock {...props} {...next} />
+            </UnitSystemProvider>
+          </LanguageProvider>
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+  return { card, widget: within(card), props, rerender };
+}
+
+const rows = (card: HTMLElement) => [...card.querySelectorAll('[data-tips-tip]')];
+
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
+
+describe('TipsBlock — the chip and the lists come from ONE function', () => {
+  it('prints in the chip exactly as many tips as gardenAdvice derives and the Large card lists', () => {
+    const gardens = [terrasse, balcon, potager];
+    const { card } = renderBlock({ size: 'large' });
+    const expected = gardenAdvice(gardens, viewsOf(gardens), varieties, weather());
+
+    expect(expected.tips).toHaveLength(3);
+    expect(card.querySelector('[data-tips-chip]')).toHaveTextContent('3 tips');
+    expect(rows(card)).toHaveLength(3);
+  });
+});
+
+describe('TipsBlock — the sentences name the variety, the cell and the garden', () => {
+  it('« prefers full sun — shaded in the afternoon », « prefers part shade », « no rain before Tuesday »', () => {
+    const { card } = renderBlock({ size: 'large' });
+    const texts = rows(card).map((row) => row.textContent);
+
+    expect(texts[0]).toContain('Your Tomato (B3, Terrasse) prefers full sun — this cell is shaded in the afternoon.');
+    expect(texts[1]).toContain('Your Hydrangea (D1, Terrasse) prefers part shade — this cell is in full sun at noon.');
+    expect(texts[2]).toContain('Your Basil (B1, Terrasse) likes an always-moist soil — no rain before Tuesday.');
+  });
+
+  it('a watering tip about two varieties lists both, and agrees in number', () => {
+    const two = oriented({ id: 'g1', name: 'Terrasse', placements: [plant('basil', 0, 1), plant('mint', 1, 0)] });
+    const { card } = renderBlock({ size: 'small', gardens: [two] });
+
+    expect(card.querySelector('[data-tips-first]')).toHaveTextContent(
+      'Your Basil and Mint (B1, Terrasse) like an always-moist soil — no rain before Tuesday.'
+    );
+  });
+
+  it('« no rain expected this week » when the forecast holds no rainy day', () => {
+    const dryWeek = weatherFixture(
+      [locationFixture({ days: weekFixture().map((day) => dayFixture({ ...day, chanceOfRain: 0, totalPrecipMm: 0 })) })],
+      [linkFixture({ gardenId: 'g1' })]
+    );
+    const { card } = renderBlock({ size: 'large', gardens: [terrasse], weather: dryWeek });
+
+    expect(rows(card)[2]).toHaveTextContent('Your Basil (B1, Terrasse) likes an always-moist soil — no rain expected this week.');
+  });
+
+  it('says when the forecast is the place’s last known one (the G2 rule)', () => {
+    const stale = weatherFixture([locationFixture({ days: weekFixture(), status: 'stale' })], [linkFixture({ gardenId: 'g1' })]);
+    const { card } = renderBlock({ size: 'large', gardens: [terrasse], weather: stale });
+
+    const watering = card.querySelector('[data-tips-tip="watering"]')!;
+    expect(watering).toHaveAttribute('data-tips-stale');
+    expect(watering).toHaveTextContent('(last known weather)');
+  });
+
+  it('in French, the artboard’s own words', () => {
+    const { card } = renderBlock({ size: 'large' }, 'fr');
+    const texts = rows(card).map((row) => row.textContent);
+
+    expect(card.querySelector('[data-tips-chip]')).toHaveTextContent('3 conseils');
+    expect(texts[0]).toContain('Votre Tomato (B3, Terrasse) préfère le plein soleil — cette case est à l’ombre l’après-midi.');
+    expect(texts[1]).toContain('Votre Hydrangea (D1, Terrasse) préfère la mi-ombre — cette case est en plein soleil à midi.');
+    expect(texts[2]).toContain('Votre Basil (B1, Terrasse) aime une terre toujours fraîche — pas de pluie avant mardi.');
+    expect(texts[0]).toContain('Voir la case B3 →');
+    expect(texts[0]).toContain('Pourquoi');
+    expect(card).toHaveTextContent('Rien à signaler — vos plantes sont là où elles aiment être.');
+    expect(card).toHaveTextContent('Sans l’orientation de « Balcon sud », impossible de comparer l’exposition — Configurer le jardin →');
+  });
+});
+
+describe('TipsBlock — Small (A2Novice.dc.html l. 316-319)', () => {
+  it('« 3 tips » in the key-number size, the first tip, and « See cell B3 → » to the garden’s planner', () => {
+    const { card, widget } = renderBlock({ size: 'small' });
+
+    expect(card.querySelector('[data-tips-count]')).toHaveTextContent('3 tips');
+    expect(card.querySelector('[data-tips-first]')).toHaveTextContent('Your Tomato (B3, Terrasse) prefers full sun');
+    const link = widget.getByRole('link', { name: 'See cell B3 →' });
+    // Arbitrage Q4: the planner, with no cell in the route (SMA-440 anchors it).
+    expect(link).toHaveAttribute('href', '/gardens/g1/planner');
+    expect(card.querySelector('[data-tips-chip]')).toBeNull();
+  });
+
+  it('with no tip: the honest sentence, no key number, no chip', () => {
+    const { card } = renderBlock({ size: 'small', gardens: [potager] });
+
+    expect(card.querySelector('[data-tips-count]')).toBeNull();
+    expect(card.querySelector('[data-tips-nothing]')).toHaveTextContent('Nothing to report — your plants are where they like to be.');
+    expect(card.querySelector('[data-tips-chip]')).toBeNull();
+  });
+});
+
+describe('TipsBlock — Medium (Main.dc.html l. 295-309, A4Manquantes.dc.html l. 327-335)', () => {
+  it('lists two tips — a disc, the sentence, « See cell → » — and « +1 tip → » that grows the widget', () => {
+    const onExpand = vi.fn();
+    const { card, widget } = renderBlock({ gardens: [terrasse, potager], onExpand });
+
+    expect(rows(card)).toHaveLength(2);
+    expect(widget.getByRole('link', { name: 'See cell B3 →' })).toHaveAttribute('href', '/gardens/g1/planner');
+    expect(widget.getByRole('link', { name: 'See cell D1 →' })).toBeInTheDocument();
+    expect(card.querySelector('[data-tips-why]')).toBeNull();
+    fireEvent.click(widget.getByRole('button', { name: '+1 tip →' }));
+    expect(onExpand).toHaveBeenCalledTimes(1);
+  });
+
+  it('with a garden whose orientation is unknown: ONE tip, the A4 invitation, « +2 tips → »', () => {
+    const { card, widget } = renderBlock();
+
+    expect(rows(card)).toHaveLength(1);
+    const invite = card.querySelector('[data-tips-invite="g2"]')!;
+    expect(invite).toHaveTextContent('Without the orientation of “Balcon sud”, the exposure can’t be compared — Set up the garden →');
+    expect(within(invite as HTMLElement).getByRole('link', { name: 'Set up the garden →' })).toHaveAttribute('href', '/gardens/g2/planner');
+    expect(widget.getByRole('button', { name: '+2 tips →' })).toBeInTheDocument();
+  });
+
+  it('counts the plants whose exposure the catalog does not know, in a foot with no gesture (D2)', () => {
+    const withUnknown = oriented({ id: 'g1', name: 'Terrasse', placements: [plant('mystery', 0, 0), plant('mystery', 0, 1), plant('hydrangea', 0, 2)] });
+    const { card } = renderBlock({ gardens: [withUnknown] });
+
+    expect(card.querySelector('[data-tips-unknown]')).toHaveTextContent('2 plants with no known exposure');
+    expect(within(card.querySelector('[data-tips-unknown]') as HTMLElement).queryByRole('link')).toBeNull();
+  });
+
+  it('with no tip and a garden that was checked: « Nothing to report »', () => {
+    const { card } = renderBlock({ gardens: [potager] });
+
+    expect(card).toHaveTextContent('Nothing to report — your plants are where they like to be.');
+    expect(card.querySelector('[data-tips-more]')).toBeNull();
+  });
+});
+
+describe('TipsBlock — Large (A3Expert.dc.html l. 315-334)', () => {
+  it('groups by garden with the type glyph, the name and the chip; « nothing to report » for a checked garden', () => {
+    const { card } = renderBlock({ size: 'large' });
+
+    const groups = [...card.querySelectorAll('[data-tips-group]')].map((node) => node.getAttribute('data-tips-group'));
+    expect(groups).toEqual(['g1', 'g3']);
+    const terrasseGroup = card.querySelector('[data-tips-group="g1"]') as HTMLElement;
+    expect(within(terrasseGroup).getByRole('heading', { level: 3, name: 'Terrasse' })).toBeInTheDocument();
+    expect(terrasseGroup.querySelector('[data-tips-group-chip]')).toHaveTextContent('3 tips');
+    expect(terrasseGroup.querySelector('svg[data-testid="DeckIcon"]')).not.toBeNull();
+    const potagerGroup = card.querySelector('[data-tips-group="g3"]') as HTMLElement;
+    expect(potagerGroup.querySelector('[data-tips-group-chip]')).toHaveTextContent('nothing to report');
+    expect(potagerGroup.querySelector('[data-tips-nothing="g3"]')).toHaveTextContent('Nothing to report — your plants are where they like to be.');
+    expect(potagerGroup.querySelector('svg[data-testid="GrassIcon"]')).not.toBeNull();
+  });
+
+  it('a garden that could not be checked has no group — its invitation is drawn instead', () => {
+    const { card } = renderBlock({ size: 'large' });
+
+    expect(card.querySelector('[data-tips-group="g2"]')).toBeNull();
+    expect(card.querySelector('[data-tips-nothing="g2"]')).toBeNull();
+    expect(card.querySelector('[data-tips-invite="g2"]')).not.toBeNull();
+  });
+
+  it('every « Why » is folded at rest, unfolds the rule, and folds back', () => {
+    const { card, widget } = renderBlock({ size: 'large' });
+
+    const whys = widget.getAllByRole('button', { name: 'Why' });
+    expect(whys).toHaveLength(3);
+    for (const why of whys) expect(why).toHaveAttribute('aria-expanded', 'false');
+    const panels = [...card.querySelectorAll('[data-tips-why-panel]')];
+    for (const panel of panels) expect(panel).toHaveAttribute('hidden');
+
+    fireEvent.click(whys[0]!);
+    expect(whys[0]).toHaveAttribute('aria-expanded', 'true');
+    const panel = document.getElementById(whys[0]!.getAttribute('aria-controls')!)!;
+    expect(panel).not.toHaveAttribute('hidden');
+    expect(panel).toHaveTextContent(
+      'The catalog recommends at least 8 h of sun a day for this plant. In summer, cell B3 is shaded in the afternoon — computed exposure: Morning.'
+    );
+    // The other two stay folded: the state is per tip.
+    expect(whys[1]).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(whys[0]!);
+    expect(whys[0]).toHaveAttribute('aria-expanded', 'false');
+    expect(panel).toHaveAttribute('hidden');
+  });
+
+  it('the « Why » of the two other kinds names the measure', () => {
+    const { card, widget } = renderBlock({ size: 'large' });
+    const whys = widget.getAllByRole('button', { name: 'Why' });
+
+    fireEvent.click(whys[1]!);
+    fireEvent.click(whys[2]!);
+    const panels = [...card.querySelectorAll('[data-tips-why-panel]')];
+    expect(panels[1]).toHaveTextContent('The catalog recommends 4 to 6 h of sun a day for this plant. In summer, cell D1 is in full sun at noon — computed exposure: Full sun.');
+    expect(panels[2]).toHaveTextContent('High watering need in the catalog. Weather of Lyon: 3 dry days from today, first rain Tuesday.');
+  });
+
+  it('the « Why » button is described by its tip’s sentence, so three « Why » are not one', () => {
+    const { widget } = renderBlock({ size: 'large' });
+    const why = widget.getAllByRole('button', { name: 'Why' })[0]!;
+
+    const described = document.getElementById(why.getAttribute('aria-describedby')!);
+    expect(described).toHaveTextContent('Your Tomato (B3, Terrasse) prefers full sun');
+  });
+
+  it('past ten tips, a named button deploys the rest into the same zone and folds back (the ④a pattern)', () => {
+    // Twelve shade lovers, each on its own full-sun cell of a 4 × 3 garden.
+    const many = Array.from({ length: 12 }, (_, i) =>
+      varietyFixture({ plantId: `shade-${i}`, commonName: `Shade ${i}`, sunlightHoursMin: 4, sunlightHoursMax: 6 })
+    );
+    const crowded = oriented({
+      id: 'g1',
+      name: 'Terrasse',
+      placements: many.map((variety, i) => plant(variety.plantId, Math.floor(i / 4), i % 4)),
+      placementCount: 12,
+    });
+    const { card, widget } = renderBlock({ size: 'large', gardens: [crowded], varieties: many, weather: EMPTY_WEATHER_DATA });
+
+    expect(card.querySelector('[data-tips-chip]')).toHaveTextContent('12 tips');
+    expect(rows(card)).toHaveLength(10);
+    const more = widget.getByRole('button', { name: 'Show the 2 other tips' });
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    expect(document.getElementById(more.getAttribute('aria-controls')!)).toHaveAttribute('data-tips-groups');
+
+    fireEvent.click(more);
+    expect(rows(card)).toHaveLength(12);
+    expect(widget.getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(widget.getByRole('button', { name: 'Show less' }));
+    expect(rows(card)).toHaveLength(10);
+  });
+});
+
+describe('TipsBlock — states', () => {
+  it('loading: a skeleton and no chip; then the rows once the plans land', () => {
+    const { card, rerender } = renderBlock({ size: 'large', loading: true });
+
+    expect(card.querySelector('[data-tips-skeleton]')).not.toBeNull();
+    expect(card.querySelector('[data-tips-chip]')).toBeNull();
+    expect(rows(card)).toHaveLength(0);
+
+    rerender({ loading: false });
+    expect(card.querySelector('[data-tips-skeleton]')).toBeNull();
+    expect(card.querySelector('[data-tips-chip]')).toHaveTextContent('3 tips');
+    expect(rows(card)).toHaveLength(3);
+  });
+
+  it('error: the sentence and a « Try again » that calls onRetry', () => {
+    const onRetry = vi.fn();
+    const { card, widget } = renderBlock({ loadError: true, onRetry });
+
+    expect(card).toHaveTextContent('Couldn’t load the tips.');
+    fireEvent.click(widget.getByRole('button', { name: 'Try again' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(card.querySelector('[data-tips-chip]')).toBeNull();
+  });
+
+  it('no plant placed anywhere: the honest empty state, not « nothing to report »', () => {
+    const { card } = renderBlock({ gardens: [gardenFixture({ id: 'g9', placements: [] })] });
+
+    expect(card).toHaveTextContent('No plant placed yet — tips arrive with your plantings.');
+    expect(card).not.toHaveTextContent('Nothing to report');
+  });
+
+  it('a garden that could not be checked and has no tip: « No tip for now », never a misleading zero (T6)', () => {
+    // A basil (Frequent) and no city: the watering family was not checked.
+    const unchecked = oriented({ id: 'g1', name: 'Terrasse', placements: [plant('basil', 0, 1)] });
+    const { card } = renderBlock({ gardens: [unchecked], weather: EMPTY_WEATHER_DATA });
+
+    expect(card).toHaveTextContent('No tip for now — the exposure or the watering of your gardens can’t be assessed yet.');
+    expect(card).not.toHaveTextContent('Nothing to report');
+  });
+
+  it('mentions no price, no quota and no plan', () => {
+    const { card } = renderBlock({ size: 'large' });
+
+    expect(card.textContent).not.toMatch(/quota|abonnement|subscription|pricing|tarif|plan\b/i);
+  });
+});
