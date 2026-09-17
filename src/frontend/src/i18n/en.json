@@ -479,7 +479,6 @@
       },
       "tips": {
         "title": "Tips",
-        "invite": "Tips arrive with the exposure and the calendar of your gardens.",
         "count_one": "{{count, number}} tip",
         "count_other": "{{count, number}} tips",
         "more_one": "+{{count, number}} tip →",

@@ -479,7 +479,6 @@
       },
       "tips": {
         "title": "Conseils",
-        "invite": "Les conseils arrivent avec l’exposition et le calendrier de vos jardins.",
         "count_one": "{{count, number}} conseil",
         "count_other": "{{count, number}} conseils",
         "more_one": "+{{count, number}} conseil →",

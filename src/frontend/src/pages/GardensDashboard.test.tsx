@@ -450,7 +450,9 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
   const INVITATIONS_EN: Array<[string, string]> = [
     // Weather LEFT this list in PR 3b/5: it carries the weather aggregate now,
     // and its invitation has a field behind it — see the two tests below.
-    ['Tips', 'Tips arrive with the exposure and the calendar of your gardens.'],
+    // Tips LEFT it in PR 4b/5: it derives its advice from the plans, the
+    // catalog and the weather — `TipsBlock.test.tsx` covers what it shows,
+    // and the test below what it says on a page with nothing planted.
     // To do today LEFT this list in PR 3b/5 (step 8): it derives its tasks
     // from the weather aggregate — `TodoBlock.test.tsx` covers what it shows.
     // This month LEFT it in PR 4a/5: it carries the calendar of the placed
@@ -485,10 +487,22 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
     renderPage();
 
     await waitFor(() => expect(renderedKeys()).toHaveLength(8));
-    // Two shells — Tips and Harvest: Gardens, Counts by variety, Statistics,
-    // Weather and To do today carry data, and This month joined them in
-    // PR 4a/5.
-    expect(screen.getAllByText('Coming soon')).toHaveLength(2);
+    // ONE shell — Harvest, and Harvest alone: Gardens, Counts by variety,
+    // Statistics, Weather and To do today carry data, This month joined them
+    // in PR 4a/5 and Tips in PR 4b/5.
+    expect(screen.getAllByText('Coming soon')).toHaveLength(1);
+    expect(screen.queryByText('Coming soon', { selector: '[data-widget="tips"] *' })).toBeNull();
+  });
+
+  it('the Tips widget carries its own body (PR 4b/5): with nothing planted, its honest sentence, not « Coming soon »', async () => {
+    servePreferences('expert');
+
+    renderPage();
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Tips' })).toBeInTheDocument();
+    const card = document.querySelector('[data-widget="tips"]') as HTMLElement;
+    expect(card).toHaveTextContent('No plant placed yet — tips arrive with your plantings.');
+    expect(within(card).queryByText('Coming soon')).toBeNull();
   });
 
   it('the Weather widget offers the city field and « Use » in its invitation (PR 3b/5, decision R4 lifted)', async () => {
@@ -530,12 +544,12 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
         'La météo a besoin de savoir où se trouvent vos jardins.'
       )
     ).toBeInTheDocument();
+    // Tips carries its own body since PR 4b/5 — its French empty sentence,
+    // where its « bientôt » shell used to be.
     expect(
-      screen.getByText(
-        'Les conseils arrivent avec l’exposition et le calendrier de vos jardins.'
-      )
+      screen.getByText('Aucune plante placée — les conseils arrivent avec vos plantations.')
     ).toBeInTheDocument();
-    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(2);
+    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(1);
     expect(screen.getByLabelText('Ville')).toBeInTheDocument();
   });
 });
@@ -1001,6 +1015,41 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     // ONE variety in « Balcon », not the three the aggregate holds.
     expect(gallery.getByText('1')).toBeInTheDocument();
     expect(gallery.queryByText('3')).toBeNull();
+  });
+
+  it('counts the Tips thumbnail through the widget’s own derivation (C4, PR 4b/5)', async () => {
+    // Same rule again: the figure comes from `gardenAdvice`, the function the
+    // widget's chip reads, on the page's own `gardenViews`. A shade lover in
+    // full sun on an oriented garden is ONE tip; a sun lover beside it in full
+    // sun is none — the thumbnail prints 1, never « 2 plants ».
+    const blocks = presetFor('gardener');
+    blocks.find((block) => block.key === 'tips')!.hidden = true;
+    servePreferences('gardener', blocks);
+
+    const sunny = (plantId: string, commonName: string, min: number, max: number) =>
+      varietyFixture({ plantId, scientificName: plantId, commonName, sunlightHoursMin: min, sunlightHoursMax: max });
+    vi.mocked(fetchDashboardData).mockResolvedValue({
+      gardens: [
+        garden('g1', 'Terrasse', {
+          config: { orientation: 'S', gardenType: null, lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
+          placements: [
+            placement({ id: 'h', plantId: 'hydrangea', startRow: 0, startCol: 0 }),
+            placement({ id: 't', plantId: 'tomato', startRow: 0, startCol: 1 }),
+          ],
+          placementCount: 2,
+          varietyCount: 2,
+        }),
+      ],
+      varieties: [sunny('hydrangea', 'Hydrangea', 4, 6), sunny('tomato', 'Tomato', 8, 12)],
+      totals: { gardenCount: 1, placementCount: 2, varietyCount: 2, catalogPlantCount: 536 },
+    });
+
+    await openPanel();
+    const gallery = within(screen.getByRole('dialog', { name: 'Customize' }));
+
+    expect(gallery.getByText('Tips')).toBeInTheDocument();
+    expect(gallery.getByText('1 tip')).toBeInTheDocument();
+    expect(gallery.queryByText('2 tips')).toBeNull();
   });
 
   it('counts the This-month thumbnail through the widget’s own derivation (C4, PR 4a/5)', async () => {
