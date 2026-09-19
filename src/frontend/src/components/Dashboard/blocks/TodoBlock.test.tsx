@@ -696,6 +696,36 @@ describe('TodoBlock — the weather note is announced once, by a region that was
   });
 });
 
+describe('TodoBlock — the region is born EMPTY, whatever state the card mounts in (round 3, S-5)', () => {
+  // GitHub `4052436616`: mounted with the weather already out — the page's
+  // grid mounts once the preferences land, and a widget shown again is
+  // remounted — the region was born WITH its text, the very case the recipe
+  // calls unreliable. The document is watched from BEFORE the card exists:
+  // the records say in what order the DOM was written.
+  it('mounted with the weather already unavailable: nothing at the first render, the note’s sentence in a later write', () => {
+    const observer = new MutationObserver(() => {});
+    observer.observe(document.body, { childList: true, characterData: true, subtree: true, characterDataOldValue: true });
+    const { card } = renderBlock({ gardens: [jardin], varieties: [hedge, sownLettuce], weather: EMPTY_WEATHER_DATA, weatherUnavailable: true });
+    const records = observer.takeRecords();
+    observer.disconnect();
+    const { region } = liveRegion(card);
+
+    expect(region.textContent).toBe('Weather unavailable — watering is not planned for now.');
+    // The region's text must arrive in a write of its own, AFTER the record
+    // that put the region in the document, onto a region that held nothing.
+    const inserted = records.findIndex((record) =>
+      [...record.addedNodes].some((node) => node === region || node.contains(region))
+    );
+    expect(inserted).toBeGreaterThanOrEqual(0);
+    const writes = records.filter((record) => region.contains(record.target));
+    expect(writes.length).toBeGreaterThan(0);
+    expect(records.indexOf(writes[0]!)).toBeGreaterThan(inserted);
+    const first = writes[0]!;
+    if (first.type === 'characterData') expect(first.oldValue).toBe('');
+    else expect(first.removedNodes).toHaveLength(0);
+  });
+});
+
 describe('TodoBlock — Small and the states', () => {
   it('Small: the count, and the first task', () => {
     const { card } = renderBlock({ size: 'small' });

@@ -560,6 +560,84 @@ describe('TipsBlock — a failure is announced once, by a region that was alread
   });
 });
 
+describe('TipsBlock — the region is born EMPTY, whatever state the card mounts in (round 3, S-5)', () => {
+  // GitHub `4052436613`: two paths the round-2 tests never took. (1) The card
+  // MOUNTS with the error already true — the page's grid mounts once the
+  // preferences land, and a widget shown again is remounted — so the region
+  // was born WITH its text, the very case the recipe calls unreliable. (2) A
+  // « Try again » that fails again left the text as it was, so nothing was
+  // said. The document is watched from BEFORE the card exists: the records
+  // say in what order the DOM was written.
+  const watchDocument = () => {
+    const observer = new MutationObserver(() => {});
+    observer.observe(document.body, { childList: true, characterData: true, subtree: true, characterDataOldValue: true });
+    return () => {
+      const records = observer.takeRecords();
+      observer.disconnect();
+      return records;
+    };
+  };
+
+  /**
+   * The region's text must arrive in a write of its own, AFTER the record
+   * that put the region in the document, onto a region that held nothing.
+   */
+  const bornEmptyThenWritten = (records: MutationRecord[], region: HTMLElement) => {
+    const inserted = records.findIndex((record) =>
+      [...record.addedNodes].some((node) => node === region || node.contains(region))
+    );
+    expect(inserted).toBeGreaterThanOrEqual(0);
+    const writes = records.filter((record) => region.contains(record.target));
+    expect(writes.length).toBeGreaterThan(0);
+    expect(records.indexOf(writes[0]!)).toBeGreaterThan(inserted);
+    const first = writes[0]!;
+    if (first.type === 'characterData') expect(first.oldValue).toBe('');
+    else expect(first.removedNodes).toHaveLength(0);
+  };
+
+  it('mounted with the plans already failed: nothing at the first render, the sentence in a later write', () => {
+    const stop = watchDocument();
+    const { card } = renderBlock({ loadError: true });
+    const records = stop();
+    const { region } = liveRegion(card);
+
+    expect(region.textContent).toBe('Couldn’t load the tips.');
+    bornEmptyThenWritten(records, region);
+  });
+
+  it('mounted with the forecast already failed: the same, for the weather note', () => {
+    const stop = watchDocument();
+    const { card } = renderBlock({ gardens: [terrasse], weather: EMPTY_WEATHER_DATA, weatherError: true });
+    const records = stop();
+    const { region } = liveRegion(card);
+
+    expect(region.textContent).toBe('Weather unavailable — the watering tips can’t be checked for now.');
+    bornEmptyThenWritten(records, region);
+  });
+
+  it('a « Try again » that fails again is said again: emptied while the request is out, filled once when it fails', () => {
+    const { card, rerender } = renderBlock({ gardens: [terrasse] });
+    const { region } = liveRegion(card);
+    rerender({ weather: EMPTY_WEATHER_DATA, weatherError: true });
+    expect(region.textContent).toBe('Weather unavailable — the watering tips can’t be checked for now.');
+
+    const observer = new MutationObserver(() => {});
+    observer.observe(region, { childList: true, characterData: true, subtree: true });
+    // The retry is out: the region is emptied — a removal, which is not announced.
+    rerender({ weather: EMPTY_WEATHER_DATA, weatherError: true, refreshing: true });
+    expect(region).toBeEmptyDOMElement();
+    expect(observer.takeRecords().every((record) => record.addedNodes.length === 0)).toBe(true);
+
+    // It failed again, the same error: ONE write, hence one announcement — never two for one change.
+    rerender({ weather: EMPTY_WEATHER_DATA, weatherError: true, refreshing: false });
+    const filled = observer.takeRecords();
+    observer.disconnect();
+    expect(region.textContent).toBe('Weather unavailable — the watering tips can’t be checked for now.');
+    expect(filled).toHaveLength(1);
+    expect(filled[0]!.addedNodes).toHaveLength(1);
+  });
+});
+
 describe('TipsBlock — states', () => {
   it('loading: a skeleton and no chip; then the rows once the plans land', () => {
     const { card, rerender } = renderBlock({ size: 'large', loading: true });

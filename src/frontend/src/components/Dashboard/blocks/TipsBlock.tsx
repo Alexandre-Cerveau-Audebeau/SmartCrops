@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
@@ -705,6 +705,24 @@ export default function TipsBlock({
    * The text is the sentence the reader sees, where it is drawn: nothing
    * while the card loads, nothing for the weather note on a Small card,
    * which does not draw it.
+   *
+   * Round 3, S-5 (GitHub `4052436613`): the text is written by an EFFECT,
+   * into the DOM, never by the render that creates the region. Rendered as
+   * a child, it was born WITH the region when the card mounted in a failed
+   * state — the page's grid mounts once the preferences land, a widget
+   * shown again is remounted — the very case the recipe calls unreliable;
+   * and a « Réessayer » that failed again left the text as it was, so the
+   * second failure was never said. Here the region is inserted with NO text
+   * node, by construction; the effect below writes the sentence after the
+   * commit that inserted it, empties it while a retry is out (a removal,
+   * which is not announced) and writes it again when the retry fails — one
+   * DOM write per change, guarded by `textContent !== next`, so nothing is
+   * said twice for one change. An ASSUMED departure from the `WeatherInvite`
+   * recipe, where React renders the text: the same through a local state —
+   * `setState` in the effect, the form G-3 proposed — is an ERROR under this
+   * project's `react-hooks/set-state-in-effect`, and writing the DOM is the
+   * use that rule names as the effect's own. No timer, no promise: one
+   * effect, two dependencies.
    */
   const announced = loading
     ? ''
@@ -713,6 +731,12 @@ export default function TipsBlock({
       : weatherError && size !== 'small'
         ? t('dashboard.blocks.tips.weatherUnavailable')
         : '';
+  const statusRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const node = statusRef.current;
+    const next = refreshing ? '' : announced;
+    if (node && node.textContent !== next) node.textContent = next;
+  }, [announced, refreshing]);
 
   return (
     <DashboardBlock
@@ -722,10 +746,8 @@ export default function TipsBlock({
       editing={editing}
       chip={chip || undefined}
     >
-      {/* Out of the flow (`position: absolute`): no gap of the column is spent on it. */}
-      <Typography role="status" aria-live="polite" data-tips-status sx={visuallyHidden}>
-        {announced}
-      </Typography>
+      {/* Out of the flow (`position: absolute`): no gap of the column is spent on it. No child: its text is the effect's, above. */}
+      <Typography ref={statusRef} role="status" aria-live="polite" data-tips-status sx={visuallyHidden} />
       {body()}
     </DashboardBlock>
   );
