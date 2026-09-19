@@ -6,6 +6,7 @@ import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
+import { visuallyHidden } from '@mui/utils';
 import type { SvgIconComponent } from '@mui/icons-material';
 import AcUnitOutlinedIcon from '@mui/icons-material/AcUnitOutlined';
 import ContentCutOutlinedIcon from '@mui/icons-material/ContentCutOutlined';
@@ -478,6 +479,24 @@ export default function TodoBlock({
     />
   );
 
+  /**
+   * What the card ANNOUNCES to assistive technology (round 2 of ④b, S-4's
+   * family — the same absence as the Tips block's note): « Météo
+   * indisponible — les arrosages ne sont pas planifiés pour l'instant. »
+   * when it is put on screen, through a live region that exists from the
+   * FIRST render, empty — the `WeatherInvite` recipe (round 1 of ③b, E7),
+   * `role="status"`, `aria-live="polite"`, off-screen through
+   * `visuallyHidden`. A region inserted together with its text is read
+   * unreliably; one already there whose text changes is read once,
+   * politely, and an empty first render announces nothing. The text is the
+   * sentence the reader sees, where it is drawn: Medium and Large, not while
+   * the plans load or fail, not on a Small card, which does not draw it.
+   */
+  const announced =
+    !loading && !loadError && weatherUnavailable && size !== 'small'
+      ? t('dashboard.blocks.todo.weatherUnavailable')
+      : '';
+
   return (
     <DashboardBlock
       blockKey="todo"
@@ -486,6 +505,10 @@ export default function TodoBlock({
       editing={editing}
       chip={chip || undefined}
     >
+      {/* Out of the flow (`position: absolute`): no gap of the column is spent on it. */}
+      <Typography role="status" aria-live="polite" data-todo-status sx={visuallyHidden}>
+        {announced}
+      </Typography>
       {body()}
     </DashboardBlock>
   );

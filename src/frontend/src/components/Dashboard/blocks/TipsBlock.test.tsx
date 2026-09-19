@@ -138,6 +138,25 @@ function renderBlock(over: Partial<Props> = {}, language = 'en') {
 
 const rows = (card: HTMLElement) => [...card.querySelectorAll('[data-tips-tip]')];
 
+/**
+ * The card's ONE live region (round 2, S-4), and a counter of the changes
+ * made to its text: what a screen reader would be handed. `takeRecords()`
+ * is synchronous, so each step of a test reads the records it caused.
+ */
+function liveRegion(card: HTMLElement) {
+  const regions = card.querySelectorAll('[aria-live], [role="status"], [role="alert"]');
+  expect(regions).toHaveLength(1);
+  const region = regions[0] as HTMLElement;
+  expect(region).toHaveAttribute('role', 'status');
+  expect(region).toHaveAttribute('aria-live', 'polite');
+  expect(region).toHaveAttribute('data-tips-status');
+  // No region ABOVE the card either: one announcement, never two.
+  expect(card.parentElement?.closest('[aria-live], [role="status"], [role="alert"]') ?? null).toBeNull();
+  const observer = new MutationObserver(() => {});
+  observer.observe(region, { childList: true, characterData: true, subtree: true });
+  return { region, changes: () => observer.takeRecords().length };
+}
+
 afterEach(() => {
   cleanup();
   localStorage.clear();
@@ -376,7 +395,8 @@ describe('TipsBlock — Large (A3Expert.dc.html l. 315-334)', () => {
     }
     expect([...zone.querySelectorAll('[data-tips-group]')].map((node) => node.getAttribute('data-tips-group'))).toEqual(['g1', 'u1', 'u2', 'u3']);
     // Under the zone: the foot alone — no invitation, no panel — and after it in document order.
-    const siblings = [...zone.parentElement!.children].filter((node) => node !== zone);
+    // (The card's live region, `data-tips-status`, is out of the flow and above the zone: not a layout sibling.)
+    const siblings = [...zone.parentElement!.children].filter((node) => node !== zone && !node.hasAttribute('data-tips-status'));
     expect(siblings).toHaveLength(1);
     expect(siblings[0]).toHaveAttribute('data-tips-unknown');
     expect(siblings[0]).toHaveTextContent('1 plant with no known exposure');
@@ -399,7 +419,7 @@ describe('TipsBlock — Large (A3Expert.dc.html l. 315-334)', () => {
     const zone = card.querySelector('[data-tips-groups]') as HTMLElement;
     expect(zone.children).toHaveLength(3);
     expect([...zone.querySelectorAll('[data-tips-invite]')]).toHaveLength(3);
-    expect([...zone.parentElement!.children].filter((node) => node !== zone)).toHaveLength(0);
+    expect([...zone.parentElement!.children].filter((node) => node !== zone && !node.hasAttribute('data-tips-status'))).toHaveLength(0);
     expect(card.querySelector('[data-invite-panel]')).toBeNull();
     expect(card).not.toHaveTextContent('No tip for now');
     expect(card).not.toHaveTextContent('Nothing to report');
@@ -476,6 +496,67 @@ describe('TipsBlock — Large (A3Expert.dc.html l. 315-334)', () => {
 
     fireEvent.click(widget.getByRole('button', { name: 'Show less' }));
     expect(rows(card)).toHaveLength(10);
+  });
+});
+
+describe('TipsBlock — a failure is announced once, by a region that was already there (S-4)', () => {
+  // Round 2, S-4 (Extension `95084e7e` / `fc363e9a`): the weather note
+  // appeared after the request failed and no live region announced it. The
+  // `WeatherInvite` recipe: a `role="status" aria-live="polite"` region
+  // mounted EMPTY from the first render — a region born with its text is
+  // read unreliably — whose text becomes the sentence on screen, once.
+  it('the weather note: nothing at first render, its own sentence when it appears, nothing when it is gone', () => {
+    const { card, rerender } = renderBlock({ gardens: [terrasse] });
+    const { region, changes } = liveRegion(card);
+    expect(region).toHaveTextContent('');
+    expect(card.querySelector('[data-tips-weather-note]')).toBeNull();
+
+    rerender({ weather: EMPTY_WEATHER_DATA, weatherError: true });
+    expect(changes()).toBeGreaterThan(0);
+    const note = card.querySelector('[data-tips-weather-note]') as HTMLElement;
+    expect(region.textContent).toBe(note.firstElementChild!.textContent);
+    expect(region.textContent).toBe('Weather unavailable — the watering tips can’t be checked for now.');
+
+    // The same state again: the text does not move, so nothing is re-announced.
+    rerender({ weather: EMPTY_WEATHER_DATA, weatherError: true });
+    expect(changes()).toBe(0);
+
+    rerender({ weather: EMPTY_WEATHER_DATA, weatherError: false });
+    expect(region).toHaveTextContent('');
+  });
+
+  it('the fatal branch: nothing while the plans load, its own sentence once they fail', () => {
+    const { card, rerender } = renderBlock({ size: 'large', loading: true });
+    const { region, changes } = liveRegion(card);
+    expect(region).toHaveTextContent('');
+
+    rerender({ loading: false, loadError: true });
+    expect(changes()).toBeGreaterThan(0);
+    expect(region.textContent).toBe('Couldn’t load the tips.');
+    expect(card).toHaveTextContent('Couldn’t load the tips.');
+
+    rerender({ loading: false, loadError: true });
+    expect(changes()).toBe(0);
+  });
+
+  it('a Small card, which draws no weather note, announces none', () => {
+    const { card, rerender } = renderBlock({ size: 'small', gardens: [terrasse] });
+    const { region, changes } = liveRegion(card);
+
+    rerender({ weather: EMPTY_WEATHER_DATA, weatherError: true });
+    expect(card.querySelector('[data-tips-weather-note]')).toBeNull();
+    expect(region).toHaveTextContent('');
+    expect(changes()).toBe(0);
+  });
+
+  it('a weather failure that lands while the plans still load is announced only once they do', () => {
+    const { card, rerender } = renderBlock({ gardens: [terrasse], loading: true, weather: EMPTY_WEATHER_DATA, weatherError: true });
+    const { region, changes } = liveRegion(card);
+    expect(region).toHaveTextContent('');
+
+    rerender({ loading: false, weather: EMPTY_WEATHER_DATA, weatherError: true });
+    expect(changes()).toBeGreaterThan(0);
+    expect(region.textContent).toBe('Weather unavailable — the watering tips can’t be checked for now.');
   });
 });
 

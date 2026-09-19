@@ -1505,6 +1505,12 @@ describe('GardensDashboard — a weather outage is said in « Conseils », with 
     expect(tips.querySelector('[data-tips-tip="shadeLover"]')).toHaveTextContent('Your Hydrangea (A1, Terrasse) prefers part shade');
     // …and the fatal branch, which the gardens' failure alone selects, is not.
     expect(tips).not.toHaveTextContent('Couldn’t load the tips.');
+    // Round 2, S-4: the note's sentence reached the card's ONE live region —
+    // and no region above the card would say it a second time.
+    const regions = tips.querySelectorAll('[aria-live], [role="status"], [role="alert"]');
+    expect(regions).toHaveLength(1);
+    expect(regions[0]!.textContent).toBe('Weather unavailable — the watering tips can’t be checked for now.');
+    expect(tips.parentElement!.closest('[aria-live], [role="status"], [role="alert"]')).toBeNull();
 
     // The retry reaches the weather half of the page's `onRetry`.
     expect(fetchDashboardWeather).toHaveBeenCalledTimes(1);

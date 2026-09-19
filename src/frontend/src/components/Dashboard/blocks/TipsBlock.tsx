@@ -7,6 +7,7 @@ import Chip from '@mui/material/Chip';
 import Link from '@mui/material/Link';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
+import { visuallyHidden } from '@mui/utils';
 import type { SvgIconComponent } from '@mui/icons-material';
 import BrightnessMediumOutlinedIcon from '@mui/icons-material/BrightnessMediumOutlined';
 import CheckBoxOutlinedIcon from '@mui/icons-material/CheckBoxOutlined';
@@ -689,6 +690,30 @@ export default function TipsBlock({
     />
   );
 
+  /**
+   * What the card ANNOUNCES to assistive technology (round 2, S-4 —
+   * Extension `95084e7e` / `fc363e9a`): the sentence a state change puts on
+   * screen — « Impossible de charger les conseils. » when the plans fail,
+   * « Météo indisponible — … » when the forecast fails while the plans stand
+   * — through a live region that exists from the FIRST render, empty: the
+   * `WeatherInvite` recipe (round 1 of ③b, E7), `role="status"`,
+   * `aria-live="polite"`, off-screen through `visuallyHidden`. A region
+   * inserted together with its text is read unreliably, which is why the
+   * attributes do not sit on the visible sentences themselves (they are
+   * born with their text); one that is already there and whose text changes
+   * is read once, politely — and an empty first render announces nothing.
+   * The text is the sentence the reader sees, where it is drawn: nothing
+   * while the card loads, nothing for the weather note on a Small card,
+   * which does not draw it.
+   */
+  const announced = loading
+    ? ''
+    : loadError
+      ? t('dashboard.blocks.tips.loadError')
+      : weatherError && size !== 'small'
+        ? t('dashboard.blocks.tips.weatherUnavailable')
+        : '';
+
   return (
     <DashboardBlock
       blockKey="tips"
@@ -697,6 +722,10 @@ export default function TipsBlock({
       editing={editing}
       chip={chip || undefined}
     >
+      {/* Out of the flow (`position: absolute`): no gap of the column is spent on it. */}
+      <Typography role="status" aria-live="polite" data-tips-status sx={visuallyHidden}>
+        {announced}
+      </Typography>
       {body()}
     </DashboardBlock>
   );
