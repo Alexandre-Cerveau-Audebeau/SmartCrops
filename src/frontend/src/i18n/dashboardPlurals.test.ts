@@ -133,6 +133,14 @@ describe('the four pluralized dashboard sites', () => {
         'dashboard.blocks.weather.others',
         'dashboard.blocks.weather.partialTitle',
         'dashboard.location.minChars',
+        // SMA-336 PR 4b/5 — the Tips widget's counts.
+        'dashboard.blocks.tips.count',
+        'dashboard.blocks.tips.more',
+        'dashboard.blocks.tips.watering',
+        'dashboard.blocks.tips.wateringNoRain',
+        'dashboard.blocks.tips.dryDays',
+        'dashboard.blocks.tips.unknownExposure',
+        'dashboard.blocks.tips.moreTips',
       ] as const;
 
       for (const key of singulars) {

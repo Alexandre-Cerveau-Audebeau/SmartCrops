@@ -19,21 +19,18 @@ import { visuallyHidden } from '@mui/utils';
 import { useTheme } from '@mui/material/styles';
 import AddIcon from '@mui/icons-material/Add';
 import AddLocationAltOutlinedIcon from '@mui/icons-material/AddLocationAltOutlined';
-import BalconyIcon from '@mui/icons-material/Balcony';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import DeckIcon from '@mui/icons-material/Deck';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import FilterVintageOutlinedIcon from '@mui/icons-material/FilterVintageOutlined';
-import GrassIcon from '@mui/icons-material/Grass';
 import YardOutlinedIcon from '@mui/icons-material/YardOutlined';
-import type { SvgIconComponent } from '@mui/icons-material';
 import DeleteGardenDialog from '../../Garden/DeleteGardenDialog';
 import DashboardBlock from '../DashboardBlock';
 import ExposureDot from '../ExposureDot';
 import GardenThumbnail from '../GardenThumbnail';
 import InviteState from '../InviteState';
 import MissingDataMark from '../MissingDataMark';
+import { GARDEN_TYPE_ICONS } from '../gardenTypeIcons';
 import OccupancyBar from '../OccupancyBar';
 import WeatherGlyph from './WeatherGlyph';
 import { displayTemperature } from './weatherFormat';
@@ -64,27 +61,14 @@ export type GardensWeather =
 const MEDIUM_ROWS = 3;
 
 /**
- * The glyph a MEDIUM row's type chip carries (round 6, N5-1).
- *
- * `A2Novice.dc.html` draws `<span class="pill type"><svg class="ic" width="14">…
- * </svg>Terrasse</span>` with `.pill.type .ic { color: var(--prim) }`, and the
- * three paths it draws were matched attribute for attribute against
- * `@mui/icons-material`: `terrace` → `Deck`, `balcony` → `Balcony`,
- * `inground` → `Grass`. The artboards never draw a `greenhouse` or an `indoor`
- * garden; rather than invent a glyph for them, those two borrow the Gardens
- * widget's own (`YardOutlined`, the entry of `BLOCK_ICONS`), so no chip is bare
- * and nothing is drawn that the design did not draw somewhere.
+ * The glyph a MEDIUM row's type chip carries (round 6, N5-1) — the shared
+ * table of `gardenTypeIcons.ts` since PR 4b/5 (T12), where the Tips widget
+ * reads the same drawings for its per-garden groups.
  *
  * MEDIUM only: `Main.dc.html`'s table writes the same chips WITHOUT a glyph
  * (`<span class="pill type">Terrasse</span>`), and so does the Large row here.
  */
-const TYPE_CHIP_ICONS: Record<string, SvgIconComponent> = {
-  terrace: DeckIcon,
-  balcony: BalconyIcon,
-  inground: GrassIcon,
-  greenhouse: YardOutlinedIcon,
-  indoor: YardOutlinedIcon,
-};
+const TYPE_CHIP_ICONS = GARDEN_TYPE_ICONS;
 
 /**
  * Thumbnail box on a Medium row and in the table's identity cell.

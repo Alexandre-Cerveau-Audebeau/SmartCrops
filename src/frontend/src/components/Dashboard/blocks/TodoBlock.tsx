@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -6,6 +6,7 @@ import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
+import { visuallyHidden } from '@mui/utils';
 import type { SvgIconComponent } from '@mui/icons-material';
 import AcUnitOutlinedIcon from '@mui/icons-material/AcUnitOutlined';
 import ContentCutOutlinedIcon from '@mui/icons-material/ContentCutOutlined';
@@ -478,6 +479,48 @@ export default function TodoBlock({
     />
   );
 
+  /**
+   * What the card ANNOUNCES to assistive technology (round 2 of ④b, S-4's
+   * family — the same absence as the Tips block's note): « Météo
+   * indisponible — les arrosages ne sont pas planifiés pour l'instant. »
+   * when it is put on screen, through a live region that exists from the
+   * FIRST render, empty — the `WeatherInvite` recipe (round 1 of ③b, E7),
+   * `role="status"`, `aria-live="polite"`, off-screen through
+   * `visuallyHidden`. A region inserted together with its text is read
+   * unreliably; one already there whose text changes is read once,
+   * politely, and an empty first render announces nothing. The text is the
+   * sentence the reader sees, where it is drawn: Medium and Large, not while
+   * the plans load or fail, not on a Small card, which does not draw it.
+   *
+   * Round 3, S-5 (GitHub `4052436616`): the text is written by an EFFECT,
+   * into the DOM, never by the render that creates the region. Rendered as
+   * a child, it was born WITH the region when the card mounted with the
+   * weather already out — the page's grid mounts once the preferences land,
+   * a widget shown again is remounted — the very case the recipe calls
+   * unreliable. Here the region is inserted with NO text node, by
+   * construction; the effect below writes the sentence after the commit
+   * that inserted it, empties it while a retry is out (`refreshing`, the
+   * card's own prop — the page passes both aggregates' — a removal, which is
+   * not announced) and writes it again when the retry fails — one DOM write
+   * per change, guarded by `textContent !== next`, so nothing is said twice
+   * for one change. An ASSUMED departure from the `WeatherInvite` recipe,
+   * where React renders the text: the same through a local state —
+   * `setState` in the effect, the form G-3 proposed — is an ERROR under this
+   * project's `react-hooks/set-state-in-effect`, and writing the DOM is the
+   * use that rule names as the effect's own. No timer, no promise: one
+   * effect, two dependencies.
+   */
+  const announced =
+    !loading && !loadError && weatherUnavailable && size !== 'small'
+      ? t('dashboard.blocks.todo.weatherUnavailable')
+      : '';
+  const statusRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const node = statusRef.current;
+    const next = refreshing ? '' : announced;
+    if (node && node.textContent !== next) node.textContent = next;
+  }, [announced, refreshing]);
+
   return (
     <DashboardBlock
       blockKey="todo"
@@ -486,6 +529,8 @@ export default function TodoBlock({
       editing={editing}
       chip={chip || undefined}
     >
+      {/* Out of the flow (`position: absolute`): no gap of the column is spent on it. No child: its text is the effect's, above. */}
+      <Typography ref={statusRef} role="status" aria-live="polite" data-todo-status sx={visuallyHidden} />
       {body()}
     </DashboardBlock>
   );

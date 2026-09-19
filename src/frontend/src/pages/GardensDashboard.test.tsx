@@ -450,7 +450,9 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
   const INVITATIONS_EN: Array<[string, string]> = [
     // Weather LEFT this list in PR 3b/5: it carries the weather aggregate now,
     // and its invitation has a field behind it — see the two tests below.
-    ['Tips', 'Tips arrive with the exposure and the calendar of your gardens.'],
+    // Tips LEFT it in PR 4b/5: it derives its advice from the plans, the
+    // catalog and the weather — `TipsBlock.test.tsx` covers what it shows,
+    // and the test below what it says on a page with nothing planted.
     // To do today LEFT this list in PR 3b/5 (step 8): it derives its tasks
     // from the weather aggregate — `TodoBlock.test.tsx` covers what it shows.
     // This month LEFT it in PR 4a/5: it carries the calendar of the placed
@@ -485,10 +487,22 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
     renderPage();
 
     await waitFor(() => expect(renderedKeys()).toHaveLength(8));
-    // Two shells — Tips and Harvest: Gardens, Counts by variety, Statistics,
-    // Weather and To do today carry data, and This month joined them in
-    // PR 4a/5.
-    expect(screen.getAllByText('Coming soon')).toHaveLength(2);
+    // ONE shell — Harvest, and Harvest alone: Gardens, Counts by variety,
+    // Statistics, Weather and To do today carry data, This month joined them
+    // in PR 4a/5 and Tips in PR 4b/5.
+    expect(screen.getAllByText('Coming soon')).toHaveLength(1);
+    expect(screen.queryByText('Coming soon', { selector: '[data-widget="tips"] *' })).toBeNull();
+  });
+
+  it('the Tips widget carries its own body (PR 4b/5): with nothing planted, its honest sentence, not « Coming soon »', async () => {
+    servePreferences('expert');
+
+    renderPage();
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Tips' })).toBeInTheDocument();
+    const card = document.querySelector('[data-widget="tips"]') as HTMLElement;
+    expect(card).toHaveTextContent('No plant placed yet — tips arrive with your plantings.');
+    expect(within(card).queryByText('Coming soon')).toBeNull();
   });
 
   it('the Weather widget offers the city field and « Use » in its invitation (PR 3b/5, decision R4 lifted)', async () => {
@@ -530,12 +544,12 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
         'La météo a besoin de savoir où se trouvent vos jardins.'
       )
     ).toBeInTheDocument();
+    // Tips carries its own body since PR 4b/5 — its French empty sentence,
+    // where its « bientôt » shell used to be.
     expect(
-      screen.getByText(
-        'Les conseils arrivent avec l’exposition et le calendrier de vos jardins.'
-      )
+      screen.getByText('Aucune plante placée — les conseils arrivent avec vos plantations.')
     ).toBeInTheDocument();
-    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(2);
+    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(1);
     expect(screen.getByLabelText('Ville')).toBeInTheDocument();
   });
 });
@@ -1003,6 +1017,41 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(gallery.queryByText('3')).toBeNull();
   });
 
+  it('counts the Tips thumbnail through the widget’s own derivation (C4, PR 4b/5)', async () => {
+    // Same rule again: the figure comes from `gardenAdvice`, the function the
+    // widget's chip reads, on the page's own `gardenViews`. A shade lover in
+    // full sun on an oriented garden is ONE tip; a sun lover beside it in full
+    // sun is none — the thumbnail prints 1, never « 2 plants ».
+    const blocks = presetFor('gardener');
+    blocks.find((block) => block.key === 'tips')!.hidden = true;
+    servePreferences('gardener', blocks);
+
+    const sunny = (plantId: string, commonName: string, min: number, max: number) =>
+      varietyFixture({ plantId, scientificName: plantId, commonName, sunlightHoursMin: min, sunlightHoursMax: max });
+    vi.mocked(fetchDashboardData).mockResolvedValue({
+      gardens: [
+        garden('g1', 'Terrasse', {
+          config: { orientation: 'S', gardenType: null, lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
+          placements: [
+            placement({ id: 'h', plantId: 'hydrangea', startRow: 0, startCol: 0 }),
+            placement({ id: 't', plantId: 'tomato', startRow: 0, startCol: 1 }),
+          ],
+          placementCount: 2,
+          varietyCount: 2,
+        }),
+      ],
+      varieties: [sunny('hydrangea', 'Hydrangea', 4, 6), sunny('tomato', 'Tomato', 8, 12)],
+      totals: { gardenCount: 1, placementCount: 2, varietyCount: 2, catalogPlantCount: 536 },
+    });
+
+    await openPanel();
+    const gallery = within(screen.getByRole('dialog', { name: 'Customize' }));
+
+    expect(gallery.getByText('Tips')).toBeInTheDocument();
+    expect(gallery.getByText('1 tip')).toBeInTheDocument();
+    expect(gallery.queryByText('2 tips')).toBeNull();
+  });
+
   it('counts the This-month thumbnail through the widget’s own derivation (C4, PR 4a/5)', async () => {
     // The same rule as the Counters card above: the figure comes from
     // `monthCalendar`, the function the widget itself counts with, so a hidden
@@ -1419,6 +1468,54 @@ describe('GardensDashboard — outlined chips draw `--chip-bd` (round 6, N6-4)',
 
     const chip = (await screen.findByText('Gardener view')).closest('.MuiChip-root')!;
     expect(rulesFor(chip).toLowerCase().replace(/\s+/g, '')).toContain(`border-color:${border}`);
+  });
+});
+
+// PR 4b/5 round 1 (S-2) — the same two statuses for the Tips block: the
+// gardens' failure empties it, the weather's is said in one line with a retry.
+describe('GardensDashboard — a weather outage is said in « Conseils », with its retry (round 1, S-2)', () => {
+  it('keeps the exposure tips, says the watering tips are out, and « Try again » refetches the weather', async () => {
+    // A shade lover in full sun on an oriented garden: ONE exposure tip, from
+    // the plans alone (the C4 thumbnail test's scene).
+    const hydrangea = varietyFixture({ plantId: 'hydrangea', scientificName: 'hydrangea', commonName: 'Hydrangea', sunlightHoursMin: 4, sunlightHoursMax: 6 });
+    vi.mocked(fetchDashboardData).mockResolvedValue({
+      gardens: [
+        garden('g1', 'Terrasse', {
+          config: { orientation: 'S', gardenType: null, lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
+          placements: [placement({ id: 'h', plantId: 'hydrangea', startRow: 0, startCol: 0 })],
+          placementCount: 1,
+          varietyCount: 1,
+        }),
+      ],
+      varieties: [hydrangea],
+      totals: { gardenCount: 1, placementCount: 1, varietyCount: 1, catalogPlantCount: 536 },
+    });
+    // The provider is down. The plans are not.
+    vi.mocked(fetchDashboardWeather).mockRejectedValue(new Error('provider down'));
+
+    renderPage();
+
+    const tips = (await screen.findByRole('heading', { level: 2, name: 'Tips' })).closest('[data-widget="tips"]') as HTMLElement;
+    await waitFor(() =>
+      expect(tips.querySelector('[data-tips-weather-note]')).toHaveTextContent(
+        'Weather unavailable — the watering tips can’t be checked for now.'
+      )
+    );
+    // The family that never needed a forecast is still there…
+    expect(tips.querySelector('[data-tips-tip="shadeLover"]')).toHaveTextContent('Your Hydrangea (A1, Terrasse) prefers part shade');
+    // …and the fatal branch, which the gardens' failure alone selects, is not.
+    expect(tips).not.toHaveTextContent('Couldn’t load the tips.');
+    // Round 2, S-4: the note's sentence reached the card's ONE live region —
+    // and no region above the card would say it a second time.
+    const regions = tips.querySelectorAll('[aria-live], [role="status"], [role="alert"]');
+    expect(regions).toHaveLength(1);
+    expect(regions[0]!.textContent).toBe('Weather unavailable — the watering tips can’t be checked for now.');
+    expect(tips.parentElement!.closest('[aria-live], [role="status"], [role="alert"]')).toBeNull();
+
+    // The retry reaches the weather half of the page's `onRetry`.
+    expect(fetchDashboardWeather).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(tips.querySelector('[data-tips-weather-note]') as HTMLElement).getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(fetchDashboardWeather).toHaveBeenCalledTimes(2));
   });
 });
 

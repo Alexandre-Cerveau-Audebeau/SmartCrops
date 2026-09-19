@@ -146,3 +146,23 @@ describe('the ornamental chip reads at WCAG AA in both modes', () => {
     expect(contrast(hex(ornText), over(ornBg, card))).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+// SMA-336 PR 4b/5 — the NEUTRAL pill carries 13 px text on every widget header
+// (« 3 conseils ») and, since the Tips widget, on its per-garden groups
+// (« 2 conseils », « rien à signaler », `A3Expert.dc.html` l. 316-334). No
+// token was added for the widget — every colour it draws is one the dashboard
+// already declares — so this is the one pair it leans on that had no assertion.
+describe('the neutral pill reads at WCAG AA in both modes', () => {
+  it('by day — text over the pill fill', () => {
+    const { pillText, pillBg } = getDashboardTokens('light');
+
+    expect(contrast(hex(pillText), hex(pillBg))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('by night — text over the translucent fill composited on the card', () => {
+    const card = hex('#16294A');
+    const { pillText, pillBg } = getDashboardTokens('dark');
+
+    expect(contrast(hex(pillText), over(pillBg, card))).toBeGreaterThanOrEqual(4.5);
+  });
+});
