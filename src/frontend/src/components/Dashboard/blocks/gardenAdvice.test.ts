@@ -511,6 +511,31 @@ describe('gardenAdvice — the whole block, one pass', () => {
       expect(evaluatedOf(south({ placements: [plant('basil', 0, 0)] }), tomorrowRains)).toBe(true);
     });
 
+    it('false: a place whose EVERY day precedes its own today — nothing left to count, so nothing was checked (round 3, S-6)', () => {
+      // The five artboard days, all before the place's `localTime`: the D1
+      // filter leaves the tip nothing to count, and « checked » may not be
+      // said of nothing. DEFENSIVE — the transport reads `localTime` and
+      // `days` from ONE provider answer and never produces this shape; the
+      // module says so where it guards it.
+      const thirsty = south({ placements: [plant('basil', 0, 0)] });
+      const allPast = lyon(artboardWeek(), { localTime: '2026-09-20 09:00' });
+
+      const advice = gardenAdvice([thirsty], viewsOf(thirsty), varieties, allPast);
+
+      expect(advice.byGarden[0]!.tips).toEqual([]);
+      expect(advice.byGarden[0]!.evaluated).toBe(false);
+    });
+
+    it('true: the shape the transport DOES produce — day 0 on yesterday, read after the place’s midnight (D1 of ④a) — is checked', () => {
+      // One day dropped, two kept: the tip has days to count (and finds one
+      // dry day, the task's), so the watering family WAS checked.
+      const afterMidnight = lyon([day('2026-09-11', 0), day('2026-09-12', 0), day('2026-09-13', 80, 6)], {
+        localTime: '2026-09-12 09:00',
+      });
+
+      expect(evaluatedOf(south({ placements: [plant('basil', 0, 0)] }), afterMidnight)).toBe(true);
+    });
+
     it('false: no orientation (the invitation says why), indoor, or no plan', () => {
       expect(evaluatedOf(unoriented({ placements: [plant('sage', 0, 0)] }))).toBe(false);
       expect(

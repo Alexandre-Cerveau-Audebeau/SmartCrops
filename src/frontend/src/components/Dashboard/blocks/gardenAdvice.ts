@@ -1,5 +1,5 @@
 import type { DashboardGardenData, DashboardVarietyData } from '../../../types/DashboardData';
-import type { DashboardWeatherData } from '../../../types/DashboardWeather';
+import type { DashboardWeatherData, WeatherDay, WeatherLocation } from '../../../types/DashboardWeather';
 import { cellRef } from '../../../utils/cellRef';
 import type { ExposureCategory, MomentsLit } from '../../../utils/exposure';
 import { clipPlacement, placementExposure, type GardenView } from '../../../utils/gardenStats';
@@ -173,10 +173,12 @@ export interface GardenAdvice {
    * Whether « Rien à signaler — vos plantes sont là où elles aiment être » may
    * be STATED for this garden when it has no tip (T6): the exposure family
    * was checked — a plan, a known orientation, outdoors — AND the watering
-   * family was checked or had nothing to check (no high-need variety). A
-   * garden that could not be checked says nothing here: its reason is drawn
-   * elsewhere — the orientation invitation below, the To-do block's weather
-   * invitation — and « nothing to report » would be a misleading zero.
+   * family was checked — a place with at least one forecast day from its
+   * own today on, the very days the tip counts ({@link daysFromToday}) — or
+   * had nothing to check (no high-need variety). A garden that could not be
+   * checked says nothing here: its reason is drawn elsewhere — the
+   * orientation invitation below, the To-do block's weather invitation — and
+   * « nothing to report » would be a misleading zero.
    */
   evaluated: boolean;
 }
@@ -361,13 +363,31 @@ function isRainyDay(day: { chanceOfRain: number | null; totalPrecipMm: number | 
 }
 
 /**
+ * The place's days from its OWN today on — the D1 filter of `todoTasks`,
+ * read by the tip and by `evaluated` alike (round 3, S-6 — GitHub
+ * `4052583264`), so what the tip counted and what « checked » means are the
+ * same days. An unknown `localTime` trusts every day, as the task does.
+ *
+ * A place whose days ALL precede its `localTime` is not a shape the
+ * transport produces: `localTime` and `days` are mapped from ONE cached
+ * provider answer (`WeatherDtoMapper.Map`, stale or fresh), so a read across
+ * the place's midnight puts day 0 on yesterday — one day dropped, never
+ * five. The empty result is guarded DEFENSIVELY, so that T6 says true on any
+ * shape of data; it is not the record of an observed case.
+ */
+function daysFromToday(location: WeatherLocation): WeatherDay[] {
+  const today = localDateOf(location);
+  return today === null ? location.days : location.days.filter((day) => day.date >= today);
+}
+
+/**
  * The watering tip of ONE garden — at most one (Q7) — or none: no place
  * with forecast days, no high-need variety, no anchor in the plan, or a dry
  * spell shorter than {@link ADVICE_RULES.watering.drySpellMinDays} (the task's
  * ground, see the module doc).
  *
- * The days are the place's own, from its today on — the D1 filter of
- * `todoTasks` — and the spell is counted with the task's own {@link isDryDay}.
+ * The days are the place's own, from its today on ({@link daysFromToday}),
+ * and the spell is counted with the task's own {@link isDryDay}.
  */
 export function wateringTips(
   garden: DashboardGardenData,
@@ -382,8 +402,7 @@ export function wateringTips(
   const highNeed = placedVarietiesOf(garden, byPlant).filter(isHighNeed);
   if (highNeed.length === 0) return [];
 
-  const today = localDateOf(location);
-  const days = today === null ? location.days : location.days.filter((day) => day.date >= today);
+  const days = daysFromToday(location);
   let dryDays = 0;
   while (dryDays < days.length && isDryDay(days[dryDays]!)) dryDays += 1;
   if (dryDays < ADVICE_RULES.watering.drySpellMinDays) return [];
@@ -446,9 +465,15 @@ export function gardenAdvice(
 
     // The watering family has something to check only when a high-need
     // variety is planted; then it is checked only when the garden reads a
-    // place with forecast days.
+    // place with at least one forecast day from its own today on — the days
+    // the tip counts (round 3, S-6), not the raw `days` `locationOfGarden`
+    // tests: a place left with none has been counted on nothing, and « rien
+    // à signaler » may not be said of it (a shape the transport does not
+    // produce — see `daysFromToday`).
     const wateringApplies = placedVarietiesOf(garden, byPlant).some(isHighNeed);
-    const wateringChecked = !wateringApplies || locationOfGarden(garden.id, weather) !== null;
+    const location = locationOfGarden(garden.id, weather);
+    const wateringChecked =
+      !wateringApplies || (location !== null && daysFromToday(location).length > 0);
 
     byGarden.push({
       garden,
