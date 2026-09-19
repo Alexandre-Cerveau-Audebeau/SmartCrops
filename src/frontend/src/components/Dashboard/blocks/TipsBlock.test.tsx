@@ -308,6 +308,41 @@ describe('TipsBlock — Medium (Main.dc.html l. 295-309, A4Manquantes.dc.html l.
     expect(card).toHaveTextContent('Nothing to report — your plants are where they like to be.');
     expect(card.querySelector('[data-tips-more]')).toBeNull();
   });
+
+  // Round 4, S-7 (GitHub `4054339776`): with no tip and a garden whose
+  // orientation is unknown, the card drew the empty panel ABOVE the
+  // invitation — « Nothing to report — your plants are where they like to
+  // be » beside a garden whose plants were NOT checked, in a one-row card
+  // that clips what overflows. The invitation alone says what there is to
+  // say; the panel yields to it.
+  it('with no tip and a garden whose orientation is unknown: the invitation alone, no empty panel (S-7)', () => {
+    // A checked garden with nothing to say, and one that could not be checked.
+    const { card } = renderBlock({ gardens: [potager, balcon] });
+
+    expect(card.querySelector('[data-invite-panel]')).toBeNull();
+    expect(card).not.toHaveTextContent('Nothing to report');
+    expect(card).not.toHaveTextContent('No tip for now');
+    const invite = card.querySelector('[data-tips-invite="g2"]')!;
+    expect(invite).toHaveTextContent('Without the orientation of “Balcon sud”, the exposure can’t be compared — Set up the garden →');
+    expect(within(invite as HTMLElement).getByRole('link', { name: 'Set up the garden →' })).toHaveAttribute('href', '/gardens/g2/planner');
+    expect(card.querySelector('[data-tips-more]')).toBeNull();
+
+    // The same with NO garden checked at all: the invitation, not « No tip for now ».
+    cleanup();
+    const alone = renderBlock({ gardens: [balcon] });
+    expect(alone.card.querySelector('[data-invite-panel]')).toBeNull();
+    expect(alone.card).not.toHaveTextContent('No tip for now');
+    expect(alone.card.querySelector('[data-tips-invite="g2"]')).not.toBeNull();
+  });
+
+  it('with no tip and NO garden without orientation: the « Nothing to report » panel is still there — it yields only to an invitation', () => {
+    const { card } = renderBlock({ gardens: [potager] });
+
+    const panel = card.querySelector('[data-invite-panel]');
+    expect(panel).not.toBeNull();
+    expect(panel).toHaveTextContent('Nothing to report — your plants are where they like to be.');
+    expect(card.querySelector('[data-tips-invite]')).toBeNull();
+  });
 });
 
 describe('TipsBlock — Large (A3Expert.dc.html l. 315-334)', () => {

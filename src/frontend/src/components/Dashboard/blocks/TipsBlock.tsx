@@ -476,6 +476,23 @@ export default function TipsBlock({
     );
   };
 
+  /**
+   * Medium — two slots, a tip or an invitation each (`Main.dc.html`,
+   * `A4Manquantes.dc.html`); the invitation takes its slot in the flow.
+   *
+   * TRUTH BEFORE FILLING (round 4, S-7 — GitHub `4054339776`): with no tip
+   * and a garden whose orientation is unknown, the empty panel used to be
+   * drawn ABOVE the invitation — « Rien à signaler — vos plantes sont là où
+   * elles aiment être » beside a garden whose plants were NOT checked, which
+   * is false — in a one-row card whose `overflow: hidden` then clipped the
+   * invitation (measured in a real engine: on a phone the 109 px invitation
+   * lost 91.5 px alone and 70.5 px beside a checked garden; on a desktop the
+   * second of two lost 52.5 of its 65.5 px). When an invitation is drawn the
+   * panel yields: the invitation alone says what there is to say, as in
+   * Large where each group carries its own verdict (S-3). The panel stays
+   * when nothing else is drawn — the early return below — where « rien à
+   * signaler » is only said of gardens that were checked (T6).
+   */
   const mediumBody = () => {
     const invites = gardensWithoutOrientation.slice(0, MEDIUM_SLOTS);
     const shown = tips.slice(0, Math.max(0, MEDIUM_SLOTS - invites.length));
@@ -499,7 +516,6 @@ export default function TipsBlock({
             {shown.map((tip) => row(tip, false))}
           </Box>
         )}
-        {shown.length === 0 && tips.length === 0 && nothing}
         {invites.map(invitation)}
         {weatherNote}
         {unknownFoot}
