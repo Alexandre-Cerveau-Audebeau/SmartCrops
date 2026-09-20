@@ -11,6 +11,7 @@ const DATA_ROW_KEYS = [
   'google',
   'profile',
   'content',
+  'location',
   'session',
   'language',
   'logs',
@@ -26,7 +27,13 @@ const COOKIE_ROW_KEYS = [
   'choice',
 ] as const;
 
-/** SMA-35: /privacy — Politique de confidentialité (trame §2 + tableau cookies §4.3). */
+/**
+ * SMA-35: /privacy — Politique de confidentialité (trame §2 + tableau cookies
+ * §4.3). SMA-441: section 03 « Localisation de vos jardins » (the garden /
+ * profile location and the WeatherAPI.com processor), inserted right after the
+ * data table — the i18n keys s03…s10 keep their names and are displayed one
+ * number later.
+ */
 export default function Privacy() {
   const { t } = useTranslation();
 
@@ -55,7 +62,16 @@ export default function Privacy() {
         <LegalParagraph text={t('legal.privacy.s02.note')} />
       </LegalSection>
 
-      <LegalSection number="03" title={t('legal.privacy.s03.title')}>
+      <LegalSection number="03" title={t('legal.privacy.location.title')}>
+        <LegalParagraph text={t('legal.privacy.location.what')} />
+        <LegalParagraph text={t('legal.privacy.location.why')} />
+        <LegalParagraph text={t('legal.privacy.location.basis')} />
+        <LegalParagraph text={t('legal.privacy.location.retention')} />
+        <LegalParagraph text={t('legal.privacy.location.recipients')} />
+        <LegalParagraph text={t('legal.privacy.location.rights')} />
+      </LegalSection>
+
+      <LegalSection number="04" title={t('legal.privacy.s03.title')}>
         <LegalList
           items={[
             t('legal.privacy.s03.editor'),
@@ -64,42 +80,47 @@ export default function Privacy() {
         />
         <Box sx={{ pl: 3 }}>
           <LegalList
-            items={[t('legal.privacy.s03.ovh'), t('legal.privacy.s03.google')]}
+            items={[
+              t('legal.privacy.s03.ovh'),
+              t('legal.privacy.s03.weatherApi'),
+              t('legal.privacy.s03.google'),
+            ]}
           />
         </Box>
         <LegalParagraph text={t('legal.privacy.s03.noThirdParties')} />
       </LegalSection>
 
-      <LegalSection number="04" title={t('legal.privacy.s04.title')}>
+      <LegalSection number="05" title={t('legal.privacy.s04.title')}>
         <LegalParagraph text={t('legal.privacy.s04.body')} />
       </LegalSection>
 
-      <LegalSection number="05" title={t('legal.privacy.s05.title')}>
+      <LegalSection number="06" title={t('legal.privacy.s05.title')}>
         <LegalParagraph text={t('legal.privacy.s05.intro')} />
         <LegalList
           items={[
             t('legal.privacy.s05.items.account'),
+            t('legal.privacy.s05.items.location'),
             t('legal.privacy.s05.items.logs'),
             t('legal.privacy.s05.items.contact'),
           ]}
         />
       </LegalSection>
 
-      <LegalSection number="06" title={t('legal.privacy.s06.title')}>
+      <LegalSection number="07" title={t('legal.privacy.s06.title')}>
         <LegalParagraph text={t('legal.privacy.s06.body')} />
       </LegalSection>
 
-      <LegalSection number="07" title={t('legal.privacy.s07.title')}>
+      <LegalSection number="08" title={t('legal.privacy.s07.title')}>
         <LegalParagraph text={t('legal.privacy.s07.p1')} />
         <LegalParagraph text={t('legal.privacy.s07.p2')} />
         <LegalParagraph text={t('legal.privacy.s07.p3')} />
       </LegalSection>
 
-      <LegalSection number="08" title={t('legal.privacy.s08.title')}>
+      <LegalSection number="09" title={t('legal.privacy.s08.title')}>
         <LegalParagraph text={t('legal.privacy.s08.body')} />
       </LegalSection>
 
-      <LegalSection number="09" title={t('legal.privacy.s09.title')}>
+      <LegalSection number="10" title={t('legal.privacy.s09.title')}>
         <LegalParagraph text={t('legal.privacy.s09.intro')} />
         <ResponsiveLegalTable
           ariaLabel={t('legal.privacy.s09.tableAriaLabel')}
@@ -118,7 +139,7 @@ export default function Privacy() {
         />
       </LegalSection>
 
-      <LegalSection number="10" title={t('legal.privacy.s10.title')}>
+      <LegalSection number="11" title={t('legal.privacy.s10.title')}>
         <LegalParagraph text={t('legal.privacy.s10.body')} />
       </LegalSection>
     </LegalPageLayout>
