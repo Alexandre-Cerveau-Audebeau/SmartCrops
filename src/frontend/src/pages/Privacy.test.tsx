@@ -42,7 +42,12 @@ describe('Privacy (SMA-35)', () => {
     expect(screen.getByText('sc_cookie_notice_ack')).toBeInTheDocument();
     // Newsletter has no backend: its rows are gone from the page.
     expect(screen.queryByText(/Newsletter/)).not.toBeInTheDocument();
-    expect(screen.getByText(/August 1, 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/September 20, 2026/)).toBeInTheDocument();
+    // SMA-441: the garden-location section names its processor.
+    expect(
+      screen.getByRole('heading', { name: 'Location of your gardens' })
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/Zoomash Ltd/).length).toBeGreaterThan(0);
     // SMA-157 regression: no unresolved [À REMPLIR/CONFIRMER/ACTIVER] marker.
     expect(container.textContent).not.toContain('[À');
     expect(container.textContent).not.toContain('[OPTION');
@@ -66,7 +71,12 @@ describe('Privacy (SMA-35)', () => {
     expect(screen.getByText('7 jours')).toBeInTheDocument();
     expect(screen.getByText('2 minutes')).toBeInTheDocument();
     expect(screen.getByText('sc_cookie_notice_ack')).toBeInTheDocument();
-    expect(screen.getByText(/1er août 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/20 septembre 2026/)).toBeInTheDocument();
+    // SMA-441, FR mirror.
+    expect(
+      screen.getByRole('heading', { name: 'Localisation de vos jardins' })
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/Zoomash Ltd/).length).toBeGreaterThan(0);
     expect(container.textContent).not.toContain('[À');
     expect(container.textContent).not.toContain('[OPTION');
   });

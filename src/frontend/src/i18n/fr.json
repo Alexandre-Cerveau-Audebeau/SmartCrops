@@ -1676,7 +1676,7 @@
   "legal": {
     "layout": {
       "lastUpdated": "Dernière mise à jour :",
-      "updatedDate": "1er août 2026",
+      "updatedDate": "20 septembre 2026",
       "courtesy": "Version originale française — en cas de divergence avec la traduction, la version française fait foi."
     },
     "mentions": {
@@ -1753,6 +1753,12 @@
             "purpose": "Fourniture du service (sauvegarde et affichage de vos jardins)",
             "basis": "Exécution du contrat"
           },
+          "location": {
+            "name": "Localisation des jardins et du profil (facultative)",
+            "data": "Lieu choisi (nom, région, pays, latitude, longitude) et date de l'enregistrement — voir la section « Localisation de vos jardins »",
+            "purpose": "Météo locale, conseils adaptés, calendrier de culture",
+            "basis": "Exécution du contrat"
+          },
           "session": {
             "name": "Cookies de session",
             "data": "Cookie d'authentification (technique, **HttpOnly**)",
@@ -1780,23 +1786,34 @@
         },
         "note": "**SmartCrops** **ne collecte pas** de données dites « sensibles », **ne vend pas** vos données, et **n'affiche pas** de publicité."
       },
+      "location": {
+        "title": "Localisation de vos jardins",
+        "what": "**Quelles données.** Lorsque vous indiquez la ville d'un jardin ou de votre profil, nous conservons le lieu que vous avez choisi dans la liste proposée : son nom, sa région, son pays, ses coordonnées géographiques (latitude et longitude) et la date de cet enregistrement. Le texte que vous tapez dans le champ « Ville » pour trouver ce lieu n'est pas enregistré dans votre compte : seul le lieu choisi l'est.",
+        "why": "**Pourquoi.** Ces informations nous servent à afficher la météo locale de vos jardins, à vous proposer des conseils adaptés (arroser, protéger du froid) et à situer votre calendrier de culture dans la bonne saison. Sans elles, ces fonctions ne sont pas disponibles ; le reste de l'application fonctionne normalement.",
+        "basis": "**Sur quelle base.** L'exécution du service que vous nous demandez (exécution du contrat, RGPD art. 6.1.b). Vous choisissez librement d'indiquer une ville, et vous pouvez la retirer à tout moment depuis l'application (bouton « Retirer »).",
+        "retention": "**Combien de temps.** Jusqu'à ce que vous retiriez la localisation, supprimiez le jardin concerné ou supprimiez votre compte ; elle est alors effacée dans les mêmes conditions que vos autres données (voir « Combien de temps vos données sont-elles conservées ? »). Les prévisions météo obtenues ne sont jamais enregistrées dans la base de données : le serveur les garde en mémoire au plus 15 minutes, et jusqu'à 24 heures comme dernière valeur connue si le fournisseur ne répond plus, puis elles disparaissent.",
+        "recipients": "**Qui la reçoit.** Pour obtenir les prévisions, nous interrogeons **WeatherAPI.com, exploité par Zoomash Ltd (Royaume-Uni)**. Lorsque vous cherchez un lieu, **le texte que vous tapez dans le champ « Ville » lui est transmis, débarrassé de ses espaces de début et de fin** (de 2 à 100 caractères) pour être reconnu. Pour la météo, la requête ne contient que **les coordonnées géographiques du lieu choisi** — celles que le fournisseur a lui-même associées à ce lieu lors de la recherche, transmises avec au plus quatre décimales —, la langue d'affichage et des paramètres techniques identiques pour tous (nombre de jours de prévision, alertes officielles) ; une même requête sert tous les jardins situés au même endroit. Nous ne lui communiquons ni votre nom, ni votre adresse électronique, ni aucun identifiant de compte ou de jardin, ni le nom de vos jardins ; la requête s'identifie uniquement comme provenant du logiciel SmartCrops. Le Royaume-Uni fait l'objet d'une décision d'adéquation de la Commission européenne, renouvelée le 19 décembre 2025 et valable jusqu'au 27 décembre 2031, qui reconnaît un niveau de protection équivalent à celui de l'Union.",
+        "rights": "**Vos droits.** Vous pouvez à tout moment consulter cette donnée, la modifier ou la retirer depuis l'application, et l'obtenir dans l'export de votre compte, où elle figure pour votre profil et pour chacun de vos jardins, aux côtés de vos autres informations."
+      },
       "s03": {
         "title": "Qui a accès à vos données ?",
         "editor": "**L'éditeur** du site, seul administrateur.",
         "subcontractorsIntro": "**Sous-traitants techniques** :",
         "ovh": "**OVH** (hébergement du serveur et de la base de données, en France/UE) ;",
+        "weatherApi": "**WeatherAPI.com** (Zoomash Ltd, Royaume-Uni — prévisions météo et reconnaissance des lieux, uniquement si vous localisez un jardin ou votre profil ; voir la section « Localisation de vos jardins ») ;",
         "google": "**Google** (uniquement si vous choisissez la connexion Google : Google traite alors vos données d'authentification selon sa propre politique de confidentialité).",
         "noThirdParties": "Aucune transmission à des tiers à des fins commerciales ou publicitaires."
       },
       "s04": {
         "title": "Vos données quittent-elles l'Union européenne ?",
-        "body": "Les données du service sont hébergées **en France (OVH)**. Si vous utilisez la connexion Google, l'authentification implique Google LLC, susceptible de traiter des données hors UE dans le cadre des mécanismes de transfert reconnus (décision d'adéquation UE–États-Unis ou clauses contractuelles types)."
+        "body": "Les données du service sont hébergées **en France (OVH)**. Si vous utilisez la connexion Google, l'authentification implique Google LLC, susceptible de traiter des données hors UE dans le cadre des mécanismes de transfert reconnus (décision d'adéquation UE–États-Unis ou clauses contractuelles types). Si vous localisez un jardin ou votre profil, les données de localisation suivantes sont transmises à WeatherAPI.com (Zoomash Ltd) au Royaume-Uni : le texte que vous tapez pour chercher un lieu, débarrassé de ses espaces de début et de fin, et les coordonnées géographiques du lieu choisi (avec la langue d'affichage et des paramètres techniques fixes) ; le nom du lieu, sa région, son pays et la date d'enregistrement ne lui sont pas transmis — le détail figure à la section « Localisation de vos jardins ». Le Royaume-Uni est couvert par une décision d'adéquation de la Commission européenne renouvelée le 19 décembre 2025 et valable jusqu'au 27 décembre 2031."
       },
       "s05": {
         "title": "Combien de temps vos données sont-elles conservées ?",
         "intro": "Durées de conservation :",
         "items": {
           "account": "**Compte et contenus associés** — durée de vie du compte ; suppression effective dans un délai de 30 jours après suppression du compte.",
+          "location": "**Localisation des jardins et du profil** — jusqu'à son retrait, la suppression du jardin ou du compte. Les prévisions météo reçues du fournisseur restent en mémoire du serveur au plus 24 heures et ne sont jamais enregistrées en base de données.",
           "logs": "**Journaux techniques** — 12 mois maximum.",
           "contact": "**Messages de contact** — 12 mois après le dernier échange."
         }
