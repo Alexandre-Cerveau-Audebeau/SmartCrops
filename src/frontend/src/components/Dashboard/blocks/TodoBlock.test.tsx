@@ -726,6 +726,49 @@ describe('TodoBlock — the region is born EMPTY, whatever state the card mounts
   });
 });
 
+describe('TodoBlock — the note’s announcement follows the WEATHER flag alone (round 5, S-8)', () => {
+  // GitHub `4055087124`: the page passes `gardensRefreshing || weatherRefreshing`
+  // as `refreshing`, and the effect emptied then refilled the region on it —
+  // so a refresh of the GARDENS alone (a rename, another block's « Try
+  // again ») announced the unchanged weather sentence a second time. The note
+  // follows its own aggregate's flag; `refreshing` keeps the retry button.
+  const NOTE = 'Weather unavailable — watering is not planned for now.';
+  const state = { weather: EMPTY_WEATHER_DATA, weatherUnavailable: true } as const;
+  const noteShown = () => {
+    const out = renderBlock({ gardens: [jardin], varieties: [hedge, sownLettuce], weather: unlocated() });
+    const live = liveRegion(out.card);
+    out.rerender(state);
+    expect(live.region.textContent).toBe(NOTE);
+    live.changes();
+    return { ...out, ...live };
+  };
+
+  it('a refresh of the gardens alone, the note kept: nothing is emptied, nothing is said again', () => {
+    const { region, changes, rerender } = noteShown();
+    // As the page wires it: the union `refreshing` is true, the weather's own flag is not.
+    rerender({ ...state, refreshing: true, weatherRefreshing: false });
+    expect(region.textContent).toBe(NOTE);
+    rerender({ ...state, refreshing: false, weatherRefreshing: false });
+    expect(region.textContent).toBe(NOTE);
+    expect(changes()).toBe(0);
+  });
+
+  it('a refresh of the WEATHER, the note kept: emptied while it is out, said again once it fails — the S-5 cycle', () => {
+    const { region, rerender } = noteShown();
+    const observer = new MutationObserver(() => {});
+    observer.observe(region, { childList: true, characterData: true, subtree: true });
+    rerender({ ...state, refreshing: true, weatherRefreshing: true });
+    expect(region).toBeEmptyDOMElement();
+    expect(observer.takeRecords().every((record) => record.addedNodes.length === 0)).toBe(true);
+    rerender({ ...state, refreshing: false, weatherRefreshing: false });
+    const filled = observer.takeRecords();
+    observer.disconnect();
+    expect(region.textContent).toBe(NOTE);
+    expect(filled).toHaveLength(1);
+    expect(filled[0]!.addedNodes).toHaveLength(1);
+  });
+});
+
 describe('TodoBlock — Small and the states', () => {
   it('Small: the count, and the first task', () => {
     const { card } = renderBlock({ size: 'small' });

@@ -53,7 +53,16 @@ interface Props {
    * retry, and a thirsty garden is simply not « checked » yet (T6).
    */
   weatherError?: boolean;
+  /** Either aggregate has a request out — the union the « Réessayer » buttons wait on (round 7 of ③b, S33). */
   refreshing?: boolean;
+  /**
+   * The GARDENS aggregate alone has a request out (round 5, S-8 — GitHub
+   * `4055087124`): what the fatal sentence's announcement follows. Defaults
+   * to `refreshing` for a caller that does not tell the aggregates apart.
+   */
+  gardensRefreshing?: boolean;
+  /** The WEATHER aggregate alone has a request out: what the weather note's announcement follows. Same default. */
+  weatherRefreshing?: boolean;
   onRetry: () => void;
   /** « +N conseils → »: the rest of the list is reached by growing the widget. */
   onExpand: () => void;
@@ -126,6 +135,8 @@ export default function TipsBlock({
   loadError,
   weatherError = false,
   refreshing = false,
+  gardensRefreshing = refreshing,
+  weatherRefreshing = refreshing,
   onRetry,
   onExpand,
 }: Props) {
@@ -747,12 +758,17 @@ export default function TipsBlock({
       : weatherError && size !== 'small'
         ? t('dashboard.blocks.tips.weatherUnavailable')
         : '';
+  // Round 5, S-8 (GitHub `4055087124`): each announced sentence follows the
+  // ONE flag of its own aggregate — the fatal sentence the gardens', the
+  // weather note the weather's — so a refresh of the OTHER aggregate neither
+  // empties nor re-announces it; `refreshing`, the union, keeps the buttons.
+  const announcedRefreshing = loadError ? gardensRefreshing : weatherRefreshing;
   const statusRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const node = statusRef.current;
-    const next = refreshing ? '' : announced;
+    const next = announcedRefreshing ? '' : announced;
     if (node && node.textContent !== next) node.textContent = next;
-  }, [announced, refreshing]);
+  }, [announced, announcedRefreshing]);
 
   return (
     <DashboardBlock

@@ -673,6 +673,89 @@ describe('TipsBlock — the region is born EMPTY, whatever state the card mounts
   });
 });
 
+describe('TipsBlock — each announced sentence follows the flag of ITS aggregate (round 5, S-8)', () => {
+  // The symmetric case of GitHub `4055087124` (To-do): the page passes
+  // `gardensRefreshing || weatherRefreshing` as `refreshing`, and the effect
+  // emptied then refilled the region on it — a refresh of the OTHER aggregate
+  // announced an unchanged sentence a second time. The weather note follows
+  // the weather's flag, the fatal sentence the gardens'; `refreshing` keeps
+  // the retry buttons.
+  const NOTE = 'Weather unavailable — the watering tips can’t be checked for now.';
+  const FATAL = 'Couldn’t load the tips.';
+  /** `refreshing` as the page derives it, and the two flags apart. */
+  const flags = (gardens: boolean, weather: boolean) => ({
+    refreshing: gardens || weather,
+    gardensRefreshing: gardens,
+    weatherRefreshing: weather,
+  });
+  const noteState = { weather: EMPTY_WEATHER_DATA, weatherError: true } as const;
+  const noteShown = () => {
+    const out = renderBlock({ gardens: [terrasse] });
+    const live = liveRegion(out.card);
+    out.rerender(noteState);
+    expect(live.region.textContent).toBe(NOTE);
+    live.changes();
+    return { ...out, ...live };
+  };
+  const fatalState = { loading: false, loadError: true } as const;
+  const fatalShown = () => {
+    const out = renderBlock({ size: 'large', loading: true });
+    const live = liveRegion(out.card);
+    out.rerender(fatalState);
+    expect(live.region.textContent).toBe(FATAL);
+    live.changes();
+    return { ...out, ...live };
+  };
+  /** The flags cycle while the sentence stays: emptied, then written back in exactly ONE write. */
+  const saidAgainOnce = (
+    region: HTMLElement,
+    rerender: (next: Partial<Props>) => void,
+    state: Partial<Props>,
+    out: ReturnType<typeof flags>,
+    text: string
+  ) => {
+    const observer = new MutationObserver(() => {});
+    observer.observe(region, { childList: true, characterData: true, subtree: true });
+    rerender({ ...state, ...out });
+    expect(region).toBeEmptyDOMElement();
+    expect(observer.takeRecords().every((record) => record.addedNodes.length === 0)).toBe(true);
+    rerender({ ...state, ...flags(false, false) });
+    const filled = observer.takeRecords();
+    observer.disconnect();
+    expect(region.textContent).toBe(text);
+    expect(filled).toHaveLength(1);
+    expect(filled[0]!.addedNodes).toHaveLength(1);
+  };
+
+  it('the weather note, a refresh of the gardens alone: nothing is emptied, nothing is said again', () => {
+    const { region, changes, rerender } = noteShown();
+    rerender({ ...noteState, ...flags(true, false) });
+    expect(region.textContent).toBe(NOTE);
+    rerender({ ...noteState, ...flags(false, false) });
+    expect(region.textContent).toBe(NOTE);
+    expect(changes()).toBe(0);
+  });
+
+  it('the fatal sentence, a refresh of the weather alone: nothing is emptied, nothing is said again', () => {
+    const { region, changes, rerender } = fatalShown();
+    rerender({ ...fatalState, ...flags(false, true) });
+    expect(region.textContent).toBe(FATAL);
+    rerender({ ...fatalState, ...flags(false, false) });
+    expect(region.textContent).toBe(FATAL);
+    expect(changes()).toBe(0);
+  });
+
+  it('the weather note, a refresh of the WEATHER: emptied, then said again once — its own flag', () => {
+    const { region, rerender } = noteShown();
+    saidAgainOnce(region, rerender, noteState, flags(false, true), NOTE);
+  });
+
+  it('the fatal sentence, a refresh of the GARDENS: emptied, then said again once — its own flag', () => {
+    const { region, rerender } = fatalShown();
+    saidAgainOnce(region, rerender, fatalState, flags(true, false), FATAL);
+  });
+});
+
 describe('TipsBlock — states', () => {
   it('loading: a skeleton and no chip; then the rows once the plans land', () => {
     const { card, rerender } = renderBlock({ size: 'large', loading: true });

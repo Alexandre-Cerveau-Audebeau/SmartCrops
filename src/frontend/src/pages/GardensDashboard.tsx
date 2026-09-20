@@ -421,6 +421,10 @@ export default function GardensDashboard() {
             weather={weatherData}
             loading={gardensLoading}
             refreshing={gardensRefreshing || weatherRefreshing}
+            // …and the two apart (round 5, S-8): each announced sentence
+            // follows its own aggregate's flag, the union only the buttons.
+            gardensRefreshing={gardensRefreshing}
+            weatherRefreshing={weatherRefreshing}
             loadError={gardensError}
             weatherError={weatherError}
             onRetry={() => {
@@ -461,6 +465,9 @@ export default function GardensDashboard() {
             // leaves the calendar tasks standing and is said in one line.
             loading={gardensLoading}
             refreshing={gardensRefreshing || weatherRefreshing}
+            // …and the weather's alone (round 5, S-8): the note's announcement
+            // follows it, the union only the button.
+            weatherRefreshing={weatherRefreshing}
             loadError={gardensError}
             weatherUnavailable={weatherLoading || weatherError}
             onRetry={() => {
