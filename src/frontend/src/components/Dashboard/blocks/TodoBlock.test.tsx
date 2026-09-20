@@ -92,7 +92,7 @@ function renderBlock(over: Partial<Props> = {}) {
     onExpand: vi.fn(),
     ...over,
   };
-  render(
+  const utils = render(
     <ThemeProvider theme={createTheme()}>
       <LanguageProvider>
         <UnitSystemProvider>
@@ -102,7 +102,34 @@ function renderBlock(over: Partial<Props> = {}) {
     </ThemeProvider>
   );
   const card = document.querySelector('[data-widget="todo"]') as HTMLElement;
-  return { card, widget: within(card), props };
+  const rerender = (next: Partial<Props>) =>
+    utils.rerender(
+      <ThemeProvider theme={createTheme()}>
+        <LanguageProvider>
+          <UnitSystemProvider>
+            <TodoBlock {...props} {...next} />
+          </UnitSystemProvider>
+        </LanguageProvider>
+      </ThemeProvider>
+    );
+  return { card, widget: within(card), props, rerender };
+}
+
+/**
+ * The card's ONE live region (round 2 of ④b, S-4's family), and a counter of
+ * the changes made to its text. `takeRecords()` is synchronous.
+ */
+function liveRegion(card: HTMLElement) {
+  const regions = card.querySelectorAll('[aria-live], [role="status"], [role="alert"]');
+  expect(regions).toHaveLength(1);
+  const region = regions[0] as HTMLElement;
+  expect(region).toHaveAttribute('role', 'status');
+  expect(region).toHaveAttribute('aria-live', 'polite');
+  expect(region).toHaveAttribute('data-todo-status');
+  expect(card.parentElement?.closest('[aria-live], [role="status"], [role="alert"]') ?? null).toBeNull();
+  const observer = new MutationObserver(() => {});
+  observer.observe(region, { childList: true, characterData: true, subtree: true });
+  return { region, changes: () => observer.takeRecords().length };
 }
 
 describe('TodoBlock — the chip and the list come from ONE function', () => {
@@ -618,6 +645,127 @@ describe('TodoBlock — the weather is half the block, not all of it (round 1, C
 
     expect(card.querySelector('[data-todo-weather-note]')).toBeNull();
     expect(card.querySelector('[data-todo-invite]')).toBeNull();
+  });
+});
+
+describe('TodoBlock — the weather note is announced once, by a region that was already there (round 2 of ④b, S-4)', () => {
+  // The same absence the Tips block's note had (Extension `95084e7e`): the
+  // note appears when the aggregate is out and nothing announced it. The
+  // `WeatherInvite` recipe, an empty `role="status"` region from the first
+  // render, whose text becomes the note's sentence — once.
+  it('nothing at first render, the note’s own sentence when it appears, nothing when it is gone', () => {
+    const { card, rerender } = renderBlock({ gardens: [jardin], varieties: [hedge, sownLettuce], weather: unlocated() });
+    const { region, changes } = liveRegion(card);
+    expect(region).toHaveTextContent('');
+    expect(card.querySelector('[data-todo-weather-note]')).toBeNull();
+
+    rerender({ weather: EMPTY_WEATHER_DATA, weatherUnavailable: true });
+    expect(changes()).toBeGreaterThan(0);
+    expect(region.textContent).toBe(card.querySelector('[data-todo-weather-note]')!.textContent);
+    expect(region.textContent).toBe('Weather unavailable — watering is not planned for now.');
+
+    rerender({ weather: EMPTY_WEATHER_DATA, weatherUnavailable: true });
+    expect(changes()).toBe(0);
+
+    rerender({ weather: unlocated(), weatherUnavailable: false });
+    expect(region).toHaveTextContent('');
+  });
+
+  it('carries the sentence in Large as well, once; nothing on a Small card, which draws no note', () => {
+    const large = renderBlock({ size: 'large', gardens: [jardin], varieties: [hedge, sownLettuce], weather: unlocated() });
+    const region = liveRegion(large.card);
+    large.rerender({ weather: EMPTY_WEATHER_DATA, weatherUnavailable: true });
+    expect(region.region.textContent).toBe('Weather unavailable — watering is not planned for now.');
+
+    cleanup();
+    const small = renderBlock({ size: 'small', gardens: [jardin], varieties: [hedge, sownLettuce], weather: unlocated() });
+    const { region: smallRegion, changes } = liveRegion(small.card);
+    small.rerender({ weather: EMPTY_WEATHER_DATA, weatherUnavailable: true });
+    expect(small.card.querySelector('[data-todo-weather-note]')).toBeNull();
+    expect(smallRegion).toHaveTextContent('');
+    expect(changes()).toBe(0);
+  });
+
+  it('says nothing while the plans load or fail — the note is not drawn there', () => {
+    const loading = renderBlock({ gardens: [jardin], varieties: [hedge, sownLettuce], weather: EMPTY_WEATHER_DATA, weatherUnavailable: true, loading: true });
+    expect(liveRegion(loading.card).region).toHaveTextContent('');
+
+    cleanup();
+    const failed = renderBlock({ gardens: [jardin], varieties: [hedge, sownLettuce], weather: EMPTY_WEATHER_DATA, weatherUnavailable: true, loadError: true });
+    expect(liveRegion(failed.card).region).toHaveTextContent('');
+  });
+});
+
+describe('TodoBlock — the region is born EMPTY, whatever state the card mounts in (round 3, S-5)', () => {
+  // GitHub `4052436616`: mounted with the weather already out — the page's
+  // grid mounts once the preferences land, and a widget shown again is
+  // remounted — the region was born WITH its text, the very case the recipe
+  // calls unreliable. The document is watched from BEFORE the card exists:
+  // the records say in what order the DOM was written.
+  it('mounted with the weather already unavailable: nothing at the first render, the note’s sentence in a later write', () => {
+    const observer = new MutationObserver(() => {});
+    observer.observe(document.body, { childList: true, characterData: true, subtree: true, characterDataOldValue: true });
+    const { card } = renderBlock({ gardens: [jardin], varieties: [hedge, sownLettuce], weather: EMPTY_WEATHER_DATA, weatherUnavailable: true });
+    const records = observer.takeRecords();
+    observer.disconnect();
+    const { region } = liveRegion(card);
+
+    expect(region.textContent).toBe('Weather unavailable — watering is not planned for now.');
+    // The region's text must arrive in a write of its own, AFTER the record
+    // that put the region in the document, onto a region that held nothing.
+    const inserted = records.findIndex((record) =>
+      [...record.addedNodes].some((node) => node === region || node.contains(region))
+    );
+    expect(inserted).toBeGreaterThanOrEqual(0);
+    const writes = records.filter((record) => region.contains(record.target));
+    expect(writes.length).toBeGreaterThan(0);
+    expect(records.indexOf(writes[0]!)).toBeGreaterThan(inserted);
+    const first = writes[0]!;
+    if (first.type === 'characterData') expect(first.oldValue).toBe('');
+    else expect(first.removedNodes).toHaveLength(0);
+  });
+});
+
+describe('TodoBlock — the note’s announcement follows the WEATHER flag alone (round 5, S-8)', () => {
+  // GitHub `4055087124`: the page passes `gardensRefreshing || weatherRefreshing`
+  // as `refreshing`, and the effect emptied then refilled the region on it —
+  // so a refresh of the GARDENS alone (a rename, another block's « Try
+  // again ») announced the unchanged weather sentence a second time. The note
+  // follows its own aggregate's flag; `refreshing` keeps the retry button.
+  const NOTE = 'Weather unavailable — watering is not planned for now.';
+  const state = { weather: EMPTY_WEATHER_DATA, weatherUnavailable: true } as const;
+  const noteShown = () => {
+    const out = renderBlock({ gardens: [jardin], varieties: [hedge, sownLettuce], weather: unlocated() });
+    const live = liveRegion(out.card);
+    out.rerender(state);
+    expect(live.region.textContent).toBe(NOTE);
+    live.changes();
+    return { ...out, ...live };
+  };
+
+  it('a refresh of the gardens alone, the note kept: nothing is emptied, nothing is said again', () => {
+    const { region, changes, rerender } = noteShown();
+    // As the page wires it: the union `refreshing` is true, the weather's own flag is not.
+    rerender({ ...state, refreshing: true, weatherRefreshing: false });
+    expect(region.textContent).toBe(NOTE);
+    rerender({ ...state, refreshing: false, weatherRefreshing: false });
+    expect(region.textContent).toBe(NOTE);
+    expect(changes()).toBe(0);
+  });
+
+  it('a refresh of the WEATHER, the note kept: emptied while it is out, said again once it fails — the S-5 cycle', () => {
+    const { region, rerender } = noteShown();
+    const observer = new MutationObserver(() => {});
+    observer.observe(region, { childList: true, characterData: true, subtree: true });
+    rerender({ ...state, refreshing: true, weatherRefreshing: true });
+    expect(region).toBeEmptyDOMElement();
+    expect(observer.takeRecords().every((record) => record.addedNodes.length === 0)).toBe(true);
+    rerender({ ...state, refreshing: false, weatherRefreshing: false });
+    const filled = observer.takeRecords();
+    observer.disconnect();
+    expect(region.textContent).toBe(NOTE);
+    expect(filled).toHaveLength(1);
+    expect(filled[0]!.addedNodes).toHaveLength(1);
   });
 });
 

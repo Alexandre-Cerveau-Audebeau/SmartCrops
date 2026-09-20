@@ -24,6 +24,7 @@ import DashboardGrid from '../components/Dashboard/DashboardGrid';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import CountersOptionsPanel from '../components/Dashboard/blocks/CountersOptionsPanel';
 import { resolveCountersFigures } from '../components/Dashboard/blocks/countersOptions';
+import { gardenAdvice } from '../components/Dashboard/blocks/gardenAdvice';
 import GardensBlock, {
   type GardensWeather,
 } from '../components/Dashboard/blocks/GardensBlock';
@@ -31,6 +32,7 @@ import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import MonthBlock from '../components/Dashboard/blocks/MonthBlock';
 import { monthCalendar } from '../components/Dashboard/blocks/plantCalendar';
 import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
+import TipsBlock from '../components/Dashboard/blocks/TipsBlock';
 import TodoBlock from '../components/Dashboard/blocks/TodoBlock';
 import WeatherBlock from '../components/Dashboard/blocks/WeatherBlock';
 import WeatherOptionsPanel from '../components/Dashboard/blocks/WeatherOptionsPanel';
@@ -401,6 +403,39 @@ export default function GardensDashboard() {
             onRetry={refetch}
           />
         );
+      case 'tips':
+        // The plans (through the page's one `gardenViews`), the catalog and
+        // the weather feed it. The PLANS are what it cannot do without — the
+        // exposure family reads them — so their loading and their failure
+        // empty the card; a weather outage only silences the watering family,
+        // which is the state `gardenAdvice` draws on its own (T6) — and is
+        // said in one line with its « Réessayer » (round 1, S-2), since the
+        // fatal branch alone used to reach the weather half of `onRetry`.
+        return (
+          <TipsBlock
+            size={block.size}
+            editing={editing}
+            gardens={gardens}
+            views={gardenViews}
+            varieties={dashboardData.varieties}
+            weather={weatherData}
+            loading={gardensLoading}
+            refreshing={gardensRefreshing || weatherRefreshing}
+            // …and the two apart (round 5, S-8): each announced sentence
+            // follows its own aggregate's flag, the union only the buttons.
+            gardensRefreshing={gardensRefreshing}
+            weatherRefreshing={weatherRefreshing}
+            loadError={gardensError}
+            weatherError={weatherError}
+            onRetry={() => {
+              if (gardensError) refetch();
+              if (weatherError) refetchWeather();
+            }}
+            onExpand={() =>
+              patchBlock('tips', (current) => ({ ...current, size: 'large' }))
+            }
+          />
+        );
       case 'stats':
         return (
           <StatsBlock
@@ -430,6 +465,9 @@ export default function GardensDashboard() {
             // leaves the calendar tasks standing and is said in one line.
             loading={gardensLoading}
             refreshing={gardensRefreshing || weatherRefreshing}
+            // …and the weather's alone (round 5, S-8): the note's announcement
+            // follows it, the union only the button.
+            weatherRefreshing={weatherRefreshing}
             loadError={gardensError}
             weatherUnavailable={weatherLoading || weatherError}
             onRetry={() => {
@@ -492,8 +530,9 @@ export default function GardensDashboard() {
    * and answer with their own headline — the Statistics card's surface over the
    * occupancy of the first two gardens, exactly what `A7Personnaliser.dc.html`
    * draws; the Counters card's distinct-variety count; the Gardens card's own
-   * count. The other five have no data before PR 3/5 and PR 4/5 and answer
-   * `null`, which the panel renders as « soon » rather than as a zero.
+   * count — then « Ce mois-ci » (PR 4a/5) and « Conseils » (PR 4b/5), each
+   * through its own derivation. Weather and Harvest answer `null`, which the
+   * panel renders as « soon » rather than as a zero.
    *
    * Nothing is invented and nothing is derived twice: the surface and the
    * occupancies come from the same `gardenViews` the meta line and the two
@@ -550,6 +589,15 @@ export default function GardensDashboard() {
       return {
         value: t('dashboard.blocks.month.galleryPrune', { count: active.prune.length }),
       };
+    }
+    if (key === 'tips') {
+      // THROUGH THE WIDGET'S OWN DERIVATION (C4), like « Ce mois-ci » above:
+      // « 3 conseils » from the very `gardenAdvice` the widget's chip reads,
+      // on the same `gardenViews`. Null — « Bientôt » — while nothing is
+      // planted, the same gate as the calendar's.
+      if (dashboardData.varieties.length === 0) return null;
+      const { tips } = gardenAdvice(gardens, gardenViews, dashboardData.varieties, weatherData);
+      return { value: t('dashboard.blocks.tips.count', { count: tips.length }) };
     }
     return null;
   };

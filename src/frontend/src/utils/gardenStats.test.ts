@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { gardenFixture } from '../test/fixtures/dashboard';
 import { gardenToPreview } from './gardenPreview';
-import { placement } from '../test/fixtures/placements';
+import { at, placement } from '../test/fixtures/placements';
 import type { DashboardGardenData } from '../types/DashboardData';
 import { parseCellsJson, type CellData } from '../types/GardenLayout';
 import type { ExposureCategory } from './exposure';
@@ -9,6 +9,7 @@ import {
   clipPlacement,
   deriveGardenView,
   placementCoverage,
+  placementExposure,
   gardenViewOf,
   dominantExposure,
   emptyExposureTally,
@@ -343,6 +344,38 @@ describe('deriveGardenView', () => {
     expect(view.surfaceM2).toBe(0);
     expect(view.dominantExposure).toBeNull();
     expect(view.exposure).toEqual(emptyExposureTally());
+    // No plan, no grid — not an empty grid, which would read as a rated plan
+    // with zero cells (SMA-336 PR 4b/5, decision T2).
+    expect(view.cells).toBeNull();
+    expect(view.momentsLit).toBeNull();
+  });
+
+  it('carries the grid its tallies were counted from (PR 4b/5, T2)', () => {
+    // The Tips widget reads a cell off `view.cells`; the Statistics widget
+    // reads `view.exposure`. Same pass, so the tally IS the count of the grid.
+    const view = deriveGardenView(
+      garden({ cellsJson: JSON.stringify([{ row: 0, col: 0, active: false }]) })
+    );
+    const counted = emptyExposureTally();
+    for (const row of view.cells!) {
+      for (const category of row) {
+        if (category) counted[category] += 1;
+      }
+    }
+
+    expect(view.cells).toHaveLength(2); // rows
+    expect(view.cells![0]).toHaveLength(4); // cols
+    expect(view.cells![0]![0]).toBeNull(); // the switched-off cell
+    expect(counted).toEqual(view.exposure);
+    // The moment triplets are aligned with the cells: null exactly where the
+    // category did not come from the sun path — here, the inactive cell.
+    expect(view.momentsLit).toHaveLength(2);
+    expect(view.momentsLit![0]![0]).toBeNull();
+    expect(view.momentsLit![0]![1]).toEqual({
+      morning: true,
+      noon: true,
+      evening: true,
+    });
   });
 
   it('subtracts the placement footprints from the free-cell tally', () => {
@@ -635,5 +668,143 @@ describe('clipPlacement', () => {
 
     expect(drawn).toEqual([{ plantKey: crossing.plantId, row: 1, col: 2, spanRows: 2, spanCols: 2 }]);
     expect(counted.occupiedCells).toBe(2 * 2);
+  });
+});
+
+describe('placementExposure — one cell, the anchor (PR 4b/5, T3)', () => {
+  // A drawn 4 × 3 garden oriented south, in the northern hemisphere at mid
+  // latitude: with nothing in the way, every cell is lit at all three moments.
+  const garden = (
+    over: Partial<DashboardGardenData> = {}
+  ): DashboardGardenData =>
+    gardenFixture({
+      config: {
+        orientation: 'S',
+        gardenType: null,
+        lightSchedule: null,
+        hemisphere: 'N',
+        latitudeBand: 'mid',
+      },
+      ...over,
+    });
+
+  // A tall wall on the bottom-left cell. Oriented south, the evening sun sits
+  // in the west and a summer shadow of two cells runs east along the bottom
+  // row; the noon sun sits in the south and the shadow runs up the first
+  // column. These are the engine's own rules (`exposure.ts`), read here, not
+  // restated: the point is that the view carries what the engine said.
+  const walled = () =>
+    garden({
+      cellsJson: JSON.stringify([{ row: 2, col: 0, infrastructure: 'wall' }]),
+    });
+
+  it('reads the anchor’s category and moments off the view — never a default', () => {
+    const view = deriveGardenView(garden());
+
+    expect(placementExposure(view, at(1, 2))).toEqual({
+      row: 1,
+      col: 2,
+      category: 'full',
+      momentsLit: { morning: true, noon: true, evening: true },
+    });
+  });
+
+  it('says WHEN the anchor is shaded, from the engine’s triplet', () => {
+    const view = deriveGardenView(walled());
+
+    // East of the wall: lit in the morning and at noon, shaded in the evening
+    // — the « shaded in the afternoon » a tip would print.
+    expect(placementExposure(view, at(2, 1))).toEqual({
+      row: 2,
+      col: 1,
+      category: 'morning',
+      momentsLit: { morning: true, noon: true, evening: false },
+    });
+    // Above the wall: the noon sun is blocked, and noon decides the category.
+    expect(placementExposure(view, at(1, 0))).toEqual({
+      row: 1,
+      col: 0,
+      category: 'shade',
+      momentsLit: { morning: true, noon: false, evening: true },
+    });
+    // Out of both shadows: nothing changed for that cell.
+    expect(placementExposure(view, at(0, 3))?.category).toBe('full');
+  });
+
+  it('judges the anchor cell, not the rest of the footprint', () => {
+    const view = deriveGardenView(walled());
+
+    // A 1 × 3 footprint anchored on the shaded cell and running into the sun:
+    // the verdict is the anchor's, the cell the sentence will name.
+    const straddling = placement({ startRow: 2, startCol: 1, spanRows: 1, spanCols: 3 });
+
+    expect(placementExposure(view, straddling)?.category).toBe('morning');
+    expect(placementExposure(view, straddling)?.col).toBe(1);
+  });
+
+  it('clips an anchor outside the plan to the first cell inside — the same clip as coverage', () => {
+    const view = deriveGardenView(garden());
+    const hanging = placement({ startRow: -1, startCol: -2, spanRows: 2, spanCols: 3 });
+
+    const exposure = placementExposure(view, hanging);
+
+    // Judged on (0, 0): the cell `placementCoverage` counted and the thumbnail
+    // drew for this placement, not on a cell that does not exist.
+    expect(exposure?.row).toBe(0);
+    expect(exposure?.col).toBe(0);
+    expect(clipPlacement(hanging, 3, 4)).toMatchObject({ row: 0, col: 0 });
+  });
+
+  it('is null for a footprint that lands entirely outside the plan', () => {
+    const view = deriveGardenView(garden());
+
+    expect(placementExposure(view, at(3, 0))).toBeNull(); // one row past the bottom
+    expect(placementExposure(view, at(0, 4))).toBeNull(); // one column past the right
+    expect(placementExposure(view, placement({ startRow: -1, startCol: 0 }))).toBeNull();
+  });
+
+  it('is null for a garden with no plan', () => {
+    const view = deriveGardenView(garden({ width: null, height: null }));
+
+    expect(view.hasPlan).toBe(false);
+    expect(placementExposure(view, at(0, 0))).toBeNull();
+  });
+
+  it('is null on a cell the user switched off — no exposure is known there', () => {
+    const view = deriveGardenView(
+      garden({ cellsJson: JSON.stringify([{ row: 1, col: 1, active: false }]) })
+    );
+
+    // The engine rates an inactive cell null, and a plant sitting on one gets
+    // no verdict rather than a made-up one.
+    expect(placementExposure(view, at(1, 1))).toBeNull();
+    expect(placementExposure(view, at(1, 2))).not.toBeNull();
+  });
+
+  it('keeps a manual override’s category, with no moments to explain it', () => {
+    const view = deriveGardenView(
+      garden({
+        cellsJson: JSON.stringify([{ row: 0, col: 0, exposureOverride: 'shade' }]),
+      })
+    );
+
+    // The user said « shade »; the physical triplet would contradict the
+    // label, so the engine withholds it (SMA-309) and so does the view.
+    expect(placementExposure(view, at(0, 0))).toEqual({
+      row: 0,
+      col: 0,
+      category: 'shade',
+      momentsLit: null,
+    });
+  });
+
+  it('reads the memoized view without deriving again', () => {
+    const data = walled();
+    const view = gardenViewOf(data);
+
+    expect(placementExposure(view, at(2, 1))).toEqual(
+      placementExposure(gardenViewOf(data), at(2, 1))
+    );
+    expect(gardenViewOf(data)).toBe(view);
   });
 });

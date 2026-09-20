@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -6,6 +6,7 @@ import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
+import { visuallyHidden } from '@mui/utils';
 import type { SvgIconComponent } from '@mui/icons-material';
 import AcUnitOutlinedIcon from '@mui/icons-material/AcUnitOutlined';
 import ContentCutOutlinedIcon from '@mui/icons-material/ContentCutOutlined';
@@ -49,7 +50,15 @@ interface Props {
    * planned — the ③b « indisponible » pattern rather than an empty card.
    */
   weatherUnavailable?: boolean;
+  /** Either aggregate has a request out — the union the « Réessayer » button waits on (round 7 of ③b, S33). */
   refreshing?: boolean;
+  /**
+   * The WEATHER aggregate alone has a request out (round 5, S-8 — GitHub
+   * `4055087124`): what the note's announcement follows — a refresh of the
+   * gardens has no sentence here. Defaults to `refreshing` for a caller that
+   * does not tell the aggregates apart.
+   */
+  weatherRefreshing?: boolean;
   onRetry: () => void;
   /** « Ajouter une ville → » of the invitation: the location dialog on the profile default. */
   onLocate: (gardenId: string | null) => void;
@@ -107,6 +116,7 @@ export default function TodoBlock({
   loadError,
   weatherUnavailable = false,
   refreshing = false,
+  weatherRefreshing = refreshing,
   onRetry,
   onLocate,
   onExpand,
@@ -478,6 +488,52 @@ export default function TodoBlock({
     />
   );
 
+  /**
+   * What the card ANNOUNCES to assistive technology (round 2 of ④b, S-4's
+   * family — the same absence as the Tips block's note): « Météo
+   * indisponible — les arrosages ne sont pas planifiés pour l'instant. »
+   * when it is put on screen, through a live region that exists from the
+   * FIRST render, empty — the `WeatherInvite` recipe (round 1 of ③b, E7),
+   * `role="status"`, `aria-live="polite"`, off-screen through
+   * `visuallyHidden`. A region inserted together with its text is read
+   * unreliably; one already there whose text changes is read once,
+   * politely, and an empty first render announces nothing. The text is the
+   * sentence the reader sees, where it is drawn: Medium and Large, not while
+   * the plans load or fail, not on a Small card, which does not draw it.
+   *
+   * Round 3, S-5 (GitHub `4052436616`): the text is written by an EFFECT,
+   * into the DOM, never by the render that creates the region. Rendered as
+   * a child, it was born WITH the region when the card mounted with the
+   * weather already out — the page's grid mounts once the preferences land,
+   * a widget shown again is remounted — the very case the recipe calls
+   * unreliable. Here the region is inserted with NO text node, by
+   * construction; the effect below writes the sentence after the commit
+   * that inserted it, empties it while a WEATHER request is out
+   * (`weatherRefreshing` — round 5, S-8: not the gardens', whose refresh has
+   * no sentence here — a removal, which is not announced) and writes it
+   * again when that request fails — one DOM write per change, guarded by
+   * `textContent !== next`, so nothing is said twice for one change. An
+   * ASSUMED departure from the `WeatherInvite` recipe,
+   * where React renders the text: the same through a local state —
+   * `setState` in the effect, the form G-3 proposed — is an ERROR under this
+   * project's `react-hooks/set-state-in-effect`, and writing the DOM is the
+   * use that rule names as the effect's own. No timer, no promise: one
+   * effect, two dependencies.
+   */
+  const announced =
+    !loading && !loadError && weatherUnavailable && size !== 'small'
+      ? t('dashboard.blocks.todo.weatherUnavailable')
+      : '';
+  // Round 5, S-8 (GitHub `4055087124`): the note follows the ONE flag of its
+  // own aggregate, the weather's — a refresh of the gardens alone neither
+  // empties nor re-announces it; `refreshing`, the union, keeps the button.
+  const statusRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const node = statusRef.current;
+    const next = weatherRefreshing ? '' : announced;
+    if (node && node.textContent !== next) node.textContent = next;
+  }, [announced, weatherRefreshing]);
+
   return (
     <DashboardBlock
       blockKey="todo"
@@ -486,6 +542,8 @@ export default function TodoBlock({
       editing={editing}
       chip={chip || undefined}
     >
+      {/* Out of the flow (`position: absolute`): no gap of the column is spent on it. No child: its text is the effect's, above. */}
+      <Typography ref={statusRef} role="status" aria-live="polite" data-todo-status sx={visuallyHidden} />
       {body()}
     </DashboardBlock>
   );
