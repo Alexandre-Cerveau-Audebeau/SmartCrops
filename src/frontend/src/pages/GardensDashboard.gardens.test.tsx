@@ -1,5 +1,6 @@
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -2168,7 +2169,14 @@ describe('Gardens Medium row on a phone — the A9 line, the actions kept (mobil
     );
   });
 
-  afterEach(() => vi.unstubAllGlobals());
+  // The page is unmounted BEFORE `matchMedia` is unstubbed (fix round 1,
+  // #3 — GitHub `4059024241`): with vitest's stacked hooks this `afterEach`
+  // runs before Testing Library's automatic cleanup, and a React tree still
+  // mounted could read the global the stub had installed.
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
 
   it('draws the thumbnail in A9’s 40 × 34 box', async () => {
     stubPhone();

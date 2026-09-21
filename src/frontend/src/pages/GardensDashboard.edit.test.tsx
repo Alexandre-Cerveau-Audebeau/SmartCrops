@@ -168,10 +168,12 @@ function stubGridGeometry(sizes?: Record<string, DashboardSize>) {
  */
 const PHONE_CELL = 328;
 
+/** Installs the one-column phone geometry above — each widget as tall as `heights` says — and returns the restore. */
 function stubPhoneGeometry(heights: Record<string, number>) {
   const originalRect = Element.prototype.getBoundingClientRect;
   const originalScroll = Element.prototype.scrollIntoView;
 
+  /** The widget key of a slot or of the card it wraps, null for anything else. */
   const keyOf = (element: Element): string | null =>
     element.getAttribute('data-widget') ??
     element.querySelector('[data-widget]')?.getAttribute('data-widget') ??

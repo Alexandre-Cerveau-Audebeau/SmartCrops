@@ -782,8 +782,10 @@ describe('WeatherBlock — the days yield whole rows to the partial invitation, 
     vi.unstubAllGlobals();
   });
 
+  /** The day rows within the measured budget. */
   const visibleDays = (card: HTMLElement) =>
     [...card.querySelectorAll('[data-weather-day]')].filter((row) => !row.hasAttribute('data-weather-day-hidden'));
+  /** The day rows hidden whole beyond it. */
   const hiddenDays = (card: HTMLElement) => [...card.querySelectorAll('[data-weather-day-hidden]')];
 
   it('with 150px for the list, three 44px days are shown and the last two are hidden WHOLE — out of sight and out of the reading', () => {

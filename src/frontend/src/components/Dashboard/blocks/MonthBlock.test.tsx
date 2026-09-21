@@ -800,6 +800,13 @@ describe('MonthBlock — one row in two on a ground of its own (V33)', () => {
 describe('MonthBlock — Large on a phone: one letter a month, an 84px name column (mobile lot, step 4)', () => {
   const INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
 
+  // The shared i18next instance is put back to English after EVERY test of
+  // this suite (fix round 1, #1 — GitHub `4059024236`): a French assertion
+  // that throws would otherwise leave it French for whatever runs next.
+  afterEach(async () => {
+    if (i18next.language !== 'en') await act(() => i18next.changeLanguage('en'));
+  });
+
   it('declares the 84px column under 600px and the 108px column from 600px — on the axis and on every row alike', () => {
     const { card } = renderBlock({ size: 'large' });
     const axisRow = card.querySelector('[data-month-axis-row]')!;
@@ -841,7 +848,6 @@ describe('MonthBlock — Large on a phone: one letter a month, an 84px name colu
     expect(initials).toEqual(INITIALS);
     const shorts = [...card.querySelectorAll('[data-month-axis-short]')].map((node) => node.textContent);
     expect(shorts).toEqual(['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc']);
-    await act(() => i18next.changeLanguage('en'));
   });
 
   it('keeps the desktop axis as it was: 13px, thirteen cells, the current month tinted, the labels on their tracks', () => {

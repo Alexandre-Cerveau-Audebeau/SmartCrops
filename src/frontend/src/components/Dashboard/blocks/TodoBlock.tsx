@@ -210,6 +210,7 @@ export default function TodoBlock({
     return task.stale ? t('dashboard.blocks.todo.stale', { task: sentence }) : sentence;
   };
 
+  /** One task row: the kind's glyph on its disc (or the Large card's checkbox), the sentence; `hidden` past the measured budget. */
   const row = (task: TodoTask, grouped: boolean, checkbox: boolean, hidden = false) => {
     const Icon = TASK_ICONS[task.kind];
     const text = label(task, grouped);
