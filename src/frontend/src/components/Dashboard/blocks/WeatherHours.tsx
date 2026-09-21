@@ -25,6 +25,12 @@ interface Props {
  *
  * The hour is the slot's OWN, in the language's notation (« 13 h », « 1 PM »),
  * from the provider's local text — never the browser's clock.
+ *
+ * SMA-336 mobile lot, step 3: on a phone the row sits UNDER the hero, on the
+ * card's full width — six columns still (arbitrage 1: the six slots, not the
+ * four of `A9`), 48 px each at 360 — and each slot is as tall as its three
+ * parts with 4 px between them, instead of the 92–124 px centred column the
+ * desktop head spreads it on.
  */
 export default function WeatherHours({ hours, system }: Props) {
   const { t, i18n } = useTranslation();
@@ -34,7 +40,7 @@ export default function WeatherHours({ hours, system }: Props) {
       component="ul"
       data-weather-hours
       sx={{
-        flex: 1,
+        flex: { xs: '0 0 auto', sm: 1 },
         minWidth: 0,
         display: 'grid',
         gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
@@ -54,10 +60,11 @@ export default function WeatherHours({ hours, system }: Props) {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'space-between',
-              height: '100%',
-              minHeight: DASHBOARD_WEATHER.hourMinHeight,
+              height: { xs: 'auto', sm: '100%' },
+              minHeight: { xs: 0, sm: DASHBOARD_WEATHER.hourMinHeight },
               maxHeight: DASHBOARD_WEATHER.hourMaxHeight,
-              my: 'auto',
+              gap: { xs: `${DASHBOARD_WEATHER.hourStackGap}px`, sm: 0 },
+              my: { xs: 0, sm: 'auto' },
             }}
           >
             <Typography

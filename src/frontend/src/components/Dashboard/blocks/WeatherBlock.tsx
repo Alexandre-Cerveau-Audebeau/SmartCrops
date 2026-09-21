@@ -301,15 +301,28 @@ export default function WeatherBlock({
     );
   };
 
-  /** The head shared by Medium and Large: the hero column beside the six slots. */
+  /**
+   * The head shared by Medium and Large: the hero column beside the six slots
+   * — and STACKED on a phone (SMA-336 mobile lot, step 3; pre-flight D2,
+   * arbitrage 1): hero on the full width, then the six slots on the full
+   * width, then the band. Under 600 px the 160 / 200 px hero column left the
+   * six slots 104 / 64 px at 360 — « 14 h15 h16 h », icons on icons, V36 —
+   * a WIDTH no row height could cure. Stacked and on an auto-height row (step
+   * 1), the four weather states measured at zero overlap. From `sm` up every
+   * declaration is the one the artboard has: the row, its 24 px gap, the
+   * 136 px fixed head of the Large card (`_spec.md` § 10.26).
+   */
   const head = (location: WeatherLocation, fixed: boolean) => (
     <Box
       data-weather-head
       sx={{
         display: 'flex',
-        gap: '24px',
+        flexDirection: { xs: 'column', sm: 'row' },
+        gap: { xs: `${DASHBOARD_WEATHER.stackGap}px`, sm: '24px' },
         minHeight: 0,
-        ...(fixed ? { height: DASHBOARD_WEATHER.largeHead, flex: '0 0 auto' } : { flex: 1 }),
+        ...(fixed
+          ? { height: { xs: 'auto', sm: DASHBOARD_WEATHER.largeHead }, flex: '0 0 auto' }
+          : { flex: { xs: '0 0 auto', sm: 1 } }),
       }}
     >
       <WeatherHero

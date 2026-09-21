@@ -66,11 +66,16 @@ export default function WeatherHero({
         ...(small
           ? { flex: 1, minHeight: 0 }
           : {
-              width: trailing
-                ? DASHBOARD_WEATHER.heroColumnWithChip
-                : DASHBOARD_WEATHER.heroColumn,
+              // The 160 / 200 px column of the Medium and Large heads — on a
+              // phone the FULL width, as tall as its three blocks with 6 px
+              // between them (mobile lot, step 3: the head is stacked there).
+              width: {
+                xs: '100%',
+                sm: trailing ? DASHBOARD_WEATHER.heroColumnWithChip : DASHBOARD_WEATHER.heroColumn,
+              },
               flexShrink: 0,
-              height: '100%',
+              height: { xs: 'auto', sm: '100%' },
+              gap: { xs: `${DASHBOARD_WEATHER.heroStackGap}px`, sm: 0 },
             }),
       }}
     >

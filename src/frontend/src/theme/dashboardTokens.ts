@@ -326,6 +326,19 @@ export const DASHBOARD_WEATHER = {
   hourIcon: 28,
   hourTemperature: 16,
   hourGap: 6,
+  /**
+   * The STACKED head of the phone (SMA-336 mobile lot, step 3 — pre-flight
+   * D2, arbitrage 1): under 600 px the hero takes the full width, the six
+   * slots the full width under it, the band under them. Measured on
+   * `5282852` at 360 px: side by side, the 160 px hero left the six slots
+   * 104 px — 12.3 px each for 24-30 px of glyphs — and no height could fix a
+   * width; stacked, 48 px a slot, zero overlap in the four weather states.
+   * Three gaps and nothing else: the type, the hero column and the 136 px
+   * Large head are the desktop's, untouched from `sm` up.
+   */
+  stackGap: 12,
+  heroStackGap: 6,
+  hourStackGap: 4,
   /** `.gard`: the gardener's band — radius 12, padding 11 / 16, 16 px / 600, a 20 px glyph, gap 10. */
   bandRadius: 12,
   bandPaddingY: 11,

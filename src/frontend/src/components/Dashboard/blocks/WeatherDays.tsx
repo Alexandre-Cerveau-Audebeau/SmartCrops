@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -6,6 +7,7 @@ import WeatherBar from './WeatherBar';
 import WeatherGlyph from './WeatherGlyph';
 import { displayTemperature } from './weatherFormat';
 import { weekScale, weekdayShort } from './weatherTime';
+import { useRowBudget } from '../useRowBudget';
 import { DASHBOARD_WEATHER } from '../../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../../theme/useDashboardTokens';
 import type { UnitSystem } from '../../../contexts/unitSystemContextValue';
@@ -55,20 +57,41 @@ function Spoken({ visible, sentence }: { visible: string; sentence: string }) {
  * « Jeu. » stays Thursday west of Greenwich; the place's own date reads
  * « Auj. ». A null chance of rain (K3) prints a dash with an accessible name,
  * never « 0 % ».
+ *
+ * WHOLE rows only (SMA-336 mobile lot, step 3 — pre-flight constat 12). The
+ * artboard gives the days what is left of the card (`A5MeteoTailles.dc.html`
+ * l. 299: `flex: 1; justify-content: space-between`, rows of `min-height:
+ * 44px`, l. 232) and budgets the partial invitation at 122 px (`_spec.md`
+ * § 10.25); the invitation WITH its field and its help line is ≈ 160 px on a
+ * 566 px card, so on a desktop the five rows ran under it — « Mar. » and
+ * « Mer. » printed through the dashed panel. Measured now: the list is
+ * `overflow: hidden`, and the rows that do not fit its height are hidden
+ * whole (`useRowBudget`) — « Auj. », « Dim. », « Lun. » with the invitation,
+ * the five days without it — never a row cut through its glyphs. On a phone
+ * the row is as tall as its card (step 1) and all five always fit.
  */
 export default function WeatherDays({ days, today, system }: Props) {
   const { t, i18n } = useTranslation();
   const tk = useDashboardTokens();
+  const listRef = useRef<HTMLUListElement>(null);
+  const budget = useRowBudget(listRef, days.length, 0);
   const scale = weekScale(days);
   if (!scale) return null;
+  // Always one: a card that cannot hold « Auj. » shows it clipped rather than nothing.
+  const visibleRows = Math.max(1, Math.min(days.length, budget));
 
   return (
     <Box
       component="ul"
+      ref={listRef}
       data-weather-days
       sx={{
         flex: 1,
         minHeight: 0,
+        // What the budget hides stays inside the list, never under the panel
+        // that follows (the V34 mechanism, pre-flight cause C4). With the
+        // rows overflowing, `space-between` packs from the top by definition.
+        overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -77,21 +100,27 @@ export default function WeatherDays({ days, today, system }: Props) {
         p: 0,
       }}
     >
-      {days.map((day) => {
+      {days.map((day, index) => {
         const rainy = day.chanceOfRain !== null && day.chanceOfRain > RAINY_CHANCE;
         const chance = day.chanceOfRain === null ? null : formatPercent(day.chanceOfRain, i18n.language);
         const min = displayTemperature(day.minTempC, system);
         const max = displayTemperature(day.maxTempC, system);
+        // Beyond the budget: kept in the DOM for the observer, hidden from the
+        // eye AND from the reader, so what is said is what is shown.
+        const hidden = index >= visibleRows;
         return (
           <Box
             component="li"
             key={day.date}
             data-weather-day={day.date}
+            data-weather-day-hidden={hidden ? '' : undefined}
+            aria-hidden={hidden || undefined}
             sx={{
               display: 'flex',
               alignItems: 'center',
               gap: `${DASHBOARD_WEATHER.dayGap}px`,
               minHeight: DASHBOARD_WEATHER.dayRow,
+              visibility: hidden ? 'hidden' : 'visible',
             }}
           >
             <Typography
