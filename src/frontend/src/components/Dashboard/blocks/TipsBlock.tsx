@@ -170,6 +170,8 @@ export default function TipsBlock({
    * them. Unmeasured — jsdom, the first paint — the budget is infinite and
    * the slots stand alone. Zero rows outside Medium so the observer is
    * re-armed on a resize of the widget; the ref is attached in Medium only.
+   * With two invitations there is no slot left and no list: every tip is
+   * then in « +N » (fix round 2, #9).
    */
   const mediumInvites = size === 'medium' ? gardensWithoutOrientation.slice(0, MEDIUM_SLOTS) : [];
   const mediumShown = size === 'medium' ? tips.slice(0, Math.max(0, MEDIUM_SLOTS - mediumInvites.length)) : [];
@@ -532,9 +534,14 @@ export default function TipsBlock({
     const invites = mediumInvites;
     const shown = mediumShown;
     // The spec's slots, then the measured cap: never more rows than fit
-    // whole. Always one — as the To-do card does — so a card too short for a
-    // single tip still shows it rather than an empty list under « +N ».
-    const visible = Math.max(1, Math.min(shown.length, mediumBudget));
+    // whole. One at least where a row EXISTS — as the To-do card does — so a
+    // card too short for a single tip still draws it, clipped, rather than an
+    // empty list under « +N » (écart e); NONE where two invitations took both
+    // slots (fix round 2, #9 — GitHub `r4059946374`, ledger `64f225c7`): a
+    // row counted that is not drawn took one tip out of « +N », and a lone
+    // tip was neither drawn nor counted — unreachable. `visible` is what is
+    // DRAWN, invitations aside; every other tip is in « +N ».
+    const visible = Math.min(shown.length, Math.max(1, mediumBudget));
     const rest = tips.length - visible;
     const overflowing = visible < shown.length;
     if (tips.length === 0 && invites.length === 0) {

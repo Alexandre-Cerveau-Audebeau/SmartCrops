@@ -19,7 +19,8 @@ import type { DashboardWeatherData } from '../../types/DashboardWeather';
  * SMA-336 mobile lot, step 7 (pre-flight D7) — the SCENE the layout harness
  * measures: the twenty-nine widget states the pre-flight measured `5282852`
  * with, on the same data, so the numbers of that report and the numbers of
- * this test are the same measurements.
+ * this test are the same measurements — and, since fix round 2 (#9), the
+ * Medium Tips card with TWO gardens without orientation.
  *
  * Three gardens — Terrasse (10 × 8, south, a wall, a description), Balcon sud
  * (12 × 4, ornamental, NO orientation: the Tips invitation), Potager du fond
@@ -165,6 +166,18 @@ const gardensLong: DashboardGardenData[] = [
 ];
 const viewsLong = new Map(gardensLong.map((garden) => [garden.id, gardenViewOf(garden)]));
 
+/**
+ * Potager du fond without its orientation either: two gardens the Tips card
+ * invites to configure — both Medium slots taken by an invitation, every tip
+ * in « +N conseils → » (fix round 2, #9 — GitHub `r4059946374`).
+ */
+const gardensTwoUnoriented: DashboardGardenData[] = [
+  terrasse,
+  balcon,
+  { ...potager, config: { ...potager.config, orientation: null } },
+];
+const viewsTwoUnoriented = new Map(gardensTwoUnoriented.map((garden) => [garden.id, gardenViewOf(garden)]));
+
 const ecully = locationFixture({
   key: '45.77,4.77',
   name: 'Écully',
@@ -217,12 +230,14 @@ export interface LayoutScene {
   weather: 'all' | 'partial';
   /** The long-named gardens. */
   long?: boolean;
+  /** Two gardens without orientation: both Medium Tips slots to an invitation (fix round 2, #9). */
+  twoInvites?: boolean;
 }
 
 const SIZES: DashboardSize[] = ['small', 'medium', 'large'];
 const WIDGETS: DashboardBlockKey[] = ['gardens', 'counters', 'stats', 'weather', 'todo', 'month', 'tips'];
 
-/** The twenty-nine scenes of the pre-flight, in its order. */
+/** The twenty-nine scenes of the pre-flight, in its order, then the two-invitation Tips card (fix round 2, #9). */
 export const LAYOUT_SCENES: LayoutScene[] = (() => {
   const scenes: LayoutScene[] = [];
   for (const key of WIDGETS) {
@@ -235,14 +250,15 @@ export const LAYOUT_SCENES: LayoutScene[] = (() => {
   }
   scenes.push({ name: 'todo-medium-long', key: 'todo', size: 'medium', weather: 'all', long: true });
   scenes.push({ name: 'tips-medium-long', key: 'tips', size: 'medium', weather: 'all', long: true });
+  scenes.push({ name: 'tips-medium-two-invites', key: 'tips', size: 'medium', weather: 'all', twoInvites: true });
   return scenes;
 })();
 
 /** The widget of a scene, with the props the page would hand it. */
 export function sceneWidget(scene: LayoutScene): ReactNode {
   const weather = scene.weather === 'all' ? weatherAll() : weatherPartial();
-  const gs = scene.long ? gardensLong : gardens;
-  const vs = scene.long ? viewsLong : views;
+  const gs = scene.twoInvites ? gardensTwoUnoriented : scene.long ? gardensLong : gardens;
+  const vs = scene.twoInvites ? viewsTwoUnoriented : scene.long ? viewsLong : views;
   const common = { size: scene.size, loading: false, loadError: false, onRetry: noop };
   switch (scene.key) {
     case 'weather':

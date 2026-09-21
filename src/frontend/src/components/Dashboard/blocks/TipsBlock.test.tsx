@@ -1053,4 +1053,76 @@ describe('TipsBlock — Medium: the rows are capped by measure, whole (fix round
     expect(hiddenRows(card)).toHaveLength(0);
     expect(widget.getByRole('button', { name: '+1 tip →' })).toBeInTheDocument();
   });
+
+  // ── Fix round 2, #9 (GitHub `r4059946374`, ledger `64f225c7` / `fbe00a7d`):
+  // two invitations take BOTH slots, so no tip row is drawn at all. The
+  // minimum of one row — a lone tip too tall for its list is drawn, clipped,
+  // rather than an empty list under « +N » (écart e, kept) — is a rule about
+  // a row that EXISTS. Counted where there was none, it took one tip out of
+  // « +N »: a single tip was neither drawn nor counted, and could not be
+  // reached. What the reader can reach is the rows drawn plus the N of
+  // « +N tips → », and that must be every tip, at both widths.
+  describe('two invitations take both slots (fix round 2, #9): every tip is drawn or in « +N tips → »', () => {
+    /** A second garden whose orientation is unknown: with Balcon sud, one invitation per slot. */
+    const cour = gardenFixture({
+      id: 'g4',
+      name: 'Cour',
+      config: { orientation: null, gardenType: 'balcony', lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
+      placements: [plant('tomato', 0, 0)],
+      placementCount: 1,
+    });
+    /** Terrasse with its hydrangea alone — a shade lover in full sun: ONE tip. */
+    const oneTip = oriented({ id: 'g1', name: 'Terrasse', placements: [plant('hydrangea', 0, 3)], placementCount: 1 });
+
+    /** The rows drawn plus the N of « +N tips → »: what the reader can reach. */
+    const reachable = (card: HTMLElement, widget: ReturnType<typeof within>) => {
+      const more = widget.queryByRole('button', { name: /^\+\d+ tips? →$/ });
+      const counted = more ? Number(/\d+/.exec(more.textContent ?? '')![0]) : 0;
+      return shownRows(card).length + counted;
+    };
+
+    it.each([
+      ['on a phone (under 600px)', true],
+      ['on a desktop', false],
+    ])('%s: two invitations and ONE tip — no row, the two invitations, « +1 tip → » that grows the widget', (_where, phone) => {
+      if (phone) stubPhone();
+      const { card, widget, props } = renderBlock({ gardens: [oneTip, balcon, cour] });
+
+      expect([...card.querySelectorAll('[data-tips-invite]')].map((node) => node.getAttribute('data-tips-invite'))).toEqual(['g2', 'g4']);
+      expect(rows(card)).toHaveLength(0);
+      const more = widget.getByRole('button', { name: '+1 tip →' });
+      expect(reachable(card, widget)).toBe(1);
+      fireEvent.click(more);
+      expect(props.onExpand).toHaveBeenCalledTimes(1);
+      // The foot still yields to an invitation (arbitrage 4).
+      expect(card.querySelector('[data-tips-unknown]')).toBeNull();
+    });
+
+    it.each([
+      ['on a phone (under 600px)', true],
+      ['on a desktop', false],
+    ])('%s: two invitations and THREE tips — no row, « +3 tips → », every tip counted', (_where, phone) => {
+      if (phone) stubPhone();
+      const { card, widget } = renderBlock({ gardens: [terrasse, balcon, cour] });
+
+      expect(card.querySelectorAll('[data-tips-invite]')).toHaveLength(2);
+      expect(rows(card)).toHaveLength(0);
+      expect(widget.getByRole('button', { name: '+3 tips →' })).toBeInTheDocument();
+      expect(reachable(card, widget)).toBe(3);
+    });
+
+    it('one invitation and one tip: the tip is drawn in the slot the invitation leaves, nothing to count — and too tall for it, still drawn (écart e, kept)', () => {
+      const fitting = renderBlock({ gardens: [oneTip, balcon] });
+      expect(shownRows(fitting.card)).toHaveLength(1);
+      expect(fitting.widget.queryByRole('button', { name: /tips? →$/ })).toBeNull();
+      expect(reachable(fitting.card, fitting.widget)).toBe(1);
+      cleanup();
+
+      listHeight.value = 40;
+      const tooTall = renderBlock({ gardens: [oneTip, balcon] });
+      expect(shownRows(tooTall.card)).toHaveLength(1);
+      expect(hiddenRows(tooTall.card)).toHaveLength(0);
+      expect(tooTall.widget.queryByRole('button', { name: /tips? →$/ })).toBeNull();
+    });
+  });
 });

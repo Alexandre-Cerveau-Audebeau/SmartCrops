@@ -28,7 +28,7 @@ import {
  * How: `harness.tsx` is bundled ONCE with Vite into a single script (no
  * server, no new dependency — `vite` is what builds the app), written into a
  * `file://` page with the app's own Inter faces, and opened in Chrome headless
- * with `--dump-dom` (`chrome.mjs`). The page mounts the twenty-nine scenes of
+ * with `--dump-dom` (`chrome.mjs`). The page mounts the thirty scenes of
  * `scenes.tsx` through the real `DashboardGrid`, one after the other, and
  * measures each card with `measure.ts`; the dump is one `<pre>` of results.
  * Six runs, in parallel: French at 360 and 390 px (the two phone widths of
