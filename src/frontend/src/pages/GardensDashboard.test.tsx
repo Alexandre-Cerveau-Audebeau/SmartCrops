@@ -572,16 +572,18 @@ describe('GardensDashboard — invitation layout (SMA-336 round 1, V3)', () => {
     expect(style.maxWidth).toBe('360px');
   });
 
-  it('stays compact on a phone, where the grid row is 200px (round 2, V5)', async () => {
+  it('stays compact on a phone, where the grid row is 200px at least (round 2, V5)', async () => {
     // V3 held on a desktop and not on a phone, and the breakpoint-conditioned
-    // rule behind that is `DashboardGrid`'s `gridAutoRows: {xs: 200px, sm:
-    // 273px}`. A 200px card leaves about 128px of body once its 20px padding,
-    // its title row and its 12px gap are taken; the stacked panel — 44px disc
-    // ABOVE the sentence above « Bientôt disponible » — needed about 164px, so
-    // it overflowed and the card's `overflow: hidden` clipped a dashed frame
-    // edge to edge. The frozen artboards draw `.inv` as a ROW (disc beside the
-    // text): the same words then need about 119px. No media query is involved,
-    // which is what makes the rule hold at EVERY width.
+    // rule behind that is `DashboardGrid`'s `gridAutoRows: {xs: minmax(200px,
+    // auto), sm: 273px}`. A 200px card leaves about 128px of body once its
+    // 20px padding, its title row and its 12px gap are taken; the stacked
+    // panel — 44px disc ABOVE the sentence above « Bientôt disponible » —
+    // needed about 164px, so it overflowed and the card's `overflow: hidden`
+    // clipped a dashed frame edge to edge. The frozen artboards draw `.inv` as
+    // a ROW (disc beside the text): the same words then need about 119px. No
+    // media query is involved, which is what makes the rule hold at EVERY
+    // width — the mobile lot let the phone row GROW past 200px, it did not
+    // let a panel need it.
     servePreferences('novice');
 
     renderPage();
@@ -589,10 +591,11 @@ describe('GardensDashboard — invitation layout (SMA-336 round 1, V3)', () => {
     await screen.findByText('The weather needs to know where your gardens are.');
     const panel = document.querySelector('[data-invite-panel]') as HTMLElement;
 
-    // The phone geometry the panel has to fit inside: one column, 200px rows.
+    // The phone geometry the panel has to fit inside: one column, rows of
+    // 200px at least (SMA-336 mobile lot, D1).
     const gridRules = emittedRules(gridNode());
     expect(gridRules.some((text) => text.includes('grid-template-columns:1fr'))).toBe(true);
-    expect(gridRules.some((text) => text.includes('grid-auto-rows:200px'))).toBe(true);
+    expect(gridRules.some((text) => text.includes('grid-auto-rows:minmax(200px, auto)'))).toBe(true);
 
     const panelRules = emittedRules(panel);
     expect(panelRules.length).toBeGreaterThan(0);
@@ -1245,18 +1248,28 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
     return rulesFor(gridNode());
   }
 
-  it('one column on a phone, and 200px rows', async () => {
+  it('one column on a phone, and rows of 200px at least that grow with their card', async () => {
+    // SMA-336 mobile lot (D1). Measured on `5282852` in Chrome at 360 px: the
+    // fixed 200 px row gave a Medium To-do card 120 px of body for 220 px of
+    // tasks (V34), the Tips card 120 for 192 (V37). In one column a fixed
+    // track protects no tiling — every card is alone on its row — so the
+    // phone row is `minmax(200px, auto)`: the frozen minimum, then the
+    // content's own height.
     const css = await gridCss();
 
     expect(columnsAt(css, '0px')).toBe('1fr');
-    expect(css).toContain('grid-auto-rows:200px');
+    expect(declaredAt(css, '0px', 'grid-auto-rows')).toBe('minmax(200px, auto)');
+    // Never a bare 200px on the phone any more, at any breakpoint.
+    expect(css).not.toContain('grid-auto-rows:200px');
   });
 
-  it('two columns on a tablet, and 273px rows', async () => {
+  it('two columns on a tablet, and 273px rows — fixed, as before the mobile lot', async () => {
     const css = await gridCss();
 
     expect(columnsAt(css, '600px')).toBe('repeat(2, 1fr)');
-    expect(css).toContain('grid-auto-rows:273px');
+    expect(declaredAt(css, '600px', 'grid-auto-rows')).toBe('273px');
+    // The auto height is the PHONE's alone: no `minmax` from 600px up.
+    expect(declaredAt(css, '600px', 'grid-auto-rows')).not.toContain('minmax');
   });
 
   it('four columns from 1200px', async () => {

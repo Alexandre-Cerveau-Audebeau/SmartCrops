@@ -195,12 +195,14 @@ export default function SortableWidget({
         //
         // A grid item's automatic minimum size in the block axis is
         // `min-height: auto`, which resolves to its content's min-content
-        // height. The rows of this grid are fixed tracks (`gridAutoRows`,
-        // 200 px on a phone and 273 px above), so an item whose content was
-        // taller than its track grew PAST the track instead of being clipped by
-        // it: the Statistics card's last line — « N cases libres, dont M en
-        // plein soleil » — was drawn below the card's own border and over the
-        // header of whichever widget sat underneath.
+        // height. The rows of this grid are fixed tracks from `sm` up
+        // (`gridAutoRows`, 273 px), so an item whose content was taller than
+        // its track grew PAST the track instead of being clipped by it: the
+        // Statistics card's last line — « N cases libres, dont M en plein
+        // soleil » — was drawn below the card's own border and over the
+        // header of whichever widget sat underneath. On a phone the track is
+        // `minmax(200px, auto)` since the mobile lot: the item is then sized
+        // by its content and this minimum simply has nothing to clip.
         //
         // `minHeight: 0` is the block-axis twin of the `minWidth: 0` above it,
         // and it is what lets `DashboardBlock`'s `overflow: hidden` and each
