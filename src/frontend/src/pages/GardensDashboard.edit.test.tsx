@@ -160,6 +160,52 @@ function stubGridGeometry(sizes?: Record<string, DashboardSize>) {
 }
 
 /**
+ * The PHONE's geometry (SMA-336 mobile lot, step 2): one column of 328 px
+ * cards whose heights are the MEASURED ones of the pre-flight — a
+ * `minmax(200px, auto)` row is as tall as its card — stacked with the 20 px
+ * gutter, in the widgets' CURRENT DOM order so the geometry follows a reorder.
+ * Everything that is not a grid widget gets the page rect, as above.
+ */
+const PHONE_CELL = 328;
+
+function stubPhoneGeometry(heights: Record<string, number>) {
+  const originalRect = Element.prototype.getBoundingClientRect;
+  const originalScroll = Element.prototype.scrollIntoView;
+
+  const keyOf = (element: Element): string | null =>
+    element.getAttribute('data-widget') ??
+    element.querySelector('[data-widget]')?.getAttribute('data-widget') ??
+    null;
+
+  Element.prototype.scrollIntoView = () => {};
+  Element.prototype.getBoundingClientRect = function (this: Element) {
+    const key = keyOf(this);
+    const order = renderedKeys();
+    const index = key ? order.indexOf(key) : -1;
+    if (index < 0) {
+      return {
+        x: 0, y: 0, top: 0, left: 0, right: 360, bottom: 3000,
+        width: 360, height: 3000, toJSON: () => ({}),
+      } as DOMRect;
+    }
+    let top = 0;
+    for (let i = 0; i < index; i += 1) top += (heights[order[i]!] ?? 200) + GUTTER;
+    const height = heights[key!] ?? 200;
+    return {
+      x: 0, y: top, top, left: 0,
+      right: PHONE_CELL, bottom: top + height,
+      width: PHONE_CELL, height,
+      toJSON: () => ({}),
+    } as DOMRect;
+  };
+
+  return () => {
+    Element.prototype.getBoundingClientRect = originalRect;
+    Element.prototype.scrollIntoView = originalScroll;
+  };
+}
+
+/**
  * The breakpoint the page believes it is at. `DashboardGrid` reads the column
  * count with `useMediaQuery` (round 3, V6), and jsdom ships no `matchMedia`:
  * without this stub MUI answers `false` to everything, the strategy packs for
@@ -1186,6 +1232,113 @@ describe('GardensDashboard — drag transforms (SMA-336 round 2, V4)', () => {
       }).toEqual({ key, style: expect.not.stringMatching(/scale/i) });
     }
 
+    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+  });
+});
+
+// ── SMA-336 mobile lot, step 2 (pre-flight D6): in ONE column the rows are
+// `minmax(200px, auto)`, so the widgets have unequal heights and the drag
+// preview has to move them by what they MEASURE, not by a cell height. The
+// dashboard's own packing strategy derives one cell from the first widget and
+// would translate the To-do below by 2 × (338 + 20) = 716 px here; the drop
+// lands it 792 + 20 = 812 px down. `verticalListSortingStrategy` reads the rects.
+describe('GardensDashboard — one column on a phone sorts by the MEASURED heights (mobile lot, D6)', () => {
+  // The pre-flight's own auto-height measurements at 360 px, three of them
+  // deliberately unequal: 338 (To-do Medium), 792 (Month Large), 246 (Weather
+  // Medium) — and the rest at the 200 px minimum.
+  const heights = {
+    weather: 338,
+    gardens: 792,
+    tips: 246,
+    month: 200,
+    todo: 200,
+    counters: 200,
+  } as const;
+
+  let restoreGeometry: () => void;
+
+  beforeEach(() => {
+    stubColumns(1);
+    restoreGeometry = stubPhoneGeometry(heights);
+  });
+
+  afterEach(() => restoreGeometry());
+
+  /** Picks the widget up, then N keyboard steps down, with dnd-kit's measurement tick between each. */
+  async function pickUpAndStepDown(handle: HTMLElement, steps: number) {
+    handle.focus();
+    fireEvent.keyDown(handle, { code: 'Space', key: ' ' });
+    await settle();
+    for (let i = 0; i < steps; i += 1) {
+      fireEvent.keyDown(handle, { code: 'ArrowDown', key: 'ArrowDown' });
+      await settle();
+    }
+  }
+
+  it('moves the neighbour up by the DRAGGED card’s height + gutter, and the dragged slot down by the NEIGHBOUR’s', async () => {
+    await enterEditMode();
+    expect(renderedKeys()).toEqual(['weather', 'gardens', 'tips', 'month', 'todo', 'counters']);
+
+    const handle = screen.getByRole('button', { name: 'Move Weather' });
+    await pickUpAndStepDown(handle, 1);
+
+    // The card that yields moves up by the dragged card's own 338 + 20…
+    expect(translationOf(sortableNode('gardens'))).toEqual({ x: 0, y: -(heights.weather + GUTTER) });
+    // …and the dragged slot — the drop preview — moves down by what it will
+    // pass: 792 + 20, the neighbour's MEASURED height. Neither is 200 + 20, nor
+    // the 2 × (338 + 20) a single derived cell would give.
+    expect(translationOf(sortableNode('weather'))).toEqual({ x: 0, y: heights.gardens + GUTTER });
+    expect(translationOf(sortableNode('weather'))).not.toEqual({ x: 0, y: 2 * (heights.weather + GUTTER) });
+    // The rest of the column does not move.
+    expect(translationOf(sortableNode('tips'))).toEqual({ x: 0, y: 0 });
+
+    fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
+  });
+
+  it('two steps down: both neighbours yield by the same amount and the preview lands under the second', async () => {
+    await enterEditMode();
+
+    const handle = screen.getByRole('button', { name: 'Move Weather' });
+    await pickUpAndStepDown(handle, 2);
+
+    expect(translationOf(sortableNode('gardens'))).toEqual({ x: 0, y: -(heights.weather + GUTTER) });
+    expect(translationOf(sortableNode('tips'))).toEqual({ x: 0, y: -(heights.weather + GUTTER) });
+    expect(translationOf(sortableNode('weather'))).toEqual({
+      x: 0,
+      y: heights.gardens + GUTTER + heights.tips + GUTTER,
+    });
+    // No slot is drawn on another: the preview sits exactly where the drop
+    // will put it, below the two cards that moved up.
+    const preview = drawnRect('weather');
+    for (const key of renderedKeys().filter((k) => k !== 'weather')) {
+      expect({ key, overlapping: overlaps(drawnRect(key!), preview) }).toEqual({ key, overlapping: false });
+    }
+
+    // Dropped there, the order and the saved layout follow.
+    fireEvent.keyDown(handle, { code: 'Space', key: ' ' });
+    await waitFor(() =>
+      expect(renderedKeys()).toEqual(['gardens', 'tips', 'weather', 'month', 'todo', 'counters'])
+    );
+    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled());
+    expect(lastSavedKeys().slice(0, 3)).toEqual(['gardens', 'tips', 'weather']);
+  });
+
+  it('still packs on a grid from two columns up — the phone list strategy is the one column’s alone', async () => {
+    // A control: the same page at four columns keeps the round-3 model, whose
+    // signature is a translation of a whole derived cell plus the gutter.
+    restoreGeometry();
+    stubColumns(4);
+    restoreGeometry = stubGridGeometry();
+    await enterEditMode();
+
+    const handle = screen.getByRole('button', { name: 'Move Weather' });
+    handle.focus();
+    fireEvent.keyDown(handle, { code: 'Space', key: ' ' });
+    await settle();
+    fireEvent.keyDown(handle, { code: 'ArrowRight', key: 'ArrowRight' });
+    await settle();
+
+    expect(translationOf(sortableNode('gardens'))).toEqual({ x: -(CELL + GUTTER), y: 0 });
     fireEvent.keyDown(handle, { code: 'Escape', key: 'Escape' });
   });
 });
