@@ -17,6 +17,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { visuallyHidden } from '@mui/utils';
 import { useTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import AddIcon from '@mui/icons-material/Add';
 import AddLocationAltOutlinedIcon from '@mui/icons-material/AddLocationAltOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -79,6 +80,13 @@ const TYPE_CHIP_ICONS = GARDEN_TYPE_ICONS;
  */
 const MEDIUM_THUMB_W = 48;
 const MEDIUM_THUMB_H = 40;
+/**
+ * …and on a PHONE, `A9NovicePhone.dc.html` l. 293: `<span class="tbox"
+ * style="width: 40px; height: 34px;">` (SMA-336 mobile lot, step 6 —
+ * pre-flight D5, arbitrage 5).
+ */
+const MEDIUM_THUMB_W_PHONE = 40;
+const MEDIUM_THUMB_H_PHONE = 34;
 
 /**
  * The table's own box (round 5, A10-4): `Main.dc.html` writes
@@ -327,9 +335,27 @@ export default function GardensBlock({
   const { system } = useUnitSystem();
   // The table's own rule and card colours, resolved once — see
   // `stickyActionsSx` for why they cannot be left as system strings.
-  const palette = useTheme().palette;
+  const theme = useTheme();
+  const palette = theme.palette;
   const ruleColor = palette.borderSubtle;
   const paperColor = palette.background.paper;
+  /**
+   * The Medium row's PHONE form (SMA-336 mobile lot, step 6 — pre-flight D5,
+   * arbitrage 5), under the one `sm` breakpoint `DashboardGrid` folds at.
+   * Measured on `5282852` at 360 px: the row's fixed parts — a 48 px
+   * thumbnail, a type chip with its glyph, the « Ornemental » chip, the
+   * count pill, the 52 px actions zone and the 24 px chevron — left the
+   * NAME 12 px: « T. », « B », « P. » (constat N1). `A9NovicePhone.dc.html`
+   * l. 292-299 draws the phone row as a 40 × 34 thumbnail, the name on a
+   * line of its own over its type chip (no glyph, `_spec.md` § 10.24), the
+   * count pill, the chevron — and no « Ornemental » (§ 10.22); the pencil
+   * and the bin the artboard never drew stay, at their place (amendment A3,
+   * arbitrage 5). Those 78 px have to come from somewhere: the count pill
+   * joins the chip on the second line, which is what gives the name the
+   * whole first line — 134 px at 360, the 130 the arbitrage asks for — and
+   * the two wrap to a third line when together they are wider than it.
+   */
+  const phone = useMediaQuery(theme.breakpoints.down('sm'));
 
   // ONE derivation per garden, shared with Statistics and reused across every
   // render of this widget (round 1, E10 / G4 / E22). It used to run inline in
@@ -523,6 +549,30 @@ export default function GardensBlock({
         }}
       />
     ) : null;
+
+  /**
+   * The GREEN count pill of a Medium row (round 4, A4): `<span class="pill ok
+   * num">50 plantes</span>`. Its colours are the artboards' `--chip-ok-bg` /
+   * `--chip-ok-tx` in both modes, carried as tokens like every other dashboard
+   * fill. At the end of the row on a desktop, on the chips line on a phone.
+   */
+  const countPill = (garden: DashboardGardenData) => (
+    <Chip
+      data-garden-count
+      label={t('gardens.plantsCount', {
+        count: garden.placementCount,
+      })}
+      size="small"
+      sx={{
+        flexShrink: 0,
+        height: DASHBOARD_TYPE.chipHeight,
+        fontSize: DASHBOARD_TYPE.chip,
+        fontWeight: 700,
+        backgroundColor: tk.okBg,
+        color: tk.okText,
+      }}
+    />
+  );
 
   /**
    * Rename and delete — the same two buttons at EVERY size (round 2, V12).
@@ -802,7 +852,8 @@ export default function GardensBlock({
                     flex: 1,
                     minWidth: 0,
                     minHeight: 44,
-                    px: '8px',
+                    // The hover inset is a pointer's: on a phone its 16 px go to the name.
+                    px: { xs: 0, sm: '8px' },
                     borderRadius: '8px',
                     textDecoration: 'none',
                     color: 'inherit',
@@ -811,21 +862,25 @@ export default function GardensBlock({
                 >
                   <GardenThumbnail
                     garden={garden}
-                    maxW={MEDIUM_THUMB_W}
-                    maxH={MEDIUM_THUMB_H}
+                    maxW={phone ? MEDIUM_THUMB_W_PHONE : MEDIUM_THUMB_W}
+                    maxH={phone ? MEDIUM_THUMB_H_PHONE : MEDIUM_THUMB_H}
                   />
                   {/* The artboard's own middle group: `flex: 1; min-width: 0;
                       display: flex; align-items: center; gap: 10px; overflow:
                       hidden` — the name and the chips share ONE line and yield
                       together, which is why the chips clip rather than push the
-                      name out. */}
+                      name out. On a phone the group is A9's COLUMN (l. 294:
+                      `flex-direction: column; align-items: flex-start; gap:
+                      4px`): the name on its own line, the chips under it. */}
                   <Box
+                    data-garden-row-group
                     sx={{
                       flex: 1,
                       minWidth: 0,
                       display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
+                      flexDirection: { xs: 'column', sm: 'row' },
+                      alignItems: { xs: 'flex-start', sm: 'center' },
+                      gap: { xs: '4px', sm: '10px' },
                       overflow: 'hidden',
                     }}
                   >
@@ -849,12 +904,16 @@ export default function GardensBlock({
                         row taller than the 44 px the artboard draws, which is
                         what pushed three rows and two links past a Medium card. */}
                     <Box
+                      data-garden-row-chips
                       sx={{
                         display: 'flex',
                         gap: '6px',
                         minWidth: 0,
                         overflow: 'hidden',
                         alignItems: 'center',
+                        // On a phone the count pill is on this line too, and
+                        // the two wrap under each other rather than clip.
+                        flexWrap: { xs: 'wrap', sm: 'nowrap' },
                       }}
                     >
                       {typeLabel(garden) && (
@@ -863,8 +922,10 @@ export default function GardensBlock({
                           size="small"
                           variant="outlined"
                           // The type's glyph, primary-coloured, 14 px (N5-1):
-                          // `.pill.type .ic { color: var(--prim) }`.
-                          icon={typeChipIcon(garden)}
+                          // `.pill.type .ic { color: var(--prim) }` — and no
+                          // glyph on a phone (`_spec.md` § 10.24: « la ligne de
+                          // chips débordait de 29 px »).
+                          icon={phone ? undefined : typeChipIcon(garden)}
                           sx={{
                             height: DASHBOARD_TYPE.chipHeight,
                             fontSize: DASHBOARD_TYPE.chip,
@@ -879,27 +940,15 @@ export default function GardensBlock({
                           }}
                         />
                       )}
-                      {ornamentalChip(garden, 'medium')}
+                      {/* No « Ornemental » on the phone row (`_spec.md` § 10.22). */}
+                      {!phone && ornamentalChip(garden, 'medium')}
+                      {phone && countPill(garden)}
                     </Box>
                   </Box>
                   {/* The GREEN count pill, right-aligned (round 4, A4):
-                      `<span class="pill ok num">50 plantes</span>`. Its colours
-                      are the artboards' `--chip-ok-bg` / `--chip-ok-tx` in both
-                      modes, carried as tokens like every other dashboard fill. */}
-                  <Chip
-                    label={t('gardens.plantsCount', {
-                      count: garden.placementCount,
-                    })}
-                    size="small"
-                    sx={{
-                      flexShrink: 0,
-                      height: DASHBOARD_TYPE.chipHeight,
-                      fontSize: DASHBOARD_TYPE.chip,
-                      fontWeight: 700,
-                      backgroundColor: tk.okBg,
-                      color: tk.okText,
-                    }}
-                  />
+                      `<span class="pill ok num">50 plantes</span>` — on the
+                      chips line on a phone, see above. */}
+                  {!phone && countPill(garden)}
                 </Box>
               </MaybeTooltip>
               {rowTrailing(garden)}
