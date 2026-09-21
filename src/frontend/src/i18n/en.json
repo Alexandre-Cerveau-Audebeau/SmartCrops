@@ -521,6 +521,7 @@
       "month": {
         "title": "This month",
         "monthsShort": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+        "monthsInitial": ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"],
         "counts": {
           "prune": "to prune",
           "sow": "to sow",

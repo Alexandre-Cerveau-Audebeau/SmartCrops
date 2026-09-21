@@ -521,6 +521,7 @@
       "month": {
         "title": "Ce mois-ci",
         "monthsShort": ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"],
+        "monthsInitial": ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"],
         "counts": {
           "prune": "à tailler",
           "sow": "à semer",

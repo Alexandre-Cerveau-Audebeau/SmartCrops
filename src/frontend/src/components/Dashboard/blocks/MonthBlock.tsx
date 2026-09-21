@@ -6,6 +6,8 @@ import Chip from '@mui/material/Chip';
 import Skeleton from '@mui/material/Skeleton';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import { visuallyHidden } from '@mui/utils';
 import type { SvgIconComponent } from '@mui/icons-material';
 import AgricultureOutlinedIcon from '@mui/icons-material/AgricultureOutlined';
@@ -123,6 +125,18 @@ const NAME_GUTTER = 8;
  */
 const NAME_BUDGET = Math.floor((NAME_COLUMN - NAME_GUTTER) / (LARGE_GRID.nameSize * 0.52));
 
+/**
+ * The PHONE's name column, and the budget that follows from it (SMA-336
+ * mobile lot, step 4 — pre-flight D3, arbitrage 2). On a 328 px card the 108 px
+ * column left the twelve months 13.2 px each for three-letter labels of 22 to
+ * 30 px: « Août » was printed over « Sep » by 16 px (V38). The grid stays —
+ * rule 3 of the design contract: a larger size shows more, never something
+ * else — with 84 px for the names and ONE letter a month, measured at zero
+ * overlap at 360 and 390 px. Nine characters fit the narrower column whole.
+ */
+const NAME_COLUMN_PHONE = 84;
+const NAME_BUDGET_PHONE = Math.floor((NAME_COLUMN_PHONE - NAME_GUTTER) / (LARGE_GRID.nameSize * 0.52));
+
 /** `Main.dc.html` l. 309: « Thym, Romarin, Courgette +7 » — three names, then the rest as a figure. */
 const MEDIUM_NAMES = 3;
 
@@ -228,6 +242,12 @@ export default function MonthBlock({
 }: Props) {
   const { t, i18n } = useTranslation();
   const tk = useDashboardTokens();
+  const theme = useTheme();
+  // The ONE breakpoint of the dashboard, the same `sm` `DashboardGrid` folds
+  // to one column at: under it the name column is 84 px, and the tooltip of
+  // V32 has to judge a clipped name by that column, not by the desktop's.
+  const phone = useMediaQuery(theme.breakpoints.down('sm'));
+  const nameBudget = phone ? NAME_BUDGET_PHONE : NAME_BUDGET;
   const MonthIcon = BLOCK_ICONS.month;
   /**
    * V26 — the Large grid deployed past its ten rows. Session-only, in React
@@ -256,6 +276,14 @@ export default function MonthBlock({
     return Array.isArray(raw) && raw.length === 12 && raw.every((label) => typeof label === 'string')
       ? (raw as string[])
       : MONTHS_OF_YEAR.map((value) => String(value));
+  })();
+
+  /** The same twelve as ONE letter each, for the phone's axis (mobile lot, step 4), guarded the same way. */
+  const monthsInitial = ((): string[] => {
+    const raw = t('dashboard.blocks.month.monthsInitial', { returnObjects: true });
+    return Array.isArray(raw) && raw.length === 12 && raw.every((label) => typeof label === 'string')
+      ? (raw as string[])
+      : monthsShort.map((label) => label.charAt(0));
   })();
 
   const names = (entries: readonly VarietyCalendar[]): string[] =>
@@ -458,8 +486,13 @@ export default function MonthBlock({
     // currently drawn, so the collapsed and the deployed states name the same
     // number and the label does not change under the reader's hand.
     const rest = Math.max(0, known.length - LARGE_ROWS);
-    // `.cal` — a 108 px name column, then the twelve months.
-    const gridColumns = `${NAME_COLUMN}px repeat(12, minmax(0, 1fr))`;
+    // `.cal` — a 108 px name column, then the twelve months; 84 px on a phone
+    // (mobile lot, step 4). ONE template for the axis and for every row, per
+    // breakpoint, so the two grids can never disagree on where a month is.
+    const gridColumns = {
+      xs: `${NAME_COLUMN_PHONE}px repeat(12, minmax(0, 1fr))`,
+      sm: `${NAME_COLUMN}px repeat(12, minmax(0, 1fr))`,
+    };
     return (
       <>
         {/* The three counters in a row (`A3Expert.dc.html` l. 334). */}
@@ -614,6 +647,12 @@ export default function MonthBlock({
                 <Box
                   key={value}
                   data-month-axis={value === month.month ? 'now' : undefined}
+                  // The month in FULL on the cell, whatever the eye is shown
+                  // (mobile lot, step 4): the row is `aria-hidden` by F4 —
+                  // the reader hears each variety's sentence, months spelled
+                  // out — and the name still travels with the cell, so no
+                  // form of the label can ever be the only record of it.
+                  aria-label={monthLabel(value, i18n.language)}
                   sx={{
                     textAlign: 'center',
                     fontSize: LARGE_GRID.axisSize,
@@ -625,7 +664,24 @@ export default function MonthBlock({
                     backgroundColor: value === month.month ? tk.tint : 'transparent',
                   }}
                 >
-                  {monthsShort[index]}
+                  {/* Two forms, one shown (mobile lot, step 4 — D3): the short
+                      name from 600 px up, its initial under it, where 13 px a
+                      column cannot hold « Juil ». Pure CSS: the same DOM at
+                      every width, and nothing for a desktop to re-render. */}
+                  <Box
+                    component="span"
+                    data-month-axis-short
+                    sx={{ display: { xs: 'none', sm: 'inline' } }}
+                  >
+                    {monthsShort[index]}
+                  </Box>
+                  <Box
+                    component="span"
+                    data-month-axis-initial
+                    sx={{ display: { xs: 'inline', sm: 'none' } }}
+                  >
+                    {monthsInitial[index]}
+                  </Box>
                 </Box>
               ))}
             </Box>
@@ -691,7 +747,7 @@ export default function MonthBlock({
                   {/* `.pn` — 14 px / 600, ellipsized, with its 8 px gutter. */}
                   <MaybeName
                     name={shownName(entry.variety)}
-                    clipped={shownName(entry.variety).length > NAME_BUDGET}
+                    clipped={shownName(entry.variety).length > nameBudget}
                   >
                     <Box
                       data-month-name

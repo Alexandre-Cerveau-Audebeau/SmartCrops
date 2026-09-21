@@ -1,10 +1,11 @@
-import { fireEvent, render, within } from '@testing-library/react';
+import { act, fireEvent, render, within } from '@testing-library/react';
 import { ThemeProvider, createTheme, type Theme } from '@mui/material/styles';
-import { describe, expect, it, vi } from 'vitest';
+import i18next from 'i18next';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
 import { UnitSystemProvider } from '../../../contexts/UnitSystemContext';
-import { rulesFor } from '../../../test/dashboardDom';
+import { declaredAtBreakpoint, rulesFor } from '../../../test/dashboardDom';
 import { gardenFixture, varietyFixture } from '../../../test/fixtures/dashboard';
 import { linkFixture, locationFixture, weatherFixture } from '../../../test/fixtures/weather';
 import { createAppTheme } from '../../../theme';
@@ -788,4 +789,100 @@ describe('MonthBlock — one row in two on a ground of its own (V33)', () => {
       }
     }
   );
+});
+
+// ── SMA-336 mobile lot, step 4 (pre-flight D3, arbitrage 2): on a phone the
+// Large grid STAYS a grid — rule 3, a larger size shows more, never something
+// else — with one letter a month and an 84 px name column. Measured on
+// `5282852` at 360 px: 13.2 px a column for labels of 22-30 px, « Août » over
+// « Sep » by 16 px (V38); measured at zero after this step. Asserted here on
+// the declarations per breakpoint; the pixels are the layout harness's.
+describe('MonthBlock — Large on a phone: one letter a month, an 84px name column (mobile lot, step 4)', () => {
+  const INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+
+  it('declares the 84px column under 600px and the 108px column from 600px — on the axis and on every row alike', () => {
+    const { card } = renderBlock({ size: 'large' });
+    const axisRow = card.querySelector('[data-month-axis-row]')!;
+    const row = card.querySelector('[data-month-plant="thyme"]')!;
+
+    for (const grid of [axisRow, row]) {
+      expect(declaredAtBreakpoint(grid, '0px', 'grid-template-columns')).toBe('84px repeat(12, minmax(0, 1fr))');
+      expect(declaredAtBreakpoint(grid, '600px', 'grid-template-columns')).toBe('108px repeat(12, minmax(0, 1fr))');
+    }
+  });
+
+  it('draws each month twice — the short name shown from 600px, its initial shown under — and names the month in full on the cell', () => {
+    const { card } = renderBlock({ size: 'large' });
+    const cells = [...card.querySelectorAll('[data-month-axis-row] > *')].slice(1);
+    expect(cells).toHaveLength(12);
+
+    cells.forEach((cell, index) => {
+      const short = cell.querySelector('[data-month-axis-short]')!;
+      const initial = cell.querySelector('[data-month-axis-initial]')!;
+      expect(declaredAtBreakpoint(short, '0px', 'display')).toBe('none');
+      expect(declaredAtBreakpoint(short, '600px', 'display')).toBe('inline');
+      expect(declaredAtBreakpoint(initial, '0px', 'display')).toBe('inline');
+      expect(declaredAtBreakpoint(initial, '600px', 'display')).toBe('none');
+      expect(initial.textContent).toBe(INITIALS[index]);
+      expect(short.textContent).toBe(
+        new Intl.DateTimeFormat('en', { month: 'short' }).format(new Date(2000, index, 1))
+      );
+      // The full month on the cell, whatever form is shown.
+      expect(cell.getAttribute('aria-label')).toBe(monthLabel(index + 1, 'en'));
+    });
+    // The axis stays the visual scale F4 made it: hidden from the reading as a whole.
+    expect(card.querySelector('[data-month-axis-row]')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('in French, the same twelve initials — the month starts with the same letter in both languages', async () => {
+    const { card } = renderBlock({ size: 'large' });
+    await act(() => i18next.changeLanguage('fr'));
+    const initials = [...card.querySelectorAll('[data-month-axis-initial]')].map((node) => node.textContent);
+    expect(initials).toEqual(INITIALS);
+    const shorts = [...card.querySelectorAll('[data-month-axis-short]')].map((node) => node.textContent);
+    expect(shorts).toEqual(['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc']);
+    await act(() => i18next.changeLanguage('en'));
+  });
+
+  it('keeps the desktop axis as it was: 13px, thirteen cells, the current month tinted, the labels on their tracks', () => {
+    const { card } = renderBlock({ size: 'large' });
+    const axisRow = card.querySelector('[data-month-axis-row]')!;
+    expect(axisRow.children).toHaveLength(13);
+    expect(ruleText(card.querySelector('[data-month-axis="now"]')!)).toContain('font-size:13px');
+    expect(card.querySelectorAll('[data-month-axis="now"]')).toHaveLength(1);
+  });
+
+  describe('the tooltip of a clipped name follows the phone’s column (V32, at 84px)', () => {
+    /** The page believes it is under 600px: `useMediaQuery(down('sm'))` answers true. */
+    const stubPhone = () =>
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn().mockImplementation((query: string) => ({
+          matches: query.includes('max-width:599.95px'),
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }))
+      );
+
+    afterEach(() => vi.unstubAllGlobals());
+
+    /** Ten characters: whole in the 108px column (twelve fit), clipped in the 84px one (nine fit). */
+    const tenLetters = pruned({ plantId: 'ten', commonName: 'courgettes', count: 1, gardenIds: ['g1'] });
+
+    it('a ten-letter name is described on a phone…', () => {
+      stubPhone();
+      const { card } = renderBlock({ size: 'large', varieties: [tenLetters] });
+      expect(card.querySelector('[data-month-plant="ten"] [data-month-name]')).toHaveAttribute('title', 'Courgettes');
+    });
+
+    it('…and not on a desktop, where the 108px column shows it whole', () => {
+      const { card } = renderBlock({ size: 'large', varieties: [tenLetters] });
+      expect(card.querySelector('[data-month-plant="ten"] [data-month-name]')).not.toHaveAttribute('title');
+    });
+  });
 });
