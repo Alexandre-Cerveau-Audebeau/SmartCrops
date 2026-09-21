@@ -1,0 +1,470 @@
+/**
+ * SMA-336 mobile lot, step 7 (pre-flight D7) — the in-page measurement of ONE
+ * dashboard card, run inside a real layout engine (Chrome headless, see
+ * `dashboardLayout.test.tsx`). jsdom lays nothing out — every rect is zero
+ * there — so a chevauchement or a clipped line can only be PROVEN absent by a
+ * browser. This module is what the pre-flight measured `5282852` with, typed
+ * and kept.
+ *
+ * What it reads, with `getBoundingClientRect`, `Range` rects and
+ * `getComputedStyle` only:
+ *
+ * - the ATOMS of the card: every text node (its own Range rect), every `svg`,
+ *   and every painted box (a background or a border) — a chevauchement is a
+ *   pair of atoms whose VISIBLE boxes intersect, visible meaning clipped by
+ *   every `overflow` ancestor up to the card and by the card's own padding
+ *   box, and cut by the sticky occluders that legitimately paint over the
+ *   flow (the frozen actions column of the Gardens table, the calendar's
+ *   month axis);
+ * - what the card or an `overflow: hidden` ancestor CLIPS — the « rogné » of
+ *   the visual pass — apart from what a scrolling zone merely keeps below its
+ *   fold, which rule 5 of the design contract allows;
+ * - the text wider than its own block (a spill), the ellipsized lines, the
+ *   scrolling zones and their excess, the smallest font drawn.
+ *
+ * A chevauchement is VISIBLE from {@link VISIBLE_OVERLAP_PX} in both
+ * dimensions; below that, two line boxes touch without their glyphs meeting
+ * (the 56 px temperature at `line-height: 1` against the place line above it,
+ * measured at 3-4 px on `5282852`) — counted apart, as contacts.
+ */
+
+export interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
+export interface OverlapMeasure {
+  a: string;
+  b: string;
+  kinds: string;
+  w: number;
+  h: number;
+  x: number;
+  y: number;
+}
+
+export interface ClipMeasure {
+  label: string;
+  kind: string;
+  /** `card`, or the tag and data attribute of the clipping ancestor. */
+  by: string;
+  /** The clipping ancestor scrolls: what it hides is reachable, not lost. */
+  scroller: boolean;
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+  h: number;
+}
+
+export interface SpillMeasure {
+  label: string;
+  container: string;
+  containerW: number;
+  textW: number;
+  spill: number;
+}
+
+export interface EllipsisMeasure {
+  text: string;
+  lost: number;
+  where: string;
+}
+
+export interface ScrollerMeasure {
+  where: string;
+  axis: string;
+  overflowX: number;
+  overflowY: number;
+  scrollbar: number;
+}
+
+export interface CardMeasure {
+  card: { w: number; h: number; padding: string };
+  body: { h: number; scrollH: number; overflow: number; beyondCard: number };
+  gridAutoRows: string;
+  gridColumns: string;
+  atoms: number;
+  overlaps: OverlapMeasure[];
+  /** Pairs overlapping by at least {@link VISIBLE_OVERLAP_PX} in both dimensions. */
+  visibleOverlaps: number;
+  /** Pairs overlapping by less: line boxes touching, no glyph under another. */
+  contacts: number;
+  clipped: ClipMeasure[];
+  /** Atoms cut by the card or by an `overflow: hidden` ancestor — never by a scroller. */
+  hardClipped: number;
+  spills: SpillMeasure[];
+  ellipsized: EllipsisMeasure[];
+  scrollers: ScrollerMeasure[];
+  minFont: number;
+  smallFonts: { label: string; px: number }[];
+  fontLoaded: boolean;
+}
+
+export const VISIBLE_OVERLAP_PX = 5;
+
+/** The id of the `<pre>` the harness page ends on — its results, base64 — and the prefix of its error and progress lines. */
+export const RESULTS_ID = 'layout-results';
+
+const round = (v: number) => Math.round(v * 10) / 10;
+
+const boxOf = (r: { left: number; top: number; right: number; bottom: number }): Box => ({
+  left: r.left,
+  top: r.top,
+  right: r.right,
+  bottom: r.bottom,
+  width: r.right - r.left,
+  height: r.bottom - r.top,
+});
+
+const rectOf = (el: Element): Box => boxOf(el.getBoundingClientRect());
+
+const intersect = (a: Box, b: Box): Box =>
+  boxOf({
+    left: Math.max(a.left, b.left),
+    top: Math.max(a.top, b.top),
+    right: Math.min(a.right, b.right),
+    bottom: Math.min(a.bottom, b.bottom),
+  });
+
+const paddingBox = (el: Element): Box => {
+  const b = el.getBoundingClientRect();
+  const cs = getComputedStyle(el);
+  return boxOf({
+    left: b.left + (parseFloat(cs.borderLeftWidth) || 0),
+    top: b.top + (parseFloat(cs.borderTopWidth) || 0),
+    right: b.right - (parseFloat(cs.borderRightWidth) || 0),
+    bottom: b.bottom - (parseFloat(cs.borderBottomWidth) || 0),
+  });
+};
+
+/** The union of the Range rects of the element's OWN text nodes, or null when it has none drawn. */
+function textRect(el: Element): Box | null {
+  let r: Box | null = null;
+  for (const node of Array.from(el.childNodes)) {
+    if (node.nodeType !== Node.TEXT_NODE || !(node.textContent ?? '').trim()) continue;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const b = range.getBoundingClientRect();
+    if (b.width === 0 && b.height === 0) continue;
+    r = r
+      ? boxOf({
+          left: Math.min(r.left, b.left),
+          top: Math.min(r.top, b.top),
+          right: Math.max(r.right, b.right),
+          bottom: Math.max(r.bottom, b.bottom),
+        })
+      : boxOf(b);
+  }
+  return r;
+}
+
+const ownText = (el: Element): string =>
+  Array.from(el.childNodes)
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent ?? '')
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const alpha = (color: string): number => {
+  const m = /rgba?\(([^)]+)\)/.exec(color || '');
+  if (!m) return color && color !== 'transparent' ? 1 : 0;
+  const parts = m[1]!.split(',').map((s) => parseFloat(s));
+  return parts.length === 4 ? parts[3]! : 1;
+};
+
+/** The nearest `data-*` attribute (or MUI chip / button class) that names where an element sits. */
+function dataTag(el: Element, stop: Element): string {
+  let e: Element | null = el;
+  while (e && e !== stop.parentElement) {
+    for (const attr of Array.from(e.attributes)) {
+      if (attr.name.startsWith('data-') && attr.name !== 'data-widget' && attr.name !== 'data-emotion') {
+        return attr.name.replace('data-', '') + (attr.value ? `=${attr.value}` : '');
+      }
+    }
+    if (e.classList.contains('MuiChip-root')) return 'chip';
+    if (e.classList.contains('MuiButton-root')) return 'button';
+    e = e.parentElement;
+  }
+  return '';
+}
+
+function visible(el: Element): boolean {
+  const cs = getComputedStyle(el);
+  if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false;
+  const b = el.getBoundingClientRect();
+  return b.width > 1 && b.height > 1;
+}
+
+const clips = (cs: CSSStyleDeclaration) => cs.overflowX !== 'visible' || cs.overflowY !== 'visible';
+const scrolls = (cs: CSSStyleDeclaration) => /auto|scroll/.test(cs.overflowX + cs.overflowY);
+
+/** The nearest ancestor that clips, up to the card, and whether it scrolls. */
+function clipAncestor(el: Element, card: Element): { el: Element; scroller: boolean } {
+  let e = el.parentElement;
+  while (e) {
+    const cs = getComputedStyle(e);
+    if (clips(cs)) return { el: e, scroller: scrolls(cs) };
+    if (e === card) break;
+    e = e.parentElement;
+  }
+  return { el: card, scroller: false };
+}
+
+/** The region an element can be seen in: the card's padding box, cut by EVERY clipping ancestor. */
+function clipBoxFor(el: Element, card: Element, includeSelf: boolean): Box {
+  let box = paddingBox(card);
+  let e: Element | null = includeSelf ? el : el.parentElement;
+  while (e) {
+    if (clips(getComputedStyle(e))) box = intersect(box, paddingBox(e));
+    if (e === card) break;
+    e = e.parentElement;
+  }
+  return box;
+}
+
+interface Occluder {
+  el: Element;
+  box: Box;
+  /** A `top`-stuck header hides what scrolls under it; a `right`-stuck column what scrolls beside it. */
+  axis: 'vertical' | 'horizontal';
+}
+
+/**
+ * The sticky elements of the card — the frozen actions column of the Gardens
+ * table (`position: sticky; right: 0`, amendment A4) and the month axis of the
+ * calendar (`position: sticky; top: 0`, V27). They are opaque and paint OVER
+ * the flow by design: a cell that has scrolled under the column is hidden, not
+ * overlapped. What they cover is removed from the visible box of every atom
+ * they do not contain.
+ */
+function occluders(card: Element): Occluder[] {
+  const found: Occluder[] = [];
+  for (const el of Array.from(card.querySelectorAll('*'))) {
+    const cs = getComputedStyle(el);
+    if (cs.position !== 'sticky' || !visible(el)) continue;
+    found.push({ el, box: rectOf(el), axis: cs.top !== 'auto' ? 'vertical' : 'horizontal' });
+  }
+  return found;
+}
+
+function occlude(box: Box, el: Element, list: Occluder[]): Box {
+  let out = box;
+  for (const occ of list) {
+    if (occ.el === el || occ.el.contains(el) || el.contains(occ.el)) continue;
+    const meets = intersect(out, occ.box);
+    if (meets.width <= 0 || meets.height <= 0) continue;
+    if (occ.axis === 'vertical') {
+      out = out.top >= occ.box.top ? boxOf({ ...out, top: Math.max(out.top, occ.box.bottom) }) : boxOf({ ...out, bottom: Math.min(out.bottom, occ.box.top) });
+    } else {
+      out = out.left < occ.box.left ? boxOf({ ...out, right: Math.min(out.right, occ.box.left) }) : boxOf({ ...out, left: Math.max(out.left, occ.box.right) });
+    }
+  }
+  return out;
+}
+
+interface Atom {
+  el: Element;
+  kind: 'text' | 'svg' | 'box' | 'panel';
+  rect: Box;
+  vis: Box;
+  label: string;
+  fontSize: number;
+  display: string;
+}
+
+export function measureCard(card: HTMLElement): CardMeasure {
+  const slot = card.parentElement!.parentElement!;
+  const grid = slot.parentElement!;
+  const cardRect = rectOf(card);
+  const clip = paddingBox(card);
+  const body = card.lastElementChild as HTMLElement;
+  const sticky = occluders(card);
+
+  const atoms: Atom[] = [];
+  for (const el of Array.from(card.querySelectorAll('*'))) {
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'style' || tag === 'script') continue;
+    // MUI's outlined field draws its border on a `fieldset` whose `legend`
+    // opens a notch UNDER the floating label, and its adornment icon sits
+    // inside that border box: the label and the icon are on the frame by
+    // design, not over it.
+    if (el.classList.contains('MuiOutlinedInput-notchedOutline')) continue;
+    if (!visible(el)) continue;
+    const cs = getComputedStyle(el);
+    const txt = ownText(el);
+    let kind: Atom['kind'];
+    let rect: Box | null;
+    let label: string;
+    if (tag === 'svg') {
+      kind = 'svg';
+      rect = rectOf(el);
+      label = `svg[${dataTag(el, card)}]`;
+    } else if (txt) {
+      kind = 'text';
+      rect = textRect(el);
+      if (!rect) continue;
+      label = `"${txt.slice(0, 44)}"`;
+    } else {
+      const painted =
+        alpha(cs.backgroundColor) > 0 ||
+        cs.backgroundImage !== 'none' ||
+        (parseFloat(cs.borderTopWidth) > 0 && cs.borderTopStyle !== 'none');
+      if (!painted) continue;
+      rect = rectOf(el);
+      kind = el.children.length === 0 ? 'box' : 'panel';
+      label = `${kind}:${tag}[${dataTag(el, card)}]`;
+    }
+    if (rect.width <= 0.5 || rect.height <= 0.5) continue;
+    const vis = occlude(intersect(rect, clipBoxFor(el, card, kind === 'text')), el, sticky);
+    atoms.push({ el, kind, rect, vis, label, fontSize: parseFloat(cs.fontSize), display: cs.display });
+  }
+
+  const overlaps: OverlapMeasure[] = [];
+  for (let a = 0; a < atoms.length; a += 1) {
+    for (let b = a + 1; b < atoms.length; b += 1) {
+      const A = atoms[a]!;
+      const B = atoms[b]!;
+      if (A.el.contains(B.el) || B.el.contains(A.el)) continue;
+      const boxes = (k: Atom['kind']) => k === 'box' || k === 'panel';
+      if (boxes(A.kind) && boxes(B.kind)) continue;
+      if (A.vis.width <= 0 || A.vis.height <= 0 || B.vis.width <= 0 || B.vis.height <= 0) continue;
+      const l = Math.max(A.vis.left, B.vis.left, clip.left);
+      const t = Math.max(A.vis.top, B.vis.top, clip.top);
+      const r = Math.min(A.vis.right, B.vis.right, clip.right);
+      const bo = Math.min(A.vis.bottom, B.vis.bottom, clip.bottom);
+      const w = r - l;
+      const h = bo - t;
+      if (w <= 1 || h <= 1) continue;
+      overlaps.push({
+        a: A.label,
+        b: B.label,
+        kinds: `${A.kind}/${B.kind}`,
+        w: round(w),
+        h: round(h),
+        x: round(l - cardRect.left),
+        y: round(t - cardRect.top),
+      });
+    }
+  }
+
+  const clipped: ClipMeasure[] = [];
+  const spills: SpillMeasure[] = [];
+  const smallFonts: { label: string; px: number }[] = [];
+  let minFont = 999;
+  let maxBottom = -Infinity;
+  for (const at of atoms) {
+    const ca = clipAncestor(at.el, card);
+    const box = paddingBox(ca.el);
+    const cutR = Math.max(0, at.rect.right - box.right);
+    const cutL = Math.max(0, box.left - at.rect.left);
+    const cutB = Math.max(0, at.rect.bottom - box.bottom);
+    const cutT = Math.max(0, box.top - at.rect.top);
+    // A line the design ELLIPSIZES is cut on the right by design — « Thym,
+    // Romarin, Courgette +7 », a title before its chip — and reported under
+    // `ellipsized`, not as a clip. Every other cut is a clip: through the
+    // bottom of a line, on the left, or by a container that draws no ellipsis.
+    const ellipsis =
+      cutR > 1 && cutL <= 1 && cutB <= 1 && cutT <= 1 &&
+      (getComputedStyle(at.el).textOverflow === 'ellipsis' || getComputedStyle(ca.el).textOverflow === 'ellipsis');
+    if (!ellipsis && (cutR > 1 || cutL > 1 || cutB > 1 || cutT > 1)) {
+      clipped.push({
+        label: at.label,
+        kind: at.kind,
+        by: ca.el === card ? 'card' : `${ca.el.tagName.toLowerCase()}[${dataTag(ca.el, card)}]`,
+        scroller: ca.scroller,
+        right: round(cutR),
+        left: round(cutL),
+        bottom: round(cutB),
+        top: round(cutT),
+        h: round(at.rect.height),
+      });
+    }
+    if (at.kind === 'text') {
+      let container: Element | null = /^inline/.test(at.display) ? at.el.parentElement : at.el;
+      while (container && container !== card && /^inline/.test(getComputedStyle(container).display)) {
+        container = container.parentElement;
+      }
+      // Seen past its block: a text its own block clips (an ellipsized title,
+      // a name in a 69 px column) is reported by the clip and ellipsis passes.
+      if (container && !clips(getComputedStyle(container))) {
+        const cb = paddingBox(container);
+        const spill = Math.max(0, at.rect.right - cb.right);
+        const spillL = Math.max(0, cb.left - at.rect.left);
+        if (spill > 1 || spillL > 1) {
+          spills.push({
+            label: at.label,
+            container: `${container.tagName.toLowerCase()}[${dataTag(container, card)}]`,
+            containerW: round(cb.width),
+            textW: round(at.rect.width),
+            spill: round(Math.max(spill, spillL)),
+          });
+        }
+      }
+      if (at.fontSize < minFont) minFont = at.fontSize;
+      if (at.fontSize < 14) smallFonts.push({ label: at.label, px: at.fontSize });
+    }
+    // Below the card's edge and NOT in a scrolling zone: lost, where a zone's
+    // fold is reachable (rule 5: « défile à l'intérieur de la carte »).
+    if (!ca.scroller && at.rect.bottom > maxBottom) maxBottom = at.rect.bottom;
+  }
+
+  const ellipsized: EllipsisMeasure[] = [];
+  const scrollers: ScrollerMeasure[] = [];
+  for (const el of Array.from(card.querySelectorAll('*'))) {
+    if (!visible(el)) continue;
+    const cs = getComputedStyle(el);
+    if (cs.textOverflow === 'ellipsis' && cs.overflowX !== 'visible' && el.scrollWidth > el.clientWidth + 1) {
+      ellipsized.push({
+        text: (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 44),
+        lost: el.scrollWidth - el.clientWidth,
+        where: dataTag(el, card),
+      });
+    }
+    const sx = /auto|scroll/.test(cs.overflowX) && el.scrollWidth > el.clientWidth + 1;
+    const sy = /auto|scroll/.test(cs.overflowY) && el.scrollHeight > el.clientHeight + 1;
+    if (sx || sy) {
+      const html = el as HTMLElement;
+      scrollers.push({
+        where: `${el.tagName.toLowerCase()}[${dataTag(el, card)}]`,
+        axis: (sx ? 'x' : '') + (sy ? 'y' : ''),
+        overflowX: el.scrollWidth - el.clientWidth,
+        overflowY: el.scrollHeight - el.clientHeight,
+        scrollbar: round(
+          html.offsetWidth - el.clientWidth - (parseFloat(cs.borderLeftWidth) || 0) - (parseFloat(cs.borderRightWidth) || 0)
+        ),
+      });
+    }
+  }
+
+  const gridStyle = getComputedStyle(grid);
+  const cardStyle = getComputedStyle(card);
+  return {
+    card: { w: round(cardRect.width), h: round(cardRect.height), padding: `${cardStyle.paddingTop}/${cardStyle.paddingLeft}` },
+    body: {
+      h: round(rectOf(body).height),
+      scrollH: body.scrollHeight,
+      overflow: Math.max(0, body.scrollHeight - body.clientHeight),
+      beyondCard: round(Math.max(0, maxBottom - clip.bottom)),
+    },
+    gridAutoRows: gridStyle.gridAutoRows,
+    gridColumns: gridStyle.gridTemplateColumns,
+    atoms: atoms.length,
+    overlaps,
+    visibleOverlaps: overlaps.filter((o) => Math.min(o.w, o.h) >= VISIBLE_OVERLAP_PX).length,
+    contacts: overlaps.filter((o) => Math.min(o.w, o.h) < VISIBLE_OVERLAP_PX).length,
+    clipped,
+    hardClipped: clipped.filter((c) => !c.scroller).length,
+    spills,
+    ellipsized,
+    scrollers,
+    minFont,
+    smallFonts,
+    fontLoaded: typeof document.fonts !== 'undefined' ? document.fonts.check('16px Inter') : false,
+  };
+}
