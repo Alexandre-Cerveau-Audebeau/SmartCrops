@@ -522,14 +522,26 @@ export default function TipsBlock({
         {shown.length > 0 && (
           <Box
             component="ul"
-            sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-evenly', gap: '8px', listStyle: 'none', m: 0, p: 0 }}
+            data-tips-list
+            // `overflow: hidden` is the guard of the mobile lot (pre-flight
+            // D4): a list that cannot hold its rows keeps them inside itself,
+            // never under the invitation that follows (V37's mechanism).
+            sx={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'space-evenly', gap: '8px', listStyle: 'none', m: 0, p: 0 }}
           >
             {shown.map((tip) => row(tip, false))}
           </Box>
         )}
         {invites.map(invitation)}
         {weatherNote}
-        {unknownFoot}
+        {/* SMA-336 mobile lot, step 5 — arbitrage 4: when an invitation shares
+            the Medium card, the foot « N plantes sans exposition connue »
+            yields. Measured on a desktop card (566 × 273): one two-line tip,
+            its link, the 65 px invitation, the 17 px foot and « +N » are
+            211 px for the 193 the body has, and « Voir la case » passed
+            under the invitation's edge by 10.5 px; without the foot they are
+            182. The foot is a count with no gesture — the invitation is the
+            gesture — and it is back the moment no invitation is drawn. */}
+        {invites.length === 0 && unknownFoot}
         {moreButton(rest)}
       </>
     );

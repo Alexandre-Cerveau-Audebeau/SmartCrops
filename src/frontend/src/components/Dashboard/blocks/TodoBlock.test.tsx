@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
 import { UnitSystemProvider } from '../../../contexts/UnitSystemContext';
@@ -812,5 +812,136 @@ describe('TodoBlock — Small and the states', () => {
     const { widget } = renderBlock();
 
     expect(widget.getByRole('heading', { level: 2, name: 'To do today' })).toBeInTheDocument();
+  });
+});
+
+// ── SMA-336 mobile lot, step 5 (pre-flight D4, arbitrage 3). The Medium list
+// is `overflow: hidden` — what it cannot hold stays inside it, never under
+// « +N tâches → » (V34: measured on `5282852`, four two-line sentences of
+// 198 px in a 193 px list, the fourth printed under the button by 36 × 19 px
+// on a desktop) — and it is capped by MEASURE: only the whole rows that fit
+// are shown, the rest are hidden whole and counted in « +N ». The geometry is
+// stubbed here; the pixels are measured by the layout harness.
+describe('TodoBlock — Medium: the list clips, and caps its rows by measure (mobile lot, step 5)', () => {
+  class ManualResizeObserver {
+    static instances: ManualResizeObserver[] = [];
+    readonly targets = new Set<Element>();
+    private readonly callback: ResizeObserverCallback;
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback;
+      ManualResizeObserver.instances.push(this);
+    }
+    observe(target: Element) {
+      this.targets.add(target);
+    }
+    unobserve(target: Element) {
+      this.targets.delete(target);
+    }
+    disconnect() {
+      this.targets.clear();
+    }
+    fire() {
+      this.callback([], this as unknown as ResizeObserver);
+    }
+  }
+
+  /** The list answers `listHeight`, every task row 44 px (two lines), everything else zero. */
+  const listHeight = { value: 150 };
+  function stubGeometry() {
+    const original = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const height = this.hasAttribute('data-todo-list')
+        ? listHeight.value
+        : this.hasAttribute('data-todo-task')
+          ? 44
+          : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: height, width: 0, height, toJSON: () => ({}) } as DOMRect;
+    };
+    return () => {
+      Element.prototype.getBoundingClientRect = original;
+    };
+  }
+
+  let restore: () => void;
+
+  beforeEach(() => {
+    ManualResizeObserver.instances = [];
+    vi.stubGlobal('ResizeObserver', ManualResizeObserver);
+    listHeight.value = 150;
+    restore = stubGeometry();
+  });
+
+  afterEach(() => {
+    restore();
+    vi.unstubAllGlobals();
+  });
+
+  const shownRows = (card: HTMLElement) =>
+    [...card.querySelectorAll('[data-todo-list] > li')].filter((row) => !row.hasAttribute('data-todo-hidden'));
+  const hiddenRows = (card: HTMLElement) => [...card.querySelectorAll('[data-todo-hidden]')];
+
+  it('clips the list: overflow hidden, so no row can pass under the button (D4)', () => {
+    restore();
+    restore = () => {};
+    const { card } = renderBlock();
+    expect(rulesFor(card.querySelector('[data-todo-list]')!)).toContain('overflow:hidden');
+  });
+
+  it('with 150px for four 44px rows and 8px gaps, shows three tasks WHOLE, hides the fourth, and says « +3 tasks → »', () => {
+    // Six tasks in the scene: the spec's cap of four, then the measured cap of
+    // three (3 × 44 + 2 × 8 = 148 ≤ 150; four would need 200) — the rest, 6 − 3.
+    const { card, widget } = renderBlock();
+
+    expect(card.querySelectorAll('[data-todo-list] > li')).toHaveLength(4);
+    expect(shownRows(card)).toHaveLength(3);
+    const hidden = hiddenRows(card);
+    expect(hidden).toHaveLength(1);
+    expect(hidden[0]).toHaveAttribute('aria-hidden', 'true');
+    expect(rulesFor(hidden[0]!)).toContain('visibility:hidden');
+    expect(widget.getByRole('button', { name: '+3 tasks →' })).toBeInTheDocument();
+    // Packed from the top while a row is hidden: `space-evenly` would centre
+    // the overflowing rows and push the first one above the list's edge.
+    expect(rulesFor(card.querySelector('[data-todo-list]')!)).toContain('justify-content:flex-start');
+  });
+
+  it('shows the four rows again when the list has room — the observer fires, the button counts « +2 » as before', () => {
+    const { card, widget } = renderBlock();
+    expect(hiddenRows(card)).toHaveLength(1);
+
+    listHeight.value = 200;
+    act(() => {
+      for (const instance of ManualResizeObserver.instances) instance.fire();
+    });
+
+    expect(hiddenRows(card)).toHaveLength(0);
+    expect(shownRows(card)).toHaveLength(4);
+    expect(widget.getByRole('button', { name: '+2 tasks →' })).toBeInTheDocument();
+    expect(rulesFor(card.querySelector('[data-todo-list]')!)).toContain('justify-content:space-evenly');
+  });
+
+  it('never hides the first task: a list too short for one row still shows it', () => {
+    listHeight.value = 20;
+    const { card, widget } = renderBlock();
+    expect(shownRows(card)).toHaveLength(1);
+    expect(widget.getByRole('button', { name: '+5 tasks →' })).toBeInTheDocument();
+  });
+
+  it('with the invitation: the spec’s cap of two, and the measured one under it', () => {
+    listHeight.value = 44;
+    const { card, widget } = renderBlock({ weather: partial() });
+    expect(card.querySelectorAll('[data-todo-list] > li')).toHaveLength(2);
+    expect(shownRows(card)).toHaveLength(1);
+    expect(card.querySelector('[data-todo-invite]')).not.toBeNull();
+    // Two tasks for the one located garden, one shown: « +1 task → ».
+    expect(widget.getByRole('button', { name: '+1 task →' })).toBeInTheDocument();
+  });
+
+  it('hides nothing where nothing is measured — jsdom’s zero rects list the four tasks, as before', () => {
+    restore();
+    restore = () => {};
+    const { card, widget } = renderBlock();
+    expect(shownRows(card)).toHaveLength(4);
+    expect(hiddenRows(card)).toHaveLength(0);
+    expect(widget.getByRole('button', { name: '+2 tasks →' })).toBeInTheDocument();
   });
 });

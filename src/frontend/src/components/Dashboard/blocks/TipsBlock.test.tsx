@@ -856,3 +856,56 @@ describe('TipsBlock — states', () => {
     expect(card.textContent).not.toMatch(/quota|abonnement|subscription|pricing|tarif|plan\b/i);
   });
 });
+
+// ── SMA-336 mobile lot, step 5 (pre-flight D4, arbitrage 4). The Medium list
+// is `overflow: hidden`, and the foot « N plants with no known exposure »
+// yields when an invitation shares the card: measured on `5282852` at 1280 px
+// — one two-line tip, its link, the 65 px invitation, the 17 px foot and
+// « +N » are 211 px for the 193 the body has, and « See cell B3 → » passed
+// under the invitation's edge by 10.5 px; without the foot they are 182.
+describe('TipsBlock — Medium: the list clips, and the foot yields to an invitation (mobile lot, step 5)', () => {
+  /** Terrasse with two plants the catalog knows no exposure for, beside its tomato. */
+  const terrasseWithUnknown = oriented({
+    id: 'g1',
+    name: 'Terrasse',
+    cellsJson: JSON.stringify([{ row: 2, col: 0, infrastructure: 'wall' }]),
+    placements: [plant('tomato', 2, 1), plant('mystery', 0, 0), plant('mystery', 0, 1)],
+    placementCount: 3,
+  });
+
+  it('clips the list: overflow hidden, so no row can pass under the invitation (D4)', () => {
+    const { card } = renderBlock({ gardens: [terrasse, potager] });
+    expect(rulesFor(card.querySelector('[data-tips-list]')!)).toContain('overflow:hidden');
+  });
+
+  it('one tip and the orientation invitation: the foot is NOT drawn, the invitation and « See cell » are', () => {
+    const { card, widget } = renderBlock({ gardens: [terrasseWithUnknown, balcon] });
+
+    expect(rows(card)).toHaveLength(1);
+    expect(card.querySelector('[data-tips-invite="g2"]')).not.toBeNull();
+    expect(widget.getByRole('link', { name: 'See cell B3 →' })).toBeInTheDocument();
+    expect(card.querySelector('[data-tips-unknown]')).toBeNull();
+  });
+
+  it('the same gardens without the invitation: the foot is back, counted (D2)', () => {
+    const { card } = renderBlock({ gardens: [terrasseWithUnknown, potager] });
+
+    expect(card.querySelector('[data-tips-invite]')).toBeNull();
+    expect(card.querySelector('[data-tips-unknown]')).toHaveTextContent('2 plants with no known exposure');
+  });
+
+  it('with no tip at all and an invitation, the foot yields too — the invitation alone (S-7, kept)', () => {
+    const noTipUnknown = oriented({ id: 'g3', name: 'Potager du fond', placements: [plant('mystery', 0, 0)], placementCount: 1 });
+    const { card } = renderBlock({ gardens: [noTipUnknown, balcon] });
+
+    expect(card.querySelector('[data-tips-invite="g2"]')).not.toBeNull();
+    expect(card.querySelector('[data-tips-unknown]')).toBeNull();
+  });
+
+  it('Large keeps its foot beside its invitations: the yield is the Medium card’s alone', () => {
+    const { card } = renderBlock({ size: 'large', gardens: [terrasseWithUnknown, balcon] });
+
+    expect(card.querySelector('[data-tips-invite="g2"]')).not.toBeNull();
+    expect(card.querySelector('[data-tips-unknown]')).toHaveTextContent('2 plants with no known exposure');
+  });
+});

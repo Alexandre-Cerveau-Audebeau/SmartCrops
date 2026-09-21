@@ -17,6 +17,7 @@ import DashboardBlock from '../DashboardBlock';
 import IconDisc from '../IconDisc';
 import InviteState from '../InviteState';
 import { BLOCK_ICONS } from '../blockIcons';
+import { useRowBudget } from '../useRowBudget';
 import { monthLabel } from './plantCalendar';
 import { gardensWithoutWeather, todoTasks, type TodoTask, type TodoTaskKind } from './todoTasks';
 import { displayTemperature, nameList } from './weatherFormat';
@@ -70,6 +71,8 @@ interface Props {
 const MEDIUM_ROWS = 4;
 /** …and with an invitation sharing the card: « 2 + « +2 tâches → » » (`_spec.md` § 4, § 7). */
 const MEDIUM_ROWS_WITH_INVITE = 2;
+/** The 8 px between the rows of the Medium list — the same number the list declares, for the measured budget. */
+const MEDIUM_ROW_GAP = 8;
 
 /**
  * The glyph of each kind, matched path-for-path against the artboards:
@@ -141,6 +144,24 @@ export default function TodoBlock({
   /** Watering cannot be planned — the aggregate is down, or some gardens have no city. */
   const wateringUnknown = weatherUnavailable || missing.length > 0;
 
+  /**
+   * The Medium list's MEASURED cap (SMA-336 mobile lot, step 5 — arbitrage
+   * 3). The spec caps the rows at four (two with the invitation); on a
+   * desktop card four sentences of two lines are 198 px for the 193 the list
+   * has, and the fourth was printed under « +N tâches → » (V34: the list,
+   * `flex: 1; min-height: 0` without `overflow`, shrank below its rows, which
+   * spilled under the button — pre-flight cause C4). The rows are now
+   * observed (`useRowBudget`): only whole rows that fit are shown, the rest
+   * are hidden whole and counted in « +N ». Unmeasured — jsdom, the first
+   * paint — the budget is infinite and the spec's cap stands alone. The row
+   * count is zero outside Medium so the observer is re-armed on a resize of
+   * the widget, and the ref is only attached in Medium.
+   */
+  const mediumCap = missing.length > 0 ? MEDIUM_ROWS_WITH_INVITE : MEDIUM_ROWS;
+  const mediumShown = size === 'medium' ? tasks.slice(0, mediumCap) : [];
+  const mediumListRef = useRef<HTMLUListElement>(null);
+  const mediumBudget = useRowBudget(mediumListRef, mediumShown.length, MEDIUM_ROW_GAP);
+
   const toggle = (id: string) =>
     setDone((current) => {
       const next = new Set(current);
@@ -189,7 +210,7 @@ export default function TodoBlock({
     return task.stale ? t('dashboard.blocks.todo.stale', { task: sentence }) : sentence;
   };
 
-  const row = (task: TodoTask, grouped: boolean, checkbox: boolean) => {
+  const row = (task: TodoTask, grouped: boolean, checkbox: boolean, hidden = false) => {
     const Icon = TASK_ICONS[task.kind];
     const text = label(task, grouped);
     const ticked = done.has(task.id);
@@ -199,7 +220,17 @@ export default function TodoBlock({
         key={task.id}
         data-todo-task={task.kind}
         data-todo-stale={task.stale ? '' : undefined}
-        sx={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}
+        // Beyond the measured budget: in the DOM for the observer, out of
+        // sight and out of the reading — what is said is what is shown.
+        data-todo-hidden={hidden ? '' : undefined}
+        aria-hidden={hidden || undefined}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          minWidth: 0,
+          visibility: hidden ? 'hidden' : 'visible',
+        }}
       >
         {checkbox ? (
           <Checkbox
@@ -354,26 +385,40 @@ export default function TodoBlock({
         </>
       );
     }
-    const cap = invitation ? MEDIUM_ROWS_WITH_INVITE : MEDIUM_ROWS;
-    const shown = tasks.slice(0, cap);
-    const rest = tasks.length - shown.length;
+    const shown = mediumShown;
+    // The spec's cap, then the measured one: never more rows than fit whole.
+    // Always one — a card that cannot hold a single task shows it clipped
+    // rather than an empty list under « +N ».
+    const visible = Math.max(1, Math.min(shown.length, mediumBudget));
+    const rest = tasks.length - visible;
+    const overflowing = visible < shown.length;
     return (
       <>
         <Box
           component="ul"
+          ref={mediumListRef}
+          data-todo-list
           sx={{
             flex: 1,
             minHeight: 0,
+            // The guard of the mobile lot (pre-flight D4): what the list
+            // cannot hold stays INSIDE it, never under the invitation or the
+            // button that follow.
+            overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'space-evenly',
-            gap: '8px',
+            // `space-evenly` falls back to CENTER when the rows overflow —
+            // the V26 trap: the first row would be pushed above the list's
+            // edge. Packed from the top while a row is hidden; spread as the
+            // artboard draws it when everything fits.
+            justifyContent: overflowing ? 'flex-start' : 'space-evenly',
+            gap: `${MEDIUM_ROW_GAP}px`,
             listStyle: 'none',
             m: 0,
             p: 0,
           }}
         >
-          {shown.map((task) => row(task, gardens.length <= 1, false))}
+          {shown.map((task, index) => row(task, gardens.length <= 1, false, index >= visible))}
         </Box>
         {invitation}
         {weatherNote}
