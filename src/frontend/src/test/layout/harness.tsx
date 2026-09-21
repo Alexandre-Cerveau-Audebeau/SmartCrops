@@ -1,3 +1,6 @@
+// The clock first (#8): the fixtures below are dated on the harness's instant
+// the moment their module evaluates, and so is everything React draws.
+import './freeze';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
@@ -6,6 +9,7 @@ import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
 import { createAppTheme } from '../../theme';
 import DashboardGrid from '../../components/Dashboard/DashboardGrid';
 import { LAYOUT_SCENES, sceneWidget, type LayoutScene } from './scenes';
+import { encodeResults } from './encode';
 import { RESULTS_ID, measureCard, type CardMeasure } from './measure';
 
 /**
@@ -23,17 +27,22 @@ import { RESULTS_ID, measureCard, type CardMeasure } from './measure';
  * under the 600 px breakpoint, as the pre-flight did), `theme` is `light` or
  * `dark`, `lang` the language — set on i18next itself, which is what the
  * widgets read; no widget reads the language context, and nothing is written
- * to the browser's storage — `scene` an optional single scene.
+ * to the browser's storage — `scene` an optional single scene; `clock` and
+ * `freeze` are read by `freeze.ts` before anything else (#8).
  *
  * `fetch` is disabled before anything mounts: no widget of the scene calls
  * the network at render, and none may (never a real provider call).
+ *
+ * Every line of progress is also written to the console (`console.log`):
+ * Chrome forwards it to its stderr (`--enable-logging=stderr`), which is how a
+ * run that is killed for taking too long still names the scene it was on.
  */
 
 export interface SceneMeasure extends CardMeasure {
   scene: string;
   key: LayoutScene['key'];
   size: LayoutScene['size'];
-  /** Rows a measured cap hid whole (`useRowBudget`): the days of the weather card, the tasks of the To-do card. */
+  /** Rows a measured cap hid whole (`useRowBudget`): the days of the weather card, the tasks of the To-do card, the tips of the Tips card. */
   hiddenRows: number;
   /** The width each garden NAME can take on a Medium Gardens row — its group's — (arbitrage 5: 130 px at least on a phone); empty elsewhere. */
   gardenNameWidths: number[];
@@ -46,10 +55,12 @@ declare global {
   }
 }
 
+/** A promise that settles after `ms` of the page's (virtual) time. */
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/** A line of progress in the document, so a run that stalls says where (read back by the test on failure). */
+/** A line of progress in the document AND on the console, so a run that stalls or is killed says where. */
 function progress(text: string) {
+  console.log(`[layout] ${text}`);
   let pre = document.getElementById(`${RESULTS_ID}-progress`);
   if (!pre) {
     pre = document.createElement('pre');
@@ -76,6 +87,7 @@ async function settle() {
 
 /** One scene under the app's providers and theme — a tree, not a component: this file is a script, not a module Fast Refresh could reload. */
 function sceneTree(scene: LayoutScene, mode: 'light' | 'dark') {
+  /** The grid's edit callbacks — never fired: the harness measures, it never edits. */
   const noop = () => {};
   return (
     <MemoryRouter>
@@ -95,6 +107,11 @@ function sceneTree(scene: LayoutScene, mode: 'light' | 'dark') {
   );
 }
 
+/**
+ * The run: reads the query string, loads the fonts, mounts and measures each
+ * scene in turn, and ends the document on the results `<pre>` — or, with
+ * `hold=1`, leaves the one scene on the page.
+ */
 async function main() {
   progress('start');
   window.fetch = () => Promise.reject(new Error('The layout harness never calls the network.'));
@@ -136,7 +153,7 @@ async function main() {
       scene: scene.name,
       key: scene.key,
       size: scene.size,
-      hiddenRows: card.querySelectorAll('[data-weather-day-hidden], [data-todo-hidden]').length,
+      hiddenRows: card.querySelectorAll('[data-weather-day-hidden], [data-todo-hidden], [data-tips-hidden]').length,
       gardenNameWidths: Array.from(card.querySelectorAll('[data-garden-row-group]')).map(
         (group) => Math.round(group.getBoundingClientRect().width * 10) / 10
       ),
@@ -149,10 +166,13 @@ async function main() {
 
   window.__layoutResults = results;
   if (hold) return;
-  const json = JSON.stringify(results);
-  // Base64 of the UTF-8 bytes: the dump must survive `--dump-dom`'s HTML serialisation untouched.
-  const encoded = btoa(String.fromCharCode(...new TextEncoder().encode(json)));
-  document.body.innerHTML = `<pre id="${RESULTS_ID}">${encoded}</pre>`;
+  // The results as TEXT — set on a node, never parsed as markup: base64 of
+  // the UTF-8 bytes (`encode.ts`), so `--dump-dom`'s HTML serialisation
+  // hands them back untouched.
+  const pre = document.createElement('pre');
+  pre.id = RESULTS_ID;
+  pre.textContent = encodeResults(results);
+  document.body.replaceChildren(pre);
 }
 
 main().catch((error: unknown) => {

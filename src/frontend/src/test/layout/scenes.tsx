@@ -10,6 +10,7 @@ import { dashboardFixture, gardenFixture, varietyFixture } from '../fixtures/das
 import { placement } from '../fixtures/placements';
 import { linkFixture, locationFixture, weatherFixture, weekFixture } from '../fixtures/weather';
 import { gardenViewOf } from '../../utils/gardenStats';
+import { LAYOUT_NOW_MS } from './clock';
 import type { DashboardBlockKey, DashboardSize } from '../../types/Dashboard';
 import type { DashboardGardenData, DashboardVarietyData } from '../../types/DashboardData';
 import type { DashboardWeatherData } from '../../types/DashboardWeather';
@@ -23,8 +24,9 @@ import type { DashboardWeatherData } from '../../types/DashboardWeather';
  * Three gardens — Terrasse (10 × 8, south, a wall, a description), Balcon sud
  * (12 × 4, ornamental, NO orientation: the Tips invitation), Potager du fond
  * (13 × 6) — sixteen varieties and sixty-four placements, calendars keyed on
- * the CURRENT month so the calendar widget is never idle whichever month the
- * suite runs in, and the weather of Écully on the shared five-day week
+ * the month of the harness's FIXED instant (`clock.ts`, fix round 1 #8) so
+ * the calendar widget is never idle and the measure is the same whichever
+ * month the suite runs in, and the weather of Écully on the shared five-day week
  * (`weekFixture`: 14:30, six slots from 14 h, wind on Tuesday). Two weather
  * states: every garden located, and Balcon sud without a city — the
  * « 2/3 localisé » chip and the To-do / Weather invitations. Two more scenes
@@ -39,11 +41,14 @@ const MONTH_TOKENS = [
   'january', 'february', 'march', 'april', 'may', 'june',
   'july', 'august', 'september', 'october', 'november', 'december',
 ] as const;
-const thisMonth = new Date().getMonth() + 1;
+/** The month the scenes are dated on — the harness's instant, never the machine's (#8): September, whichever month the suite runs in. */
+const thisMonth = new Date(LAYOUT_NOW_MS).getUTCMonth() + 1;
+/** The calendar token of a month number, wrapping past December. */
 const token = (month: number) => MONTH_TOKENS[(month - 1 + 12) % 12]!;
 const NOW = token(thisMonth);
 const OPPOSITE = token(thisMonth + 6);
 
+/** A catalog variety of the scene, over the fixture's defaults. */
 const variety = (
   plantId: string,
   commonName: string,
@@ -70,8 +75,10 @@ export const varieties: DashboardVarietyData[] = [
   variety('strawberry', 'fraisier', 'Fragaria × ananassa', { count: 3, cells: 3, gardenIds: ['g3'], wateringNeedLevel: 'Average', minToleratedTempC: null, harvestPeriod: 'may-june', floweringSeason: 'Spring' }),
 ];
 
+/** One placement of a variety at a cell. */
 const plant = (plantId: string, row: number, col: number) =>
   placement({ id: `${plantId}-${row}-${col}`, plantId, startRow: row, startCol: col });
+/** The same variety on several cells. */
 const many = (plantId: string, cells: Array<[number, number]>) =>
   cells.map(([row, col]) => plant(plantId, row, col));
 
@@ -187,6 +194,7 @@ export const weatherPartial = (): DashboardWeatherData =>
     ]
   );
 
+/** The `GardensBlock` view of the weather: each garden's location, or null when it has none. */
 const gardensWeather = (weather: DashboardWeatherData): GardensWeather => ({
   status: 'ready',
   byGarden: new Map(
@@ -198,6 +206,7 @@ const gardensWeather = (weather: DashboardWeatherData): GardensWeather => ({
   ),
 });
 
+/** The callbacks the scenes never fire. */
 const noop = () => {};
 
 export interface LayoutScene {

@@ -110,8 +110,10 @@ export const VISIBLE_OVERLAP_PX = 5;
 /** The id of the `<pre>` the harness page ends on — its results, base64 — and the prefix of its error and progress lines. */
 export const RESULTS_ID = 'layout-results';
 
+/** To a tenth of a pixel — what the report prints. */
 const round = (v: number) => Math.round(v * 10) / 10;
 
+/** A box with its width and height, from any rect-like. */
 const boxOf = (r: { left: number; top: number; right: number; bottom: number }): Box => ({
   left: r.left,
   top: r.top,
@@ -121,8 +123,10 @@ const boxOf = (r: { left: number; top: number; right: number; bottom: number }):
   height: r.bottom - r.top,
 });
 
+/** The element's border box. */
 const rectOf = (el: Element): Box => boxOf(el.getBoundingClientRect());
 
+/** The intersection of two boxes — its width or height is ≤ 0 when they do not meet. */
 const intersect = (a: Box, b: Box): Box =>
   boxOf({
     left: Math.max(a.left, b.left),
@@ -131,6 +135,7 @@ const intersect = (a: Box, b: Box): Box =>
     bottom: Math.min(a.bottom, b.bottom),
   });
 
+/** The element's padding box — its border box less its borders — which is what its own `overflow` clips to. */
 const paddingBox = (el: Element): Box => {
   const b = el.getBoundingClientRect();
   const cs = getComputedStyle(el);
@@ -163,6 +168,7 @@ function textRect(el: Element): Box | null {
   return r;
 }
 
+/** The element's OWN text — its direct text nodes, whitespace collapsed. */
 const ownText = (el: Element): string =>
   Array.from(el.childNodes)
     .filter((node) => node.nodeType === Node.TEXT_NODE)
@@ -171,6 +177,7 @@ const ownText = (el: Element): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
+/** The alpha of a CSS colour: 0 for `transparent`, the fourth channel of an `rgba()`, 1 otherwise. */
 const alpha = (color: string): number => {
   const m = /rgba?\(([^)]+)\)/.exec(color || '');
   if (!m) return color && color !== 'transparent' ? 1 : 0;
@@ -194,6 +201,7 @@ function dataTag(el: Element, stop: Element): string {
   return '';
 }
 
+/** Drawn at all: not `display: none`, not `visibility: hidden`, not transparent, and wider and taller than a pixel. */
 function visible(el: Element): boolean {
   const cs = getComputedStyle(el);
   if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false;
@@ -201,7 +209,9 @@ function visible(el: Element): boolean {
   return b.width > 1 && b.height > 1;
 }
 
+/** The style clips its overflow on at least one axis. */
 const clips = (cs: CSSStyleDeclaration) => cs.overflowX !== 'visible' || cs.overflowY !== 'visible';
+/** …and lets it scroll (`auto` or `scroll`) rather than hiding it. */
 const scrolls = (cs: CSSStyleDeclaration) => /auto|scroll/.test(cs.overflowX + cs.overflowY);
 
 /** The nearest ancestor that clips, up to the card, and whether it scrolls. */
@@ -253,6 +263,7 @@ function occluders(card: Element): Occluder[] {
   return found;
 }
 
+/** The box less what the sticky occluders paint over it — an occluder hides neither its own subtree nor an ancestor. */
 function occlude(box: Box, el: Element, list: Occluder[]): Box {
   let out = box;
   for (const occ of list) {
@@ -278,6 +289,13 @@ interface Atom {
   display: string;
 }
 
+/**
+ * Measures ONE dashboard card — the `[data-widget]` element — in the engine it
+ * is mounted in: its atoms, their visible overlaps, what the card or an
+ * `overflow: hidden` ancestor clips, the text drawn past its block, the
+ * ellipsized lines, the scrolling zones, the smallest font, and the grid's
+ * row and column templates. Pure reading: nothing in the DOM is changed.
+ */
 export function measureCard(card: HTMLElement): CardMeasure {
   const slot = card.parentElement!.parentElement!;
   const grid = slot.parentElement!;
@@ -331,6 +349,7 @@ export function measureCard(card: HTMLElement): CardMeasure {
       const A = atoms[a]!;
       const B = atoms[b]!;
       if (A.el.contains(B.el) || B.el.contains(A.el)) continue;
+      /** A painted box or panel: two of them may meet by design (a chip on its tinted row), so only text and glyphs count against them. */
       const boxes = (k: Atom['kind']) => k === 'box' || k === 'panel';
       if (boxes(A.kind) && boxes(B.kind)) continue;
       if (A.vis.width <= 0 || A.vis.height <= 0 || B.vis.width <= 0 || B.vis.height <= 0) continue;

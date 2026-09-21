@@ -9,6 +9,7 @@ import {
   makeOutDir,
   measureRun,
   removeOutDir,
+  terminateChildren,
   writePage,
   type LayoutRun,
 } from './chrome.mjs';
@@ -30,13 +31,16 @@ import {
  * with `--dump-dom` (`chrome.mjs`). The page mounts the twenty-nine scenes of
  * `scenes.tsx` through the real `DashboardGrid`, one after the other, and
  * measures each card with `measure.ts`; the dump is one `<pre>` of results.
- * Four runs, in parallel: French at 360 and 390 px (the two phone widths of
+ * Six runs, in parallel: French at 360 and 390 px (the two phone widths of
  * the visual pass; the phone is emulated on the `#page` width because
  * headless Chrome opens no window under 500 px, and 500 is still under the
  * 600 px breakpoint), French at 1280 px (the desktop — its 24 scenes at zero
- * on `5282852` are pinned here, and the four this lot corrected), and English
- * at 360, where « 2 PM » is wider than « 14 h ». Day and night were measured
- * identical on 290 runs by the pre-flight, so the light theme alone runs.
+ * on `5282852` are pinned here, and the four this lot corrected), English at
+ * 360, where « 2 PM » is wider than « 14 h » — and, for the harness's own
+ * guards (fix round 1, #4 and #8), French at 360 a SECOND time, identical,
+ * and French at 360 with the wall clock told another day. Day and night were
+ * measured identical on 290 runs by the pre-flight, so the light theme alone
+ * runs.
  *
  * What it asserts, scene by scene, at every width: NO visible overlap between
  * two atoms of a card, NOTHING clipped by the card or by an `overflow:
@@ -48,18 +52,37 @@ import {
  * Chrome: `CHROME_BIN`, else the usual names on the PATH, else the usual
  * install paths. Without Chrome the suite is SKIPPED on a workstation and
  * FAILS on CI (`CI` is set there): the workflow's own step checks the browser
- * first, and a layout suite that skips on CI would guard nothing.
+ * first, and a layout suite that skips on CI would guard nothing. Every run is
+ * bounded (S1): a browser past its delay is killed, and every browser still
+ * running is killed before the temp folder goes, whether the setup passed or
+ * threw.
  */
 
 const PHONE_WIDTHS = [360, 390] as const;
 const DESKTOP_WIDTH = 1280;
+/** A day in another month and another year: the wall clock the sixth run is told (#8). */
+const ANOTHER_DAY = Date.UTC(2027, 1, 3, 15, 30, 0);
 
 const RUNS: LayoutRun[] = [
   { id: 'fr@360', lang: 'fr', vw: 360 },
+  // The twin of `fr@360`: the same language, the same width — the
+  // determinism guard compares the two, box for box (#4).
+  { id: 'fr@360-twin', lang: 'fr', vw: 360 },
   { id: 'fr@390', lang: 'fr', vw: 390 },
   { id: `fr@${DESKTOP_WIDTH}`, lang: 'fr', vw: DESKTOP_WIDTH },
   { id: 'en@360', lang: 'en', vw: 360 },
+  // `fr@360` again, with the page told the machine's clock says February
+  // 2027: the harness freezes its own instant over it, so the measurements
+  // must be the same (#8).
+  { id: 'fr@360-clock', lang: 'fr', vw: 360, clockMs: ANOTHER_DAY },
 ];
+
+/** A run by its id — never by its position, which the list above does not promise. */
+const runOf = (id: string): LayoutRun => {
+  const run = RUNS.find((candidate) => candidate.id === id);
+  if (!run) throw new Error(`No layout run ${id}`);
+  return run;
+};
 
 const CHROME = findChrome();
 
@@ -86,30 +109,51 @@ function defects(scene: SceneMeasure) {
   };
 }
 
+/** The measurement of one scene in one run, or a throw that names both. */
 const sceneOf = (run: LayoutRun, name: string): SceneMeasure => {
   const scene = results.get(run.id)?.get(name);
   if (!scene) throw new Error(`No measurement for ${name} in ${run.id}`);
   return scene;
 };
 
+/** Every scene of a run, keyed by name. */
+const scenesOf = (run: LayoutRun): Map<string, SceneMeasure> => {
+  const scenes = results.get(run.id);
+  if (!scenes) throw new Error(`No measurements for ${run.id}`);
+  return scenes;
+};
+
 describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot, D7)', () => {
   beforeAll(async () => {
     outDir = makeOutDir();
-    await buildHarness(outDir);
-    writePage(outDir);
-    const measured = await Promise.all(RUNS.map((run) => measureRun(CHROME!, outDir, run)));
-    RUNS.forEach((run, index) => {
-      results.set(run.id, new Map(measured[index]!.map((scene) => [scene.scene, scene])));
-    });
+    try {
+      await buildHarness(outDir);
+      writePage(outDir);
+      // Every run settles — measured, or killed past its delay — before the
+      // first failure is raised: no browser is left behind a thrown hook.
+      const settled = await Promise.allSettled(RUNS.map((run) => measureRun(CHROME!, outDir, run)));
+      settled.forEach((outcome, index) => {
+        if (outcome.status === 'fulfilled') {
+          results.set(RUNS[index]!.id, new Map(outcome.value.map((scene) => [scene.scene, scene])));
+        }
+      });
+      const failed = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
+      if (failed) throw failed.reason;
+    } finally {
+      // Whether the setup passed or threw: nothing of Chrome survives it.
+      await terminateChildren();
+    }
   }, 180_000);
 
-  afterAll(() => {
+  afterAll(async () => {
+    // The profiles are deleted only once every browser has exited.
+    await terminateChildren();
     if (outDir) removeOutDir(outDir);
   });
 
   it('measured every scene, in Inter, in every run', () => {
     for (const run of RUNS) {
-      const scenes = results.get(run.id)!;
+      const scenes = scenesOf(run);
       expect(scenes.size, run.id).toBe(LAYOUT_SCENES.length);
       for (const scene of scenes.values()) {
         expect(scene.fontLoaded, `${run.id} ${scene.scene}: Inter not loaded`).toBe(true);
@@ -126,8 +170,8 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
 
   describe('the phone (360 and 390 px)', () => {
     it.each(PHONE_WIDTHS)('is one column of 328 / 358 px cards, on rows of 200px at least (D1) — at %i px', (width) => {
-      const run = RUNS.find((r) => r.lang === 'fr' && r.vw === width)!;
-      for (const scene of results.get(run.id)!.values()) {
+      const run = runOf(`fr@${width}`);
+      for (const scene of scenesOf(run).values()) {
         expect(scene.gridAutoRows, `${run.id} ${scene.scene}`).toBe('minmax(200px, auto)');
         expect(scene.card.w, `${run.id} ${scene.scene}`).toBe(width - 32);
         expect(scene.card.h, `${run.id} ${scene.scene}`).toBeGreaterThanOrEqual(200);
@@ -135,30 +179,29 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
     });
 
     it.each(PHONE_WIDTHS)('gives each garden name 130 px at least on the Medium row at %i px (N1, arbitrage 5)', (width) => {
-      const run = RUNS.find((r) => r.lang === 'fr' && r.vw === width)!;
-      const scene = sceneOf(run, 'gardens-medium');
+      const scene = sceneOf(runOf(`fr@${width}`), 'gardens-medium');
       expect(scene.gardenNameWidths).toHaveLength(3);
       for (const nameWidth of scene.gardenNameWidths) expect(nameWidth).toBeGreaterThanOrEqual(130);
     });
 
     it('draws the six hour slots at 360 px with room for each (V36, arbitrage 1)', () => {
-      const scene = sceneOf(RUNS[0]!, 'weather-medium');
+      const scene = sceneOf(runOf('fr@360'), 'weather-medium');
       expect(scene.card.h).toBeGreaterThan(300);
       expect(scene.scrollers).toEqual([]);
     });
 
     it('shows the ten calendar rows and the twelve month initials at 360 px (V38, arbitrage 2)', () => {
-      const scene = sceneOf(RUNS[0]!, 'month-large');
+      const scene = sceneOf(runOf('fr@360'), 'month-large');
       expect(scene.scrollers.filter((s) => s.axis.includes('y'))).toEqual([]);
       expect(scene.ellipsized.filter((e) => e.where.startsWith('month-axis'))).toEqual([]);
     });
   });
 
   describe(`the desktop (${DESKTOP_WIDTH} px) — pinned as the pre-flight measured it`, () => {
-    const desktop = RUNS[2]!;
+    const desktop = runOf(`fr@${DESKTOP_WIDTH}`);
 
     it('keeps the card sizes of the 273px grid: 273 × 273, 566 × 273, 566 × 566', () => {
-      for (const scene of results.get(desktop.id)!.values()) {
+      for (const scene of scenesOf(desktop).values()) {
         const expected = scene.size === 'small' ? [273, 273] : scene.size === 'medium' ? [566, 273] : [566, 566];
         expect([scene.card.w, scene.card.h], scene.scene).toEqual(expected);
       }
@@ -184,15 +227,42 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       expect(sceneOf(desktop, 'todo-medium-partial').hiddenRows).toBe(0);
       expect(sceneOf(desktop, 'weather-large').hiddenRows).toBe(0);
     });
+
+    it('measures the Medium tips too (#2): two tips that fit whole hide nothing, on the short and the long garden names', () => {
+      expect(sceneOf(desktop, 'tips-medium').hiddenRows).toBe(0);
+      expect(sceneOf(desktop, 'tips-medium-long').hiddenRows).toBe(0);
+    });
   });
 
-  it('reads the same measurements twice: the harness is deterministic', () => {
-    // Guards the harness itself: a card measured differently on two identical
-    // runs would make every assertion above a coin toss.
-    const first = results.get('fr@360')!;
-    for (const [name, scene] of first) {
-      const twin = results.get('en@360')!.get(name)!;
-      expect(twin.card.w, name).toBe(scene.card.w);
-    }
+  describe('the harness itself', () => {
+    it('reads the same measurements twice: two identical runs agree on every scene, box for box (#4)', () => {
+      // Guards the harness: a card measured differently on two identical
+      // runs would make every assertion above a coin toss. `fr@360-twin` is
+      // `fr@360` again — the whole measurement is compared, not a width.
+      const twin = scenesOf(runOf('fr@360-twin'));
+      for (const [name, scene] of scenesOf(runOf('fr@360'))) {
+        expect(twin.get(name), name).toEqual(scene);
+      }
+    });
+
+    it('does not follow the machine’s date: told another day, the same run measures the same, box for box (#8)', () => {
+      // The page is told the wall clock says 3 February 2027; the harness
+      // freezes its own instant over it (`freeze.ts`), so the fixtures'
+      // months, the calendar's column and the relative dates do not move.
+      const other = scenesOf(runOf('fr@360-clock'));
+      for (const [name, scene] of scenesOf(runOf('fr@360'))) {
+        expect(other.get(name), name).toEqual(scene);
+      }
+    });
+
+    it('draws the same card frame in both languages: fr@360 and en@360 share the card widths (language parity)', () => {
+      // Not determinism — the twin above is that: the frame comes from the
+      // grid track, and « 2 PM » wider than « 14 h » may only change what
+      // is drawn inside it.
+      const english = scenesOf(runOf('en@360'));
+      for (const [name, scene] of scenesOf(runOf('fr@360'))) {
+        expect(english.get(name)?.card.w, name).toBe(scene.card.w);
+      }
+    });
   });
 });
