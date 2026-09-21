@@ -1,7 +1,7 @@
-import { cleanup, fireEvent, render, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
 import { UnitSystemProvider } from '../../../contexts/UnitSystemContext';
@@ -907,5 +907,150 @@ describe('TipsBlock — Medium: the list clips, and the foot yields to an invita
 
     expect(card.querySelector('[data-tips-invite="g2"]')).not.toBeNull();
     expect(card.querySelector('[data-tips-unknown]')).toHaveTextContent('2 plants with no known exposure');
+  });
+});
+
+// ── SMA-336 mobile lot, fix round 1, #2 (GitHub `4059024239`): the Medium
+// list is capped by MEASURE, the To-do card's pattern (arbitrage 3). A tip is
+// a sentence of unbounded garden and plant names over its link: on a narrow
+// card it wraps to three lines and stands taller than its slot, and the
+// `overflow: hidden` of D4 would cut it through a line. Only the whole rows
+// that fit are shown; the rest are hidden whole and counted in « +N ». The
+// foot still yields to an invitation (arbitrage 4, unchanged). The geometry
+// is stubbed here; the pixels are the layout harness's.
+describe('TipsBlock — Medium: the rows are capped by measure, whole (fix round 1, #2)', () => {
+  class ManualResizeObserver {
+    static instances: ManualResizeObserver[] = [];
+    readonly targets = new Set<Element>();
+    private readonly callback: ResizeObserverCallback;
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback;
+      ManualResizeObserver.instances.push(this);
+    }
+    observe(target: Element) {
+      this.targets.add(target);
+    }
+    unobserve(target: Element) {
+      this.targets.delete(target);
+    }
+    disconnect() {
+      this.targets.clear();
+    }
+    fire() {
+      this.callback([], this as unknown as ResizeObserver);
+    }
+  }
+
+  /** The page believes it is under 600px: `useMediaQuery(down('sm'))` answers true. */
+  const stubPhone = () =>
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes('max-width:599.95px'),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }))
+    );
+
+  /** The list answers `listHeight`; every tip row a THREE-line sentence over its link — 3 × 20.3 + 4 + 20 ≈ 85 px; everything else zero. */
+  const listHeight = { value: 150 };
+  const ROW = 85;
+  /** Installs that geometry on every element; returns the restore. */
+  function stubGeometry() {
+    const original = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const height = this.hasAttribute('data-tips-list') ? listHeight.value : this.hasAttribute('data-tips-tip') ? ROW : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: height, width: 0, height, toJSON: () => ({}) } as DOMRect;
+    };
+    return () => {
+      Element.prototype.getBoundingClientRect = original;
+    };
+  }
+
+  let restore: () => void;
+
+  beforeEach(() => {
+    ManualResizeObserver.instances = [];
+    vi.stubGlobal('ResizeObserver', ManualResizeObserver);
+    listHeight.value = 150;
+    restore = stubGeometry();
+  });
+
+  afterEach(() => {
+    restore();
+    vi.unstubAllGlobals();
+  });
+
+  /** The tip rows within the measured budget. */
+  const shownRows = (card: HTMLElement) => rows(card).filter((row) => !row.hasAttribute('data-tips-hidden'));
+  /** The tip rows hidden whole beyond it. */
+  const hiddenRows = (card: HTMLElement) => [...card.querySelectorAll('[data-tips-hidden]')];
+
+  it.each([
+    ['on a phone (under 600px)', true],
+    ['on a desktop', false],
+  ])('%s: two three-line tips in 150px — the first shown WHOLE, the second hidden whole, « +2 tips → »', (_where, phone) => {
+    if (phone) stubPhone();
+    // Three tips on Terrasse and Potager: the spec's two slots, then the
+    // measured cap of one (85 ≤ 150; two would need 85 + 8 + 85 = 178) — the
+    // rest, 3 − 1.
+    const { card, widget } = renderBlock({ gardens: [terrasse, potager] });
+
+    expect(rows(card)).toHaveLength(2);
+    expect(shownRows(card)).toHaveLength(1);
+    const hidden = hiddenRows(card);
+    expect(hidden).toHaveLength(1);
+    expect(hidden[0]).toHaveAttribute('aria-hidden', 'true');
+    expect(rulesFor(hidden[0]!)).toContain('visibility:hidden');
+    expect(widget.getByRole('button', { name: '+2 tips →' })).toBeInTheDocument();
+    // Packed from the top while a row is hidden.
+    expect(rulesFor(card.querySelector('[data-tips-list]')!)).toContain('justify-content:flex-start');
+    expect(rulesFor(card.querySelector('[data-tips-list]')!)).toContain('overflow:hidden');
+  });
+
+  it('shows both tips again when the list has room — the observer fires, « +1 tip → » as before', () => {
+    const { card, widget } = renderBlock({ gardens: [terrasse, potager] });
+    expect(hiddenRows(card)).toHaveLength(1);
+
+    listHeight.value = 200;
+    act(() => {
+      for (const instance of ManualResizeObserver.instances) instance.fire();
+    });
+
+    expect(hiddenRows(card)).toHaveLength(0);
+    expect(shownRows(card)).toHaveLength(2);
+    expect(widget.getByRole('button', { name: '+1 tip →' })).toBeInTheDocument();
+    expect(rulesFor(card.querySelector('[data-tips-list]')!)).toContain('justify-content:space-evenly');
+  });
+
+  it('never hides the first tip: a list too short for one row still shows it — the To-do card’s rule', () => {
+    listHeight.value = 40;
+    const { card, widget } = renderBlock({ gardens: [terrasse, potager] });
+    expect(shownRows(card)).toHaveLength(1);
+    expect(widget.getByRole('button', { name: '+2 tips →' })).toBeInTheDocument();
+  });
+
+  it('with the invitation: the one slot the spec leaves, measured too, and the foot still yields (arbitrage 4)', () => {
+    listHeight.value = 60;
+    const { card, widget } = renderBlock();
+    expect(rows(card)).toHaveLength(1);
+    expect(shownRows(card)).toHaveLength(1);
+    expect(card.querySelector('[data-tips-invite="g2"]')).not.toBeNull();
+    expect(card.querySelector('[data-tips-unknown]')).toBeNull();
+    expect(widget.getByRole('button', { name: '+2 tips →' })).toBeInTheDocument();
+  });
+
+  it('hides nothing where nothing is measured — jsdom’s zero rects list the two tips, as before', () => {
+    restore();
+    restore = () => {};
+    const { card, widget } = renderBlock({ gardens: [terrasse, potager] });
+    expect(shownRows(card)).toHaveLength(2);
+    expect(hiddenRows(card)).toHaveLength(0);
+    expect(widget.getByRole('button', { name: '+1 tip →' })).toBeInTheDocument();
   });
 });

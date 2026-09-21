@@ -21,6 +21,7 @@ import IconDisc from '../IconDisc';
 import InviteState from '../InviteState';
 import { BLOCK_ICONS } from '../blockIcons';
 import { gardenTypeIcon } from '../gardenTypeIcons';
+import { useRowBudget } from '../useRowBudget';
 import { gardenAdvice, type GardenAdvice, type Tip, type TipKind } from './gardenAdvice';
 import { nameList } from './weatherFormat';
 import { weekdayLong } from './weatherTime';
@@ -76,6 +77,8 @@ interface Props {
  * card never grows past its six lines whatever the account holds.
  */
 const MEDIUM_SLOTS = 2;
+/** The 8 px between the rows of the Medium list — the same number the list declares, for the measured budget. */
+const MEDIUM_ROW_GAP = 8;
 
 /**
  * Tips a Large card lists at rest — the frozen design's cap of TEN data rows
@@ -155,6 +158,23 @@ export default function TipsBlock({
   // walks every garden and every placement and rebuilds three catalog maps.
   const advice = useMemo(() => gardenAdvice(gardens, views, varieties, weather), [gardens, views, varieties, weather]);
   const { tips, byGarden, gardensWithoutOrientation, unknownExposure } = advice;
+
+  /**
+   * The Medium list's MEASURED cap (fix round 1, #2 — GitHub `4059024239`),
+   * the To-do card's pattern (arbitrage 3): the spec's two slots, then only
+   * the whole rows that FIT the list's height. A tip is a sentence of
+   * unbounded garden and plant names over a link line; on a narrow card it
+   * can wrap to three lines and stand taller than its slot, and the list's
+   * `overflow: hidden` (D4) would then cut it through a line. The rows beyond
+   * the budget are hidden whole and counted in « +N », so `onExpand` reaches
+   * them. Unmeasured — jsdom, the first paint — the budget is infinite and
+   * the slots stand alone. Zero rows outside Medium so the observer is
+   * re-armed on a resize of the widget; the ref is attached in Medium only.
+   */
+  const mediumInvites = size === 'medium' ? gardensWithoutOrientation.slice(0, MEDIUM_SLOTS) : [];
+  const mediumShown = size === 'medium' ? tips.slice(0, Math.max(0, MEDIUM_SLOTS - mediumInvites.length)) : [];
+  const mediumListRef = useRef<HTMLUListElement>(null);
+  const mediumBudget = useRowBudget(mediumListRef, mediumShown.length, MEDIUM_ROW_GAP);
 
   const toggleWhy = (id: string) =>
     setOpen((current) => {
@@ -247,7 +267,7 @@ export default function TipsBlock({
    * « Pourquoi » of the Large card (`A3Expert.dc.html` l. 320): 15 px / 700 in
    * the secondary colour, an 18 px chevron, unfolding the rule beneath.
    */
-  const row = (tip: Tip, withWhy: boolean) => {
+  const row = (tip: Tip, withWhy: boolean, hidden = false) => {
     const Icon = TIP_ICONS[tip.kind];
     const text = sentence(tip);
     const isOpen = open.has(tip.id);
@@ -259,7 +279,11 @@ export default function TipsBlock({
         key={tip.id}
         data-tips-tip={tip.kind}
         data-tips-stale={tip.kind === 'watering' && tip.stale ? '' : undefined}
-        sx={{ display: 'flex', gap: '12px', alignItems: 'flex-start', minWidth: 0 }}
+        // Beyond the measured budget (#2): in the DOM for the observer, out
+        // of sight and out of the reading — what is said is what is shown.
+        data-tips-hidden={hidden ? '' : undefined}
+        aria-hidden={hidden || undefined}
+        sx={{ display: 'flex', gap: '12px', alignItems: 'flex-start', minWidth: 0, visibility: hidden ? 'hidden' : 'visible' }}
       >
         <IconDisc size={34} iconSize={18}>
           <Icon />
@@ -505,9 +529,14 @@ export default function TipsBlock({
    * signaler » is only said of gardens that were checked (T6).
    */
   const mediumBody = () => {
-    const invites = gardensWithoutOrientation.slice(0, MEDIUM_SLOTS);
-    const shown = tips.slice(0, Math.max(0, MEDIUM_SLOTS - invites.length));
-    const rest = tips.length - shown.length;
+    const invites = mediumInvites;
+    const shown = mediumShown;
+    // The spec's slots, then the measured cap: never more rows than fit
+    // whole. Always one — as the To-do card does — so a card too short for a
+    // single tip still shows it rather than an empty list under « +N ».
+    const visible = Math.max(1, Math.min(shown.length, mediumBudget));
+    const rest = tips.length - visible;
+    const overflowing = visible < shown.length;
     if (tips.length === 0 && invites.length === 0) {
       return (
         <>
@@ -522,13 +551,28 @@ export default function TipsBlock({
         {shown.length > 0 && (
           <Box
             component="ul"
+            ref={mediumListRef}
             data-tips-list
             // `overflow: hidden` is the guard of the mobile lot (pre-flight
             // D4): a list that cannot hold its rows keeps them inside itself,
             // never under the invitation that follows (V37's mechanism).
-            sx={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'space-evenly', gap: '8px', listStyle: 'none', m: 0, p: 0 }}
+            // Packed from the top while a row is hidden — `space-evenly`
+            // would centre the overflowing rows and push the first one above
+            // the list's edge — spread as the artboard draws it when all fit.
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: overflowing ? 'flex-start' : 'space-evenly',
+              gap: `${MEDIUM_ROW_GAP}px`,
+              listStyle: 'none',
+              m: 0,
+              p: 0,
+            }}
           >
-            {shown.map((tip) => row(tip, false))}
+            {shown.map((tip, index) => row(tip, false, index >= visible))}
           </Box>
         )}
         {invites.map(invitation)}

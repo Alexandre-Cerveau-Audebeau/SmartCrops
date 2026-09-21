@@ -30,11 +30,13 @@ class ManualResizeObserver {
   }
 }
 
+/** Fires every observer the hook created, inside `act`. */
 const fireAll = () =>
   act(() => {
     for (const instance of ManualResizeObserver.instances) instance.fire();
   });
 
+/** Every element answers the height its `data-h` declares; returns the restore. */
 function stubHeights() {
   const original = Element.prototype.getBoundingClientRect;
   Element.prototype.getBoundingClientRect = function (this: Element) {
@@ -49,6 +51,7 @@ function stubHeights() {
   };
 }
 
+/** A list of rows keyed by index, and the budget the hook answers for it. */
 function List({ listHeight, rows, gap }: { listHeight: number; rows: number[]; gap: number }) {
   const ref = useRef<HTMLUListElement>(null);
   const budget = useRowBudget(ref, rows.length, gap);
@@ -64,6 +67,23 @@ function List({ listHeight, rows, gap }: { listHeight: number; rows: number[]; g
   );
 }
 
+/** The same list with KEYED rows: a changed key swaps the `<li>` for a new element, as a content-keyed task row does. */
+function KeyedList({ listHeight, rows, gap }: { listHeight: number; rows: Array<{ key: string; height: number }>; gap: number }) {
+  const ref = useRef<HTMLUListElement>(null);
+  const budget = useRowBudget(ref, rows.length, gap);
+  return (
+    <>
+      <ul ref={ref} data-h={listHeight}>
+        {rows.map((row) => (
+          <li key={row.key} data-h={row.height} />
+        ))}
+      </ul>
+      <output data-testid="budget">{String(budget)}</output>
+    </>
+  );
+}
+
+/** The budget the rendered list prints. */
 const budget = () => screen.getByTestId('budget').textContent;
 
 describe('useRowBudget — whole rows that fit the measured list (SMA-336 mobile lot)', () => {
@@ -126,6 +146,32 @@ describe('useRowBudget — whole rows that fit the measured list (SMA-336 mobile
     rerender(<List listHeight={0} rows={[44, 44, 44, 44, 44]} gap={0} />);
     fireAll();
     expect(budget()).toBe('Infinity');
+  });
+
+  // Fix round 1, #6 (ledger `74b0ff36`): a row REPLACED at a constant count —
+  // a task whose content digest, and so its key, changed on a refresh — is
+  // a new element the observer never saw, and the list's own box does not
+  // move. The budget must follow the rows that are actually in the DOM.
+  it('recomputes when a row is swapped for a taller one at the same count — the new element is observed too', async () => {
+    const { rerender } = render(
+      <KeyedList listHeight={100} rows={[{ key: 'a', height: 30 }, { key: 'b', height: 30 }, { key: 'c', height: 30 }]} gap={0} />
+    );
+    expect(budget()).toBe('3');
+    const observer = ManualResizeObserver.instances.at(-1)!;
+    expect(observer.targets.size).toBe(4);
+
+    // The second row is another element now, twice as tall: 30 + 60 = 90
+    // fits in 100, the third would need 120.
+    await act(async () => {
+      rerender(
+        <KeyedList listHeight={100} rows={[{ key: 'a', height: 30 }, { key: 'b2', height: 60 }, { key: 'c', height: 30 }]} gap={0} />
+      );
+    });
+    expect(budget()).toBe('2');
+    // …and it is observed from now on, the replaced one no longer.
+    const rows = [...document.querySelectorAll('li')];
+    expect(rows.every((row) => observer.targets.has(row))).toBe(true);
+    expect(observer.targets.size).toBe(4);
   });
 
   it('disconnects the observer on unmount', () => {

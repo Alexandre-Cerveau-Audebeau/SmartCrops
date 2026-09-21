@@ -847,6 +847,7 @@ describe('TodoBlock — Medium: the list clips, and caps its rows by measure (mo
 
   /** The list answers `listHeight`, every task row 44 px (two lines), everything else zero. */
   const listHeight = { value: 150 };
+  /** Installs that geometry on every element; returns the restore. */
   function stubGeometry() {
     const original = Element.prototype.getBoundingClientRect;
     Element.prototype.getBoundingClientRect = function (this: Element) {
@@ -876,8 +877,10 @@ describe('TodoBlock — Medium: the list clips, and caps its rows by measure (mo
     vi.unstubAllGlobals();
   });
 
+  /** The task rows within the measured budget. */
   const shownRows = (card: HTMLElement) =>
     [...card.querySelectorAll('[data-todo-list] > li')].filter((row) => !row.hasAttribute('data-todo-hidden'));
+  /** The task rows hidden whole beyond it. */
   const hiddenRows = (card: HTMLElement) => [...card.querySelectorAll('[data-todo-hidden]')];
 
   it('clips the list: overflow hidden, so no row can pass under the button (D4)', () => {
@@ -934,6 +937,45 @@ describe('TodoBlock — Medium: the list clips, and caps its rows by measure (mo
     expect(card.querySelector('[data-todo-invite]')).not.toBeNull();
     // Two tasks for the one located garden, one shown: « +1 task → ».
     expect(widget.getByRole('button', { name: '+1 task →' })).toBeInTheDocument();
+  });
+
+  // Fix round 1, #6 (ledger `74b0ff36`): a task's id is a digest of its
+  // content — `cold:g1:2026-09-15:…:9` — so a refresh that changes Tuesday's
+  // minimum swaps the row's `<li>` for a new element at the SAME count. The
+  // measured cap must follow that new row's height, not the replaced one's.
+  it('recomputes the cap when a task is replaced by a taller one at a constant count — the swapped row is measured', async () => {
+    // Rows that say « 7° » are two-line rows of 88 px; every other row 44.
+    restore();
+    const original = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const height = this.hasAttribute('data-todo-list')
+        ? listHeight.value
+        : this.hasAttribute('data-todo-task')
+          ? /7°/.test(this.textContent ?? '')
+            ? 88
+            : 44
+          : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: height, width: 0, height, toJSON: () => ({}) } as DOMRect;
+    };
+    restore = () => {
+      Element.prototype.getBoundingClientRect = original;
+    };
+
+    const { card, widget, rerender } = renderBlock();
+    expect(shownRows(card)).toHaveLength(3);
+    expect(widget.getByRole('button', { name: '+3 tasks →' })).toBeInTheDocument();
+
+    // Tuesday drops from 9° to 7°: the same six tasks, the three cold rows
+    // replaced (their ids carry the temperature), the second row now 88 px —
+    // 44 + 8 + 88 = 140 fits in 150, the third would need 192.
+    const colder = days().map((day) => (day.date === '2026-09-15' ? dayFixture({ ...day, minTempC: 7 }) : day));
+    await act(async () => {
+      rerender({ weather: weatherFixture([locationFixture({ days: colder })], gardens.map((g) => linkFixture({ gardenId: g.id }))) });
+    });
+    expect(card.querySelectorAll('[data-todo-list] > li')).toHaveLength(4);
+    expect(shownRows(card)).toHaveLength(2);
+    expect(hiddenRows(card)).toHaveLength(2);
+    expect(widget.getByRole('button', { name: '+4 tasks →' })).toBeInTheDocument();
   });
 
   it('hides nothing where nothing is measured — jsdom’s zero rects list the four tasks, as before', () => {

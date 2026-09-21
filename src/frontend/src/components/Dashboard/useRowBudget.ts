@@ -22,6 +22,14 @@ import { useLayoutEffect, useState, type RefObject } from 'react';
  * window, a font that lands — reveals them again. Hiding a row can make the
  * « +N » line appear and shorten the list, which can hide one more row; that
  * chain only ever hides, never reveals, so it settles in at most one step.
+ *
+ * The rows observed are the rows IN the list, by identity (fix round 1, #6 —
+ * ledger `74b0ff36`): a row keyed on its content — a task whose id is a
+ * digest of its sentence — is a NEW element after a refresh that changed it,
+ * at the same count. The list's own box does not move, the count does not
+ * change, and a set of rows fixed at mount would never see the new one. A
+ * MutationObserver on the list's children keeps the observed set equal to
+ * what the DOM holds, and recomputes on every change of it.
  */
 export function useRowBudget(
   list: RefObject<HTMLElement | null>,
@@ -35,6 +43,7 @@ export function useRowBudget(
     const element = list.current;
     if (!element || typeof ResizeObserver === 'undefined') return;
 
+    /** Counts the whole rows whose heights and gaps fit the list's measured height, and stores that budget. */
     const compute = () => {
       const available = element.getBoundingClientRect().height;
       if (available <= 0) {
@@ -61,9 +70,41 @@ export function useRowBudget(
 
     const observer = new ResizeObserver(compute);
     observer.observe(element);
-    for (const row of Array.from(element.children)) observer.observe(row);
+
+    // The observed rows follow the list's children by IDENTITY: a row that
+    // left is unobserved, a row that arrived is observed — whatever the count.
+    const observed = new Set<Element>();
+    /** Observes the rows now in the list, and no longer the ones that left it. */
+    const syncRows = () => {
+      const rows = new Set(Array.from(element.children));
+      for (const row of observed) {
+        if (!rows.has(row)) {
+          observer.unobserve(row);
+          observed.delete(row);
+        }
+      }
+      for (const row of rows) {
+        if (!observed.has(row)) {
+          observer.observe(row);
+          observed.add(row);
+        }
+      }
+    };
+    syncRows();
+    const children =
+      typeof MutationObserver === 'undefined'
+        ? null
+        : new MutationObserver(() => {
+            syncRows();
+            compute();
+          });
+    children?.observe(element, { childList: true });
+
     compute();
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      children?.disconnect();
+    };
   }, [list, rowCount, gap]);
 
   return budget;
