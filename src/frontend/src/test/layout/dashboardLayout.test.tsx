@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { LAYOUT_SCENES } from './scenes';
-import { PROBE_SCENES } from './probes';
+import { PROBE_SCENES, WIDE_LINE } from './probes';
 import type { SceneMeasure } from './harness';
 import { VISIBLE_OVERLAP_PX } from './measure';
 import {
@@ -50,11 +50,13 @@ import {
  * Contacts under {@link VISIBLE_OVERLAP_PX} — line boxes touching without a
  * glyph under another — are reported, not failed.
  *
- * The instrument is checked too (fix round 2, #11): two PROBES of
- * `probes.tsx` — synthetic cards with a known cut — are measured in every
- * run, apart from the scenes, and the suite asserts what the measure must
- * see in them: a line a scrolling zone holds but the card cuts is a clip by
- * the card, and a line under a zone's fold is not.
+ * The instrument is checked too (fix round 2, #11; fix round 3, #12): four
+ * PROBES of `probes.tsx` — synthetic cards with a known cut — are measured in
+ * every run, apart from the scenes, and the suite asserts what the measure
+ * must see in them: a line a scrolling zone holds but the card cuts is a clip
+ * by the card, a line under a zone's fold is not, a zone that hides one axis
+ * beside a scrolling one cuts for good on the hidden axis — and the computed
+ * `overflow` the widgets' zones rely on is read from the engine.
  *
  * Chrome: `CHROME_BIN`, else the usual names on the PATH, else the usual
  * install paths. Without Chrome the suite is SKIPPED on a workstation and
@@ -315,6 +317,58 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
           ['"Past the card, inside the zone"', true],
           ['"Past the fold of the zone"', true],
         ]);
+      }
+    });
+
+    it('reads each scroll axis on its own: a hidden axis beside a scrolling one is a hard clip, not a fold (#12)', () => {
+      // `overflow-x: hidden; overflow-y: auto`: the wide line is cut on the
+      // right by the zone, for good — no scroll brings its end into view —
+      // while the lines under the fold come back with a scroll. Read with one
+      // `scroller` for both axes, the zone passed for scrolling and the wide
+      // line's cut for a fold: a hard horizontal clip, ignored.
+      const wide = `"${WIDE_LINE.slice(0, 44)}"`;
+      const zone = 'div[probe-zone=true]';
+      /** Each clip as [label, by, reachable, the edge it is cut on]. */
+      const cuts = (probe: SceneMeasure) =>
+        probe.clipped.map((c) => [c.label, c.by, c.scroller, c.right > 1 ? 'right' : c.bottom > 1 ? 'bottom' : 'other']);
+      for (const run of RUNS) {
+        const xHidden = probeOf(run, 'probe-x-hidden-y-auto');
+        expect(cuts(xHidden), run.id).toEqual([
+          [wide, zone, false, 'right'],
+          ['"Past the card, inside the zone"', zone, true, 'bottom'],
+          ['"Past the fold of the zone"', zone, true, 'bottom'],
+        ]);
+        expect(xHidden.hardClipped, run.id).toBe(1);
+        // A zone that scrolls vertically loses nothing below the card's edge.
+        expect(xHidden.body.beyondCard, run.id).toBe(0);
+        // The symmetric zone, `overflow-x: auto; overflow-y: hidden`: the wide
+        // line scrolls into view; the lines under the fold are cut for good —
+        // and, hidden vertically, they are lost below the card's edge, which
+        // `beyondCard` reads on the vertical axis alone.
+        const yHidden = probeOf(run, 'probe-x-auto-y-hidden');
+        expect(cuts(yHidden), run.id).toEqual([
+          [wide, zone, true, 'right'],
+          ['"Past the card, inside the zone"', zone, false, 'bottom'],
+          ['"Past the fold of the zone"', zone, false, 'bottom'],
+        ]);
+        expect(yHidden.hardClipped, run.id).toBe(2);
+        expect(yHidden.body.beyondCard, run.id).toBeGreaterThan(0);
+      }
+    });
+
+    it('measures the CSS rule the scenes rely on: `overflow-y: auto` declared alone computes `overflow-x` to `auto` in the engine (#12)', () => {
+      // Every scrolling zone of the widgets declares `overflowY: 'auto'` and
+      // nothing for the other axis. CSS Overflow 3 computes that axis to
+      // `auto`, so both scroll and the per-axis reading classifies those zones
+      // as the merged one did — read from Chrome here, not from the text of
+      // the specification. The mixed zones compute as declared: the probes
+      // above measure what they claim to.
+      for (const run of RUNS) {
+        expect(probeOf(run, 'probe-zone-fold').zoneOverflow, run.id).toEqual({ x: 'auto', y: 'auto' });
+        expect(probeOf(run, 'probe-zone-past-card').zoneOverflow, run.id).toEqual({ x: 'auto', y: 'auto' });
+        expect(probeOf(run, 'probe-x-hidden-y-auto').zoneOverflow, run.id).toEqual({ x: 'hidden', y: 'auto' });
+        expect(probeOf(run, 'probe-x-auto-y-hidden').zoneOverflow, run.id).toEqual({ x: 'auto', y: 'hidden' });
+        for (const scene of scenesOf(run).values()) expect(scene.zoneOverflow, `${run.id} ${scene.scene}`).toBeNull();
       }
     });
   });

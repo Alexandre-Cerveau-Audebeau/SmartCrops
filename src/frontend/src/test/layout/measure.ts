@@ -22,7 +22,11 @@
  *   clipping ancestor at once, each edge of the cut owned by the ancestor
  *   whose box is tightest there (fix round 2, #11 — GitHub `5263906213`): a
  *   line a zone holds but the card cuts — a zone running past the card — is
- *   the card's clip, not a fold, whatever the nearest ancestor scrolls;
+ *   the card's clip, not a fold, whatever the nearest ancestor scrolls. Each
+ *   edge is then read on ITS OWN axis (fix round 3, #12 — ledger `ac9da25d`):
+ *   an ancestor that hides its horizontal overflow beside a scrolling
+ *   vertical one cuts its left and right edges for good, and a single flag
+ *   for both axes made that cut pass for a fold;
  * - the text wider than its own block (a spill), the ellipsized lines, the
  *   scrolling zones and their excess, the smallest font drawn.
  *
@@ -60,7 +64,11 @@ export interface ClipMeasure {
    * edge both do (#11).
    */
   by: string;
-  /** Every cut edge is a scrolling ancestor's: what is hidden is reachable, not lost. False as soon as one edge is not. */
+  /**
+   * Every cut edge is reachable by scrolling ITS OWN axis — left and right
+   * horizontally, top and bottom vertically (#12): what is hidden is
+   * reachable, not lost. False as soon as one edge is not.
+   */
   scroller: boolean;
   top: number;
   right: number;
@@ -219,14 +227,26 @@ function visible(el: Element): boolean {
 
 /** The style clips its overflow on at least one axis. */
 const clips = (cs: CSSStyleDeclaration) => cs.overflowX !== 'visible' || cs.overflowY !== 'visible';
-/** …and lets it scroll (`auto` or `scroll`) rather than hiding it. */
-const scrolls = (cs: CSSStyleDeclaration) => /auto|scroll/.test(cs.overflowX + cs.overflowY);
+/**
+ * ONE axis of an `overflow` lets its excess scroll (`auto` or `scroll`)
+ * rather than hiding it. Read per axis (fix round 3, #12): the two values
+ * added together answered « scrolls » for a style that scrolls one axis and
+ * hides the other, and every cut of such an ancestor then passed for a fold.
+ */
+const scrollsAxis = (overflow: string) => /auto|scroll/.test(overflow);
 
-/** One ancestor that bounds what an element can show: its padding box, and whether it scrolls — what it cuts is then reachable. */
+/**
+ * One ancestor that bounds what an element can show: its padding box, and
+ * whether it scrolls ON EACH AXIS — what it cuts on a scrolling axis is
+ * reachable, what it cuts on a hidden one is lost. The axes are kept apart
+ * (#12): `overflow-x: hidden; overflow-y: auto` is a scroller downwards and a
+ * wall sideways, and the cut says which.
+ */
 interface Clipper {
   el: Element;
   box: Box;
-  scroller: boolean;
+  scrollX: boolean;
+  scrollY: boolean;
 }
 
 /**
@@ -238,21 +258,26 @@ function clippers(el: Element, card: Element): Clipper[] {
   let e = el.parentElement;
   while (e) {
     const cs = getComputedStyle(e);
+    const axes = { scrollX: scrollsAxis(cs.overflowX), scrollY: scrollsAxis(cs.overflowY) };
     if (e === card) {
-      found.push({ el: e, box: paddingBox(e), scroller: clips(cs) && scrolls(cs) });
+      found.push({ el: e, box: paddingBox(e), ...axes });
       break;
     }
-    if (clips(cs)) found.push({ el: e, box: paddingBox(e), scroller: scrolls(cs) });
+    if (clips(cs)) found.push({ el: e, box: paddingBox(e), ...axes });
     e = e.parentElement;
   }
   if (found[found.length - 1]?.el !== card) {
-    found.push({ el: card, box: paddingBox(card), scroller: false });
+    found.push({ el: card, box: paddingBox(card), scrollX: false, scrollY: false });
   }
   return found;
 }
 
 type Edge = 'top' | 'right' | 'bottom' | 'left';
 const EDGES: Edge[] = ['top', 'right', 'bottom', 'left'];
+
+/** The cut on this edge is reachable only if its OWN axis scrolls: left and right are horizontal, top and bottom vertical (#12). */
+const edgeScrolls = (clipper: Clipper, edge: Edge): boolean =>
+  edge === 'left' || edge === 'right' ? clipper.scrollX : clipper.scrollY;
 
 /**
  * Where an element can be seen, and WHO bounds each side of it (#11): the
@@ -443,10 +468,11 @@ export function measureCard(card: HTMLElement): CardMeasure {
       cutEdges[0] === 'right' &&
       (getComputedStyle(at.el).textOverflow === 'ellipsis' || getComputedStyle(frame.owner.right.el).textOverflow === 'ellipsis');
     if (!ellipsis && cutEdges.length > 0) {
-      // Reachable only if EVERY cut edge is a scrolling ancestor's: a zone's
-      // fold gives back what a scroll asks for; the card's edge, or an
-      // `overflow: hidden` ancestor's, gives nothing back — inside a zone too.
-      const hard = cutEdges.filter((edge) => !frame.owner[edge].scroller);
+      // Reachable only if EVERY cut edge is a scrolling ancestor's, ON THE
+      // AXIS OF THAT EDGE (#12): a zone's fold gives back what a scroll asks
+      // for; the card's edge, an `overflow: hidden` ancestor's, or the hidden
+      // axis of a zone that scrolls the other one, gives nothing back.
+      const hard = cutEdges.filter((edge) => !edgeScrolls(frame.owner[edge], edge));
       /** The edge that cuts the most, among the given ones. */
       const worst = (edges: Edge[]): Edge => edges.reduce((a, b) => (cut[b] > cut[a] ? b : a));
       const by = frame.owner[worst(hard.length > 0 ? hard : cutEdges)].el;
@@ -489,7 +515,14 @@ export function measureCard(card: HTMLElement): CardMeasure {
     // Below the card's edge and NOT in a scrolling zone: lost, where a zone's
     // fold is reachable (rule 5: « défile à l'intérieur de la carte »). A zone
     // that itself runs past the card is caught by the clip pass above.
-    if (!frame.nearest.scroller && at.rect.bottom > maxBottom) maxBottom = at.rect.bottom;
+    //
+    // ONE edge is read here and it is the BOTTOM (#12): `maxBottom` keeps the
+    // lowest `at.rect.bottom` and the value returned is `maxBottom -
+    // clip.bottom`, the card's padding box below. Nothing horizontal enters
+    // it — a text wider than its block is a `spill`, an atom past the card's
+    // side is a clip on `right` or `left`. So the axis that says whether that
+    // bottom is reachable is the VERTICAL one, and `scrollY` alone is read.
+    if (!frame.nearest.scrollY && at.rect.bottom > maxBottom) maxBottom = at.rect.bottom;
   }
 
   const ellipsized: EllipsisMeasure[] = [];
@@ -504,8 +537,8 @@ export function measureCard(card: HTMLElement): CardMeasure {
         where: dataTag(el, card),
       });
     }
-    const sx = /auto|scroll/.test(cs.overflowX) && el.scrollWidth > el.clientWidth + 1;
-    const sy = /auto|scroll/.test(cs.overflowY) && el.scrollHeight > el.clientHeight + 1;
+    const sx = scrollsAxis(cs.overflowX) && el.scrollWidth > el.clientWidth + 1;
+    const sy = scrollsAxis(cs.overflowY) && el.scrollHeight > el.clientHeight + 1;
     if (sx || sy) {
       const html = el as HTMLElement;
       scrollers.push({

@@ -22,8 +22,10 @@ import { RESULTS_ID, measureCard, type CardMeasure } from './measure';
  * theme — waits for the fonts and for React to settle, measures the card with
  * `measure.ts`, unmounts, and finally replaces the document with one `<pre>`
  * carrying the measurements, which `--dump-dom` prints. After the scenes, the
- * PROBES of `probes.tsx` (fix round 2, #11): synthetic cards with a known cut,
- * mounted and measured the same way, so the suite can check the instrument.
+ * PROBES of `probes.tsx` (fix round 2, #11; fix round 3, #12): synthetic cards
+ * with a known cut, mounted and measured the same way, so the suite can check
+ * the instrument — each one also reporting the computed `overflow` of its
+ * zone, read here in the engine.
  *
  * The query string drives the run: `vw` is the page width to emulate (Chrome
  * headless opens no window under 500 px, so the phone is the `#page` width
@@ -47,6 +49,8 @@ export interface SceneMeasure extends CardMeasure {
   size: LayoutScene['size'];
   /** A probe of the harness's own — a synthetic card built to hold a known cut (#11) — or null for a widget scene. */
   probe: ProbeScene['probe'] | null;
+  /** The COMPUTED `overflow-x` / `overflow-y` of a probe's zone, read in the engine (#12) — the CSS rule measured, not assumed; null for a widget scene. */
+  zoneOverflow: { x: string; y: string } | null;
   /** Rows a measured cap hid whole (`useRowBudget`): the days of the weather card, the tasks of the To-do card, the tips of the Tips card. */
   hiddenRows: number;
   /** The width each garden NAME can take on a Medium Gardens row — its group's — (arbitrage 5: 130 px at least on a phone); empty elsewhere. */
@@ -92,6 +96,14 @@ async function settle() {
 
 /** A probe of the harness's own (`probes.tsx`), not a widget scene. */
 const isProbe = (scene: LayoutScene | ProbeScene): scene is ProbeScene => 'probe' in scene;
+
+/** The computed `overflow` of a probe's zone — its `[data-probe-zone]` — axis by axis, or null where the card has none. */
+function zoneOverflowOf(card: HTMLElement): { x: string; y: string } | null {
+  const zone = card.querySelector('[data-probe-zone]');
+  if (!zone) return null;
+  const cs = getComputedStyle(zone);
+  return { x: cs.overflowX, y: cs.overflowY };
+}
 
 /** One scene under the app's providers and theme — a tree, not a component: this file is a script, not a module Fast Refresh could reload. */
 function sceneTree(scene: LayoutScene | ProbeScene, mode: 'light' | 'dark') {
@@ -162,6 +174,7 @@ async function main() {
       key: scene.key,
       size: scene.size,
       probe: isProbe(scene) ? scene.probe : null,
+      zoneOverflow: zoneOverflowOf(card),
       hiddenRows: card.querySelectorAll('[data-weather-day-hidden], [data-todo-hidden], [data-tips-hidden]').length,
       gardenNameWidths: Array.from(card.querySelectorAll('[data-garden-row-group]')).map(
         (group) => Math.round(group.getBoundingClientRect().width * 10) / 10
