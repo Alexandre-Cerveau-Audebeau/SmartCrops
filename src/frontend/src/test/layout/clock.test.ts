@@ -62,3 +62,47 @@ describe('freezeClock — `new Date()` and `Date.now()` answer the instant, noth
     expect(readings[0]).toEqual({ now: LAYOUT_NOW_MS, month: 8 });
   });
 });
+
+describe('freezeClock — constructible AND callable, as the engine’s `Date` is (fix round 2, #10 — ledger `e8e83b2a`)', () => {
+  // Over the real clock throughout: `instanceof` and the prototype are read
+  // through no fake `Date`.
+  const RealDate = Date;
+
+  it('`Date()` without `new` answers a string — the frozen instant’s — as the engine’s answers the current one', () => {
+    const thaw = freezeClock(LAYOUT_NOW_MS);
+    try {
+      const called = Date();
+      expect(typeof called).toBe('string');
+      expect(called).toBe(new RealDate(LAYOUT_NOW_MS).toString());
+    } finally {
+      thaw();
+    }
+  });
+
+  it('`new Date()` and `Date.now()` answer the frozen instant, and a frozen date is a `Date`', () => {
+    const thaw = freezeClock(LAYOUT_NOW_MS);
+    try {
+      expect(new Date().getTime()).toBe(LAYOUT_NOW_MS);
+      expect(Date.now()).toBe(LAYOUT_NOW_MS);
+      expect(new Date() instanceof Date).toBe(true);
+      expect(new Date(0) instanceof Date).toBe(true);
+      expect(new Date() instanceof RealDate).toBe(true);
+    } finally {
+      thaw();
+    }
+  });
+
+  it('keeps `Date.parse`, `Date.UTC` and the prototype — the engine’s own, not a copy', () => {
+    const thaw = freezeClock(LAYOUT_NOW_MS);
+    try {
+      expect(Date.prototype).toBe(RealDate.prototype);
+      expect(Object.getPrototypeOf(new Date())).toBe(RealDate.prototype);
+      expect(Date.UTC(2020, 5, 1)).toBe(RealDate.UTC(2020, 5, 1));
+      expect(Date.parse('2020-06-01T00:00:00.000Z')).toBe(RealDate.UTC(2020, 5, 1));
+      expect(new Date(2020, 0, 15).getMonth()).toBe(0);
+    } finally {
+      thaw();
+    }
+    expect(Date).toBe(RealDate);
+  });
+});

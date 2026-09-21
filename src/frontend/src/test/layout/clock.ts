@@ -14,25 +14,31 @@
 export const LAYOUT_NOW_MS = Date.UTC(2026, 8, 14, 18, 36, 12);
 
 /**
- * Replaces the global `Date` with one whose `new Date()` and `Date.now()`
- * answer `instantMs`; every other construction — `new Date(ms)`, from
- * components, from a wire string — and every method stay the engine's own.
- * Returns the function that puts the previous `Date` back.
+ * Replaces the global `Date` with one whose `new Date()`, `Date()` and
+ * `Date.now()` answer `instantMs`; every other construction — `new Date(ms)`,
+ * from components, from a wire string — and every method stay the engine's
+ * own. Returns the function that puts the previous `Date` back.
+ *
+ * The replacement is a FUNCTION, not a class (fix round 2, #10 — ledger
+ * `e8e83b2a`): the engine's `Date` is callable as well as constructible —
+ * `Date()` without `new` is the current instant as a string — and a class
+ * cannot be called, so a caller of that form would have thrown under the
+ * freeze. Called, it answers the frozen instant's string; constructed, it
+ * builds the engine's own `Date` for `new.target`, so an instance is an
+ * `instanceof Date` with the engine's prototype. `Date.parse` and `Date.UTC`
+ * are reached through the prototype chain; `Date.now` alone is its own.
  */
 export function freezeClock(instantMs: number): () => void {
   const Previous = globalThis.Date;
-  class FrozenDate extends Previous {
-    constructor(...args: [] | [number | string | Date] | [number, number, number?, number?, number?, number?, number?]) {
-      if (args.length === 0) super(instantMs);
-      else if (args.length === 1) super(args[0]);
-      else super(...args);
-    }
-    /** The frozen instant, for `Date.now()`. */
-    static now(): number {
-      return instantMs;
-    }
+  /** The frozen `Date`: the instant's string when called, the engine's `Date` when constructed. */
+  function FrozenDate(this: unknown, ...args: unknown[]): Date | string {
+    if (new.target === undefined) return new Previous(instantMs).toString();
+    return Reflect.construct(Previous, args.length === 0 ? [instantMs] : args, new.target) as Date;
   }
-  globalThis.Date = FrozenDate as DateConstructor;
+  Object.setPrototypeOf(FrozenDate, Previous);
+  FrozenDate.prototype = Previous.prototype;
+  Object.defineProperty(FrozenDate, 'now', { value: (): number => instantMs, configurable: true, writable: true });
+  globalThis.Date = FrozenDate as unknown as DateConstructor;
   return () => {
     globalThis.Date = Previous;
   };
