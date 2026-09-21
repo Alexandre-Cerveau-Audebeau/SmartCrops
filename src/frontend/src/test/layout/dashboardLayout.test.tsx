@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { LAYOUT_SCENES } from './scenes';
+import { PROBE_SCENES } from './probes';
 import type { SceneMeasure } from './harness';
 import { VISIBLE_OVERLAP_PX } from './measure';
 import {
@@ -49,6 +50,12 @@ import {
  * Contacts under {@link VISIBLE_OVERLAP_PX} — line boxes touching without a
  * glyph under another — are reported, not failed.
  *
+ * The instrument is checked too (fix round 2, #11): two PROBES of
+ * `probes.tsx` — synthetic cards with a known cut — are measured in every
+ * run, apart from the scenes, and the suite asserts what the measure must
+ * see in them: a line a scrolling zone holds but the card cuts is a clip by
+ * the card, and a line under a zone's fold is not.
+ *
  * Chrome: `CHROME_BIN`, else the usual names on the PATH, else the usual
  * install paths. Without Chrome the suite is SKIPPED on a workstation and
  * FAILS on CI (`CI` is set there): the workflow's own step checks the browser
@@ -93,6 +100,8 @@ if (!CHROME && IS_CI) {
 }
 
 const results = new Map<string, Map<string, SceneMeasure>>();
+/** The probes' measurements, by run then by probe name — apart from the scenes, which must be clean; a probe must not be. */
+const probes = new Map<string, Map<string, SceneMeasure>>();
 let outDir = '';
 
 /** What a scene must be free of, at every width — named so a failure says which. */
@@ -123,6 +132,13 @@ const scenesOf = (run: LayoutRun): Map<string, SceneMeasure> => {
   return scenes;
 };
 
+/** The measurement of one probe in one run, or a throw that names both. */
+const probeOf = (run: LayoutRun, name: string): SceneMeasure => {
+  const probe = probes.get(run.id)?.get(name);
+  if (!probe) throw new Error(`No measurement for the probe ${name} in ${run.id}`);
+  return probe;
+};
+
 describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot, D7)', () => {
   beforeAll(async () => {
     outDir = makeOutDir();
@@ -134,7 +150,9 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       const settled = await Promise.allSettled(RUNS.map((run) => measureRun(CHROME!, outDir, run)));
       settled.forEach((outcome, index) => {
         if (outcome.status === 'fulfilled') {
-          results.set(RUNS[index]!.id, new Map(outcome.value.map((scene) => [scene.scene, scene])));
+          const byName = (measured: SceneMeasure[]) => new Map(measured.map((scene) => [scene.scene, scene]));
+          results.set(RUNS[index]!.id, byName(outcome.value.filter((scene) => scene.probe === null)));
+          probes.set(RUNS[index]!.id, byName(outcome.value.filter((scene) => scene.probe !== null)));
         }
       });
       const failed = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
@@ -151,13 +169,14 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
     if (outDir) removeOutDir(outDir);
   });
 
-  it('measured every scene, in Inter, in every run', () => {
+  it('measured every scene and every probe, in Inter, in every run', () => {
     for (const run of RUNS) {
       const scenes = scenesOf(run);
       expect(scenes.size, run.id).toBe(LAYOUT_SCENES.length);
       for (const scene of scenes.values()) {
         expect(scene.fontLoaded, `${run.id} ${scene.scene}: Inter not loaded`).toBe(true);
       }
+      expect(probes.get(run.id)?.size, run.id).toBe(PROBE_SCENES.length);
     }
   });
 
@@ -262,6 +281,40 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       const english = scenesOf(runOf('en@360'));
       for (const [name, scene] of scenesOf(runOf('fr@360'))) {
         expect(english.get(name)?.card.w, name).toBe(scene.card.w);
+      }
+    });
+
+    it('counts what the CARD cuts inside a scrolling zone as clipped by the card, never as the zone’s fold (#11)', () => {
+      // The probe: a 200 px card whose zone runs 60 px past its edge. A line
+      // 170 px down the zone fits the zone and is cut by the card; a line past
+      // the zone's fold is cut by both, and scrolling the zone to its end
+      // still leaves it past the card. Neither is reachable: both are HARD
+      // clips, by the card. Measured against the nearest clipping ancestor
+      // alone, both read as a scroller's fold and were ignored.
+      for (const run of RUNS) {
+        const probe = probeOf(run, 'probe-zone-past-card');
+        const hard = probe.clipped.filter((c) => !c.scroller).map((c) => [c.label, c.by]);
+        expect(hard, run.id).toEqual([
+          ['"Past the card, inside the zone"', 'card'],
+          ['"Past the fold of the zone"', 'card'],
+        ]);
+        expect(probe.hardClipped, run.id).toBe(2);
+        // The cut is the card's edge, not the zone's: the first line loses
+        // under 20 px, the second every pixel of its glyphs.
+        expect(probe.clipped.find((c) => c.label === '"Past the card, inside the zone"')?.bottom, run.id).toBeLessThan(20);
+      }
+    });
+
+    it('still lets a scrolling zone keep its lines under its fold: the fold probe has no hard clip (rule 5, #11)', () => {
+      // The same lines in a zone that fits the card: cut by the zone alone,
+      // brought back by a scroll — a fold, not a loss.
+      for (const run of RUNS) {
+        const probe = probeOf(run, 'probe-zone-fold');
+        expect(probe.hardClipped, run.id).toBe(0);
+        expect(probe.clipped.map((c) => [c.label, c.scroller]), run.id).toEqual([
+          ['"Past the card, inside the zone"', true],
+          ['"Past the fold of the zone"', true],
+        ]);
       }
     });
   });

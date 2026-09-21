@@ -9,6 +9,7 @@ import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
 import { createAppTheme } from '../../theme';
 import DashboardGrid from '../../components/Dashboard/DashboardGrid';
 import { LAYOUT_SCENES, sceneWidget, type LayoutScene } from './scenes';
+import { PROBE_SCENES, probeWidget, type ProbeScene } from './probes';
 import { encodeResults } from './encode';
 import { RESULTS_ID, measureCard, type CardMeasure } from './measure';
 
@@ -20,7 +21,9 @@ import { RESULTS_ID, measureCard, type CardMeasure } from './measure';
  * the REAL React tree, `DashboardGrid` included, under the app's providers and
  * theme — waits for the fonts and for React to settle, measures the card with
  * `measure.ts`, unmounts, and finally replaces the document with one `<pre>`
- * carrying the measurements, which `--dump-dom` prints.
+ * carrying the measurements, which `--dump-dom` prints. After the scenes, the
+ * PROBES of `probes.tsx` (fix round 2, #11): synthetic cards with a known cut,
+ * mounted and measured the same way, so the suite can check the instrument.
  *
  * The query string drives the run: `vw` is the page width to emulate (Chrome
  * headless opens no window under 500 px, so the phone is the `#page` width
@@ -42,6 +45,8 @@ export interface SceneMeasure extends CardMeasure {
   scene: string;
   key: LayoutScene['key'];
   size: LayoutScene['size'];
+  /** A probe of the harness's own — a synthetic card built to hold a known cut (#11) — or null for a widget scene. */
+  probe: ProbeScene['probe'] | null;
   /** Rows a measured cap hid whole (`useRowBudget`): the days of the weather card, the tasks of the To-do card, the tips of the Tips card. */
   hiddenRows: number;
   /** The width each garden NAME can take on a Medium Gardens row — its group's — (arbitrage 5: 130 px at least on a phone); empty elsewhere. */
@@ -85,8 +90,11 @@ async function settle() {
   await wait(20);
 }
 
+/** A probe of the harness's own (`probes.tsx`), not a widget scene. */
+const isProbe = (scene: LayoutScene | ProbeScene): scene is ProbeScene => 'probe' in scene;
+
 /** One scene under the app's providers and theme — a tree, not a component: this file is a script, not a module Fast Refresh could reload. */
-function sceneTree(scene: LayoutScene, mode: 'light' | 'dark') {
+function sceneTree(scene: LayoutScene | ProbeScene, mode: 'light' | 'dark') {
   /** The grid's edit callbacks — never fired: the harness measures, it never edits. */
   const noop = () => {};
   return (
@@ -99,7 +107,7 @@ function sceneTree(scene: LayoutScene, mode: 'light' | 'dark') {
             onReorder={noop}
             onHide={noop}
             onResize={noop}
-            renderBlock={() => sceneWidget(scene)}
+            renderBlock={() => (isProbe(scene) ? probeWidget(scene) : sceneWidget(scene))}
           />
         </UnitSystemProvider>
       </ThemeProvider>
@@ -139,7 +147,7 @@ async function main() {
   progress('fonts ready');
 
   const results: SceneMeasure[] = [];
-  for (const scene of LAYOUT_SCENES.filter((s) => !only || s.name === only)) {
+  for (const scene of [...LAYOUT_SCENES, ...PROBE_SCENES].filter((s) => !only || s.name === only)) {
     const host = document.createElement('div');
     page.appendChild(host);
     const root = createRoot(host);
@@ -153,6 +161,7 @@ async function main() {
       scene: scene.name,
       key: scene.key,
       size: scene.size,
+      probe: isProbe(scene) ? scene.probe : null,
       hiddenRows: card.querySelectorAll('[data-weather-day-hidden], [data-todo-hidden], [data-tips-hidden]').length,
       gardenNameWidths: Array.from(card.querySelectorAll('[data-garden-row-group]')).map(
         (group) => Math.round(group.getBoundingClientRect().width * 10) / 10

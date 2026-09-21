@@ -18,7 +18,11 @@
  *   month axis);
  * - what the card or an `overflow: hidden` ancestor CLIPS — the « rogné » of
  *   the visual pass — apart from what a scrolling zone merely keeps below its
- *   fold, which rule 5 of the design contract allows;
+ *   fold, which rule 5 of the design contract allows. Measured against EVERY
+ *   clipping ancestor at once, each edge of the cut owned by the ancestor
+ *   whose box is tightest there (fix round 2, #11 — GitHub `5263906213`): a
+ *   line a zone holds but the card cuts — a zone running past the card — is
+ *   the card's clip, not a fold, whatever the nearest ancestor scrolls;
  * - the text wider than its own block (a spill), the ellipsized lines, the
  *   scrolling zones and their excess, the smallest font drawn.
  *
@@ -50,9 +54,13 @@ export interface OverlapMeasure {
 export interface ClipMeasure {
   label: string;
   kind: string;
-  /** `card`, or the tag and data attribute of the clipping ancestor. */
+  /**
+   * `card`, or the tag and data attribute of the ancestor whose edge cuts the
+   * most — of the ones that cut for good, when a scroller's fold and an outer
+   * edge both do (#11).
+   */
   by: string;
-  /** The clipping ancestor scrolls: what it hides is reachable, not lost. */
+  /** Every cut edge is a scrolling ancestor's: what is hidden is reachable, not lost. False as soon as one edge is not. */
   scroller: boolean;
   top: number;
   right: number;
@@ -214,28 +222,65 @@ const clips = (cs: CSSStyleDeclaration) => cs.overflowX !== 'visible' || cs.over
 /** …and lets it scroll (`auto` or `scroll`) rather than hiding it. */
 const scrolls = (cs: CSSStyleDeclaration) => /auto|scroll/.test(cs.overflowX + cs.overflowY);
 
-/** The nearest ancestor that clips, up to the card, and whether it scrolls. */
-function clipAncestor(el: Element, card: Element): { el: Element; scroller: boolean } {
+/** One ancestor that bounds what an element can show: its padding box, and whether it scrolls — what it cuts is then reachable. */
+interface Clipper {
+  el: Element;
+  box: Box;
+  scroller: boolean;
+}
+
+/**
+ * The ancestors that clip, nearest first, the card last: the card bounds every
+ * atom — its own `overflow: hidden` — and is listed whatever its style says.
+ */
+function clippers(el: Element, card: Element): Clipper[] {
+  const found: Clipper[] = [];
   let e = el.parentElement;
   while (e) {
     const cs = getComputedStyle(e);
-    if (clips(cs)) return { el: e, scroller: scrolls(cs) };
-    if (e === card) break;
+    if (e === card) {
+      found.push({ el: e, box: paddingBox(e), scroller: clips(cs) && scrolls(cs) });
+      break;
+    }
+    if (clips(cs)) found.push({ el: e, box: paddingBox(e), scroller: scrolls(cs) });
     e = e.parentElement;
   }
-  return { el: card, scroller: false };
+  if (found[found.length - 1]?.el !== card) {
+    found.push({ el: card, box: paddingBox(card), scroller: false });
+  }
+  return found;
 }
 
-/** The region an element can be seen in: the card's padding box, cut by EVERY clipping ancestor. */
-function clipBoxFor(el: Element, card: Element, includeSelf: boolean): Box {
-  let box = paddingBox(card);
-  let e: Element | null = includeSelf ? el : el.parentElement;
-  while (e) {
-    if (clips(getComputedStyle(e))) box = intersect(box, paddingBox(e));
-    if (e === card) break;
-    e = e.parentElement;
+type Edge = 'top' | 'right' | 'bottom' | 'left';
+const EDGES: Edge[] = ['top', 'right', 'bottom', 'left'];
+
+/**
+ * Where an element can be seen, and WHO bounds each side of it (#11): the
+ * card's padding box cut by every clipping ancestor — one intersection — with
+ * each edge owned by the ancestor whose box is tightest there, the nearest one
+ * when two coincide. `nearest` is the innermost clipping ancestor: what says
+ * whether the element sits in a scrolling zone.
+ */
+function clipFrame(el: Element, card: Element): { box: Box; owner: Record<Edge, Clipper>; nearest: Clipper } {
+  const all = clippers(el, card);
+  const outer = all[all.length - 1]!;
+  const owner: Record<Edge, Clipper> = { top: outer, right: outer, bottom: outer, left: outer };
+  // From the card inwards, so the nearest ancestor keeps an edge two share.
+  for (let i = all.length - 1; i >= 0; i -= 1) {
+    const c = all[i]!;
+    if (c.box.top >= owner.top.box.top) owner.top = c;
+    if (c.box.left >= owner.left.box.left) owner.left = c;
+    if (c.box.bottom <= owner.bottom.box.bottom) owner.bottom = c;
+    if (c.box.right <= owner.right.box.right) owner.right = c;
   }
-  return box;
+  const box = boxOf({ top: owner.top.box.top, left: owner.left.box.left, bottom: owner.bottom.box.bottom, right: owner.right.box.right });
+  return { box, owner, nearest: all[0]! };
+}
+
+/** The region an element can be seen in: the card's padding box, cut by EVERY clipping ancestor — and, with `includeSelf`, by its own `overflow`. */
+function clipBoxFor(el: Element, card: Element, includeSelf: boolean): Box {
+  const box = clipFrame(el, card).box;
+  return includeSelf && clips(getComputedStyle(el)) ? intersect(box, paddingBox(el)) : box;
 }
 
 interface Occluder {
@@ -378,29 +423,42 @@ export function measureCard(card: HTMLElement): CardMeasure {
   let minFont = 999;
   let maxBottom = -Infinity;
   for (const at of atoms) {
-    const ca = clipAncestor(at.el, card);
-    const box = paddingBox(ca.el);
-    const cutR = Math.max(0, at.rect.right - box.right);
-    const cutL = Math.max(0, box.left - at.rect.left);
-    const cutB = Math.max(0, at.rect.bottom - box.bottom);
-    const cutT = Math.max(0, box.top - at.rect.top);
+    // Against every clipping ancestor at once (#11): the tightest edge on
+    // each side, whoever owns it — the card's bottom inside a zone that runs
+    // past the card is the card's cut, not the zone's fold.
+    const frame = clipFrame(at.el, card);
+    const cut: Record<Edge, number> = {
+      top: Math.max(0, frame.box.top - at.rect.top),
+      right: Math.max(0, at.rect.right - frame.box.right),
+      bottom: Math.max(0, at.rect.bottom - frame.box.bottom),
+      left: Math.max(0, frame.box.left - at.rect.left),
+    };
+    const cutEdges = EDGES.filter((edge) => cut[edge] > 1);
     // A line the design ELLIPSIZES is cut on the right by design — « Thym,
     // Romarin, Courgette +7 », a title before its chip — and reported under
     // `ellipsized`, not as a clip. Every other cut is a clip: through the
     // bottom of a line, on the left, or by a container that draws no ellipsis.
     const ellipsis =
-      cutR > 1 && cutL <= 1 && cutB <= 1 && cutT <= 1 &&
-      (getComputedStyle(at.el).textOverflow === 'ellipsis' || getComputedStyle(ca.el).textOverflow === 'ellipsis');
-    if (!ellipsis && (cutR > 1 || cutL > 1 || cutB > 1 || cutT > 1)) {
+      cutEdges.length === 1 &&
+      cutEdges[0] === 'right' &&
+      (getComputedStyle(at.el).textOverflow === 'ellipsis' || getComputedStyle(frame.owner.right.el).textOverflow === 'ellipsis');
+    if (!ellipsis && cutEdges.length > 0) {
+      // Reachable only if EVERY cut edge is a scrolling ancestor's: a zone's
+      // fold gives back what a scroll asks for; the card's edge, or an
+      // `overflow: hidden` ancestor's, gives nothing back — inside a zone too.
+      const hard = cutEdges.filter((edge) => !frame.owner[edge].scroller);
+      /** The edge that cuts the most, among the given ones. */
+      const worst = (edges: Edge[]): Edge => edges.reduce((a, b) => (cut[b] > cut[a] ? b : a));
+      const by = frame.owner[worst(hard.length > 0 ? hard : cutEdges)].el;
       clipped.push({
         label: at.label,
         kind: at.kind,
-        by: ca.el === card ? 'card' : `${ca.el.tagName.toLowerCase()}[${dataTag(ca.el, card)}]`,
-        scroller: ca.scroller,
-        right: round(cutR),
-        left: round(cutL),
-        bottom: round(cutB),
-        top: round(cutT),
+        by: by === card ? 'card' : `${by.tagName.toLowerCase()}[${dataTag(by, card)}]`,
+        scroller: hard.length === 0,
+        right: round(cut.right),
+        left: round(cut.left),
+        bottom: round(cut.bottom),
+        top: round(cut.top),
         h: round(at.rect.height),
       });
     }
@@ -429,8 +487,9 @@ export function measureCard(card: HTMLElement): CardMeasure {
       if (at.fontSize < 14) smallFonts.push({ label: at.label, px: at.fontSize });
     }
     // Below the card's edge and NOT in a scrolling zone: lost, where a zone's
-    // fold is reachable (rule 5: « défile à l'intérieur de la carte »).
-    if (!ca.scroller && at.rect.bottom > maxBottom) maxBottom = at.rect.bottom;
+    // fold is reachable (rule 5: « défile à l'intérieur de la carte »). A zone
+    // that itself runs past the card is caught by the clip pass above.
+    if (!frame.nearest.scroller && at.rect.bottom > maxBottom) maxBottom = at.rect.bottom;
   }
 
   const ellipsized: EllipsisMeasure[] = [];
