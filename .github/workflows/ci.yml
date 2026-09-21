@@ -60,6 +60,15 @@ jobs:
         run: npm run lint
         working-directory: src/frontend
 
+      # SMA-336 mobile lot (D7): the dashboard layout suite measures the
+      # widgets in Chrome headless (src/frontend/src/test/layout). The runner
+      # image ships Google Chrome; this step FAILS the job if it is missing and
+      # hands its path to the suite, which never skips when CI is set.
+      - name: Chrome for the layout harness
+        run: |
+          google-chrome --version
+          echo "CHROME_BIN=$(command -v google-chrome)" >> "$GITHUB_ENV"
+
       - name: Test
         run: npm test
         working-directory: src/frontend

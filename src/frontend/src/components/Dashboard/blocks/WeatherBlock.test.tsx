@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n/i18n';
@@ -15,7 +15,7 @@ import {
   pickFixture,
   weatherFixture,
 } from '../../../test/fixtures/weather';
-import { rulesFor } from '../../../test/dashboardDom';
+import { declaredAtBreakpoint, rulesFor } from '../../../test/dashboardDom';
 import type { DashboardSize } from '../../../types/Dashboard';
 import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../../../types/DashboardWeather';
 import { LOCATION_SEARCH_DEBOUNCE_MS } from '../locationTools';
@@ -653,5 +653,186 @@ describe('WeatherBlock — the invitations (F.4)', () => {
     expect(onLocate).toHaveBeenCalledWith(null);
     expect(widget.queryByLabelText('City')).toBeNull();
     expect(widget.getByText('No rain expected — water in the evening.')).toBeInTheDocument();
+  });
+});
+
+// ── SMA-336 mobile lot, step 3 (pre-flight D2, arbitrage 1): the head STACKS
+// under 600 px — hero on the full width, the six slots under it — and keeps
+// every desktop declaration from `sm` up. Asserted on the DECLARATIONS Emotion
+// emits per breakpoint, the way the breakpoint suite of the page does; the
+// chevauchements themselves are measured in a real engine by
+// `src/test/layout/dashboardLayout.test.tsx`.
+
+/** The value a property takes inside one `@media (min-width:…)` block of a node's rules — the shared probe. */
+const atBreakpoint = declaredAtBreakpoint;
+
+describe('WeatherBlock — the head stacks on a phone and stays a row from 600px (mobile lot, step 3)', () => {
+  it('Medium: a column under 600px, a row with the 24px gap above it', () => {
+    const { card } = renderBlock({ size: 'medium' });
+    const head = card.querySelector('[data-weather-head]')!;
+
+    expect(atBreakpoint(head, '0px', 'flex-direction')).toBe('column');
+    expect(atBreakpoint(head, '600px', 'flex-direction')).toBe('row');
+    expect(atBreakpoint(head, '0px', 'gap')).toBe('12px');
+    expect(atBreakpoint(head, '600px', 'gap')).toBe('24px');
+    // Content-sized on the phone's auto-height row; the leftover height from 600px.
+    expect(atBreakpoint(head, '0px', 'flex')).toBe('0 0 auto');
+    expect(atBreakpoint(head, '600px', 'flex')).toBe('1');
+  });
+
+  it('Large: the 136px fixed head is the desktop’s alone — auto under 600px', () => {
+    const { card } = renderBlock({ size: 'large' });
+    const head = card.querySelector('[data-weather-head]')!;
+
+    expect(atBreakpoint(head, '0px', 'height')).toBe('auto');
+    expect(atBreakpoint(head, '600px', 'height')).toBe('136px');
+    expect(atBreakpoint(head, '0px', 'flex-direction')).toBe('column');
+    expect(atBreakpoint(head, '600px', 'flex-direction')).toBe('row');
+  });
+
+  it('the hero column is the full width and its own height on a phone, 160 / 200px and 100% from 600px', () => {
+    const { card } = renderBlock({ size: 'medium' });
+    const hero = card.querySelector('[data-weather-hero]')!;
+    expect(atBreakpoint(hero, '0px', 'width')).toBe('100%');
+    expect(atBreakpoint(hero, '600px', 'width')).toBe('160px');
+    expect(atBreakpoint(hero, '0px', 'height')).toBe('auto');
+    expect(atBreakpoint(hero, '600px', 'height')).toBe('100%');
+
+    cleanup();
+    // With the « 1/3 localisé » chip the desktop column is 200px (A4); the phone is still the full width.
+    const partialCard = renderBlock({ size: 'medium', weather: partial() }).card;
+    const partialHero = partialCard.querySelector('[data-weather-hero]')!;
+    expect(atBreakpoint(partialHero, '0px', 'width')).toBe('100%');
+    expect(atBreakpoint(partialHero, '600px', 'width')).toBe('200px');
+  });
+
+  it('keeps SIX slot columns at every width (arbitrage 1), at content height on a phone and 92–124px centred from 600px', () => {
+    const { card } = renderBlock({ size: 'medium' });
+    const hours = card.querySelector('[data-weather-hours]')!;
+    const slot = hours.querySelector('li')!;
+
+    // The six columns are declared outside any media query: the same at 360 and at 1280.
+    expect(rulesFor(hours).replace(/\s/g, '')).toContain('grid-template-columns:repeat(6,minmax(0,1fr))');
+    expect(hours.querySelectorAll('li')).toHaveLength(6);
+    expect(atBreakpoint(slot, '0px', 'min-height')).toBe('0');
+    expect(atBreakpoint(slot, '600px', 'min-height')).toBe('92px');
+    expect(atBreakpoint(slot, '0px', 'height')).toBe('auto');
+    expect(atBreakpoint(slot, '600px', 'height')).toBe('100%');
+    expect(rulesFor(slot)).toContain('max-height:124px');
+  });
+});
+
+// ── SMA-336 mobile lot, step 3 — the desktop defect the pre-flight traced as
+// constat 12: on a Large card with « 2/3 localisé », the partial invitation
+// with its field is ≈ 160 px where `_spec.md` § 10.25 budgeted 122, and the
+// five days ran under it. The days now yield WHOLE rows, by measure
+// (`useRowBudget`): the geometry is stubbed here, the pixels are measured by
+// the layout harness.
+describe('WeatherBlock — the days yield whole rows to the partial invitation, by measure (mobile lot, step 3)', () => {
+  class ManualResizeObserver {
+    static instances: ManualResizeObserver[] = [];
+    readonly targets = new Set<Element>();
+    private readonly callback: ResizeObserverCallback;
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback;
+      ManualResizeObserver.instances.push(this);
+    }
+    observe(target: Element) {
+      this.targets.add(target);
+    }
+    unobserve(target: Element) {
+      this.targets.delete(target);
+    }
+    disconnect() {
+      this.targets.clear();
+    }
+    fire() {
+      this.callback([], this as unknown as ResizeObserver);
+    }
+  }
+
+  /** The list answers `listHeight`, every day row 44 px, everything else zero. */
+  function stubDaysGeometry(listHeight: { value: number }) {
+    const original = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const height = this.hasAttribute('data-weather-days')
+        ? listHeight.value
+        : this.hasAttribute('data-weather-day')
+          ? 44
+          : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: height, width: 0, height, toJSON: () => ({}) } as DOMRect;
+    };
+    return () => {
+      Element.prototype.getBoundingClientRect = original;
+    };
+  }
+
+  const listHeight = { value: 150 };
+  let restore: () => void;
+
+  beforeEach(() => {
+    ManualResizeObserver.instances = [];
+    vi.stubGlobal('ResizeObserver', ManualResizeObserver);
+    restore = stubDaysGeometry(listHeight);
+    listHeight.value = 150;
+  });
+
+  afterEach(() => {
+    restore();
+    vi.unstubAllGlobals();
+  });
+
+  /** The day rows within the measured budget. */
+  const visibleDays = (card: HTMLElement) =>
+    [...card.querySelectorAll('[data-weather-day]')].filter((row) => !row.hasAttribute('data-weather-day-hidden'));
+  /** The day rows hidden whole beyond it. */
+  const hiddenDays = (card: HTMLElement) => [...card.querySelectorAll('[data-weather-day-hidden]')];
+
+  it('with 150px for the list, three 44px days are shown and the last two are hidden WHOLE — out of sight and out of the reading', () => {
+    const { card } = renderBlock({ size: 'large', weather: partial() });
+
+    expect(card.querySelectorAll('[data-weather-day]')).toHaveLength(5);
+    expect(visibleDays(card).map((row) => row.getAttribute('data-weather-day'))).toEqual([
+      '2026-09-12', '2026-09-13', '2026-09-14',
+    ]);
+    const hidden = hiddenDays(card);
+    expect(hidden).toHaveLength(2);
+    for (const row of hidden) {
+      expect(row).toHaveAttribute('aria-hidden', 'true');
+      expect(rulesFor(row)).toContain('visibility:hidden');
+    }
+    // The hidden rows are INSIDE the list, which clips: nothing runs under the invitation.
+    expect(rulesFor(card.querySelector('[data-weather-days]')!)).toContain('overflow:hidden');
+    // The invitation itself is there, whole, after the list.
+    expect(card.querySelector('[data-weather-invite="partial"]')).not.toBeNull();
+  });
+
+  it('shows the five days again when the list has room for them — the observer fires, the rows come back', () => {
+    const { card } = renderBlock({ size: 'large', weather: partial() });
+    expect(hiddenDays(card)).toHaveLength(2);
+
+    listHeight.value = 230;
+    act(() => {
+      for (const instance of ManualResizeObserver.instances) instance.fire();
+    });
+
+    expect(hiddenDays(card)).toHaveLength(0);
+    expect(visibleDays(card)).toHaveLength(5);
+  });
+
+  it('never hides « Auj. »: a list too short for one row still shows its first day', () => {
+    listHeight.value = 20;
+    const { card } = renderBlock({ size: 'large', weather: partial() });
+
+    expect(visibleDays(card).map((row) => row.getAttribute('data-weather-day'))).toEqual(['2026-09-12']);
+    expect(hiddenDays(card)).toHaveLength(4);
+  });
+
+  it('hides nothing where nothing is measured — jsdom’s zero rects show all five days, as before', () => {
+    restore();
+    restore = () => {};
+    const { card } = renderBlock({ size: 'large', weather: partial() });
+    expect(hiddenDays(card)).toHaveLength(0);
+    expect(card.querySelectorAll('[data-weather-day]')).toHaveLength(5);
   });
 });

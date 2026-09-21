@@ -1,7 +1,7 @@
-import { cleanup, fireEvent, render, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
 import { UnitSystemProvider } from '../../../contexts/UnitSystemContext';
@@ -854,5 +854,275 @@ describe('TipsBlock — states', () => {
     const { card } = renderBlock({ size: 'large' });
 
     expect(card.textContent).not.toMatch(/quota|abonnement|subscription|pricing|tarif|plan\b/i);
+  });
+});
+
+// ── SMA-336 mobile lot, step 5 (pre-flight D4, arbitrage 4). The Medium list
+// is `overflow: hidden`, and the foot « N plants with no known exposure »
+// yields when an invitation shares the card: measured on `5282852` at 1280 px
+// — one two-line tip, its link, the 65 px invitation, the 17 px foot and
+// « +N » are 211 px for the 193 the body has, and « See cell B3 → » passed
+// under the invitation's edge by 10.5 px; without the foot they are 182.
+describe('TipsBlock — Medium: the list clips, and the foot yields to an invitation (mobile lot, step 5)', () => {
+  /** Terrasse with two plants the catalog knows no exposure for, beside its tomato. */
+  const terrasseWithUnknown = oriented({
+    id: 'g1',
+    name: 'Terrasse',
+    cellsJson: JSON.stringify([{ row: 2, col: 0, infrastructure: 'wall' }]),
+    placements: [plant('tomato', 2, 1), plant('mystery', 0, 0), plant('mystery', 0, 1)],
+    placementCount: 3,
+  });
+
+  it('clips the list: overflow hidden, so no row can pass under the invitation (D4)', () => {
+    const { card } = renderBlock({ gardens: [terrasse, potager] });
+    expect(rulesFor(card.querySelector('[data-tips-list]')!)).toContain('overflow:hidden');
+  });
+
+  it('one tip and the orientation invitation: the foot is NOT drawn, the invitation and « See cell » are', () => {
+    const { card, widget } = renderBlock({ gardens: [terrasseWithUnknown, balcon] });
+
+    expect(rows(card)).toHaveLength(1);
+    expect(card.querySelector('[data-tips-invite="g2"]')).not.toBeNull();
+    expect(widget.getByRole('link', { name: 'See cell B3 →' })).toBeInTheDocument();
+    expect(card.querySelector('[data-tips-unknown]')).toBeNull();
+  });
+
+  it('the same gardens without the invitation: the foot is back, counted (D2)', () => {
+    const { card } = renderBlock({ gardens: [terrasseWithUnknown, potager] });
+
+    expect(card.querySelector('[data-tips-invite]')).toBeNull();
+    expect(card.querySelector('[data-tips-unknown]')).toHaveTextContent('2 plants with no known exposure');
+  });
+
+  it('with no tip at all and an invitation, the foot yields too — the invitation alone (S-7, kept)', () => {
+    const noTipUnknown = oriented({ id: 'g3', name: 'Potager du fond', placements: [plant('mystery', 0, 0)], placementCount: 1 });
+    const { card } = renderBlock({ gardens: [noTipUnknown, balcon] });
+
+    expect(card.querySelector('[data-tips-invite="g2"]')).not.toBeNull();
+    expect(card.querySelector('[data-tips-unknown]')).toBeNull();
+  });
+
+  it('Large keeps its foot beside its invitations: the yield is the Medium card’s alone', () => {
+    const { card } = renderBlock({ size: 'large', gardens: [terrasseWithUnknown, balcon] });
+
+    expect(card.querySelector('[data-tips-invite="g2"]')).not.toBeNull();
+    expect(card.querySelector('[data-tips-unknown]')).toHaveTextContent('2 plants with no known exposure');
+  });
+});
+
+// ── SMA-336 mobile lot, fix round 1, #2 (GitHub `4059024239`): the Medium
+// list is capped by MEASURE, the To-do card's pattern (arbitrage 3). A tip is
+// a sentence of unbounded garden and plant names over its link: on a narrow
+// card it wraps to three lines and stands taller than its slot, and the
+// `overflow: hidden` of D4 would cut it through a line. Only the whole rows
+// that fit are shown; the rest are hidden whole and counted in « +N ». The
+// foot still yields to an invitation (arbitrage 4, unchanged). The geometry
+// is stubbed here; the pixels are the layout harness's.
+describe('TipsBlock — Medium: the rows are capped by measure, whole (fix round 1, #2)', () => {
+  class ManualResizeObserver {
+    static instances: ManualResizeObserver[] = [];
+    readonly targets = new Set<Element>();
+    private readonly callback: ResizeObserverCallback;
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback;
+      ManualResizeObserver.instances.push(this);
+    }
+    observe(target: Element) {
+      this.targets.add(target);
+    }
+    unobserve(target: Element) {
+      this.targets.delete(target);
+    }
+    disconnect() {
+      this.targets.clear();
+    }
+    fire() {
+      this.callback([], this as unknown as ResizeObserver);
+    }
+  }
+
+  /** The page believes it is under 600px: `useMediaQuery(down('sm'))` answers true. */
+  const stubPhone = () =>
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes('max-width:599.95px'),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }))
+    );
+
+  /** The list answers `listHeight`; every tip row a THREE-line sentence over its link — 3 × 20.3 + 4 + 20 ≈ 85 px; everything else zero. */
+  const listHeight = { value: 150 };
+  const ROW = 85;
+  /** Installs that geometry on every element; returns the restore. */
+  function stubGeometry() {
+    const original = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const height = this.hasAttribute('data-tips-list') ? listHeight.value : this.hasAttribute('data-tips-tip') ? ROW : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: height, width: 0, height, toJSON: () => ({}) } as DOMRect;
+    };
+    return () => {
+      Element.prototype.getBoundingClientRect = original;
+    };
+  }
+
+  let restore: () => void;
+
+  beforeEach(() => {
+    ManualResizeObserver.instances = [];
+    vi.stubGlobal('ResizeObserver', ManualResizeObserver);
+    listHeight.value = 150;
+    restore = stubGeometry();
+  });
+
+  afterEach(() => {
+    restore();
+    vi.unstubAllGlobals();
+  });
+
+  /** The tip rows within the measured budget. */
+  const shownRows = (card: HTMLElement) => rows(card).filter((row) => !row.hasAttribute('data-tips-hidden'));
+  /** The tip rows hidden whole beyond it. */
+  const hiddenRows = (card: HTMLElement) => [...card.querySelectorAll('[data-tips-hidden]')];
+
+  it.each([
+    ['on a phone (under 600px)', true],
+    ['on a desktop', false],
+  ])('%s: two three-line tips in 150px — the first shown WHOLE, the second hidden whole, « +2 tips → »', (_where, phone) => {
+    if (phone) stubPhone();
+    // Three tips on Terrasse and Potager: the spec's two slots, then the
+    // measured cap of one (85 ≤ 150; two would need 85 + 8 + 85 = 178) — the
+    // rest, 3 − 1.
+    const { card, widget } = renderBlock({ gardens: [terrasse, potager] });
+
+    expect(rows(card)).toHaveLength(2);
+    expect(shownRows(card)).toHaveLength(1);
+    const hidden = hiddenRows(card);
+    expect(hidden).toHaveLength(1);
+    expect(hidden[0]).toHaveAttribute('aria-hidden', 'true');
+    expect(rulesFor(hidden[0]!)).toContain('visibility:hidden');
+    expect(widget.getByRole('button', { name: '+2 tips →' })).toBeInTheDocument();
+    // Packed from the top while a row is hidden.
+    expect(rulesFor(card.querySelector('[data-tips-list]')!)).toContain('justify-content:flex-start');
+    expect(rulesFor(card.querySelector('[data-tips-list]')!)).toContain('overflow:hidden');
+  });
+
+  it('shows both tips again when the list has room — the observer fires, « +1 tip → » as before', () => {
+    const { card, widget } = renderBlock({ gardens: [terrasse, potager] });
+    expect(hiddenRows(card)).toHaveLength(1);
+
+    listHeight.value = 200;
+    act(() => {
+      for (const instance of ManualResizeObserver.instances) instance.fire();
+    });
+
+    expect(hiddenRows(card)).toHaveLength(0);
+    expect(shownRows(card)).toHaveLength(2);
+    expect(widget.getByRole('button', { name: '+1 tip →' })).toBeInTheDocument();
+    expect(rulesFor(card.querySelector('[data-tips-list]')!)).toContain('justify-content:space-evenly');
+  });
+
+  it('never hides the first tip: a list too short for one row still shows it — the To-do card’s rule', () => {
+    listHeight.value = 40;
+    const { card, widget } = renderBlock({ gardens: [terrasse, potager] });
+    expect(shownRows(card)).toHaveLength(1);
+    expect(widget.getByRole('button', { name: '+2 tips →' })).toBeInTheDocument();
+  });
+
+  it('with the invitation: the one slot the spec leaves, measured too, and the foot still yields (arbitrage 4)', () => {
+    listHeight.value = 60;
+    const { card, widget } = renderBlock();
+    expect(rows(card)).toHaveLength(1);
+    expect(shownRows(card)).toHaveLength(1);
+    expect(card.querySelector('[data-tips-invite="g2"]')).not.toBeNull();
+    expect(card.querySelector('[data-tips-unknown]')).toBeNull();
+    expect(widget.getByRole('button', { name: '+2 tips →' })).toBeInTheDocument();
+  });
+
+  it('hides nothing where nothing is measured — jsdom’s zero rects list the two tips, as before', () => {
+    restore();
+    restore = () => {};
+    const { card, widget } = renderBlock({ gardens: [terrasse, potager] });
+    expect(shownRows(card)).toHaveLength(2);
+    expect(hiddenRows(card)).toHaveLength(0);
+    expect(widget.getByRole('button', { name: '+1 tip →' })).toBeInTheDocument();
+  });
+
+  // ── Fix round 2, #9 (GitHub `r4059946374`, ledger `64f225c7` / `fbe00a7d`):
+  // two invitations take BOTH slots, so no tip row is drawn at all. The
+  // minimum of one row — a lone tip too tall for its list is drawn, clipped,
+  // rather than an empty list under « +N » (écart e, kept) — is a rule about
+  // a row that EXISTS. Counted where there was none, it took one tip out of
+  // « +N »: a single tip was neither drawn nor counted, and could not be
+  // reached. What the reader can reach is the rows drawn plus the N of
+  // « +N tips → », and that must be every tip, at both widths.
+  describe('two invitations take both slots (fix round 2, #9): every tip is drawn or in « +N tips → »', () => {
+    /** A second garden whose orientation is unknown: with Balcon sud, one invitation per slot. */
+    const cour = gardenFixture({
+      id: 'g4',
+      name: 'Cour',
+      config: { orientation: null, gardenType: 'balcony', lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
+      placements: [plant('tomato', 0, 0)],
+      placementCount: 1,
+    });
+    /** Terrasse with its hydrangea alone — a shade lover in full sun: ONE tip. */
+    const oneTip = oriented({ id: 'g1', name: 'Terrasse', placements: [plant('hydrangea', 0, 3)], placementCount: 1 });
+
+    /** The rows drawn plus the N of « +N tips → »: what the reader can reach. */
+    const reachable = (card: HTMLElement, widget: ReturnType<typeof within>) => {
+      const more = widget.queryByRole('button', { name: /^\+\d+ tips? →$/ });
+      const counted = more ? Number(/\d+/.exec(more.textContent ?? '')![0]) : 0;
+      return shownRows(card).length + counted;
+    };
+
+    it.each([
+      ['on a phone (under 600px)', true],
+      ['on a desktop', false],
+    ])('%s: two invitations and ONE tip — no row, the two invitations, « +1 tip → » that grows the widget', (_where, phone) => {
+      if (phone) stubPhone();
+      const { card, widget, props } = renderBlock({ gardens: [oneTip, balcon, cour] });
+
+      expect([...card.querySelectorAll('[data-tips-invite]')].map((node) => node.getAttribute('data-tips-invite'))).toEqual(['g2', 'g4']);
+      expect(rows(card)).toHaveLength(0);
+      const more = widget.getByRole('button', { name: '+1 tip →' });
+      expect(reachable(card, widget)).toBe(1);
+      fireEvent.click(more);
+      expect(props.onExpand).toHaveBeenCalledTimes(1);
+      // The foot still yields to an invitation (arbitrage 4).
+      expect(card.querySelector('[data-tips-unknown]')).toBeNull();
+    });
+
+    it.each([
+      ['on a phone (under 600px)', true],
+      ['on a desktop', false],
+    ])('%s: two invitations and THREE tips — no row, « +3 tips → », every tip counted', (_where, phone) => {
+      if (phone) stubPhone();
+      const { card, widget } = renderBlock({ gardens: [terrasse, balcon, cour] });
+
+      expect(card.querySelectorAll('[data-tips-invite]')).toHaveLength(2);
+      expect(rows(card)).toHaveLength(0);
+      expect(widget.getByRole('button', { name: '+3 tips →' })).toBeInTheDocument();
+      expect(reachable(card, widget)).toBe(3);
+    });
+
+    it('one invitation and one tip: the tip is drawn in the slot the invitation leaves, nothing to count — and too tall for it, still drawn (écart e, kept)', () => {
+      const fitting = renderBlock({ gardens: [oneTip, balcon] });
+      expect(shownRows(fitting.card)).toHaveLength(1);
+      expect(fitting.widget.queryByRole('button', { name: /tips? →$/ })).toBeNull();
+      expect(reachable(fitting.card, fitting.widget)).toBe(1);
+      cleanup();
+
+      listHeight.value = 40;
+      const tooTall = renderBlock({ gardens: [oneTip, balcon] });
+      expect(shownRows(tooTall.card)).toHaveLength(1);
+      expect(hiddenRows(tooTall.card)).toHaveLength(0);
+      expect(tooTall.widget.queryByRole('button', { name: /tips? →$/ })).toBeNull();
+    });
   });
 });

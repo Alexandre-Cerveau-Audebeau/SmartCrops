@@ -53,6 +53,26 @@ export const emittedRules = (node: Element): string[] => {
 export const rulesFor = (node: Element): string => emittedRules(node).join(' ');
 
 /**
+ * The value a property takes inside ONE `@media (min-width:…)` block of a
+ * node's rules — how a responsive `sx` value is pinned per breakpoint (SMA-336
+ * mobile lot: every phone correction is written under `xs`, and the desktop
+ * value under `sm` has to be asserted unchanged beside it). MUI emits the
+ * breakpoints mobile-first, so `0px` is the phone and `600px` the tablet and
+ * desktop. Read from the block's own opening brace, on a declaration
+ * boundary: `width:` must not be read out of `(min-width:0px)`, nor `height:`
+ * out of `min-height:`. Null when the block or the property is absent.
+ */
+export function declaredAtBreakpoint(node: Element, minWidth: string, property: string): string | null {
+  const css = rulesFor(node);
+  const marker = `@media (min-width:${minWidth})`;
+  const at = css.indexOf(marker);
+  if (at < 0) return null;
+  const block = css.slice(css.indexOf('{', at), css.indexOf('}}', at));
+  const found = new RegExp(`[{;]\\s*${property}:([^;}]+)`).exec(block);
+  return found ? found[1]!.trim() : null;
+}
+
+/**
  * The SortableWidget slot of a widget — the grid ITEM between the grid and the
  * card, which is the node the spans and `min-height: 0` are declared on.
  */

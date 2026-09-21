@@ -1,5 +1,6 @@
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -22,7 +23,7 @@ import {
   gardenFixture,
 } from '../test/fixtures/dashboard';
 import { at, placement } from '../test/fixtures/placements';
-import { rulesFor } from '../test/dashboardDom';
+import { declaredAtBreakpoint, rulesFor } from '../test/dashboardDom';
 import type {
   DashboardData,
   DashboardGardenData,
@@ -2129,5 +2130,118 @@ describe('Gardens — an unreadable `updatedAt` is never displayed as « now » 
     const identity = within(table).getByText('Casa Lolo').closest('th')!;
     expect(within(identity).getByText('No date')).toHaveAttribute('data-missing-mark');
     expect(within(table).queryByText(/Modified/)).not.toBeInTheDocument();
+  });
+});
+
+// ── SMA-336 mobile lot, step 6 (pre-flight D5, arbitrage 5): the Medium row
+// on a PHONE is `A9NovicePhone.dc.html` l. 292-299 — a 40 × 34 thumbnail, the
+// name on a line of its own over its type chip (no glyph), the count pill, the
+// chevron — with the pencil and the bin of amendment A3 kept at their place.
+// Measured on `5282852` at 360 px, the name had 12 px (« T. », « B », « P. »);
+// the pixels after this step are the layout harness's. Here, the shape.
+describe('Gardens Medium row on a phone — the A9 line, the actions kept (mobile lot, step 6)', () => {
+  /** The page believes it is under 600px: `useMediaQuery(down('sm'))` answers true. */
+  const stubPhone = () =>
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes('max-width:599.95px'),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }))
+    );
+
+  beforeEach(() => {
+    localStorage.setItem('smartcrops-language', 'en');
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([
+        gardenWith(3, {
+          height: 6,
+          isEdible: false,
+          config: { orientation: null, gardenType: 'terrace', lightSchedule: null, hemisphere: 'N', latitudeBand: 'mid' },
+        }),
+      ])
+    );
+  });
+
+  // The page is unmounted BEFORE `matchMedia` is unstubbed (fix round 1,
+  // #3 — GitHub `4059024241`): with vitest's stacked hooks this `afterEach`
+  // runs before Testing Library's automatic cleanup, and a React tree still
+  // mounted could read the global the stub had installed.
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('draws the thumbnail in A9’s 40 × 34 box', async () => {
+    stubPhone();
+    await renderNovice();
+
+    // A 4 × 6 plan is HEIGHT-limited: (34 − 7) / 6 = 4.5 → 4 px cells with a
+    // 1 px gap, where the desktop's 48 × 40 box gives 5 px (the test above).
+    const preview = within(gardensWidget()).getAllByTestId('template-preview')[0]!;
+    expect(preview).toHaveStyle({
+      gridTemplateColumns: 'repeat(4, 4px)',
+      gridTemplateRows: 'repeat(6, 4px)',
+      gap: '1px',
+    });
+  });
+
+  it('stacks the name over its chips (A9 l. 294), the type chip bare, no « Ornamental », the pill on the chips line', async () => {
+    stubPhone();
+    await renderNovice();
+    const widget = gardensWidget();
+
+    const group = widget.querySelector('[data-garden-row-group]')!;
+    expect(declaredAtBreakpoint(group, '0px', 'flex-direction')).toBe('column');
+    expect(declaredAtBreakpoint(group, '600px', 'flex-direction')).toBe('row');
+    expect(declaredAtBreakpoint(group, '0px', 'gap')).toBe('4px');
+    expect(declaredAtBreakpoint(group, '600px', 'gap')).toBe('10px');
+
+    const chip = within(widget).getByText('Terrace').closest('.MuiChip-root')!;
+    expect(chip.querySelector('svg')).toBeNull();
+    expect(within(widget).queryByText('Ornamental')).toBeNull();
+
+    const pill = within(widget).getByText('3 plants').closest('.MuiChip-root')!;
+    const chips = widget.querySelector('[data-garden-row-chips]')!;
+    expect(chips.contains(pill)).toBe(true);
+    expect(declaredAtBreakpoint(chips, '0px', 'flex-wrap')).toBe('wrap');
+    expect(declaredAtBreakpoint(chips, '600px', 'flex-wrap')).toBe('nowrap');
+    // The name is alone on its line: the first child of the column.
+    expect(group.firstElementChild).toHaveTextContent('Casa Lolo');
+    // The hover inset of the desktop row is not spent on a phone.
+    const link = within(widget).getByRole('link', { name: 'Open Casa Lolo' });
+    expect(declaredAtBreakpoint(link, '0px', 'padding-left')).toBe('0px');
+    expect(declaredAtBreakpoint(link, '600px', 'padding-left')).toBe('8px');
+  });
+
+  it('keeps the pencil, the bin and the chevron where they are (A3, arbitrage 5)', async () => {
+    stubPhone();
+    await renderNovice();
+    const widget = within(gardensWidget());
+
+    expect(widget.getByRole('button', { name: 'Edit Casa Lolo' })).toBeInTheDocument();
+    expect(widget.getByRole('button', { name: 'Delete Casa Lolo' })).toBeInTheDocument();
+    expect(gardensWidget().querySelector('[data-row-chevron]')).not.toBeNull();
+    expect(gardensWidget().querySelector('[data-row-actions]')).not.toBeNull();
+  });
+
+  it('on a desktop the row is A2’s: 48 × 40, the glyph on the chip, « Ornamental », the pill at the end of the row', async () => {
+    await renderNovice();
+    const widget = gardensWidget();
+
+    const preview = within(widget).getAllByTestId('template-preview')[0]!;
+    expect(preview).toHaveStyle({ gridTemplateColumns: 'repeat(4, 5px)', gridTemplateRows: 'repeat(6, 5px)' });
+    const chip = within(widget).getByText('Terrace').closest('.MuiChip-root')!;
+    expect(chip.querySelector('svg')).not.toBeNull();
+    expect(within(widget).getByText('Ornamental')).toBeInTheDocument();
+    const pill = within(widget).getByText('3 plants').closest('.MuiChip-root')!;
+    expect(widget.querySelector('[data-garden-row-chips]')!.contains(pill)).toBe(false);
+    expect(widget.querySelector('[data-garden-row-group]')!.contains(pill)).toBe(false);
   });
 });

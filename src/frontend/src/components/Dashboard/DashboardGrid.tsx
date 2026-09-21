@@ -16,6 +16,7 @@ import {
   SortableContext,
   arrayMove,
   sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import Box from '@mui/material/Box';
 import useMediaQuery from '@mui/material/useMediaQuery';
@@ -92,13 +93,26 @@ export default function DashboardGrid({
     [visible, columns]
   );
 
+  // ONE column is a LIST, not a grid (SMA-336 mobile lot, step 2 — pre-flight
+  // D6). The dashboard's own strategy packs logical cells and translates every
+  // widget by `rows × (cell height + gap)`, with ONE cell height derived from
+  // the first measured widget (`dashboardSortingStrategy.ts`, `cellSizeFrom`).
+  // That is exact while every row is the same track — 273 px from `sm` up —
+  // and false the moment the phone rows are `minmax(200px, auto)` (step 1):
+  // a 338 px To-do above a 792 px calendar would be shown landing 716 px down
+  // where the drop puts it 812. dnd-kit's `verticalListSortingStrategy` reads
+  // the MEASURED rect of each item and the gaps between them, which is the
+  // right model for a column of unequal heights, and it is only ever used
+  // here: two and four columns keep the packing strategy, unchanged.
   const strategy = useMemo(
     () =>
-      createDashboardSortingStrategy({
-        items: gridItems,
-        columns,
-        gap: DASHBOARD_SPACING.gutter,
-      }),
+      columns === 1
+        ? verticalListSortingStrategy
+        : createDashboardSortingStrategy({
+            items: gridItems,
+            columns,
+            gap: DASHBOARD_SPACING.gutter,
+          }),
     [gridItems, columns]
   );
 
@@ -173,7 +187,18 @@ export default function DashboardGrid({
               sm: 'repeat(2, 1fr)',
               lg: 'repeat(4, 1fr)',
             },
-            gridAutoRows: { xs: '200px', sm: '273px' },
+            // SMA-336 mobile lot, step 1 (pre-flight D1): on a phone the rows
+            // are `minmax(200px, auto)` — never shorter than the 200 px the
+            // design freezes (`_spec.md` § 1, the « verrou 13 » of the visual
+            // pass), as tall as their content needs. In four or two columns a
+            // fixed track protects the tiling: a Medium beside a Small must
+            // share one row height. In ONE column every card is alone on its
+            // row, so the fixed 200 px protected nothing and clipped everything
+            // — measured on `5282852`: four two-line tasks in a 120 px body
+            // (V34), the invitation printed over the first tip (V37), the
+            // band over the min / max (V36), three calendar rows visible out
+            // of ten (V38). From `sm` up the 273 px track is untouched.
+            gridAutoRows: { xs: 'minmax(200px, auto)', sm: '273px' },
             gap: `${DASHBOARD_SPACING.gutter}px`,
           }}
         >
