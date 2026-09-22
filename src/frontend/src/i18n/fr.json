@@ -327,6 +327,7 @@
     "loadError": "Impossible de charger votre tableau de bord.",
     "retry": "Réessayer",
     "soon": "Bientôt disponible",
+    "weatherDisclaimer": "La météo affichée ici est fournie à titre d'information générale. Les prévisions et les conditions actuelles sont probabilistes et peuvent être inexactes pour votre lieu ou votre horaire précis. Ne vous fondez pas uniquement sur elles pour des décisions touchant à la sécurité des personnes, à l'aviation, à la navigation maritime, à la planification d'urgence ou à toute autre activité où la sécurité est en jeu. Pour toute décision où l'exactitude compte, référez-vous toujours aux services météorologiques officiels et aux autorités compétentes.",
     "save": {
       "pending": "Enregistrement…",
       "saved": "Enregistré",

@@ -327,6 +327,7 @@
     "loadError": "Couldn’t load your dashboard.",
     "retry": "Try again",
     "soon": "Coming soon",
+    "weatherDisclaimer": "The weather shown here is for general information only. Forecasts and current conditions are probabilistic and may be inaccurate for your exact location or time. Do not rely on them as the only basis for decisions about personal safety, aviation, marine navigation, emergency planning or any other safety-critical activity. For decisions where accuracy matters, always refer to official weather services and the relevant authorities.",
     "save": {
       "pending": "Saving…",
       "saved": "Saved",
