@@ -50,13 +50,14 @@ import {
  * Contacts under {@link VISIBLE_OVERLAP_PX} — line boxes touching without a
  * glyph under another — are reported, not failed.
  *
- * The instrument is checked too (fix round 2, #11; fix round 3, #12): four
- * PROBES of `probes.tsx` — synthetic cards with a known cut — are measured in
- * every run, apart from the scenes, and the suite asserts what the measure
- * must see in them: a line a scrolling zone holds but the card cuts is a clip
- * by the card, a line under a zone's fold is not, a zone that hides one axis
- * beside a scrolling one cuts for good on the hidden axis — and the computed
- * `overflow` the widgets' zones rely on is read from the engine.
+ * The instrument is checked too (fix round 2, #11; fix round 3, #12; SMA-446,
+ * #13): five PROBES of `probes.tsx` — synthetic cards with a known cut — are
+ * measured in every run, apart from the scenes, and the suite asserts what
+ * the measure must see in them: a line a scrolling zone holds but the card
+ * cuts is a clip by the card, a line under a zone's fold is not, a zone that
+ * hides one axis beside a scrolling one cuts for good on the hidden axis, a
+ * card that scrolls whole still cuts for good — and the computed `overflow`
+ * the widgets' zones rely on is read from the engine.
  *
  * Chrome: `CHROME_BIN`, else the usual names on the PATH, else the usual
  * install paths. Without Chrome the suite is SKIPPED on a workstation and
@@ -353,6 +354,29 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
         ]);
         expect(yHidden.hardClipped, run.id).toBe(2);
         expect(yHidden.body.beyondCard, run.id).toBeGreaterThan(0);
+      }
+    });
+
+    it('holds the card as a hard boundary whatever its computed overflow: a card that scrolls still counts its cuts as hard clips (SMA-446, #13)', () => {
+      // The probe: the widgets' 200 px card declared `overflow: auto` — a
+      // card that would scroll whole, which no card may: a ZONE scrolls
+      // inside the card (rule 5), the card itself never does — over a zone
+      // that clips nothing. The card is the only clipper of the line 170 px
+      // down and the line 320 px down. Read from the card's computed axes,
+      // the card passed for a scroller and both cuts for a fold — `hardClipped`
+      // 0, `beyondCard` 0 — and `defects()` saw nothing: a loss the instrument
+      // hid. The card is a hard boundary whatever its style says.
+      for (const run of RUNS) {
+        const probe = probeOf(run, 'probe-card-scrolls');
+        // The premise, measured: the card computes `auto` on both axes and its zone clips nothing.
+        expect(probe.cardOverflow, run.id).toEqual({ x: 'auto', y: 'auto' });
+        expect(probe.zoneOverflow, run.id).toEqual({ x: 'visible', y: 'visible' });
+        expect(probe.clipped.map((c) => [c.label, c.by, c.scroller]), run.id).toEqual([
+          ['"Past the card, inside the zone"', 'card', false],
+          ['"Past the fold of the zone"', 'card', false],
+        ]);
+        expect(probe.hardClipped, run.id).toBe(2);
+        expect(probe.body.beyondCard, run.id).toBeGreaterThan(0);
       }
     });
 

@@ -51,6 +51,8 @@ export interface SceneMeasure extends CardMeasure {
   probe: ProbeScene['probe'] | null;
   /** The COMPUTED `overflow-x` / `overflow-y` of a probe's zone, read in the engine (#12) — the CSS rule measured, not assumed; null for a widget scene. */
   zoneOverflow: { x: string; y: string } | null;
+  /** The COMPUTED `overflow-x` / `overflow-y` of the CARD itself, read in the engine (#13): what the card-scrolls probe claims to declare, measured. */
+  cardOverflow: { x: string; y: string };
   /** Rows a measured cap hid whole (`useRowBudget`): the days of the weather card, the tasks of the To-do card, the tips of the Tips card. */
   hiddenRows: number;
   /** The width each garden NAME can take on a Medium Gardens row — its group's — (arbitrage 5: 130 px at least on a phone); empty elsewhere. */
@@ -97,12 +99,16 @@ async function settle() {
 /** A probe of the harness's own (`probes.tsx`), not a widget scene. */
 const isProbe = (scene: LayoutScene | ProbeScene): scene is ProbeScene => 'probe' in scene;
 
+/** The computed `overflow` of an element, axis by axis. */
+function overflowOf(el: Element): { x: string; y: string } {
+  const cs = getComputedStyle(el);
+  return { x: cs.overflowX, y: cs.overflowY };
+}
+
 /** The computed `overflow` of a probe's zone — its `[data-probe-zone]` — axis by axis, or null where the card has none. */
 function zoneOverflowOf(card: HTMLElement): { x: string; y: string } | null {
   const zone = card.querySelector('[data-probe-zone]');
-  if (!zone) return null;
-  const cs = getComputedStyle(zone);
-  return { x: cs.overflowX, y: cs.overflowY };
+  return zone ? overflowOf(zone) : null;
 }
 
 /** One scene under the app's providers and theme — a tree, not a component: this file is a script, not a module Fast Refresh could reload. */
@@ -175,6 +181,7 @@ async function main() {
       size: scene.size,
       probe: isProbe(scene) ? scene.probe : null,
       zoneOverflow: zoneOverflowOf(card),
+      cardOverflow: overflowOf(card),
       hiddenRows: card.querySelectorAll('[data-weather-day-hidden], [data-todo-hidden], [data-tips-hidden]').length,
       gardenNameWidths: Array.from(card.querySelectorAll('[data-garden-row-group]')).map(
         (group) => Math.round(group.getBoundingClientRect().width * 10) / 10

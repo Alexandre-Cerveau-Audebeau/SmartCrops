@@ -251,19 +251,26 @@ interface Clipper {
 
 /**
  * The ancestors that clip, nearest first, the card last: the card bounds every
- * atom — its own `overflow: hidden` — and is listed whatever its style says.
+ * atom — its own `overflow: hidden` — and is listed whatever its style says,
+ * as a HARD boundary on both axes (SMA-446, #13): what the card cuts is lost.
+ * A card never scrolls whole — a zone scrolls inside it (rule 5) — so its
+ * axes are not read from its computed style, which the fallback below never
+ * did either: read from the style, a card declaring `overflow: auto` would
+ * have passed its own cuts for a fold and `hardClipped` would have
+ * under-counted in silence — the invariant the header states (« what the card
+ * or an `overflow: hidden` ancestor CLIPS ») held by the code, not by the
+ * widgets' habit of declaring `hidden`. The `card-scrolls` probe proves it.
  */
 function clippers(el: Element, card: Element): Clipper[] {
   const found: Clipper[] = [];
   let e = el.parentElement;
   while (e) {
-    const cs = getComputedStyle(e);
-    const axes = { scrollX: scrollsAxis(cs.overflowX), scrollY: scrollsAxis(cs.overflowY) };
     if (e === card) {
-      found.push({ el: e, box: paddingBox(e), ...axes });
+      found.push({ el: e, box: paddingBox(e), scrollX: false, scrollY: false });
       break;
     }
-    if (clips(cs)) found.push({ el: e, box: paddingBox(e), ...axes });
+    const cs = getComputedStyle(e);
+    if (clips(cs)) found.push({ el: e, box: paddingBox(e), scrollX: scrollsAxis(cs.overflowX), scrollY: scrollsAxis(cs.overflowY) });
     e = e.parentElement;
   }
   if (found[found.length - 1]?.el !== card) {
