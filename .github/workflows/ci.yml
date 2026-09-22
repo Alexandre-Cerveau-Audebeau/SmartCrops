@@ -1,3 +1,11 @@
+# Runners pinned to ubuntu-24.04 (SMA-447 § 1, 22/09/2026) — here, in cd.yml
+# and in rollback.yml. The floating `latest` Ubuntu label moves to 26.04 from
+# 19 October 2026 (https://github.com/actions/runner-images/issues/14748),
+# and the « Chrome for the layout harness » step below — Google's APT
+# repository, the headless browser's packages on a new distribution — could
+# break there, on every PR. Re-evaluate once the layout harness has been run
+# green on an ubuntu-26.04 runner (Chrome found, 30 scenes at zero); then
+# move the three workflows together, never one at a time.
 name: CI
 
 on:
@@ -9,7 +17,7 @@ on:
 jobs:
   backend:
     name: Backend (.NET 8)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
@@ -39,7 +47,7 @@ jobs:
 
   frontend:
     name: Frontend (Node 20)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
