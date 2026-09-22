@@ -327,6 +327,7 @@
     "loadError": "Impossible de charger votre tableau de bord.",
     "retry": "Réessayer",
     "soon": "Bientôt disponible",
+    "weatherDisclaimer": "La météo affichée ici est fournie à titre d'information générale. Les prévisions et les conditions actuelles sont probabilistes et peuvent être inexactes pour votre lieu ou votre horaire précis. Ne vous fondez pas uniquement sur elles pour des décisions touchant à la sécurité des personnes, à l'aviation, à la navigation maritime, à la planification d'urgence ou à toute autre activité où la sécurité est en jeu. Pour toute décision où l'exactitude compte, référez-vous toujours aux services météorologiques officiels et aux autorités compétentes.",
     "save": {
       "pending": "Enregistrement…",
       "saved": "Enregistré",
@@ -1677,7 +1678,7 @@
   "legal": {
     "layout": {
       "lastUpdated": "Dernière mise à jour :",
-      "updatedDate": "20 septembre 2026",
+      "updatedDate": "22 septembre 2026",
       "courtesy": "Version originale française — en cas de divergence avec la traduction, la version française fait foi."
     },
     "mentions": {
@@ -1792,7 +1793,7 @@
         "what": "**Quelles données.** Lorsque vous indiquez la ville d'un jardin ou de votre profil, nous conservons le lieu que vous avez choisi dans la liste proposée : son nom, sa région, son pays, ses coordonnées géographiques (latitude et longitude) et la date de cet enregistrement. Le texte que vous tapez dans le champ « Ville » pour trouver ce lieu n'est pas enregistré dans votre compte : seul le lieu choisi l'est.",
         "why": "**Pourquoi.** Ces informations nous servent à afficher la météo locale de vos jardins, à vous proposer des conseils adaptés (arroser, protéger du froid) et à situer votre calendrier de culture dans la bonne saison. Sans elles, ces fonctions ne sont pas disponibles ; le reste de l'application fonctionne normalement.",
         "basis": "**Sur quelle base.** L'exécution du service que vous nous demandez (exécution du contrat, RGPD art. 6.1.b). Vous choisissez librement d'indiquer une ville, et vous pouvez la retirer à tout moment depuis l'application (bouton « Retirer »).",
-        "retention": "**Combien de temps.** Jusqu'à ce que vous retiriez la localisation, supprimiez le jardin concerné ou supprimiez votre compte ; elle est alors effacée dans les mêmes conditions que vos autres données (voir « Combien de temps vos données sont-elles conservées ? »). Les prévisions météo obtenues ne sont jamais enregistrées dans la base de données : le serveur les garde en mémoire au plus 15 minutes, et jusqu'à 24 heures comme dernière valeur connue si le fournisseur ne répond plus, puis elles disparaissent.",
+        "retention": "**Combien de temps.** Jusqu'à ce que vous retiriez la localisation, supprimiez le jardin concerné ou supprimiez votre compte ; elle est alors effacée dans les mêmes conditions que vos autres données (voir « Combien de temps vos données sont-elles conservées ? »). Les prévisions météo obtenues ne sont jamais enregistrées dans la base de données : le serveur les garde en mémoire au plus 15 minutes, et jusqu'à 60 minutes comme dernière valeur connue si le fournisseur ne répond plus, puis elles disparaissent.",
         "recipients": "**Qui la reçoit.** Pour obtenir les prévisions, nous interrogeons **WeatherAPI.com, exploité par Zoomash Ltd (Royaume-Uni)**. Lorsque vous cherchez un lieu, **le texte que vous tapez dans le champ « Ville » lui est transmis, débarrassé de ses espaces de début et de fin** (de 2 à 100 caractères) pour être reconnu. Pour la météo, la requête ne contient que **les coordonnées géographiques du lieu choisi** — celles que le fournisseur a lui-même associées à ce lieu lors de la recherche, transmises avec au plus quatre décimales —, la langue d'affichage et des paramètres techniques identiques pour tous (nombre de jours de prévision, alertes officielles) ; une même requête sert tous les jardins situés au même endroit. Nous ne lui communiquons ni votre nom, ni votre adresse électronique, ni aucun identifiant de compte ou de jardin, ni le nom de vos jardins ; la requête s'identifie uniquement comme provenant du logiciel SmartCrops. Le Royaume-Uni fait l'objet d'une décision d'adéquation de la Commission européenne, renouvelée le 19 décembre 2025 et valable jusqu'au 27 décembre 2031, qui reconnaît un niveau de protection équivalent à celui de l'Union.",
         "rights": "**Vos droits.** Vous pouvez à tout moment consulter cette donnée, la modifier ou la retirer depuis l'application, et l'obtenir dans l'export de votre compte, où elle figure pour votre profil et pour chacun de vos jardins, aux côtés de vos autres informations."
       },
@@ -1814,7 +1815,7 @@
         "intro": "Durées de conservation :",
         "items": {
           "account": "**Compte et contenus associés** — durée de vie du compte ; suppression effective dans un délai de 30 jours après suppression du compte.",
-          "location": "**Localisation des jardins et du profil** — jusqu'à son retrait, la suppression du jardin ou du compte. Les prévisions météo reçues du fournisseur restent en mémoire du serveur au plus 24 heures et ne sont jamais enregistrées en base de données.",
+          "location": "**Localisation des jardins et du profil** — jusqu'à son retrait, la suppression du jardin ou du compte. Les prévisions météo reçues du fournisseur restent en mémoire du serveur au plus 60 minutes et ne sont jamais enregistrées en base de données.",
           "logs": "**Journaux techniques** — 12 mois maximum.",
           "contact": "**Messages de contact** — 12 mois après le dernier échange."
         }

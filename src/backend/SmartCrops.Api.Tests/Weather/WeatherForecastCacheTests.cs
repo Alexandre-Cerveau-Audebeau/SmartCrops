@@ -227,40 +227,80 @@ public class WeatherForecastCacheTests
         Assert.Equal(0, cache.GateCount);
     }
 
+    /// <summary>
+    /// Guarantees the last known entry has an ABSOLUTE age: reads during an
+    /// outage never renew it, it is served stale through the 55th minute and
+    /// gone from the 60th, and every failed refresh asked the provider again.
+    /// </summary>
     [Fact]
     public async Task LastKnown_IsNotRenewedByReads_AndExpiresAfterItsTtl()
     {
         // Review round 2 (C7), under the memory cache's own clock
-        // (MemoryCacheOptions.Clock): a success at T0, then a day of hourly
-        // reads during an outage. A sliding expiration renewed the last known
-        // entry on every read, so a forecast could be served stale for ever
-        // under traffic; the entry has an ABSOLUTE age now — stale through
-        // the 23rd hour, unavailable from the 24th.
+        // (MemoryCacheOptions.Clock): a success at T0, then an hour of reads
+        // every five minutes during an outage, from the end of the fresh
+        // window. A sliding expiration renewed the last known entry on every
+        // read, so a forecast could be served stale for ever under traffic;
+        // the entry has an ABSOLUTE age — stale through the 55th minute,
+        // unavailable from the 60th (the terms' cap on current conditions,
+        // SMA-387; it was the 24th hour before that lot).
         var clock = new ManualClock(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
         var (cache, handler) = Build(clock: clock);
         var first = await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
         Assert.False(first.Stale);
         handler.Respond(HttpStatusCode.Forbidden, "{\"error\":{\"code\":2009,\"message\":\"synthetic\"}}");
 
-        for (var hour = 1; hour <= 23; hour++)
+        clock.Advance(WeatherForecastCache.FreshTtl);
+        for (var minute = 15; minute <= 55; minute += 5)
         {
-            clock.Advance(TimeSpan.FromHours(1));
             var outcome = await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
-            Assert.True(outcome.Stale, $"hour {hour}: expected the last known forecast");
+            Assert.True(outcome.Stale, $"minute {minute}: expected the last known forecast");
             Assert.Equal(first.Data!.FetchedAtUtc, outcome.Data!.FetchedAtUtc);
+            clock.Advance(TimeSpan.FromMinutes(5));
         }
 
-        clock.Advance(TimeSpan.FromHours(1));
         var expired = await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
         Assert.Null(expired.Data);
         Assert.False(expired.Stale);
         Assert.Equal(WeatherApiFailureKind.Refused, expired.Failure!.Kind);
 
-        clock.Advance(TimeSpan.FromHours(1));
+        clock.Advance(TimeSpan.FromMinutes(5));
         var stillExpired = await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
         Assert.Null(stillExpired.Data);
-        // Every hour tried the provider again: the failure was never memorized.
-        Assert.Equal(1 + 25, handler.Calls);
+        // Every read tried the provider again: the failure was never memorized.
+        Assert.Equal(1 + 9 + 2, handler.Calls);
+    }
+
+    /// <summary>
+    /// Guarantees the 60-minute bound of <see cref="WeatherForecastCache.LastKnownTtl"/>
+    /// on both sides: the last known forecast is still served at 59 minutes
+    /// and gone at 61, the failure never memorized.
+    /// </summary>
+    [Fact]
+    public async Task LastKnown_IsGoneAfterSixtyMinutes_TheTermsCapForCurrentConditions()
+    {
+        // SMA-387: the last known entry keeps the WHOLE forecast.json answer,
+        // current conditions included, and the provider's terms cap the
+        // caching of current conditions at 60 minutes. Under the memory
+        // cache's own clock: a success at T0, the provider down since; the
+        // last weather known is still served at 59 minutes and gone at 61.
+        var clock = new ManualClock(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
+        var (cache, handler) = Build(clock: clock);
+        var first = await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+        Assert.False(first.Stale);
+        handler.Respond(HttpStatusCode.Forbidden, "{\"error\":{\"code\":2009,\"message\":\"synthetic\"}}");
+
+        clock.Advance(TimeSpan.FromMinutes(59));
+        var stale = await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+        Assert.True(stale.Stale, "59 minutes after the success: the last known forecast is still within the cap");
+        Assert.Equal(first.Data!.FetchedAtUtc, stale.Data!.FetchedAtUtc);
+
+        clock.Advance(TimeSpan.FromMinutes(2));
+        var gone = await cache.GetAsync(45.76, 4.84, "fr", CancellationToken.None);
+        Assert.Null(gone.Data);
+        Assert.False(gone.Stale);
+        Assert.Equal(WeatherApiFailureKind.Refused, gone.Failure!.Kind);
+        // Both reads tried the provider again: the failure was never memorized.
+        Assert.Equal(3, handler.Calls);
     }
 
     [Fact]
@@ -432,13 +472,17 @@ public class WeatherForecastCacheTests
         Assert.NotEqual(lyon, annecy);
     }
 
+    /// <summary>
+    /// Guarantees the two cache keys keep their documented shape and the two
+    /// TTLs their documented values — 15 minutes fresh, 60 minutes last known.
+    /// </summary>
     [Fact]
     public void Keys_AreTheDocumentedShape()
     {
         Assert.Equal("weather:fresh:45.76,4.84:fr", WeatherForecastCache.FreshKey(WeatherLocationKey.From(45.764, 4.8357), "fr"));
         Assert.Equal("weather:last:45.76,4.84:fr", WeatherForecastCache.LastKnownKey(WeatherLocationKey.From(45.764, 4.8357), "fr"));
         Assert.Equal(TimeSpan.FromMinutes(15), WeatherForecastCache.FreshTtl);
-        Assert.Equal(TimeSpan.FromHours(24), WeatherForecastCache.LastKnownTtl);
+        Assert.Equal(TimeSpan.FromMinutes(60), WeatherForecastCache.LastKnownTtl);
     }
 
     /// <summary>The memory cache's clock, advanced by hand.</summary>

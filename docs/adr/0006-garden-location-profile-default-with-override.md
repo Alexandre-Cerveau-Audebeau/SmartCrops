@@ -57,3 +57,7 @@ The criterion that decided it is **a garden created after the invitation**. With
 - **ADR-0005** — the same `AuthController` carries the profile location endpoints, for the same reason it carries the export.
 - **SMA-336** PR 3a/5 (this lot), PR 3b/5 (the widget, the invitation, the settings section that will offer the override).
 - Pre-flight report `SMA-336 - PR3 pre-flight.md` (2026-09-12), § A and § H.1 — the DEV figures (0 of 2 profile cities, 0 gardens located) the decision rests on.
+
+## Amendments
+
+- **2026-09-21 — the last-known entry is capped at 60 minutes** (SMA-387; WeatherAPI.com terms of service, caching limit on current conditions). `WeatherForecastCache.LastKnownTtl` — the « last known » entry of decision C7 of PR 3a, served stale while a refresh fails — was 24 hours, the ceiling the provider's terms allow for a forecast. The entry keeps the whole `forecast.json` answer, current conditions included, and the same terms cap the caching of current conditions at 60 minutes (https://www.weatherapi.com/terms.aspx, section « API »), so the entry is now capped at 60 minutes. The fresh entry (15 minutes) and the C7 rule — an absolute age, never renewed by a read — are unchanged; the C7 test proves the bound at the 60th minute, and a second test proves it at 59 and 61.
