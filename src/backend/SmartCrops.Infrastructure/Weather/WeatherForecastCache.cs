@@ -37,13 +37,14 @@ public sealed record WeatherFetchOutcome(CachedForecast? Data, bool Stale, Weath
 ///   the provider itself refreshes every 10 to 15, and its terms allow up to
 ///   60 for current conditions);</item>
 ///   <item><b>last known</b> — ABSOLUTE TTL of <see cref="LastKnownTtl"/>
-///   (24 hours, the terms' ceiling for a forecast), counted from the success
-///   that wrote it, rewritten on every success and read ONLY when a refresh
-///   fails: the answer is then the last weather known, flagged stale with its
-///   own instant. Reading it never extends it (review round 2, C7): a sliding
-///   window would have been renewed by every failed refresh, and under steady
-///   traffic during an outage a forecast could have been served stale for
-///   ever.</item>
+///   (60 minutes: the entry holds the whole answer, current conditions
+///   included, and the terms cap the caching of current conditions at 60
+///   minutes — SMA-387), counted from the success that wrote it, rewritten
+///   on every success and read ONLY when a refresh fails: the answer is then
+///   the last weather known, flagged stale with its own instant. Reading it
+///   never extends it (review round 2, C7): a sliding window would have been
+///   renewed by every failed refresh, and under steady traffic during an
+///   outage a forecast could have been served stale for ever.</item>
 /// </list>
 ///
 /// <para><b>Single-flight per key: one call per wave, one outcome for the
@@ -89,8 +90,15 @@ public sealed class WeatherForecastCache
     /// <summary>How long a forecast is reused before the provider is asked again.</summary>
     public static readonly TimeSpan FreshTtl = TimeSpan.FromMinutes(15);
 
-    /// <summary>How long the last successful answer is kept for a failed refresh, counted from that success.</summary>
-    public static readonly TimeSpan LastKnownTtl = TimeSpan.FromHours(24);
+    /// <summary>
+    /// How long the last successful answer is kept for a failed refresh,
+    /// counted from that success: 60 minutes, because the entry keeps the
+    /// whole forecast.json answer, current conditions included, and the
+    /// WeatherAPI.com terms of service cap the caching of current conditions
+    /// at 60 minutes (https://www.weatherapi.com/terms.aspx, section "API";
+    /// SMA-387).
+    /// </summary>
+    public static readonly TimeSpan LastKnownTtl = TimeSpan.FromMinutes(60);
 
     private readonly IMemoryCache _cache;
     private readonly IServiceScopeFactory _scopes;
