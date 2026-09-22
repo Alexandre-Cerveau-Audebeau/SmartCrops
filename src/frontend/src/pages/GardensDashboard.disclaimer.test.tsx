@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import i18next from 'i18next';
@@ -14,6 +14,8 @@ import { rulesFor } from '../test/dashboardDom';
 import { dashboardFixture, gardenFixture } from '../test/fixtures/dashboard';
 import { linkFixture, locationFixture, weatherFixture } from '../test/fixtures/weather';
 import { presetFor } from '../constants/dashboardPresets';
+import { WEATHER_BEARING_BLOCKS } from '../components/Dashboard/weatherDisclaimer';
+import type { DashboardBlockKey } from '../types/Dashboard';
 import type { DashboardWeatherData, WeatherStatus } from '../types/DashboardWeather';
 
 vi.mock('../services/gardenApi', () => ({
@@ -118,7 +120,85 @@ const weatherLanded = () =>
     expect(document.querySelector('[data-weather-skeleton]')).toBeNull();
   });
 
+/** The warning's own nodes — `role="note"` is asserted separately. */
 const disclaimers = () => document.querySelectorAll('[data-weather-disclaimer]');
+
+// Review round 1, G1 (GitHub 4067551264): the warning follows the VISIBLE
+// weather, and never less. The layout is the stored one — `hidden: true`
+// through the preferences, the customization tests' pattern.
+
+/** The widgets that stay on the page beside the weather-bearing ones. */
+const SHOWN_BESIDE: readonly DashboardBlockKey[] = ['gardens', 'month', 'counters', 'stats'];
+
+/**
+ * A stored Gardener layout with exactly `visible` of the three weather-bearing
+ * widgets on the page, the four of `SHOWN_BESIDE` shown and Harvest hidden as
+ * the preset has it.
+ */
+function serveLayoutShowing(visible: readonly DashboardBlockKey[]) {
+  const bearing: readonly DashboardBlockKey[] = WEATHER_BEARING_BLOCKS;
+  vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+    schemaVersion: 1,
+    level: 'gardener',
+    isPreset: false,
+    blocks: presetFor('gardener').map((block) => ({
+      ...block,
+      hidden: bearing.includes(block.key)
+        ? !visible.includes(block.key)
+        : !SHOWN_BESIDE.includes(block.key),
+    })),
+    updatedAt: null,
+  });
+}
+
+/** The keys of the widgets the grid rendered. */
+const renderedWidgets = () =>
+  [...document.querySelectorAll('[data-widget]')].map((node) => node.getAttribute('data-widget'));
+
+/**
+ * Every node a weather figure is drawn in: the three weather-bearing widgets,
+ * the Weather widget's inner surfaces, the Gardens table's MÉTÉO column and
+ * cells, and the weather-fed lines of To-do and Tips. If a future change draws
+ * weather somewhere else, the list — and the visibility rule — must grow.
+ */
+const WEATHER_FIGURE_SELECTORS = [
+  '[data-widget="weather"]',
+  '[data-widget="todo"]',
+  '[data-widget="tips"]',
+  '[data-weather-band]',
+  '[data-weather-head]',
+  '[data-weather-located]',
+  '[data-weather-attribution]',
+  '[data-weather-skeleton]',
+  '[data-weather-column]',
+  '[data-weather-cell]',
+  '[data-todo-task]',
+  '[data-todo-weather-note]',
+  '[data-tips-tip]',
+  '[data-tips-weather-note]',
+] as const;
+
+/** Every rendered node of `WEATHER_FIGURE_SELECTORS` — empty when the page draws no weather. */
+const weatherFigures = () =>
+  WEATHER_FIGURE_SELECTORS.flatMap((selector) => [...document.querySelectorAll(selector)]);
+
+/**
+ * The aggregate held back until the test lands it inside `act`, so the DOM
+ * read right after is the one the landed data produced — the only proof of
+ * landing when the Weather widget, and its skeleton, are off the page.
+ */
+function holdWeather() {
+  let land!: (weather: DashboardWeatherData) => void;
+  vi.mocked(fetchDashboardWeather).mockReturnValue(
+    new Promise<DashboardWeatherData>((resolve) => {
+      land = resolve;
+    })
+  );
+  return (weather: DashboardWeatherData) =>
+    act(async () => {
+      land(weather);
+    });
+}
 
 beforeEach(() => {
   vi.mocked(saveDashboardPreferences).mockResolvedValue(undefined);
@@ -252,6 +332,77 @@ describe('GardensDashboard — the weather warning under the grid (SMA-387)', ()
     expect(await screen.findByText('Impossible de charger la météo.')).toBeInTheDocument();
     expect(screen.queryByRole('note')).toBeNull();
     expect(disclaimers()).toHaveLength(0);
+  });
+});
+
+describe('GardensDashboard — the weather warning follows the visible weather, and never less (SMA-387, G1)', () => {
+  it.each(WEATHER_BEARING_BLOCKS)(
+    'is shown when « %s » is the only weather-bearing widget on the page',
+    async (only) => {
+      serveLayoutShowing([only]);
+
+      await renderPage('fr');
+
+      await screen.findByRole('note');
+      expect(disclaimers()).toHaveLength(1);
+      const rendered = renderedWidgets();
+      expect(rendered).toContain(only);
+      for (const other of WEATHER_BEARING_BLOCKS) {
+        if (other !== only) expect(rendered).not.toContain(other);
+      }
+      // The guards of the negative case below DO catch weather when it is
+      // drawn: the selectors find the widget, and with the Weather widget on
+      // the page its figures are in the text — « 24° » now, in the hero and
+      // in the MÉTÉO cell.
+      expect(weatherFigures().length).toBeGreaterThan(0);
+      if (only === 'weather') {
+        await waitFor(() => expect(document.body.textContent).toContain('24°'));
+        expect(document.body.textContent).toMatch(/\d\s?°/);
+      }
+    }
+  );
+
+  it('reads the DOM the landed aggregate produced: the note is there right after the landing', async () => {
+    // The landing mechanism of the negative case below, proven on a positive
+    // one: no `findBy`, no `waitFor` — the note is asserted SYNCHRONOUSLY
+    // after `act`, so a landing that did not flush would fail here first.
+    serveLayoutShowing(['todo']);
+    const land = holdWeather();
+
+    await renderPage('fr');
+    expect(await screen.findAllByText('Casa Lolo')).not.toHaveLength(0);
+    await waitFor(() => expect(fetchDashboardWeather).toHaveBeenCalledTimes(1));
+    expect(disclaimers()).toHaveLength(0);
+
+    await land(aggregateWith('fresh'));
+
+    expect(disclaimers()).toHaveLength(1);
+    expect(screen.getByRole('note')).toHaveAttribute('data-weather-disclaimer');
+  });
+
+  it('is absent when none of the three is on the page — and no weather figure is drawn anywhere', async () => {
+    // Gardens, « Ce mois-ci », Counters and Statistics shown, the aggregate
+    // landed WITH data (a fresh place, 24° now, 16–29 today): the page shows
+    // no weather, so it shows no warning. The second half is the guard: if a
+    // future change draws weather outside the three widgets, it turns red
+    // and the visibility rule has to be revisited.
+    serveLayoutShowing([]);
+    const land = holdWeather();
+
+    await renderPage('fr');
+    expect(await screen.findAllByText('Casa Lolo')).not.toHaveLength(0);
+    await waitFor(() => expect(fetchDashboardWeather).toHaveBeenCalledTimes(1));
+
+    await land(aggregateWith('fresh'));
+
+    const rendered = renderedWidgets();
+    expect(rendered).toEqual(expect.arrayContaining([...SHOWN_BESIDE]));
+    for (const key of WEATHER_BEARING_BLOCKS) expect(rendered).not.toContain(key);
+    expect(screen.queryByRole('note')).toBeNull();
+    expect(disclaimers()).toHaveLength(0);
+    expect(weatherFigures()).toHaveLength(0);
+    expect(document.body.textContent).not.toContain('24°');
+    expect(document.body.textContent).not.toMatch(/\d\s?°/);
   });
 });
 

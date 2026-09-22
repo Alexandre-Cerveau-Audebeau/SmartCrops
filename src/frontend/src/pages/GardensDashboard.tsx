@@ -38,6 +38,7 @@ import WeatherBlock from '../components/Dashboard/blocks/WeatherBlock';
 import WeatherOptionsPanel from '../components/Dashboard/blocks/WeatherOptionsPanel';
 import LocationDialog from '../components/Dashboard/LocationDialog';
 import type { LocationTarget } from '../components/Dashboard/locationTools';
+import { weatherDisclaimerVisible } from '../components/Dashboard/weatherDisclaimer';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useDashboardWeather } from '../hooks/useDashboardWeather';
@@ -218,20 +219,6 @@ export default function GardensDashboard() {
           ),
         };
 
-  // SMA-387 — the provider's terms ask for a clear, prominent warning for the
-  // end user wherever weather data from the API is shown. ONE for the page,
-  // under the grid, as long as at least one place carries data a surface
-  // draws — « fresh » or « stale » (the Weather widget, the MÉTÉO column and
-  // the To-do block all read this same aggregate). Nothing to warn about
-  // while the aggregate loads, when no place is located, when every place is
-  // unavailable, or behind a load error: every surface then shows the error,
-  // not figures. A passive refresh keeps the previous data on screen, so the
-  // warning stays with it.
-  const showWeatherDisclaimer =
-    !weatherLoading &&
-    !weatherError &&
-    weatherData.locations.some((place) => place.status !== 'unavailable');
-
   // The page's own share of the derivation the widgets read — see the meta line
   // below. Shared through `gardenViewOf`'s memo, so the header does not make the
   // exposure engine run a third time.
@@ -338,6 +325,24 @@ export default function GardensDashboard() {
    */
   const isBlockVisible = (key: DashboardBlockKey) =>
     blocks.some((block) => block.key === key && !block.hidden);
+
+  // SMA-387 — the provider's terms ask for a clear, prominent warning for the
+  // end user wherever weather data from the API is shown. ONE for the page,
+  // under the grid, as long as at least one place carries data a surface
+  // draws — « fresh » or « stale » — AND a widget that draws it is on the page
+  // (review round 1, G1): the Weather widget, the To-do block or the Tips
+  // block; the MÉTÉO column follows the Weather widget's own visibility.
+  // Nothing to warn about while the aggregate loads, when no place is
+  // located, when every place is unavailable, or behind a load error: every
+  // surface then shows the error, not figures. A passive refresh keeps the
+  // previous data on screen, so the warning stays with it. The rule itself is
+  // a pure function, pinned on every subset of the three widgets.
+  const showWeatherDisclaimer = weatherDisclaimerVisible({
+    loading: weatherLoading,
+    error: weatherError,
+    locations: weatherData.locations,
+    isBlockVisible,
+  });
 
   const renderBlock = (block: DashboardBlock) => {
     switch (block.key) {
