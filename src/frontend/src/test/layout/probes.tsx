@@ -41,9 +41,22 @@ import type { LayoutScene } from './scenes';
  * scenes rely on — `overflow-y: auto` declared alone computes `overflow-x` to
  * `auto`, so both axes scroll — is measured in Chrome, not assumed from the
  * specification.
+ *
+ * SMA-446, #13 — the CARD as a hard boundary, whatever its style computes:
+ *
+ * `card-scrolls`: the same 200 px card declared `overflow: auto` — a card
+ * that would scroll whole, which no card may: a ZONE scrolls inside the card
+ * (rule 5), the card itself never does — over a zone that clips nothing, so
+ * the card is the only clipper of its lines. The line 170 px down and the
+ * line 320 px down are cut by the card, for good. Read from the card's
+ * computed axes, the card passed for a scroller and both cuts for a fold:
+ * `hardClipped` 0, `beyondCard` 0 — a loss the instrument would have hidden
+ * in silence the day a card declared a scroll. Every probe reports its card's
+ * computed `overflow` too (`cardOverflow`), so this one proves it measures
+ * what it claims.
  */
 export interface ProbeScene extends LayoutScene {
-  probe: 'zone-past-card' | 'zone-fold' | 'x-hidden-y-auto' | 'x-auto-y-hidden';
+  probe: 'zone-past-card' | 'zone-fold' | 'x-hidden-y-auto' | 'x-auto-y-hidden' | 'card-scrolls';
 }
 
 export const PROBE_SCENES: ProbeScene[] = [
@@ -51,6 +64,7 @@ export const PROBE_SCENES: ProbeScene[] = [
   { name: 'probe-zone-fold', key: 'tips', size: 'medium', weather: 'all', probe: 'zone-fold' },
   { name: 'probe-x-hidden-y-auto', key: 'tips', size: 'medium', weather: 'all', probe: 'x-hidden-y-auto' },
   { name: 'probe-x-auto-y-hidden', key: 'tips', size: 'medium', weather: 'all', probe: 'x-auto-y-hidden' },
+  { name: 'probe-card-scrolls', key: 'tips', size: 'medium', weather: 'all', probe: 'card-scrolls' },
 ];
 
 /** The card's border-box height, its padding and its 1 px border: the frame the widgets' cards draw, at a fixed size. */
@@ -69,12 +83,22 @@ export const WIDE_LINE =
 /** One axis of a zone's `overflow`: declared, or left to the engine's computation, as the widgets' zones leave their other axis. */
 type Overflow = 'auto' | 'hidden' | undefined;
 
-/** The zone of each probe: its height, its `overflow` axis by axis, and whether its first line is the wide one. */
-const ZONES: Record<ProbeScene['probe'], { height: number; overflowX: Overflow; overflowY: Overflow; wide: boolean }> = {
-  'zone-past-card': { height: 260, overflowX: undefined, overflowY: 'auto', wide: false },
-  'zone-fold': { height: 100, overflowX: undefined, overflowY: 'auto', wide: false },
-  'x-hidden-y-auto': { height: 100, overflowX: 'hidden', overflowY: 'auto', wide: true },
-  'x-auto-y-hidden': { height: 100, overflowX: 'auto', overflowY: 'hidden', wide: true },
+/**
+ * The zone of each probe: its height, its `overflow` axis by axis, whether
+ * its first line is the wide one — and the CARD's own `overflow`, the widgets'
+ * `hidden` for every probe but `card-scrolls` (#13).
+ */
+const ZONES: Record<
+  ProbeScene['probe'],
+  { height: number; overflowX: Overflow; overflowY: Overflow; wide: boolean; card: 'hidden' | 'auto' }
+> = {
+  'zone-past-card': { height: 260, overflowX: undefined, overflowY: 'auto', wide: false, card: 'hidden' },
+  'zone-fold': { height: 100, overflowX: undefined, overflowY: 'auto', wide: false, card: 'hidden' },
+  'x-hidden-y-auto': { height: 100, overflowX: 'hidden', overflowY: 'auto', wide: true, card: 'hidden' },
+  'x-auto-y-hidden': { height: 100, overflowX: 'auto', overflowY: 'hidden', wide: true, card: 'hidden' },
+  // A zone that clips nothing — `overflow` left to compute to `visible` on
+  // both axes — under a card that scrolls: the card is the only clipper.
+  'card-scrolls': { height: 260, overflowX: undefined, overflowY: undefined, wide: false, card: 'auto' },
 };
 
 /** One line of the probe — the text atom the measure reads — of a known height, never wrapping. */
@@ -90,13 +114,13 @@ function line(id: string, text: string) {
 const spacer = (height: number) => <div aria-hidden style={{ height }} />;
 
 /**
- * The card of a probe: the widgets' frame — `overflow: hidden`, a 1 px
- * border, a padding — at a fixed height, holding ONE zone of 400 px of
- * content. The zone starts 17 px down the card (the border, the padding): a
- * line at its top — « Within the card », or the wide line — a line 170 px
- * down the zone — 187 to 207 on the card, past its 199 px padding box, within
- * a 260 px zone, under the fold of a 100 px one — and a line 320 px down,
- * past the fold of either zone.
+ * The card of a probe: the widgets' frame — `overflow: hidden` (or `auto`,
+ * for the one probe that scrolls its card, #13), a 1 px border, a padding —
+ * at a fixed height, holding ONE zone of 400 px of content. The zone starts
+ * 17 px down the card (the border, the padding): a line at its top — « Within
+ * the card », or the wide line — a line 170 px down the zone — 187 to 207 on
+ * the card, past its 199 px padding box, within a 260 px zone, under the fold
+ * of a 100 px one — and a line 320 px down, past the fold of either zone.
  */
 export function probeWidget(scene: ProbeScene): ReactNode {
   const zone = ZONES[scene.probe];
@@ -106,7 +130,7 @@ export function probeWidget(scene: ProbeScene): ReactNode {
       style={{
         height: CARD_HEIGHT,
         boxSizing: 'border-box',
-        overflow: 'hidden',
+        overflow: zone.card,
         padding: PADDING,
         border: '1px solid #cccccc',
         borderRadius: 12,

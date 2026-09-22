@@ -18,6 +18,28 @@ import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../../../types/Da
 import TodoBlock from './TodoBlock';
 import { todoTasks } from './todoTasks';
 
+// SMA-434 — the block reads the BROWSER's month at render for a garden that
+// reads no place (Q10), and the calendar fixtures further down are dated on
+// « this month ». They used to read the wall clock when the module loaded:
+// either side of midnight on the last day of a month the fixture and the
+// render named different months, and the rows went missing at random. `Date`
+// is pinned on ONE instant for every test — mid-month at noon UTC, so the
+// local month is the same in every zone the suite may run in — and the
+// fixtures are dated from that same instant. ONLY `Date` is faked: the timers
+// stay real, so the measured-budget suite's `act` and effects keep their
+// clock.
+
+const FROZEN_NOW = Date.UTC(2026, 8, 14, 12, 0, 0);
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(FROZEN_NOW);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 // SMA-336 PR 3b/5 — « À faire aujourd'hui » against `Main.dc.html` (Medium:
 // four rows, « +N tâches → ») and `A4Manquantes.dc.html` (two rows, the
 // invitation for the gardens without weather, « +2 tâches → »), the Large
@@ -343,15 +365,17 @@ describe('TodoBlock — Large', () => {
 // The block reads the BROWSER's month when no garden is located (Q10), and a
 // component test may not depend on the day it runs: each fixture below is
 // dated FROM that same month, so the row exists in September and in February
-// alike, and the assertions read the month back rather than spell it.
+// alike, and the assertions read the month back rather than spell it — and
+// « that same month » is the FROZEN instant's (SMA-434, `FROZEN_NOW` above),
+// never the wall clock's.
 
 const MONTH_TOKENS = [
   'january', 'february', 'march', 'april', 'may', 'june',
   'july', 'august', 'september', 'october', 'november', 'december',
 ] as const;
 
-/** The month the block is in when nothing is located — 1..12. */
-const currentMonthToken = () => MONTH_TOKENS[new Date().getMonth()]!;
+/** The month the block is in when nothing is located — the frozen instant's. */
+const currentMonthToken = () => MONTH_TOKENS[new Date(FROZEN_NOW).getMonth()]!;
 
 /** A hedge the catalog prunes THIS month, and a lettuce whose sowing window ENDS this month. */
 const hedge = varietyFixture({

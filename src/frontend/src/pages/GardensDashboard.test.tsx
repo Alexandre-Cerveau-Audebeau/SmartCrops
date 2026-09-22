@@ -93,6 +93,26 @@ function servePreferences(level: DashboardLevel, blocks?: DashboardBlock[]) {
 }
 
 
+/**
+ * SMA-434 — two tests below date a fixture on « this month ». The fixture used
+ * to read the wall clock at construction and the widget reads it again at
+ * render (`blockMonth`): either side of midnight on the last day of a month
+ * the two named different months, and the assertion failed at random. Both
+ * now read ONE instant — mid-month at noon UTC, so the local month is the
+ * same in every zone the suite may run in.
+ */
+const FROZEN_NOW = Date.UTC(2026, 8, 14, 12, 0, 0);
+
+/**
+ * Pins `Date` on `FROZEN_NOW` for the rest of the test; the file's `afterEach`
+ * puts the real clock back. ONLY `Date` is faked: the timers stay real, so
+ * `waitFor` and `findBy…` keep polling on the engine's own `setTimeout`.
+ */
+function freezeDate() {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(FROZEN_NOW);
+}
+
 /** The widget keys the grid currently renders, in DOM order. */
 const renderedKeys = () =>
   [...document.querySelectorAll('[data-widget]')].map((node) =>
@@ -131,7 +151,10 @@ beforeEach(() => {
   servePreferences('gardener');
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.clearAllMocks();
+});
 
 describe('GardensDashboard — grid from the stored preferences (SMA-336)', () => {
   it('renders the eight widgets of the Expert preset, in the canonical order', async () => {
@@ -1063,13 +1086,15 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     blocks.find((block) => block.key === 'month')!.hidden = true;
     servePreferences('gardener', blocks);
 
-    // Two varieties pruned THIS month whatever month the suite runs in, and
-    // one pruned six months away — the figure must be 2, never 3.
+    // Two varieties pruned THIS month — the frozen instant's, which the widget
+    // reads too (SMA-434) — and one pruned six months away: the figure must
+    // be 2, never 3.
+    freezeDate();
     const MONTHS = [
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December',
     ];
-    const now = new Date().getMonth();
+    const now = new Date(FROZEN_NOW).getMonth();
     const pruned = (plantId: string, commonName: string, monthIndex: number): DashboardVarietyData => ({
       plantId,
       scientificName: plantId,
@@ -1535,13 +1560,16 @@ describe('GardensDashboard — a weather outage is said in « Conseils », with 
 // ROUND 1 (C2) — the page hands the To-do block TWO statuses, not their union.
 describe('GardensDashboard — a weather outage no longer empties « À faire » (round 1, C2)', () => {
   it('keeps the calendar tasks and says the watering half is out', async () => {
+    // A hedge pruned THIS month — the frozen instant's, which « À faire »
+    // reads too (SMA-434): the row must exist whatever day the suite runs.
+    freezeDate();
     const MONTHS = [
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December',
     ];
     const hedge: DashboardVarietyData = {
       ...varietyFixture({ plantId: 'hedge', commonName: 'Hedge', gardenIds: ['g1'] }),
-      pruningMonths: MONTHS[new Date().getMonth()]!,
+      pruningMonths: MONTHS[new Date(FROZEN_NOW).getMonth()]!,
     };
     vi.mocked(fetchDashboardData).mockResolvedValue(
       dashboardWith(

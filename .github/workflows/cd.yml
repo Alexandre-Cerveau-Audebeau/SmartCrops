@@ -56,7 +56,7 @@ jobs:
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_repository.full_name == github.repository &&
       github.event.workflow_run.head_branch == 'main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     # This explicit block REPLACES the default set — every unlisted scope
     # drops to none. R2: R1's least-privilege scoping silently starved its
@@ -145,7 +145,7 @@ jobs:
     # explicitly on stale runs (the is_latest output).
     needs: build-and-push
     if: needs.build-and-push.outputs.is_latest == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout the CI-validated commit

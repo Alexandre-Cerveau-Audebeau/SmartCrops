@@ -1,7 +1,7 @@
 import { act, fireEvent, render, within } from '@testing-library/react';
 import { ThemeProvider, createTheme, type Theme } from '@mui/material/styles';
 import i18next from 'i18next';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n/i18n';
 import { LanguageProvider } from '../../../contexts/LanguageContext';
 import { UnitSystemProvider } from '../../../contexts/UnitSystemContext';
@@ -24,13 +24,34 @@ import { browserClock, monthCalendar, monthLabel, zonedYearMonthOf } from './pla
 // assertion below may name a month: every fixture is dated FROM that same
 // month and the expectations are read back from it. One fixture is dated six
 // months away, and stays idle whichever month the suite runs in.
+//
+// SMA-434 — « that same month » is the FROZEN instant's, not the wall clock's.
+// The fixtures used to read the clock when the module loaded and the block
+// read it again at each render: either side of midnight on the last day of a
+// month the two named different months, and the counters failed at random.
+// `Date` is pinned on one instant for every test — mid-month at noon UTC, so
+// the local month is the same in every zone the suite may run in — and the
+// fixtures are dated from that instant. ONLY `Date` is faked: the timers
+// stay real.
+
+const FROZEN_NOW = Date.UTC(2026, 8, 14, 12, 0, 0);
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(FROZEN_NOW);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const MONTH_TOKENS = [
   'january', 'february', 'march', 'april', 'may', 'june',
   'july', 'august', 'september', 'october', 'november', 'december',
 ] as const;
 
-const thisMonth = () => new Date().getMonth() + 1;
+/** The month the block is in — the frozen instant's, 1..12. */
+const thisMonth = () => new Date(FROZEN_NOW).getMonth() + 1;
 const token = (month: number) => MONTH_TOKENS[(month - 1 + 12) % 12]!;
 /** Six months from now — never this month, in any month of the year. */
 const opposite = () => token(thisMonth() + 6);
@@ -396,7 +417,7 @@ describe('MonthBlock — the states', () => {
     // month it shows is Sydney's own now, whatever the snapshot froze and
     // whatever zone the suite runs in. Before round 1 it said March.
     const SYDNEY = '-33.87,151.21';
-    const there = zonedYearMonthOf(new Date(), 'Australia/Sydney')!;
+    const there = zonedYearMonthOf(new Date(FROZEN_NOW), 'Australia/Sydney')!;
     const thymeThere = varietyFixture({
       plantId: 'thyme',
       commonName: 'Thyme',
