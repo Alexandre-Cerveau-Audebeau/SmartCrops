@@ -94,6 +94,12 @@ function serve(weather: DashboardWeatherData) {
   vi.mocked(fetchDashboardWeather).mockResolvedValue(weather);
 }
 
+/**
+ * The page under the providers it reads — language, unit system, theme,
+ * router — with i18next switched to `language` BEFORE the render, so the
+ * catalogue text asserted is the one the page rendered. Returns the theme,
+ * for the contrast tests.
+ */
 async function renderPage(language: Language = 'fr', mode: 'light' | 'dark' = 'light') {
   // The language through the context the page reads AND through i18next
   // itself — the two sources the page consults, aligned before the render.

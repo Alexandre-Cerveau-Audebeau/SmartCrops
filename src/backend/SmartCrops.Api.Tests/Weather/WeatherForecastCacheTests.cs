@@ -227,6 +227,11 @@ public class WeatherForecastCacheTests
         Assert.Equal(0, cache.GateCount);
     }
 
+    /// <summary>
+    /// Guarantees the last known entry has an ABSOLUTE age: reads during an
+    /// outage never renew it, it is served stale through the 55th minute and
+    /// gone from the 60th, and every failed refresh asked the provider again.
+    /// </summary>
     [Fact]
     public async Task LastKnown_IsNotRenewedByReads_AndExpiresAfterItsTtl()
     {
@@ -265,6 +270,11 @@ public class WeatherForecastCacheTests
         Assert.Equal(1 + 9 + 2, handler.Calls);
     }
 
+    /// <summary>
+    /// Guarantees the 60-minute bound of <see cref="WeatherForecastCache.LastKnownTtl"/>
+    /// on both sides: the last known forecast is still served at 59 minutes
+    /// and gone at 61, the failure never memorized.
+    /// </summary>
     [Fact]
     public async Task LastKnown_IsGoneAfterSixtyMinutes_TheTermsCapForCurrentConditions()
     {
@@ -462,6 +472,10 @@ public class WeatherForecastCacheTests
         Assert.NotEqual(lyon, annecy);
     }
 
+    /// <summary>
+    /// Guarantees the two cache keys keep their documented shape and the two
+    /// TTLs their documented values — 15 minutes fresh, 60 minutes last known.
+    /// </summary>
     [Fact]
     public void Keys_AreTheDocumentedShape()
     {
