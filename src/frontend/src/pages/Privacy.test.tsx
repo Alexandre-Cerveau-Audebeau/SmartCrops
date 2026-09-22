@@ -42,7 +42,7 @@ describe('Privacy (SMA-35)', () => {
     expect(screen.getByText('sc_cookie_notice_ack')).toBeInTheDocument();
     // Newsletter has no backend: its rows are gone from the page.
     expect(screen.queryByText(/Newsletter/)).not.toBeInTheDocument();
-    expect(screen.getByText(/September 20, 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/September 22, 2026/)).toBeInTheDocument();
     // SMA-441: the garden-location section names its processor.
     expect(
       screen.getByRole('heading', { name: 'Location of your gardens' })
@@ -71,7 +71,7 @@ describe('Privacy (SMA-35)', () => {
     expect(screen.getByText('7 jours')).toBeInTheDocument();
     expect(screen.getByText('2 minutes')).toBeInTheDocument();
     expect(screen.getByText('sc_cookie_notice_ack')).toBeInTheDocument();
-    expect(screen.getByText(/20 septembre 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/22 septembre 2026/)).toBeInTheDocument();
     // SMA-441, FR mirror.
     expect(
       screen.getByRole('heading', { name: 'Localisation de vos jardins' })

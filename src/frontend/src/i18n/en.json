@@ -1678,7 +1678,7 @@
   "legal": {
     "layout": {
       "lastUpdated": "Last updated:",
-      "updatedDate": "September 20, 2026",
+      "updatedDate": "September 22, 2026",
       "courtesy": "Courtesy translation — in case of any discrepancy, the French version prevails."
     },
     "mentions": {
@@ -1793,7 +1793,7 @@
         "what": "**What data.** When you set the city of a garden or of your profile, we keep the place you picked from the suggested list: its name, region, country, geographic coordinates (latitude and longitude) and the date it was saved. The text you type in the “City” field to find that place is not saved to your account: only the chosen place is.",
         "why": "**Why.** This information lets us show the local weather of your gardens, offer tailored tips (watering, protecting from the cold) and place your growing calendar in the right season. Without it, these features are unavailable; the rest of the application works normally.",
         "basis": "**On what basis.** The performance of the service you ask of us (performance of the contract, GDPR art. 6(1)(b)). Setting a city is your free choice, and you can remove it at any time from the application (“Remove” button).",
-        "retention": "**How long.** Until you remove the location, delete the garden concerned or delete your account; it is then erased under the same conditions as your other data (see “How long is your data kept?”). The weather forecasts we obtain are never written to the database: the server keeps them in memory for at most 15 minutes, and for up to 24 hours as the last known value if the provider stops answering, after which they are gone.",
+        "retention": "**How long.** Until you remove the location, delete the garden concerned or delete your account; it is then erased under the same conditions as your other data (see “How long is your data kept?”). The weather forecasts we obtain are never written to the database: the server keeps them in memory for at most 15 minutes, and for up to 60 minutes as the last known value if the provider stops answering, after which they are gone.",
         "recipients": "**Who receives it.** To obtain forecasts, we query **WeatherAPI.com, operated by Zoomash Ltd (United Kingdom)**. When you search for a place, **the text you type in the “City” field is sent to it, trimmed of its leading and trailing spaces** (2 to 100 characters) to be recognised. For the weather, the request contains only **the geographic coordinates of the chosen place** — the ones the provider itself associated with that place during the search, sent with at most four decimals —, the display language and technical parameters identical for everyone (number of forecast days, official alerts); a single request serves every garden located in the same place. We do not send it your name, your email address, any account or garden identifier, or the names of your gardens; the request identifies itself only as coming from the SmartCrops software. The United Kingdom is covered by an adequacy decision of the European Commission, renewed on 19 December 2025 and valid until 27 December 2031, which recognises a level of protection equivalent to that of the Union.",
         "rights": "**Your rights.** You can at any time view this data, change it or remove it from the application, and obtain it in your account export, where it appears for your profile and for each of your gardens, alongside your other information."
       },
@@ -1815,7 +1815,7 @@
         "intro": "Retention periods:",
         "items": {
           "account": "**Account and associated content** — lifetime of the account; effective deletion within 30 days after account deletion.",
-          "location": "**Garden and profile location** — until it is removed, or the garden or account is deleted. Weather forecasts received from the provider stay in the server's memory for at most 24 hours and are never written to the database.",
+          "location": "**Garden and profile location** — until it is removed, or the garden or account is deleted. Weather forecasts received from the provider stay in the server's memory for at most 60 minutes and are never written to the database.",
           "logs": "**Technical logs** — 12 months maximum.",
           "contact": "**Contact messages** — 12 months after the last exchange."
         }
