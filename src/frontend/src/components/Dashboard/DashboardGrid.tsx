@@ -24,7 +24,7 @@ import { useTheme } from '@mui/material/styles';
 import SortableWidget from './SortableWidget';
 import { createDashboardSortingStrategy } from './dashboardSortingStrategy';
 import { sizesFor } from '../../constants/dashboardCapabilities';
-import { spanFor } from '../../utils/dashboardLayoutGrid';
+import { hasFreeHeight, spanFor } from '../../utils/dashboardLayoutGrid';
 import { DASHBOARD_SPACING } from '../../theme/dashboardTokens';
 import type { DashboardBlock, DashboardBlockKey, DashboardLevel } from '../../types/Dashboard';
 
@@ -91,23 +91,31 @@ export default function DashboardGrid({
   const activeBlock = visible.find((block) => block.key === activeKey) ?? null;
 
   // The visible widgets with the footprint they have HERE — a Medium is two
-  // columns wide on a tablet and one on a phone, and the model has to know it.
+  // columns wide on a tablet and one on a phone, and the model has to know it
+  // — and whether their row takes the height of their content (a Full width,
+  // SMA-437 A-N10), from the same `hasFreeHeight` the CSS pins by.
   const gridItems = useMemo(
-    () => visible.map((block) => ({ key: block.key, ...spanFor(block.size, columns) })),
+    () =>
+      visible.map((block) => ({
+        key: block.key,
+        ...spanFor(block.size, columns),
+        freeHeight: hasFreeHeight(block.size),
+      })),
     [visible, columns]
   );
 
   // ONE column is a LIST, not a grid (SMA-336 mobile lot, step 2 — pre-flight
-  // D6). The dashboard's own strategy packs logical cells and translates every
+  // D6). The dashboard's own strategy packs logical cells and translated every
   // widget by `rows × (cell height + gap)`, with ONE cell height derived from
-  // the first measured widget (`dashboardSortingStrategy.ts`, `cellSizeFrom`).
-  // That is exact while every row is the same track — 273 px from `sm` up —
-  // and false the moment the phone rows are `minmax(200px, auto)` (step 1):
-  // a 338 px To-do above a 792 px calendar would be shown landing 716 px down
-  // where the drop puts it 812. dnd-kit's `verticalListSortingStrategy` reads
-  // the MEASURED rect of each item and the gaps between them, which is the
-  // right model for a column of unequal heights, and it is only ever used
-  // here: two and four columns keep the packing strategy, unchanged.
+  // the first measured widget. That was exact while every row was the same
+  // track — 273 px from `sm` up — and false the moment the phone rows are
+  // `minmax(200px, auto)` (step 1): a 338 px To-do above a 792 px calendar
+  // would be shown landing 716 px down where the drop puts it 812. dnd-kit's
+  // `verticalListSortingStrategy` reads the MEASURED rect of each item and the
+  // gaps between them, which is the right model for a column of unequal
+  // heights, and it is only ever used here. Two and four columns keep the
+  // packing strategy, which since SMA-437 (pre-flight D6) reads its rows on
+  // the measured rects too, row by row, for the Full width's sake.
   const strategy = useMemo(
     () =>
       columns === 1

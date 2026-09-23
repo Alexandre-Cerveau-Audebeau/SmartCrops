@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   moveItem,
   packGrid,
+  rowTops,
   spanFor,
   translationFor,
   type GridItem,
@@ -261,6 +262,30 @@ describe('the drag preview — every item translated to the cell the drop gives 
       m: [0, 0],
       d: [0, 0],
     });
+  });
+});
+
+// SMA-437 lot 1, PR A, step A4 (pre-flight D6) — the rows of a grid whose
+// Full-width rows take the height of their content: the top of each row is
+// the sum of the heights and gutters above it. Written by hand.
+describe('rowTops — the top of every row, with free-height rows among them (SMA-437, D6)', () => {
+  const band = (key: string): GridItem => ({ key, ...spanFor('wide', 4), freeHeight: true });
+
+  it('every row pinned: row r starts at r × (273 + 20)', () => {
+    const placed = packGrid([large('a'), medium('b'), medium('c')], 4);
+    // a on rows 0-1; b beside it on row 0, c beside it on row 1.
+    expect(rowTops(placed, new Map(), 273, 20)).toEqual([0, 293]);
+  });
+
+  it('a 180 px band on row 0 moves every row below it up by 273 − 180', () => {
+    const placed = packGrid([band('band'), large('a'), large('b')], 4);
+    expect(rowTops(placed, new Map([['band', 180]]), 273, 20)).toEqual([0, 200, 493]);
+  });
+
+  it('a band between two rows: its own height, the rows around it pinned', () => {
+    const placed = packGrid([medium('a'), medium('b'), band('band'), small('c')], 4);
+    // a and b on row 0, the band on row 1, c on row 2.
+    expect(rowTops(placed, new Map([['band', 130]]), 273, 20)).toEqual([0, 293, 443]);
   });
 });
 
