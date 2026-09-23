@@ -77,8 +77,10 @@ export default function WeatherDays({ days, today, system }: Props) {
   const budget = useRowBudget(listRef, days.length, 0);
   const scale = weekScale(days);
   if (!scale) return null;
-  // Always one: a card that cannot hold « Auj. » shows it clipped rather than nothing.
-  const visibleRows = Math.max(1, Math.min(days.length, budget));
+  // Whole rows only, the first included (SMA-437 lot 1, PR A, step A7b): a
+  // list that could not hold « Auj. » drew it anyway, cut through its glyphs
+  // — the Tips card's defect in Edit mode, and this list's same rule.
+  const visibleRows = Math.min(days.length, budget);
 
   return (
     <Box

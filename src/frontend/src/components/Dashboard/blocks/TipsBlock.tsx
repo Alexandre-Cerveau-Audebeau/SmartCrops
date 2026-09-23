@@ -534,14 +534,18 @@ export default function TipsBlock({
     const invites = mediumInvites;
     const shown = mediumShown;
     // The spec's slots, then the measured cap: never more rows than fit
-    // whole. One at least where a row EXISTS — as the To-do card does — so a
-    // card too short for a single tip still draws it, clipped, rather than an
-    // empty list under « +N » (écart e); NONE where two invitations took both
-    // slots (fix round 2, #9 — GitHub `r4059946374`, ledger `64f225c7`): a
-    // row counted that is not drawn took one tip out of « +N », and a lone
-    // tip was neither drawn nor counted — unreachable. `visible` is what is
-    // DRAWN, invitations aside; every other tip is in « +N ».
-    const visible = Math.min(shown.length, Math.max(1, mediumBudget));
+    // whole — not even the first (SMA-437 lot 1, PR A, step A7b; écart e
+    // lifted). It used to be drawn, clipped, whatever its height: measured in
+    // Edit mode, whose controls take 14 px of the card, a 70 px tip in a
+    // 63.3 px list, cut through « Voir la case B3 → » by 4.3 px — and left out
+    // of « +N », since it was « drawn ». A list that cannot hold one tip whole
+    // draws none, and « +N » counts them all; the invitation stays, and tips
+    // existing, the « nothing to report » panel is never drawn (the early
+    // return below is for no tip and no invitation). NONE likewise where two
+    // invitations took both slots (fix round 2, #9 — GitHub `r4059946374`,
+    // ledger `64f225c7`). `visible` is what is DRAWN, invitations aside;
+    // every other tip is in « +N ».
+    const visible = Math.min(shown.length, mediumBudget);
     const rest = tips.length - visible;
     const overflowing = visible < shown.length;
     if (tips.length === 0 && invites.length === 0) {

@@ -820,12 +820,17 @@ describe('WeatherBlock — the days yield whole rows to the partial invitation, 
     expect(visibleDays(card)).toHaveLength(5);
   });
 
-  it('never hides « Auj. »: a list too short for one row still shows its first day', () => {
+  // SMA-437 lot 1, PR A, step A7b — the Tips card's defect, and the same rule
+  // here: a list too short for one whole row drew « Auj. » anyway, cut
+  // through its glyphs. Whole rows only, even the first.
+  it('hides even « Auj. » when the list cannot hold one whole row — never a day cut through its glyphs', () => {
     listHeight.value = 20;
     const { card } = renderBlock({ size: 'large', weather: partial() });
 
-    expect(visibleDays(card).map((row) => row.getAttribute('data-weather-day'))).toEqual(['2026-09-12']);
-    expect(hiddenDays(card)).toHaveLength(4);
+    expect(visibleDays(card)).toHaveLength(0);
+    expect(hiddenDays(card)).toHaveLength(5);
+    // The invitation is still there, whole, after the list.
+    expect(card.querySelector('[data-weather-invite="partial"]')).not.toBeNull();
   });
 
   it('hides nothing where nothing is measured — jsdom’s zero rects show all five days, as before', () => {

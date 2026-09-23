@@ -946,11 +946,17 @@ describe('TodoBlock — Medium: the list clips, and caps its rows by measure (mo
     expect(rulesFor(card.querySelector('[data-todo-list]')!)).toContain('justify-content:space-evenly');
   });
 
-  it('never hides the first task: a list too short for one row still shows it', () => {
+  // SMA-437 lot 1, PR A, step A7b — the Tips card's defect, and this card's
+  // same rule: a list too short for one whole row drew it anyway, cut, and
+  // left it out of « +N ». It now draws none and counts them all.
+  it('hides even the first task when the list cannot hold it whole — none cut, every task in « +6 tasks → »', () => {
     listHeight.value = 20;
     const { card, widget } = renderBlock();
-    expect(shownRows(card)).toHaveLength(1);
-    expect(widget.getByRole('button', { name: '+5 tasks →' })).toBeInTheDocument();
+    expect(shownRows(card)).toHaveLength(0);
+    expect(hiddenRows(card)).toHaveLength(4);
+    expect(widget.getByRole('button', { name: '+6 tasks →' })).toBeInTheDocument();
+    // Tasks exist: never « nothing to do ».
+    expect(card.querySelector('[data-todo-nothing]')).toBeNull();
   });
 
   it('with the invitation: the spec’s cap of two, and the measured one under it', () => {
