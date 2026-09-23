@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
@@ -33,6 +33,7 @@ import InviteState from '../InviteState';
 import MissingDataMark from '../MissingDataMark';
 import { GARDEN_TYPE_ICONS } from '../gardenTypeIcons';
 import OccupancyBar from '../OccupancyBar';
+import { useGlyphsFit } from '../useGlyphsFit';
 import WeatherGlyph from './WeatherGlyph';
 import { displayTemperature } from './weatherFormat';
 import { updateGarden } from '../../../services/gardenApi';
@@ -68,6 +69,8 @@ const MEDIUM_ROWS = 3;
  *
  * MEDIUM only: `Main.dc.html`'s table writes the same chips WITHOUT a glyph
  * (`<span class="pill type">Terrasse</span>`), and so does the Large row here.
+ * And on a Medium row only where it fits (`_spec.md` § 10.24): see
+ * `useGlyphsFit`.
  */
 const TYPE_CHIP_ICONS = GARDEN_TYPE_ICONS;
 
@@ -357,6 +360,33 @@ export default function GardensBlock({
    */
   const phone = useMediaQuery(theme.breakpoints.down('sm'));
 
+  /**
+   * The Medium rows' chips drawn BARE, the A9 form — no type glyph, no
+   * « Ornemental » glyph — when one row of the card cannot hold them with
+   * their glyphs (SMA-437 lot 1, PR A, step A7a; `_spec.md` § 10.24: the glyph
+   * « partout où elle tient »). Measured by the layout harness at 600 px: a
+   * 552 px card, whose « Balcon sud » row needs 81 + 10 + 191 px of a 272.5 px
+   * group — the « Ornemental » chip was cut by 6.3 px, the name by 2.6. Bare,
+   * the two chips are 152 px and the row holds whole, on ONE line: the row
+   * keeps its 44 px, so the card still holds its three rows. From a 563 px
+   * card up — the 561 px the full form needs, and the pixel `useGlyphsFit`
+   * keeps for rounding — and so on the 566 px card of a desktop, the rows
+   * hold the full form and nothing changes. The phone row has its own form
+   * (above).
+   */
+  const mediumBodyRef = useRef<HTMLDivElement>(null);
+  const bareChips = useGlyphsFit(
+    mediumBodyRef,
+    '[data-garden-row-group]',
+    [
+      i18n.language,
+      ...gardens
+        .slice(0, MEDIUM_ROWS)
+        .map((garden) => `${garden.id} ${garden.name} ${garden.config.gardenType} ${garden.isEdible}`),
+    ].join('\n'),
+    size === 'medium' && !phone
+  );
+
   // ONE derivation per garden, shared with Statistics and reused across every
   // render of this widget (round 1, E10 / G4 / E22). It used to run inline in
   // `GardenRow`, so the rename dialog's own `setEditName` re-ran the exposure
@@ -524,7 +554,8 @@ export default function GardensBlock({
    * N5-1 and N5-2): on a Medium row with a 13 px `FilterVintageOutlined` in
    * front (`A2Novice.dc.html`, `<span class="pill orn"><svg class="ic"
    * width="13">…</svg>Ornemental</span>`), in the table without a glyph and
-   * 24 px high (`Main.dc.html`, `.tbl .pill { height: 24px }`).
+   * 24 px high (`Main.dc.html`, `.tbl .pill { height: 24px }`). A Medium row
+   * whose card cannot hold the glyphs draws it bare too (`bareChips`).
    */
   const ornamentalChip = (
     garden: DashboardGardenData,
@@ -534,7 +565,7 @@ export default function GardensBlock({
       <Chip
         label={t('dashboard.blocks.gardens.ornamental')}
         size="small"
-        icon={where === 'medium' ? <FilterVintageOutlinedIcon /> : undefined}
+        icon={where === 'medium' && !bareChips ? <FilterVintageOutlinedIcon /> : undefined}
         sx={{
           height:
             where === 'table'
@@ -789,6 +820,7 @@ export default function GardensBlock({
     const remaining = gardens.length - shown.length;
     return (
       <Box
+        ref={mediumBodyRef}
         sx={{
           flex: 1,
           minHeight: 0,
@@ -924,8 +956,9 @@ export default function GardensBlock({
                           // The type's glyph, primary-coloured, 14 px (N5-1):
                           // `.pill.type .ic { color: var(--prim) }` — and no
                           // glyph on a phone (`_spec.md` § 10.24: « la ligne de
-                          // chips débordait de 29 px »).
-                          icon={phone ? undefined : typeChipIcon(garden)}
+                          // chips débordait de 29 px »), nor where the card
+                          // cannot hold it (`bareChips`, SMA-437 A7a).
+                          icon={phone || bareChips ? undefined : typeChipIcon(garden)}
                           sx={{
                             height: DASHBOARD_TYPE.chipHeight,
                             fontSize: DASHBOARD_TYPE.chip,
