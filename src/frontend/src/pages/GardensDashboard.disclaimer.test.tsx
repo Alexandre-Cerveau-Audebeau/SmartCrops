@@ -430,3 +430,73 @@ describe.each(['light', 'dark'] as const)(
     });
   }
 );
+
+// SMA-437 lot 1, PR B, step B6 (A-N8) — the Key figures band bears the
+// warning as soon as it SHOWS « À faire aujourd'hui » or « Conseils ». An
+// Expert page with the band on it and the three bearing widgets hidden: the
+// band alone decides.
+describe('GardensDashboard — the Key figures band bears the warning by what it shows (SMA-437, A-N8)', () => {
+  /** An Expert layout: Weather, To-do and Tips hidden; the band hidden or not, showing `figures` (its defaults when null). */
+  function serveBand(figures: string[] | null, hidden = false) {
+    const bearing: readonly string[] = WEATHER_BEARING_BLOCKS;
+    vi.mocked(fetchDashboardPreferences).mockResolvedValue({
+      schemaVersion: 1,
+      level: 'expert',
+      isPreset: false,
+      blocks: presetFor('expert').map((block) => ({
+        ...block,
+        hidden: block.key === 'keyfigures' ? hidden : bearing.includes(block.key),
+        ...(block.key === 'keyfigures' && figures ? { options: { figures } } : {}),
+      })),
+      updatedAt: null,
+    });
+  }
+
+  it('is shown when the band, showing « À faire aujourd’hui » — its default — is the only bearer on the page', async () => {
+    serveBand(null);
+
+    await renderPage('fr');
+
+    await screen.findByRole('note');
+    expect(disclaimers()).toHaveLength(1);
+    const rendered = renderedWidgets();
+    expect(rendered).toContain('keyfigures');
+    for (const key of WEATHER_BEARING_BLOCKS) expect(rendered).not.toContain(key);
+  });
+
+  it('is shown for « Conseils » too', async () => {
+    serveBand(['free', 'tips', 'varieties', 'surface']);
+
+    await renderPage('fr');
+
+    await screen.findByRole('note');
+    expect(disclaimers()).toHaveLength(1);
+  });
+
+  it('is absent when the band shows neither of the two — the aggregate landed WITH data', async () => {
+    serveBand(['free', 'occupancy', 'varieties', 'noplan']);
+    const land = holdWeather();
+
+    await renderPage('fr');
+    expect(await screen.findAllByText('Casa Lolo')).not.toHaveLength(0);
+    await waitFor(() => expect(fetchDashboardWeather).toHaveBeenCalledTimes(1));
+    await land(aggregateWith('fresh'));
+
+    expect(renderedWidgets()).toContain('keyfigures');
+    expect(screen.queryByRole('note')).toBeNull();
+    expect(disclaimers()).toHaveLength(0);
+  });
+
+  it('is absent when the band is hidden, even set to « À faire aujourd’hui »', async () => {
+    serveBand(null, true);
+    const land = holdWeather();
+
+    await renderPage('fr');
+    expect(await screen.findAllByText('Casa Lolo')).not.toHaveLength(0);
+    await waitFor(() => expect(fetchDashboardWeather).toHaveBeenCalledTimes(1));
+    await land(aggregateWith('fresh'));
+
+    expect(renderedWidgets()).not.toContain('keyfigures');
+    expect(disclaimers()).toHaveLength(0);
+  });
+});

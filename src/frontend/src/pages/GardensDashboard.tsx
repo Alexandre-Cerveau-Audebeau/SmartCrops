@@ -357,11 +357,18 @@ export default function GardensDashboard() {
   // surface then shows the error, not figures. A passive refresh keeps the
   // previous data on screen, so the warning stays with it. The rule itself is
   // a pure function, pinned on every subset of the three widgets.
+  //
+  // SMA-437 lot 1, PR B, step B6 (A-N8): the Key figures band bears it too
+  // while it SHOWS « À faire aujourd'hui » or « Conseils » — its figures read
+  // through the same `keyFiguresOptions` the band draws with, none when it is
+  // off the page.
+  const band = blocks.find((block) => block.key === 'keyfigures' && !block.hidden);
   const showWeatherDisclaimer = weatherDisclaimerVisible({
     loading: weatherLoading,
     error: weatherError,
     locations: weatherData.locations,
     isBlockVisible,
+    keyFigures: band ? keyFiguresOptions(band.options ?? null).figures : [],
   });
 
   const renderBlock = (block: DashboardBlock) => {

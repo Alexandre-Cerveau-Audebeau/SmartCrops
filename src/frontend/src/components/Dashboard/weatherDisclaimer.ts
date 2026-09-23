@@ -1,5 +1,6 @@
 import type { DashboardBlockKey } from '../../types/Dashboard';
 import type { WeatherLocation } from '../../types/DashboardWeather';
+import type { KeyFigure } from './blocks/keyFiguresOptions';
 
 /**
  * SMA-387 — the WeatherAPI.com terms of service ask for a clear, prominent
@@ -27,6 +28,16 @@ export const WEATHER_BEARING_BLOCKS = [
   'tips',
 ] as const satisfies readonly DashboardBlockKey[];
 
+/**
+ * SMA-437 lot 1, PR B, step B6 (A-N8, 23/09) — the figures of the Key figures
+ * band that count things derived in part from the forecast: « À faire
+ * aujourd'hui » (the watering, cold and frost tasks) and « Conseils » (the
+ * watering family). The band bears the warning while it SHOWS one of them —
+ * by what it displays, not by being on the page: « Un avertissement en trop ne
+ * coûte rien ; un en moins violerait le contrat (V1). »
+ */
+export const WEATHER_BEARING_FIGURES = ['todo', 'tips'] as const satisfies readonly KeyFigure[];
+
 export interface WeatherDisclaimerInput {
   /** The weather aggregate is still loading: every surface shows a skeleton. */
   loading: boolean;
@@ -36,6 +47,12 @@ export interface WeatherDisclaimerInput {
   locations: readonly Pick<WeatherLocation, 'status'>[];
   /** Whether a widget is ON the page (`hidden: false` in the layout). */
   isBlockVisible: (key: DashboardBlockKey) => boolean;
+  /**
+   * The figures the Key figures band SHOWS — its four, read through
+   * `keyFiguresOptions` like the band itself — or none when it is off the
+   * page or the formula has no band (A-N8).
+   */
+  keyFigures: readonly KeyFigure[];
 }
 
 /**
@@ -44,16 +61,24 @@ export interface WeatherDisclaimerInput {
  * data a surface draws — « fresh » or « stale », i.e. anything but
  * « unavailable » (a status added later is treated as data, so the warning
  * errs on the side of showing); and at least one of `WEATHER_BEARING_BLOCKS`
- * is visible. A layout with every weather-bearing widget hidden shows no
- * weather figure, so it shows no warning either (G1).
+ * is visible — or the Key figures band shows one of
+ * `WEATHER_BEARING_FIGURES` (SMA-437, A-N8), whatever its own state
+ * (skeleton, invitation), as the rule already treats To-do and Tips. A layout
+ * with every weather-bearing surface off the page shows no weather figure, so
+ * it shows no warning either (G1).
  */
 export function weatherDisclaimerVisible({
   loading,
   error,
   locations,
   isBlockVisible,
+  keyFigures,
 }: WeatherDisclaimerInput): boolean {
   if (loading || error) return false;
   if (!locations.some((place) => place.status !== 'unavailable')) return false;
-  return WEATHER_BEARING_BLOCKS.some((key) => isBlockVisible(key));
+  const bearing: readonly KeyFigure[] = WEATHER_BEARING_FIGURES;
+  return (
+    WEATHER_BEARING_BLOCKS.some((key) => isBlockVisible(key)) ||
+    keyFigures.some((figure) => bearing.includes(figure))
+  );
 }
