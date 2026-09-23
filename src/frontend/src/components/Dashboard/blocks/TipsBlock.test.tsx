@@ -1028,12 +1028,11 @@ describe('TipsBlock — Medium: the rows are capped by measure, whole (fix round
     expect(rulesFor(card.querySelector('[data-tips-list]')!)).toContain('justify-content:space-evenly');
   });
 
-  // SMA-437 lot 1, PR A, step A7b — the minimum of one row is gone (écart e,
-  // lifted): the layout harness measured it in Edit mode, whose controls take
-  // 14 px of the card — a 70 px tip in a 63.3 px list, drawn anyway and cut
-  // through « Voir la case B3 → » by 4.3 px, and not counted in « +N » since
-  // it was « drawn ». A list that cannot hold one tip whole now draws none,
-  // and counts them all.
+  // SMA-437 lot 1, PR A, step A7b — whole rows only, the first included: a
+  // list that cannot hold one tip whole draws none, hides every row whole and
+  // counts every tip in « +N ». The layout harness holds that case in Edit
+  // mode, whose controls take 14 px of the card: a 70 px tip for a 63.3 px
+  // list, hidden and counted.
   it('hides even the first tip when the list cannot hold it whole — none cut, every tip in « +3 tips → »', () => {
     listHeight.value = 40;
     const { card, widget } = renderBlock({ gardens: [terrasse, potager] });
@@ -1045,8 +1044,8 @@ describe('TipsBlock — Medium: the rows are capped by measure, whole (fix round
   });
 
   it('with the invitation: the one slot the spec leaves, measured too, and the foot still yields (arbitrage 4)', () => {
-    // 60 px for an 85 px tip: the slot's tip is hidden whole and counted —
-    // it was drawn, cut, and left out of « +N » until SMA-437 A7b.
+    // 60 px for an 85 px tip: the slot's tip does not fit whole, so it is
+    // hidden whole and counted in « +N ».
     listHeight.value = 60;
     const { card, widget } = renderBlock();
     expect(rows(card)).toHaveLength(1);
@@ -1067,13 +1066,11 @@ describe('TipsBlock — Medium: the rows are capped by measure, whole (fix round
   });
 
   // ── Fix round 2, #9 (GitHub `r4059946374`, ledger `64f225c7` / `fbe00a7d`):
-  // two invitations take BOTH slots, so no tip row is drawn at all. The
-  // minimum of one row — a lone tip too tall for its list is drawn, clipped,
-  // rather than an empty list under « +N » (écart e, kept) — is a rule about
-  // a row that EXISTS. Counted where there was none, it took one tip out of
-  // « +N »: a single tip was neither drawn nor counted, and could not be
-  // reached. What the reader can reach is the rows drawn plus the N of
-  // « +N tips → », and that must be every tip, at both widths.
+  // two invitations take BOTH slots, so no tip row is drawn at all. What the
+  // reader can reach is the rows drawn plus the N of « +N tips → », and that
+  // must be every tip, at both widths: a tip is drawn whole or counted —
+  // whether no slot is left for it, or its slot cannot hold it whole (SMA-437,
+  // A7b).
   describe('two invitations take both slots (fix round 2, #9): every tip is drawn or in « +N tips → »', () => {
     /** A second garden whose orientation is unknown: with Balcon sud, one invitation per slot. */
     const cour = gardenFixture({
@@ -1123,7 +1120,7 @@ describe('TipsBlock — Medium: the rows are capped by measure, whole (fix round
       expect(reachable(card, widget)).toBe(3);
     });
 
-    it('one invitation and one tip: the tip is drawn in the slot the invitation leaves, nothing to count — and too tall for it, hidden whole and counted (SMA-437 A7b, écart e lifted)', () => {
+    it('one invitation and one tip: the tip is drawn in the slot the invitation leaves, nothing to count — and too tall for it, hidden whole and counted (SMA-437 A7b)', () => {
       const fitting = renderBlock({ gardens: [oneTip, balcon] });
       expect(shownRows(fitting.card)).toHaveLength(1);
       expect(fitting.widget.queryByRole('button', { name: /tips? →$/ })).toBeNull();
