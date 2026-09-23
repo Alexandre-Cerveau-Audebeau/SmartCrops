@@ -77,6 +77,20 @@ public class DashboardLayoutReferenceTests
         }
     }
 
+    /// <summary>
+    /// SMA-437 lot 1, PR B, step B2 — the Key figures band's catalogue and its
+    /// four defaults exist on both sides too: the client reads them to draw and
+    /// to fall back, the server to refuse (pre-flight D9, D10).
+    /// </summary>
+    [Fact]
+    public void KeyFigures_AreTheReferenceFigures_AndItsDefaults()
+    {
+        var keyFigures = Reference.GetProperty("keyFigures");
+
+        Assert.Equal(Strings(keyFigures.GetProperty("figures")), DashboardKeyFigures.All);
+        Assert.Equal(Strings(keyFigures.GetProperty("defaults")), DashboardKeyFigures.Defaults);
+    }
+
     [Theory]
     [MemberData(nameof(Levels))]
     public void Preset_IsTheReferencePreset_BlockByBlock(string level)

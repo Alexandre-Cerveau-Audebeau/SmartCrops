@@ -5,6 +5,16 @@
   "sizes": ["small", "medium", "large", "wide"],
   "blocks": ["weather", "gardens", "tips", "month", "todo", "counters", "stats", "harvest", "keyfigures"],
   "nonHidableBlock": "gardens",
+  "keyFigures": {
+    "figures": [
+      "gardens", "plants", "varieties", "edible", "ornam",
+      "surface", "active", "planted", "occupancy", "free", "freeSun", "sunShare",
+      "prune", "sow", "harvest", "flower",
+      "todo", "tips",
+      "noplan", "noorient", "located", "cities"
+    ],
+    "defaults": ["free", "occupancy", "varieties", "todo"]
+  },
   "sizesFor": {
     "novice": {
       "weather": ["small", "medium", "large"],

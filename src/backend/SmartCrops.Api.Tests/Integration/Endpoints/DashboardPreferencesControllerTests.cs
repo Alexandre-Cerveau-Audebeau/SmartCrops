@@ -661,6 +661,70 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.Equal(expected, body.Blocks.Select(b => (b.Key, b.Size, b.Hidden)));
     }
 
+    // ── The band's four figures (SMA-437 lot 1, PR B, step B2) ───────────────
+    // Pre-flight D9: `figures`, when present on the band's options, is four
+    // DISTINCT strings taken from the 22 of V3-04, or the write is refused —
+    // strict on write; on read the document passes as stored and the client
+    // falls back to the four defaults.
+
+    [Theory]
+    [InlineData("""["free","occupancy","varieties"]""")]
+    [InlineData("""["free","occupancy","varieties","todo","tips"]""")]
+    [InlineData("""["free","free","varieties","todo"]""")]
+    [InlineData("""["free","occupancy","compost","todo"]""")]
+    [InlineData("""["free","occupancy",3,"todo"]""")]
+    [InlineData("\"free,occupancy,varieties,todo\"")]
+    [InlineData("""{"0":"free","1":"occupancy","2":"varieties","3":"todo"}""")]
+    [InlineData("null")]
+    public async Task PutPreferences_BandFiguresNotFourDistinctKnownOnes_Returns400(string figures)
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var response = await Client.PutAsJsonAsync(Url, ExpertRequestWithBandOptions(new() { ["figures"] = JsonValue(figures) }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("figures for block 'keyfigures' must be four distinct known figures", await response.Content.ReadAsStringAsync());
+        await AssertNothingStoredAsync(userId);
+    }
+
+    [Fact]
+    public async Task PutPreferences_BandFiguresFourDistinctKnownOnes_IsStored_AsSent()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var put = await Client.PutAsJsonAsync(
+            Url,
+            ExpertRequestWithBandOptions(new() { ["figures"] = JsonValue("""["cities","free","tips","surface"]""") }));
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+        Assert.NotNull(body);
+        var options = Block(body, "keyfigures").Options;
+        Assert.NotNull(options);
+        Assert.Equal(
+            ["cities", "free", "tips", "surface"],
+            options["figures"].EnumerateArray().Select(figure => figure.GetString()));
+    }
+
+    /// <summary>Without `figures`, the band's options are bounded like any other block's, and nothing more.</summary>
+    [Fact]
+    public async Task PutPreferences_BandOptionsWithoutFigures_IsAccepted()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var response = await Client.PutAsJsonAsync(
+            Url,
+            ExpertRequestWithBandOptions(new() { ["density"] = JsonValue("\"compact\"") }));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
     // ── Bounded options (round 1, E1 / G2) ───────────────────────────────────
 
     [Fact]
@@ -799,6 +863,17 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
                     b.Size,
                     b.Hidden,
                     b.Key == DashboardLayout.Blocks.Weather ? options : null))]);
+
+    /// <summary>The Expert preset, its Key figures band carrying the given options.</summary>
+    private static SaveDashboardPreferencesRequest ExpertRequestWithBandOptions(
+        Dictionary<string, JsonElement> options) =>
+        new(DashboardLayout.Levels.Expert,
+            [.. DashboardPresets.For(DashboardLayout.Levels.Expert)
+                .Select(b => new SaveDashboardBlockRequest(
+                    b.Key,
+                    b.Size,
+                    b.Hidden,
+                    b.Key == "keyfigures" ? options : null))]);
 
     /// <summary>One JSON value, from its literal text.</summary>
     private static JsonElement JsonValue(string json) =>

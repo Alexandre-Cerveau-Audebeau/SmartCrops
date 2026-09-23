@@ -853,9 +853,30 @@ public class DashboardController(
         }
 
         var bytes = JsonSerializer.SerializeToUtf8Bytes(options, JsonWeb).Length;
-        return bytes > MaxOptionsBytesPerBlock
-            ? $"options for block '{block.Key}' are too large"
-            : null;
+        if (bytes > MaxOptionsBytesPerBlock) return $"options for block '{block.Key}' are too large";
+
+        return block.Key == DashboardLayout.Blocks.KeyFigures ? ValidateKeyFigures(options) : null;
+    }
+
+    /// <summary>
+    /// The Key figures band's own option (SMA-437 lot 1, PR B, step B2 —
+    /// pre-flight D9): <c>figures</c>, when present, is an array of FOUR
+    /// distinct strings taken from <see cref="DashboardKeyFigures.All"/> — the
+    /// four emplacements of the gear, which can never form three or five. The
+    /// band's other keys are bounded like any block's, and nothing more: a key a
+    /// newer client adds must not be refused by this server.
+    /// </summary>
+    private static string? ValidateKeyFigures(Dictionary<string, JsonElement> options)
+    {
+        if (!options.TryGetValue("figures", out var figures)) return null;
+
+        var valid = figures.ValueKind == JsonValueKind.Array
+            && figures.EnumerateArray().All(figure => figure.ValueKind == JsonValueKind.String)
+            && DashboardKeyFigures.IsValidSelection([.. figures.EnumerateArray().Select(figure => figure.GetString()!)]);
+
+        return valid
+            ? null
+            : $"figures for block '{DashboardLayout.Blocks.KeyFigures}' must be four distinct known figures";
     }
 
     private string? GetCurrentUserId() =>
