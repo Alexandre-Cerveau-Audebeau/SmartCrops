@@ -6,12 +6,15 @@ import { useGlyphsFit } from './useGlyphsFit';
 // chips' glyphs, measured. jsdom lays nothing out, so the geometry is stubbed
 // as `useRowBudget.test.tsx` stubs it: a row answers the width its `data-w`
 // declares, a child the natural width its `data-sw` declares (`scrollWidth`),
-// and a ResizeObserver fires when the test says so.
+// and a ResizeObserver fires when the test says so — never once disconnected,
+// as a real one (PR #287, fix round 1, S5).
 
 class ManualResizeObserver {
   static instances: ManualResizeObserver[] = [];
   readonly targets = new Set<Element>();
   private readonly callback: ResizeObserverCallback;
+  /** False once `disconnect()` ran: a disconnected observer watches nothing and never calls back. */
+  private connected = true;
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
     ManualResizeObserver.instances.push(this);
@@ -23,14 +26,16 @@ class ManualResizeObserver {
     this.targets.delete(target);
   }
   disconnect() {
+    this.connected = false;
     this.targets.clear();
   }
   fire() {
+    if (!this.connected) return;
     this.callback([], this as unknown as ResizeObserver);
   }
 }
 
-/** Fires every observer the hook created, inside `act`. */
+/** Fires every observer the hook still has connected, inside `act`. */
 const fireAll = () =>
   act(() => {
     for (const instance of ManualResizeObserver.instances) instance.fire();
@@ -70,6 +75,9 @@ interface Row {
   bare: number[];
 }
 
+/** Every verdict the rows were drawn with, render after render — an intermediate one included. */
+const drawn: string[] = [];
+
 /** The rows, in a container drawn only while `mounted` — the Medium body a loading view replaces. */
 function Rows({
   rows,
@@ -83,6 +91,7 @@ function Rows({
   mounted?: boolean;
 }) {
   const { bare, ref } = useGlyphsFit('[data-row]', content, enabled);
+  drawn.push(String(bare));
   return (
     <>
       {mounted && (
@@ -168,6 +177,23 @@ describe('useGlyphsFit — the chips keep their glyphs wherever they fit (SMA-43
     rerender(<Rows rows={[balcon(286.5)]} />);
     fireAll();
     expect(bare()).toBe('false');
+  });
+
+  // PR #287, fix round 1, S5 (CodeRabbit, GitHub) — a resize that leaves the
+  // rows short of the full form keeps them bare THROUGHOUT: no render in
+  // between draws the glyphs back. An observer the hook has disconnected
+  // holds the closure of the form it was created for; had it still fired, it
+  // would measure the bare rows as if they were the full ones, overwrite the
+  // widths kept from the full form, and flip the card to its glyphs and back.
+  it('keeps the rows bare through a resize short of the full form — not one render draws the glyphs back', () => {
+    const { rerender } = render(<Rows rows={[balcon(272.5)]} />);
+    expect(bare()).toBe('true');
+
+    drawn.length = 0;
+    rerender(<Rows rows={[balcon(278)]} />);
+    fireAll();
+    expect(bare()).toBe('true');
+    expect(drawn).not.toContain('false');
   });
 
   it('measures again when the content changes — a shorter name gets its glyphs at once', () => {

@@ -13,19 +13,26 @@ import GardensBlock from './GardensBlock';
 // wide and « Balcon sud », its « Balcon » chip and its « Ornemental » chip
 // need 282 px of a 272.5 px group. jsdom lays nothing out: the group answers
 // the width the test sets, the name and the chip line their natural widths —
-// the chip line narrower once its glyphs are gone.
+// the chip line narrower once its glyphs are gone. The ResizeObserver fires
+// when the test says so, and never once disconnected, as a real one (PR #287,
+// fix round 1, S5).
 
 class ManualResizeObserver {
   static instances: ManualResizeObserver[] = [];
   private readonly callback: ResizeObserverCallback;
+  /** False once `disconnect()` ran: a disconnected observer never calls back. */
+  private connected = true;
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
     ManualResizeObserver.instances.push(this);
   }
   observe() {}
   unobserve() {}
-  disconnect() {}
+  disconnect() {
+    this.connected = false;
+  }
   fire() {
+    if (!this.connected) return;
     this.callback([], this as unknown as ResizeObserver);
   }
 }
@@ -130,6 +137,22 @@ describe('GardensBlock — the Medium chips’ glyphs, wherever they fit (SMA-43
     // The rows are all there, each with its name.
     expect(screen.getByRole('link', { name: 'Open Terrasse' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Balcon sud' })).toBeInTheDocument();
+  });
+
+  // PR #287, fix round 1, S5 (CodeRabbit, GitHub) — a resize the bare rows
+  // still hold answers with ONE verdict. Every flip of the form re-arms the
+  // hook's effect, which disconnects its observer and creates the next one; a
+  // resize that flipped the card to its glyphs and back — the work of an
+  // observer answering after its disconnection — would leave two more
+  // observers behind.
+  it('answers a resize with one verdict — no observer is re-created, the chips stay bare', () => {
+    groupWidth = 272.5;
+    renderMedium();
+    const observers = ManualResizeObserver.instances.length;
+
+    fireAll();
+    expect(ManualResizeObserver.instances).toHaveLength(observers);
+    expect(chip('Balcony').querySelector('svg')).toBeNull();
   });
 
   it('gives the glyphs back when the card grows wide enough', () => {
