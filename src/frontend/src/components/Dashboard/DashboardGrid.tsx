@@ -201,8 +201,17 @@ export default function DashboardGrid({
             // — measured on `5282852`: four two-line tasks in a 120 px body
             // (V34), the invitation printed over the first tip (V37), the
             // band over the min / max (V36), three calendar rows visible out
-            // of ten (V38). From `sm` up the 273 px track is untouched.
-            gridAutoRows: { xs: 'minmax(200px, auto)', sm: `${DASHBOARD_SPACING.row}px` },
+            // of ten (V38).
+            //
+            // SMA-437 (A-N10, pre-flight D5): from `sm` up the tracks are
+            // `auto` too, and the 273 px moved onto the cards — `SortableWidget`
+            // pins Small and Medium at 273 px and Large at 566. A Full-width
+            // row then takes the height of its content with no floor, while
+            // the three other sizes still share one row height and still clip
+            // what is taller than their card. Measured by the pre-flight:
+            // 0 gap on seven layouts at four widths, where `minmax(273px,
+            // auto)` without pinning let a 900 px Large stretch its rows.
+            gridAutoRows: { xs: 'minmax(200px, auto)', sm: 'auto' },
             gap: `${DASHBOARD_SPACING.gutter}px`,
           }}
         >

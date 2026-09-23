@@ -25,7 +25,7 @@ import type {
   DashboardGardenData,
   DashboardVarietyData,
 } from '../types/DashboardData';
-import { emittedRules, gridNode, rulesFor, slotOf } from '../test/dashboardDom';
+import { declaredAtBreakpoint, emittedRules, gridNode, rulesFor, slotOf } from '../test/dashboardDom';
 
 vi.mock('../services/gardenApi', () => ({
   createGarden: vi.fn(),
@@ -1288,13 +1288,18 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
     expect(css).not.toContain('grid-auto-rows:200px');
   });
 
-  it('two columns on a tablet, and 273px rows — fixed, as before the mobile lot', async () => {
+  it('two columns on a tablet, and auto rows from 600px — the 273px are pinned on the cards (SMA-437, A-N10)', async () => {
+    // A-N10: a Full-width row takes the height of its content, with no floor,
+    // while the three other sizes keep 273 / 566 px — so the TRACK is `auto`
+    // and the height is declared on each card (the test below). The pre-flight
+    // measured it: 0 gap on seven layouts at four widths.
     const css = await gridCss();
 
     expect(columnsAt(css, '600px')).toBe('repeat(2, 1fr)');
-    expect(declaredAt(css, '600px', 'grid-auto-rows')).toBe('273px');
-    // The auto height is the PHONE's alone: no `minmax` from 600px up.
+    expect(declaredAt(css, '600px', 'grid-auto-rows')).toBe('auto');
+    // No floor from 600px up: neither the 273px track nor a `minmax` (A-N10).
     expect(declaredAt(css, '600px', 'grid-auto-rows')).not.toContain('minmax');
+    expect(css).not.toContain('grid-auto-rows:273px');
   });
 
   it('four columns from 1200px', async () => {
@@ -1383,6 +1388,30 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
       // `grid-row` is not responsive: `spanFor` never changes the row span, so
       // the one declaration outside any media query has to match all three.
       expect(css).toContain(`grid-row:span ${spanFor(block.size, 4).rows}`);
+    }
+  });
+
+  it('pins Small and Medium at 273px and Large at 566px from 600px up, and nothing on a phone (SMA-437, A-N10)', async () => {
+    // Written by hand, not derived: one row is 273px, a Large two rows and
+    // the 20px gutter between them. The track is `auto` from 600px up, so
+    // these heights are what keeps the tiling — and what clips a widget
+    // taller than its card instead of letting it stretch its row.
+    const blocks = presetFor('gardener');
+    blocks[0]!.size = 'small';
+    blocks[1]!.size = 'medium';
+    blocks[2]!.size = 'large';
+    servePreferences('gardener', blocks);
+    renderPage();
+    await screen.findByRole('heading', { level: 2, name: 'Gardens' });
+
+    const pinned = { small: '273px', medium: '273px', large: '566px' } as const;
+    for (const block of blocks.slice(0, 3)) {
+      const slot = slotOf(block.key);
+      expect(declaredAtBreakpoint(slot, '600px', 'height'), block.key).toBe(
+        pinned[block.size as keyof typeof pinned]
+      );
+      // The phone keeps `minmax(200px, auto)` and cards sized by their content.
+      expect(declaredAtBreakpoint(slot, '0px', 'height'), block.key).toBeNull();
     }
   });
 });

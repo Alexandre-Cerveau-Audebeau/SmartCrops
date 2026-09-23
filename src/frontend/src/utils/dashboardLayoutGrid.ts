@@ -66,6 +66,25 @@ export const DASHBOARD_BASE_SPANS = {
 export type DashboardSpanSize = keyof typeof DASHBOARD_BASE_SPANS;
 
 /**
+ * SMA-437 (A-N10) — the one size whose row takes the height of its content,
+ * with no floor: the Full width. The three others are PINNED from 600 px up
+ * ({@link pinnedHeight}). Read by the CSS (`SortableWidget`) and by the drag
+ * model (`DashboardGrid`) alike, so the two cannot disagree on which rows are
+ * free.
+ */
+export function hasFreeHeight(size: DashboardSpanSize): boolean {
+  return size === 'wide';
+}
+
+/**
+ * The height a pinned card takes from 600 px up: `rows` rows of `row` px and
+ * the gutters between them — 273 px on one row, 566 on two.
+ */
+export function pinnedHeight(rows: number, row: number, gap: number): number {
+  return rows * row + (rows - 1) * gap;
+}
+
+/**
  * The footprint a size actually gets in a grid of `columns` columns. CSS Grid
  * clamps a span to the number of columns, which is exactly what makes a Medium
  * and a Large one column wide on a phone — and a Full width two columns wide
