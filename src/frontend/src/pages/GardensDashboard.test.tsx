@@ -157,13 +157,17 @@ afterEach(() => {
 });
 
 describe('GardensDashboard — grid from the stored preferences (SMA-336)', () => {
-  it('renders the eight widgets of the Expert preset, in the canonical order', async () => {
+  it('renders the nine widgets of the Expert preset: the Key figures band first, then the eight in the canonical order', async () => {
+    // SMA-437 lot 1, PR B, step B1 — « en tête du preset Expert ».
     servePreferences('expert');
 
     renderPage();
 
-    await waitFor(() => expect(renderedKeys()).toHaveLength(8));
-    expect(renderedKeys()).toEqual([...DASHBOARD_BLOCK_KEYS]);
+    await waitFor(() => expect(renderedKeys()).toHaveLength(9));
+    expect(renderedKeys()).toEqual([
+      'keyfigures',
+      ...DASHBOARD_BLOCK_KEYS.filter((key) => key !== 'keyfigures'),
+    ]);
   });
 
   it('leaves the level’s hidden widgets out of the grid', async () => {
@@ -535,11 +539,12 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
 
     renderPage();
 
-    await waitFor(() => expect(renderedKeys()).toHaveLength(8));
-    // ONE shell — Harvest, and Harvest alone: Gardens, Counts by variety,
-    // Statistics, Weather and To do today carry data, This month joined them
-    // in PR 4a/5 and Tips in PR 4b/5.
-    expect(screen.getAllByText('Coming soon')).toHaveLength(1);
+    await waitFor(() => expect(renderedKeys()).toHaveLength(9));
+    // TWO shells — Harvest, and the Key figures band until its widget lands
+    // (SMA-437 lot 1, PR B: the block arrives in step B1, its body in B4):
+    // Gardens, Counts by variety, Statistics, Weather and To do today carry
+    // data, This month joined them in PR 4a/5 and Tips in PR 4b/5.
+    expect(screen.getAllByText('Coming soon')).toHaveLength(2);
     expect(screen.queryByText('Coming soon', { selector: '[data-widget="tips"] *' })).toBeNull();
   });
 
@@ -598,7 +603,8 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
     expect(
       screen.getByText('Aucune plante placée — les conseils arrivent avec vos plantations.')
     ).toBeInTheDocument();
-    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(1);
+    // Harvest, and the Key figures band until its widget lands (PR B, B4).
+    expect(screen.getAllByText('Bientôt disponible')).toHaveLength(2);
     expect(screen.getByLabelText('Ville')).toBeInTheDocument();
   });
 });
@@ -922,7 +928,8 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
 
     fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
 
-    await waitFor(() => expect(renderedKeys()).toHaveLength(8));
+    // The Expert preset: the Key figures band, then the eight (PR B, B1).
+    await waitFor(() => expect(renderedKeys()).toHaveLength(9));
     expect(await screen.findByText('Expert view')).toBeInTheDocument();
     await waitFor(() =>
       expect(saveDashboardPreferences).toHaveBeenCalledWith(

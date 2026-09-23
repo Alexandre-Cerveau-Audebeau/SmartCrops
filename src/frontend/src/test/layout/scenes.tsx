@@ -343,6 +343,10 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
       // « Bientôt disponible », as the page draws it (SMA-437: the Expert
       // preset's grid scene holds it).
       return <InviteBlock blockKey="harvest" size={scene.size} editing={scene.editing} />;
+    case 'keyfigures':
+      // The Key figures band heads the Expert preset since PR B, step B1; the
+      // page draws it as an invitation until its widget lands (step B4).
+      return <InviteBlock blockKey="keyfigures" size={scene.size} editing={scene.editing} />;
     default:
       throw new Error(`No scene for the widget ${scene.key}`);
   }

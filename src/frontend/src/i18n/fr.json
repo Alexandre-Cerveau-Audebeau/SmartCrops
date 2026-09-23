@@ -638,6 +638,10 @@
       "harvest": {
         "title": "Récolte",
         "invite": "Les stades de croissance de vos plants ne sont pas encore renseignés — l’estimation ne peut pas les compter."
+      },
+      "keyfigures": {
+        "title": "Chiffres clés",
+        "invite": "Vos quatre chiffres clés arrivent bientôt ici."
       }
     },
     "exposure": {

@@ -6,11 +6,14 @@
  * level may be: the unions below are DERIVED from them, so adding a widget is
  * one edit on this side, not four.
  *
- * The frozen design settles the count at EIGHT widgets (`_spec.md` § 8, « les
- * huit widgets en Grand », and exactly eight `data-widget` keys on the
- * artboards). The order here is the canonical one — it is also the order the
- * server appends a missing block in, so a layout saved before a widget existed
- * grows predictably.
+ * The frozen design of 08/09 settled the count at EIGHT widgets (`_spec.md`
+ * § 8); the v3 adds a ninth, the Key figures band — `keyfigures` (SMA-437
+ * lot 1, PR B, step B1, pre-flight D1), the Expert's alone: which formula has
+ * which widget is its preset's to say (`dashboardPresets.ts`, D4). The order
+ * here is the canonical one, the band last since it arrived last; where a
+ * layout that lacks a widget receives it is its PRESET's place (arbitrage 3 of
+ * the lot 1 pre-flight — the server's `Merge`), so the band heads an Expert
+ * page saved before it existed.
  */
 export const DASHBOARD_BLOCK_KEYS = [
   'weather',
@@ -21,6 +24,7 @@ export const DASHBOARD_BLOCK_KEYS = [
   'counters',
   'stats',
   'harvest',
+  'keyfigures',
 ] as const;
 
 export type DashboardBlockKey = (typeof DASHBOARD_BLOCK_KEYS)[number];

@@ -1120,7 +1120,9 @@ describe('GardensDashboard — drag transforms (SMA-336 round 2, V4)', () => {
 
   const mixedBlocks = () => {
     const blocks = presetFor('gardener');
-    for (const block of blocks) block.size = sizes[block.key];
+    // The Gardener preset never carries the Key figures band (SMA-437, D4):
+    // the guard narrows the key for the table above, and never skips a block.
+    for (const block of blocks) if (block.key !== 'keyfigures') block.size = sizes[block.key];
     return blocks;
   };
 

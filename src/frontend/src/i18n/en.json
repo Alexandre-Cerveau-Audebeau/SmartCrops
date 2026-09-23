@@ -638,6 +638,10 @@
       "harvest": {
         "title": "Harvest",
         "invite": "Your plants have no growth stage yet — the estimate can’t count them."
+      },
+      "keyfigures": {
+        "title": "Key figures",
+        "invite": "Your four key figures are coming here soon."
       }
     },
     "exposure": {

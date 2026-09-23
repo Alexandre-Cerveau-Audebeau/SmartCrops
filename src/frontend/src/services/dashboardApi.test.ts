@@ -188,7 +188,53 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     ]);
   });
 
-  it('brings a KNOWN size the formula does not permit back to the preset’s — no widget has the Full width yet', async () => {
+  // SMA-437 lot 1, PR B, step B1 (pre-flight D4) — the blocks of a formula
+  // are those of its preset. The server refuses the Key figures band in a
+  // Gardener's PUT and drops it from a stored Gardener layout; the client does
+  // the same on read, in defence, and BEFORE any size is resolved: the band
+  // has no size in the Gardener's preset to come back to.
+  it('drops the Key figures band from a layout whose formula does not permit it — whatever its size', async () => {
+    mockFetch({
+      schemaVersion: 1,
+      level: 'gardener',
+      isPreset: false,
+      blocks: [
+        { key: 'keyfigures', size: 'wide', hidden: false },
+        { key: 'weather', size: 'medium', hidden: false },
+        { key: 'gardens', size: 'large', hidden: false },
+      ],
+      updatedAt: null,
+    });
+
+    const preferences = await fetchDashboardPreferences();
+
+    expect(preferences.blocks).toEqual([
+      { key: 'weather', size: 'medium', hidden: false },
+      { key: 'gardens', size: 'large', hidden: false },
+    ]);
+  });
+
+  it('keeps the band at the Expert formula, and brings any other size back to its one — the Full width', async () => {
+    mockFetch({
+      schemaVersion: 1,
+      level: 'expert',
+      isPreset: false,
+      blocks: [
+        { key: 'keyfigures', size: 'large', hidden: false },
+        { key: 'weather', size: 'large', hidden: false },
+      ],
+      updatedAt: null,
+    });
+
+    const preferences = await fetchDashboardPreferences();
+
+    expect(preferences.blocks).toEqual([
+      { key: 'keyfigures', size: 'wide', hidden: false },
+      { key: 'weather', size: 'large', hidden: false },
+    ]);
+  });
+
+  it('brings a KNOWN size the formula does not permit back to the preset’s — Weather has no Full width yet', async () => {
     mockFetch({
       schemaVersion: 1,
       level: 'expert',

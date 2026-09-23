@@ -19,12 +19,22 @@ import type {
  * the size would show its Large stretched over 1 152 px. So the table follows
  * what is drawn, not only what is permitted: Jardins, Météo, Statistiques,
  * Compteurs and Ce mois-ci will each add `wide` to their Expert row in their
- * own lot, on both sides; the Key figures band arrives with `wide` as its one
- * size. In this PR no widget has it.
+ * own lot, on both sides. The Key figures band arrived with `wide` as its one
+ * size (PR B, step B1 — pre-flight D3: « keyfigures@Expert = [wide] ; tout le
+ * reste = [P, M, G] »): it is the one widget drawn in Full width, and a
+ * one-size row draws no corner handle (`DashboardGrid`).
+ *
+ * Which formula HAS a widget is not this table's to say but its preset's (D4):
+ * the band's rows at the Novice and Gardener formulas are the default three
+ * sizes and are never read — a layout of theirs never carries the band
+ * (`dashboardApi.normalize`; on the server, `Validate` and `Merge`).
  */
 
 /** Small, Medium, Large — in the order the corner handle steps through them. */
 const THREE_SIZES = ['small', 'medium', 'large'] as const satisfies DashboardSizeList;
+
+/** The Full width alone — the Key figures band's one size (A-N11, C28). */
+const WIDE_ONLY = ['wide'] as const satisfies DashboardSizeList;
 
 /**
  * The Expert's row, widget by widget: the one formula the Full width is ever
@@ -40,6 +50,7 @@ const EXPERT_SIZES: Record<DashboardBlockKey, DashboardSizeList> = {
   counters: THREE_SIZES,
   stats: THREE_SIZES,
   harvest: THREE_SIZES,
+  keyfigures: WIDE_ONLY,
 };
 
 /**

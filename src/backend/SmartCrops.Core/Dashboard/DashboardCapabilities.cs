@@ -14,7 +14,15 @@ namespace SmartCrops.Core.Dashboard;
 /// the table follows what is drawn, not only what is permitted: Jardins,
 /// Météo, Statistiques, Compteurs and Ce mois-ci will each add
 /// <see cref="DashboardLayout.Sizes.Wide"/> to their Expert row in their own
-/// lot, on both sides. No block has it yet.</para>
+/// lot, on both sides. The Key figures band arrived with it as its one size
+/// (PR B, step B1 — pre-flight D3: « keyfigures@Expert = [wide] ; tout le reste
+/// = [P, M, G] »).</para>
+///
+/// <para>Which level HAS a block is not this table's to say but its preset's
+/// (<see cref="DashboardPresets.Permits"/>, D4): the band's rows at the Novice
+/// and Gardener levels are the default three sizes and are never read — the
+/// controller refuses the band there on write and drops it on read before any
+/// size is looked up.</para>
 ///
 /// <para>Both sides are checked against ONE file,
 /// <c>src/frontend/src/constants/dashboardLayout.reference.json</c> (PR #287,
@@ -26,6 +34,9 @@ public static class DashboardCapabilities
     /// <summary>Small, Medium, Large — in the order the corner handle steps through them.</summary>
     private static readonly IReadOnlyList<string> ThreeSizes =
         [DashboardLayout.Sizes.Small, DashboardLayout.Sizes.Medium, DashboardLayout.Sizes.Large];
+
+    /// <summary>The Full width alone — the Key figures band's one size (A-N11, C28).</summary>
+    private static readonly IReadOnlyList<string> WideOnly = [DashboardLayout.Sizes.Wide];
 
     /// <summary>
     /// The Expert's row, block by block: the one level the Full width is ever
@@ -43,6 +54,7 @@ public static class DashboardCapabilities
             [DashboardLayout.Blocks.Counters] = ThreeSizes,
             [DashboardLayout.Blocks.Stats] = ThreeSizes,
             [DashboardLayout.Blocks.Harvest] = ThreeSizes,
+            [DashboardLayout.Blocks.KeyFigures] = WideOnly,
         };
 
     /// <summary>

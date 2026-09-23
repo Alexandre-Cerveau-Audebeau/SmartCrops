@@ -3,6 +3,8 @@ import { GRID_SCENES, LAYOUT_SCENES } from './scenes';
 import { PROBE_SCENES, WIDE_LINE, WIDE_SHORT_HEIGHT } from './probes';
 import type { GridMeasure, SceneMeasure } from './harness';
 import { VISIBLE_OVERLAP_PX } from './measure';
+import { sizesFor } from '../../constants/dashboardCapabilities';
+import type { DashboardBlockKey } from '../../types/Dashboard';
 import {
   IS_CI,
   buildHarness,
@@ -227,9 +229,11 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
     // SMA-437 (D19): every card of a whole grid, the same four rules — and
     // no two cards meeting, and in Edit mode every control inside its card,
     // over none of its text, with the corner grip on every card that has
-    // more than one size (all of them in this PR).
+    // more than one size at its formula: every one but the Key figures band,
+    // whose one size is the Full width (PR B, step B1 — A-N11, C28).
     it.each(GRID_SCENES.map((grid) => grid.name))('%s: every card clean, no two cards meeting, the Edit controls clear of the text', (name) => {
       const grid = gridOf(run, name);
+      const scene = GRID_SCENES.find((candidate) => candidate.name === name)!;
       for (const card of grid.cards) {
         expect(defects(card), card.scene).toEqual({ overlaps: [], clipped: [], spills: [], beyondCard: 0 });
         expect(card.fontLoaded, `${card.scene}: Inter not loaded`).toBe(true);
@@ -240,7 +244,8 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
         for (const { key, controls } of grid.controls) {
           expect(controls.filter((control) => !control.inside).map((control) => control.label), key).toEqual([]);
           expect(controls.flatMap((control) => control.covers.map((text) => `${control.label} over ${text}`)), key).toEqual([]);
-          expect(controls.filter((control) => control.grip), key).toHaveLength(1);
+          const grips = sizesFor(key as DashboardBlockKey, scene.level).length > 1 ? 1 : 0;
+          expect(controls.filter((control) => control.grip), key).toHaveLength(grips);
         }
       } else {
         expect(grid.controls).toEqual([]);
@@ -296,13 +301,20 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
   });
 
   describe('the grid scenes — the tracks the engine resolves (SMA-437, A-N10)', () => {
-    it.each(WIDE_RUNS.map((run) => run.id))('from 600 px up, every resolved row is 273 px and every card its pinned height — %s', (id) => {
+    it.each(WIDE_RUNS.map((run) => run.id))('from 600 px up, every resolved row is 273 px and every card its pinned height — but a Full-width row, as tall as its card — %s', (id) => {
       const run = runOf(id);
       for (const grid of GRID_SCENES) {
         const measured = gridOf(run, grid.name);
-        // The tracks are `auto` now: a row of 273 px is the PINNED cards' doing.
-        expect(new Set(measured.rows.split(' ')), `${id} ${grid.name}`).toEqual(new Set(['273px']));
-        for (const card of measured.cards) {
+        // The tracks are `auto` now: a row of 273 px is the PINNED cards' doing,
+        // and a Full-width row — the Key figures band of the Expert preset
+        // (PR B, step B1) — the height of its one card (A-N10), no floor.
+        const free = measured.cards.filter((card) => PINNED[card.size] === undefined);
+        const unpinnedTracks = measured.rows.split(' ').filter((track) => track !== '273px').map(parseFloat);
+        expect(unpinnedTracks, `${id} ${grid.name}`).toHaveLength(free.length);
+        free.forEach((card, index) => {
+          expect(unpinnedTracks[index], `${id} ${card.scene}`).toBeCloseTo(card.box.h, 0);
+        });
+        for (const card of measured.cards.filter((candidate) => PINNED[candidate.size] !== undefined)) {
           expect(card.box.h, `${id} ${card.scene}`).toBe(PINNED[card.size]);
         }
       }

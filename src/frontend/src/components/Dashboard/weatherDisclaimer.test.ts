@@ -21,7 +21,7 @@ const SUBSETS: readonly (readonly DashboardBlockKey[])[] = Array.from(
   (_, mask) => WEATHER_BEARING_BLOCKS.filter((_, index) => mask & (1 << index))
 );
 
-/** The five widgets that draw no weather figure. */
+/** The six widgets that draw no weather figure. */
 const NON_BEARING = DASHBOARD_BLOCK_KEYS.filter(
   (key) => !(WEATHER_BEARING_BLOCKS as readonly DashboardBlockKey[]).includes(key)
 );
@@ -30,13 +30,16 @@ describe('weatherDisclaimerVisible — with data, the warning follows the weathe
   it('enumerates the eight subsets, the empty one included', () => {
     expect(SUBSETS).toHaveLength(8);
     expect(SUBSETS.filter((subset) => subset.length === 0)).toHaveLength(1);
-    expect(NON_BEARING).toEqual(['gardens', 'month', 'counters', 'stats', 'harvest']);
+    // SMA-437 lot 1, PR B, step B1: the Key figures band is a block now, and
+    // it draws no figure yet — the page renders it as an invitation until its
+    // widget lands.
+    expect(NON_BEARING).toEqual(['gardens', 'month', 'counters', 'stats', 'harvest', 'keyfigures']);
   });
 
   it.each(SUBSETS.map((subset) => [subset.length ? subset.join(' + ') : '(none)', subset] as const))(
     'visible %s → shown if and only if at least one is visible',
     (_label, subset) => {
-      // The five non-bearing widgets are ALWAYS on the page here: they must
+      // The six non-bearing widgets are ALWAYS on the page here: they must
       // never count as weather.
       const isBlockVisible = layoutWith([...NON_BEARING, ...subset]);
 

@@ -80,9 +80,12 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.Equal(DashboardLayout.CurrentSchemaVersion, body.SchemaVersion);
         Assert.Null(body.UpdatedAt);
 
-        // The preset lists all eight blocks, in canonical order, hidden ones
-        // included — the Customize gallery reads them from here.
-        Assert.Equal(DashboardLayout.Blocks.All, body.Blocks.Select(b => b.Key).ToList());
+        // The preset lists every block of the Gardener — the eight widgets, in
+        // canonical order, hidden ones included, and never the Key figures band,
+        // which is the Expert's alone (SMA-437, pre-flight D4). The Customize
+        // gallery reads them from here.
+        Assert.Equal(GardenerKeys, body.Blocks.Select(b => b.Key).ToList());
+        Assert.DoesNotContain("keyfigures", body.Blocks.Select(b => b.Key));
 
         // Gardener: gardens large, stats and harvest hidden (frozen design § 8).
         Assert.Equal(DashboardLayout.Sizes.Large, Block(body, DashboardLayout.Blocks.Gardens).Size);
@@ -118,12 +121,16 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         await SeedUserAsync(userId);
         AuthAs(userId);
 
-        // Expert level, gardens moved first and shrunk, harvest hidden.
+        // Expert level, gardens moved first and shrunk, harvest hidden — and the
+        // Key figures band, which every Expert layout carries since SMA-437 lot 1
+        // (PR B, step B1), moved from the head to the third place: once stored,
+        // its place is the user's, never the preset's.
         var saved = new SaveDashboardPreferencesRequest(
             DashboardLayout.Levels.Expert,
             [
                 new(DashboardLayout.Blocks.Gardens, DashboardLayout.Sizes.Medium, false, null),
                 new(DashboardLayout.Blocks.Weather, DashboardLayout.Sizes.Large, false, null),
+                new(DashboardLayout.Blocks.KeyFigures, DashboardLayout.Sizes.Wide, false, null),
                 new(DashboardLayout.Blocks.Tips, DashboardLayout.Sizes.Small, false, null),
                 new(DashboardLayout.Blocks.Month, DashboardLayout.Sizes.Small, false, null),
                 new(DashboardLayout.Blocks.Todo, DashboardLayout.Sizes.Medium, false, null),
@@ -282,7 +289,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.True(body.IsPreset);
         Assert.Equal(DashboardLayout.Levels.Gardener, body.Level);
         Assert.Equal(DashboardLayout.CurrentSchemaVersion, body.SchemaVersion);
-        Assert.Equal(DashboardLayout.Blocks.All, body.Blocks.Select(b => b.Key).ToList());
+        Assert.Equal(GardenerKeys, body.Blocks.Select(b => b.Key).ToList());
     }
 
     [Fact]
@@ -309,11 +316,12 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.Equal(DashboardLayout.Levels.Novice, body.Level);
 
         // The two stored blocks keep their stored order and size; the six others
-        // arrive behind them with their preset values.
+        // arrive at their preset places — here, behind them — with their preset
+        // values.
         Assert.Equal(DashboardLayout.Blocks.Gardens, body.Blocks[0].Key);
         Assert.Equal(DashboardLayout.Blocks.Weather, body.Blocks[1].Key);
         Assert.Equal(DashboardLayout.Sizes.Small, body.Blocks[0].Size);
-        Assert.Equal(DashboardLayout.Blocks.All.Count, body.Blocks.Count);
+        Assert.Equal(DashboardPresets.For(DashboardLayout.Levels.Novice).Count, body.Blocks.Count);
         Assert.True(Block(body, DashboardLayout.Blocks.Stats).Hidden);
     }
 
@@ -363,7 +371,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         // "unreadable" path: the blocks are simply all filled from the preset.
         Assert.False(body.IsPreset);
         Assert.Equal(DashboardLayout.Levels.Gardener, body.Level);
-        Assert.Equal(DashboardLayout.Blocks.All, body.Blocks.Select(b => b.Key).ToList());
+        Assert.Equal(GardenerKeys, body.Blocks.Select(b => b.Key).ToList());
     }
 
     [Fact]
@@ -388,10 +396,14 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<DashboardPreferencesResponse>();
         Assert.NotNull(body);
-        // The one real block keeps its stored position and size.
-        Assert.Equal(DashboardLayout.Blocks.Tips, body.Blocks[0].Key);
-        Assert.Equal(DashboardLayout.Sizes.Small, body.Blocks[0].Size);
-        Assert.Equal(DashboardLayout.Blocks.All.Count, body.Blocks.Count);
+        // The one real block keeps its stored size; the seven the document
+        // omits arrive at their preset places around it (SMA-437 lot 1, PR B,
+        // arbitrage 3 — « à la place du preset », no longer at the end), so
+        // Weather and Gardens come back before it, where the Gardener preset
+        // puts them, and it keeps its own preset place, the third.
+        Assert.Equal(GardenerKeys, body.Blocks.Select(b => b.Key).ToList());
+        Assert.Equal(DashboardLayout.Sizes.Small, Block(body, DashboardLayout.Blocks.Tips).Size);
+        Assert.Equal(DashboardPresets.For(DashboardLayout.Levels.Gardener).Count, body.Blocks.Count);
     }
 
     // ── Sizes per formula (SMA-437 lot 1, PR A, step A5 — pre-flight D4) ─────
@@ -456,6 +468,197 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         // The Gardener preset's Weather size.
         Assert.Equal(DashboardLayout.Sizes.Medium, body.Blocks[0].Size);
         Assert.Equal(DashboardLayout.Sizes.Small, Block(body, DashboardLayout.Blocks.Gardens).Size);
+    }
+
+    // ── The Key figures band (SMA-437 lot 1, PR B, step B1) ──────────────────
+    // Pre-flight D4 and D8, and arbitrage 3 (23/09): the band is the Expert's
+    // alone, heads its preset in the Full width — its one size — and an Expert
+    // who saved a layout before it existed receives it at the head, visible,
+    // without the chip turning « · ajustée ». Literals for the band's key and
+    // size on purpose: they are the wire contract.
+
+    [Fact]
+    public async Task PutPreferences_ExpertWithTheBandInFullWidth_IsStored_AndReadFirst()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var request = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Expert,
+            [
+                new("keyfigures", "wide", false, null),
+                .. EightWidgets.Select(key => new SaveDashboardBlockRequest(key, "large", false, null)),
+            ]);
+
+        var put = await Client.PutAsJsonAsync(Url, request);
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+        Assert.NotNull(body);
+        Assert.Equal(("keyfigures", "wide", false), (body.Blocks[0].Key, body.Blocks[0].Size, body.Blocks[0].Hidden));
+        Assert.Equal(9, body.Blocks.Count);
+    }
+
+    /// <summary>R8: the Gardener has no band — refused on the server, not only absent from its interface.</summary>
+    [Fact]
+    public async Task PutPreferences_GardenerWithTheBand_Returns400_NamingTheLevel()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var request = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Gardener,
+            [
+                new("keyfigures", "wide", false, null),
+                new(DashboardLayout.Blocks.Weather, DashboardLayout.Sizes.Medium, false, null),
+            ]);
+
+        var response = await Client.PutAsJsonAsync(Url, request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("block 'keyfigures' is not available at level 'gardener'", await response.Content.ReadAsStringAsync());
+        await AssertNothingStoredAsync(userId);
+    }
+
+    /// <summary>The band's one size is the Full width: a Large band is refused even at the Expert level.</summary>
+    [Fact]
+    public async Task PutPreferences_ExpertBandInLarge_Returns400_NamingTheSize()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var request = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Expert,
+            [new("keyfigures", "large", false, null)]);
+
+        var response = await Client.PutAsJsonAsync(Url, request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("size 'large' is not available for block 'keyfigures' at level 'expert'", await response.Content.ReadAsStringAsync());
+        await AssertNothingStoredAsync(userId);
+    }
+
+    /// <summary>
+    /// A client of eight blocks — a tab opened before the band, the other half of
+    /// a rolling deploy (pre-flight risk 4) — is accepted, and the band comes back
+    /// from the preset on the next read, at the head.
+    /// </summary>
+    [Fact]
+    public async Task PutPreferences_ExpertClientOfEightBlocks_IsAccepted_AndTheBandComesBackFirst()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var request = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Expert,
+            [.. EightWidgets.Select(key => new SaveDashboardBlockRequest(key, "large", false, null))]);
+
+        var put = await Client.PutAsJsonAsync(Url, request);
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+        Assert.NotNull(body);
+        Assert.Equal(("keyfigures", "wide", false), (body.Blocks[0].Key, body.Blocks[0].Size, body.Blocks[0].Hidden));
+    }
+
+    /// <summary>
+    /// A stored layout of a level without the band — written by hand, since no
+    /// write path can produce it — is read WITHOUT it, even with a size the
+    /// server could not resolve: <c>Merge</c> drops a block the level does not
+    /// permit BEFORE it looks for a fallback size in the preset, which has none
+    /// for it (pre-flight C.3, « un piège de lecture à désamorcer »). Forgiving
+    /// on read: 200, never 500.
+    /// </summary>
+    [Fact]
+    public async Task GetPreferences_StoredGardenerLayoutWithTheBand_Returns200_WithoutIt()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        await InsertRawLayoutAsync(
+            userId,
+            DashboardLayout.CurrentSchemaVersion,
+            """
+            {"schemaVersion":1,"level":"gardener","blocks":[
+              {"key":"keyfigures","size":"huge","hidden":false,"options":null},
+              {"key":"weather","size":"medium","hidden":false,"options":null},
+              {"key":"gardens","size":"large","hidden":false,"options":null}]}
+            """);
+
+        var response = await Client.GetAsync(Url);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<DashboardPreferencesResponse>();
+        Assert.NotNull(body);
+        Assert.Equal(GardenerKeys, body.Blocks.Select(b => b.Key).ToList());
+    }
+
+    /// <summary>
+    /// Arbitrage 3 — THE case: an Expert who saved the eight-widget preset before
+    /// this PR. The band arrives at the head, visible, in the Full width — and the
+    /// layout read back IS the Expert preset, block for block (key, size,
+    /// visibility, in order: what <c>isAdjusted</c> compares), so the chip does
+    /// not turn « · ajustée » for a change the user did not make. It used to
+    /// arrive at the END: a band at the foot of the page, and the chip adjusted.
+    /// </summary>
+    [Fact]
+    public async Task GetPreferences_ExpertLayoutSavedBeforeTheBand_ReceivesItFirst_AndReadsAsThePreset()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        await InsertRawLayoutAsync(
+            userId,
+            DashboardLayout.CurrentSchemaVersion,
+            StoredExpertLayout(EightWidgets.Select(key => (key, "large", false))));
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+
+        Assert.NotNull(body);
+        Assert.False(body.IsPreset);
+        Assert.Equal(("keyfigures", "wide", false), (body.Blocks[0].Key, body.Blocks[0].Size, body.Blocks[0].Hidden));
+        Assert.Equal(
+            DashboardPresets.For(DashboardLayout.Levels.Expert).Select(b => (b.Key, b.Size, b.Hidden)),
+            body.Blocks.Select(b => (b.Key, b.Size, b.Hidden)));
+    }
+
+    /// <summary>
+    /// The same, on a layout the user HAD rearranged — Gardens first and Medium,
+    /// Tips Small, Harvest hidden: the band still takes the head, visible;
+    /// everything the user arranged stays as they left it, behind it.
+    /// </summary>
+    [Fact]
+    public async Task GetPreferences_RearrangedExpertLayoutSavedBeforeTheBand_ReceivesItFirst_KeepingTheRest()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        (string Key, string Size, bool Hidden)[] stored =
+        [
+            ("gardens", "medium", false),
+            ("weather", "large", false),
+            ("tips", "small", false),
+            ("month", "large", false),
+            ("todo", "large", false),
+            ("counters", "large", false),
+            ("stats", "large", false),
+            ("harvest", "large", true),
+        ];
+        await InsertRawLayoutAsync(userId, DashboardLayout.CurrentSchemaVersion, StoredExpertLayout(stored));
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+
+        Assert.NotNull(body);
+        var expected = new List<(string Key, string Size, bool Hidden)> { ("keyfigures", "wide", false) };
+        expected.AddRange(stored);
+        Assert.Equal(expected, body.Blocks.Select(b => (b.Key, b.Size, b.Hidden)));
     }
 
     // ── Bounded options (round 1, E1 / G2) ───────────────────────────────────
@@ -558,6 +761,25 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>The Gardener preset's keys, in order — the eight widgets, never the band.</summary>
+    private static List<string> GardenerKeys =>
+        [.. DashboardPresets.For(DashboardLayout.Levels.Gardener).Select(b => b.Key)];
+
+    /// <summary>
+    /// The eight widgets — the blocks of the Expert preset as it stood before the
+    /// Key figures band, what an Expert saved until PR B: a literal, not derived
+    /// from today's preset, which is the thing under test.
+    /// </summary>
+    private static readonly string[] EightWidgets =
+        ["weather", "gardens", "tips", "month", "todo", "counters", "stats", "harvest"];
+
+    /// <summary>An Expert layout as stored JSON, its blocks sized and hidden as given.</summary>
+    private static string StoredExpertLayout(IEnumerable<(string Key, string Size, bool Hidden)> blocks) =>
+        "{\"schemaVersion\":1,\"level\":\"expert\",\"blocks\":[" +
+        string.Join(",", blocks.Select(b =>
+            $"{{\"key\":\"{b.Key}\",\"size\":\"{b.Size}\",\"hidden\":{(b.Hidden ? "true" : "false")},\"options\":null}}")) +
+        "]}";
 
     private static DashboardBlockDto Block(DashboardPreferencesResponse body, string key) =>
         body.Blocks.Single(b => b.Key == key);

@@ -18,7 +18,7 @@ import type {
 import type { GardenConfig, LightSlot } from '../types/Garden';
 import type { PlacementData } from './gardenLayoutApi';
 import { sizesFor } from '../constants/dashboardCapabilities';
-import { DEFAULT_DASHBOARD_LEVEL, presetFor } from '../constants/dashboardPresets';
+import { DEFAULT_DASHBOARD_LEVEL, permitsBlock, presetFor } from '../constants/dashboardPresets';
 import { fetchJson } from './fetchJson';
 import {
   arrayOf,
@@ -38,9 +38,10 @@ const API_BASE = '/api';
 
 /**
  * The size a block takes in its level's preset — what a size the level does
- * not permit comes back to. Every preset lists every block (pinned by
- * `dashboardPresets.test.ts`, and by the server's `DashboardPresetsTests`); the
- * first size the level permits stands in should one ever not.
+ * not permit comes back to. Every preset lists every block its level permits
+ * (pinned by `dashboardPresets.test.ts`, and by the server's
+ * `DashboardPresetsTests`), and `normalizeBlock` drops any other before asking;
+ * the first size the level permits stands in should one ever not.
  */
 function presetSize(key: DashboardBlockKey, level: DashboardLevel): DashboardSize {
   return presetFor(level).find((block) => block.key === key)?.size ?? sizesFor(key, level)[0];
@@ -67,12 +68,20 @@ function presetSize(key: DashboardBlockKey, level: DashboardLevel): DashboardSiz
  * (SMA-437, pre-flight D4), exactly as the server's `Merge` does. It used to
  * drop the block whole: the widget vanished from the page, Gardens included,
  * which can never be hidden (pre-flight, constat 14).
+ *
+ * A block the level does not have at all — the Key figures band in a
+ * Gardener's layout — is DROPPED, and before any size is read (SMA-437 lot 1,
+ * PR B, step B1 — pre-flight D4): the blocks of a formula are those of its
+ * preset, which holds no size for it to come back to. No write path of this
+ * client produces one; the server refuses it on write and drops it on read
+ * (`Merge`) — this is the same rule, in defence.
  */
 function normalizeBlock(value: unknown, level: DashboardLevel): DashboardBlock | null {
   if (typeof value !== 'object' || value === null) return null;
 
   const block = value as { key?: unknown; size?: unknown; hidden?: unknown; options?: unknown };
   if (typeof block.key !== 'string' || !isDashboardBlockKey(block.key)) return null;
+  if (!permitsBlock(level, block.key)) return null;
 
   const permitted = sizesFor(block.key, level);
   const normalized: DashboardBlock = {

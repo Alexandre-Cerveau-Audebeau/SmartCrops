@@ -29,7 +29,7 @@ public record DashboardBlockDto(
 /// this server does not know. The client uses it to show the level chip without
 /// its « adjusted » suffix.
 /// </param>
-/// <param name="Blocks">All eight blocks, in display order, hidden ones included.</param>
+/// <param name="Blocks">Every block the level has — the eight widgets, and the Key figures band at the Expert level (SMA-437) — in display order, hidden ones included.</param>
 /// <param name="UpdatedAt">When the stored layout was last written; null for a preset.</param>
 public record DashboardPreferencesResponse(
     int SchemaVersion,

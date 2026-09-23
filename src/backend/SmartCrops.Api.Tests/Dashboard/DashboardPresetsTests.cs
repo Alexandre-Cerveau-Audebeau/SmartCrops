@@ -3,16 +3,20 @@ using SmartCrops.Core.Dashboard;
 namespace SmartCrops.Api.Tests.Dashboard;
 
 /// <summary>
-/// SMA-336 round 1 (E4) — the invariant every preset must hold: it lists EVERY
-/// block of <see cref="DashboardLayout.Blocks.All"/>, exactly once.
+/// SMA-336 round 1 (E4) — the invariant every preset must hold: it lists every
+/// block its level PERMITS, exactly once. Until SMA-437 that was every block of
+/// <see cref="DashboardLayout.Blocks.All"/>; since the Key figures band (lot 1,
+/// PR B, step B1 — pre-flight D4), the blocks of a level ARE those of its
+/// preset, and the band is the Expert's alone.
 ///
 /// <para><c>DashboardController.Merge</c> resolves a stored block's fallback size
 /// with <c>preset.First(p =&gt; p.Key == block.Key)</c>. That call is only safe
-/// because of this invariant. <c>ExpertPreset</c> derives from <c>Blocks.All</c>
-/// and is safe by construction; <c>NovicePreset</c> and <c>GardenerPreset</c> are
-/// hand-written literals, so a ninth block added to <c>Blocks.All</c> without a
-/// matching entry would make <c>Merge</c> throw <c>InvalidOperationException</c>
-/// on a read path the controller documents as never failing.</para>
+/// because <c>Merge</c> first drops every block the level does not permit
+/// (<see cref="DashboardPresets.Permits"/>) — the band in a Gardener's layout
+/// — and because each preset lists every block it permits: a block permitted
+/// but missing from its preset would make <c>Merge</c> throw
+/// <c>InvalidOperationException</c> on a read path the controller documents as
+/// never failing.</para>
 ///
 /// <para>A TEST rather than a static-constructor guard, deliberately: a throwing
 /// type initializer turns the same mistake into a <c>TypeInitializationException</c>
@@ -28,17 +32,40 @@ public class DashboardPresetsTests
         return data;
     }
 
+    /// <summary>
+    /// The Novice and the Gardener list the eight widgets and never the band;
+    /// the Expert lists all nine (V3-01: « Les chiffres clés — Non · Non · Oui »).
+    /// Literal on purpose — the band's key is the wire contract.
+    /// </summary>
     [Theory]
-    [MemberData(nameof(Levels))]
-    public void For_EveryLevel_ListsEveryBlockExactlyOnce(string level)
+    [InlineData(DashboardLayout.Levels.Novice, false)]
+    [InlineData(DashboardLayout.Levels.Gardener, false)]
+    [InlineData(DashboardLayout.Levels.Expert, true)]
+    public void For_EveryLevel_ListsExactlyTheBlocksItsLevelPermits_EachOnce(string level, bool withTheBand)
     {
         var preset = DashboardPresets.For(level);
+        var expected = DashboardLayout.Blocks.All.Where(key => withTheBand || key != "keyfigures");
 
-        Assert.Equal(DashboardLayout.Blocks.All.Count, preset.Count);
         Assert.Equal(
-            DashboardLayout.Blocks.All.OrderBy(k => k, StringComparer.Ordinal),
+            expected.OrderBy(k => k, StringComparer.Ordinal),
             preset.Select(b => b.Key).OrderBy(k => k, StringComparer.Ordinal));
         Assert.Equal(preset.Count, preset.Select(b => b.Key).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    /// <summary>
+    /// « en tête du preset Expert » (contract § 3.3 [A], § 4.5): the band first,
+    /// in the Full width — its one size — then the eight widgets in Large.
+    /// </summary>
+    [Fact]
+    public void For_Expert_PutsTheKeyFiguresBandFirst_InFullWidth_ThenTheEightInLarge()
+    {
+        var expert = DashboardPresets.For(DashboardLayout.Levels.Expert);
+
+        Assert.Equal(new DashboardPresetBlock("keyfigures", "wide", false), expert[0]);
+        Assert.Equal(
+            DashboardLayout.Blocks.All.Where(key => key != "keyfigures"),
+            expert.Skip(1).Select(b => b.Key));
+        Assert.All(expert.Skip(1), block => Assert.Equal(new DashboardPresetBlock(block.Key, "large", false), block));
     }
 
     [Theory]
@@ -61,12 +88,13 @@ public class DashboardPresetsTests
     }
 
     /// <summary>
-    /// The exact call <c>Merge</c> makes, for every block of every level: it must
-    /// never be the one that throws.
+    /// The exact call <c>Merge</c> makes, for every block a level permits: it
+    /// must never be the one that throws. A block the level does not permit
+    /// never reaches it — <c>Merge</c> drops it first (pre-flight D4).
     /// </summary>
     [Theory]
     [MemberData(nameof(Levels))]
-    public void For_EveryLevel_ResolvesTheFallbackSizeOfEveryKnownBlock(string level)
+    public void For_EveryLevel_ResolvesTheFallbackSizeOfEveryBlockItPermits(string level)
     {
         var preset = DashboardPresets.For(level);
 
@@ -75,8 +103,36 @@ public class DashboardPresetsTests
         // type when it is not, so the null check could never fail. This states
         // the property the test is named for.
         Assert.All(
-            DashboardLayout.Blocks.All,
+            DashboardLayout.Blocks.All.Where(key => DashboardPresets.Permits(level, key)),
             key => Assert.Contains(preset, p => p.Key == key));
+    }
+
+    /// <summary>
+    /// The blocks of a level are those of its preset (pre-flight D4) — the rule
+    /// the controller refuses a write by and drops a stored block by.
+    /// </summary>
+    [Theory]
+    [InlineData(DashboardLayout.Levels.Novice, "keyfigures", false)]
+    [InlineData(DashboardLayout.Levels.Gardener, "keyfigures", false)]
+    [InlineData(DashboardLayout.Levels.Expert, "keyfigures", true)]
+    [InlineData(DashboardLayout.Levels.Gardener, "stats", true)]
+    [InlineData(DashboardLayout.Levels.Expert, "compost", false)]
+    [InlineData("archdruid", "keyfigures", false)]
+    public void Permits_IsWhetherTheLevelsPresetListsTheBlock(string level, string key, bool permitted)
+    {
+        Assert.Equal(permitted, DashboardPresets.Permits(level, key));
+    }
+
+    /// <summary>
+    /// D18 — <c>DashboardController.MaxRequestBodyBytes</c> derives from the
+    /// NUMBER of blocks, and <c>[RequestSizeLimit]</c> needs a constant: the
+    /// constant must be the length of the list, or the ceiling lies.
+    /// </summary>
+    [Fact]
+    public void Blocks_Count_IsTheNumberOfBlocks()
+    {
+        // The constant on the `expected` side (xUnit2000).
+        Assert.Equal(DashboardLayout.Blocks.Count, DashboardLayout.Blocks.All.Count);
     }
 
     [Fact]
