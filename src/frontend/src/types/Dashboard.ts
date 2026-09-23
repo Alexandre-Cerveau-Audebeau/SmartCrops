@@ -23,8 +23,12 @@ export const DASHBOARD_BLOCK_KEYS = [
 
 export type DashboardBlockKey = (typeof DASHBOARD_BLOCK_KEYS)[number];
 
-/** Footprints, in grid cells: 1×1, 2×1, 2×2 (`_spec.md` § 1). */
-export const DASHBOARD_SIZES = ['small', 'medium', 'large'] as const;
+/**
+ * Footprints, in grid cells: 1×1, 2×1, 2×2 (`_spec.md` § 1), and the fourth
+ * size of the v3, the Full width — « Pleine largeur » on screen, `wide` here,
+ * never « Large », which is Grand (SMA-437, V8): 4×1, as tall as its content.
+ */
+export const DASHBOARD_SIZES = ['small', 'medium', 'large', 'wide'] as const;
 
 export type DashboardSize = (typeof DASHBOARD_SIZES)[number];
 
@@ -97,11 +101,18 @@ export function isDashboardSize(value: string): value is DashboardSize {
 }
 
 /**
+ * The sizes the corner handle steps through: the three of every widget. The
+ * Full width is a size, not a step of this cycle — no widget is offered it
+ * before it is drawn for it (SMA-437, A-N11).
+ */
+const RESIZE_CYCLE: readonly DashboardSize[] = ['small', 'medium', 'large'];
+
+/**
  * The Edit-mode corner handle cycles Small -> Medium -> Large -> Small. It
  * WRAPS on purpose: without the wrap a widget grown to Large could never be
  * brought back down, since the handle is the only resize gesture.
  */
 export function nextDashboardSize(size: DashboardSize): DashboardSize {
-  const index = DASHBOARD_SIZES.indexOf(size);
-  return DASHBOARD_SIZES[(index + 1) % DASHBOARD_SIZES.length]!;
+  const index = RESIZE_CYCLE.indexOf(size);
+  return RESIZE_CYCLE[(index + 1) % RESIZE_CYCLE.length]!;
 }

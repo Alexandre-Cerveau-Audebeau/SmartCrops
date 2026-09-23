@@ -350,7 +350,8 @@
     "sizes": {
       "small": "Petit",
       "medium": "Moyen",
-      "large": "Grand"
+      "large": "Grand",
+      "wide": "Pleine largeur"
     },
     "editMode": {
       "drag": "Déplacer {{widget}}",

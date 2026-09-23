@@ -67,6 +67,49 @@ describe('spanFor — CSS clamps a span to the column count', () => {
   });
 });
 
+// SMA-437 lot 1, PR A, step A1 (pre-flight D2) — the fourth size, « Pleine
+// largeur » on screen, `wide` in the code (V8): 4 × 1, and the same clamp as
+// the three others. Two columns on a tablet is A-N12 (« la Pleine largeur
+// occupe les deux colonnes »), one on a phone is F10 — both without a line of
+// their own, which is what these pin.
+describe('spanFor — the Full width (SMA-437, D2)', () => {
+  it('takes the four columns of the desktop, the two of a tablet, the one of a phone — on ONE row', () => {
+    expect(spanFor('wide', 4)).toEqual({ cols: 4, rows: 1 });
+    expect(spanFor('wide', 2)).toEqual({ cols: 2, rows: 1 });
+    expect(spanFor('wide', 1)).toEqual({ cols: 1, rows: 1 });
+  });
+});
+
+describe('packGrid — a Full width opens a row of its own (SMA-437, D2)', () => {
+  const wide = (key: string, columns: number): GridItem => ({ key, ...spanFor('wide', columns) });
+
+  it('four columns: the rows before and after it are the other widgets’', () => {
+    expect(cells([small('a'), wide('band', 4), small('b')], 4)).toEqual({
+      a: [0, 0],
+      band: [0, 1],
+      b: [0, 2],
+    });
+  });
+
+  it('four columns: it waits below the lower half of a Large, whose row it cannot share', () => {
+    // L holds columns 0-1 of rows 0 and 1; `s` fills column 2 of row 0; the
+    // band needs the four columns of one row, and row 1 still has L in it.
+    expect(cells([large('L'), small('s'), wide('band', 4)], 4)).toEqual({
+      L: [0, 0],
+      s: [2, 0],
+      band: [0, 2],
+    });
+  });
+
+  it('two columns — the tablet: both columns, one row (A-N12)', () => {
+    expect(cells([small('a'), wide('band', 2), small('b')], 2)).toEqual({
+      a: [0, 0],
+      band: [0, 1],
+      b: [0, 2],
+    });
+  });
+});
+
 describe('packGrid — sparse auto-placement, four columns', () => {
   it('fills a row left to right, then wraps', () => {
     expect(cells([small('a'), small('b'), small('c'), small('d'), small('e')], 4)).toEqual({

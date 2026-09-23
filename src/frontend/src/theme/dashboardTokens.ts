@@ -385,4 +385,10 @@ export const DASHBOARD_SPACING = {
   sectionGap: 20,
   /** Grid gutter. */
   gutter: 20,
+  /**
+   * One grid row from 600 px up (V7): a Small and a Medium are one row tall, a
+   * Large two rows and the gutter between them. The one source of the grid's
+   * row height, for the CSS and for the drag model alike (SMA-437, D5).
+   */
+  row: 273,
 } as const;

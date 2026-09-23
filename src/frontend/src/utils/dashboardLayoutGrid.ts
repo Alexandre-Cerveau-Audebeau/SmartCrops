@@ -52,13 +52,15 @@ export interface GridTranslation {
 
 /**
  * The footprint of each widget size at full width (`_spec.md` § 1): Small
- * 1x1, Medium 2x1, Large 2x2. The single source of truth for both the CSS
- * (`SortableWidget`) and the model (`packGrid`) — they must not drift.
+ * 1x1, Medium 2x1, Large 2x2 — and the Full width, 4x1 (SMA-437, V8), the one
+ * size that takes every column of a row. The single source of truth for both
+ * the CSS (`SortableWidget`) and the model (`packGrid`) — they must not drift.
  */
 export const DASHBOARD_BASE_SPANS = {
   small: { cols: 1, rows: 1 },
   medium: { cols: 2, rows: 1 },
   large: { cols: 2, rows: 2 },
+  wide: { cols: 4, rows: 1 },
 } as const;
 
 export type DashboardSpanSize = keyof typeof DASHBOARD_BASE_SPANS;
@@ -66,7 +68,8 @@ export type DashboardSpanSize = keyof typeof DASHBOARD_BASE_SPANS;
 /**
  * The footprint a size actually gets in a grid of `columns` columns. CSS Grid
  * clamps a span to the number of columns, which is exactly what makes a Medium
- * and a Large one column wide on a phone.
+ * and a Large one column wide on a phone — and a Full width two columns wide
+ * on a tablet (A-N12) and one on a phone.
  */
 export function spanFor(size: DashboardSpanSize, columns: number): GridSpan {
   const base = DASHBOARD_BASE_SPANS[size];

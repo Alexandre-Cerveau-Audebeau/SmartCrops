@@ -198,7 +198,7 @@ export default function DashboardGrid({
             // (V34), the invitation printed over the first tip (V37), the
             // band over the min / max (V36), three calendar rows visible out
             // of ten (V38). From `sm` up the 273 px track is untouched.
-            gridAutoRows: { xs: 'minmax(200px, auto)', sm: '273px' },
+            gridAutoRows: { xs: 'minmax(200px, auto)', sm: `${DASHBOARD_SPACING.row}px` },
             gap: `${DASHBOARD_SPACING.gutter}px`,
           }}
         >

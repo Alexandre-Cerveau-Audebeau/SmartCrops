@@ -169,10 +169,10 @@ export default function SortableWidget({
   // drag preview computed from a stale span lands on the wrong cell. CSS
   // clamps a span to the column count and `spanFor` says so explicitly, so
   // ONE call per breakpoint DashboardGrid declares — one column on a phone,
-  // two on a tablet, four from `lg` up (round 4, E'''1). The three sizes cap
-  // at two columns today, so the `lg` value equals the `sm` one; declaring it
-  // anyway is what keeps CSS and packing from diverging the day a size takes
-  // three or four.
+  // two on a tablet, four from `lg` up (round 4, E'''1). Small, Medium and
+  // Large cap at two columns, so for them the `lg` value equals the `sm` one;
+  // the Full width takes four there (SMA-437, D2), which is the day this third
+  // declaration was kept for.
   const phone = spanFor(block.size, 1);
   const tablet = spanFor(block.size, 2);
   const desktop = spanFor(block.size, 4);
