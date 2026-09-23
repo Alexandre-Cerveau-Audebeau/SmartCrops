@@ -2,7 +2,7 @@ import { render } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import { createAppTheme } from '../../theme';
-import { rulesFor } from '../../test/dashboardDom';
+import { declaredAtBreakpoint, rulesFor } from '../../test/dashboardDom';
 import DashboardBlock from './DashboardBlock';
 import type { DashboardSize } from '../../types/Dashboard';
 
@@ -32,5 +32,28 @@ describe('DashboardBlock — the padding of each size (SMA-437, D7)', () => {
     expect(rulesFor(cardOf(size, false))).toContain(`padding:${padding}`);
     expect(rulesFor(cardOf(size, false))).toContain(`padding-top:${padding}`);
     expect(rulesFor(cardOf(size, true))).toContain(`padding-top:${editTop}`);
+  });
+
+  // SMA-437 lot 1, PR B, step B7 — the Full width on a phone: 20 px, the
+  // phone's one air (V32; V3-04, `.ph .w.xl { padding: 20px }`). At 24 px a
+  // tile of the Key figures band is 110 px wide at 360 px, and seven English
+  // digits at 22 px (111.4 px) ran past it — the harness's extreme scene; the
+  // 114 px arbitrage 1 was measured on are the 20 px ones.
+  it('gives the Full width 20 px on a phone, and 24 px from 600 px up', () => {
+    const card = cardOf('wide', false);
+    expect(declaredAtBreakpoint(card, '0px', 'padding')).toBe('20px');
+    expect(declaredAtBreakpoint(card, '600px', 'padding')).toBe('24px');
+    expect(declaredAtBreakpoint(card, '0px', 'padding-top')).toBe('20px');
+    expect(declaredAtBreakpoint(card, '600px', 'padding-top')).toBe('24px');
+  });
+
+  // The responsive padding is written in media queries, which come AFTER a
+  // plain `padding-top` and override it: the Edit-mode 38 px must be declared
+  // at the same breakpoints, or the drag pill lands on the title (the harness,
+  // `grid-expert-edit` at 360 and 390 px).
+  it('keeps the 38 px the Edit controls sit in on a phone as from 600 px up', () => {
+    const card = cardOf('wide', true);
+    expect(declaredAtBreakpoint(card, '0px', 'padding-top')).toBe('38px');
+    expect(declaredAtBreakpoint(card, '600px', 'padding-top')).toBe('38px');
   });
 });

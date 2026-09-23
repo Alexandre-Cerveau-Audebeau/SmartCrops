@@ -293,8 +293,14 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       const grid = gridWidthAt(width);
       const column = (grid - 20) / 2;
       for (const scene of scenesOf(runOf(`fr@${width}`)).values()) {
-        // A Small takes one column; a Medium and a Large both (spanFor, two columns).
+        // A Small takes one column; a Medium, a Large and a Full width both
+        // (spanFor, two columns — A-N12). The Full width has no pinned height:
+        // its own describe below measures it.
         const expectedWidth = scene.size === 'small' ? column : grid;
+        if (scene.size === 'wide') {
+          expect(scene.card.w, scene.scene).toBe(expectedWidth);
+          continue;
+        }
         expect([scene.card.w, scene.card.h], scene.scene).toEqual([expectedWidth, PINNED[scene.size]]);
       }
     });
@@ -335,7 +341,9 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
     const desktop = runOf(`fr@${DESKTOP_WIDTH}`);
 
     it('keeps the card sizes of the 273px grid: 273 × 273, 566 × 273, 566 × 566', () => {
-      for (const scene of scenesOf(desktop).values()) {
+      // The Full width — the Key figures band — is no card of that grid: as
+      // tall as its content (A-N10), measured in its own describe below.
+      for (const scene of [...scenesOf(desktop).values()].filter((candidate) => candidate.size !== 'wide')) {
         const expected = scene.size === 'small' ? [273, 273] : scene.size === 'medium' ? [566, 273] : [566, 566];
         expect([scene.card.w, scene.card.h], scene.scene).toEqual(expected);
       }
@@ -365,6 +373,112 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
     it('measures the Medium tips too (#2): two tips that fit whole hide nothing, on the short and the long garden names', () => {
       expect(sceneOf(desktop, 'tips-medium').hiddenRows).toBe(0);
       expect(sceneOf(desktop, 'tips-medium-long').hiddenRows).toBe(0);
+    });
+  });
+
+  // SMA-437 lot 1, PR B, step B7 (pre-flight C.8, D19) — the Key figures band:
+  // one card in its one size, the Full width, as tall as its content (A-N10);
+  // its four tiles four in a row from 900 px and two by two below (arbitrage
+  // 2); the values of a row starting at one height whatever their labels wrap
+  // to (the subgrid, D13); seven digits, hectares and the longest label held in
+  // every run (arbitrage 1: 22 px on a phone).
+  describe('the Key figures band (SMA-437 lot 1, PR B)', () => {
+    const BAND_SCENES = LAYOUT_SCENES.filter((scene) => scene.key === 'keyfigures').map((scene) => scene.name);
+    /** The band scenes that draw four tiles — every one but the empty band, which draws its invitation. */
+    const TILED = BAND_SCENES.filter((name) => name !== 'keyfigures-wide-empty');
+    /** The tiles of a scene, grouped by row (their top). */
+    const rowsOf = (scene: SceneMeasure) => {
+      const rows = new Map<number, SceneMeasure['keyFigureTiles']>();
+      for (const tile of scene.keyFigureTiles) rows.set(tile.y, [...(rows.get(tile.y) ?? []), tile]);
+      return [...rows.values()];
+    };
+
+    it('measures its four scenes in every run — the defaults, the extreme set, no garden, nothing planted', () => {
+      expect(BAND_SCENES).toEqual(['keyfigures-wide', 'keyfigures-wide-extreme', 'keyfigures-wide-empty', 'keyfigures-wide-unplanted']);
+      for (const run of RUNS) {
+        for (const name of TILED) expect(sceneOf(run, name).keyFigureTiles, `${run.id} ${name}`).toHaveLength(4);
+        expect(sceneOf(run, 'keyfigures-wide-empty').keyFigureTiles, run.id).toEqual([]);
+      }
+    });
+
+    it.each(BAND_SCENES)('%s: at 1 280 px, the whole grid (1 152 px) and as tall as its content — under a row of 273 px, no floor (A-N10)', (name) => {
+      const scene = sceneOf(runOf(`fr@${DESKTOP_WIDTH}`), name);
+      expect(scene.card.w).toBe(gridWidthAt(DESKTOP_WIDTH));
+      expect(scene.card.h).toBeLessThan(273);
+      // As tall as its content: the body holds all of it, nothing below its fold.
+      expect(scene.body.scrollH).toBeLessThanOrEqual(scene.body.h + 1);
+    });
+
+    it.each(TABLET_WIDTHS)('spans both columns of the tablet at %i px (A-N12), as tall as its content', (width) => {
+      for (const name of BAND_SCENES) {
+        const scene = sceneOf(runOf(`fr@${width}`), name);
+        expect(scene.card.w, name).toBe(gridWidthAt(width));
+        expect(scene.body.scrollH, name).toBeLessThanOrEqual(scene.body.h + 1);
+      }
+    });
+
+    it.each(PHONE_WIDTHS)('is one card of 200 to 400 px on a phone, at %i px — its tiles two by two', (width) => {
+      for (const name of BAND_SCENES) {
+        const scene = sceneOf(runOf(`fr@${width}`), name);
+        expect(scene.card.h, name).toBeGreaterThanOrEqual(200);
+        expect(scene.card.h, name).toBeLessThanOrEqual(400);
+      }
+    });
+
+    it('draws its four tiles four in a row from 900 px — at 1 024 and 1 280 px — and two by two below — at 600, 390 and 360 px (arbitrage 2)', () => {
+      for (const run of RUNS) {
+        const expected = run.vw >= 900 ? [4] : [2, 2];
+        for (const name of TILED) {
+          expect(rowsOf(sceneOf(run, name)).map((row) => row.length), `${run.id} ${name}`).toEqual(expected);
+        }
+      }
+    });
+
+    it('starts the values of a row at one height, whatever their labels wrap to — the subgrid (D13)', () => {
+      for (const run of RUNS) {
+        for (const name of TILED) {
+          for (const row of rowsOf(sceneOf(run, name))) {
+            const tops = row.map((tile) => tile.valueTop!);
+            expect(Math.max(...tops) - Math.min(...tops), `${run.id} ${name} ${row.map((t) => t.figure).join(',')}`).toBeLessThanOrEqual(0.5);
+          }
+        }
+      }
+    });
+
+    it('holds the extreme set — seven digits, 24,56 ha, the longest label — with nothing clipped and nothing spilled, in every run, in both languages', () => {
+      for (const run of RUNS) {
+        const scene = sceneOf(run, 'keyfigures-wide-extreme');
+        expect(defects(scene), run.id).toEqual({ overlaps: [], clipped: [], spills: [], beyondCard: 0 });
+      }
+    });
+
+    it('keeps every text of every tile inside its tile — no value running past it, in every run (« sept chiffres tiennent dans une tuile »)', () => {
+      // Read against the TILE (`overflow`), which the card-level passes cannot
+      // do for a flex item: this is what fixes the 22 px of arbitrage 1.
+      for (const run of RUNS) {
+        for (const name of TILED) {
+          const past = sceneOf(run, name).keyFigureTiles.filter((tile) => tile.overflow > 0.5);
+          expect(past.map((tile) => `${tile.figure} +${tile.overflow} px in ${tile.w} px`), `${run.id} ${name}`).toEqual([]);
+        }
+      }
+    });
+
+    it('gives the band three Edit-mode controls and no grip, clear of its title and its tiles — and keeps the ordinary rows around it pinned', () => {
+      for (const run of WIDE_RUNS) {
+        for (const name of ['grid-expert-edit', 'grid-expert-band-between-edit']) {
+          const grid = gridOf(run, name);
+          const band = grid.controls.find((card) => card.key === 'keyfigures')!;
+          expect(band.controls, `${run.id} ${name}`).toHaveLength(3);
+          expect(band.controls.filter((control) => control.grip), `${run.id} ${name}`).toEqual([]);
+          expect(band.controls.flatMap((control) => control.covers), `${run.id} ${name}`).toEqual([]);
+        }
+        const between = gridOf(run, 'grid-expert-band-between');
+        const band = between.cards.find((card) => card.key === 'keyfigures')!;
+        const others = between.cards.filter((card) => card.key !== 'keyfigures');
+        expect(others.some((card) => card.box.y < band.box.y), run.id).toBe(true);
+        expect(others.some((card) => card.box.y > band.box.y), run.id).toBe(true);
+        for (const card of others) expect(card.box.h, `${run.id} ${card.scene}`).toBe(PINNED[card.size]);
+      }
     });
   });
 

@@ -72,9 +72,25 @@ export default function DashboardBlock({
   // two sizes wide enough for the larger air.
   const roomy = size === 'large' || size === 'wide';
   const padding = roomy ? DASHBOARD_SPACING.paddingLarge : DASHBOARD_SPACING.padding;
+  // The Full width on a PHONE (SMA-437 lot 1, PR B, step B7): 20 px, the
+  // phone's one air (V32; V3-04, `.ph .w.xl { padding: 20px }`). The harness
+  // measured the Key figures band at 24 px: a 110 px tile at 360 px, seven
+  // English digits at 22 px running 1.4 px past it; arbitrage 1's 22 px was
+  // measured on the 114 px tile these 20 px give. The Large is not touched.
+  const air =
+    size === 'wide'
+      ? { xs: `${DASHBOARD_SPACING.padding}px`, sm: `${padding}px` }
+      : `${padding}px`;
   // Edit mode: the "−", the drag handle and the gear live inside the card
-  // (`_spec.md` § 8, point 5), so the header needs room for them.
-  const topPadding = editing ? (roomy ? 38 : 34) : padding;
+  // (`_spec.md` § 8, point 5), so the header needs room for them. A responsive
+  // `p` is written in media queries, which come after a plain `pt` and would
+  // override it: the Full width's Edit-mode top is declared at its breakpoints.
+  const editTop = `${roomy ? 38 : 34}px`;
+  const topPadding = editing
+    ? size === 'wide'
+      ? { xs: editTop, sm: editTop }
+      : editTop
+    : air;
 
   // Every widget has one, and it is the SAME table the Customize gallery and
   // the invitation panels read — a widget cannot be drawn with one glyph here
@@ -94,8 +110,8 @@ export default function DashboardBlock({
         display: 'flex',
         flexDirection: 'column',
         gap: `${DASHBOARD_SPACING.gap}px`,
-        p: `${padding}px`,
-        pt: `${topPadding}px`,
+        p: air,
+        pt: topPadding,
         borderColor: 'borderSubtle',
         overflow: 'hidden',
       }}
