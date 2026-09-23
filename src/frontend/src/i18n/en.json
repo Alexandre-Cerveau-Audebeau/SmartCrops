@@ -386,6 +386,17 @@
       "dragEnd": "{{widget}} dropped at position {{position}} of {{total}}.",
       "dragCancel": "Moving {{widget}} cancelled."
     },
+    "reorder": {
+      "handle": "Drag “{{name}}”",
+      "up": "Move “{{name}}” up",
+      "down": "Move “{{name}}” down",
+      "moved": "“{{name}}” moves to {{place}}.",
+      "stayed": "“{{name}}” stays in {{place}}.",
+      "dragging": "“{{name}}” is being moved — release to put it in {{place}}.",
+      "draggingAfter": "“{{name}}” is being moved — release to put it in {{place}}, after “{{previous}}”.",
+      "cancelled": "Moving “{{name}}” cancelled.",
+      "instructions": "Press Space to pick the row up, the arrow keys to move it, Space to drop it, Escape to cancel."
+    },
     "blocks": {
       "weather": {
         "title": "Weather",
@@ -643,6 +654,37 @@
         "title": "Key figures",
         "list": "Your four key figures",
         "loadError": "Couldn’t load your key figures.",
+        "panel": {
+          "section": "Your four figures",
+          "helpLead": "Always four.",
+          "help": "Tap a figure to replace it; drag ⠿ or use ▲ ▼ to reorder.",
+          "list": "Your four figures, in the order of the tiles",
+          "replaceSlot": "Replace “{{figure}}”, {{place}}",
+          "reset": "Restore the default figures",
+          "resetDone": "These are already the default figures.",
+          "resetSaid": "The four default figures are back.",
+          "back": "Your four figures",
+          "catalogueTitle": "Replace “{{figure}}” — {{place}}",
+          "catalogueLabel": "Choose a figure",
+          "markCurrent": "the place to replace",
+          "markShown": "already in {{place}}",
+          "swapNote": "Choosing a figure already shown swaps the two places — never a duplicate, never a gap.",
+          "cancel": "Cancel",
+          "replace": "Replace",
+          "replaced": "“{{figure}}” replaces “{{previous}}” in {{place}}.",
+          "swapped": "“{{figure}}” and “{{other}}” swap places.",
+          "place_ordinal_one": "{{count}}st place",
+          "place_ordinal_two": "{{count}}nd place",
+          "place_ordinal_few": "{{count}}rd place",
+          "place_ordinal_other": "{{count}}th place",
+          "groups": {
+            "gardens": "Your gardens",
+            "space": "The space",
+            "month": "This month",
+            "today": "Today",
+            "complete": "To complete"
+          }
+        },
         "empty": {
           "title": "Your key figures arrive with your first garden",
           "body": "Free cells, occupancy, varieties, today’s tasks: all of it is computed from your gardens and their plans."

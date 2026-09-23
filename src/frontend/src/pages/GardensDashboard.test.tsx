@@ -194,7 +194,10 @@ describe('GardensDashboard — grid from the stored preferences (SMA-336)', () =
     servePreferences('expert');
 
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    // « Edit » is drawn, DISABLED, while the layout loads: a click then is lost.
+    const edit = await screen.findByRole('button', { name: 'Edit' });
+    await waitFor(() => expect(edit).toBeEnabled());
+    fireEvent.click(edit);
 
     expect(await screen.findByRole('button', { name: 'Hide Key figures' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Move Key figures' })).toBeInTheDocument();

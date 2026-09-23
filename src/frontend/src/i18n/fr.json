@@ -386,6 +386,17 @@
       "dragEnd": "{{widget}} déposé en position {{position}} sur {{total}}.",
       "dragCancel": "Déplacement de {{widget}} annulé."
     },
+    "reorder": {
+      "handle": "Déplacer «\u00a0{{name}}\u00a0»",
+      "up": "Monter «\u00a0{{name}}\u00a0»",
+      "down": "Descendre «\u00a0{{name}}\u00a0»",
+      "moved": "«\u00a0{{name}}\u00a0» passe en {{place}}.",
+      "stayed": "«\u00a0{{name}}\u00a0» reste en {{place}}.",
+      "dragging": "«\u00a0{{name}}\u00a0» en cours de déplacement — relâchez pour le placer en {{place}}.",
+      "draggingAfter": "«\u00a0{{name}}\u00a0» en cours de déplacement — relâchez pour le placer en {{place}}, après «\u00a0{{previous}}\u00a0».",
+      "cancelled": "Déplacement de «\u00a0{{name}}\u00a0» annulé.",
+      "instructions": "Appuyez sur Espace pour saisir la ligne, les flèches pour la déplacer, Espace pour la déposer, Échap pour annuler."
+    },
     "blocks": {
       "weather": {
         "title": "Météo",
@@ -643,6 +654,37 @@
         "title": "Chiffres clés",
         "list": "Vos quatre chiffres clés",
         "loadError": "Impossible de charger vos chiffres clés.",
+        "panel": {
+          "section": "Vos quatre chiffres",
+          "helpLead": "Toujours quatre.",
+          "help": "Touchez un chiffre pour le remplacer\u00a0; glissez ⠿ ou utilisez ▲ ▼ pour l’ordre.",
+          "list": "Vos quatre chiffres, dans l’ordre des tuiles",
+          "replaceSlot": "Remplacer «\u00a0{{figure}}\u00a0», {{place}}",
+          "reset": "Rétablir les chiffres par défaut",
+          "resetDone": "Ce sont déjà les chiffres par défaut.",
+          "resetSaid": "Les quatre chiffres par défaut sont rétablis.",
+          "back": "Vos quatre chiffres",
+          "catalogueTitle": "Remplacer «\u00a0{{figure}}\u00a0» — {{place}}",
+          "catalogueLabel": "Choisir un chiffre",
+          "markCurrent": "la place à remplacer",
+          "markShown": "déjà en {{place}}",
+          "swapNote": "Choisir un chiffre déjà affiché échange les deux places — jamais de doublon, jamais de trou.",
+          "cancel": "Annuler",
+          "replace": "Remplacer",
+          "replaced": "«\u00a0{{figure}}\u00a0» remplace «\u00a0{{previous}}\u00a0» en {{place}}.",
+          "swapped": "«\u00a0{{figure}}\u00a0» et «\u00a0{{other}}\u00a0» échangent leurs places.",
+          "place_ordinal_one": "{{count}}ʳᵉ place",
+          "place_ordinal_two": "{{count}}ᵉ place",
+          "place_ordinal_few": "{{count}}ᵉ place",
+          "place_ordinal_other": "{{count}}ᵉ place",
+          "groups": {
+            "gardens": "Vos jardins",
+            "space": "La place",
+            "month": "Ce mois-ci",
+            "today": "Aujourd’hui",
+            "complete": "À compléter"
+          }
+        },
         "empty": {
           "title": "Vos chiffres clés arrivent avec votre premier jardin",
           "body": "Cases libres, occupation, variétés, tâches du jour\u00a0: tout se calcule à partir de vos jardins et de leurs plans."

@@ -17,6 +17,8 @@
  * `constants/dashboardLayout.reference.json` — the S2 rule of PR #287.
  */
 
+import { moveItem } from '../../../utils/dashboardLayoutGrid';
+
 /**
  * The 22 figures of V3-04, in its catalogue's order (`K_ORDER`) and with its
  * keys, for traceability with the artboard — five groups: « Vos jardins »,
@@ -95,4 +97,32 @@ export function keyFiguresOptions(options: Record<string, unknown> | null | unde
     ...(options ?? {}),
     figures: isSelection(stored) ? [...stored] : [...DEFAULT_KEY_FIGURES],
   };
+}
+
+/**
+ * SMA-437 lot 1, PR B, step B5 (A-N23: « on remplace, on n'ajoute ni ne
+ * retire jamais ; choisir un chiffre déjà affiché échange les places ») — the
+ * figure of emplacement `slot` replaced by `figure`. A figure already shown in
+ * another emplacement SWAPS places with the one it replaces: never a
+ * duplicate, never a hole, and no error to show. A fresh list; the one given
+ * is not touched.
+ */
+export function replaceFigure(figures: readonly KeyFigure[], slot: number, figure: KeyFigure): KeyFigure[] {
+  const next = [...figures];
+  const current = next[slot];
+  if (current === undefined) return next;
+  const elsewhere = next.indexOf(figure);
+  if (elsewhere >= 0) next[elsewhere] = current;
+  next[slot] = figure;
+  return next;
+}
+
+/** The figure of emplacement `from` moved to `to`, the others keeping their order — ▲ ▼ and the handle. */
+export function moveFigure(figures: readonly KeyFigure[], from: number, to: number): KeyFigure[] {
+  return moveItem(figures, from, to);
+}
+
+/** Whether the four are the four of 23/09, in their order — « Rétablir les chiffres par défaut » is then inert. */
+export function isDefaultSelection(figures: readonly KeyFigure[]): boolean {
+  return figures.length === DEFAULT_KEY_FIGURES.length && figures.every((figure, index) => figure === DEFAULT_KEY_FIGURES[index]);
 }

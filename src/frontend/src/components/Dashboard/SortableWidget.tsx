@@ -13,6 +13,7 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import { OptionsPanelEscapeContext } from './optionsPanelEscape';
 import { hasFreeHeight, pinnedHeight, spanFor } from '../../utils/dashboardLayoutGrid';
 import { DASHBOARD_SPACING } from '../../theme/dashboardTokens';
 import { NON_HIDABLE_BLOCK, type DashboardBlock } from '../../types/Dashboard';
@@ -152,6 +153,9 @@ export default function SortableWidget({
 }: Props) {
   const { t } = useTranslation();
   const [optionsAnchor, setOptionsAnchor] = useState<HTMLElement | null>(null);
+  // Escape, left to the panel while it needs it — a keyboard drag to cancel,
+  // a catalogue to leave (SMA-437 lot 1, PR B, step B5; `optionsPanelEscape`).
+  const [escapeHeld, setEscapeHeld] = useState(false);
 
   // The options panel's NAME comes from its own two title lines (round 6,
   // Extension #5-5): the paper carried an `aria-label` built from the same
@@ -410,11 +414,19 @@ export default function SortableWidget({
               anchorEl={optionsAnchor}
               open={optionsAnchor !== null}
               onClose={() => setOptionsAnchor(null)}
+              disableEscapeKeyDown={escapeHeld}
               anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
               transformOrigin={{ vertical: 'top', horizontal: 'right' }}
               slotProps={{
                 paper: {
-                  sx: { width: 320 },
+                  // `backgroundImage: 'none'` (SMA-437 lot 1, PR B — contract
+                  // § 4.9, pre-flight D15): at night MUI lightens a Paper by
+                  // its elevation, 11.9 % of white at 8, which put this panel
+                  // on #324260 and its secondary text at 4.27:1, under the
+                  // 4.5 of V14 — the Counters panel included. HERE, on the
+                  // options panel only, not on the theme's `MuiPaper`: that
+                  // would change every dialog and menu of the night theme.
+                  sx: { width: 320, backgroundImage: 'none' },
                   // NAMED, and named after the widget: `Menu` gave this surface
                   // a `menu` role for free, and dropping to a `Popover` would
                   // otherwise leave a focus-trapping panel with no role and no
@@ -473,11 +485,13 @@ export default function SortableWidget({
                 </Typography>
               </Box>
               <Box sx={{ px: '18px', py: '8px' }}>
-                {options ?? (
-                  <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>
-                    {t('dashboard.editMode.optionsEmpty')}
-                  </Typography>
-                )}
+                <OptionsPanelEscapeContext.Provider value={setEscapeHeld}>
+                  {options ?? (
+                    <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>
+                      {t('dashboard.editMode.optionsEmpty')}
+                    </Typography>
+                  )}
+                </OptionsPanelEscapeContext.Provider>
               </Box>
               <Divider />
               {/* `.pop-r { justify-content: flex-end }` closing on

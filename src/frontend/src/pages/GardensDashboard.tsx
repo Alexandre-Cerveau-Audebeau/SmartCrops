@@ -30,6 +30,7 @@ import GardensBlock, {
 } from '../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
 import KeyFiguresBlock from '../components/Dashboard/blocks/KeyFiguresBlock';
+import KeyFiguresOptionsPanel from '../components/Dashboard/blocks/KeyFiguresOptionsPanel';
 import { keyFigureTiles, type KeyFiguresWeatherStatus } from '../components/Dashboard/blocks/keyFigures';
 import { keyFiguresOptions } from '../components/Dashboard/blocks/keyFiguresOptions';
 import MonthBlock from '../components/Dashboard/blocks/MonthBlock';
@@ -551,7 +552,8 @@ export default function GardensDashboard() {
   /**
    * A widget's own settings, for the Edit-mode gear. Counters has its two
    * options; Weather has « Localisation… » (round 1, V21 a), the door to the
-   * profile default; the other six open on the panel that says so.
+   * profile default; the Key figures band its four emplacements (SMA-437 lot
+   * 1, PR B); the other six open on the panel that says so.
    */
   const renderBlockOptions = (block: DashboardBlock) => {
     switch (block.key) {
@@ -577,6 +579,30 @@ export default function GardensDashboard() {
             loading={weatherInFlight}
             unavailable={weatherError}
             onLocate={() => openLocate(null)}
+          />
+        );
+      case 'keyfigures':
+        // SMA-437 lot 1, PR B, step B5 — the four emplacements. The values of
+        // the catalogue only once the gardens are known: an aggregate still
+        // loading, or failed, would print its zeros.
+        return (
+          <KeyFiguresOptionsPanel
+            options={block.options ?? null}
+            input={
+              gardensLoading || gardensError
+                ? null
+                : {
+                    gardens,
+                    views: gardenViews,
+                    varieties: dashboardData.varieties,
+                    totals: dashboardData.totals,
+                    weather: weatherData,
+                    weatherStatus,
+                  }
+            }
+            onChange={(options) =>
+              patchBlock('keyfigures', (current) => ({ ...current, options }))
+            }
           />
         );
       default:

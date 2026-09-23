@@ -3,7 +3,11 @@ import reference from '../../../constants/dashboardLayout.reference.json';
 import {
   DEFAULT_KEY_FIGURES,
   KEY_FIGURES,
+  isDefaultSelection,
   keyFiguresOptions,
+  moveFigure,
+  replaceFigure,
+  type KeyFigure,
 } from './keyFiguresOptions';
 
 // SMA-437 lot 1, PR B, step B2 (pre-flight D9, D10) — the four figures of the
@@ -76,5 +80,56 @@ describe('keyFiguresOptions — four distinct known figures, or the defaults', (
     expect(read.density).toBe('compact');
     // …and an invalid `figures` does not take them down with it.
     expect(keyFiguresOptions({ figures: 'nope', density: 'compact' }).density).toBe('compact');
+  });
+});
+
+// SMA-437 lot 1, PR B, step B5 (A-N23) — the four EMPLACEMENTS of the gear:
+// one replaces, one never adds nor removes, and choosing a figure already
+// shown SWAPS the two places — never a duplicate, never a hole, no error.
+
+describe('replaceFigure — the emplacements are replaced, never added to nor emptied', () => {
+  const defaults = (): KeyFigure[] => [...DEFAULT_KEY_FIGURES];
+
+  it('puts a figure not shown yet in the emplacement', () => {
+    expect(replaceFigure(defaults(), 1, 'cities')).toEqual(['free', 'cities', 'varieties', 'todo']);
+  });
+
+  it('SWAPS the two places when the figure is already shown elsewhere', () => {
+    expect(replaceFigure(defaults(), 1, 'free')).toEqual(['occupancy', 'free', 'varieties', 'todo']);
+    expect(replaceFigure(defaults(), 0, 'todo')).toEqual(['todo', 'occupancy', 'varieties', 'free']);
+  });
+
+  it('changes nothing when the figure is the emplacement’s own', () => {
+    expect(replaceFigure(defaults(), 2, 'varieties')).toEqual(defaults());
+  });
+
+  it('can never form three figures, nor five, nor a duplicate — from any emplacement, with any of the 22', () => {
+    for (let slot = 0; slot < 4; slot += 1) {
+      for (const figure of KEY_FIGURES) {
+        const next = replaceFigure(defaults(), slot, figure);
+        expect(next, `${slot} ← ${figure}`).toHaveLength(4);
+        expect(new Set(next).size, `${slot} ← ${figure}`).toBe(4);
+        expect(next[slot]).toBe(figure);
+      }
+    }
+  });
+
+  it('never writes into the list it is given', () => {
+    const given = defaults();
+    replaceFigure(given, 0, 'cities');
+    expect(given).toEqual(defaults());
+  });
+});
+
+describe('moveFigure and isDefaultSelection', () => {
+  it('moves a figure to another place, the others keeping their order', () => {
+    expect(moveFigure(['free', 'occupancy', 'varieties', 'todo'], 2, 1)).toEqual(['free', 'varieties', 'occupancy', 'todo']);
+    expect(moveFigure(['free', 'occupancy', 'varieties', 'todo'], 0, 3)).toEqual(['occupancy', 'varieties', 'todo', 'free']);
+  });
+
+  it('knows the four of 23/09 in their order — and nothing else — for the default', () => {
+    expect(isDefaultSelection(['free', 'occupancy', 'varieties', 'todo'])).toBe(true);
+    expect(isDefaultSelection(['occupancy', 'free', 'varieties', 'todo'])).toBe(false);
+    expect(isDefaultSelection(['free', 'occupancy', 'varieties', 'tips'])).toBe(false);
   });
 });
