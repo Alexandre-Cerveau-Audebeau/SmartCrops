@@ -55,8 +55,28 @@ import type { LayoutScene } from './scenes';
  * computed `overflow` too (`cardOverflow`), so this one proves it measures
  * what it claims.
  */
+/** The probes of the first rounds: a card of a fixed height, holding one zone. */
+type ZoneProbe = 'zone-past-card' | 'zone-fold' | 'x-hidden-y-auto' | 'x-auto-y-hidden' | 'card-scrolls';
+
+/**
+ * SMA-437 lot 1, PR A, step A7 (pre-flight D19) — two probes of the GRID's
+ * tracks, whose cards take the height the grid gives them (`height: 100%`,
+ * as `DashboardBlock` does) instead of a fixed one:
+ *
+ * `pinned-overflow`: a Small card holding 400 px of lines. From 600 px up its
+ * cell is PINNED at 273 px (A-N10), so the card must stop there and CUT what
+ * is below — a hard clip by the card: the proof that the pinning exists. On a
+ * phone the row grows with it, and nothing is cut.
+ *
+ * `wide-short`: a Full-width card holding one line. Its row takes the height
+ * of its content with NO 273 px floor (A-N10) — {@link WIDE_SHORT_HEIGHT} —
+ * across every column of the desktop and both of a tablet (A-N12). On
+ * develop, whose rows were 273 px tracks, it measured 273.
+ */
+type TrackProbe = 'pinned-overflow' | 'wide-short';
+
 export interface ProbeScene extends LayoutScene {
-  probe: 'zone-past-card' | 'zone-fold' | 'x-hidden-y-auto' | 'x-auto-y-hidden' | 'card-scrolls';
+  probe: ZoneProbe | TrackProbe;
 }
 
 export const PROBE_SCENES: ProbeScene[] = [
@@ -65,6 +85,8 @@ export const PROBE_SCENES: ProbeScene[] = [
   { name: 'probe-x-hidden-y-auto', key: 'tips', size: 'medium', weather: 'all', probe: 'x-hidden-y-auto' },
   { name: 'probe-x-auto-y-hidden', key: 'tips', size: 'medium', weather: 'all', probe: 'x-auto-y-hidden' },
   { name: 'probe-card-scrolls', key: 'tips', size: 'medium', weather: 'all', probe: 'card-scrolls' },
+  { name: 'probe-pinned-overflow', key: 'tips', size: 'small', weather: 'all', probe: 'pinned-overflow' },
+  { name: 'probe-wide-short', key: 'tips', size: 'wide', weather: 'all', probe: 'wide-short' },
 ];
 
 /** The card's border-box height, its padding and its 1 px border: the frame the widgets' cards draw, at a fixed size. */
@@ -73,12 +95,21 @@ const PADDING = 16;
 /** The height of a line, and of the spacers between them. */
 const LINE = 20;
 
+/** The Full-width probe's card: one line, its padding and its two 1 px borders — 54 px, far under the 273 px of a row. */
+export const WIDE_SHORT_HEIGHT = LINE + 2 * PADDING + 2;
+
+/** The lines the pinned probe holds: 400 px of them, well past a 273 px card. */
+const PINNED_LINES = 20;
+
 /**
  * The first line of the two mixed-axis probes: far wider than any zone the
- * grid draws (532 px in the 566 px card of the desktop), never wrapping.
+ * grid draws — 532 px in the 566 px Medium card of the desktop, and 942 px in
+ * the 976 px one of a 1 024 px tablet since the tablet runs (SMA-437), where
+ * the line of the first rounds fitted whole — never wrapping.
  */
 export const WIDE_LINE =
-  'A line far wider than its zone, cut on the right for good — no scrollbar will ever bring its end into view, at any width';
+  'A line far wider than its zone, cut on the right for good — no scrollbar will ever bring its end into view, at any width, ' +
+  'not even in the widest Medium card a tablet draws, nine hundred and seventy-six pixels from one border to the other';
 
 /** One axis of a zone's `overflow`: declared, or left to the engine's computation, as the widgets' zones leave their other axis. */
 type Overflow = 'auto' | 'hidden' | undefined;
@@ -89,7 +120,7 @@ type Overflow = 'auto' | 'hidden' | undefined;
  * `hidden` for every probe but `card-scrolls` (#13).
  */
 const ZONES: Record<
-  ProbeScene['probe'],
+  ZoneProbe,
   { height: number; overflowX: Overflow; overflowY: Overflow; wide: boolean; card: 'hidden' | 'auto' }
 > = {
   'zone-past-card': { height: 260, overflowX: undefined, overflowY: 'auto', wide: false, card: 'hidden' },
@@ -123,6 +154,7 @@ const spacer = (height: number) => <div aria-hidden style={{ height }} />;
  * of a 100 px one — and a line 320 px down, past the fold of either zone.
  */
 export function probeWidget(scene: ProbeScene): ReactNode {
+  if (scene.probe === 'pinned-overflow' || scene.probe === 'wide-short') return trackProbe(scene.probe);
   const zone = ZONES[scene.probe];
   return (
     <div
@@ -147,6 +179,35 @@ export function probeWidget(scene: ProbeScene): ReactNode {
         {line('past-fold', 'Past the fold of the zone')}
         {spacer(60)}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The card of a track probe (SMA-437): the widgets' frame — `overflow:
+ * hidden`, a 1 px border, a padding — as tall as the grid makes it
+ * (`height: 100%`, `DashboardBlock`'s own rule), holding either 400 px of lines
+ * (`pinned-overflow`) or one (`wide-short`).
+ */
+function trackProbe(probe: TrackProbe): ReactNode {
+  const lines = probe === 'pinned-overflow' ? PINNED_LINES : 1;
+  return (
+    <div
+      data-widget="probe"
+      style={{
+        height: '100%',
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+        padding: PADDING,
+        border: '1px solid #cccccc',
+        borderRadius: 12,
+        background: '#ffffff',
+        fontFamily: 'Inter, sans-serif',
+      }}
+    >
+      {Array.from({ length: lines }, (_, index) => (
+        <div key={index}>{line(`line-${index + 1}`, `Line ${index + 1} of the probe`)}</div>
+      ))}
     </div>
   );
 }

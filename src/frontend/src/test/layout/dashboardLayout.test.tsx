@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { LAYOUT_SCENES } from './scenes';
-import { PROBE_SCENES, WIDE_LINE } from './probes';
-import type { SceneMeasure } from './harness';
+import { GRID_SCENES, LAYOUT_SCENES } from './scenes';
+import { PROBE_SCENES, WIDE_LINE, WIDE_SHORT_HEIGHT } from './probes';
+import type { GridMeasure, SceneMeasure } from './harness';
 import { VISIBLE_OVERLAP_PX } from './measure';
 import {
   IS_CI,
@@ -59,6 +59,17 @@ import {
  * card that scrolls whole still cuts for good — and the computed `overflow`
  * the widgets' zones rely on is read from the engine.
  *
+ * SMA-437 lot 1, PR A, step A7 (pre-flight D19) — the fourth size needs
+ * more of the instrument: two TABLET runs, French at 600 px (the lower edge
+ * of the two-column grid) and at 1 024 px, their viewport calibrated
+ * (`windowFrame`) and asserted; GRID scenes — the Gardener and Expert
+ * presets, at rest and in Edit mode — measured card by card AND as a grid
+ * (the tracks the engine resolves, no two cards meeting, the Edit-mode
+ * controls inside their card and over none of its text); and two probes of
+ * the tracks: a pinned card taller than its row is CUT at 273 px (the pinning
+ * exists), a short Full-width card takes the height of its content (no
+ * floor, A-N10) across every column (A-N12).
+ *
  * Chrome: `CHROME_BIN`, else the usual names on the PATH, else the usual
  * install paths. Without Chrome the suite is SKIPPED on a workstation and
  * FAILS on CI (`CI` is set there): the workflow's own step checks the browser
@@ -69,6 +80,8 @@ import {
  */
 
 const PHONE_WIDTHS = [360, 390] as const;
+/** The two tablet runs (SMA-437, D19): the lower edge of the two-column grid, and a landscape tablet. */
+const TABLET_WIDTHS = [600, 1024] as const;
 const DESKTOP_WIDTH = 1280;
 /** A day in another month and another year: the wall clock the sixth run is told (#8). */
 const ANOTHER_DAY = Date.UTC(2027, 1, 3, 15, 30, 0);
@@ -79,6 +92,7 @@ const RUNS: LayoutRun[] = [
   // determinism guard compares the two, box for box (#4).
   { id: 'fr@360-twin', lang: 'fr', vw: 360 },
   { id: 'fr@390', lang: 'fr', vw: 390 },
+  ...TABLET_WIDTHS.map((vw) => ({ id: `fr@${vw}`, lang: 'fr' as const, vw })),
   { id: `fr@${DESKTOP_WIDTH}`, lang: 'fr', vw: DESKTOP_WIDTH },
   { id: 'en@360', lang: 'en', vw: 360 },
   // `fr@360` again, with the page told the machine's clock says February
@@ -105,7 +119,18 @@ if (!CHROME && IS_CI) {
 const results = new Map<string, Map<string, SceneMeasure>>();
 /** The probes' measurements, by run then by probe name — apart from the scenes, which must be clean; a probe must not be. */
 const probes = new Map<string, Map<string, SceneMeasure>>();
+/** The grid scenes' measurements, by run then by scene name (SMA-437, D19). */
+const grids = new Map<string, Map<string, GridMeasure>>();
 let outDir = '';
+
+/** The runs whose grid has two or four columns — the tablets and the desktop — where the rows are `auto` and the cards pinned. */
+const WIDE_RUNS = RUNS.filter((run) => run.vw >= 600);
+
+/** The grid's width at a run of 600 px or more: the page's 1 200 px cap less its 24 px sides, or the viewport less them. */
+const gridWidthAt = (vw: number) => Math.min(vw, 1200) - 48;
+
+/** The pinned height of a size from 600 px up (A-N10), by hand: 273 px a row, 566 on two. */
+const PINNED: Record<string, number> = { small: 273, medium: 273, large: 566 };
 
 /** What a scene must be free of, at every width — named so a failure says which. */
 function defects(scene: SceneMeasure) {
@@ -142,6 +167,13 @@ const probeOf = (run: LayoutRun, name: string): SceneMeasure => {
   return probe;
 };
 
+/** The measurement of one grid scene in one run, or a throw that names both. */
+const gridOf = (run: LayoutRun, name: string): GridMeasure => {
+  const grid = grids.get(run.id)?.get(name);
+  if (!grid) throw new Error(`No measurement for the grid scene ${name} in ${run.id}`);
+  return grid;
+};
+
 describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot, D7)', () => {
   beforeAll(async () => {
     outDir = makeOutDir();
@@ -154,8 +186,10 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       settled.forEach((outcome, index) => {
         if (outcome.status === 'fulfilled') {
           const byName = (measured: SceneMeasure[]) => new Map(measured.map((scene) => [scene.scene, scene]));
-          results.set(RUNS[index]!.id, byName(outcome.value.filter((scene) => scene.probe === null)));
-          probes.set(RUNS[index]!.id, byName(outcome.value.filter((scene) => scene.probe !== null)));
+          const { scenes, grids: measuredGrids } = outcome.value;
+          results.set(RUNS[index]!.id, byName(scenes.filter((scene) => scene.probe === null)));
+          probes.set(RUNS[index]!.id, byName(scenes.filter((scene) => scene.probe !== null)));
+          grids.set(RUNS[index]!.id, new Map(measuredGrids.map((grid) => [grid.scene, grid])));
         }
       });
       const failed = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
@@ -180,6 +214,7 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
         expect(scene.fontLoaded, `${run.id} ${scene.scene}: Inter not loaded`).toBe(true);
       }
       expect(probes.get(run.id)?.size, run.id).toBe(PROBE_SCENES.length);
+      expect(grids.get(run.id)?.size, run.id).toBe(GRID_SCENES.length);
     }
   });
 
@@ -187,6 +222,29 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
     it.each(LAYOUT_SCENES.map((scene) => scene.name))('%s: no overlap, nothing clipped, nothing beyond the card', (name) => {
       const scene = sceneOf(run, name);
       expect(defects(scene)).toEqual({ overlaps: [], clipped: [], spills: [], beyondCard: 0 });
+    });
+
+    // SMA-437 (D19): every card of a whole grid, the same four rules — and
+    // no two cards meeting, and in Edit mode every control inside its card,
+    // over none of its text, with the corner grip on every card that has
+    // more than one size (all of them in this PR).
+    it.each(GRID_SCENES.map((grid) => grid.name))('%s: every card clean, no two cards meeting, the Edit controls clear of the text', (name) => {
+      const grid = gridOf(run, name);
+      for (const card of grid.cards) {
+        expect(defects(card), card.scene).toEqual({ overlaps: [], clipped: [], spills: [], beyondCard: 0 });
+        expect(card.fontLoaded, `${card.scene}: Inter not loaded`).toBe(true);
+      }
+      expect(grid.cardOverlaps).toEqual([]);
+      if (grid.editing) {
+        expect(grid.controls.map((card) => card.key)).toEqual(grid.cards.map((card) => card.key));
+        for (const { key, controls } of grid.controls) {
+          expect(controls.filter((control) => !control.inside).map((control) => control.label), key).toEqual([]);
+          expect(controls.flatMap((control) => control.covers.map((text) => `${control.label} over ${text}`)), key).toEqual([]);
+          expect(controls.filter((control) => control.grip), key).toHaveLength(1);
+        }
+      } else {
+        expect(grid.controls).toEqual([]);
+      }
     });
   });
 
@@ -216,6 +274,48 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       const scene = sceneOf(runOf('fr@360'), 'month-large');
       expect(scene.scrollers.filter((s) => s.axis.includes('y'))).toEqual([]);
       expect(scene.ellipsized.filter((e) => e.where.startsWith('month-axis'))).toEqual([]);
+    });
+  });
+
+  describe('the tablet (600 and 1 024 px) — two columns, the cards pinned (SMA-437, D19)', () => {
+    it.each(TABLET_WIDTHS)('measures the viewport it claims: %i px, the window calibrated for its frame', (width) => {
+      for (const scene of scenesOf(runOf(`fr@${width}`)).values()) {
+        expect(scene.viewport, scene.scene).toBe(width);
+      }
+    });
+
+    it.each(TABLET_WIDTHS)('draws two columns, and every card at its pinned height — at %i px', (width) => {
+      const grid = gridWidthAt(width);
+      const column = (grid - 20) / 2;
+      for (const scene of scenesOf(runOf(`fr@${width}`)).values()) {
+        // A Small takes one column; a Medium and a Large both (spanFor, two columns).
+        const expectedWidth = scene.size === 'small' ? column : grid;
+        expect([scene.card.w, scene.card.h], scene.scene).toEqual([expectedWidth, PINNED[scene.size]]);
+      }
+    });
+  });
+
+  describe('the grid scenes — the tracks the engine resolves (SMA-437, A-N10)', () => {
+    it.each(WIDE_RUNS.map((run) => run.id))('from 600 px up, every resolved row is 273 px and every card its pinned height — %s', (id) => {
+      const run = runOf(id);
+      for (const grid of GRID_SCENES) {
+        const measured = gridOf(run, grid.name);
+        // The tracks are `auto` now: a row of 273 px is the PINNED cards' doing.
+        expect(new Set(measured.rows.split(' ')), `${id} ${grid.name}`).toEqual(new Set(['273px']));
+        for (const card of measured.cards) {
+          expect(card.box.h, `${id} ${card.scene}`).toBe(PINNED[card.size]);
+        }
+      }
+    });
+
+    it.each(PHONE_WIDTHS)('on a phone, one column of cards of 200 px at least, one above the other — at %i px', (width) => {
+      for (const grid of GRID_SCENES) {
+        const measured = gridOf(runOf(`fr@${width}`), grid.name);
+        for (const card of measured.cards) {
+          expect(card.box.w, card.scene).toBe(width - 32);
+          expect(card.box.h, card.scene).toBeGreaterThanOrEqual(200);
+        }
+      }
     });
   });
 
@@ -377,6 +477,39 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
         ]);
         expect(probe.hardClipped, run.id).toBe(2);
         expect(probe.body.beyondCard, run.id).toBeGreaterThan(0);
+      }
+    });
+
+    it('sees the pinning: a Small card taller than its row is CUT at 273 px from 600 px up, and grows on a phone (SMA-437, A-N10)', () => {
+      // 400 px of lines in a card as tall as its cell. From 600 px up the cell
+      // is pinned: the card stops at 273 px and the lines below are a hard
+      // clip by the card. Without the pinning an `auto` row would have grown
+      // to the lines and cut nothing.
+      for (const run of WIDE_RUNS) {
+        const probe = probeOf(run, 'probe-pinned-overflow');
+        expect(probe.card.h, run.id).toBe(273);
+        expect(probe.hardClipped, run.id).toBeGreaterThan(0);
+        expect(new Set(probe.clipped.map((c) => c.by)), run.id).toEqual(new Set(['card']));
+      }
+      for (const width of PHONE_WIDTHS) {
+        const probe = probeOf(runOf(`fr@${width}`), 'probe-pinned-overflow');
+        expect(probe.card.h, `fr@${width}`).toBeGreaterThan(273);
+        expect(probe.hardClipped, `fr@${width}`).toBe(0);
+      }
+    });
+
+    it('sees the Full width take the height of its content — no 273 px floor — across every column (SMA-437, A-N10, A-N12)', () => {
+      // One line in a Full-width card: 54 px, far under a row. On develop,
+      // whose rows were 273 px tracks, this probe measured 273.
+      for (const run of WIDE_RUNS) {
+        const probe = probeOf(run, 'probe-wide-short');
+        expect(probe.card.h, run.id).toBe(WIDE_SHORT_HEIGHT);
+        expect(probe.card.w, run.id).toBe(gridWidthAt(run.vw));
+        expect(probe.hardClipped, run.id).toBe(0);
+      }
+      // The phone keeps its `minmax(200px, auto)` floor (V7): the band is 200 px there.
+      for (const width of PHONE_WIDTHS) {
+        expect(probeOf(runOf(`fr@${width}`), 'probe-wide-short').card.h, `fr@${width}`).toBe(200);
       }
     });
 

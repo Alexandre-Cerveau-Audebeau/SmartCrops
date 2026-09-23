@@ -140,6 +140,70 @@ body{margin:0;background:#fafcf8;color:#1b2a22;font-family:Inter,system-ui,sans-
   writeFileSync(join(outDir, 'page.html'), html, 'utf8');
 }
 
+/**
+ * The flags every Chrome of the harness is started with. Fix round 1 set them;
+ * SMA-437 (pre-flight D19) adds `--force-prefers-reduced-motion`: the Edit
+ * mode rocks every card by half a degree (`SortableWidget`'s wobble), and a
+ * card measured mid-rock is a card measured at an angle — the product's own
+ * reduced-motion rendering stills it, and nothing else of the dashboard reads
+ * that preference.
+ */
+const CHROME_FLAGS = [
+  '--headless=new',
+  '--disable-gpu',
+  '--hide-scrollbars',
+  '--no-first-run',
+  '--no-default-browser-check',
+  '--disable-background-networking',
+  '--disable-sync',
+  '--disable-extensions',
+  '--disable-component-update',
+  '--disable-features=Translate,OptimizationHints,MediaRouter',
+  '--no-sandbox',
+  '--allow-file-access-from-files',
+  '--force-prefers-reduced-motion',
+];
+
+/** The width the calibration opens its window at. */
+const FRAME_PROBE_WIDTH = 1000;
+
+/** The calibration of each folder's runs, started once. */
+const frames = new Map();
+
+/**
+ * SMA-437 (pre-flight D19) — the width Chrome's window keeps for itself, in
+ * px. `--window-size=W` does not give a W px viewport everywhere: measured
+ * here on Windows, the headless window keeps a 16 px frame — `--window-size=600`
+ * is a 584 px viewport, UNDER the 600 px breakpoint, so a « tablet » run would
+ * have measured the phone's one-column grid. Calibrated ONCE per folder, on a
+ * page that reports its `innerWidth`, and added to the window of every run from
+ * 600 px up: a run's `vw` is then the viewport it measures, whatever the
+ * platform — which the harness reports (`viewport`) and the suite asserts.
+ */
+export function windowFrame(binary, outDir) {
+  if (!frames.has(outDir)) frames.set(outDir, calibrateFrame(binary, outDir));
+  return frames.get(outDir);
+}
+
+async function calibrateFrame(binary, outDir) {
+  const page = join(outDir, 'frame.html');
+  writeFileSync(
+    page,
+    '<!doctype html><html><body><pre id="frame"></pre><script>document.getElementById("frame").textContent = String(innerWidth);</script></body></html>',
+    'utf8'
+  );
+  const profile = join(outDir, 'profile-frame');
+  mkdirSync(profile, { recursive: true });
+  const { out } = await runProcess(
+    binary,
+    [...CHROME_FLAGS, `--user-data-dir=${profile}`, `--window-size=${FRAME_PROBE_WIDTH},900`, '--dump-dom', pathToFileURL(page).href],
+    { timeoutMs: CHROME_RUN_TIMEOUT_MS, label: 'Chrome for the window-frame calibration' }
+  );
+  const found = /<pre id="frame">(\d+)<\/pre>/.exec(out);
+  if (!found) throw new Error(`The window-frame calibration read no width: ${out.slice(0, 200)}`);
+  return FRAME_PROBE_WIDTH - Number(found[1]);
+}
+
 /** The children `runProcess` spawned that have not exited yet. */
 const running = new Set();
 
@@ -247,15 +311,17 @@ export function decodeResults(base64) {
 /**
  * One run of the page: every scene at `run.vw` px in `run.lang`, measured.
  * Headless Chrome opens no window under 500 px, so a phone width is the
- * `#page` width (still under the 600 px breakpoint); a desktop width is the
- * window's. The page is told the wall clock — `run.clockMs`, else this
- * process's `Date.now()` — and freezes its own instant over it unless
- * `run.freeze` is false (#8). Bounded by {@link CHROME_RUN_TIMEOUT_MS}: past
- * it the browser is killed and the error names the run and the last scene
- * it reached.
+ * `#page` width (still under the 600 px breakpoint); a tablet or desktop
+ * width is the window's viewport — the window is opened wider by the frame
+ * {@link windowFrame} calibrated (SMA-437). The page is told the wall clock —
+ * `run.clockMs`, else this process's `Date.now()` — and freezes its own
+ * instant over it unless `run.freeze` is false (#8). Bounded by
+ * {@link CHROME_RUN_TIMEOUT_MS}: past it the browser is killed and the error
+ * names the run and the last scene it reached.
  */
 export async function measureRun(binary, outDir, run) {
   const phone = run.vw < 600;
+  const frame = phone ? 0 : await windowFrame(binary, outDir);
   const clock = run.clockMs ?? Date.now();
   const query = `?lang=${run.lang}${phone ? `&vw=${run.vw}` : ''}&clock=${clock}${run.freeze === false ? '&freeze=0' : ''}`;
   const url = pathToFileURL(join(outDir, 'page.html')).href + query;
@@ -266,21 +332,10 @@ export async function measureRun(binary, outDir, run) {
     result = await runProcess(
       binary,
       [
-        '--headless=new',
-        '--disable-gpu',
-        '--hide-scrollbars',
-        '--no-first-run',
-        '--no-default-browser-check',
-        '--disable-background-networking',
-        '--disable-sync',
-        '--disable-extensions',
-        '--disable-component-update',
-        '--disable-features=Translate,OptimizationHints,MediaRouter',
-        '--no-sandbox',
-        '--allow-file-access-from-files',
+        ...CHROME_FLAGS,
         '--enable-logging=stderr',
         `--user-data-dir=${profile}`,
-        `--window-size=${phone ? 500 : run.vw},900`,
+        `--window-size=${phone ? 500 : run.vw + frame},900`,
         '--virtual-time-budget=600000',
         '--dump-dom',
         url,
