@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
@@ -373,10 +373,13 @@ export default function GardensBlock({
    * keeps for rounding — and so on the 566 px card of a desktop, the rows
    * hold the full form and nothing changes. The phone row has its own form
    * (above).
+   *
+   * The Medium body is handed to the hook by a CALLBACK ref (PR #287, fix
+   * round 1, S1): it is drawn only once the gardens are loaded, without an
+   * error, and not empty, and the measure starts when it mounts — whatever
+   * kept it off the page, and even when the gardens come back unchanged.
    */
-  const mediumBodyRef = useRef<HTMLDivElement>(null);
-  const bareChips = useGlyphsFit(
-    mediumBodyRef,
+  const { bare: bareChips, ref: mediumBodyRef } = useGlyphsFit(
     '[data-garden-row-group]',
     [
       i18n.language,

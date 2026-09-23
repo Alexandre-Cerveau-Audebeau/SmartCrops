@@ -68,16 +68,17 @@ const gardens = [
   gardenFixture({ id: 'g2', name: 'Balcon sud', config: { ...config, gardenType: 'balcony' }, isEdible: false }),
 ];
 
-function renderMedium() {
-  render(
+/** The Medium card, loaded unless the test says otherwise — always the same gardens, so the same content. */
+function mediumCard({ loading = false, loadError = false }: { loading?: boolean; loadError?: boolean } = {}) {
+  return (
     <ThemeProvider theme={createTheme()}>
       <UnitSystemProvider>
         <MemoryRouter>
           <GardensBlock
             size="medium"
             gardens={gardens}
-            loading={false}
-            loadError={false}
+            loading={loading}
+            loadError={loadError}
             onCreateClick={() => {}}
             onChanged={() => {}}
             onDeleted={() => {}}
@@ -88,6 +89,8 @@ function renderMedium() {
     </ThemeProvider>
   );
 }
+
+const renderMedium = () => render(mediumCard());
 
 /** The chip a label sits in. */
 const chip = (label: string) => screen.getByText(label).closest('.MuiChip-root')!;
@@ -139,5 +142,24 @@ describe('GardensBlock — the Medium chips’ glyphs, wherever they fit (SMA-43
     fireAll();
     expect(chip('Balcony').querySelector('svg')).not.toBeNull();
     expect(chip('Ornamental').querySelector('svg')).not.toBeNull();
+  });
+
+  // PR #287, fix round 1, S1 (CodeRabbit, both surfaces) — the Medium body is
+  // not drawn while the card loads or shows its error, so the rows the hook
+  // measures do not exist yet. When they arrive with the SAME content — the
+  // same gardens, the same language — nothing the hook depends on changes:
+  // the measure has to start because the node mounted, not because a prop did.
+  it.each([
+    ['a loading view', { loading: true }],
+    ['an error view', { loadError: true }],
+  ])('measures the rows when the Medium body mounts after %s, with the same content — bare in a 272.5 px group', (_view, state) => {
+    groupWidth = 272.5;
+    const { rerender } = render(mediumCard(state));
+    expect(screen.queryByText('Balcony')).toBeNull();
+
+    rerender(mediumCard());
+    for (const label of ['Balcony', 'Ornamental', 'Terrace']) {
+      expect(chip(label).querySelector('svg'), label).toBeNull();
+    }
   });
 });

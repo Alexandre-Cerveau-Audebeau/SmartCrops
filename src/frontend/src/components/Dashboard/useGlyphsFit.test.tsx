@@ -1,5 +1,4 @@
 import { act, render, screen } from '@testing-library/react';
-import { useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGlyphsFit } from './useGlyphsFit';
 
@@ -71,20 +70,32 @@ interface Row {
   bare: number[];
 }
 
-function Rows({ rows, content = 'a', enabled = true }: { rows: Row[]; content?: string; enabled?: boolean }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const bare = useGlyphsFit(ref, '[data-row]', content, enabled);
+/** The rows, in a container drawn only while `mounted` — the Medium body a loading view replaces. */
+function Rows({
+  rows,
+  content = 'a',
+  enabled = true,
+  mounted = true,
+}: {
+  rows: Row[];
+  content?: string;
+  enabled?: boolean;
+  mounted?: boolean;
+}) {
+  const { bare, ref } = useGlyphsFit('[data-row]', content, enabled);
   return (
     <>
-      <div ref={ref} data-w={600}>
-        {rows.map((row, index) => (
-          <div key={index} data-row data-w={row.w} style={{ columnGap: '10px' }}>
-            {(bare ? row.bare : row.full).map((width, child) => (
-              <span key={child} data-sw={width} />
-            ))}
-          </div>
-        ))}
-      </div>
+      {mounted && (
+        <div ref={ref} data-w={600}>
+          {rows.map((row, index) => (
+            <div key={index} data-row data-w={row.w} style={{ columnGap: '10px' }}>
+              {(bare ? row.bare : row.full).map((width, child) => (
+                <span key={child} data-sw={width} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
       <output data-testid="bare">{String(bare)}</output>
     </>
   );
@@ -172,6 +183,30 @@ describe('useGlyphsFit — the chips keep their glyphs wherever they fit (SMA-43
     expect(observer.targets.size).toBe(1 + 2 + 4);
     unmount();
     expect(observer.targets.size).toBe(0);
+  });
+
+  // PR #287, fix round 1, S1 — the node's own mounting starts the measure.
+  it('measures the rows when the node mounts late with the same content — its mounting, not a prop, starts the measure', () => {
+    const { rerender } = render(<Rows rows={[balcon(272.5)]} mounted={false} />);
+    expect(ManualResizeObserver.instances).toHaveLength(0);
+    expect(bare()).toBe('false');
+
+    rerender(<Rows rows={[balcon(272.5)]} />);
+    expect(bare()).toBe('true');
+  });
+
+  it('detaches from a node that unmounts, and attaches to the next one', () => {
+    const { rerender } = render(<Rows rows={[balcon(286.5)]} />);
+    const first = ManualResizeObserver.instances.at(-1)!;
+    expect(first.targets.size).toBe(1 + 1 + 2);
+
+    rerender(<Rows rows={[balcon(286.5)]} mounted={false} />);
+    expect(first.targets.size).toBe(0);
+
+    rerender(<Rows rows={[balcon(286.5)]} />);
+    const second = ManualResizeObserver.instances.at(-1)!;
+    expect(second).not.toBe(first);
+    expect(second.targets.size).toBe(1 + 1 + 2);
   });
 
   it('does nothing when disabled — the phone row has no glyph to drop', () => {

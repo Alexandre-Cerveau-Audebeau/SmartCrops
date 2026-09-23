@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 
 /**
  * `scrollWidth` is an integer: a natural width it reports can be short of the
@@ -36,21 +36,30 @@ const ROUNDING = 1;
  *
  * `false` — the glyphs — while nothing has a width (jsdom, the first paint):
  * no glyph is dropped on a guess. Inert when `enabled` is false.
+ *
+ * The measured node arrives through the returned CALLBACK `ref`, never read
+ * off a ref object (PR #287, fix round 1, S1): the node is state, so the
+ * observer attaches each time it mounts and detaches when it unmounts. A card
+ * that shows its loading or error view has no rows to measure; when they
+ * arrive with the same content — the same gardens, the same language —
+ * nothing else the measure depends on changes, and an effect that read
+ * `ref.current` never ran again: no observer, and the glyphs stayed where
+ * they did not fit. The node's own mounting is now what starts the measure,
+ * whatever state kept it off the page.
  */
 export function useGlyphsFit(
-  container: RefObject<HTMLElement | null>,
-  /** The rows inside `container`: one-line flex rows whose children sit side by side. */
+  /** The rows inside the node given to `ref`: one-line flex rows whose children sit side by side. */
   rowSelector: string,
   /** What the rows hold, as one string: the needs are measured again when it changes. */
   content: string,
   enabled: boolean
-): boolean {
+): { bare: boolean; ref: (node: HTMLElement | null) => void } {
+  const [element, setElement] = useState<HTMLElement | null>(null);
   const [verdict, setVerdict] = useState<{ content: string; bare: boolean }>({ content, bare: false });
   const needs = useRef<{ content: string; widths: number[] } | null>(null);
   const bare = enabled && verdict.content === content && verdict.bare;
 
   useLayoutEffect(() => {
-    const element = container.current;
     if (!enabled || !element || typeof ResizeObserver === 'undefined') return;
 
     /** Measures the rows, and flips the form when the one drawn is not the one they call for. */
@@ -86,9 +95,9 @@ export function useGlyphsFit(
     }
     compute();
     return () => observer.disconnect();
-  }, [container, rowSelector, content, enabled, bare]);
+  }, [element, rowSelector, content, enabled, bare]);
 
-  return bare;
+  return { bare, ref: setElement };
 }
 
 /** A row's natural width: its children's, and the gaps between them. */
