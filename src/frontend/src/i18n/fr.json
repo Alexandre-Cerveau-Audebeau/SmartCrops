@@ -641,7 +641,12 @@
       },
       "keyfigures": {
         "title": "Chiffres clés",
-        "invite": "Vos quatre chiffres clés arrivent bientôt ici.",
+        "list": "Vos quatre chiffres clés",
+        "loadError": "Impossible de charger vos chiffres clés.",
+        "empty": {
+          "title": "Vos chiffres clés arrivent avec votre premier jardin",
+          "body": "Cases libres, occupation, variétés, tâches du jour\u00a0: tout se calcule à partir de vos jardins et de leurs plans."
+        },
         "spoken": "{{label}}\u00a0: {{value}}",
         "spokenWithSub": "{{label}}\u00a0: {{value}} — {{sub}}",
         "none": {

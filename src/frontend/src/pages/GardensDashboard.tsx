@@ -29,6 +29,9 @@ import GardensBlock, {
   type GardensWeather,
 } from '../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
+import KeyFiguresBlock from '../components/Dashboard/blocks/KeyFiguresBlock';
+import { keyFigureTiles, type KeyFiguresWeatherStatus } from '../components/Dashboard/blocks/keyFigures';
+import { keyFiguresOptions } from '../components/Dashboard/blocks/keyFiguresOptions';
 import MonthBlock from '../components/Dashboard/blocks/MonthBlock';
 import { monthCalendar } from '../components/Dashboard/blocks/plantCalendar';
 import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
@@ -224,6 +227,15 @@ export default function GardensDashboard() {
   // below. Shared through `gardenViewOf`'s memo, so the header does not make the
   // exposure engine run a third time.
   const gardenViews = useGardenViews(gardens);
+
+  // SMA-437 lot 1, PR B (arbitrage 4): the Key figures band computes its
+  // weather-reading figures without the weather while it loads or has failed,
+  // and says so — the one state it reads of the weather hook.
+  const weatherStatus: KeyFiguresWeatherStatus = weatherLoading
+    ? 'loading'
+    : weatherError
+      ? 'error'
+      : 'ready';
   const totalSurface = gardens.reduce(
     (sum, garden) => sum + (gardenViews.get(garden.id)?.surfaceM2 ?? 0),
     0
@@ -506,6 +518,29 @@ export default function GardensDashboard() {
             }
           />
         );
+      case 'keyfigures':
+        // SMA-437 lot 1, PR B, step B4 — the band reads the two aggregates the
+        // page already holds; the plans are what it cannot do without, so
+        // only their loading and their failure take the card over. The
+        // weather's state is said tile by tile (arbitrage 4).
+        return (
+          <KeyFiguresBlock
+            size={block.size}
+            editing={editing}
+            options={block.options ?? null}
+            gardens={gardens}
+            views={gardenViews}
+            varieties={dashboardData.varieties}
+            totals={dashboardData.totals}
+            weather={weatherData}
+            weatherStatus={weatherStatus}
+            loading={gardensLoading}
+            refreshing={gardensRefreshing}
+            loadError={gardensError}
+            onRetry={refetch}
+            onCreate={() => setCreateDialogOpen(true)}
+          />
+        );
       default:
         return (
           <InviteBlock blockKey={block.key} size={block.size} editing={editing} />
@@ -622,6 +657,30 @@ export default function GardensDashboard() {
       if (dashboardData.varieties.length === 0) return null;
       const { tips } = gardenAdvice(gardens, gardenViews, dashboardData.varieties, weatherData);
       return { value: t('dashboard.blocks.tips.count', { count: tips.length }) };
+    }
+    if (key === 'keyfigures') {
+      // SMA-437 lot 1, PR B (pre-flight D16) — the value of the band's FIRST
+      // figure, through the very `keyFigureTiles` the band draws with: the
+      // widget exists, so never « Bientôt » (R5) — and without a garden, the
+      // band's own invitation is what it would show, so nothing here.
+      if (gardens.length === 0) return null;
+      const stored = blocks.find((block) => block.key === 'keyfigures');
+      const [tile] = keyFigureTiles(
+        keyFiguresOptions(stored?.options ?? null).figures.slice(0, 1),
+        {
+          gardens,
+          views: gardenViews,
+          varieties: dashboardData.varieties,
+          totals: dashboardData.totals,
+          weather: weatherData,
+          weatherStatus,
+        },
+        t,
+        i18n.language
+      );
+      if (!tile) return null;
+      // The unit after a no-break space, as the band draws them side by side.
+      return { value: tile.unit ? `${tile.value}\u00a0${tile.unit}` : tile.value };
     }
     return null;
   };

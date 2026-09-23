@@ -641,7 +641,12 @@
       },
       "keyfigures": {
         "title": "Key figures",
-        "invite": "Your four key figures are coming here soon.",
+        "list": "Your four key figures",
+        "loadError": "Couldn’t load your key figures.",
+        "empty": {
+          "title": "Your key figures arrive with your first garden",
+          "body": "Free cells, occupancy, varieties, today’s tasks: all of it is computed from your gardens and their plans."
+        },
         "spoken": "{{label}}: {{value}}",
         "spokenWithSub": "{{label}}: {{value}} — {{sub}}",
         "none": {

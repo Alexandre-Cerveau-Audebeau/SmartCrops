@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import CountersBlock from '../../components/Dashboard/blocks/CountersBlock';
 import GardensBlock, { type GardensWeather } from '../../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../../components/Dashboard/blocks/InviteBlock';
+import KeyFiguresBlock from '../../components/Dashboard/blocks/KeyFiguresBlock';
 import MonthBlock from '../../components/Dashboard/blocks/MonthBlock';
 import StatsBlock from '../../components/Dashboard/blocks/StatsBlock';
 import TipsBlock from '../../components/Dashboard/blocks/TipsBlock';
@@ -344,9 +345,22 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
       // preset's grid scene holds it).
       return <InviteBlock blockKey="harvest" size={scene.size} editing={scene.editing} />;
     case 'keyfigures':
-      // The Key figures band heads the Expert preset since PR B, step B1; the
-      // page draws it as an invitation until its widget lands (step B4).
-      return <InviteBlock blockKey="keyfigures" size={scene.size} editing={scene.editing} />;
+      // The Key figures band (SMA-437 lot 1, PR B): its four default figures
+      // on the scene's gardens, as the page hands it the two aggregates.
+      return (
+        <KeyFiguresBlock
+          {...common}
+          editing={scene.editing ?? false}
+          options={null}
+          gardens={gs}
+          views={vs}
+          varieties={varieties}
+          totals={data.totals}
+          weather={weather}
+          weatherStatus="ready"
+          onCreate={noop}
+        />
+      );
     default:
       throw new Error(`No scene for the widget ${scene.key}`);
   }

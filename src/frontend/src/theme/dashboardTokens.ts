@@ -374,6 +374,50 @@ export const DASHBOARD_WEATHER = {
   divider: 1,
 } as const;
 
+/**
+ * T5 — the Key figures band's measures (SMA-437 lot 1, PR B, step B4), in px:
+ * V3-04's `.kpi4` / `.tile` CSS, brought onto the type scale by arbitrage 1 of
+ * the lot 1 pre-flight (23/09) — aides, notes, sous-lignes 13 → 14 px, the
+ * emplacement number 12 → 13 px (the chips' size) — with its TWO documented
+ * exceptions to the 14 px floor (V11):
+ *
+ * 1. `label` — the tiles' labels and the gear panel's section and group
+ *    headings, 11 px capitals: the existing exception of the table's column
+ *    headings, for the same role (naming what follows). At 14 px the longest
+ *    label, « Cases libres en plein soleil », takes two lines on a desktop and
+ *    three on a phone (pre-flight C.9);
+ * 2. `valuePhone` — the tile's value under 600 px, 22 px: the one size
+ *    measured to hold seven digits in half a 360 px phone column — 105.5 px in
+ *    French, 111.4 in English, for a 114 px tile (pre-flight C.5). The desktop
+ *    value is the scale's own `bigSmall`, 28.
+ */
+export const DASHBOARD_KEY_FIGURES = {
+  /** The tiles' grid: four in a row from `md` (900 px), two by two below (arbitrage 2). */
+  gridGap: 12,
+  gridGapPhone: 10,
+  /** A tile is a flat `surfaceSubtle` patch, no border, no shadow: the card alone carries one. */
+  tileRadius: 10,
+  tilePadding: '14px 16px',
+  tilePaddingPhone: '12px',
+  tileGap: 4,
+  /** The glyph before the label, green like a widget header's. */
+  icon: 16,
+  iconGap: 7,
+  /** Exception 1: 11 px capitals — see above. */
+  label: 11,
+  labelLetterSpacing: '0.06em',
+  /** The value: 28 px (`DASHBOARD_TYPE.bigSmall`), tabular figures. */
+  value: 28,
+  /** Exception 2: 22 px under 600 px — see above. */
+  valuePhone: 22,
+  valueUnitGap: 5,
+  unit: 14,
+  sub: 14,
+  /** The empty band: the invitation's form (b) — a card with a title, a body and a gesture (contract § 4.8). */
+  inviteDisc: 40,
+  inviteTitle: 16,
+} as const;
+
 /** T2 — air (`_spec.md` § 3). */
 export const DASHBOARD_SPACING = {
   /** Widget padding: 20px, 24px on a Large card. */
