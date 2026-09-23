@@ -641,7 +641,147 @@
       },
       "keyfigures": {
         "title": "Chiffres clés",
-        "invite": "Vos quatre chiffres clés arrivent bientôt ici."
+        "invite": "Vos quatre chiffres clés arrivent bientôt ici.",
+        "spoken": "{{label}}\u00a0: {{value}}",
+        "spokenWithSub": "{{label}}\u00a0: {{value}} — {{sub}}",
+        "none": {
+          "feminine": "Aucune",
+          "masculine": "Aucun",
+          "nothing": "Rien"
+        },
+        "unit": {
+          "of": "sur {{total, number}}",
+          "percent": "%",
+          "m2": "m²",
+          "ha": "ha",
+          "varieties_one": "variété",
+          "varieties_other": "variétés",
+          "tasks_one": "tâche",
+          "tasks_other": "tâches"
+        },
+        "noPlan": "aucun plan dessiné",
+        "noPlant": "aucune plante posée",
+        "addPlants": "ajoutez des plantes depuis la Bibliothèque",
+        "weather": {
+          "loading": "sans la météo — en cours de chargement",
+          "unavailable": "sans la météo — indisponible",
+          "noCity": "sans la météo — ajoutez une ville",
+          "some": {
+            "noCity_one": "sans la météo de {{count, number}} jardin — ajoutez une ville",
+            "noCity_other": "sans la météo de {{count, number}} jardins — ajoutez une ville",
+            "unavailable_one": "sans la météo de {{count, number}} jardin — indisponible",
+            "unavailable_other": "sans la météo de {{count, number}} jardins — indisponible"
+          }
+        },
+        "figures": {
+          "gardens": {
+            "label": "Jardins",
+            "someOrnamental_one": "dont {{count, number}} ornemental",
+            "someOrnamental_other": "dont {{count, number}} ornementaux",
+            "noOrnamental": "aucun ornemental"
+          },
+          "plants": {
+            "label": "Plantes",
+            "sub_one": "posée dans vos jardins",
+            "sub_other": "posées dans vos jardins"
+          },
+          "varieties": {
+            "label": "Variétés",
+            "sub_one": "distincte, tous jardins confondus",
+            "sub_other": "distinctes, tous jardins confondus"
+          },
+          "edible": {
+            "label": "Variétés comestibles",
+            "sub": "la part du potager"
+          },
+          "ornam": {
+            "label": "Jardins ornementaux",
+            "sub": "sans récolte attendue"
+          },
+          "surface": {
+            "label": "Surface",
+            "sub": "cultivable, en cases actives"
+          },
+          "active": {
+            "label": "Cases actives",
+            "sub_one": "plantable",
+            "sub_other": "plantables"
+          },
+          "planted": {
+            "label": "Cases plantées",
+            "sub_one": "occupée par vos plantes",
+            "sub_other": "occupées par vos plantes"
+          },
+          "occupancy": {
+            "label": "Occupation",
+            "sub": "{{planted}} sur {{active, number}}",
+            "planted_one": "{{count, number}} case plantée",
+            "planted_other": "{{count, number}} cases plantées"
+          },
+          "free": {
+            "label": "Cases libres",
+            "sub": "où planter la suite",
+            "full": "tout est planté"
+          },
+          "freeSun": {
+            "label": "Cases libres en plein soleil",
+            "sub_one": "sur {{count, number}} libre",
+            "sub_other": "sur {{count, number}} libres"
+          },
+          "sunShare": {
+            "label": "Part en plein soleil",
+            "sub": "de vos cases, en été à midi"
+          },
+          "prune": {
+            "label": "À tailler ce mois-ci"
+          },
+          "sow": {
+            "label": "À semer ce mois-ci"
+          },
+          "harvest": {
+            "label": "À récolter ce mois-ci"
+          },
+          "flower": {
+            "label": "En fleur ce mois-ci"
+          },
+          "todo": {
+            "label": "À faire aujourd’hui",
+            "sub_one": "dans {{count, number}} jardin",
+            "sub_other": "dans {{count, number}} jardins",
+            "none": "aujourd’hui"
+          },
+          "tips": {
+            "label": "Conseils",
+            "sub_one": "dans {{count, number}} jardin",
+            "sub_other": "dans {{count, number}} jardins",
+            "none": "pour l’instant"
+          },
+          "noplan": {
+            "label": "Plans à dessiner",
+            "sub": "rien ne s’y calcule encore",
+            "none": "tous vos plans sont dessinés"
+          },
+          "noorient": {
+            "label": "Jardins sans orientation",
+            "sub": "à renseigner pour les conseils",
+            "none": "rien à renseigner pour les conseils"
+          },
+          "located": {
+            "label": "Jardins localisés",
+            "none": "ajoutez une ville",
+            "all_one": "votre jardin a une ville",
+            "all_other": "tous vos jardins ont une ville",
+            "oneMissing": "{{garden}} n’a pas de ville",
+            "someMissing_one": "{{count, number}} jardin sans ville",
+            "someMissing_other": "{{count, number}} jardins sans ville"
+          },
+          "cities": {
+            "label": "Villes",
+            "none": "ajoutez une ville",
+            "names": "{{names}}",
+            "namesMore": "{{names}} +{{count, number}}"
+          }
+        }
       }
     },
     "exposure": {
