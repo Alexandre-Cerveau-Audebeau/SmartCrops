@@ -143,7 +143,12 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     ]);
   });
 
-  it('drops blocks whose size is not one of the three footprints', async () => {
+  // SMA-437 lot 1, PR A, step A5 (pre-flight D4, constat 14) — a block with
+  // a size this build does not know used to be DROPPED whole: the widget
+  // vanished from the page, and even Gardens, which can never be hidden,
+  // could. The server brings such a size back to the preset's; so does the
+  // client now, in place.
+  it('brings a size it does not know back to the preset’s, in place, instead of dropping the block', async () => {
     mockFetch({
       schemaVersion: 1,
       level: 'gardener',
@@ -157,7 +162,50 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
 
     const preferences = await fetchDashboardPreferences();
 
-    expect(preferences.blocks.map((block) => block.key)).toEqual(['gardens']);
+    expect(preferences.blocks).toEqual([
+      { key: 'weather', size: 'medium', hidden: false },
+      { key: 'gardens', size: 'large', hidden: false },
+    ]);
+  });
+
+  it('never makes Gardens disappear — the widget that can never be hidden', async () => {
+    mockFetch({
+      schemaVersion: 1,
+      level: 'gardener',
+      isPreset: false,
+      blocks: [
+        { key: 'gardens', size: 'huge', hidden: false },
+        { key: 'weather', size: 'small', hidden: false },
+      ],
+      updatedAt: null,
+    });
+
+    const preferences = await fetchDashboardPreferences();
+
+    expect(preferences.blocks).toEqual([
+      { key: 'gardens', size: 'large', hidden: false },
+      { key: 'weather', size: 'small', hidden: false },
+    ]);
+  });
+
+  it('brings a KNOWN size the formula does not permit back to the preset’s — no widget has the Full width yet', async () => {
+    mockFetch({
+      schemaVersion: 1,
+      level: 'expert',
+      isPreset: false,
+      blocks: [
+        { key: 'weather', size: 'wide', hidden: false },
+        { key: 'gardens', size: 'medium', hidden: false },
+      ],
+      updatedAt: null,
+    });
+
+    const preferences = await fetchDashboardPreferences();
+
+    expect(preferences.blocks).toEqual([
+      { key: 'weather', size: 'large', hidden: false },
+      { key: 'gardens', size: 'medium', hidden: false },
+    ]);
   });
 
   it('falls back to the default level when the stored one is unknown', async () => {

@@ -27,14 +27,20 @@ public static class DashboardLayout
         public static readonly IReadOnlyList<string> All = [Novice, Gardener, Expert];
     }
 
-    /// <summary>The three block footprints: 1×1, 2×1 and 2×2 grid cells.</summary>
+    /// <summary>
+    /// The four block footprints: 1×1, 2×1 and 2×2 grid cells, and the Full
+    /// width — « Pleine largeur », 4×1 as tall as its content (SMA-437, V8).
+    /// A KNOWN size is not a PERMITTED one: which block may take which size at
+    /// which level is <see cref="DashboardCapabilities.SizesFor"/>.
+    /// </summary>
     public static class Sizes
     {
         public const string Small = "small";
         public const string Medium = "medium";
         public const string Large = "large";
+        public const string Wide = "wide";
 
-        public static readonly IReadOnlyList<string> All = [Small, Medium, Large];
+        public static readonly IReadOnlyList<string> All = [Small, Medium, Large, Wide];
     }
 
     /// <summary>
