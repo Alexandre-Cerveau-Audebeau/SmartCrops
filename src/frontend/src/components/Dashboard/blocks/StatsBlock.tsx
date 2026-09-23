@@ -25,7 +25,7 @@ import {
   type ExposureTally,
 } from '../../../utils/gardenStats';
 import { useGardenViews } from '../../../hooks/useGardenViews';
-import { formatDecimal, formatPercent } from '../../../utils/formatNumber';
+import { formatPercent, formatSurface } from '../../../utils/formatNumber';
 
 interface Props {
   size: DashboardSize;
@@ -143,11 +143,15 @@ export default function StatsBlock({
 
   // Locale-formatted, never `toFixed` (round 1, G5): `toFixed` always writes a
   // point, so the French widget printed « 1.8 m² » where the language uses a
-  // comma. One fractional digit, as the frozen design has it.
-  const surfaceText = (value: number) =>
-    t('dashboard.blocks.stats.surface', {
-      value: formatDecimal(value, i18n.language, 1),
-    });
+  // comma. One fractional digit, as the frozen design has it — and, since
+  // SMA-437 (A-N16, arbitrage 5), hectares beyond 10 000 m² (« 2,66 ha »)
+  // with a no-break space before the unit, the very format of the page's
+  // header: a page never states « 2,66 ha » above and « 26 642,0 m² » here.
+  // A garden's own row follows the same rule, should one ever pass 10 000 m².
+  const surfaceText = (value: number) => {
+    const surface = formatSurface(value, i18n.language);
+    return t(`dashboard.surface.${surface.unit}`, { value: surface.value });
+  };
 
   // Through `Intl` (round 7, S46 — Extension #8-8): « 17 % » in French with
   // its non-breaking space, « 17% » in English — not a figure, an ordinary

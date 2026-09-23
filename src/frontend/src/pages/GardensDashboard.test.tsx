@@ -292,6 +292,32 @@ describe('GardensDashboard — header (SMA-336)', () => {
     );
   });
 
+  // SMA-437 lot 1, PR A, step A6 (A-N16) — « 2,66 ha », never « 26 642 m² »:
+  // hectares beyond 10 000 m², two decimals at most, no useless zero.
+  it('writes the surface in hectares beyond 10 000 m² — « 1.01 ha » (SMA-437, A-N16)', async () => {
+    // 101 × 100 cells of 1 m: 10 100 m² — beyond 10 000, so « 1.01 ha ».
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([garden('g1', 'Domaine', { width: 101, height: 100, cellSize: '1m' })])
+    );
+
+    renderPage();
+
+    const heading = await screen.findByRole('heading', { name: 'My Gardens' });
+    const meta = await within(heading.parentElement!).findByText('1 garden · 0 plants · 1.01 ha');
+    expect(meta.textContent).toContain('1.01\u00a0ha');
+  });
+
+  it('never lets a figure and its unit part at a line end: a NO-BREAK space before « m² » (SMA-437, pre-flight constat 19)', async () => {
+    // The contract (§ 5.3): « espace insécable […] avant m² ». The meta line
+    // wrote an ordinary space, which a line may break at.
+    renderPage();
+
+    const heading = await screen.findByRole('heading', { name: 'My Gardens' });
+    const meta = await within(heading.parentElement!).findByText('1 garden · 0 plants · 3.0 m²');
+    expect(meta.textContent).toContain('3.0\u00a0m²');
+    expect(meta.textContent).not.toContain('3.0 m²');
+  });
+
   it('marks the chip « adjusted » when the layout diverges from its preset', async () => {
     const blocks = presetFor('gardener');
     blocks[0]!.size = 'large';
@@ -980,6 +1006,19 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     const rules = rulesFor(add).replace(/\s+/g, '');
     expect(rules).toContain('width:36px');
     expect(rules).toContain('height:36px');
+  });
+
+  it('writes the Statistics thumbnail in hectares beyond 10 000 m², as the widget does (SMA-437, arbitrage 5)', async () => {
+    // 101 × 100 cells of 1 m: 10 100 m² — beyond 10 000, so « 1.01 ha ».
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([garden('g1', 'Domaine', { width: 101, height: 100, cellSize: '1m' })])
+    );
+
+    await openPanel();
+    const gallery = screen.getByRole('dialog', { name: 'Customize' });
+
+    const value = await within(gallery).findByText('1.01 ha');
+    expect(value.textContent).toBe('1.01\u00a0ha');
   });
 
   it('counts the Counters thumbnail through the widget’s own filter (C4)', async () => {

@@ -318,7 +318,10 @@
     "metaGardens_other": "{{count, number}} jardins",
     "metaPlants_one": "{{count, number}} plante",
     "metaPlants_other": "{{count, number}} plantes",
-    "metaSurface": "{{value}} m²",
+    "surface": {
+      "m2": "{{value}}\u00a0m²",
+      "ha": "{{value}}\u00a0ha"
+    },
     "edit": "Modifier",
     "done": "Terminé",
     "customize": "Personnaliser",
@@ -612,7 +615,6 @@
       "stats": {
         "title": "Statistiques",
         "headerChip": "{{surface}} · occupation moyenne {{percent}}",
-        "surface": "{{value}} m²",
         "activeCells": "{{active}} · {{occupied}}",
         "freeCells": "{{free}}, {{sunny}}",
         "occupancySection": "Occupation par jardin",

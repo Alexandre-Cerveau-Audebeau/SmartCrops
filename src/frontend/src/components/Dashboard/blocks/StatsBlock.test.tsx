@@ -488,7 +488,8 @@ describe('StatsBlock — the header chip of the Large card (A10-7)', () => {
     // 2.0 m² — with nothing planted in it.
     renderBlock();
 
-    expect(chipNode().textContent).toBe('2.0 m² · 0% average occupancy');
+    // A NO-BREAK space before the unit (SMA-437, pre-flight constat 19).
+    expect(chipNode().textContent).toBe('2.0\u00a0m² · 0% average occupancy');
   });
 
   it('states the occupancy as a share of every plantable cell', () => {
@@ -533,19 +534,47 @@ describe('StatsBlock — the header chip of the Large card (A10-7)', () => {
   });
 });
 
+// SMA-437 lot 1, PR A, step A6 (A-N16; arbitrage 5, 23/09) — the same
+// surface format as the header, so a page never states « 2,66 ha » above and
+// « 26 642,0 m² » below: hectares beyond 10 000 m², two decimals at most, and
+// a no-break space before the unit.
+describe('StatsBlock — the surface in hectares beyond 10 000 m² (SMA-437, arbitrage 5)', () => {
+  /** 173 × 154 cells of 1 m: 26 642 m². */
+  const estate = () => garden({ width: 173, height: 154, cellSize: '1m' });
+
+  it('writes the Medium headline « 2.66 ha »', () => {
+    renderBlock({ size: 'medium', gardens: [estate()] });
+
+    expect(surfaceNode().textContent).toBe('2.66\u00a0ha');
+  });
+
+  it('writes « 2,66 ha » in French', () => {
+    renderBlock({ size: 'medium', gardens: [estate()] }, 'fr');
+
+    expect(surfaceNode().textContent).toBe('2,66\u00a0ha');
+  });
+
+  it('writes the Large card’s chip, and the garden’s own row, in hectares too', () => {
+    const widget = renderBlock({ gardens: [estate()] });
+
+    expect(chipNode().textContent).toBe('2.66\u00a0ha · 0% average occupancy');
+    expect(widget.getByText('2.66 ha · 0%')).toBeInTheDocument();
+  });
+});
+
 describe('StatsBlock — figures in the reader’s language (round 1, G5)', () => {
   it('writes the surface with the French decimal comma', () => {
     // `toFixed(1)` always emits a point, so the French widget printed « 1.8 m² »
     // in a page that writes every other decimal with a comma.
     renderBlock({ size: 'medium', gardens: [garden()] }, 'fr');
 
-    expect(surfaceNode().textContent).toMatch(/^\d+,\d m²$/);
+    expect(surfaceNode().textContent).toMatch(/^\d+,\d\u00a0m²$/);
   });
 
   it('writes it with a point in English', () => {
     renderBlock({ size: 'medium', gardens: [garden()] });
 
-    expect(surfaceNode().textContent).toMatch(/^\d+\.\d m²$/);
+    expect(surfaceNode().textContent).toMatch(/^\d+\.\d\u00a0m²$/);
   });
 
   it('never reaches the screen through toFixed', () => {

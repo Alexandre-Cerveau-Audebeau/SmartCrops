@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { formatCount, formatDecimal, formatPercent } from './formatNumber';
+import { formatCount, formatDecimal, formatPercent, formatSurface } from './formatNumber';
 
 // ROUND 6 (Extension #4-20) — one `Intl.NumberFormat` per (language, digits),
 // built on first use. The Gardens table and the Statistics rows format a figure
@@ -63,5 +63,38 @@ describe('formatPercent', () => {
     expect(formatPercent(66.6, 'en')).toBe('67%');
     expect(formatPercent(0, 'en')).toBe('0%');
     expect(formatPercent(100, 'en')).toBe('100%');
+  });
+});
+
+// SMA-437 lot 1, PR A, step A6 (A-N16, pre-flight D12) — a surface, in square
+// metres up to 10 000 m² and in hectares BEYOND, with two decimals at most and
+// no useless zero: « 2,66 ha », « 24,56 ha », « 3 ha ». The value and the unit
+// come back apart: the header joins them, the Key figures band (PR B) draws
+// them at two sizes.
+describe('formatSurface', () => {
+  it('turns into hectares beyond 10 000 m², two decimals at most', () => {
+    expect(formatSurface(26_642, 'fr')).toEqual({ value: '2,66', unit: 'ha' });
+    expect(formatSurface(245_600, 'fr')).toEqual({ value: '24,56', unit: 'ha' });
+    expect(formatSurface(26_642, 'en')).toEqual({ value: '2.66', unit: 'ha' });
+    expect(formatSurface(245_600, 'en')).toEqual({ value: '24.56', unit: 'ha' });
+  });
+
+  it('writes no useless zero: « 3 ha », never « 3,00 ha » — rounding included', () => {
+    expect(formatSurface(30_000, 'fr')).toEqual({ value: '3', unit: 'ha' });
+    expect(formatSurface(29_999.6, 'fr')).toEqual({ value: '3', unit: 'ha' });
+    expect(formatSurface(25_000, 'fr')).toEqual({ value: '2,5', unit: 'ha' });
+  });
+
+  it('stays in square metres up to 10 000 m² included, one decimal as the header always wrote it', () => {
+    const tenThousand = formatSurface(10_000, 'fr');
+    expect(tenThousand.unit).toBe('m2');
+    // Grouped the French way, whichever no-break space the runtime's ICU
+    // chooses — never the ordinary one.
+    expect(tenThousand.value).toMatch(/^10\s000,0$/u);
+    expect(tenThousand.value).not.toContain(' ');
+    expect(formatSurface(10_000, 'en')).toEqual({ value: '10,000.0', unit: 'm2' });
+    expect(formatSurface(42.5, 'fr')).toEqual({ value: '42,5', unit: 'm2' });
+    expect(formatSurface(42.5, 'en')).toEqual({ value: '42.5', unit: 'm2' });
+    expect(formatSurface(0, 'en')).toEqual({ value: '0.0', unit: 'm2' });
   });
 });
