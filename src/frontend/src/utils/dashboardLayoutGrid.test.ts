@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   moveItem,
   packGrid,
+  rowTops,
   spanFor,
   translationFor,
   type GridItem,
@@ -64,6 +65,49 @@ describe('spanFor — CSS clamps a span to the column count', () => {
   it('narrows a Medium and a Large to one column on a phone', () => {
     expect(spanFor('medium', 1)).toEqual({ cols: 1, rows: 1 });
     expect(spanFor('large', 1)).toEqual({ cols: 1, rows: 2 });
+  });
+});
+
+// SMA-437 lot 1, PR A, step A1 (pre-flight D2) — the fourth size, « Pleine
+// largeur » on screen, `wide` in the code (V8): 4 × 1, and the same clamp as
+// the three others. Two columns on a tablet is A-N12 (« la Pleine largeur
+// occupe les deux colonnes »), one on a phone is F10 — both without a line of
+// their own, which is what these pin.
+describe('spanFor — the Full width (SMA-437, D2)', () => {
+  it('takes the four columns of the desktop, the two of a tablet, the one of a phone — on ONE row', () => {
+    expect(spanFor('wide', 4)).toEqual({ cols: 4, rows: 1 });
+    expect(spanFor('wide', 2)).toEqual({ cols: 2, rows: 1 });
+    expect(spanFor('wide', 1)).toEqual({ cols: 1, rows: 1 });
+  });
+});
+
+describe('packGrid — a Full width opens a row of its own (SMA-437, D2)', () => {
+  const wide = (key: string, columns: number): GridItem => ({ key, ...spanFor('wide', columns) });
+
+  it('four columns: the rows before and after it are the other widgets’', () => {
+    expect(cells([small('a'), wide('band', 4), small('b')], 4)).toEqual({
+      a: [0, 0],
+      band: [0, 1],
+      b: [0, 2],
+    });
+  });
+
+  it('four columns: it waits below the lower half of a Large, whose row it cannot share', () => {
+    // L holds columns 0-1 of rows 0 and 1; `s` fills column 2 of row 0; the
+    // band needs the four columns of one row, and row 1 still has L in it.
+    expect(cells([large('L'), small('s'), wide('band', 4)], 4)).toEqual({
+      L: [0, 0],
+      s: [2, 0],
+      band: [0, 2],
+    });
+  });
+
+  it('two columns — the tablet: both columns, one row (A-N12)', () => {
+    expect(cells([small('a'), wide('band', 2), small('b')], 2)).toEqual({
+      a: [0, 0],
+      band: [0, 1],
+      b: [0, 2],
+    });
   });
 });
 
@@ -218,6 +262,30 @@ describe('the drag preview — every item translated to the cell the drop gives 
       m: [0, 0],
       d: [0, 0],
     });
+  });
+});
+
+// SMA-437 lot 1, PR A, step A4 (pre-flight D6) — the rows of a grid whose
+// Full-width rows take the height of their content: the top of each row is
+// the sum of the heights and gutters above it. Written by hand.
+describe('rowTops — the top of every row, with free-height rows among them (SMA-437, D6)', () => {
+  const band = (key: string): GridItem => ({ key, ...spanFor('wide', 4), freeHeight: true });
+
+  it('every row pinned: row r starts at r × (273 + 20)', () => {
+    const placed = packGrid([large('a'), medium('b'), medium('c')], 4);
+    // a on rows 0-1; b beside it on row 0, c beside it on row 1.
+    expect(rowTops(placed, new Map(), 273, 20)).toEqual([0, 293]);
+  });
+
+  it('a 180 px band on row 0 moves every row below it up by 273 − 180', () => {
+    const placed = packGrid([band('band'), large('a'), large('b')], 4);
+    expect(rowTops(placed, new Map([['band', 180]]), 273, 20)).toEqual([0, 200, 493]);
+  });
+
+  it('a band between two rows: its own height, the rows around it pinned', () => {
+    const placed = packGrid([medium('a'), medium('b'), band('band'), small('c')], 4);
+    // a and b on row 0, the band on row 1, c on row 2.
+    expect(rowTops(placed, new Map([['band', 130]]), 273, 20)).toEqual([0, 293, 443]);
   });
 });
 

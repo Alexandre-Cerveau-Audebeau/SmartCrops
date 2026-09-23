@@ -35,6 +35,12 @@ export interface GridSpan {
 
 export interface GridItem extends GridSpan {
   key: string;
+  /**
+   * The item's row takes the height of its content (SMA-437, A-N10) — a Full
+   * width — instead of the pinned row height. Its row's height is read on the
+   * item's own measured rect ({@link rowTops}).
+   */
+  freeHeight?: boolean;
 }
 
 /** A cell coordinate. ZERO-based, unlike CSS grid lines. */
@@ -52,21 +58,43 @@ export interface GridTranslation {
 
 /**
  * The footprint of each widget size at full width (`_spec.md` § 1): Small
- * 1x1, Medium 2x1, Large 2x2. The single source of truth for both the CSS
- * (`SortableWidget`) and the model (`packGrid`) — they must not drift.
+ * 1x1, Medium 2x1, Large 2x2 — and the Full width, 4x1 (SMA-437, V8), the one
+ * size that takes every column of a row. The single source of truth for both
+ * the CSS (`SortableWidget`) and the model (`packGrid`) — they must not drift.
  */
 export const DASHBOARD_BASE_SPANS = {
   small: { cols: 1, rows: 1 },
   medium: { cols: 2, rows: 1 },
   large: { cols: 2, rows: 2 },
+  wide: { cols: 4, rows: 1 },
 } as const;
 
 export type DashboardSpanSize = keyof typeof DASHBOARD_BASE_SPANS;
 
 /**
+ * SMA-437 (A-N10) — the one size whose row takes the height of its content,
+ * with no floor: the Full width. The three others are PINNED from 600 px up
+ * ({@link pinnedHeight}). Read by the CSS (`SortableWidget`) and by the drag
+ * model (`DashboardGrid`) alike, so the two cannot disagree on which rows are
+ * free.
+ */
+export function hasFreeHeight(size: DashboardSpanSize): boolean {
+  return size === 'wide';
+}
+
+/**
+ * The height a pinned card takes from 600 px up: `rows` rows of `row` px and
+ * the gutters between them — 273 px on one row, 566 on two.
+ */
+export function pinnedHeight(rows: number, row: number, gap: number): number {
+  return rows * row + (rows - 1) * gap;
+}
+
+/**
  * The footprint a size actually gets in a grid of `columns` columns. CSS Grid
  * clamps a span to the number of columns, which is exactly what makes a Medium
- * and a Large one column wide on a phone.
+ * and a Large one column wide on a phone — and a Full width two columns wide
+ * on a tablet (A-N12) and one on a phone.
  */
 export function spanFor(size: DashboardSpanSize, columns: number): GridSpan {
   const base = DASHBOARD_BASE_SPANS[size];
@@ -150,8 +178,47 @@ export function packGrid(
 }
 
 /**
+ * SMA-437 lot 1, PR A, step A4 (pre-flight D6) — the top of every row of a
+ * packed layout, in pixels from the top of the grid, for a grid whose rows are
+ * NOT all one height: a row holding a free-height item (a Full width) is as
+ * tall as that item's measured height, every other row is `rowHeight` — the
+ * pinned 273 px, read on any pinned widget. The top of a row is the sum of the
+ * heights and gutters above it.
+ *
+ * A Full width takes every column of its row (`spanFor`), so a free row holds
+ * its item alone; were two free items ever to share a row, the taller wins,
+ * as an `auto` track does.
+ */
+export function rowTops(
+  placements: ReadonlyMap<string, GridPlacement>,
+  freeHeights: ReadonlyMap<string, number>,
+  rowHeight: number,
+  gap: number
+): number[] {
+  let rows = 0;
+  for (const placement of placements.values()) rows = Math.max(rows, placement.row + placement.rows);
+
+  const heights = new Array<number | null>(rows).fill(null);
+  for (const [key, height] of freeHeights) {
+    const placement = placements.get(key);
+    if (!placement) continue;
+    heights[placement.row] = Math.max(heights[placement.row] ?? 0, height);
+  }
+
+  const tops: number[] = [];
+  let top = 0;
+  for (let row = 0; row < rows; row += 1) {
+    tops.push(top);
+    top += (heights[row] ?? rowHeight) + gap;
+  }
+  return tops;
+}
+
+/**
  * The pixel displacement of an element between two cells, for a grid whose
- * cells are `cellWidth` x `rowHeight` with `gap` between them.
+ * cells are `cellWidth` x `rowHeight` with `gap` between them — every row one
+ * height, the case {@link rowTops} reduces to when no row is free, and the
+ * model the drag preview used until SMA-437.
  *
  * A pure delta: it needs no grid origin, which is what lets the drag transform
  * be computed without ever measuring the container.

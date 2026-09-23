@@ -318,7 +318,10 @@
     "metaGardens_other": "{{count, number}} gardens",
     "metaPlants_one": "{{count, number}} plant",
     "metaPlants_other": "{{count, number}} plants",
-    "metaSurface": "{{value}} m²",
+    "surface": {
+      "m2": "{{value}}\u00a0m²",
+      "ha": "{{value}}\u00a0ha"
+    },
     "edit": "Edit",
     "done": "Done",
     "customize": "Customize",
@@ -350,7 +353,8 @@
     "sizes": {
       "small": "Small",
       "medium": "Medium",
-      "large": "Large"
+      "large": "Large",
+      "wide": "Full width"
     },
     "editMode": {
       "drag": "Move {{widget}}",
@@ -611,7 +615,6 @@
       "stats": {
         "title": "Statistics",
         "headerChip": "{{surface}} · {{percent}} average occupancy",
-        "surface": "{{value}} m²",
         "activeCells": "{{active}} · {{occupied}}",
         "freeCells": "{{free}}, {{sunny}}",
         "occupancySection": "Occupancy by garden",

@@ -23,13 +23,16 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import SortableWidget from './SortableWidget';
 import { createDashboardSortingStrategy } from './dashboardSortingStrategy';
-import { spanFor } from '../../utils/dashboardLayoutGrid';
+import { sizesFor } from '../../constants/dashboardCapabilities';
+import { hasFreeHeight, spanFor } from '../../utils/dashboardLayoutGrid';
 import { DASHBOARD_SPACING } from '../../theme/dashboardTokens';
-import type { DashboardBlock, DashboardBlockKey } from '../../types/Dashboard';
+import type { DashboardBlock, DashboardBlockKey, DashboardLevel } from '../../types/Dashboard';
 
 interface Props {
   /** Every block, hidden ones included - the grid renders the visible ones. */
   blocks: DashboardBlock[];
+  /** The formula, which decides the sizes a widget may take — and so whether it gets a corner handle (SMA-437, A-N11). */
+  level: DashboardLevel;
   editing: boolean;
   onReorder: (blocks: DashboardBlock[]) => void;
   onHide: (key: DashboardBlockKey) => void;
@@ -55,6 +58,7 @@ interface Props {
  */
 export default function DashboardGrid({
   blocks,
+  level,
   editing,
   onReorder,
   onHide,
@@ -87,23 +91,31 @@ export default function DashboardGrid({
   const activeBlock = visible.find((block) => block.key === activeKey) ?? null;
 
   // The visible widgets with the footprint they have HERE — a Medium is two
-  // columns wide on a tablet and one on a phone, and the model has to know it.
+  // columns wide on a tablet and one on a phone, and the model has to know it
+  // — and whether their row takes the height of their content (a Full width,
+  // SMA-437 A-N10), from the same `hasFreeHeight` the CSS pins by.
   const gridItems = useMemo(
-    () => visible.map((block) => ({ key: block.key, ...spanFor(block.size, columns) })),
+    () =>
+      visible.map((block) => ({
+        key: block.key,
+        ...spanFor(block.size, columns),
+        freeHeight: hasFreeHeight(block.size),
+      })),
     [visible, columns]
   );
 
   // ONE column is a LIST, not a grid (SMA-336 mobile lot, step 2 — pre-flight
-  // D6). The dashboard's own strategy packs logical cells and translates every
+  // D6). The dashboard's own strategy packs logical cells and translated every
   // widget by `rows × (cell height + gap)`, with ONE cell height derived from
-  // the first measured widget (`dashboardSortingStrategy.ts`, `cellSizeFrom`).
-  // That is exact while every row is the same track — 273 px from `sm` up —
-  // and false the moment the phone rows are `minmax(200px, auto)` (step 1):
-  // a 338 px To-do above a 792 px calendar would be shown landing 716 px down
-  // where the drop puts it 812. dnd-kit's `verticalListSortingStrategy` reads
-  // the MEASURED rect of each item and the gaps between them, which is the
-  // right model for a column of unequal heights, and it is only ever used
-  // here: two and four columns keep the packing strategy, unchanged.
+  // the first measured widget. That was exact while every row was the same
+  // track — 273 px from `sm` up — and false the moment the phone rows are
+  // `minmax(200px, auto)` (step 1): a 338 px To-do above a 792 px calendar
+  // would be shown landing 716 px down where the drop puts it 812. dnd-kit's
+  // `verticalListSortingStrategy` reads the MEASURED rect of each item and the
+  // gaps between them, which is the right model for a column of unequal
+  // heights, and it is only ever used here. Two and four columns keep the
+  // packing strategy, which since SMA-437 (pre-flight D6) reads its rows on
+  // the measured rects too, row by row, for the Full width's sake.
   const strategy = useMemo(
     () =>
       columns === 1
@@ -197,8 +209,17 @@ export default function DashboardGrid({
             // — measured on `5282852`: four two-line tasks in a 120 px body
             // (V34), the invitation printed over the first tip (V37), the
             // band over the min / max (V36), three calendar rows visible out
-            // of ten (V38). From `sm` up the 273 px track is untouched.
-            gridAutoRows: { xs: 'minmax(200px, auto)', sm: '273px' },
+            // of ten (V38).
+            //
+            // SMA-437 (A-N10, pre-flight D5): from `sm` up the tracks are
+            // `auto` too, and the 273 px moved onto the cards — `SortableWidget`
+            // pins Small and Medium at 273 px and Large at 566. A Full-width
+            // row then takes the height of its content with no floor, while
+            // the three other sizes still share one row height and still clip
+            // what is taller than their card. Measured by the pre-flight:
+            // 0 gap on seven layouts at four widths, where `minmax(273px,
+            // auto)` without pinning let a 900 px Large stretch its rows.
+            gridAutoRows: { xs: 'minmax(200px, auto)', sm: 'auto' },
             gap: `${DASHBOARD_SPACING.gutter}px`,
           }}
         >
@@ -209,6 +230,7 @@ export default function DashboardGrid({
               label={label(block.key)}
               editing={editing}
               sizeLabel={t(`dashboard.sizes.${block.size}`)}
+              resizable={sizesFor(block.key, level).length > 1}
               onHide={() => onHide(block.key)}
               onResize={() => onResize(block.key)}
               options={renderBlockOptions?.(block)}

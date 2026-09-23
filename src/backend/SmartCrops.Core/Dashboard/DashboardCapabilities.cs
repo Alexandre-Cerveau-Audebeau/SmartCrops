@@ -1,0 +1,59 @@
+namespace SmartCrops.Core.Dashboard;
+
+/// <summary>
+/// SMA-437 lot 1, PR A, step A5 (pre-flight D3, D4) — the sizes a block may
+/// take, per level: the twin of the client's
+/// <c>constants/dashboardCapabilities.ts</c>, row for row. The controller
+/// refuses a size outside this table on write and brings it back to the
+/// preset's on read — a right checked on the server, never only in the
+/// interface (R8).
+///
+/// <para>The rule it carries (A-N11): the Full width is an Expert capability,
+/// and a block gets it only once its Full-width version is DRAWN — until then
+/// a crafted request could show its Large stretched over the page's width. So
+/// the table follows what is drawn, not only what is permitted: Jardins,
+/// Météo, Statistiques, Compteurs and Ce mois-ci will each add
+/// <see cref="DashboardLayout.Sizes.Wide"/> to their Expert row in their own
+/// lot, on both sides. No block has it yet.</para>
+///
+/// <para>Both sides are checked against ONE file,
+/// <c>src/frontend/src/constants/dashboardLayout.reference.json</c> (PR #287,
+/// fix round 1, S2): a row changed here and not there — or not in the file —
+/// fails a suite. Adding <c>wide</c> to a row is a change in three places.</para>
+/// </summary>
+public static class DashboardCapabilities
+{
+    /// <summary>Small, Medium, Large — in the order the corner handle steps through them.</summary>
+    private static readonly IReadOnlyList<string> ThreeSizes =
+        [DashboardLayout.Sizes.Small, DashboardLayout.Sizes.Medium, DashboardLayout.Sizes.Large];
+
+    /// <summary>
+    /// The Expert's row, block by block: the one level the Full width is ever
+    /// offered to. A row here, not a rule, so the day a block is drawn in Full
+    /// width is a one-line change that a review sees.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> ExpertSizes =
+        new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            [DashboardLayout.Blocks.Weather] = ThreeSizes,
+            [DashboardLayout.Blocks.Gardens] = ThreeSizes,
+            [DashboardLayout.Blocks.Tips] = ThreeSizes,
+            [DashboardLayout.Blocks.Month] = ThreeSizes,
+            [DashboardLayout.Blocks.Todo] = ThreeSizes,
+            [DashboardLayout.Blocks.Counters] = ThreeSizes,
+            [DashboardLayout.Blocks.Stats] = ThreeSizes,
+            [DashboardLayout.Blocks.Harvest] = ThreeSizes,
+        };
+
+    /// <summary>
+    /// The sizes <paramref name="key"/> may take at <paramref name="level"/>,
+    /// in the order the corner handle steps through them. The Gardener never
+    /// gets the Full width (A-N11); the Novice keeps the three sizes of today's
+    /// grid; a block this server does not know takes none.
+    /// </summary>
+    public static IReadOnlyList<string> SizesFor(string key, string? level)
+    {
+        if (!DashboardLayout.Blocks.All.Contains(key)) return [];
+        return level == DashboardLayout.Levels.Expert ? ExpertSizes[key] : ThreeSizes;
+    }
+}

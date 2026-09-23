@@ -1028,21 +1028,32 @@ describe('TipsBlock — Medium: the rows are capped by measure, whole (fix round
     expect(rulesFor(card.querySelector('[data-tips-list]')!)).toContain('justify-content:space-evenly');
   });
 
-  it('never hides the first tip: a list too short for one row still shows it — the To-do card’s rule', () => {
+  // SMA-437 lot 1, PR A, step A7b — whole rows only, the first included: a
+  // list that cannot hold one tip whole draws none, hides every row whole and
+  // counts every tip in « +N ». The layout harness holds that case in Edit
+  // mode, whose controls take 14 px of the card: a 70 px tip for a 63.3 px
+  // list, hidden and counted.
+  it('hides even the first tip when the list cannot hold it whole — none cut, every tip in « +3 tips → »', () => {
     listHeight.value = 40;
     const { card, widget } = renderBlock({ gardens: [terrasse, potager] });
-    expect(shownRows(card)).toHaveLength(1);
-    expect(widget.getByRole('button', { name: '+2 tips →' })).toBeInTheDocument();
+    expect(shownRows(card)).toHaveLength(0);
+    expect(hiddenRows(card)).toHaveLength(2);
+    expect(widget.getByRole('button', { name: '+3 tips →' })).toBeInTheDocument();
+    // Tips exist: never the « nothing to report » panel.
+    expect(card.querySelector('[data-tips-nothing]')).toBeNull();
   });
 
   it('with the invitation: the one slot the spec leaves, measured too, and the foot still yields (arbitrage 4)', () => {
+    // 60 px for an 85 px tip: the slot's tip does not fit whole, so it is
+    // hidden whole and counted in « +N ».
     listHeight.value = 60;
     const { card, widget } = renderBlock();
     expect(rows(card)).toHaveLength(1);
-    expect(shownRows(card)).toHaveLength(1);
+    expect(shownRows(card)).toHaveLength(0);
+    expect(hiddenRows(card)).toHaveLength(1);
     expect(card.querySelector('[data-tips-invite="g2"]')).not.toBeNull();
     expect(card.querySelector('[data-tips-unknown]')).toBeNull();
-    expect(widget.getByRole('button', { name: '+2 tips →' })).toBeInTheDocument();
+    expect(widget.getByRole('button', { name: '+3 tips →' })).toBeInTheDocument();
   });
 
   it('hides nothing where nothing is measured — jsdom’s zero rects list the two tips, as before', () => {
@@ -1055,13 +1066,11 @@ describe('TipsBlock — Medium: the rows are capped by measure, whole (fix round
   });
 
   // ── Fix round 2, #9 (GitHub `r4059946374`, ledger `64f225c7` / `fbe00a7d`):
-  // two invitations take BOTH slots, so no tip row is drawn at all. The
-  // minimum of one row — a lone tip too tall for its list is drawn, clipped,
-  // rather than an empty list under « +N » (écart e, kept) — is a rule about
-  // a row that EXISTS. Counted where there was none, it took one tip out of
-  // « +N »: a single tip was neither drawn nor counted, and could not be
-  // reached. What the reader can reach is the rows drawn plus the N of
-  // « +N tips → », and that must be every tip, at both widths.
+  // two invitations take BOTH slots, so no tip row is drawn at all. What the
+  // reader can reach is the rows drawn plus the N of « +N tips → », and that
+  // must be every tip, at both widths: a tip is drawn whole or counted —
+  // whether no slot is left for it, or its slot cannot hold it whole (SMA-437,
+  // A7b).
   describe('two invitations take both slots (fix round 2, #9): every tip is drawn or in « +N tips → »', () => {
     /** A second garden whose orientation is unknown: with Balcon sud, one invitation per slot. */
     const cour = gardenFixture({
@@ -1111,7 +1120,7 @@ describe('TipsBlock — Medium: the rows are capped by measure, whole (fix round
       expect(reachable(card, widget)).toBe(3);
     });
 
-    it('one invitation and one tip: the tip is drawn in the slot the invitation leaves, nothing to count — and too tall for it, still drawn (écart e, kept)', () => {
+    it('one invitation and one tip: the tip is drawn in the slot the invitation leaves, nothing to count — and too tall for it, hidden whole and counted (SMA-437 A7b)', () => {
       const fitting = renderBlock({ gardens: [oneTip, balcon] });
       expect(shownRows(fitting.card)).toHaveLength(1);
       expect(fitting.widget.queryByRole('button', { name: /tips? →$/ })).toBeNull();
@@ -1120,9 +1129,13 @@ describe('TipsBlock — Medium: the rows are capped by measure, whole (fix round
 
       listHeight.value = 40;
       const tooTall = renderBlock({ gardens: [oneTip, balcon] });
-      expect(shownRows(tooTall.card)).toHaveLength(1);
-      expect(hiddenRows(tooTall.card)).toHaveLength(0);
-      expect(tooTall.widget.queryByRole('button', { name: /tips? →$/ })).toBeNull();
+      expect(shownRows(tooTall.card)).toHaveLength(0);
+      expect(hiddenRows(tooTall.card)).toHaveLength(1);
+      expect(tooTall.widget.getByRole('button', { name: '+1 tip →' })).toBeInTheDocument();
+      expect(reachable(tooTall.card, tooTall.widget)).toBe(1);
+      // The invitation stays, and tips exist: never « nothing to report ».
+      expect(tooTall.card.querySelector('[data-tips-invite="g2"]')).not.toBeNull();
+      expect(tooTall.card.querySelector('[data-tips-nothing]')).toBeNull();
     });
   });
 });

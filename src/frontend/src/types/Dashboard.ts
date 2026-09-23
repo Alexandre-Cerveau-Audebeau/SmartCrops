@@ -1,8 +1,10 @@
 /**
  * SMA-336 — the dashboard vocabulary, mirroring the server's
- * `SmartCrops.Core/Dashboard/DashboardLayout.cs`. The three arrays are the
- * single source of truth for what a key, a size and a level may be: the unions
- * below are DERIVED from them, so adding a widget is one edit, not four.
+ * `SmartCrops.Core/Dashboard/DashboardLayout.cs` — both checked against
+ * `constants/dashboardLayout.reference.json` (PR #287, fix round 1, S2). The
+ * three arrays are the single source of truth for what a key, a size and a
+ * level may be: the unions below are DERIVED from them, so adding a widget is
+ * one edit on this side, not four.
  *
  * The frozen design settles the count at EIGHT widgets (`_spec.md` § 8, « les
  * huit widgets en Grand », and exactly eight `data-widget` keys on the
@@ -23,10 +25,17 @@ export const DASHBOARD_BLOCK_KEYS = [
 
 export type DashboardBlockKey = (typeof DASHBOARD_BLOCK_KEYS)[number];
 
-/** Footprints, in grid cells: 1×1, 2×1, 2×2 (`_spec.md` § 1). */
-export const DASHBOARD_SIZES = ['small', 'medium', 'large'] as const;
+/**
+ * Footprints, in grid cells: 1×1, 2×1, 2×2 (`_spec.md` § 1), and the fourth
+ * size of the v3, the Full width — « Pleine largeur » on screen, `wide` here,
+ * never « Large », which is Grand (SMA-437, V8): 4×1, as tall as its content.
+ */
+export const DASHBOARD_SIZES = ['small', 'medium', 'large', 'wide'] as const;
 
 export type DashboardSize = (typeof DASHBOARD_SIZES)[number];
+
+/** The sizes a widget may take at a formula — never empty (`sizesFor`, SMA-437). */
+export type DashboardSizeList = readonly [DashboardSize, ...DashboardSize[]];
 
 export const DASHBOARD_LEVELS = ['novice', 'gardener', 'expert'] as const;
 
@@ -97,11 +106,15 @@ export function isDashboardSize(value: string): value is DashboardSize {
 }
 
 /**
- * The Edit-mode corner handle cycles Small -> Medium -> Large -> Small. It
- * WRAPS on purpose: without the wrap a widget grown to Large could never be
- * brought back down, since the handle is the only resize gesture.
+ * The Edit-mode corner handle steps through `sizes` — the sizes the widget may
+ * take at its formula (`sizesFor`, SMA-437 A-N11), in their order: Small ->
+ * Medium -> Large -> Small, and -> Full width before Small the day an Expert
+ * widget has it. It WRAPS on purpose: without the wrap a widget grown to its
+ * largest size could never be brought back down, since the handle is the only
+ * resize gesture. A size the list does not hold steps to the first one; a
+ * one-size list has no handle at all (`SortableWidget`).
  */
-export function nextDashboardSize(size: DashboardSize): DashboardSize {
-  const index = DASHBOARD_SIZES.indexOf(size);
-  return DASHBOARD_SIZES[(index + 1) % DASHBOARD_SIZES.length]!;
+export function nextDashboardSize(size: DashboardSize, sizes: DashboardSizeList): DashboardSize {
+  const index = sizes.indexOf(size);
+  return sizes[(index + 1) % sizes.length] ?? sizes[0];
 }

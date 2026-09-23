@@ -737,7 +737,9 @@ public class DashboardController(
     /// Keeps the stored blocks in their stored order, drops keys this server does
     /// not know, and appends any block the document omits with its preset values.
     /// A layout written before a block existed therefore keeps working, and the
-    /// new block simply arrives at the end.
+    /// new block simply arrives at the end. A stored size the level does not
+    /// permit — unknown, or known but not offered to that block at that level
+    /// (SMA-437, pre-flight D4) — is replaced by the preset's, in place.
     /// </summary>
     private static List<DashboardBlockDto> Merge(List<StoredBlock> stored, string level)
     {
@@ -750,7 +752,8 @@ public class DashboardController(
             if (block.Key is null || !DashboardLayout.Blocks.All.Contains(block.Key)) continue;
             if (!seen.Add(block.Key)) continue;
 
-            var size = block.Size is not null && DashboardLayout.Sizes.All.Contains(block.Size)
+            // `SizesFor` only ever lists known sizes, so one check covers both.
+            var size = block.Size is not null && DashboardCapabilities.SizesFor(block.Key, level).Contains(block.Size)
                 ? block.Size
                 : preset.First(p => p.Key == block.Key).Size;
             var hidden = block.Hidden && block.Key != DashboardLayout.NonHidableBlock;
@@ -786,6 +789,13 @@ public class DashboardController(
             if (!DashboardLayout.Blocks.All.Contains(block.Key)) return $"unknown block '{block.Key}'";
             if (!seen.Add(block.Key)) return $"duplicate block '{block.Key}'";
             if (!DashboardLayout.Sizes.All.Contains(block.Size)) return $"unknown size '{block.Size}'";
+            // A known size is not a permitted one (SMA-437, pre-flight D4):
+            // the Full width only for a block drawn for it, at the Expert level.
+            if (!DashboardCapabilities.SizesFor(block.Key, request.Level).Contains(block.Size))
+            {
+                return $"size '{block.Size}' is not available for block '{block.Key}' at level '{request.Level}'";
+            }
+
             if (block.Hidden && block.Key == DashboardLayout.NonHidableBlock)
             {
                 return $"block '{block.Key}' cannot be hidden";

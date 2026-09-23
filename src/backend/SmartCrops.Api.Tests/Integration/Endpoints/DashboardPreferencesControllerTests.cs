@@ -394,6 +394,70 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.Equal(DashboardLayout.Blocks.All.Count, body.Blocks.Count);
     }
 
+    // ── Sizes per formula (SMA-437 lot 1, PR A, step A5 — pre-flight D4) ─────
+
+    /// <summary>
+    /// <c>wide</c> is a size this server knows (the fourth, V8), and no block
+    /// may take it yet at any formula: a crafted PUT must not be able to show a
+    /// widget's Large stretched over the page's width. Strict on write.
+    /// </summary>
+    [Theory]
+    [InlineData(DashboardLayout.Levels.Expert)]
+    [InlineData(DashboardLayout.Levels.Gardener)]
+    [InlineData(DashboardLayout.Levels.Novice)]
+    public async Task PutPreferences_SizeTheFormulaDoesNotPermit_Returns400(string level)
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var request = new SaveDashboardPreferencesRequest(
+            level,
+            [.. DashboardPresets.For(level).Select(b => new SaveDashboardBlockRequest(
+                b.Key,
+                b.Key == DashboardLayout.Blocks.Weather ? DashboardLayout.Sizes.Wide : b.Size,
+                b.Hidden,
+                null))]);
+
+        var response = await Client.PutAsJsonAsync(Url, request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        await AssertNothingStoredAsync(userId);
+    }
+
+    /// <summary>
+    /// A stored size the formula does not permit — a row written by hand, or by
+    /// a future version — is brought back to the preset's size on read, in
+    /// place: the block keeps its position and never disappears. Forgiving on
+    /// read.
+    /// </summary>
+    [Fact]
+    public async Task GetPreferences_StoredSizeTheFormulaDoesNotPermit_FallsBackToThePresetSize()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        await InsertRawLayoutAsync(
+            userId,
+            DashboardLayout.CurrentSchemaVersion,
+            """
+            {"schemaVersion":1,"level":"gardener","blocks":[
+              {"key":"weather","size":"wide","hidden":false,"options":null},
+              {"key":"gardens","size":"small","hidden":false,"options":null}]}
+            """);
+
+        var response = await Client.GetAsync(Url);
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<DashboardPreferencesResponse>();
+
+        Assert.NotNull(body);
+        Assert.Equal(DashboardLayout.Blocks.Weather, body.Blocks[0].Key);
+        // The Gardener preset's Weather size.
+        Assert.Equal(DashboardLayout.Sizes.Medium, body.Blocks[0].Size);
+        Assert.Equal(DashboardLayout.Sizes.Small, Block(body, DashboardLayout.Blocks.Gardens).Size);
+    }
+
     // ── Bounded options (round 1, E1 / G2) ───────────────────────────────────
 
     [Fact]

@@ -3,8 +3,9 @@ import type { SortingStrategy } from '@dnd-kit/sortable';
 import {
   moveItem,
   packGrid,
-  translationFor,
+  rowTops,
   type GridItem,
+  type GridPlacement,
 } from '../../utils/dashboardLayoutGrid';
 
 interface Options {
@@ -16,31 +17,55 @@ interface Options {
   gap: number;
 }
 
+/** What the drag preview needs of the measured grid (SMA-437, pre-flight D6). */
+interface MeasuredGrid {
+  /** One column's width. */
+  cellWidth: number;
+  /** A pinned row's height — 273 px from 600 px up; 0 when no item is pinned. */
+  rowHeight: number;
+  /** Each free-height item's own measured height, by key: its row's height. */
+  freeHeights: Map<string, number>;
+}
+
 /**
- * The cell size, derived from any measured widget rather than from the
+ * The grid's geometry, read on the measured widgets rather than on the
  * container — dnd-kit's `SortingStrategy` is handed `activeNodeRect`, the
- * ACTIVE item's rect, and `rects`, the measured item rects; there is no
- * container rect in its arguments. A widget of span `c` x `r` is
- * `c * cellWidth + (c - 1) * gap` wide, so one measured widget is enough.
+ * ACTIVE item's rect, and `rects`, the measured item rects, aligned with
+ * `items`; there is no container rect in its arguments.
  *
- * Returns null when nothing has a usable size — jsdom measures every element
- * as a zero rect unless a test stubs the geometry, and a zero cell would turn
- * every translation into 0 rather than into a wrong number.
+ * A widget of span `c` x `r` is `c * cellWidth + (c - 1) * gap` wide, so any
+ * measured widget gives the column width. The row height is NOT one number
+ * any more (SMA-437, A-N10): a Full-width row is as tall as its content. So
+ * the pinned row height is read on a PINNED widget, `r * rowHeight + (r - 1)
+ * * gap` tall, and each free row's height on ITS OWN widget's rect — the
+ * model of round 3 took the first measured widget for all rows, and when that
+ * widget was a 180 px band, every row was taken for 180 px (the pre-flight:
+ * 544 wrong couples of 776, up to 744 px on the desktop).
+ *
+ * Returns null when a height the layout needs was not measured — jsdom
+ * measures every element as a zero rect unless a test stubs the geometry, and
+ * a zero cell would turn every translation into 0 rather than into a wrong
+ * number.
  */
-function cellSizeFrom(
-  rects: ClientRect[],
-  items: GridItem[],
-  gap: number
-): { width: number; height: number } | null {
+function measuredGrid(rects: ClientRect[], items: GridItem[], gap: number): MeasuredGrid | null {
+  let cellWidth: number | null = null;
+  let rowHeight: number | null = null;
+  const freeHeights = new Map<string, number>();
+
   for (let i = 0; i < items.length; i += 1) {
     const rect = rects[i];
     const item = items[i];
     if (!rect || !item || rect.width <= 0 || rect.height <= 0) continue;
-    const width = (rect.width - (item.cols - 1) * gap) / item.cols;
-    const height = (rect.height - (item.rows - 1) * gap) / item.rows;
-    if (width > 0 && height > 0) return { width, height };
+    cellWidth ??= (rect.width - (item.cols - 1) * gap) / item.cols;
+    if (item.freeHeight) freeHeights.set(item.key, rect.height);
+    else rowHeight ??= (rect.height - (item.rows - 1) * gap) / item.rows;
   }
-  return null;
+
+  if (cellWidth === null || cellWidth <= 0) return null;
+  if (items.some((item) => item.freeHeight && !freeHeights.has(item.key))) return null;
+  const pinnedRows = items.some((item) => !item.freeHeight);
+  if (pinnedRows && (rowHeight === null || rowHeight <= 0)) return null;
+  return { cellWidth, rowHeight: rowHeight ?? 0, freeHeights };
 }
 
 /**
@@ -69,6 +94,14 @@ function cellSizeFrom(
  *
  * The transform NEVER carries a scale factor. `SortableWidget` also applies it
  * with `CSS.Translate.toString`, so the round-2 guarantee holds at both ends.
+ *
+ * SMA-437 (pre-flight D6) — the rows are measured ROW BY ROW: a Full-width
+ * row is as tall as its content, so a widget moves from the top of its row in
+ * the current layout to the top of its row in the target one, each computed
+ * from the heights of the rows above it in THAT layout (`rowTops`) — the
+ * gesture the phone's `verticalListSortingStrategy` already makes, carried to
+ * the grid. Without a Full width every row is pinned and the translation is
+ * exactly round 3's `(row delta) × (row + gap)`.
  */
 export function createDashboardSortingStrategy({
   items,
@@ -81,7 +114,7 @@ export function createDashboardSortingStrategy({
   // One-entry memo: dnd-kit calls the strategy once per item on every
   // drag-over, and the target layout is the same for all of them.
   let cachedKey = '';
-  let cachedTarget: ReturnType<typeof packGrid> | null = null;
+  let cachedTarget: Map<string, GridPlacement> | null = null;
 
   const targetFor = (activeIndex: number, overIndex: number) => {
     const key = `${activeIndex}:${overIndex}`;
@@ -95,14 +128,23 @@ export function createDashboardSortingStrategy({
     const item = items[index];
     if (!item) return null;
 
+    const target = targetFor(activeIndex, overIndex);
     const from = current.get(item.key);
-    const to = targetFor(activeIndex, overIndex).get(item.key);
+    const to = target.get(item.key);
     if (!from || !to) return null;
 
-    const cell = cellSizeFrom(rects, items, gap);
-    if (!cell) return null;
+    const grid = measuredGrid(rects, items, gap);
+    if (!grid) return null;
 
-    const { x, y } = translationFor(from, to, cell.width, cell.height, gap);
-    return { x, y, scaleX: 1, scaleY: 1 };
+    const fromTop = rowTops(current, grid.freeHeights, grid.rowHeight, gap)[from.row];
+    const toTop = rowTops(target, grid.freeHeights, grid.rowHeight, gap)[to.row];
+    if (fromTop === undefined || toTop === undefined) return null;
+
+    return {
+      x: (to.col - from.col) * (grid.cellWidth + gap),
+      y: toTop - fromTop,
+      scaleX: 1,
+      scaleY: 1,
+    };
   };
 }

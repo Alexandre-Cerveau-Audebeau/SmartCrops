@@ -4,6 +4,9 @@ namespace SmartCrops.Core.Dashboard;
 /// SMA-336 — the vocabulary of the gardens dashboard layout, shared by the
 /// controller, its validation and the presets. Centralised so the whitelist the
 /// API validates against and the presets it falls back to can never drift apart.
+/// The client's twin (<c>types/Dashboard.ts</c>) and this class are both
+/// checked against <c>src/frontend/src/constants/dashboardLayout.reference.json</c>
+/// (PR #287, fix round 1, S2), so they cannot drift apart either.
 /// </summary>
 public static class DashboardLayout
 {
@@ -27,14 +30,20 @@ public static class DashboardLayout
         public static readonly IReadOnlyList<string> All = [Novice, Gardener, Expert];
     }
 
-    /// <summary>The three block footprints: 1×1, 2×1 and 2×2 grid cells.</summary>
+    /// <summary>
+    /// The four block footprints: 1×1, 2×1 and 2×2 grid cells, and the Full
+    /// width — « Pleine largeur », 4×1 as tall as its content (SMA-437, V8).
+    /// A KNOWN size is not a PERMITTED one: which block may take which size at
+    /// which level is <see cref="DashboardCapabilities.SizesFor"/>.
+    /// </summary>
     public static class Sizes
     {
         public const string Small = "small";
         public const string Medium = "medium";
         public const string Large = "large";
+        public const string Wide = "wide";
 
-        public static readonly IReadOnlyList<string> All = [Small, Medium, Large];
+        public static readonly IReadOnlyList<string> All = [Small, Medium, Large, Wide];
     }
 
     /// <summary>

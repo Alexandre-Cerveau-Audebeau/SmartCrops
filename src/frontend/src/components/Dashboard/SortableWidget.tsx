@@ -13,7 +13,8 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import { spanFor } from '../../utils/dashboardLayoutGrid';
+import { hasFreeHeight, pinnedHeight, spanFor } from '../../utils/dashboardLayoutGrid';
+import { DASHBOARD_SPACING } from '../../theme/dashboardTokens';
 import { NON_HIDABLE_BLOCK, type DashboardBlock } from '../../types/Dashboard';
 
 /**
@@ -101,6 +102,12 @@ interface Props {
   editing: boolean;
   /** Localized current size, so the resize label says where it stands. */
   sizeLabel: string;
+  /**
+   * More than one size at the widget's formula (`sizesFor`, SMA-437 A-N11).
+   * False draws no corner handle — « une seule taille, pas de poignée » —
+   * rather than a button that would change nothing.
+   */
+  resizable: boolean;
   onHide: () => void;
   onResize: () => void;
   /**
@@ -118,7 +125,8 @@ interface Props {
  * SMA-336 - one cell of the dashboard grid: its footprint, and in Edit mode the
  * four controls the frozen design puts INSIDE the card (_spec.md 8, point 5) -
  * hide (or the lock, on Gardens), the drag handle, the options gear and the
- * corner resize handle.
+ * corner resize handle, which a widget with a single size does not get
+ * (SMA-437, A-N11).
  *
  * The controls are an overlay on the grid cell rather than props threaded
  * through every widget: the cell is the one element that knows the block, and
@@ -136,6 +144,7 @@ export default function SortableWidget({
   label,
   editing,
   sizeLabel,
+  resizable,
   onHide,
   onResize,
   options,
@@ -169,14 +178,22 @@ export default function SortableWidget({
   // drag preview computed from a stale span lands on the wrong cell. CSS
   // clamps a span to the column count and `spanFor` says so explicitly, so
   // ONE call per breakpoint DashboardGrid declares — one column on a phone,
-  // two on a tablet, four from `lg` up (round 4, E'''1). The three sizes cap
-  // at two columns today, so the `lg` value equals the `sm` one; declaring it
-  // anyway is what keeps CSS and packing from diverging the day a size takes
-  // three or four.
+  // two on a tablet, four from `lg` up (round 4, E'''1). Small, Medium and
+  // Large cap at two columns, so for them the `lg` value equals the `sm` one;
+  // the Full width takes four there (SMA-437, D2), which is the day this third
+  // declaration was kept for.
   const phone = spanFor(block.size, 1);
   const tablet = spanFor(block.size, 2);
   const desktop = spanFor(block.size, 4);
   const locked = block.key === NON_HIDABLE_BLOCK;
+  // SMA-437 (A-N10, pre-flight D5): the grid's rows are `auto` from `sm` up,
+  // so the 273 px live HERE — 273 on one row, 566 on two, the row count being
+  // the same at two and four columns. Nothing for the Full width, whose row
+  // takes the height of its content with no floor; nothing under `sm`, where
+  // the phone's `minmax(200px, auto)` rows stay as they were.
+  const pinned = hasFreeHeight(block.size)
+    ? null
+    : pinnedHeight(desktop.rows, DASHBOARD_SPACING.row, DASHBOARD_SPACING.gutter);
 
   return (
     <Box
@@ -195,12 +212,13 @@ export default function SortableWidget({
         //
         // A grid item's automatic minimum size in the block axis is
         // `min-height: auto`, which resolves to its content's min-content
-        // height. The rows of this grid are fixed tracks from `sm` up
-        // (`gridAutoRows`, 273 px), so an item whose content was taller than
-        // its track grew PAST the track instead of being clipped by it: the
-        // Statistics card's last line — « N cases libres, dont M en plein
-        // soleil » — was drawn below the card's own border and over the
-        // header of whichever widget sat underneath. On a phone the track is
+        // height. The rows of this grid were fixed 273 px tracks from `sm` up,
+        // so an item whose content was taller than its track grew PAST the
+        // track instead of being clipped by it: the Statistics card's last
+        // line — « N cases libres, dont M en plein soleil » — was drawn below
+        // the card's own border and over the header of whichever widget sat
+        // underneath. Since SMA-437 the tracks are `auto` and the height is
+        // pinned on the item itself (below); on a phone the track is
         // `minmax(200px, auto)` since the mobile lot: the item is then sized
         // by its content and this minimum simply has nothing to clip.
         //
@@ -209,6 +227,7 @@ export default function SortableWidget({
         // body's own bounded scroll actually apply. Fixing it here fixes it for
         // all eight widgets at once, which is why it is not in a widget.
         minHeight: 0,
+        ...(pinned !== null && { height: { sm: `${pinned}px` } }),
         gridColumn: {
           xs: `span ${phone.cols}`,
           sm: `span ${tablet.cols}`,
@@ -344,24 +363,27 @@ export default function SortableWidget({
             {/* 3 px of offset plus the small IconButton's own 5 px of padding
                 put the 16 px grip exactly where the artboard has it — 8 px in
                 from both edges — while the button around it stays a full
-                keyboard target. */}
-            <IconButton
-              size="small"
-              onClick={onResize}
-              aria-label={t('dashboard.editMode.resize', {
-                widget: label,
-                size: sizeLabel,
-              })}
-              sx={{
-                position: 'absolute',
-                bottom: 3,
-                right: 3,
-                zIndex: 3,
-                color: 'primary.main',
-              }}
-            >
-              <ResizeGrip />
-            </IconButton>
+                keyboard target. Only for a widget with more than one size at
+                its formula (SMA-437, A-N11). */}
+            {resizable && (
+              <IconButton
+                size="small"
+                onClick={onResize}
+                aria-label={t('dashboard.editMode.resize', {
+                  widget: label,
+                  size: sizeLabel,
+                })}
+                sx={{
+                  position: 'absolute',
+                  bottom: 3,
+                  right: 3,
+                  zIndex: 3,
+                  color: 'primary.main',
+                }}
+              >
+                <ResizeGrip />
+              </IconButton>
+            )}
 
             {/* Generic options shell (_spec.md 8, A8). PR 1/5 shipped the frame
                 and nothing in it; PR 2/5 drops the Counters entries in. A widget

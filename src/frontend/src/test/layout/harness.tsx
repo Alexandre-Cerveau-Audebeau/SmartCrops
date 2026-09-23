@@ -8,10 +8,17 @@ import i18next from '../../i18n/i18n';
 import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
 import { createAppTheme } from '../../theme';
 import DashboardGrid from '../../components/Dashboard/DashboardGrid';
-import { LAYOUT_SCENES, sceneWidget, type LayoutScene } from './scenes';
+import {
+  GRID_SCENES,
+  LAYOUT_SCENES,
+  gridCardScene,
+  sceneWidget,
+  type GridScene,
+  type LayoutScene,
+} from './scenes';
 import { PROBE_SCENES, probeWidget, type ProbeScene } from './probes';
 import { encodeResults } from './encode';
-import { RESULTS_ID, measureCard, type CardMeasure } from './measure';
+import { RESULTS_ID, measureCard, measureControls, type CardMeasure, type ControlMeasure } from './measure';
 
 /**
  * SMA-336 mobile lot, step 7 (pre-flight D7) — the BROWSER side of the layout
@@ -57,11 +64,44 @@ export interface SceneMeasure extends CardMeasure {
   hiddenRows: number;
   /** The width each garden NAME can take on a Medium Gardens row — its group's — (arbitrage 5: 130 px at least on a phone); empty elsewhere. */
   gardenNameWidths: number[];
+  /** The page's viewport width (`innerWidth`), measured: the width a tablet or desktop run claims to be at (SMA-437). */
+  viewport: number;
+}
+
+/** One card of a grid scene: its measure, and its border box relative to the grid. */
+export interface GridCardMeasure extends SceneMeasure {
+  box: { x: number; y: number; w: number; h: number };
+}
+
+/**
+ * SMA-437 lot 1, PR A, step A7 (pre-flight D19) — a grid scene, measured as a
+ * grid: every card by `measureCard`, each card's box, the row tracks the
+ * engine RESOLVED (`grid-template-rows` in px — not the `grid-auto-rows` the
+ * CSS declares), the cards that meet, and in Edit mode each card's controls.
+ */
+export interface GridMeasure {
+  scene: string;
+  editing: boolean;
+  viewport: number;
+  /** The resolved row tracks, `273px 273px …`. */
+  rows: string;
+  columns: string;
+  cards: GridCardMeasure[];
+  /** Every pair of cards whose border boxes intersect by more than a pixel. */
+  cardOverlaps: string[];
+  /** In Edit mode, each card's controls; empty at rest. */
+  controls: Array<{ key: string; controls: ControlMeasure[] }>;
+}
+
+/** What one run of the page returns: the one-card scenes and probes, and the grid scenes. */
+export interface LayoutResults {
+  scenes: SceneMeasure[];
+  grids: GridMeasure[];
 }
 
 declare global {
   interface Window {
-    __layoutResults?: SceneMeasure[];
+    __layoutResults?: LayoutResults;
     __layoutError?: string;
   }
 }
@@ -111,16 +151,20 @@ function zoneOverflowOf(card: HTMLElement): { x: string; y: string } | null {
   return zone ? overflowOf(zone) : null;
 }
 
+/** The grid's edit callbacks — never fired: the harness measures, it never edits. */
+const noop = () => {};
+
 /** One scene under the app's providers and theme — a tree, not a component: this file is a script, not a module Fast Refresh could reload. */
 function sceneTree(scene: LayoutScene | ProbeScene, mode: 'light' | 'dark') {
-  /** The grid's edit callbacks — never fired: the harness measures, it never edits. */
-  const noop = () => {};
   return (
     <MemoryRouter>
       <ThemeProvider theme={createAppTheme(mode)}>
         <UnitSystemProvider>
           <DashboardGrid
             blocks={[{ key: scene.key, size: scene.size, hidden: false }]}
+            // The formula with every widget and every size (SMA-437): the
+            // scenes measure the widgets, and the level only decides the grip.
+            level="expert"
             editing={false}
             onReorder={noop}
             onHide={noop}
@@ -131,6 +175,92 @@ function sceneTree(scene: LayoutScene | ProbeScene, mode: 'light' | 'dark') {
       </ThemeProvider>
     </MemoryRouter>
   );
+}
+
+/** A grid scene (SMA-437, D19): the whole preset, through the same grid, at its formula, at rest or in Edit mode. */
+function gridTree(grid: GridScene, mode: 'light' | 'dark') {
+  return (
+    <MemoryRouter>
+      <ThemeProvider theme={createAppTheme(mode)}>
+        <UnitSystemProvider>
+          <DashboardGrid
+            blocks={grid.blocks.map((block) => ({ ...block, hidden: false }))}
+            level={grid.level}
+            editing={grid.editing}
+            onReorder={noop}
+            onHide={noop}
+            onResize={noop}
+            renderBlock={(block) => sceneWidget(gridCardScene(grid, block))}
+          />
+        </UnitSystemProvider>
+      </ThemeProvider>
+    </MemoryRouter>
+  );
+}
+
+/** What the harness reads of a card beyond `measureCard`, the same for a one-card scene and a card of a grid. */
+function cardExtras(card: HTMLElement) {
+  return {
+    cardOverflow: overflowOf(card),
+    hiddenRows: card.querySelectorAll('[data-weather-day-hidden], [data-todo-hidden], [data-tips-hidden]').length,
+    gardenNameWidths: Array.from(card.querySelectorAll('[data-garden-row-group]')).map(
+      (group) => Math.round(group.getBoundingClientRect().width * 10) / 10
+    ),
+    viewport: window.innerWidth,
+  };
+}
+
+/** A box to a tenth of a pixel, relative to `origin`. */
+function boxWithin(el: Element, origin: DOMRect) {
+  const r = el.getBoundingClientRect();
+  const round = (v: number) => Math.round(v * 10) / 10;
+  return { x: round(r.left - origin.left), y: round(r.top - origin.top), w: round(r.width), h: round(r.height) };
+}
+
+/** Measures a mounted grid scene: every card, the resolved tracks, the cards that meet, the Edit-mode controls. */
+function measureGrid(grid: GridScene, host: HTMLElement): GridMeasure {
+  const cards = Array.from(host.querySelectorAll<HTMLElement>('[data-widget]'));
+  if (cards.length !== grid.blocks.length) {
+    throw new Error(`The grid scene ${grid.name} drew ${cards.length} cards for ${grid.blocks.length} blocks.`);
+  }
+  // card → the wobble wrapper → the grid item → the grid (`measureCard` walks the same way).
+  const gridEl = cards[0]!.parentElement!.parentElement!.parentElement!;
+  const origin = gridEl.getBoundingClientRect();
+  const measured: GridCardMeasure[] = cards.map((card) => {
+    const key = card.getAttribute('data-widget') as LayoutScene['key'];
+    const block = grid.blocks.find((candidate) => candidate.key === key)!;
+    return {
+      scene: `${grid.name}/${key}`,
+      key,
+      size: block.size,
+      probe: null,
+      zoneOverflow: null,
+      ...cardExtras(card),
+      ...measureCard(card),
+      box: boxWithin(card, origin),
+    };
+  });
+  const cardOverlaps: string[] = [];
+  measured.forEach((a, i) => {
+    for (const b of measured.slice(i + 1)) {
+      const w = Math.min(a.box.x + a.box.w, b.box.x + b.box.w) - Math.max(a.box.x, b.box.x);
+      const h = Math.min(a.box.y + a.box.h, b.box.y + b.box.h) - Math.max(a.box.y, b.box.y);
+      if (w > 1 && h > 1) cardOverlaps.push(`${a.key} ∩ ${b.key} = ${Math.round(w)}×${Math.round(h)}`);
+    }
+  });
+  const style = getComputedStyle(gridEl);
+  return {
+    scene: grid.name,
+    editing: grid.editing,
+    viewport: window.innerWidth,
+    rows: style.gridTemplateRows,
+    columns: style.gridTemplateColumns,
+    cards: measured,
+    cardOverlaps,
+    controls: grid.editing
+      ? cards.map((card) => ({ key: card.getAttribute('data-widget')!, controls: measureControls(card) }))
+      : [],
+  };
 }
 
 /**
@@ -164,7 +294,7 @@ async function main() {
   await Promise.all([300, 400, 500, 600, 700].map((weight) => document.fonts.load(`${weight} 16px Inter`)));
   progress('fonts ready');
 
-  const results: SceneMeasure[] = [];
+  const results: LayoutResults = { scenes: [], grids: [] };
   for (const scene of [...LAYOUT_SCENES, ...PROBE_SCENES].filter((s) => !only || s.name === only)) {
     const host = document.createElement('div');
     page.appendChild(host);
@@ -175,20 +305,30 @@ async function main() {
     progress(`settled ${scene.name}`);
     const card = host.querySelector<HTMLElement>('[data-widget]');
     if (!card) throw new Error(`The scene ${scene.name} drew no card.`);
-    results.push({
+    results.scenes.push({
       scene: scene.name,
       key: scene.key,
       size: scene.size,
       probe: isProbe(scene) ? scene.probe : null,
       zoneOverflow: zoneOverflowOf(card),
-      cardOverflow: overflowOf(card),
-      hiddenRows: card.querySelectorAll('[data-weather-day-hidden], [data-todo-hidden], [data-tips-hidden]').length,
-      gardenNameWidths: Array.from(card.querySelectorAll('[data-garden-row-group]')).map(
-        (group) => Math.round(group.getBoundingClientRect().width * 10) / 10
-      ),
+      ...cardExtras(card),
       ...measureCard(card),
     });
     if (hold) break;
+    root.unmount();
+    host.remove();
+  }
+
+  // The grid scenes (SMA-437, D19), after the one-card scenes, the same way.
+  for (const grid of GRID_SCENES.filter((g) => !hold && (!only || g.name === only))) {
+    const host = document.createElement('div');
+    page.appendChild(host);
+    const root = createRoot(host);
+    root.render(gridTree(grid, mode));
+    progress(`rendered ${grid.name}`);
+    await settle();
+    progress(`settled ${grid.name}`);
+    results.grids.push(measureGrid(grid, host));
     root.unmount();
     host.remove();
   }

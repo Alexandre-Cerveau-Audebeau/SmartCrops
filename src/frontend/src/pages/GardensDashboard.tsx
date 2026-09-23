@@ -39,6 +39,7 @@ import WeatherOptionsPanel from '../components/Dashboard/blocks/WeatherOptionsPa
 import LocationDialog from '../components/Dashboard/LocationDialog';
 import type { LocationTarget } from '../components/Dashboard/locationTools';
 import { weatherDisclaimerVisible } from '../components/Dashboard/weatherDisclaimer';
+import { sizesFor } from '../constants/dashboardCapabilities';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useDashboardWeather } from '../hooks/useDashboardWeather';
@@ -47,7 +48,7 @@ import { useLanguage } from '../hooks/useLanguage';
 import { useDashboardTokens } from '../theme/useDashboardTokens';
 import { createGarden } from '../services/gardenApi';
 import { DASHBOARD_SPACING, DASHBOARD_TYPE } from '../theme/dashboardTokens';
-import { formatCount, formatDecimal } from '../utils/formatNumber';
+import { formatCount, formatSurface } from '../utils/formatNumber';
 import {
   nextDashboardSize,
   type DashboardBlock,
@@ -227,6 +228,12 @@ export default function GardensDashboard() {
     (sum, garden) => sum + (gardenViews.get(garden.id)?.surfaceM2 ?? 0),
     0
   );
+  // SMA-437 (A-N16, arbitrage 5): « 2,66 ha » beyond 10 000 m², with a
+  // no-break space before the unit — ONE rendering of the page's surface, for
+  // the header and for the Statistics thumbnail alike, the one the widget
+  // itself draws.
+  const surface = formatSurface(totalSurface, i18n.language);
+  const surfaceText = t(`dashboard.surface.${surface.unit}`, { value: surface.value });
 
   const [editing, setEditing] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -569,9 +576,7 @@ export default function GardensDashboard() {
         .filter((view): view is GardenView => view?.hasPlan === true);
       if (planned.length === 0) return null;
       return {
-        value: t('dashboard.blocks.stats.surface', {
-          value: formatDecimal(totalSurface, i18n.language, 1),
-        }),
+        value: surfaceText,
         bars: planned.slice(0, 2).map((view) => view.occupancyPercent),
       };
     }
@@ -675,9 +680,7 @@ export default function GardensDashboard() {
                 plants: t('dashboard.metaPlants', {
                   count: dashboardData.totals.placementCount,
                 }),
-                surface: t('dashboard.metaSurface', {
-                  value: formatDecimal(totalSurface, i18n.language, 1),
-                }),
+                surface: surfaceText,
               })}
             </Typography>
           )}
@@ -813,15 +816,18 @@ export default function GardensDashboard() {
       {!loading && !loadError && (
         <DashboardGrid
           blocks={blocks}
+          level={level}
           editing={editing}
           onReorder={setBlocks}
           onHide={(key) =>
             patchBlock(key, (block) => ({ ...block, hidden: true }))
           }
+          // Through the sizes the widget may take at THIS formula (SMA-437,
+          // A-N11): the Gardener's cycle never reaches the Full width.
           onResize={(key) =>
             patchBlock(key, (block) => ({
               ...block,
-              size: nextDashboardSize(block.size),
+              size: nextDashboardSize(block.size, sizesFor(block.key, level)),
             }))
           }
           renderBlock={renderBlock}

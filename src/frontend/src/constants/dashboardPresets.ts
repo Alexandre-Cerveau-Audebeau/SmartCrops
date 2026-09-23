@@ -9,7 +9,9 @@ import {
  * (`_spec.md` § 8) and kept byte-identical to the server's
  * `DashboardPresets.cs`: the client must be able to tell « this layout is the
  * preset » without a round-trip, and « réinitialiser au niveau X » must produce
- * exactly what a fresh account would receive.
+ * exactly what a fresh account would receive. Checked so since PR #287, fix
+ * round 1 (S2): both sides compare their presets to
+ * `dashboardLayout.reference.json`.
  *
  * Every preset lists ALL eight widgets — the ones a level does not show are
  * present and `hidden`, so the Customize gallery has something to offer back

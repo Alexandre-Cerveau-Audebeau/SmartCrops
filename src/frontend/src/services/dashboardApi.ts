@@ -4,7 +4,9 @@ import {
   isDashboardSize,
   type DashboardBlock,
   type DashboardBlockKey,
+  type DashboardLevel,
   type DashboardPreferences,
+  type DashboardSize,
   type SaveDashboardPreferences,
 } from '../types/Dashboard';
 import type {
@@ -15,6 +17,7 @@ import type {
 } from '../types/DashboardData';
 import type { GardenConfig, LightSlot } from '../types/Garden';
 import type { PlacementData } from './gardenLayoutApi';
+import { sizesFor } from '../constants/dashboardCapabilities';
 import { DEFAULT_DASHBOARD_LEVEL, presetFor } from '../constants/dashboardPresets';
 import { fetchJson } from './fetchJson';
 import {
@@ -34,6 +37,16 @@ const API_BASE = '/api';
 // HttpOnly auth cookie flows (SMA-280 policy: every call site states it).
 
 /**
+ * The size a block takes in its level's preset — what a size the level does
+ * not permit comes back to. Every preset lists every block (pinned by
+ * `dashboardPresets.test.ts`, and by the server's `DashboardPresetsTests`); the
+ * first size the level permits stands in should one ever not.
+ */
+function presetSize(key: DashboardBlockKey, level: DashboardLevel): DashboardSize {
+  return presetFor(level).find((block) => block.key === key)?.size ?? sizesFor(key, level)[0];
+}
+
+/**
  * SMA-336 round 1 (E17) — the service boundary is where an untrusted body
  * becomes the typed layout the rest of the app relies on.
  *
@@ -44,21 +57,30 @@ const API_BASE = '/api';
  * the other end of this call: an older client meeting a newer server, a proxy,
  * a replayed cache. Normalizing here costs one pass and removes the crash.
  *
- * Unknown block keys and invalid sizes are DROPPED, an unknown level falls back
- * to the default, and a document from which nothing survives falls back to that
- * level's preset — the same principle the server applies on read: a stored
- * layout must never be able to keep someone out of their own dashboard.
+ * Unknown block keys are DROPPED, an unknown level falls back to the default,
+ * and a document from which nothing survives falls back to that level's preset
+ * — the same principle the server applies on read: a stored layout must never
+ * be able to keep someone out of their own dashboard.
+ *
+ * A size the level does not permit — unknown, or known but not offered to that
+ * block at that level (`sizesFor`) — is brought back to the preset's, IN PLACE
+ * (SMA-437, pre-flight D4), exactly as the server's `Merge` does. It used to
+ * drop the block whole: the widget vanished from the page, Gardens included,
+ * which can never be hidden (pre-flight, constat 14).
  */
-function normalizeBlock(value: unknown): DashboardBlock | null {
+function normalizeBlock(value: unknown, level: DashboardLevel): DashboardBlock | null {
   if (typeof value !== 'object' || value === null) return null;
 
   const block = value as { key?: unknown; size?: unknown; hidden?: unknown; options?: unknown };
   if (typeof block.key !== 'string' || !isDashboardBlockKey(block.key)) return null;
-  if (typeof block.size !== 'string' || !isDashboardSize(block.size)) return null;
 
+  const permitted = sizesFor(block.key, level);
   const normalized: DashboardBlock = {
     key: block.key,
-    size: block.size,
+    size:
+      typeof block.size === 'string' && isDashboardSize(block.size) && permitted.includes(block.size)
+        ? block.size
+        : presetSize(block.key, level),
     hidden: block.hidden === true,
   };
 
@@ -97,7 +119,7 @@ function normalize(raw: unknown): DashboardPreferences {
   // did not write — so the first occurrence wins here too.
   const seen = new Set<DashboardBlockKey>();
   const blocks = (Array.isArray(source.blocks) ? source.blocks : [])
-    .map(normalizeBlock)
+    .map((block) => normalizeBlock(block, level))
     .filter((block): block is DashboardBlock => block !== null)
     .filter((block) => {
       if (seen.has(block.key)) return false;

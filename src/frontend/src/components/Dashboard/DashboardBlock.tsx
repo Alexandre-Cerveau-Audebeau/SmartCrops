@@ -68,13 +68,13 @@ export default function DashboardBlock({
   regionLabel,
   children,
 }: Props) {
-  const padding =
-    size === 'large'
-      ? DASHBOARD_SPACING.paddingLarge
-      : DASHBOARD_SPACING.padding;
+  // « 24 en Grand et en Pleine largeur » (SMA-437 contract § 5.4, D7): the
+  // two sizes wide enough for the larger air.
+  const roomy = size === 'large' || size === 'wide';
+  const padding = roomy ? DASHBOARD_SPACING.paddingLarge : DASHBOARD_SPACING.padding;
   // Edit mode: the "−", the drag handle and the gear live inside the card
   // (`_spec.md` § 8, point 5), so the header needs room for them.
-  const topPadding = editing ? (size === 'large' ? 38 : 34) : padding;
+  const topPadding = editing ? (roomy ? 38 : 34) : padding;
 
   // Every widget has one, and it is the SAME table the Customize gallery and
   // the invitation panels read — a widget cannot be drawn with one glyph here

@@ -586,3 +586,88 @@ export function measureCard(card: HTMLElement): CardMeasure {
     fontLoaded: typeof document.fonts !== 'undefined' ? document.fonts.check('16px Inter') : false,
   };
 }
+
+/** One Edit-mode control of a card, measured against the card it sits on (SMA-437, pre-flight D19). */
+export interface ControlMeasure {
+  /** Its accessible name — the language of the run — or its tag. */
+  label: string;
+  /** Its painted box — the chip, or the glyph of an unpainted button — relative to the card. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Every painted part lies inside the card's border box. */
+  inside: boolean;
+  /** The card's text a painted part covers by {@link VISIBLE_OVERLAP_PX} or more in both dimensions. */
+  covers: string[];
+  /** The corner resize grip: the artboard's two diagonal strokes. */
+  grip: boolean;
+}
+
+/** The path of the corner grip (`SortableWidget`'s `ResizeGrip`, `A6Modifier.dc.html`). */
+const GRIP_PATH = 'M15 1 1 15M15 8l-7 7';
+
+/**
+ * SMA-437 lot 1, PR A, step A7 (pre-flight D19) — the Edit-mode controls of a
+ * card: the « − » (or the lock), the drag pill, the gear and the corner grip,
+ * which `SortableWidget` lays OVER the card, beside it in the DOM — so
+ * `measureCard`, which reads the card's own subtree, never sees them. What is
+ * read is what is PAINTED: a chip's box, or the glyph of a button that paints
+ * no box (the grip's 16 px strokes inside its 26 px target). Each must lie
+ * inside the card and cover none of the card's text — the top padding the
+ * card reserves in Edit mode (34 px, 38 in Large) is where they belong.
+ */
+export function measureControls(card: HTMLElement): ControlMeasure[] {
+  const wrapper = card.parentElement!;
+  const cardBox = rectOf(card);
+  const sticky = occluders(card);
+  const texts: { label: string; vis: Box }[] = [];
+  for (const el of Array.from(card.querySelectorAll('*'))) {
+    if (!visible(el)) continue;
+    const txt = ownText(el);
+    const rect = txt ? textRect(el) : null;
+    if (!txt || !rect) continue;
+    texts.push({ label: `"${txt.slice(0, 44)}"`, vis: occlude(intersect(rect, clipBoxFor(el, card, true)), el, sticky) });
+  }
+
+  const controls: ControlMeasure[] = [];
+  for (const control of Array.from(wrapper.children)) {
+    if (control === card || !visible(control)) continue;
+    const cs = getComputedStyle(control);
+    const paintsBox =
+      alpha(cs.backgroundColor) > 0 || (parseFloat(cs.borderTopWidth) > 0 && cs.borderTopStyle !== 'none');
+    const parts = paintsBox
+      ? [rectOf(control)]
+      : Array.from(control.querySelectorAll('svg')).filter(visible).map(rectOf);
+    if (parts.length === 0) continue;
+    const box = boxOf({
+      left: Math.min(...parts.map((p) => p.left)),
+      top: Math.min(...parts.map((p) => p.top)),
+      right: Math.max(...parts.map((p) => p.right)),
+      bottom: Math.max(...parts.map((p) => p.bottom)),
+    });
+    const covers = texts
+      .filter((text) =>
+        parts.some((part) => {
+          const meet = intersect(part, text.vis);
+          return meet.width >= VISIBLE_OVERLAP_PX && meet.height >= VISIBLE_OVERLAP_PX;
+        })
+      )
+      .map((text) => text.label);
+    controls.push({
+      label: control.getAttribute('aria-label') ?? control.tagName.toLowerCase(),
+      x: round(box.left - cardBox.left),
+      y: round(box.top - cardBox.top),
+      w: round(box.width),
+      h: round(box.height),
+      inside:
+        box.left >= cardBox.left - 0.5 &&
+        box.top >= cardBox.top - 0.5 &&
+        box.right <= cardBox.right + 0.5 &&
+        box.bottom <= cardBox.bottom + 0.5,
+      covers,
+      grip: control.querySelector(`path[d="${GRIP_PATH}"]`) !== null,
+    });
+  }
+  return controls;
+}

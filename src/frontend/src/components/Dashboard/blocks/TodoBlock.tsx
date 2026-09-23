@@ -387,10 +387,12 @@ export default function TodoBlock({
       );
     }
     const shown = mediumShown;
-    // The spec's cap, then the measured one: never more rows than fit whole.
-    // Always one — a card that cannot hold a single task shows it clipped
-    // rather than an empty list under « +N ».
-    const visible = Math.max(1, Math.min(shown.length, mediumBudget));
+    // The spec's cap, then the measured one: never more rows than fit whole —
+    // not even the first (SMA-437 lot 1, PR A, step A7b). A card that could
+    // not hold a single task drew it anyway, clipped, and left it out of
+    // « +N » — the Tips card's defect in Edit mode, and this card's same rule.
+    // It now draws none, and « +N » counts every task.
+    const visible = Math.min(shown.length, mediumBudget);
     const rest = tasks.length - visible;
     const overflowing = visible < shown.length;
     return (

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import CountersBlock from '../../components/Dashboard/blocks/CountersBlock';
 import GardensBlock, { type GardensWeather } from '../../components/Dashboard/blocks/GardensBlock';
+import InviteBlock from '../../components/Dashboard/blocks/InviteBlock';
 import MonthBlock from '../../components/Dashboard/blocks/MonthBlock';
 import StatsBlock from '../../components/Dashboard/blocks/StatsBlock';
 import TipsBlock from '../../components/Dashboard/blocks/TipsBlock';
@@ -11,7 +12,8 @@ import { placement } from '../fixtures/placements';
 import { linkFixture, locationFixture, weatherFixture, weekFixture } from '../fixtures/weather';
 import { gardenViewOf } from '../../utils/gardenStats';
 import { LAYOUT_NOW_MS } from './clock';
-import type { DashboardBlockKey, DashboardSize } from '../../types/Dashboard';
+import { presetFor } from '../../constants/dashboardPresets';
+import type { DashboardBlockKey, DashboardLevel, DashboardSize } from '../../types/Dashboard';
 import type { DashboardGardenData, DashboardVarietyData } from '../../types/DashboardData';
 import type { DashboardWeatherData } from '../../types/DashboardWeather';
 
@@ -232,6 +234,8 @@ export interface LayoutScene {
   long?: boolean;
   /** Two gardens without orientation: both Medium Tips slots to an invitation (fix round 2, #9). */
   twoInvites?: boolean;
+  /** In Edit mode: the widget reserves the top padding its controls sit in (SMA-437, D19). */
+  editing?: boolean;
 }
 
 const SIZES: DashboardSize[] = ['small', 'medium', 'large'];
@@ -254,12 +258,50 @@ export const LAYOUT_SCENES: LayoutScene[] = (() => {
   return scenes;
 })();
 
+/**
+ * SMA-437 lot 1, PR A, step A7 (pre-flight D19) — a scene of SEVERAL widgets:
+ * a whole grid, measured card by card and as a grid — the rows it resolves,
+ * each card's box, and, in Edit mode, each card's controls. The layouts are
+ * the product's own presets, read from `presetFor` rather than copied, so the
+ * scene follows them.
+ */
+export interface GridScene {
+  name: string;
+  level: DashboardLevel;
+  editing: boolean;
+  blocks: Array<{ key: DashboardBlockKey; size: DashboardSize }>;
+}
+
+/** The visible widgets of a level's preset, in order. */
+const presetGrid = (level: DashboardLevel) =>
+  presetFor(level)
+    .filter((block) => !block.hidden)
+    .map(({ key, size }) => ({ key, size }));
+
+/**
+ * The Gardener preset (Weather M, Gardens L, four Mediums) and the Expert one
+ * (the eight widgets in Large), at rest and in Edit mode.
+ */
+export const GRID_SCENES: GridScene[] = (['gardener', 'expert'] as const).flatMap((level) => [
+  { name: `grid-${level}`, level, editing: false, blocks: presetGrid(level) },
+  { name: `grid-${level}-edit`, level, editing: true, blocks: presetGrid(level) },
+]);
+
+/** The scene of one card of a grid scene: the widget at its size, on every garden located. */
+export const gridCardScene = (grid: GridScene, block: GridScene['blocks'][number]): LayoutScene => ({
+  name: `${grid.name}/${block.key}`,
+  key: block.key,
+  size: block.size,
+  weather: 'all',
+  editing: grid.editing,
+});
+
 /** The widget of a scene, with the props the page would hand it. */
 export function sceneWidget(scene: LayoutScene): ReactNode {
   const weather = scene.weather === 'all' ? weatherAll() : weatherPartial();
   const gs = scene.twoInvites ? gardensTwoUnoriented : scene.long ? gardensLong : gardens;
   const vs = scene.twoInvites ? viewsTwoUnoriented : scene.long ? viewsLong : views;
-  const common = { size: scene.size, loading: false, loadError: false, onRetry: noop };
+  const common = { size: scene.size, editing: scene.editing, loading: false, loadError: false, onRetry: noop };
   switch (scene.key) {
     case 'weather':
       return <WeatherBlock {...common} weather={weather} gardens={gs} onLocate={noop} onLocated={noop} />;
@@ -297,6 +339,10 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
       return <StatsBlock {...common} gardens={gs} />;
     case 'todo':
       return <TodoBlock {...common} gardens={gs} varieties={varieties} weather={weather} onLocate={noop} onExpand={noop} />;
+    case 'harvest':
+      // « Bientôt disponible », as the page draws it (SMA-437: the Expert
+      // preset's grid scene holds it).
+      return <InviteBlock blockKey="harvest" size={scene.size} editing={scene.editing} />;
     default:
       throw new Error(`No scene for the widget ${scene.key}`);
   }

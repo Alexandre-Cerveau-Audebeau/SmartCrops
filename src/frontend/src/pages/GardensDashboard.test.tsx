@@ -25,7 +25,7 @@ import type {
   DashboardGardenData,
   DashboardVarietyData,
 } from '../types/DashboardData';
-import { emittedRules, gridNode, rulesFor, slotOf } from '../test/dashboardDom';
+import { declaredAtBreakpoint, emittedRules, gridNode, rulesFor, slotOf } from '../test/dashboardDom';
 
 vi.mock('../services/gardenApi', () => ({
   createGarden: vi.fn(),
@@ -290,6 +290,32 @@ describe('GardensDashboard — header (SMA-336)', () => {
         within(heading.parentElement!).getByText('2 gardens · 1 plant · 6.0 m²')
       ).toBeInTheDocument()
     );
+  });
+
+  // SMA-437 lot 1, PR A, step A6 (A-N16) — « 2,66 ha », never « 26 642 m² »:
+  // hectares beyond 10 000 m², two decimals at most, no useless zero.
+  it('writes the surface in hectares beyond 10 000 m² — « 1.01 ha » (SMA-437, A-N16)', async () => {
+    // 101 × 100 cells of 1 m: 10 100 m² — beyond 10 000, so « 1.01 ha ».
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([garden('g1', 'Domaine', { width: 101, height: 100, cellSize: '1m' })])
+    );
+
+    renderPage();
+
+    const heading = await screen.findByRole('heading', { name: 'My Gardens' });
+    const meta = await within(heading.parentElement!).findByText('1 garden · 0 plants · 1.01 ha');
+    expect(meta.textContent).toContain('1.01\u00a0ha');
+  });
+
+  it('never lets a figure and its unit part at a line end: a NO-BREAK space before « m² » (SMA-437, pre-flight constat 19)', async () => {
+    // The contract (§ 5.3): « espace insécable […] avant m² ». The meta line
+    // wrote an ordinary space, which a line may break at.
+    renderPage();
+
+    const heading = await screen.findByRole('heading', { name: 'My Gardens' });
+    const meta = await within(heading.parentElement!).findByText('1 garden · 0 plants · 3.0 m²');
+    expect(meta.textContent).toContain('3.0\u00a0m²');
+    expect(meta.textContent).not.toContain('3.0 m²');
   });
 
   it('marks the chip « adjusted » when the layout diverges from its preset', async () => {
@@ -982,6 +1008,19 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(rules).toContain('height:36px');
   });
 
+  it('writes the Statistics thumbnail in hectares beyond 10 000 m², as the widget does (SMA-437, arbitrage 5)', async () => {
+    // 101 × 100 cells of 1 m: 10 100 m² — beyond 10 000, so « 1.01 ha ».
+    vi.mocked(fetchDashboardData).mockResolvedValue(
+      dashboardWith([garden('g1', 'Domaine', { width: 101, height: 100, cellSize: '1m' })])
+    );
+
+    await openPanel();
+    const gallery = screen.getByRole('dialog', { name: 'Customize' });
+
+    const value = await within(gallery).findByText('1.01 ha');
+    expect(value.textContent).toBe('1.01\u00a0ha');
+  });
+
   it('counts the Counters thumbnail through the widget’s own filter (C4)', async () => {
     // ROUND 5 (C4). The branch read `totals.varietyCount` unconditionally, so a
     // user who had narrowed the widget to one garden and then hidden it was
@@ -1288,13 +1327,18 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
     expect(css).not.toContain('grid-auto-rows:200px');
   });
 
-  it('two columns on a tablet, and 273px rows — fixed, as before the mobile lot', async () => {
+  it('two columns on a tablet, and auto rows from 600px — the 273px are pinned on the cards (SMA-437, A-N10)', async () => {
+    // A-N10: a Full-width row takes the height of its content, with no floor,
+    // while the three other sizes keep 273 / 566 px — so the TRACK is `auto`
+    // and the height is declared on each card (the test below). The pre-flight
+    // measured it: 0 gap on seven layouts at four widths.
     const css = await gridCss();
 
     expect(columnsAt(css, '600px')).toBe('repeat(2, 1fr)');
-    expect(declaredAt(css, '600px', 'grid-auto-rows')).toBe('273px');
-    // The auto height is the PHONE's alone: no `minmax` from 600px up.
+    expect(declaredAt(css, '600px', 'grid-auto-rows')).toBe('auto');
+    // No floor from 600px up: neither the 273px track nor a `minmax` (A-N10).
     expect(declaredAt(css, '600px', 'grid-auto-rows')).not.toContain('minmax');
+    expect(css).not.toContain('grid-auto-rows:273px');
   });
 
   it('four columns from 1200px', async () => {
@@ -1383,6 +1427,30 @@ describe('GardensDashboard — responsive breakpoints (SMA-336 round 3)', () => 
       // `grid-row` is not responsive: `spanFor` never changes the row span, so
       // the one declaration outside any media query has to match all three.
       expect(css).toContain(`grid-row:span ${spanFor(block.size, 4).rows}`);
+    }
+  });
+
+  it('pins Small and Medium at 273px and Large at 566px from 600px up, and nothing on a phone (SMA-437, A-N10)', async () => {
+    // Written by hand, not derived: one row is 273px, a Large two rows and
+    // the 20px gutter between them. The track is `auto` from 600px up, so
+    // these heights are what keeps the tiling — and what clips a widget
+    // taller than its card instead of letting it stretch its row.
+    const blocks = presetFor('gardener');
+    blocks[0]!.size = 'small';
+    blocks[1]!.size = 'medium';
+    blocks[2]!.size = 'large';
+    servePreferences('gardener', blocks);
+    renderPage();
+    await screen.findByRole('heading', { level: 2, name: 'Gardens' });
+
+    const pinned = { small: '273px', medium: '273px', large: '566px' } as const;
+    for (const block of blocks.slice(0, 3)) {
+      const slot = slotOf(block.key);
+      expect(declaredAtBreakpoint(slot, '600px', 'height'), block.key).toBe(
+        pinned[block.size as keyof typeof pinned]
+      );
+      // The phone keeps `minmax(200px, auto)` and cards sized by their content.
+      expect(declaredAtBreakpoint(slot, '0px', 'height'), block.key).toBeNull();
     }
   });
 });
