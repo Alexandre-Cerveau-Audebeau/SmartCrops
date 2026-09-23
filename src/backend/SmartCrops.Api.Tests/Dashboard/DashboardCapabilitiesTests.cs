@@ -6,7 +6,9 @@ namespace SmartCrops.Api.Tests.Dashboard;
 /// SMA-437 lot 1, PR A, step A5 (pre-flight D3, D4) — the sizes a block may
 /// take, per formula. The twin of the client's
 /// <c>constants/dashboardCapabilities.test.ts</c>: the same table, pinned
-/// literally on both sides, as the presets are.
+/// literally on both sides, as the presets are — and cross-checked against the
+/// shared reference file by <see cref="DashboardLayoutReferenceTests"/>
+/// (PR #287, fix round 1, S2).
 ///
 /// <para>In this PR NO block has <c>wide</c>: the Full width is offered to a
 /// widget the day its Full-width version is drawn (A-N11), by adding it to that

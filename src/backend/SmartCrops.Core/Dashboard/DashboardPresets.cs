@@ -22,6 +22,11 @@ public record DashboardPresetBlock(string Key, string Size, bool Hidden);
 /// present and <c>Hidden</c>, so the Customize gallery can offer it back without
 /// inventing an entry. This is also the fallback the API serves when a user has
 /// no saved layout, or one stored under an unknown schema version.</para>
+///
+/// <para>Byte-identical to the client's <c>constants/dashboardPresets.ts</c>,
+/// and checked so: both sides compare their presets to
+/// <c>src/frontend/src/constants/dashboardLayout.reference.json</c> (PR #287,
+/// fix round 1, S2).</para>
 /// </summary>
 public static class DashboardPresets
 {

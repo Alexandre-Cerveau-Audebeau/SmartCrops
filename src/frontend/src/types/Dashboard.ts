@@ -1,8 +1,10 @@
 /**
  * SMA-336 — the dashboard vocabulary, mirroring the server's
- * `SmartCrops.Core/Dashboard/DashboardLayout.cs`. The three arrays are the
- * single source of truth for what a key, a size and a level may be: the unions
- * below are DERIVED from them, so adding a widget is one edit, not four.
+ * `SmartCrops.Core/Dashboard/DashboardLayout.cs` — both checked against
+ * `constants/dashboardLayout.reference.json` (PR #287, fix round 1, S2). The
+ * three arrays are the single source of truth for what a key, a size and a
+ * level may be: the unions below are DERIVED from them, so adding a widget is
+ * one edit on this side, not four.
  *
  * The frozen design settles the count at EIGHT widgets (`_spec.md` § 8, « les
  * huit widgets en Grand », and exactly eight `data-widget` keys on the

@@ -4,6 +4,9 @@ namespace SmartCrops.Core.Dashboard;
 /// SMA-336 — the vocabulary of the gardens dashboard layout, shared by the
 /// controller, its validation and the presets. Centralised so the whitelist the
 /// API validates against and the presets it falls back to can never drift apart.
+/// The client's twin (<c>types/Dashboard.ts</c>) and this class are both
+/// checked against <c>src/frontend/src/constants/dashboardLayout.reference.json</c>
+/// (PR #287, fix round 1, S2), so they cannot drift apart either.
 /// </summary>
 public static class DashboardLayout
 {

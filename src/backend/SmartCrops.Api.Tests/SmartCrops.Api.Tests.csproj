@@ -37,6 +37,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- PR #287, fix round 1, S2: the ONE reference file of the dashboard layout
+         (blocks, sizes, levels, the size table, the presets), read by this
+         project's DashboardLayoutReferenceTests and by the client's
+         dashboardLayout.reference.test.ts. It lives in the frontend tree, which
+         the frontend's production image is built from; this project is never
+         part of the API image. A literal path, not a glob: if the file is gone,
+         the copy fails the build instead of skipping silently. -->
+    <None Include="..\..\frontend\src\constants\dashboardLayout.reference.json" Link="Dashboard\dashboardLayout.reference.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\SmartCrops.Api\SmartCrops.Api.csproj" />
   </ItemGroup>
 

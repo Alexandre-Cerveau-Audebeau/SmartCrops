@@ -10,7 +10,9 @@ import type {
  * for row: the server refuses a size outside this table on write and brings
  * it back to the preset's on read, and the client does the same on read
  * (`dashboardApi.normalize`). Pinned literally on both sides, as the presets
- * are.
+ * are — and both sides are checked against ONE file,
+ * `dashboardLayout.reference.json` (PR #287, fix round 1, S2): a row changed
+ * here and not there, or not in the file, fails a suite.
  *
  * The rule it carries (A-N11, 23/09): the Full width is an Expert capability,
  * and a widget gets it only once its Full-width version is DRAWN — until then

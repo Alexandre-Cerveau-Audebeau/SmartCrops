@@ -1,0 +1,72 @@
+{
+  "$comment": "PR #287, fix round 1, S2 — the ONE reference of the dashboard layout, shared by the client and the server. Neither reads it at run time: each keeps its own constants (client: types/Dashboard.ts, constants/dashboardCapabilities.ts, constants/dashboardPresets.ts; server: SmartCrops.Core/Dashboard/DashboardLayout.cs, DashboardCapabilities.cs, DashboardPresets.cs), and each side's test compares them to this file (client: constants/dashboardLayout.reference.test.ts; server: SmartCrops.Api.Tests/Dashboard/DashboardLayoutReferenceTests.cs, which gets a copy of it through its .csproj). A change to the layout is made in three places — the client, the server and here — or a suite fails.",
+  "levels": ["novice", "gardener", "expert"],
+  "defaultLevel": "gardener",
+  "sizes": ["small", "medium", "large", "wide"],
+  "blocks": ["weather", "gardens", "tips", "month", "todo", "counters", "stats", "harvest"],
+  "nonHidableBlock": "gardens",
+  "sizesFor": {
+    "novice": {
+      "weather": ["small", "medium", "large"],
+      "gardens": ["small", "medium", "large"],
+      "tips": ["small", "medium", "large"],
+      "month": ["small", "medium", "large"],
+      "todo": ["small", "medium", "large"],
+      "counters": ["small", "medium", "large"],
+      "stats": ["small", "medium", "large"],
+      "harvest": ["small", "medium", "large"]
+    },
+    "gardener": {
+      "weather": ["small", "medium", "large"],
+      "gardens": ["small", "medium", "large"],
+      "tips": ["small", "medium", "large"],
+      "month": ["small", "medium", "large"],
+      "todo": ["small", "medium", "large"],
+      "counters": ["small", "medium", "large"],
+      "stats": ["small", "medium", "large"],
+      "harvest": ["small", "medium", "large"]
+    },
+    "expert": {
+      "weather": ["small", "medium", "large"],
+      "gardens": ["small", "medium", "large"],
+      "tips": ["small", "medium", "large"],
+      "month": ["small", "medium", "large"],
+      "todo": ["small", "medium", "large"],
+      "counters": ["small", "medium", "large"],
+      "stats": ["small", "medium", "large"],
+      "harvest": ["small", "medium", "large"]
+    }
+  },
+  "presets": {
+    "novice": [
+      { "key": "weather", "size": "medium", "hidden": false },
+      { "key": "gardens", "size": "medium", "hidden": false },
+      { "key": "tips", "size": "small", "hidden": false },
+      { "key": "month", "size": "small", "hidden": false },
+      { "key": "todo", "size": "medium", "hidden": true },
+      { "key": "counters", "size": "medium", "hidden": true },
+      { "key": "stats", "size": "large", "hidden": true },
+      { "key": "harvest", "size": "large", "hidden": true }
+    ],
+    "gardener": [
+      { "key": "weather", "size": "medium", "hidden": false },
+      { "key": "gardens", "size": "large", "hidden": false },
+      { "key": "tips", "size": "medium", "hidden": false },
+      { "key": "month", "size": "medium", "hidden": false },
+      { "key": "todo", "size": "medium", "hidden": false },
+      { "key": "counters", "size": "medium", "hidden": false },
+      { "key": "stats", "size": "large", "hidden": true },
+      { "key": "harvest", "size": "large", "hidden": true }
+    ],
+    "expert": [
+      { "key": "weather", "size": "large", "hidden": false },
+      { "key": "gardens", "size": "large", "hidden": false },
+      { "key": "tips", "size": "large", "hidden": false },
+      { "key": "month", "size": "large", "hidden": false },
+      { "key": "todo", "size": "large", "hidden": false },
+      { "key": "counters", "size": "large", "hidden": false },
+      { "key": "stats", "size": "large", "hidden": false },
+      { "key": "harvest", "size": "large", "hidden": false }
+    ]
+  }
+}

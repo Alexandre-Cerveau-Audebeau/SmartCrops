@@ -15,6 +15,11 @@ namespace SmartCrops.Core.Dashboard;
 /// Météo, Statistiques, Compteurs and Ce mois-ci will each add
 /// <see cref="DashboardLayout.Sizes.Wide"/> to their Expert row in their own
 /// lot, on both sides. No block has it yet.</para>
+///
+/// <para>Both sides are checked against ONE file,
+/// <c>src/frontend/src/constants/dashboardLayout.reference.json</c> (PR #287,
+/// fix round 1, S2): a row changed here and not there — or not in the file —
+/// fails a suite. Adding <c>wide</c> to a row is a change in three places.</para>
 /// </summary>
 public static class DashboardCapabilities
 {
