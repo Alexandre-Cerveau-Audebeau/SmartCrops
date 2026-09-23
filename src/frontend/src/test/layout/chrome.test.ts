@@ -7,6 +7,7 @@ import {
   runProcess,
   terminateChildren,
   type TimedOutError,
+  windowFrame,
 } from './chrome.mjs';
 import { encodeResults } from './encode';
 
@@ -80,5 +81,31 @@ describe('decodeResults — what measureRun reads back is what the page encoded 
     }));
     expect(JSON.stringify(results).length).toBeGreaterThan(200_000);
     expect(decodeResults(encodeResults(results))).toEqual(results);
+  });
+});
+
+// SMA-437 lot 1, PR B, S4 — the window-frame calibration is cached per folder,
+// but a REJECTED one was cached too: one Chrome that failed to start, and every
+// later run of the folder rejected on the same promise without calibrating
+// again. The calibration is injected so no Chrome is needed; the folder names
+// are this test's own, never a folder the harness measures in.
+describe('windowFrame — a rejected calibration is not kept (S4)', () => {
+  it('calibrates again after a rejection, and keeps the first calibration that succeeds', async () => {
+    const folder = 'window-frame-test/rejected-then-calibrated';
+    const calls: string[] = [];
+    const failing = (_binary: string, outDir: string) => {
+      calls.push(`failing ${outDir}`);
+      return Promise.reject(new Error('Chrome for the window-frame calibration did not start'));
+    };
+    const calibrated = (frame: number) => (_binary: string, outDir: string) => {
+      calls.push(`${frame} ${outDir}`);
+      return Promise.resolve(frame);
+    };
+
+    await expect(windowFrame('chrome', folder, failing)).rejects.toThrow('did not start');
+    await expect(windowFrame('chrome', folder, calibrated(16))).resolves.toBe(16);
+    // Cached from here on: a third run of the folder reads 16 without calibrating.
+    await expect(windowFrame('chrome', folder, calibrated(99))).resolves.toBe(16);
+    expect(calls).toEqual([`failing ${folder}`, `16 ${folder}`]);
   });
 });

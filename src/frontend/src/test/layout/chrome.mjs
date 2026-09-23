@@ -180,8 +180,16 @@ const frames = new Map();
  * 600 px up: a run's `vw` is then the viewport it measures, whatever the
  * platform — which the harness reports (`viewport`) and the suite asserts.
  */
-export function windowFrame(binary, outDir) {
-  if (!frames.has(outDir)) frames.set(outDir, calibrateFrame(binary, outDir));
+export function windowFrame(binary, outDir, calibrate = calibrateFrame) {
+  if (!frames.has(outDir)) {
+    const frame = calibrate(binary, outDir);
+    frames.set(outDir, frame);
+    // A rejected calibration is not kept (SMA-437 lot 1, PR B, S4): the caller
+    // still sees the rejection, and the next run of the folder calibrates again.
+    frame.catch(() => {
+      if (frames.get(outDir) === frame) frames.delete(outDir);
+    });
+  }
   return frames.get(outDir);
 }
 
