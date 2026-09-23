@@ -103,9 +103,27 @@ describe('isAdjusted (SMA-336)', () => {
 });
 
 describe('nextDashboardSize (SMA-336)', () => {
+  const THREE = ['small', 'medium', 'large'] as const;
+
   it('cycles Small to Medium to Large and wraps back to Small', () => {
-    expect(nextDashboardSize('small')).toBe('medium');
-    expect(nextDashboardSize('medium')).toBe('large');
-    expect(nextDashboardSize('large')).toBe('small');
+    expect(nextDashboardSize('small', THREE)).toBe('medium');
+    expect(nextDashboardSize('medium', THREE)).toBe('large');
+    expect(nextDashboardSize('large', THREE)).toBe('small');
+  });
+
+  // SMA-437 lot 1, PR A, step A2 (pre-flight D3) — the handle steps through
+  // the sizes the widget may take at its formula, never through every size.
+  it('steps through the list it is given: with the Full width in it, Large → Full width → Small (the Expert cycle of A-N11)', () => {
+    const expert = ['small', 'medium', 'large', 'wide'] as const;
+    expect(nextDashboardSize('large', expert)).toBe('wide');
+    expect(nextDashboardSize('wide', expert)).toBe('small');
+  });
+
+  it('stays put on a one-size list — the Key figures band, which has no handle', () => {
+    expect(nextDashboardSize('wide', ['wide'])).toBe('wide');
+  });
+
+  it('steps a size the list does not hold to the first one', () => {
+    expect(nextDashboardSize('wide', THREE)).toBe('small');
   });
 });

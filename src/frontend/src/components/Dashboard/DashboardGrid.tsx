@@ -23,13 +23,16 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import SortableWidget from './SortableWidget';
 import { createDashboardSortingStrategy } from './dashboardSortingStrategy';
+import { sizesFor } from '../../constants/dashboardCapabilities';
 import { spanFor } from '../../utils/dashboardLayoutGrid';
 import { DASHBOARD_SPACING } from '../../theme/dashboardTokens';
-import type { DashboardBlock, DashboardBlockKey } from '../../types/Dashboard';
+import type { DashboardBlock, DashboardBlockKey, DashboardLevel } from '../../types/Dashboard';
 
 interface Props {
   /** Every block, hidden ones included - the grid renders the visible ones. */
   blocks: DashboardBlock[];
+  /** The formula, which decides the sizes a widget may take — and so whether it gets a corner handle (SMA-437, A-N11). */
+  level: DashboardLevel;
   editing: boolean;
   onReorder: (blocks: DashboardBlock[]) => void;
   onHide: (key: DashboardBlockKey) => void;
@@ -55,6 +58,7 @@ interface Props {
  */
 export default function DashboardGrid({
   blocks,
+  level,
   editing,
   onReorder,
   onHide,
@@ -209,6 +213,7 @@ export default function DashboardGrid({
               label={label(block.key)}
               editing={editing}
               sizeLabel={t(`dashboard.sizes.${block.size}`)}
+              resizable={sizesFor(block.key, level).length > 1}
               onHide={() => onHide(block.key)}
               onResize={() => onResize(block.key)}
               options={renderBlockOptions?.(block)}

@@ -32,6 +32,9 @@ export const DASHBOARD_SIZES = ['small', 'medium', 'large', 'wide'] as const;
 
 export type DashboardSize = (typeof DASHBOARD_SIZES)[number];
 
+/** The sizes a widget may take at a formula — never empty (`sizesFor`, SMA-437). */
+export type DashboardSizeList = readonly [DashboardSize, ...DashboardSize[]];
+
 export const DASHBOARD_LEVELS = ['novice', 'gardener', 'expert'] as const;
 
 export type DashboardLevel = (typeof DASHBOARD_LEVELS)[number];
@@ -101,18 +104,15 @@ export function isDashboardSize(value: string): value is DashboardSize {
 }
 
 /**
- * The sizes the corner handle steps through: the three of every widget. The
- * Full width is a size, not a step of this cycle — no widget is offered it
- * before it is drawn for it (SMA-437, A-N11).
+ * The Edit-mode corner handle steps through `sizes` — the sizes the widget may
+ * take at its formula (`sizesFor`, SMA-437 A-N11), in their order: Small ->
+ * Medium -> Large -> Small, and -> Full width before Small the day an Expert
+ * widget has it. It WRAPS on purpose: without the wrap a widget grown to its
+ * largest size could never be brought back down, since the handle is the only
+ * resize gesture. A size the list does not hold steps to the first one; a
+ * one-size list has no handle at all (`SortableWidget`).
  */
-const RESIZE_CYCLE: readonly DashboardSize[] = ['small', 'medium', 'large'];
-
-/**
- * The Edit-mode corner handle cycles Small -> Medium -> Large -> Small. It
- * WRAPS on purpose: without the wrap a widget grown to Large could never be
- * brought back down, since the handle is the only resize gesture.
- */
-export function nextDashboardSize(size: DashboardSize): DashboardSize {
-  const index = RESIZE_CYCLE.indexOf(size);
-  return RESIZE_CYCLE[(index + 1) % RESIZE_CYCLE.length]!;
+export function nextDashboardSize(size: DashboardSize, sizes: DashboardSizeList): DashboardSize {
+  const index = sizes.indexOf(size);
+  return sizes[(index + 1) % sizes.length] ?? sizes[0];
 }

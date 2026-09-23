@@ -39,6 +39,7 @@ import WeatherOptionsPanel from '../components/Dashboard/blocks/WeatherOptionsPa
 import LocationDialog from '../components/Dashboard/LocationDialog';
 import type { LocationTarget } from '../components/Dashboard/locationTools';
 import { weatherDisclaimerVisible } from '../components/Dashboard/weatherDisclaimer';
+import { sizesFor } from '../constants/dashboardCapabilities';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useDashboardWeather } from '../hooks/useDashboardWeather';
@@ -813,15 +814,18 @@ export default function GardensDashboard() {
       {!loading && !loadError && (
         <DashboardGrid
           blocks={blocks}
+          level={level}
           editing={editing}
           onReorder={setBlocks}
           onHide={(key) =>
             patchBlock(key, (block) => ({ ...block, hidden: true }))
           }
+          // Through the sizes the widget may take at THIS formula (SMA-437,
+          // A-N11): the Gardener's cycle never reaches the Full width.
           onResize={(key) =>
             patchBlock(key, (block) => ({
               ...block,
-              size: nextDashboardSize(block.size),
+              size: nextDashboardSize(block.size, sizesFor(block.key, level)),
             }))
           }
           renderBlock={renderBlock}

@@ -101,6 +101,12 @@ interface Props {
   editing: boolean;
   /** Localized current size, so the resize label says where it stands. */
   sizeLabel: string;
+  /**
+   * More than one size at the widget's formula (`sizesFor`, SMA-437 A-N11).
+   * False draws no corner handle — « une seule taille, pas de poignée » —
+   * rather than a button that would change nothing.
+   */
+  resizable: boolean;
   onHide: () => void;
   onResize: () => void;
   /**
@@ -118,7 +124,8 @@ interface Props {
  * SMA-336 - one cell of the dashboard grid: its footprint, and in Edit mode the
  * four controls the frozen design puts INSIDE the card (_spec.md 8, point 5) -
  * hide (or the lock, on Gardens), the drag handle, the options gear and the
- * corner resize handle.
+ * corner resize handle, which a widget with a single size does not get
+ * (SMA-437, A-N11).
  *
  * The controls are an overlay on the grid cell rather than props threaded
  * through every widget: the cell is the one element that knows the block, and
@@ -136,6 +143,7 @@ export default function SortableWidget({
   label,
   editing,
   sizeLabel,
+  resizable,
   onHide,
   onResize,
   options,
@@ -344,24 +352,27 @@ export default function SortableWidget({
             {/* 3 px of offset plus the small IconButton's own 5 px of padding
                 put the 16 px grip exactly where the artboard has it — 8 px in
                 from both edges — while the button around it stays a full
-                keyboard target. */}
-            <IconButton
-              size="small"
-              onClick={onResize}
-              aria-label={t('dashboard.editMode.resize', {
-                widget: label,
-                size: sizeLabel,
-              })}
-              sx={{
-                position: 'absolute',
-                bottom: 3,
-                right: 3,
-                zIndex: 3,
-                color: 'primary.main',
-              }}
-            >
-              <ResizeGrip />
-            </IconButton>
+                keyboard target. Only for a widget with more than one size at
+                its formula (SMA-437, A-N11). */}
+            {resizable && (
+              <IconButton
+                size="small"
+                onClick={onResize}
+                aria-label={t('dashboard.editMode.resize', {
+                  widget: label,
+                  size: sizeLabel,
+                })}
+                sx={{
+                  position: 'absolute',
+                  bottom: 3,
+                  right: 3,
+                  zIndex: 3,
+                  color: 'primary.main',
+                }}
+              >
+                <ResizeGrip />
+              </IconButton>
+            )}
 
             {/* Generic options shell (_spec.md 8, A8). PR 1/5 shipped the frame
                 and nothing in it; PR 2/5 drops the Counters entries in. A widget

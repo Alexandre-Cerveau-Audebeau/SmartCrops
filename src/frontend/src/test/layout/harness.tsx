@@ -121,6 +121,9 @@ function sceneTree(scene: LayoutScene | ProbeScene, mode: 'light' | 'dark') {
         <UnitSystemProvider>
           <DashboardGrid
             blocks={[{ key: scene.key, size: scene.size, hidden: false }]}
+            // The formula with every widget and every size (SMA-437): the
+            // scenes measure the widgets, and the level only decides the grip.
+            level="expert"
             editing={false}
             onReorder={noop}
             onHide={noop}
