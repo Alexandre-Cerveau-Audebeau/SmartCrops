@@ -280,8 +280,12 @@ describe('the difficult states (R5, contract § 4.5) — never a zero that reads
 describe('the figures that read the weather, when it is missing (arbitrage 4)', () => {
   const calendarOnly = todoTasks(sceneGardens, sceneVarieties, EMPTY_WEATHER_DATA, CLOCK).length;
 
+  // The page's weather in each state (`useDashboardWeather`): nothing while the
+  // first load is out; after a failure, nothing — or the last aggregate, kept
+  // across a failed refresh (E2 b of ③b). The band reads what the page holds
+  // (round 1, É8).
   it('while the weather loads: the value WITHOUT it, and a sub-line that says so', () => {
-    const input = scene(weatherAll(), { weatherStatus: 'loading' });
+    const input = scene(EMPTY_WEATHER_DATA, { weatherStatus: 'loading' });
     expect(calendarOnly).toBeGreaterThan(0);
     expect(shown(tile('todo', input))).toEqual([
       String(calendarOnly),
@@ -294,12 +298,24 @@ describe('the figures that read the weather, when it is missing (arbitrage 4)', 
     expect(shown(tile('cities', input))).toEqual(['—', null, 'sans la météo — en cours de chargement', true]);
   });
 
-  it('behind a failure: « indisponible » — and the last aggregate is not counted on', () => {
-    const input = scene(weatherAll(), { weatherStatus: 'error' });
+  it('behind a failure that kept nothing: « indisponible », and the value without the weather', () => {
+    const input = scene(EMPTY_WEATHER_DATA, { weatherStatus: 'error' });
     expect(tile('todo', input).value).toBe(String(calendarOnly));
     expect(tile('todo', input).sub).toBe('sans la météo — indisponible');
     expect(shown(tile('located', input))).toEqual(['—', null, 'sans la météo — indisponible', true]);
     expect(tile('todo', input, en, 'en').sub).toBe('without the weather — unavailable');
+  });
+
+  it('behind a failed refresh that kept the last aggregate: « indisponible », and the count the page still shows (É8)', () => {
+    // `TodoBlock` and `TipsBlock` go on counting with the aggregate kept: so
+    // does the band — one count per page.
+    const input = scene(weatherAll(), { weatherStatus: 'error' });
+    const kept = todoTasks(sceneGardens, sceneVarieties, weatherAll(), CLOCK).length;
+    expect(kept).not.toBe(calendarOnly);
+    expect(tile('todo', input).value).toBe(String(kept));
+    expect(tile('todo', input).sub).toBe('sans la météo — indisponible');
+    // The Weather widget and the MÉTÉO column show the failure, not the places.
+    expect(shown(tile('located', input))).toEqual(['—', null, 'sans la météo — indisponible', true]);
   });
 
   it('with no city at all: « ajoutez une ville » — and the gardens located, « Aucun », said', () => {

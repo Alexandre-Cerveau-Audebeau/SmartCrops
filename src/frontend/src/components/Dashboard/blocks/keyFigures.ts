@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next';
 import type { DashboardGardenData, DashboardTotals, DashboardVarietyData } from '../../../types/DashboardData';
-import { EMPTY_WEATHER_DATA, type DashboardWeatherData } from '../../../types/DashboardWeather';
+import type { DashboardWeatherData } from '../../../types/DashboardWeather';
 import {
   isEdibleVariety,
   ratedCells,
@@ -40,13 +40,24 @@ import type { KeyFigure } from './keyFiguresOptions';
  * Arbitrage 4 (23/09): a figure that reads the weather — « À faire
  * aujourd'hui », « Conseils », « Jardins localisés », « Villes » — while the
  * weather aggregate loads, has failed, or leaves a planted garden without a
- * forecast, shows the value computed WITHOUT it, and a sub-line that says so:
- * « sans la météo — indisponible », « sans la météo — ajoutez une ville »… The
- * calendar tasks and the exposure tips are true without it; hiding them would
- * be the misleading zero.
+ * forecast, shows the value computed without what is missing, and a sub-line
+ * that says so: « sans la météo — indisponible », « sans la météo — ajoutez
+ * une ville »… The calendar tasks and the exposure tips are true without it;
+ * hiding them would be the misleading zero.
+ *
+ * Round 1, É8 — a page never contradicts itself: every figure is computed
+ * through the weather the PAGE holds (`useDashboardWeather`'s `data`), the
+ * very aggregate the widgets showing the same information read — including
+ * the last one kept after a failed refresh (E2 b of ③b), which `TodoBlock`,
+ * `TipsBlock` and `MonthBlock` go on counting with. The sub-line follows the
+ * page's weather STATE, as those widgets' own notes do.
  */
 
-/** The weather aggregate, as the band reads it: still loading, failed, or answered. */
+/**
+ * The weather aggregate's state on the page: still loading (nothing read yet),
+ * failed (with the last aggregate kept, or nothing — the page's `data` says
+ * which), or answered.
+ */
 export type KeyFiguresWeatherStatus = 'loading' | 'error' | 'ready';
 
 export interface KeyFiguresInput {
@@ -152,12 +163,13 @@ function derivations(input: KeyFiguresInput) {
     return memo.get(name) as T;
   };
   const clock = input.clock ?? DEFAULT_TODO_CLOCK;
-  // The weather the figures are computed THROUGH: the aggregate once it has
-  // answered, and nothing before or after a failure — so « sans la météo » is
-  // literally true when a tile says it. A failed refresh keeps the last
-  // aggregate on the page (`useDashboardWeather`); the band does not count
-  // on it.
-  const weather = input.weatherStatus === 'ready' ? input.weather : EMPTY_WEATHER_DATA;
+  // The weather the figures are computed THROUGH: the page's own (round 1,
+  // É8). Empty while the first load is out or when a failure kept nothing; the
+  // last aggregate after a failed refresh, which the To-do, Tips and This month
+  // widgets go on counting with — so a tile and its widget never give two
+  // counts on one page. What the tile then SAYS of the weather follows the
+  // page's state (`weatherGap`), as the widgets' notes do.
+  const weather = input.weather;
 
   return {
     /** The sums over the gardens that HAVE a plan — the Statistics widget's own filter (`hasPlan`). */
