@@ -180,6 +180,42 @@ describe('the band’s gear — four emplacements, « Toujours quatre »', () =>
     expect(await savedFigures()).toEqual(['occupancy', 'free', 'varieties', 'todo']);
   });
 
+  // SMA-437 lot 1, PR B, round 1, S2 — the rule learned in #278: a live region
+  // is announced when text CHANGES inside it, not when it is inserted already
+  // filled. So the panel's region is mounted once, outside both views, born
+  // empty, and stays mounted; what it says is written into it after the return
+  // from the catalogue.
+  it('says the swap through ONE region, mounted empty and kept across the catalogue — the text arrives by a mutation after the return', async () => {
+    const panel = await openPanel();
+    const region = said(panel);
+    // Born empty: nothing has been said yet.
+    expect(region.childNodes).toHaveLength(0);
+    const added: string[] = [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) added.push(node.textContent ?? '');
+      }
+    });
+    observer.observe(region, { childList: true, characterData: true, subtree: true });
+
+    fireEvent.click(slots(panel)[1]!);
+    fireEvent.click(within(panel).getByRole('radio', { name: /^Free cells(?! in full sun)/ }));
+    // In the catalogue, the region is still there, and says nothing yet.
+    expect(said(panel)).toBe(region);
+    expect(region).toHaveTextContent('');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Replace' }));
+    await waitFor(() => expect(slots(panel)).toHaveLength(4));
+    await act(async () => {});
+    observer.disconnect();
+
+    // The SAME node, before and after the catalogue…
+    expect(said(panel)).toBe(region);
+    expect(region.isConnected).toBe(true);
+    // …and the swap said by a mutation of it, once the four were back.
+    expect(added).toContain('“Free cells” and “Occupancy” swap places.');
+    expect(region).toHaveTextContent('“Free cells” and “Occupancy” swap places.');
+  });
+
   it('opens the catalogue IN the panel on « Replace »: the 22 figures in five groups, the emplacement’s own checked and marked', async () => {
     const panel = await openPanel();
     fireEvent.click(slots(panel)[1]!);
