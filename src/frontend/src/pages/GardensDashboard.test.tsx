@@ -157,13 +157,71 @@ afterEach(() => {
 });
 
 describe('GardensDashboard — grid from the stored preferences (SMA-336)', () => {
-  it('renders the eight widgets of the Expert preset, in the canonical order', async () => {
+  it('renders the nine widgets of the Expert preset: the Key figures band first, then the eight in the canonical order', async () => {
+    // SMA-437 lot 1, PR B, step B1 — « en tête du preset Expert ».
     servePreferences('expert');
 
     renderPage();
 
-    await waitFor(() => expect(renderedKeys()).toHaveLength(8));
-    expect(renderedKeys()).toEqual([...DASHBOARD_BLOCK_KEYS]);
+    await waitFor(() => expect(renderedKeys()).toHaveLength(9));
+    expect(renderedKeys()).toEqual([
+      'keyfigures',
+      ...DASHBOARD_BLOCK_KEYS.filter((key) => key !== 'keyfigures'),
+    ]);
+  });
+
+  // SMA-437 lot 1, PR B, step B4 — the band has its own body: its four
+  // figures, as tiles, on the page's own aggregates. Without it the block fell
+  // to the generic « Coming soon » shell.
+  it('draws the Key figures band as its four tiles — on the page’s gardens — not as a « Coming soon » shell', async () => {
+    servePreferences('expert');
+
+    renderPage();
+
+    const band = await waitFor(() => {
+      const node = document.querySelector('[data-widget="keyfigures"]') as HTMLElement | null;
+      expect(node).not.toBeNull();
+      return node!;
+    });
+    const list = await within(band).findByRole('list', { name: 'Your four key figures' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(4);
+    // Casa Lolo, 4 × 3, nothing planted: twelve free cells.
+    expect(within(band).getByText('Free cells: 12 — where to plant next')).toBeInTheDocument();
+    expect(within(band).queryByText('Coming soon')).toBeNull();
+  });
+
+  it('gives the band three Edit-mode controls — hide, move, options — and NO corner grip: it has one size (C28)', async () => {
+    servePreferences('expert');
+
+    renderPage();
+    // « Edit » is drawn, DISABLED, while the layout loads: a click then is lost.
+    const edit = await screen.findByRole('button', { name: 'Edit' });
+    await waitFor(() => expect(edit).toBeEnabled());
+    fireEvent.click(edit);
+
+    expect(await screen.findByRole('button', { name: 'Hide Key figures' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move Key figures' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Key figures options' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Change the size of Key figures/ })).toBeNull();
+    // …while a widget with three sizes keeps its grip.
+    expect(screen.getByRole('button', { name: /Change the size of Weather/ })).toBeInTheDocument();
+  });
+
+  it('shows, in the gallery, a hidden band’s FIRST figure — never « Soon » (pre-flight D16)', async () => {
+    const blocks = presetFor('expert').map((block) =>
+      block.key === 'keyfigures' ? { ...block, hidden: true } : block
+    );
+    servePreferences('expert', blocks);
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Customize' }));
+
+    const panel = await screen.findByRole('dialog', { name: 'Customize' });
+    const add = within(panel).getByRole('button', { name: 'Add Key figures' });
+    const row = add.parentElement as HTMLElement;
+    // The first default figure — free cells — of Casa Lolo: twelve.
+    await waitFor(() => expect(row).toHaveTextContent('12'));
+    expect(within(row).queryByText('Soon')).toBeNull();
   });
 
   it('leaves the level’s hidden widgets out of the grid', async () => {
@@ -535,10 +593,11 @@ describe('GardensDashboard — the widget shells still waiting for data (SMA-336
 
     renderPage();
 
-    await waitFor(() => expect(renderedKeys()).toHaveLength(8));
+    await waitFor(() => expect(renderedKeys()).toHaveLength(9));
     // ONE shell — Harvest, and Harvest alone: Gardens, Counts by variety,
     // Statistics, Weather and To do today carry data, This month joined them
-    // in PR 4a/5 and Tips in PR 4b/5.
+    // in PR 4a/5, Tips in PR 4b/5 and the Key figures band in SMA-437 lot 1
+    // (PR B, step B4).
     expect(screen.getAllByText('Coming soon')).toHaveLength(1);
     expect(screen.queryByText('Coming soon', { selector: '[data-widget="tips"] *' })).toBeNull();
   });
@@ -922,7 +981,8 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
 
     fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
 
-    await waitFor(() => expect(renderedKeys()).toHaveLength(8));
+    // The Expert preset: the Key figures band, then the eight (PR B, B1).
+    await waitFor(() => expect(renderedKeys()).toHaveLength(9));
     expect(await screen.findByText('Expert view')).toBeInTheDocument();
     await waitFor(() =>
       expect(saveDashboardPreferences).toHaveBeenCalledWith(

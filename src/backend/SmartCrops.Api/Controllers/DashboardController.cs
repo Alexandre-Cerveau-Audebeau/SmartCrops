@@ -87,7 +87,7 @@ public class DashboardController(
 
     /// <summary>
     /// Ceiling on one block's serialized options document, in UTF-8 bytes.
-    /// Without it an authenticated caller can PUT eight blocks of arbitrary
+    /// Without it an authenticated caller can PUT nine blocks of arbitrary
     /// JSON, and the server stores all of it in their <c>jsonb</c> row, then
     /// reads it back on every dashboard load.
     /// </summary>
@@ -100,12 +100,15 @@ public class DashboardController(
     /// dictionary; this one is applied before, so an oversized document costs a
     /// rejected request instead of a parsed one.
     ///
-    /// <para>Derived from those ceilings rather than picked: eight blocks
-    /// (<see cref="DashboardLayout.Blocks"/>) x <see cref="MaxOptionsBytesPerBlock"/>
-    /// is 16 KiB of options, and the doubling leaves room for the JSON envelope
-    /// — keys, sizes, level, escaping — around them.</para>
+    /// <para>Derived from those ceilings rather than picked: the number of
+    /// blocks (<see cref="DashboardLayout.Blocks.Count"/>, nine since the Key
+    /// figures band — SMA-437 lot 1, PR B, pre-flight D18) x
+    /// <see cref="MaxOptionsBytesPerBlock"/> is 18 KiB of options, and the
+    /// doubling leaves room for the JSON envelope — keys, sizes, level,
+    /// escaping — around them. A constant, since <c>[RequestSizeLimit]</c>
+    /// takes one: a block added to the list moves the ceiling with it.</para>
     /// </summary>
-    private const int MaxRequestBodyBytes = 2 * 8 * MaxOptionsBytesPerBlock;
+    private const int MaxRequestBodyBytes = 2 * DashboardLayout.Blocks.Count * MaxOptionsBytesPerBlock;
 
     /// <summary>
     /// Plant types whose members are edible whatever their own flag says — the
@@ -735,11 +738,25 @@ public class DashboardController(
 
     /// <summary>
     /// Keeps the stored blocks in their stored order, drops keys this server does
-    /// not know, and appends any block the document omits with its preset values.
-    /// A layout written before a block existed therefore keeps working, and the
-    /// new block simply arrives at the end. A stored size the level does not
-    /// permit — unknown, or known but not offered to that block at that level
-    /// (SMA-437, pre-flight D4) — is replaced by the preset's, in place.
+    /// not know and blocks the level does not have (SMA-437 lot 1, PR B, step B1
+    /// — pre-flight D4: the Key figures band in a Gardener's layout), and fills in
+    /// any block the document omits with its preset values. A stored size the
+    /// level does not permit — unknown, or known but not offered to that block at
+    /// that level — is replaced by the preset's, in place.
+    ///
+    /// <para>The order of the checks matters: a block the level does not have is
+    /// dropped BEFORE its size is resolved, because the fallback size comes from
+    /// the level's preset, which holds no entry for it — <c>First</c> would throw
+    /// on a read path documented as never failing (pre-flight C.3).</para>
+    ///
+    /// <para>A block the document omits takes its PRESET's place — inserted at
+    /// its index in the preset, in preset order (arbitrage 3 of the lot 1
+    /// pre-flight, 23/09) — where it used to arrive at the end. A layout written
+    /// before a block existed therefore keeps working, and the new block lands
+    /// where a fresh account would find it: the Key figures band heads an Expert
+    /// page saved before it existed, visible, as the preset and the offer card
+    /// promise — and a layout that WAS the old preset reads as the new one, so
+    /// the chip does not turn « · ajustée » for a change the user did not make.</para>
     /// </summary>
     private static List<DashboardBlockDto> Merge(List<StoredBlock> stored, string level)
     {
@@ -750,6 +767,7 @@ public class DashboardController(
         foreach (var block in stored)
         {
             if (block.Key is null || !DashboardLayout.Blocks.All.Contains(block.Key)) continue;
+            if (!preset.Any(p => p.Key == block.Key)) continue;
             if (!seen.Add(block.Key)) continue;
 
             // `SizesFor` only ever lists known sizes, so one check covers both.
@@ -761,9 +779,14 @@ public class DashboardController(
             blocks.Add(new DashboardBlockDto(block.Key, size, hidden, block.Options));
         }
 
-        foreach (var missing in preset.Where(p => !seen.Contains(p.Key)))
+        // In preset order, so each insertion finds the ones before it in place.
+        for (var index = 0; index < preset.Count; index++)
         {
-            blocks.Add(new DashboardBlockDto(missing.Key, missing.Size, missing.Hidden, null));
+            var missing = preset[index];
+            if (seen.Contains(missing.Key)) continue;
+            blocks.Insert(
+                Math.Min(index, blocks.Count),
+                new DashboardBlockDto(missing.Key, missing.Size, missing.Hidden, null));
         }
 
         return blocks;
@@ -787,6 +810,14 @@ public class DashboardController(
         foreach (var block in request.Blocks)
         {
             if (!DashboardLayout.Blocks.All.Contains(block.Key)) return $"unknown block '{block.Key}'";
+            // A known block is not one every level has (SMA-437, pre-flight
+            // D4): the Key figures band is the Expert's alone — a right checked
+            // here, never only in the interface (R8).
+            if (!DashboardPresets.Permits(request.Level, block.Key))
+            {
+                return $"block '{block.Key}' is not available at level '{request.Level}'";
+            }
+
             if (!seen.Add(block.Key)) return $"duplicate block '{block.Key}'";
             if (!DashboardLayout.Sizes.All.Contains(block.Size)) return $"unknown size '{block.Size}'";
             // A known size is not a permitted one (SMA-437, pre-flight D4):
@@ -822,9 +853,30 @@ public class DashboardController(
         }
 
         var bytes = JsonSerializer.SerializeToUtf8Bytes(options, JsonWeb).Length;
-        return bytes > MaxOptionsBytesPerBlock
-            ? $"options for block '{block.Key}' are too large"
-            : null;
+        if (bytes > MaxOptionsBytesPerBlock) return $"options for block '{block.Key}' are too large";
+
+        return block.Key == DashboardLayout.Blocks.KeyFigures ? ValidateKeyFigures(options) : null;
+    }
+
+    /// <summary>
+    /// The Key figures band's own option (SMA-437 lot 1, PR B, step B2 —
+    /// pre-flight D9): <c>figures</c>, when present, is an array of FOUR
+    /// distinct strings taken from <see cref="DashboardKeyFigures.All"/> — the
+    /// four emplacements of the gear, which can never form three or five. The
+    /// band's other keys are bounded like any block's, and nothing more: a key a
+    /// newer client adds must not be refused by this server.
+    /// </summary>
+    private static string? ValidateKeyFigures(Dictionary<string, JsonElement> options)
+    {
+        if (!options.TryGetValue("figures", out var figures)) return null;
+
+        var valid = figures.ValueKind == JsonValueKind.Array
+            && figures.EnumerateArray().All(figure => figure.ValueKind == JsonValueKind.String)
+            && DashboardKeyFigures.IsValidSelection([.. figures.EnumerateArray().Select(figure => figure.GetString()!)]);
+
+        return valid
+            ? null
+            : $"figures for block '{DashboardLayout.Blocks.KeyFigures}' must be four distinct known figures";
     }
 
     private string? GetCurrentUserId() =>

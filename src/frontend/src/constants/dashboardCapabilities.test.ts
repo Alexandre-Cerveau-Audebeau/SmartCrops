@@ -22,16 +22,30 @@ function walk(start: DashboardSize, sizes: ReturnType<typeof sizesFor>, steps: n
   return reached;
 }
 
-describe('sizesFor — the table of PR A: no widget has the Full width yet', () => {
-  it.each(DASHBOARD_LEVELS)('at %s, every widget takes Small, Medium and Large, in that order', (level) => {
-    for (const key of DASHBOARD_BLOCK_KEYS) {
+/** Whether a (widget, formula) is the Key figures band at the Expert formula — the one row of the table that is not Small, Medium, Large. */
+const isExpertBand = (key: string, level: string) => key === 'keyfigures' && level === 'expert';
+
+describe('sizesFor — the table of PR B: the Key figures band takes the Full width, at the Expert formula, and nothing else does', () => {
+  // SMA-437 lot 1, PR B, step B1 (pre-flight D3): « keyfigures@Expert =
+  // [wide] ; tout le reste = [P, M, G] ». The band is the one widget DRAWN in
+  // Full width — its only size — and the Expert the one formula that has it
+  // (V3-01). Whether a formula has a widget at all is its preset's to say
+  // (D4): the band's rows at the two other formulas are never read, since a
+  // layout of theirs never carries it (`dashboardApi.normalize`, and the
+  // server's `Merge` and `Validate`).
+  it('the Key figures band takes ONE size at the Expert formula: the Full width', () => {
+    expect(sizesFor('keyfigures', 'expert')).toEqual(['wide']);
+  });
+
+  it.each(DASHBOARD_LEVELS)('at %s, every other widget takes Small, Medium and Large, in that order', (level) => {
+    for (const key of DASHBOARD_BLOCK_KEYS.filter((candidate) => !isExpertBand(candidate, level))) {
       expect(sizesFor(key, level), `${key} at ${level}`).toEqual(['small', 'medium', 'large']);
     }
   });
 
-  it('no widget is offered `wide` at any formula — a widget gets it the day its Full-width version is drawn', () => {
+  it('no other widget is offered `wide` at any formula — a widget gets it the day its Full-width version is drawn', () => {
     for (const level of DASHBOARD_LEVELS) {
-      for (const key of DASHBOARD_BLOCK_KEYS) {
+      for (const key of DASHBOARD_BLOCK_KEYS.filter((candidate) => !isExpertBand(candidate, level))) {
         expect(sizesFor(key, level), `${key} at ${level}`).not.toContain('wide');
       }
     }
@@ -48,9 +62,15 @@ describe('the corner handle, per formula (A-N11)', () => {
     }
   });
 
-  it('in PR A, the Expert’s cycle of every resizable widget is Small → Medium → Large → Small', () => {
-    for (const key of DASHBOARD_BLOCK_KEYS) {
+  it('in PR B, the Expert’s cycle of every resizable widget is Small → Medium → Large → Small', () => {
+    for (const key of DASHBOARD_BLOCK_KEYS.filter((candidate) => candidate !== 'keyfigures')) {
       expect(walk('small', sizesFor(key, 'expert'), 3), key).toEqual(['medium', 'large', 'small']);
     }
+  });
+
+  it('the Key figures band has no cycle at all: one size, so no corner handle (A-N11, C28)', () => {
+    // `DashboardGrid` draws the grip for a widget with MORE than one size.
+    expect(sizesFor('keyfigures', 'expert')).toHaveLength(1);
+    expect(walk('wide', sizesFor('keyfigures', 'expert'), 3)).toEqual(['wide', 'wide', 'wide']);
   });
 });

@@ -1,11 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { DndContext } from '@dnd-kit/core';
 import { SortableContext } from '@dnd-kit/sortable';
-import { ThemeProvider } from '@mui/material/styles';
+import { ThemeProvider, getOverlayAlpha } from '@mui/material/styles';
 import { beforeEach, describe, expect, it } from 'vitest';
 import i18next from '../../i18n/i18n';
 import { createAppTheme } from '../../theme';
 import { declaredAtBreakpoint, rulesFor, slotOf } from '../../test/dashboardDom';
+import { contrast, hex, over } from '../../test/contrast';
 import SortableWidget from './SortableWidget';
 import type { DashboardBlock, DashboardSize } from '../../types/Dashboard';
 
@@ -86,5 +87,50 @@ describe('SortableWidget — the pinned heights (SMA-437, A-N10)', () => {
     expect(rules).not.toMatch(/[{;]height:/);
     // …and it spans every column of the desktop (D2).
     expect(declaredAtBreakpoint(slotOf('tips'), '1200px', 'grid-column')).toBe('span 4');
+  });
+});
+
+// SMA-437 lot 1, PR B, step B5 (contract § 4.9, pre-flight D15) — at night MUI
+// lightens a Paper by its elevation (`getOverlayAlpha(8)`, 11.9 % of white),
+// and the options panel sat on #324260: its secondary text at 4.27:1, under
+// the 4.5 of V14. The veil is removed on THIS Popover only — the theme's own
+// `MuiPaper` keeps it for every dialog and menu.
+describe('SortableWidget — the options panel at night (SMA-437, D15)', () => {
+  beforeEach(async () => {
+    await i18next.changeLanguage('en');
+  });
+
+  it('draws the panel WITHOUT the night veil, so its secondary text holds 4.5:1', () => {
+    const theme = createAppTheme('dark');
+    render(
+      <ThemeProvider theme={theme}>
+        <DndContext>
+          <SortableContext items={['tips']}>
+            <SortableWidget
+              block={{ key: 'tips', size: 'medium', hidden: false }}
+              label="Tips"
+              editing
+              sizeLabel="Medium"
+              resizable
+              onHide={() => {}}
+              onResize={() => {}}
+            >
+              <div data-widget="tips">Tips body</div>
+            </SortableWidget>
+          </SortableContext>
+        </DndContext>
+      </ThemeProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Tips options' }));
+    const paper = screen.getByRole('dialog').closest('.MuiPaper-root') ?? screen.getByRole('dialog');
+
+    expect(rulesFor(paper).replace(/\s+/g, '')).toContain('background-image:none');
+
+    // The arithmetic of the two backgrounds: the card's, and the veiled one.
+    const paperColor = hex(theme.palette.background.paper);
+    const secondary = hex(theme.palette.text.secondary);
+    expect(contrast(secondary, paperColor)).toBeGreaterThanOrEqual(4.5);
+    const veiled = over(`rgba(255,255,255,${getOverlayAlpha(8)})`, paperColor);
+    expect(contrast(secondary, veiled)).toBeLessThan(4.5);
   });
 });

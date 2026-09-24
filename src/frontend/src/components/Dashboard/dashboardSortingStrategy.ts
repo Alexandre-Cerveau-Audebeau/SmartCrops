@@ -124,6 +124,28 @@ export function createDashboardSortingStrategy({
     return cachedTarget;
   };
 
+  // One-entry memo per hover (SMA-437 lot 1, PR B, S3): the measured grid and
+  // the row tops of both layouts are the same for every item of one
+  // drag-over. Keyed on the `rects` array too — dnd-kit hands a new one when
+  // it measures again, and a new measure is a new grid.
+  let hoverRects: ClientRect[] | null = null;
+  let hoverKey = '';
+  let hoverRows: { grid: MeasuredGrid; fromTops: number[]; toTops: number[] } | null = null;
+
+  const rowsFor = (rects: ClientRect[], activeIndex: number, overIndex: number) => {
+    const key = `${activeIndex}:${overIndex}`;
+    if (hoverRects === rects && hoverKey === key) return hoverRows;
+    hoverRects = rects;
+    hoverKey = key;
+    const grid = measuredGrid(rects, items, gap);
+    hoverRows = grid && {
+      grid,
+      fromTops: rowTops(current, grid.freeHeights, grid.rowHeight, gap),
+      toTops: rowTops(targetFor(activeIndex, overIndex), grid.freeHeights, grid.rowHeight, gap),
+    };
+    return hoverRows;
+  };
+
   return ({ rects, activeIndex, overIndex, index }) => {
     const item = items[index];
     if (!item) return null;
@@ -133,11 +155,12 @@ export function createDashboardSortingStrategy({
     const to = target.get(item.key);
     if (!from || !to) return null;
 
-    const grid = measuredGrid(rects, items, gap);
-    if (!grid) return null;
+    const rows = rowsFor(rects, activeIndex, overIndex);
+    if (!rows) return null;
+    const { grid } = rows;
 
-    const fromTop = rowTops(current, grid.freeHeights, grid.rowHeight, gap)[from.row];
-    const toTop = rowTops(target, grid.freeHeights, grid.rowHeight, gap)[to.row];
+    const fromTop = rows.fromTops[from.row];
+    const toTop = rows.toTops[to.row];
     if (fromTop === undefined || toTop === undefined) return null;
 
     return {

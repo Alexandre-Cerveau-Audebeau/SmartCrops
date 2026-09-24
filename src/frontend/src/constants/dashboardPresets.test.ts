@@ -13,15 +13,31 @@ import {
 // SMA-336 locks on the frozen design (_spec.md 8) and on the server's
 // DashboardPresets.cs, which must stay byte-identical to these three lists.
 
+/** The eight widgets of every formula, in the canonical order — every key but the Key figures band. */
+const EIGHT = DASHBOARD_BLOCK_KEYS.filter((key) => key !== 'keyfigures');
+
 describe('dashboard presets (SMA-336)', () => {
-  it.each(DASHBOARD_LEVELS)(
-    'the %s preset lists all eight blocks in the canonical order',
+  // SMA-437 lot 1, PR B, step B1 (pre-flight D4, D8) — a preset lists EXACTLY
+  // the blocks its formula permits. The Key figures band is the Expert's
+  // alone (V3-01: « Les chiffres clés — Non · Non · Oui »), so the Novice and
+  // the Gardener list the eight others, hidden ones included, and nothing
+  // else: their Customize gallery cannot offer the band back.
+  it.each(['novice', 'gardener'] as const)(
+    'the %s preset lists the eight widgets of its formula in the canonical order — never the Key figures band',
     (level) => {
-      expect(presetFor(level).map((block) => block.key)).toEqual([
-        ...DASHBOARD_BLOCK_KEYS,
-      ]);
+      expect(presetFor(level).map((block) => block.key)).toEqual(EIGHT);
     }
   );
+
+  it('Expert: the Key figures band first, in Full width — its one size — then the eight widgets in Large, none hidden', () => {
+    // « en tête du preset Expert » (contract § 3.3 [A], § 4.5): written by
+    // hand now, where it was derived from the keys, and byte-identical to the
+    // server's (`dashboardLayout.reference.json`).
+    expect(presetFor('expert')).toEqual([
+      { key: 'keyfigures', size: 'wide', hidden: false },
+      ...EIGHT.map((key) => ({ key, size: 'large', hidden: false })),
+    ]);
+  });
 
   it('Novice shows Weather M, Gardens M, Tips S, This month S and hides the rest', () => {
     expect(presetFor('novice')).toEqual([
@@ -47,13 +63,6 @@ describe('dashboard presets (SMA-336)', () => {
       { key: 'stats', size: 'large', hidden: true },
       { key: 'harvest', size: 'large', hidden: true },
     ]);
-  });
-
-  it('Expert shows the eight widgets in Large, none hidden', () => {
-    const expert = presetFor('expert');
-    expect(expert).toHaveLength(8);
-    expect(expert.every((block) => block.size === 'large')).toBe(true);
-    expect(expert.some((block) => block.hidden)).toBe(false);
   });
 
   it('the default level is Gardener, like the server', () => {

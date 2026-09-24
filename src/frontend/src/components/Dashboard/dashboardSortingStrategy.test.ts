@@ -270,3 +270,58 @@ describe('the dashboard sorting strategy — a Full-width row of its own height 
     }
   );
 });
+
+// ── SMA-437 lot 1, PR B, S3 — the grid measured once per hover.
+//
+// dnd-kit calls the strategy once per item on every drag-over, with the same
+// `rects`: the measured grid and the row heights are the same for every one of
+// those calls. Read per call, a hover over N widgets read N² rects; read once
+// per hover, N. The results are the ones the tests above pin, unchanged.
+
+describe('the dashboard sorting strategy — the grid measured once per hover (SMA-437, PR B, S3)', () => {
+  const expert = [bandItem('band'), ...['l1', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7', 'l8'].map(largeItem)];
+  const rectsWithBand = (band: number) => [
+    rectAt(0, 0, 4, band),
+    ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => rectAt((i % 2) * 586, band + 20 + Math.floor(i / 2) * 586, 2, 566)),
+  ];
+
+  /** The rects, counting every widget's rect read through them. */
+  function counted(rects: ClientRect[]) {
+    const count = { reads: 0 };
+    const proxy = new Proxy(rects, {
+      get(target, prop, receiver) {
+        if (typeof prop === 'string' && /^\d+$/.test(prop)) count.reads += 1;
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    return { proxy, count };
+  }
+
+  /** One hover: the strategy called for every item, as dnd-kit does. */
+  function hover(
+    strategy: ReturnType<typeof createDashboardSortingStrategy>,
+    rects: ClientRect[],
+    activeIndex: number,
+    overIndex: number
+  ) {
+    return expert.map((_, index) => strategy({ rects, activeIndex, overIndex, index, activeNodeRect: null }));
+  }
+
+  it('reads each measured rect once per hover — 9 reads for 9 widgets, not 81', () => {
+    const strategy = createDashboardSortingStrategy({ items: expert, columns: 4, gap: DESK.gap });
+    const { proxy, count } = counted(rectsWithBand(180));
+    hover(strategy, proxy, 0, 7);
+    expect(count.reads).toBe(expert.length);
+    // Another hover: measured again, once.
+    count.reads = 0;
+    hover(strategy, proxy, 0, 3);
+    expect(count.reads).toBe(expert.length);
+  });
+
+  it('measures again when dnd-kit hands new rects on the same hover — a band grown from 180 to 240 px', () => {
+    const strategy = createDashboardSortingStrategy({ items: expert, columns: 4, gap: DESK.gap });
+    // The band to the 8th place: the first Large rises by the band's row alone.
+    expect(hover(strategy, rectsWithBand(180), 0, 7)[1]).toEqual({ x: 0, y: -200, scaleX: 1, scaleY: 1 });
+    expect(hover(strategy, rectsWithBand(240), 0, 7)[1]).toEqual({ x: 0, y: -260, scaleX: 1, scaleY: 1 });
+  });
+});

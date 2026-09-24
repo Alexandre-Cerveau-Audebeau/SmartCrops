@@ -17,6 +17,7 @@ import {
   type LayoutScene,
 } from './scenes';
 import { PROBE_SCENES, probeWidget, type ProbeScene } from './probes';
+import { measureFocus, type FocusMeasure } from './focusProbe';
 import { encodeResults } from './encode';
 import { RESULTS_ID, measureCard, measureControls, type CardMeasure, type ControlMeasure } from './measure';
 
@@ -66,6 +67,27 @@ export interface SceneMeasure extends CardMeasure {
   gardenNameWidths: number[];
   /** The page's viewport width (`innerWidth`), measured: the width a tablet or desktop run claims to be at (SMA-437). */
   viewport: number;
+  /**
+   * The Key figures band's tiles (SMA-437 lot 1, PR B, step B7), relative to
+   * the card: each tile's box and the top of its value — how many rows the four
+   * make, and whether the values of a row start at one height (the subgrid,
+   * D13). Empty on every other card.
+   */
+  keyFigureTiles: Array<{
+    figure: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    valueTop: number | null;
+    /**
+     * How far, in px, the furthest of the tile's texts runs past the tile's
+     * padding box, left or right — 0 when all stay inside. The value is a
+     * flex item, so the harness's `spills` pass compares it to its OWN box and
+     * cannot see it leave its tile; this reads it against the tile.
+     */
+    overflow: number;
+  }>;
 }
 
 /** One card of a grid scene: its measure, and its border box relative to the grid. */
@@ -93,10 +115,12 @@ export interface GridMeasure {
   controls: Array<{ key: string; controls: ControlMeasure[] }>;
 }
 
-/** What one run of the page returns: the one-card scenes and probes, and the grid scenes. */
+/** What one run of the page returns: the one-card scenes and probes, the grid scenes, and where the focus goes in the reorderable list. */
 export interface LayoutResults {
   scenes: SceneMeasure[];
   grids: GridMeasure[];
+  /** SMA-437 lot 1, PR B, round 1, S1 — the reorderable list's gestures, and where each leaves the focus (`focusProbe.tsx`). */
+  focus: FocusMeasure[];
 }
 
 declare global {
@@ -200,7 +224,30 @@ function gridTree(grid: GridScene, mode: 'light' | 'dark') {
 
 /** What the harness reads of a card beyond `measureCard`, the same for a one-card scene and a card of a grid. */
 function cardExtras(card: HTMLElement) {
+  const origin = card.getBoundingClientRect();
   return {
+    keyFigureTiles: Array.from(card.querySelectorAll('[data-key-figure]')).map((tile) => {
+      const value = tile.querySelector('[data-key-figure-value]');
+      const box = tile.getBoundingClientRect();
+      const cs = getComputedStyle(tile);
+      const inner = { left: box.left + parseFloat(cs.paddingLeft), right: box.right - parseFloat(cs.paddingRight) };
+      // The drawn texts of the tile — its label, value, unit and sub-line;
+      // the visually-hidden sentence is not drawn.
+      const texts = Array.from(tile.querySelectorAll('[data-key-figure-label], [data-key-figure-value], [data-key-figure-unit], [data-key-figure-sub]'));
+      const overflow = Math.max(
+        0,
+        ...texts.map((text) => {
+          const r = text.getBoundingClientRect();
+          return Math.max(r.right - inner.right, inner.left - r.left);
+        })
+      );
+      return {
+        figure: tile.getAttribute('data-key-figure') ?? '',
+        ...boxWithin(tile, origin),
+        valueTop: value ? Math.round((value.getBoundingClientRect().top - origin.top) * 10) / 10 : null,
+        overflow: Math.round(overflow * 10) / 10,
+      };
+    }),
     cardOverflow: overflowOf(card),
     hiddenRows: card.querySelectorAll('[data-weather-day-hidden], [data-todo-hidden], [data-tips-hidden]').length,
     gardenNameWidths: Array.from(card.querySelectorAll('[data-garden-row-group]')).map(
@@ -294,7 +341,7 @@ async function main() {
   await Promise.all([300, 400, 500, 600, 700].map((weight) => document.fonts.load(`${weight} 16px Inter`)));
   progress('fonts ready');
 
-  const results: LayoutResults = { scenes: [], grids: [] };
+  const results: LayoutResults = { scenes: [], grids: [], focus: [] };
   for (const scene of [...LAYOUT_SCENES, ...PROBE_SCENES].filter((s) => !only || s.name === only)) {
     const host = document.createElement('div');
     page.appendChild(host);
@@ -331,6 +378,14 @@ async function main() {
     results.grids.push(measureGrid(grid, host));
     root.unmount();
     host.remove();
+  }
+
+  // Where the focus goes in the reorderable list (S1), after the scenes: a
+  // run asked for one scene measures that scene alone.
+  if (!only) {
+    progress('focus…');
+    results.focus = await measureFocus(page, mode);
+    progress('focus measured');
   }
 
   window.__layoutResults = results;

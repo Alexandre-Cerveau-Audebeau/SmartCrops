@@ -3,6 +3,7 @@ import AgricultureOutlinedIcon from '@mui/icons-material/AgricultureOutlined';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import LocalFloristOutlinedIcon from '@mui/icons-material/LocalFloristOutlined';
+import NumbersOutlinedIcon from '@mui/icons-material/NumbersOutlined';
 import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import TipsAndUpdatesOutlinedIcon from '@mui/icons-material/TipsAndUpdatesOutlined';
 import WbSunnyOutlinedIcon from '@mui/icons-material/WbSunnyOutlined';
@@ -34,6 +35,10 @@ import type { DashboardBlockKey } from '../../types/Dashboard';
  * artboard's own 44 px hero icon for the widget, matched path-for-path, so the
  * title row borrows the drawing the card already carries.
  *
+ * The Key figures band (SMA-437 lot 1, PR B) carries `NumbersOutlined` — the
+ * `numbers` drawing of V3-04, matched path-for-path, distinct from the
+ * Statistics' `Insights` (contract § 4.5).
+ *
  * A plain lookup in its OWN module so the components that read it stay
  * component-only files (react-refresh/only-export-components).
  */
@@ -46,4 +51,5 @@ export const BLOCK_ICONS: Record<DashboardBlockKey, SvgIconComponent> = {
   counters: LocalFloristOutlinedIcon,
   stats: InsightsOutlinedIcon,
   harvest: AgricultureOutlinedIcon,
+  keyfigures: NumbersOutlinedIcon,
 };

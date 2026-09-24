@@ -29,6 +29,10 @@ import GardensBlock, {
   type GardensWeather,
 } from '../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../components/Dashboard/blocks/InviteBlock';
+import KeyFiguresBlock from '../components/Dashboard/blocks/KeyFiguresBlock';
+import KeyFiguresOptionsPanel from '../components/Dashboard/blocks/KeyFiguresOptionsPanel';
+import { keyFigureTiles, type KeyFiguresWeatherStatus } from '../components/Dashboard/blocks/keyFigures';
+import { keyFiguresOptions } from '../components/Dashboard/blocks/keyFiguresOptions';
 import MonthBlock from '../components/Dashboard/blocks/MonthBlock';
 import { monthCalendar } from '../components/Dashboard/blocks/plantCalendar';
 import StatsBlock from '../components/Dashboard/blocks/StatsBlock';
@@ -55,6 +59,7 @@ import {
   type DashboardBlockKey,
   type GalleryPreview,
 } from '../types/Dashboard';
+import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
 import type { GardenView } from '../utils/gardenStats';
 
 /**
@@ -129,6 +134,18 @@ export default function GardensDashboard() {
     refetch: refetchWeather,
     refetchAfterMutation: refetchWeatherAfterMutation,
   } = useDashboardWeather(language);
+
+  // SMA-437 lot 1, PR B, round 2, É8 — the ONE weather every derived figure
+  // of the page is computed through: none while the weather is in FAILURE,
+  // the aggregate otherwise. After a failed passive refresh the hook keeps
+  // the last aggregate (E2 b of ③b) for what it is kept for — the place the
+  // location dialog and the Weather gear panel name, read from `weatherData`
+  // below —, never for a count: the Weather widget and the MÉTÉO column show
+  // their error, and the To-do, Tips and This month widgets, the Key figures
+  // band and the gallery thumbnails compute without it, so « Météo
+  // indisponible » and « sans la météo — indisponible » are true where they
+  // are said. A derivation reads THIS, never `weatherData`.
+  const displayWeather = weatherError ? EMPTY_WEATHER_DATA : weatherData;
 
   // The ONE location dialog of the page (§ F.4), opened from the widget, the
   // « 1/3 localisé » chip, a table cell or the Weather gear. The state holds the
@@ -224,6 +241,15 @@ export default function GardensDashboard() {
   // below. Shared through `gardenViewOf`'s memo, so the header does not make the
   // exposure engine run a third time.
   const gardenViews = useGardenViews(gardens);
+
+  // SMA-437 lot 1, PR B (arbitrage 4): the Key figures band computes its
+  // weather-reading figures without the weather while it loads or has failed,
+  // and says so — the one state it reads of the weather hook.
+  const weatherStatus: KeyFiguresWeatherStatus = weatherLoading
+    ? 'loading'
+    : weatherError
+      ? 'error'
+      : 'ready';
   const totalSurface = gardens.reduce(
     (sum, garden) => sum + (gardenViews.get(garden.id)?.surfaceM2 ?? 0),
     0
@@ -344,11 +370,18 @@ export default function GardensDashboard() {
   // surface then shows the error, not figures. A passive refresh keeps the
   // previous data on screen, so the warning stays with it. The rule itself is
   // a pure function, pinned on every subset of the three widgets.
+  //
+  // SMA-437 lot 1, PR B, step B6 (A-N8): the Key figures band bears it too
+  // while it SHOWS « À faire aujourd'hui » or « Conseils » — its figures read
+  // through the same `keyFiguresOptions` the band draws with, none when it is
+  // off the page.
+  const band = blocks.find((block) => block.key === 'keyfigures' && !block.hidden);
   const showWeatherDisclaimer = weatherDisclaimerVisible({
     loading: weatherLoading,
     error: weatherError,
     locations: weatherData.locations,
     isBlockVisible,
+    keyFigures: band ? keyFiguresOptions(band.options ?? null).figures : [],
   });
 
   const renderBlock = (block: DashboardBlock) => {
@@ -422,7 +455,7 @@ export default function GardensDashboard() {
             editing={editing}
             gardens={gardens}
             varieties={dashboardData.varieties}
-            weather={weatherData}
+            weather={displayWeather}
             loading={gardensLoading}
             refreshing={gardensRefreshing}
             loadError={gardensError}
@@ -444,7 +477,7 @@ export default function GardensDashboard() {
             gardens={gardens}
             views={gardenViews}
             varieties={dashboardData.varieties}
-            weather={weatherData}
+            weather={displayWeather}
             loading={gardensLoading}
             refreshing={gardensRefreshing || weatherRefreshing}
             // …and the two apart (round 5, S-8): each announced sentence
@@ -483,7 +516,7 @@ export default function GardensDashboard() {
             editing={editing}
             gardens={gardens}
             varieties={dashboardData.varieties}
-            weather={weatherData}
+            weather={displayWeather}
             // Round 1, C2: the two aggregates no longer share one gate. The
             // PLANS are what the block cannot do without — « Tailler » and
             // « Semer » come from them and the catalog alone — so only their
@@ -506,6 +539,29 @@ export default function GardensDashboard() {
             }
           />
         );
+      case 'keyfigures':
+        // SMA-437 lot 1, PR B, step B4 — the band reads the two aggregates the
+        // page already holds; the plans are what it cannot do without, so
+        // only their loading and their failure take the card over. The
+        // weather's state is said tile by tile (arbitrage 4).
+        return (
+          <KeyFiguresBlock
+            size={block.size}
+            editing={editing}
+            options={block.options ?? null}
+            gardens={gardens}
+            views={gardenViews}
+            varieties={dashboardData.varieties}
+            totals={dashboardData.totals}
+            weather={displayWeather}
+            weatherStatus={weatherStatus}
+            loading={gardensLoading}
+            refreshing={gardensRefreshing}
+            loadError={gardensError}
+            onRetry={refetch}
+            onCreate={() => setCreateDialogOpen(true)}
+          />
+        );
       default:
         return (
           <InviteBlock blockKey={block.key} size={block.size} editing={editing} />
@@ -516,7 +572,8 @@ export default function GardensDashboard() {
   /**
    * A widget's own settings, for the Edit-mode gear. Counters has its two
    * options; Weather has « Localisation… » (round 1, V21 a), the door to the
-   * profile default; the other six open on the panel that says so.
+   * profile default; the Key figures band its four emplacements (SMA-437 lot
+   * 1, PR B); the other six open on the panel that says so.
    */
   const renderBlockOptions = (block: DashboardBlock) => {
     switch (block.key) {
@@ -542,6 +599,30 @@ export default function GardensDashboard() {
             loading={weatherInFlight}
             unavailable={weatherError}
             onLocate={() => openLocate(null)}
+          />
+        );
+      case 'keyfigures':
+        // SMA-437 lot 1, PR B, step B5 — the four emplacements. The values of
+        // the catalogue only once the gardens are known: an aggregate still
+        // loading, or failed, would print its zeros.
+        return (
+          <KeyFiguresOptionsPanel
+            options={block.options ?? null}
+            input={
+              gardensLoading || gardensError
+                ? null
+                : {
+                    gardens,
+                    views: gardenViews,
+                    varieties: dashboardData.varieties,
+                    totals: dashboardData.totals,
+                    weather: displayWeather,
+                    weatherStatus,
+                  }
+            }
+            onChange={(options) =>
+              patchBlock('keyfigures', (current) => ({ ...current, options }))
+            }
           />
         );
       default:
@@ -609,7 +690,7 @@ export default function GardensDashboard() {
       // widget it stands for does not. It is only ever called for a HIDDEN
       // widget, so the derivation never runs twice on one page.
       if (dashboardData.varieties.length === 0) return null;
-      const { active } = monthCalendar(gardens, dashboardData.varieties, weatherData);
+      const { active } = monthCalendar(gardens, dashboardData.varieties, displayWeather);
       return {
         value: t('dashboard.blocks.month.galleryPrune', { count: active.prune.length }),
       };
@@ -620,8 +701,32 @@ export default function GardensDashboard() {
       // on the same `gardenViews`. Null — « Bientôt » — while nothing is
       // planted, the same gate as the calendar's.
       if (dashboardData.varieties.length === 0) return null;
-      const { tips } = gardenAdvice(gardens, gardenViews, dashboardData.varieties, weatherData);
+      const { tips } = gardenAdvice(gardens, gardenViews, dashboardData.varieties, displayWeather);
       return { value: t('dashboard.blocks.tips.count', { count: tips.length }) };
+    }
+    if (key === 'keyfigures') {
+      // SMA-437 lot 1, PR B (pre-flight D16) — the value of the band's FIRST
+      // figure, through the very `keyFigureTiles` the band draws with: the
+      // widget exists, so never « Bientôt » (R5) — and without a garden, the
+      // band's own invitation is what it would show, so nothing here.
+      if (gardens.length === 0) return null;
+      const stored = blocks.find((block) => block.key === 'keyfigures');
+      const [tile] = keyFigureTiles(
+        keyFiguresOptions(stored?.options ?? null).figures.slice(0, 1),
+        {
+          gardens,
+          views: gardenViews,
+          varieties: dashboardData.varieties,
+          totals: dashboardData.totals,
+          weather: displayWeather,
+          weatherStatus,
+        },
+        t,
+        i18n.language
+      );
+      if (!tile) return null;
+      // The unit after a no-break space, as the band draws them side by side.
+      return { value: tile.unit ? `${tile.value}\u00a0${tile.unit}` : tile.value };
     }
     return null;
   };

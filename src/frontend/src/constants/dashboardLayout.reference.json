@@ -1,10 +1,20 @@
 {
-  "$comment": "PR #287, fix round 1, S2 — the ONE reference of the dashboard layout, shared by the client and the server. Neither reads it at run time: each keeps its own constants (client: types/Dashboard.ts, constants/dashboardCapabilities.ts, constants/dashboardPresets.ts; server: SmartCrops.Core/Dashboard/DashboardLayout.cs, DashboardCapabilities.cs, DashboardPresets.cs), and each side's test compares them to this file (client: constants/dashboardLayout.reference.test.ts; server: SmartCrops.Api.Tests/Dashboard/DashboardLayoutReferenceTests.cs, which gets a copy of it through its .csproj). A change to the layout is made in three places — the client, the server and here — or a suite fails.",
+  "$comment": "PR #287, fix round 1, S2 — the ONE reference of the dashboard layout, shared by the client and the server. Neither reads it at run time: each keeps its own constants (client: types/Dashboard.ts, constants/dashboardCapabilities.ts, constants/dashboardPresets.ts; server: SmartCrops.Core/Dashboard/DashboardLayout.cs, DashboardCapabilities.cs, DashboardPresets.cs), and each side's test compares them to this file (client: constants/dashboardLayout.reference.test.ts; server: SmartCrops.Api.Tests/Dashboard/DashboardLayoutReferenceTests.cs, which gets a copy of it through its .csproj). A change to the layout is made in three places — the client, the server and here — or a suite fails. SMA-437 lot 1, PR B, step B1: whether a level HAS a block is its preset's to say (pre-flight D4) — the Key figures band is in the Expert preset alone, in its one size, the Full width — so a block's sizesFor row at a level whose preset does not list it (the band at novice and gardener: the default three sizes of pre-flight D3) is never read.",
   "levels": ["novice", "gardener", "expert"],
   "defaultLevel": "gardener",
   "sizes": ["small", "medium", "large", "wide"],
-  "blocks": ["weather", "gardens", "tips", "month", "todo", "counters", "stats", "harvest"],
+  "blocks": ["weather", "gardens", "tips", "month", "todo", "counters", "stats", "harvest", "keyfigures"],
   "nonHidableBlock": "gardens",
+  "keyFigures": {
+    "figures": [
+      "gardens", "plants", "varieties", "edible", "ornam",
+      "surface", "active", "planted", "occupancy", "free", "freeSun", "sunShare",
+      "prune", "sow", "harvest", "flower",
+      "todo", "tips",
+      "noplan", "noorient", "located", "cities"
+    ],
+    "defaults": ["free", "occupancy", "varieties", "todo"]
+  },
   "sizesFor": {
     "novice": {
       "weather": ["small", "medium", "large"],
@@ -14,7 +24,8 @@
       "todo": ["small", "medium", "large"],
       "counters": ["small", "medium", "large"],
       "stats": ["small", "medium", "large"],
-      "harvest": ["small", "medium", "large"]
+      "harvest": ["small", "medium", "large"],
+      "keyfigures": ["small", "medium", "large"]
     },
     "gardener": {
       "weather": ["small", "medium", "large"],
@@ -24,7 +35,8 @@
       "todo": ["small", "medium", "large"],
       "counters": ["small", "medium", "large"],
       "stats": ["small", "medium", "large"],
-      "harvest": ["small", "medium", "large"]
+      "harvest": ["small", "medium", "large"],
+      "keyfigures": ["small", "medium", "large"]
     },
     "expert": {
       "weather": ["small", "medium", "large"],
@@ -34,7 +46,8 @@
       "todo": ["small", "medium", "large"],
       "counters": ["small", "medium", "large"],
       "stats": ["small", "medium", "large"],
-      "harvest": ["small", "medium", "large"]
+      "harvest": ["small", "medium", "large"],
+      "keyfigures": ["wide"]
     }
   },
   "presets": {
@@ -59,6 +72,7 @@
       { "key": "harvest", "size": "large", "hidden": true }
     ],
     "expert": [
+      { "key": "keyfigures", "size": "wide", "hidden": false },
       { "key": "weather", "size": "large", "hidden": false },
       { "key": "gardens", "size": "large", "hidden": false },
       { "key": "tips", "size": "large", "hidden": false },

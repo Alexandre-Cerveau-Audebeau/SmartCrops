@@ -44,7 +44,11 @@ export function writePage(outDir: string): void;
 /** Runs Chrome headless on the page for one run — bounded, killed past the delay — and returns its measurements. */
 export function measureRun(binary: string, outDir: string, run: LayoutRun): Promise<LayoutResults>;
 /** The px Chrome's window keeps for itself, calibrated once per folder: `--window-size` is the viewport plus this. */
-export function windowFrame(binary: string, outDir: string): Promise<number>;
+export function windowFrame(
+  binary: string,
+  outDir: string,
+  calibrate?: (binary: string, outDir: string) => Promise<number>
+): Promise<number>;
 /** Spawns a process and settles once it has exited: the result, or a `TimedOutError` past `timeoutMs`. */
 export function runProcess(binary: string, args: string[], options: { timeoutMs: number; label: string }): Promise<ProcessResult>;
 /** Kills every child still running, waits for each to exit, and returns their pids. */

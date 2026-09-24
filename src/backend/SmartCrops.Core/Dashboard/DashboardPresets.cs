@@ -18,10 +18,14 @@ public record DashboardPresetBlock(string Key, string Size, bool Hidden);
 /// Ce mois-ci Moyen, À faire Moyen, Compteurs Moyen », « Expert : les huit
 /// widgets en Grand ».
 ///
-/// <para>Every preset lists all eight blocks: a block a level does not show is
-/// present and <c>Hidden</c>, so the Customize gallery can offer it back without
-/// inventing an entry. This is also the fallback the API serves when a user has
-/// no saved layout, or one stored under an unknown schema version.</para>
+/// <para>Every preset lists every block its level permits: a block a level does
+/// not show is present and <c>Hidden</c>, so the Customize gallery can offer it
+/// back without inventing an entry. And ONLY those (SMA-437 lot 1, PR B, step
+/// B1 — pre-flight D4): the blocks of a level ARE those of its preset
+/// (<see cref="Permits"/>), and the Key figures band is the Expert's alone —
+/// « en tête du preset Expert », in its one size, the Full width (D8). This is
+/// also the fallback the API serves when a user has no saved layout, or one
+/// stored under an unknown schema version.</para>
 ///
 /// <para>Byte-identical to the client's <c>constants/dashboardPresets.ts</c>,
 /// and checked so: both sides compare their presets to
@@ -33,6 +37,7 @@ public static class DashboardPresets
     private const string S = DashboardLayout.Sizes.Small;
     private const string M = DashboardLayout.Sizes.Medium;
     private const string L = DashboardLayout.Sizes.Large;
+    private const string W = DashboardLayout.Sizes.Wide;
 
     private static readonly IReadOnlyList<DashboardPresetBlock> NovicePreset =
     [
@@ -58,8 +63,22 @@ public static class DashboardPresets
         new(DashboardLayout.Blocks.Harvest, L, true),
     ];
 
+    /// <summary>
+    /// Written by hand since the band (pre-flight D8), where it was derived from
+    /// the keys: the band first, in the Full width, then the eight in Large.
+    /// </summary>
     private static readonly IReadOnlyList<DashboardPresetBlock> ExpertPreset =
-        [.. DashboardLayout.Blocks.All.Select(key => new DashboardPresetBlock(key, L, false))];
+    [
+        new(DashboardLayout.Blocks.KeyFigures, W, false),
+        new(DashboardLayout.Blocks.Weather, L, false),
+        new(DashboardLayout.Blocks.Gardens, L, false),
+        new(DashboardLayout.Blocks.Tips, L, false),
+        new(DashboardLayout.Blocks.Month, L, false),
+        new(DashboardLayout.Blocks.Todo, L, false),
+        new(DashboardLayout.Blocks.Counters, L, false),
+        new(DashboardLayout.Blocks.Stats, L, false),
+        new(DashboardLayout.Blocks.Harvest, L, false),
+    ];
 
     /// <summary>
     /// The preset for a level. An unknown level falls back to
@@ -72,6 +91,16 @@ public static class DashboardPresets
         DashboardLayout.Levels.Expert => ExpertPreset,
         _ => GardenerPreset,
     };
+
+    /// <summary>
+    /// Whether <paramref name="level"/> has the block <paramref name="key"/> at
+    /// all — whether its preset lists it (pre-flight D4). The minimal right of a
+    /// level the controller checks: a block it does not permit is refused on
+    /// write and dropped on read. An unknown level reads as the default one, as
+    /// <see cref="For"/> does. The client's twin is <c>permitsBlock</c>.
+    /// </summary>
+    public static bool Permits(string? level, string key) =>
+        For(level).Any(block => block.Key == key);
 
     /// <summary>
     /// True when the level is one this server knows. Annotated so the compiler

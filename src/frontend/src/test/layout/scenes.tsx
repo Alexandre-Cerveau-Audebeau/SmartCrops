@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import CountersBlock from '../../components/Dashboard/blocks/CountersBlock';
 import GardensBlock, { type GardensWeather } from '../../components/Dashboard/blocks/GardensBlock';
 import InviteBlock from '../../components/Dashboard/blocks/InviteBlock';
+import KeyFiguresBlock from '../../components/Dashboard/blocks/KeyFiguresBlock';
 import MonthBlock from '../../components/Dashboard/blocks/MonthBlock';
 import StatsBlock from '../../components/Dashboard/blocks/StatsBlock';
 import TipsBlock from '../../components/Dashboard/blocks/TipsBlock';
@@ -10,7 +11,8 @@ import WeatherBlock from '../../components/Dashboard/blocks/WeatherBlock';
 import { dashboardFixture, gardenFixture, varietyFixture } from '../fixtures/dashboard';
 import { placement } from '../fixtures/placements';
 import { linkFixture, locationFixture, weatherFixture, weekFixture } from '../fixtures/weather';
-import { gardenViewOf } from '../../utils/gardenStats';
+import { gardenViewOf, type GardenView } from '../../utils/gardenStats';
+import type { KeyFigure } from '../../components/Dashboard/blocks/keyFiguresOptions';
 import { LAYOUT_NOW_MS } from './clock';
 import { presetFor } from '../../constants/dashboardPresets';
 import type { DashboardBlockKey, DashboardLevel, DashboardSize } from '../../types/Dashboard';
@@ -236,6 +238,13 @@ export interface LayoutScene {
   twoInvites?: boolean;
   /** In Edit mode: the widget reserves the top padding its controls sit in (SMA-437, D19). */
   editing?: boolean;
+  /**
+   * The Key figures band's data (SMA-437 lot 1, PR B, step B7): its four
+   * defaults on the scene's gardens; the EXTREME set — seven digits, hectares,
+   * the longest label; no garden (the invitation); gardens with plans and
+   * nothing planted (« — », « Aucune », « Rien »).
+   */
+  band?: 'default' | 'extreme' | 'empty' | 'unplanted';
 }
 
 const SIZES: DashboardSize[] = ['small', 'medium', 'large'];
@@ -255,6 +264,14 @@ export const LAYOUT_SCENES: LayoutScene[] = (() => {
   scenes.push({ name: 'todo-medium-long', key: 'todo', size: 'medium', weather: 'all', long: true });
   scenes.push({ name: 'tips-medium-long', key: 'tips', size: 'medium', weather: 'all', long: true });
   scenes.push({ name: 'tips-medium-two-invites', key: 'tips', size: 'medium', weather: 'all', twoInvites: true });
+  // SMA-437 lot 1, PR B, step B7 — the Key figures band, in its one size, at
+  // every width of the runs: the desktop, the two tablets on either side of
+  // the 900 px where its tiles go from two by two to four in a row
+  // (arbitrage 2), the phones two by two.
+  scenes.push({ name: 'keyfigures-wide', key: 'keyfigures', size: 'wide', weather: 'all', band: 'default' });
+  scenes.push({ name: 'keyfigures-wide-extreme', key: 'keyfigures', size: 'wide', weather: 'all', band: 'extreme' });
+  scenes.push({ name: 'keyfigures-wide-empty', key: 'keyfigures', size: 'wide', weather: 'all', band: 'empty' });
+  scenes.push({ name: 'keyfigures-wide-unplanted', key: 'keyfigures', size: 'wide', weather: 'all', band: 'unplanted' });
   return scenes;
 })();
 
@@ -282,10 +299,30 @@ const presetGrid = (level: DashboardLevel) =>
  * The Gardener preset (Weather M, Gardens L, four Mediums) and the Expert one
  * (the eight widgets in Large), at rest and in Edit mode.
  */
-export const GRID_SCENES: GridScene[] = (['gardener', 'expert'] as const).flatMap((level) => [
-  { name: `grid-${level}`, level, editing: false, blocks: presetGrid(level) },
-  { name: `grid-${level}-edit`, level, editing: true, blocks: presetGrid(level) },
-]);
+export const GRID_SCENES: GridScene[] = [
+  ...(['gardener', 'expert'] as const).flatMap((level) => [
+    { name: `grid-${level}`, level, editing: false, blocks: presetGrid(level) },
+    { name: `grid-${level}-edit`, level, editing: true, blocks: presetGrid(level) },
+  ]),
+  // SMA-437 lot 1, PR B, step B7 (pre-flight C.8) — the band BETWEEN two
+  // ordinary rows: Weather M, Gardens L, Tips S, This month S, then the band,
+  // then To-do M and Counters M — pinned rows above and below a row as tall as
+  // its content; at rest and in Edit mode.
+  ...[false, true].map((editing) => ({
+    name: `grid-expert-band-between${editing ? '-edit' : ''}`,
+    level: 'expert' as const,
+    editing,
+    blocks: [
+      { key: 'weather', size: 'medium' },
+      { key: 'gardens', size: 'large' },
+      { key: 'tips', size: 'small' },
+      { key: 'month', size: 'small' },
+      { key: 'keyfigures', size: 'wide' },
+      { key: 'todo', size: 'medium' },
+      { key: 'counters', size: 'medium' },
+    ] satisfies GridScene['blocks'],
+  })),
+];
 
 /** The scene of one card of a grid scene: the widget at its size, on every garden located. */
 export const gridCardScene = (grid: GridScene, block: GridScene['blocks'][number]): LayoutScene => ({
@@ -295,6 +332,104 @@ export const gridCardScene = (grid: GridScene, block: GridScene['blocks'][number
   weather: 'all',
   editing: grid.editing,
 });
+
+/**
+ * The EXTREME band (pre-flight C.5, « le jeu extrême »): seven digits in a
+ * tile — 1 284 630 plants, 1 284 630 free cells, 1 284 000 of them in full sun
+ * — 24,56 ha, and the longest label of the catalogue, « Cases libres en plein
+ * soleil ». The views are the scene's own, their sums raised: the band reads
+ * them as the page's shared views, and no engine has to lay out a million
+ * cells for it.
+ */
+const EXTREME_FIGURES: KeyFigure[] = ['freeSun', 'surface', 'plants', 'free'];
+const extremeViews = new Map(
+  gardens.map((garden, index): [string, GardenView] => {
+    const view = gardenViewOf(garden);
+    return [
+      garden.id,
+      {
+        ...view,
+        activeCells: 428_310,
+        occupiedCells: 100,
+        freeCells: 428_210,
+        surfaceM2: [100_000, 100_000, 45_600][index]!,
+        freeExposure: { ...view.freeExposure, full: 428_000 },
+      },
+    ];
+  })
+);
+
+/** Three gardens with a plan and nothing planted: « — », « Aucune », « Rien ». */
+const unplantedGardens: DashboardGardenData[] = gardens.map((garden) => ({
+  ...garden,
+  placements: [],
+  placementCount: 0,
+  varietyCount: 0,
+  occupiedCells: 0,
+  isEdible: null,
+}));
+const unplantedViews = new Map(unplantedGardens.map((garden) => [garden.id, gardenViewOf(garden)]));
+
+/** The Key figures band of a scene: its data, as the page would hand it. */
+function bandWidget(scene: LayoutScene, weather: DashboardWeatherData): ReactNode {
+  const band = scene.band ?? 'default';
+  const common = {
+    size: scene.size,
+    editing: scene.editing ?? false,
+    weather,
+    weatherStatus: 'ready' as const,
+    loading: false,
+    loadError: false,
+    onRetry: noop,
+    onCreate: noop,
+  };
+  if (band === 'extreme') {
+    return (
+      <KeyFiguresBlock
+        {...common}
+        options={{ figures: EXTREME_FIGURES }}
+        gardens={gardens}
+        views={extremeViews}
+        varieties={varieties}
+        totals={{ ...data.totals, placementCount: 1_284_630 }}
+      />
+    );
+  }
+  if (band === 'empty') {
+    return (
+      <KeyFiguresBlock
+        {...common}
+        options={null}
+        gardens={[]}
+        views={new Map()}
+        varieties={[]}
+        totals={{ gardenCount: 0, placementCount: 0, varietyCount: 0, catalogPlantCount: 536 }}
+      />
+    );
+  }
+  if (band === 'unplanted') {
+    return (
+      <KeyFiguresBlock
+        {...common}
+        options={null}
+        gardens={unplantedGardens}
+        views={unplantedViews}
+        varieties={[]}
+        totals={{ gardenCount: 3, placementCount: 0, varietyCount: 0, catalogPlantCount: 536 }}
+      />
+    );
+  }
+  return (
+    <KeyFiguresBlock
+      {...common}
+      options={null}
+      gardens={gardens}
+      views={views}
+      varieties={varieties}
+      totals={data.totals}
+    />
+  );
+}
 
 /** The widget of a scene, with the props the page would hand it. */
 export function sceneWidget(scene: LayoutScene): ReactNode {
@@ -343,6 +478,10 @@ export function sceneWidget(scene: LayoutScene): ReactNode {
       // « Bientôt disponible », as the page draws it (SMA-437: the Expert
       // preset's grid scene holds it).
       return <InviteBlock blockKey="harvest" size={scene.size} editing={scene.editing} />;
+    case 'keyfigures':
+      // The Key figures band (SMA-437 lot 1, PR B): its data by the scene's
+      // `band` — its four defaults on the scene's gardens unless told otherwise.
+      return bandWidget(scene, weather);
     default:
       throw new Error(`No scene for the widget ${scene.key}`);
   }

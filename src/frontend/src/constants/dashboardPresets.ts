@@ -1,7 +1,7 @@
-import {
-  DASHBOARD_BLOCK_KEYS,
-  type DashboardBlock,
-  type DashboardLevel,
+import type {
+  DashboardBlock,
+  DashboardBlockKey,
+  DashboardLevel,
 } from '../types/Dashboard';
 
 /**
@@ -13,13 +13,18 @@ import {
  * round 1 (S2): both sides compare their presets to
  * `dashboardLayout.reference.json`.
  *
- * Every preset lists ALL eight widgets — the ones a level does not show are
- * present and `hidden`, so the Customize gallery has something to offer back
- * instead of inventing an entry.
+ * Every preset lists EVERY widget its formula permits — the ones a level does
+ * not show are present and `hidden`, so the Customize gallery has something to
+ * offer back instead of inventing an entry. And ONLY those (SMA-437 lot 1,
+ * PR B, step B1 — pre-flight D4): the blocks of a formula ARE those of its
+ * preset, the rule the server refuses a write by and the client and the server
+ * drop a stored block by. The Key figures band is the Expert's alone (V3-01),
+ * so the Novice and the Gardener list the eight others.
  */
 const S = 'small' as const;
 const M = 'medium' as const;
 const L = 'large' as const;
+const W = 'wide' as const;
 
 const NOVICE: DashboardBlock[] = [
   { key: 'weather', size: M, hidden: false },
@@ -43,11 +48,22 @@ const GARDENER: DashboardBlock[] = [
   { key: 'harvest', size: L, hidden: true },
 ];
 
-const EXPERT: DashboardBlock[] = DASHBOARD_BLOCK_KEYS.map((key) => ({
-  key,
-  size: L,
-  hidden: false,
-}));
+/**
+ * Written by hand since the band (pre-flight D8), where it was derived from the
+ * keys: « Chiffres clés en tête » (contract § 3.3 [A], § 4.5), in the Full
+ * width — its one size — then the eight widgets in Large, as before.
+ */
+const EXPERT: DashboardBlock[] = [
+  { key: 'keyfigures', size: W, hidden: false },
+  { key: 'weather', size: L, hidden: false },
+  { key: 'gardens', size: L, hidden: false },
+  { key: 'tips', size: L, hidden: false },
+  { key: 'month', size: L, hidden: false },
+  { key: 'todo', size: L, hidden: false },
+  { key: 'counters', size: L, hidden: false },
+  { key: 'stats', size: L, hidden: false },
+  { key: 'harvest', size: L, hidden: false },
+];
 
 export const DEFAULT_DASHBOARD_LEVEL: DashboardLevel = 'gardener';
 
@@ -63,6 +79,14 @@ const PRESETS: Record<DashboardLevel, DashboardBlock[]> = {
  */
 export function presetFor(level: DashboardLevel): DashboardBlock[] {
   return PRESETS[level].map((block) => ({ ...block }));
+}
+
+/**
+ * Whether `level` has the widget `key` at all — whether its preset lists it
+ * (pre-flight D4). The twin of the server's `DashboardPresets.Permits`.
+ */
+export function permitsBlock(level: DashboardLevel, key: DashboardBlockKey): boolean {
+  return PRESETS[level].some((block) => block.key === key);
 }
 
 /**

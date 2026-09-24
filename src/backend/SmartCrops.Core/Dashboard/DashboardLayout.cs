@@ -47,10 +47,14 @@ public static class DashboardLayout
     }
 
     /// <summary>
-    /// The eight dashboard blocks, in their canonical order — the same order and
-    /// the same keys the frozen design uses (<c>data-widget</c> in the artboards).
-    /// A layout document may omit blocks; the reader fills the gaps from the
-    /// preset and appends them in this order.
+    /// The nine dashboard blocks, in their canonical order — the eight of the
+    /// frozen design (<c>data-widget</c> in the artboards), then the Key figures
+    /// band of the v3 (SMA-437 lot 1, PR B, step B1 — pre-flight D1), the
+    /// Expert's alone: which level has which block is its preset's to say
+    /// (<see cref="DashboardPresets.Permits"/>, D4). A layout document may omit
+    /// blocks; the reader fills the gaps from the preset, each at its PRESET'S
+    /// place (arbitrage 3 of the lot 1 pre-flight), so the band heads an Expert
+    /// page saved before it existed.
     /// </summary>
     public static class Blocks
     {
@@ -62,9 +66,18 @@ public static class DashboardLayout
         public const string Counters = "counters";
         public const string Stats = "stats";
         public const string Harvest = "harvest";
+        public const string KeyFigures = "keyfigures";
 
         public static readonly IReadOnlyList<string> All =
-            [Weather, Gardens, Tips, Month, Todo, Counters, Stats, Harvest];
+            [Weather, Gardens, Tips, Month, Todo, Counters, Stats, Harvest, KeyFigures];
+
+        /// <summary>
+        /// The length of <see cref="All"/>, as a constant (pre-flight D18): the
+        /// request-body ceiling of <c>DashboardController</c> derives from it,
+        /// and <c>[RequestSizeLimit]</c> takes a constant only. Pinned equal to
+        /// <c>All.Count</c> by <c>DashboardPresetsTests</c>.
+        /// </summary>
+        public const int Count = 9;
     }
 
     /// <summary>

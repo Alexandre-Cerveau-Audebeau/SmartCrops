@@ -386,6 +386,17 @@
       "dragEnd": "{{widget}} déposé en position {{position}} sur {{total}}.",
       "dragCancel": "Déplacement de {{widget}} annulé."
     },
+    "reorder": {
+      "handle": "Déplacer «\u00a0{{name}}\u00a0»",
+      "up": "Monter «\u00a0{{name}}\u00a0»",
+      "down": "Descendre «\u00a0{{name}}\u00a0»",
+      "moved": "«\u00a0{{name}}\u00a0» passe en {{place}}.",
+      "stayed": "«\u00a0{{name}}\u00a0» reste en {{place}}.",
+      "dragging": "«\u00a0{{name}}\u00a0» en cours de déplacement — relâchez pour le placer en {{place}}.",
+      "draggingAfter": "«\u00a0{{name}}\u00a0» en cours de déplacement — relâchez pour le placer en {{place}}, après «\u00a0{{previous}}\u00a0».",
+      "cancelled": "Déplacement de «\u00a0{{name}}\u00a0» annulé.",
+      "instructions": "Appuyez sur Espace pour saisir la ligne, les flèches pour la déplacer, Espace pour la déposer, Échap pour annuler."
+    },
     "blocks": {
       "weather": {
         "title": "Météo",
@@ -638,6 +649,186 @@
       "harvest": {
         "title": "Récolte",
         "invite": "Les stades de croissance de vos plants ne sont pas encore renseignés — l’estimation ne peut pas les compter."
+      },
+      "keyfigures": {
+        "title": "Chiffres clés",
+        "list": "Vos quatre chiffres clés",
+        "loadError": "Impossible de charger vos chiffres clés.",
+        "panel": {
+          "section": "Vos quatre chiffres",
+          "helpLead": "Toujours quatre.",
+          "help": "Touchez un chiffre pour le remplacer\u00a0; glissez ⠿ ou utilisez ▲ ▼ pour l’ordre.",
+          "list": "Vos quatre chiffres, dans l’ordre des tuiles",
+          "replaceSlot": "Remplacer «\u00a0{{figure}}\u00a0», {{place}}",
+          "reset": "Rétablir les chiffres par défaut",
+          "resetDone": "Ce sont déjà les chiffres par défaut.",
+          "resetSaid": "Les quatre chiffres par défaut sont rétablis.",
+          "back": "Vos quatre chiffres",
+          "catalogueTitle": "Remplacer «\u00a0{{figure}}\u00a0» — {{place}}",
+          "catalogueLabel": "Choisir un chiffre",
+          "markCurrent": "la place à remplacer",
+          "markShown": "déjà en {{place}}",
+          "swapNote": "Choisir un chiffre déjà affiché échange les deux places — jamais de doublon, jamais de trou.",
+          "cancel": "Annuler",
+          "replace": "Remplacer",
+          "replaced": "«\u00a0{{figure}}\u00a0» remplace «\u00a0{{previous}}\u00a0» en {{place}}.",
+          "swapped": "«\u00a0{{figure}}\u00a0» et «\u00a0{{other}}\u00a0» échangent leurs places.",
+          "place_ordinal_one": "{{count}}ʳᵉ place",
+          "place_ordinal_two": "{{count}}ᵉ place",
+          "place_ordinal_few": "{{count}}ᵉ place",
+          "place_ordinal_other": "{{count}}ᵉ place",
+          "groups": {
+            "gardens": "Vos jardins",
+            "space": "La place",
+            "month": "Ce mois-ci",
+            "today": "Aujourd’hui",
+            "complete": "À compléter"
+          }
+        },
+        "empty": {
+          "title": "Vos chiffres clés arrivent avec votre premier jardin",
+          "body": "Cases libres, occupation, variétés, tâches du jour\u00a0: tout se calcule à partir de vos jardins et de leurs plans."
+        },
+        "spoken": "{{label}}\u00a0: {{value}}",
+        "spokenWithSub": "{{label}}\u00a0: {{value}} — {{sub}}",
+        "none": {
+          "feminine": "Aucune",
+          "masculine": "Aucun",
+          "nothing": "Rien"
+        },
+        "unit": {
+          "of": "sur {{total, number}}",
+          "percent": "%",
+          "m2": "m²",
+          "ha": "ha",
+          "varieties_one": "variété",
+          "varieties_other": "variétés",
+          "tasks_one": "tâche",
+          "tasks_other": "tâches"
+        },
+        "noPlan": "aucun plan dessiné",
+        "noPlant": "aucune plante posée",
+        "addPlants": "ajoutez des plantes depuis la Bibliothèque",
+        "weather": {
+          "loading": "sans la météo — en cours de chargement",
+          "unavailable": "sans la météo — indisponible",
+          "noCity": "sans la météo — ajoutez une ville",
+          "some": {
+            "noCity_one": "sans la météo de {{count, number}} jardin — ajoutez une ville",
+            "noCity_other": "sans la météo de {{count, number}} jardins — ajoutez une ville",
+            "unavailable_one": "sans la météo de {{count, number}} jardin — indisponible",
+            "unavailable_other": "sans la météo de {{count, number}} jardins — indisponible"
+          }
+        },
+        "figures": {
+          "gardens": {
+            "label": "Jardins",
+            "someOrnamental_one": "dont {{count, number}} ornemental",
+            "someOrnamental_other": "dont {{count, number}} ornementaux",
+            "noOrnamental": "aucun ornemental"
+          },
+          "plants": {
+            "label": "Plantes",
+            "sub_one": "posée dans vos jardins",
+            "sub_other": "posées dans vos jardins"
+          },
+          "varieties": {
+            "label": "Variétés",
+            "sub_one": "distincte, tous jardins confondus",
+            "sub_other": "distinctes, tous jardins confondus"
+          },
+          "edible": {
+            "label": "Variétés comestibles",
+            "sub": "la part du potager"
+          },
+          "ornam": {
+            "label": "Jardins ornementaux",
+            "sub": "sans récolte attendue"
+          },
+          "surface": {
+            "label": "Surface",
+            "sub": "cultivable, en cases actives"
+          },
+          "active": {
+            "label": "Cases actives",
+            "sub_one": "plantable",
+            "sub_other": "plantables"
+          },
+          "planted": {
+            "label": "Cases plantées",
+            "sub_one": "occupée par vos plantes",
+            "sub_other": "occupées par vos plantes"
+          },
+          "occupancy": {
+            "label": "Occupation",
+            "sub": "{{planted}} sur {{active, number}}",
+            "planted_one": "{{count, number}} case plantée",
+            "planted_other": "{{count, number}} cases plantées"
+          },
+          "free": {
+            "label": "Cases libres",
+            "sub": "où planter la suite",
+            "full": "tout est planté"
+          },
+          "freeSun": {
+            "label": "Cases libres en plein soleil",
+            "sub_one": "sur {{count, number}} libre",
+            "sub_other": "sur {{count, number}} libres"
+          },
+          "sunShare": {
+            "label": "Part en plein soleil",
+            "sub": "de vos cases, en été à midi"
+          },
+          "prune": {
+            "label": "À tailler ce mois-ci"
+          },
+          "sow": {
+            "label": "À semer ce mois-ci"
+          },
+          "harvest": {
+            "label": "À récolter ce mois-ci"
+          },
+          "flower": {
+            "label": "En fleur ce mois-ci"
+          },
+          "todo": {
+            "label": "À faire aujourd’hui",
+            "sub_one": "dans {{count, number}} jardin",
+            "sub_other": "dans {{count, number}} jardins",
+            "none": "aujourd’hui"
+          },
+          "tips": {
+            "label": "Conseils",
+            "sub_one": "dans {{count, number}} jardin",
+            "sub_other": "dans {{count, number}} jardins",
+            "none": "pour l’instant"
+          },
+          "noplan": {
+            "label": "Plans à dessiner",
+            "sub": "rien ne s’y calcule encore",
+            "none": "tous vos plans sont dessinés"
+          },
+          "noorient": {
+            "label": "Jardins sans orientation",
+            "sub": "à renseigner pour les conseils",
+            "none": "rien à renseigner pour les conseils"
+          },
+          "located": {
+            "label": "Jardins localisés",
+            "none": "ajoutez une ville",
+            "all_one": "votre jardin a une ville",
+            "all_other": "tous vos jardins ont une ville",
+            "oneMissing": "{{garden}} n’a pas de ville",
+            "someMissing_one": "{{count, number}} jardin sans ville",
+            "someMissing_other": "{{count, number}} jardins sans ville"
+          },
+          "cities": {
+            "label": "Villes",
+            "none": "ajoutez une ville",
+            "names": "{{names}}",
+            "namesMore": "{{names}} +{{count, number}}"
+          }
+        }
       }
     },
     "exposure": {

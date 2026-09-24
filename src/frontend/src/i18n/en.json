@@ -386,6 +386,17 @@
       "dragEnd": "{{widget}} dropped at position {{position}} of {{total}}.",
       "dragCancel": "Moving {{widget}} cancelled."
     },
+    "reorder": {
+      "handle": "Drag “{{name}}”",
+      "up": "Move “{{name}}” up",
+      "down": "Move “{{name}}” down",
+      "moved": "“{{name}}” moves to {{place}}.",
+      "stayed": "“{{name}}” stays in {{place}}.",
+      "dragging": "“{{name}}” is being moved — release to put it in {{place}}.",
+      "draggingAfter": "“{{name}}” is being moved — release to put it in {{place}}, after “{{previous}}”.",
+      "cancelled": "Moving “{{name}}” cancelled.",
+      "instructions": "Press Space to pick the row up, the arrow keys to move it, Space to drop it, Escape to cancel."
+    },
     "blocks": {
       "weather": {
         "title": "Weather",
@@ -638,6 +649,186 @@
       "harvest": {
         "title": "Harvest",
         "invite": "Your plants have no growth stage yet — the estimate can’t count them."
+      },
+      "keyfigures": {
+        "title": "Key figures",
+        "list": "Your four key figures",
+        "loadError": "Couldn’t load your key figures.",
+        "panel": {
+          "section": "Your four figures",
+          "helpLead": "Always four.",
+          "help": "Tap a figure to replace it; drag ⠿ or use ▲ ▼ to reorder.",
+          "list": "Your four figures, in the order of the tiles",
+          "replaceSlot": "Replace “{{figure}}”, {{place}}",
+          "reset": "Restore the default figures",
+          "resetDone": "These are already the default figures.",
+          "resetSaid": "The four default figures are back.",
+          "back": "Your four figures",
+          "catalogueTitle": "Replace “{{figure}}” — {{place}}",
+          "catalogueLabel": "Choose a figure",
+          "markCurrent": "the place to replace",
+          "markShown": "already in {{place}}",
+          "swapNote": "Choosing a figure already shown swaps the two places — never a duplicate, never a gap.",
+          "cancel": "Cancel",
+          "replace": "Replace",
+          "replaced": "“{{figure}}” replaces “{{previous}}” in {{place}}.",
+          "swapped": "“{{figure}}” and “{{other}}” swap places.",
+          "place_ordinal_one": "{{count}}st place",
+          "place_ordinal_two": "{{count}}nd place",
+          "place_ordinal_few": "{{count}}rd place",
+          "place_ordinal_other": "{{count}}th place",
+          "groups": {
+            "gardens": "Your gardens",
+            "space": "The space",
+            "month": "This month",
+            "today": "Today",
+            "complete": "To complete"
+          }
+        },
+        "empty": {
+          "title": "Your key figures arrive with your first garden",
+          "body": "Free cells, occupancy, varieties, today’s tasks: all of it is computed from your gardens and their plans."
+        },
+        "spoken": "{{label}}: {{value}}",
+        "spokenWithSub": "{{label}}: {{value}} — {{sub}}",
+        "none": {
+          "feminine": "None",
+          "masculine": "None",
+          "nothing": "Nothing"
+        },
+        "unit": {
+          "of": "of {{total, number}}",
+          "percent": "%",
+          "m2": "m²",
+          "ha": "ha",
+          "varieties_one": "variety",
+          "varieties_other": "varieties",
+          "tasks_one": "task",
+          "tasks_other": "tasks"
+        },
+        "noPlan": "no plan drawn yet",
+        "noPlant": "no plant placed yet",
+        "addPlants": "add plants from the Library",
+        "weather": {
+          "loading": "without the weather — still loading",
+          "unavailable": "without the weather — unavailable",
+          "noCity": "without the weather — add a city",
+          "some": {
+            "noCity_one": "without the weather of {{count, number}} garden — add a city",
+            "noCity_other": "without the weather of {{count, number}} gardens — add a city",
+            "unavailable_one": "without the weather of {{count, number}} garden — unavailable",
+            "unavailable_other": "without the weather of {{count, number}} gardens — unavailable"
+          }
+        },
+        "figures": {
+          "gardens": {
+            "label": "Gardens",
+            "someOrnamental_one": "{{count, number}} of them ornamental",
+            "someOrnamental_other": "{{count, number}} of them ornamental",
+            "noOrnamental": "none of them ornamental"
+          },
+          "plants": {
+            "label": "Plants",
+            "sub_one": "placed in your gardens",
+            "sub_other": "placed in your gardens"
+          },
+          "varieties": {
+            "label": "Varieties",
+            "sub_one": "distinct, across all your gardens",
+            "sub_other": "distinct, across all your gardens"
+          },
+          "edible": {
+            "label": "Edible varieties",
+            "sub": "the kitchen-garden share"
+          },
+          "ornam": {
+            "label": "Ornamental gardens",
+            "sub": "no harvest expected"
+          },
+          "surface": {
+            "label": "Surface",
+            "sub": "cultivable, in active cells"
+          },
+          "active": {
+            "label": "Active cells",
+            "sub_one": "plantable",
+            "sub_other": "plantable"
+          },
+          "planted": {
+            "label": "Planted cells",
+            "sub_one": "taken by your plants",
+            "sub_other": "taken by your plants"
+          },
+          "occupancy": {
+            "label": "Occupancy",
+            "sub": "{{planted}} of {{active, number}}",
+            "planted_one": "{{count, number}} planted cell",
+            "planted_other": "{{count, number}} planted cells"
+          },
+          "free": {
+            "label": "Free cells",
+            "sub": "where to plant next",
+            "full": "everything is planted"
+          },
+          "freeSun": {
+            "label": "Free cells in full sun",
+            "sub_one": "of {{count, number}} free",
+            "sub_other": "of {{count, number}} free"
+          },
+          "sunShare": {
+            "label": "Share in full sun",
+            "sub": "of your cells, in summer at noon"
+          },
+          "prune": {
+            "label": "To prune this month"
+          },
+          "sow": {
+            "label": "To sow this month"
+          },
+          "harvest": {
+            "label": "To harvest this month"
+          },
+          "flower": {
+            "label": "In flower this month"
+          },
+          "todo": {
+            "label": "To do today",
+            "sub_one": "in {{count, number}} garden",
+            "sub_other": "in {{count, number}} gardens",
+            "none": "today"
+          },
+          "tips": {
+            "label": "Tips",
+            "sub_one": "in {{count, number}} garden",
+            "sub_other": "in {{count, number}} gardens",
+            "none": "for now"
+          },
+          "noplan": {
+            "label": "Plans to draw",
+            "sub": "nothing is computed there yet",
+            "none": "every plan is drawn"
+          },
+          "noorient": {
+            "label": "Gardens without orientation",
+            "sub": "to fill in for the tips",
+            "none": "nothing to fill in for the tips"
+          },
+          "located": {
+            "label": "Located gardens",
+            "none": "add a city",
+            "all_one": "your garden has a city",
+            "all_other": "every garden has a city",
+            "oneMissing": "{{garden}} has no city",
+            "someMissing_one": "{{count, number}} garden without a city",
+            "someMissing_other": "{{count, number}} gardens without a city"
+          },
+          "cities": {
+            "label": "Cities",
+            "none": "add a city",
+            "names": "{{names}}",
+            "namesMore": "{{names}} +{{count, number}}"
+          }
+        }
       }
     },
     "exposure": {
