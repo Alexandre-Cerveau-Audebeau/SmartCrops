@@ -46,17 +46,18 @@ import type { KeyFigure } from './keyFiguresOptions';
  * hiding them would be the misleading zero.
  *
  * Round 1, É8 — a page never contradicts itself: every figure is computed
- * through the weather the PAGE holds (`useDashboardWeather`'s `data`), the
- * very aggregate the widgets showing the same information read — including
- * the last one kept after a failed refresh (E2 b of ③b), which `TodoBlock`,
- * `TipsBlock` and `MonthBlock` go on counting with. The sub-line follows the
- * page's weather STATE, as those widgets' own notes do.
+ * through the weather the page hands its derivations, the very weather the
+ * widgets showing the same information are handed — `TodoBlock`,
+ * `TipsBlock`, `MonthBlock`. Round 2, É8: that weather is the page's ONE
+ * `displayWeather`, empty while the weather is in failure — the last
+ * aggregate `useDashboardWeather` keeps across a failed refresh (E2 b of ③b)
+ * names the stored place, and is not counted on. The sub-line follows the
+ * page's weather STATE, as those widgets' own notes do, and is true.
  */
 
 /**
  * The weather aggregate's state on the page: still loading (nothing read yet),
- * failed (with the last aggregate kept, or nothing — the page's `data` says
- * which), or answered.
+ * failed (no aggregate handed to the figures), or answered.
  */
 export type KeyFiguresWeatherStatus = 'loading' | 'error' | 'ready';
 
@@ -163,12 +164,13 @@ function derivations(input: KeyFiguresInput) {
     return memo.get(name) as T;
   };
   const clock = input.clock ?? DEFAULT_TODO_CLOCK;
-  // The weather the figures are computed THROUGH: the page's own (round 1,
-  // É8). Empty while the first load is out or when a failure kept nothing; the
-  // last aggregate after a failed refresh, which the To-do, Tips and This month
-  // widgets go on counting with — so a tile and its widget never give two
-  // counts on one page. What the tile then SAYS of the weather follows the
-  // page's state (`weatherGap`), as the widgets' notes do.
+  // The weather the figures are computed THROUGH: the one the page hands the
+  // To-do, Tips and This month widgets too (round 1, É8) — its
+  // `displayWeather`, empty while the first load is out and after any failure
+  // (round 2, É8) — so a tile and its widget never give two counts on one
+  // page. No condition of its own here: the page's is the only one. What the
+  // tile SAYS of the weather follows the page's state (`weatherGap`), as the
+  // widgets' notes do.
   const weather = input.weather;
 
   return {

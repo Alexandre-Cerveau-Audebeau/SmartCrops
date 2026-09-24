@@ -59,6 +59,7 @@ import {
   type DashboardBlockKey,
   type GalleryPreview,
 } from '../types/Dashboard';
+import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
 import type { GardenView } from '../utils/gardenStats';
 
 /**
@@ -133,6 +134,18 @@ export default function GardensDashboard() {
     refetch: refetchWeather,
     refetchAfterMutation: refetchWeatherAfterMutation,
   } = useDashboardWeather(language);
+
+  // SMA-437 lot 1, PR B, round 2, É8 — the ONE weather every derived figure
+  // of the page is computed through: none while the weather is in FAILURE,
+  // the aggregate otherwise. After a failed passive refresh the hook keeps
+  // the last aggregate (E2 b of ③b) for what it is kept for — the place the
+  // location dialog and the Weather gear panel name, read from `weatherData`
+  // below —, never for a count: the Weather widget and the MÉTÉO column show
+  // their error, and the To-do, Tips and This month widgets, the Key figures
+  // band and the gallery thumbnails compute without it, so « Météo
+  // indisponible » and « sans la météo — indisponible » are true where they
+  // are said. A derivation reads THIS, never `weatherData`.
+  const displayWeather = weatherError ? EMPTY_WEATHER_DATA : weatherData;
 
   // The ONE location dialog of the page (§ F.4), opened from the widget, the
   // « 1/3 localisé » chip, a table cell or the Weather gear. The state holds the
@@ -442,7 +455,7 @@ export default function GardensDashboard() {
             editing={editing}
             gardens={gardens}
             varieties={dashboardData.varieties}
-            weather={weatherData}
+            weather={displayWeather}
             loading={gardensLoading}
             refreshing={gardensRefreshing}
             loadError={gardensError}
@@ -464,7 +477,7 @@ export default function GardensDashboard() {
             gardens={gardens}
             views={gardenViews}
             varieties={dashboardData.varieties}
-            weather={weatherData}
+            weather={displayWeather}
             loading={gardensLoading}
             refreshing={gardensRefreshing || weatherRefreshing}
             // …and the two apart (round 5, S-8): each announced sentence
@@ -503,7 +516,7 @@ export default function GardensDashboard() {
             editing={editing}
             gardens={gardens}
             varieties={dashboardData.varieties}
-            weather={weatherData}
+            weather={displayWeather}
             // Round 1, C2: the two aggregates no longer share one gate. The
             // PLANS are what the block cannot do without — « Tailler » and
             // « Semer » come from them and the catalog alone — so only their
@@ -540,7 +553,7 @@ export default function GardensDashboard() {
             views={gardenViews}
             varieties={dashboardData.varieties}
             totals={dashboardData.totals}
-            weather={weatherData}
+            weather={displayWeather}
             weatherStatus={weatherStatus}
             loading={gardensLoading}
             refreshing={gardensRefreshing}
@@ -603,7 +616,7 @@ export default function GardensDashboard() {
                     views: gardenViews,
                     varieties: dashboardData.varieties,
                     totals: dashboardData.totals,
-                    weather: weatherData,
+                    weather: displayWeather,
                     weatherStatus,
                   }
             }
@@ -677,7 +690,7 @@ export default function GardensDashboard() {
       // widget it stands for does not. It is only ever called for a HIDDEN
       // widget, so the derivation never runs twice on one page.
       if (dashboardData.varieties.length === 0) return null;
-      const { active } = monthCalendar(gardens, dashboardData.varieties, weatherData);
+      const { active } = monthCalendar(gardens, dashboardData.varieties, displayWeather);
       return {
         value: t('dashboard.blocks.month.galleryPrune', { count: active.prune.length }),
       };
@@ -688,7 +701,7 @@ export default function GardensDashboard() {
       // on the same `gardenViews`. Null — « Bientôt » — while nothing is
       // planted, the same gate as the calendar's.
       if (dashboardData.varieties.length === 0) return null;
-      const { tips } = gardenAdvice(gardens, gardenViews, dashboardData.varieties, weatherData);
+      const { tips } = gardenAdvice(gardens, gardenViews, dashboardData.varieties, displayWeather);
       return { value: t('dashboard.blocks.tips.count', { count: tips.length }) };
     }
     if (key === 'keyfigures') {
@@ -705,7 +718,7 @@ export default function GardensDashboard() {
           views: gardenViews,
           varieties: dashboardData.varieties,
           totals: dashboardData.totals,
-          weather: weatherData,
+          weather: displayWeather,
           weatherStatus,
         },
         t,

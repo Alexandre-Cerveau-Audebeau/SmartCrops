@@ -52,6 +52,12 @@ import { fetchDashboardData, fetchDashboardPreferences, saveDashboardPreferences
 // localisés » and « Villes » as the MÉTÉO column of the Gardens table, the
 // « ce mois-ci » lanes as `MonthBlock` — through the real `useDashboardWeather`
 // hook, in the five states the weather really takes on the page.
+//
+// Round 2, É8 — and what they say is TRUE: while the page's weather is in
+// FAILURE, no derived figure reads it. The last aggregate the hook keeps across
+// a failed refresh (E2 b of ③b) names the stored place in the location dialog
+// and the Weather gear panel; it is never counted — not by the band, not by
+// the To-do, Tips or This month widgets, which say « Météo indisponible ».
 
 /** The harness's scene: three gardens, sixteen varieties, 64 placements, every garden in Écully. */
 const DATA: DashboardData = {
@@ -73,14 +79,15 @@ const nowhere = (): DashboardWeatherData =>
 /**
  * An Expert page showing the band with `figures`, and beside it the widgets
  * that show the same information — To-do and Tips in Medium (their count chip
- * and their weather note), This month in Small (its three counts), Weather and
- * Gardens in Large (the MÉTÉO column).
+ * and their weather note) or in Large (where their whole lists are drawn),
+ * This month in Small (its three counts), Weather and Gardens in Large (the
+ * MÉTÉO column).
  */
-function serve(figures: KeyFigure[]) {
+function serve(figures: KeyFigure[], size: 'medium' | 'large' = 'medium') {
   const blocks: DashboardBlock[] = [
     { key: 'keyfigures', size: 'wide', hidden: false, options: { figures } },
-    { key: 'todo', size: 'medium', hidden: false },
-    { key: 'tips', size: 'medium', hidden: false },
+    { key: 'todo', size, hidden: false },
+    { key: 'tips', size, hidden: false },
     { key: 'month', size: 'small', hidden: false },
     { key: 'weather', size: 'large', hidden: false },
     { key: 'gardens', size: 'large', hidden: false },
@@ -161,6 +168,28 @@ const weatherColumn = () => {
   return { located: places.length, cities: new Set(places).size };
 };
 
+/** What the To-do and Tips widgets count on the scene through `weather` — the plans alone when it is empty. */
+const countsThrough = (weather: DashboardWeatherData) => {
+  const views = new Map(sceneGardens.map((garden) => [garden.id, gardenViewOf(garden)]));
+  return {
+    todo: todoTasks(sceneGardens, sceneVarieties, weather).length,
+    tips: gardenAdvice(sceneGardens, views, sceneVarieties, weather).tips.length,
+  };
+};
+
+/** The To-do tasks read from a forecast: watering, and the cold. */
+const FORECAST_TASKS = ['water', 'cold', 'frost'];
+
+/** What the two widgets DRAW from a forecast: the To-do rows of a forecast kind, the Tips of the watering kind. */
+const drawnFromForecast = () => ({
+  tasks: [...widget('todo').querySelectorAll('[data-todo-task]')]
+    .map((node) => node.getAttribute('data-todo-task'))
+    .filter((kind) => FORECAST_TASKS.includes(kind ?? '')),
+  tips: [...widget('tips').querySelectorAll('[data-tips-tip]')]
+    .map((node) => node.getAttribute('data-tips-tip'))
+    .filter((kind) => kind === 'watering'),
+});
+
 /** The three counts of the This month widget — each one drawn, so a missing count never reads as 0. */
 const monthWidget = () => {
   const count = (lane: 'prune' | 'sow' | 'harvest') => {
@@ -189,9 +218,14 @@ function deferredWeather() {
 
 type WeatherState = 'first load' | 'ready' | 'failed refresh, aggregate kept' | 'error, nothing kept' | 'no city';
 
-/** The page, in one real state of its weather, with the band showing `figures`. */
-async function pageIn(state: WeatherState, figures: KeyFigure[], weather: DashboardWeatherData = weatherAll()) {
-  serve(figures);
+/** The page, in one real state of its weather, with the band showing `figures` — To-do and Tips at `size`. */
+async function pageIn(
+  state: WeatherState,
+  figures: KeyFigure[],
+  weather: DashboardWeatherData = weatherAll(),
+  size: 'medium' | 'large' = 'medium'
+) {
+  serve(figures, size);
   if (state === 'first load') vi.mocked(fetchDashboardWeather).mockImplementation(() => new Promise(() => undefined));
   if (state === 'ready' || state === 'failed refresh, aggregate kept') vi.mocked(fetchDashboardWeather).mockResolvedValue(weather);
   if (state === 'error, nothing kept') vi.mocked(fetchDashboardWeather).mockRejectedValue(new Error('provider down'));
@@ -251,10 +285,13 @@ afterEach(() => {
  * showing the same information says. The COUNTS agree in every state; « sans
  * la météo » is said wherever the page says its weather is missing — the
  * To-do widget's note (loading, failure) or its city invitation — and nowhere
- * else.
+ * else; and a count reads a forecast only where the page shows one (round 2,
+ * É8).
  */
 const MATRIX: Array<{
   state: WeatherState;
+  /** Whether the To-do and Tips widgets — and the band — count from a forecast: watering and cold tasks, watering tips. */
+  forecastCounted: boolean;
   /** The sub-line of « À faire aujourd'hui » and « Conseils » — null: none about the weather. */
   weatherSub: string | null;
   /** What the To-do widget says of the weather. */
@@ -268,6 +305,7 @@ const MATRIX: Array<{
 }> = [
   {
     state: 'first load',
+    forecastCounted: false,
     weatherSub: 'sans la météo — en cours de chargement',
     todoSays: 'note',
     tipsNote: false,
@@ -277,6 +315,7 @@ const MATRIX: Array<{
   },
   {
     state: 'ready',
+    forecastCounted: true,
     weatherSub: null,
     todoSays: 'nothing',
     tipsNote: false,
@@ -286,6 +325,7 @@ const MATRIX: Array<{
   },
   {
     state: 'failed refresh, aggregate kept',
+    forecastCounted: false,
     weatherSub: 'sans la météo — indisponible',
     todoSays: 'note',
     tipsNote: true,
@@ -295,6 +335,7 @@ const MATRIX: Array<{
   },
   {
     state: 'error, nothing kept',
+    forecastCounted: false,
     weatherSub: 'sans la météo — indisponible',
     todoSays: 'note',
     tipsNote: true,
@@ -304,6 +345,7 @@ const MATRIX: Array<{
   },
   {
     state: 'no city',
+    forecastCounted: false,
     weatherSub: 'sans la météo — ajoutez une ville',
     todoSays: 'invite',
     tipsNote: false,
@@ -322,6 +364,13 @@ describe('the Key figures band reads the weather the page reads (SMA-437, PR B, 
     // The counts: the same on the band and on the widget, in every state.
     expect(numberIn(tile('todo').value), 'À faire aujourd’hui').toBe(todo.count);
     expect(numberIn(tile('tips').value), 'Conseils').toBe(tips.count);
+    // …and read from a forecast only where the page shows one (round 2, É8):
+    // after a failed refresh, the plans alone — the aggregate kept is counted
+    // neither by the band nor by the widgets.
+    const counted = countsThrough(row.forecastCounted ? weatherAll() : EMPTY_WEATHER_DATA);
+    expect(todo.count, 'À faire aujourd’hui').toBe(counted.todo);
+    expect(tips.count, 'Conseils').toBe(counted.tips);
+    if (!row.forecastCounted) expect(drawnFromForecast()).toEqual({ tasks: [], tips: [] });
 
     // What each says of the weather.
     expect(tile('todo').sub, 'À faire aujourd’hui').toBe(row.weatherSub ?? tile('todo').sub);
@@ -341,17 +390,18 @@ describe('the Key figures band reads the weather the page reads (SMA-437, PR B, 
     expect(numberIn(tile('cities').value)).toBe(weatherColumn().cities);
   });
 
-  it('failed refresh, aggregate kept: the forecast the page still shows is counted — the band does not fall back to the plans alone', async () => {
+  it('failed refresh, aggregate kept: the last aggregate is not counted on — by the band or by any widget (round 2, É8)', async () => {
     await pageIn('failed refresh, aggregate kept', ['todo', 'tips', 'located', 'cities']);
-    // The kept aggregate is what makes the To-do and Tips widgets count more
-    // than the plans alone: the case is only a proof if it does.
-    const views = new Map(sceneGardens.map((garden) => [garden.id, gardenViewOf(garden)]));
-    const plansAlone = todoTasks(sceneGardens, sceneVarieties, EMPTY_WEATHER_DATA).length;
-    const tipsAlone = gardenAdvice(sceneGardens, views, sceneVarieties, EMPTY_WEATHER_DATA).tips.length;
-    expect(todoWidget().count).not.toBe(plansAlone);
-    expect(tipsWidget().count).not.toBe(tipsAlone);
-    expect(numberIn(tile('todo').value)).toBe(todoWidget().count);
-    expect(numberIn(tile('tips').value)).toBe(tipsWidget().count);
+    // Counted, the kept aggregate would make the To-do and Tips widgets count
+    // more than the plans alone: the case is only a proof if it would.
+    const kept = countsThrough(weatherAll());
+    const plansAlone = countsThrough(EMPTY_WEATHER_DATA);
+    expect(kept.todo).not.toBe(plansAlone.todo);
+    expect(kept.tips).not.toBe(plansAlone.tips);
+    expect(todoWidget().count).toBe(plansAlone.todo);
+    expect(tipsWidget().count).toBe(plansAlone.tips);
+    expect(numberIn(tile('todo').value)).toBe(plansAlone.todo);
+    expect(numberIn(tile('tips').value)).toBe(plansAlone.tips);
   });
 
   it.each(MATRIX.map((row) => row.state))('%s: the « ce mois-ci » lanes as the This month widget', async (state) => {
@@ -362,10 +412,12 @@ describe('the Key figures band reads the weather the page reads (SMA-437, PR B, 
     expect(numberIn(tile('harvest').value), 'harvest').toBe(month.harvest);
   });
 
-  it('failed refresh, aggregate kept: the lanes read the month of the PLACE the page still shows, not the browser’s', async () => {
+  it('failed refresh, aggregate kept: the lanes read the browser’s month — not the month of a place the page no longer shows (round 2, É8)', async () => {
     // A place already in October while the browser is still in September
     // (UTC+14; the browser at 11:00 UTC on 30 September) — the month
-    // `MonthBlock` reads from the aggregate it keeps.
+    // `MonthBlock` would read from the aggregate the hook keeps, were it
+    // handed to it. The Weather widget shows its failure, not the place: the
+    // lanes fall back to the browser's month, as without a city.
     vi.setSystemTime(Date.UTC(2026, 8, 30, 11, 0, 0));
     const kiritimati = locationFixture({
       key: '1.87,-157.36',
@@ -389,9 +441,47 @@ describe('the Key figures band reads the weather the page reads (SMA-437, PR B, 
 
     await pageIn('failed refresh, aggregate kept', ['prune', 'sow', 'harvest', 'flower'], weather);
     const month = monthWidget();
-    expect([month.prune, month.sow, month.harvest]).toEqual(lanes(weather));
+    expect([month.prune, month.sow, month.harvest]).toEqual(lanes(EMPTY_WEATHER_DATA));
     expect([numberIn(tile('prune').value), numberIn(tile('sow').value), numberIn(tile('harvest').value)]).toEqual(
-      lanes(weather)
+      lanes(EMPTY_WEATHER_DATA)
     );
+  });
+});
+
+/**
+ * Round 2, É8 — the widgets' notes are TRUE. Whenever the To-do widget says
+ * « Météo indisponible — les arrosages ne sont pas planifiés pour l’instant »,
+ * its list holds no watering and no cold task; whenever the Tips widget says
+ * « Météo indisponible — les conseils d’arrosage ne peuvent pas être vérifiés
+ * pour l’instant », it lists no watering tip. In every state of the matrix, on
+ * Large cards, where the whole list is drawn.
+ */
+describe('a widget that says the weather is unavailable counts nothing from it (SMA-437, PR B, round 2, É8)', () => {
+  it.each(MATRIX)('$state: no watering or cold task under the To-do note, no watering tip under the Tips note', async (row) => {
+    await pageIn(row.state, ['todo', 'tips', 'located', 'cities'], weatherAll(), 'large');
+    const todoNote = widget('todo').querySelector('[data-todo-weather-note]');
+    const tipsNote = widget('tips').querySelector('[data-tips-weather-note]');
+    // The notes are said where the matrix says them — or the invariant would
+    // hold by never being put to the test.
+    expect(todoNote !== null, 'the To-do note').toBe(row.todoSays === 'note');
+    expect(tipsNote !== null, 'the Tips note').toBe(row.tipsNote);
+    // Every task and every tip counted is drawn: what is read is the whole list.
+    expect(widget('todo').querySelectorAll('[data-todo-task]')).toHaveLength(todoWidget().count);
+    expect(widget('tips').querySelectorAll('[data-tips-tip]')).toHaveLength(tipsWidget().count);
+
+    if (todoNote) {
+      expect(todoNote.textContent).toBe('Météo indisponible — les arrosages ne sont pas planifiés pour l’instant.');
+    }
+    if (tipsNote) {
+      expect(tipsNote.textContent).toMatch(
+        /^Météo indisponible — les conseils d’arrosage ne peuvent pas être vérifiés pour l’instant\./
+      );
+    }
+    // Under each note, nothing read from a forecast — both lists in one look.
+    const drawn = drawnFromForecast();
+    expect({
+      underTheTodoNote: todoNote ? drawn.tasks : [],
+      underTheTipsNote: tipsNote ? drawn.tips : [],
+    }).toEqual({ underTheTodoNote: [], underTheTipsNote: [] });
   });
 });
