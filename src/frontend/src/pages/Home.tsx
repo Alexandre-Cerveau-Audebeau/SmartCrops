@@ -140,6 +140,32 @@ interface Testimonial {
  */
 const testimonials: Testimonial[] = [];
 
+/**
+ * A testimonial's initials on their disc. Exported so a test can measure its
+ * colours (SMA-449): while the list above is empty the page renders none.
+ */
+export function TestimonialAvatar({ initials }: { initials: string }) {
+  return (
+    <Box
+      sx={{
+        width: 36,
+        height: 36,
+        borderRadius: '50%',
+        bgcolor: 'primary.main',
+        color: 'primary.contrastText',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 14,
+        fontWeight: 600,
+        flexShrink: 0,
+      }}
+    >
+      {initials}
+    </Box>
+  );
+}
+
 const currentTech: TechItem[] = [
   ...TECH_STACK,
   {
@@ -583,23 +609,7 @@ export default function Home() {
                     &ldquo;{testimonial.quote}&rdquo;
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <Box
-                      sx={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: '50%',
-                        bgcolor: 'primary.light',
-                        color: '#fff',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 14,
-                        fontWeight: 600,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {testimonial.initials}
-                    </Box>
+                    <TestimonialAvatar initials={testimonial.initials} />
                     <Box>
                       <Typography variant="body2" fontWeight={500}>
                         {testimonial.name}
