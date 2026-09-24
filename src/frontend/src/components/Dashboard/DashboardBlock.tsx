@@ -74,9 +74,10 @@ export default function DashboardBlock({
   const padding = roomy ? DASHBOARD_SPACING.paddingLarge : DASHBOARD_SPACING.padding;
   // The Full width on a PHONE (SMA-437 lot 1, PR B, step B7): 20 px, the
   // phone's one air (V32; V3-04, `.ph .w.xl { padding: 20px }`). The harness
-  // measured the Key figures band at 24 px: a 110 px tile at 360 px, seven
-  // English digits at 22 px running 1.4 px past it; arbitrage 1's 22 px was
-  // measured on the 114 px tile these 20 px give. The Large is not touched.
+  // measured the Key figures band at 24 px: a tile with a content width of
+  // 110 px at 360 px (a 134 px box), seven English digits at 22 px running
+  // 1.4 px past it; arbitrage 1's 22 px was measured on the content width of
+  // 114 px (a 138 px box) these 20 px give. The Large is not touched.
   const air =
     size === 'wide'
       ? { xs: `${DASHBOARD_SPACING.padding}px`, sm: `${padding}px` }

@@ -3,19 +3,14 @@ using SmartCrops.Core.Dashboard;
 namespace SmartCrops.Api.Tests.Dashboard;
 
 /// <summary>
-/// SMA-437 lot 1, PR A, step A5 (pre-flight D3, D4) — the sizes a block may
-/// take, per formula. The twin of the client's
-/// <c>constants/dashboardCapabilities.test.ts</c>: the same table, pinned
-/// literally on both sides, as the presets are — and cross-checked against the
-/// shared reference file by <see cref="DashboardLayoutReferenceTests"/>
-/// (PR #287, fix round 1, S2).
-///
-/// <para>Since PR B, step B1 (pre-flight D3), ONE row has <c>wide</c>: the Key
-/// figures band at the Expert level, whose one size it is. Every other block is
-/// offered the Full width the day its Full-width version is drawn (A-N11), by
-/// adding it to that block's Expert row on both sides. Whether a level has a
-/// block at all is its preset's to say (D4): the band's rows at the two other
-/// levels are never read.</para>
+/// The sizes a block may take, per level (<see cref="DashboardCapabilities.SizesFor"/>):
+/// the Key figures band takes the Full width alone at the Expert level; every
+/// other block, at every level, takes Small, Medium and Large, in that order,
+/// and never the Full width; every preset's size is one its block may take; an
+/// unknown block takes none; the Full width is the fourth known size. The client
+/// pins the same table (<c>constants/dashboardCapabilities.test.ts</c>), and
+/// <see cref="DashboardLayoutReferenceTests"/> checks it against the shared
+/// reference file.
 /// </summary>
 public class DashboardCapabilitiesTests
 {

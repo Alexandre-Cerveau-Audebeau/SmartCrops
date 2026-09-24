@@ -36,9 +36,10 @@ describe('DashboardBlock — the padding of each size (SMA-437, D7)', () => {
 
   // SMA-437 lot 1, PR B, step B7 — the Full width on a phone: 20 px, the
   // phone's one air (V32; V3-04, `.ph .w.xl { padding: 20px }`). At 24 px a
-  // tile of the Key figures band is 110 px wide at 360 px, and seven English
-  // digits at 22 px (111.4 px) ran past it — the harness's extreme scene; the
-  // 114 px arbitrage 1 was measured on are the 20 px ones.
+  // tile of the Key figures band has a content width of 110 px at 360 px (a
+  // 134 px box), and seven English digits at 22 px (111.4 px) ran past it —
+  // the harness's extreme scene; the content width of 114 px (a 138 px box)
+  // arbitrage 1 was measured on is the 20 px one.
   it('gives the Full width 20 px on a phone, and 24 px from 600 px up', () => {
     const card = cardOf('wide', false);
     expect(declaredAtBreakpoint(card, '0px', 'padding')).toBe('20px');
