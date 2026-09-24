@@ -21,6 +21,13 @@
 > `--obtn-tx` (`#3C4A42`) ; bordures `--card-bd` (`#F0F4EE`), `--divider` (`#EDF2EC`),
 > `--input-bd` (`#D8E0D8`), `--obtn-bd` (`#D8E0D8`), `--cell-on-bd` (`#DEE9DA`),
 > `--cell-off-bd` (`#E3E6E1`). La nuit (§2) est inchangée.
+>
+> **Correctif de contraste SMA-449 (24/09/2026)** — le vert primaire jour est assombri, même
+> teinte et même saturation, pour que tout texte vert (et tout texte blanc sur fond vert)
+> atteigne 4,5:1 (WCAG AA). Tokens déviés (valeur maquette d'origine) : `--prim` (`#2E8B57`),
+> `--h1` (`#2E8B57`). Ratios : 4,25 → 5,20:1 sur blanc ; pire couple de texte 4,53:1, sur
+> `--cnt-chip-bg`. Les verts des graphismes du §6 (treillis) restent tels quels. La nuit (§2)
+> est inchangée.
 
 ```css
 --page-bg: #FAFDF7;          --nav-bg: #1B5E3A;
@@ -28,7 +35,7 @@
 --shadow: 0 2px 10px rgba(27,94,58,0.07);
 --t-title: #22302A;          --t-sci: #5E6B64;
 --t-meta: #2F3B34;           --muted: #4F5A54;
---prim: #2E8B57;             --h1: #2E8B57;
+--prim: #297B4D;             --h1: #297B4D;
 --divider: #CBD5CA;          --input-bd: #B4C1B4;
 --search-bg: #FBFDFA;        --placeholder: #9AA69E;
 --track: #E2EADF;

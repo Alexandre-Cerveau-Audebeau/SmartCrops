@@ -145,7 +145,7 @@ export const BotanicalSynonymsSection = memo(function BotanicalSynonymsSection({
   const chipBorder = dark ? 'rgba(255,255,255,0.10)' : '#E2EADF';
   const chipText = dark ? palette.text.primary : '#3A463F';
   const toggleBg = dark ? 'transparent' : '#FFFFFF';
-  const toggleColor = dark ? palette.primary.main : '#2E8B57';
+  const toggleColor = palette.primary.main;
   const toggleBorder = dark ? palette.primary.main : '#BCE2CC';
 
   return (

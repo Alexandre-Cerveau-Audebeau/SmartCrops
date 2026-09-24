@@ -1,6 +1,9 @@
 import { render, screen } from '@testing-library/react';
+import { ThemeProvider } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n/i18n';
+import { createAppTheme } from '../../theme';
+import { contrast, resolveColor } from '../../test/contrast';
 import type { PlantSynonym } from '../../types/Plant';
 import { BotanicalSynonymsSection } from './BotanicalSynonymsSection';
 
@@ -103,13 +106,28 @@ describe('BotanicalSynonymsSection (SMA-246 — two-row clamp)', () => {
     const synonyms = Array.from({ length: 6 }, (_, i) =>
       syn(i + 1, `Synonym ${i + 1}`)
     );
-    render(<BotanicalSynonymsSection synonyms={synonyms} />);
+    // Under the product's day theme, not MUI's bare default: the toggle's
+    // colour has to come from the real palette for the ratio below to mean
+    // anything (SMA-449).
+    render(
+      <ThemeProvider theme={createAppTheme('light')}>
+        <BotanicalSynonymsSection synonyms={synonyms} />
+      </ThemeProvider>
+    );
 
     // 6 chips → rows 0,0,24,24,48,48; four fit two rows with the toggle → "+ 2 more".
     const toggle = await screen.findByRole('button', {
       name: /\+\s*2\s*more/i,
     });
     expect(toggle).toBeInTheDocument();
+
+    // SMA-449 — its 13 px label reads at WCAG AA (4,5:1) over its own white
+    // ground: the hardcoded `#2E8B57` measured 4,25:1.
+    const style = getComputedStyle(toggle);
+    const ground = resolveColor(style.backgroundColor, [255, 255, 255])!;
+    const text = resolveColor(style.color, ground)!;
+    expect(ground).toEqual([255, 255, 255]);
+    expect(contrast(text, ground)).toBeGreaterThanOrEqual(4.5);
   });
 
   it('clamps to four rows on mobile (SMA-247)', async () => {

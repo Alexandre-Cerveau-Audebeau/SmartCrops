@@ -269,7 +269,7 @@ const LIGHT: PlannerTokens = {
   tMeta: '#2F3B34', // contrast v2 16/07 (mockup #3C4A42)
   tSci: '#5E6B64', // contrast v2 16/07 (mockup #75827A)
   muted: '#4F5A54', // contrast v2 16/07 (mockup #7A8781)
-  prim: '#2E8B57',
+  prim: '#297B4D', // SMA-449 24/09 (mockup #2E8B57): 4.25 → 5.20:1 on white, 4.53:1 on cntChipBg
   expoIcc: '#E8890C',
   inputBd: '#B4C1B4', // contrast v2 16/07 (mockup #D8E0D8)
   searchBg: '#FBFDFA',
