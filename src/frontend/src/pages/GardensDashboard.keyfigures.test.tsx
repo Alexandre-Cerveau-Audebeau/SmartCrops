@@ -164,6 +164,22 @@ describe('the band’s gear — four emplacements, « Toujours quatre »', () =>
     expect(await savedFigures()).toEqual(['free', 'varieties', 'occupancy', 'todo']);
   });
 
+  // SMA-437 lot 1, PR B, round 1, S1 — ▼ of the FIRST emplacement: the move
+  // React makes by moving the focused row itself, in the page's own Popover and
+  // through its re-render (`patchBlock`). jsdom drops the focus of a moved node
+  // as Chrome does; what the page must leave is the focus back on ▼.
+  it('▼ moves a figure down a place, says the new place, keeps the focus — and writes the order', async () => {
+    const panel = await openPanel();
+    const down = within(panel).getByRole('button', { name: 'Move “Free cells” down' });
+    down.focus();
+    fireEvent.click(down);
+
+    expect(said(panel)).toHaveTextContent('“Free cells” moves to 2nd place.');
+    expect(document.activeElement).toBe(within(panel).getByRole('button', { name: 'Move “Free cells” down' }));
+    expect(slots(panel)[1]).toHaveAccessibleName('Replace “Free cells”, 2nd place');
+    expect(await savedFigures()).toEqual(['occupancy', 'free', 'varieties', 'todo']);
+  });
+
   it('opens the catalogue IN the panel on « Replace »: the 22 figures in five groups, the emplacement’s own checked and marked', async () => {
     const panel = await openPanel();
     fireEvent.click(slots(panel)[1]!);

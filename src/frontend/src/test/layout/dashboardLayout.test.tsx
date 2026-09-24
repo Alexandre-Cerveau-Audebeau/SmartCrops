@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { GRID_SCENES, LAYOUT_SCENES } from './scenes';
 import { PROBE_SCENES, WIDE_LINE, WIDE_SHORT_HEIGHT } from './probes';
 import type { GridMeasure, SceneMeasure } from './harness';
+import type { FocusMeasure } from './focusProbe';
 import { VISIBLE_OVERLAP_PX } from './measure';
 import { sizesFor } from '../../constants/dashboardCapabilities';
 import type { DashboardBlockKey } from '../../types/Dashboard';
@@ -123,6 +124,8 @@ const results = new Map<string, Map<string, SceneMeasure>>();
 const probes = new Map<string, Map<string, SceneMeasure>>();
 /** The grid scenes' measurements, by run then by scene name (SMA-437, D19). */
 const grids = new Map<string, Map<string, GridMeasure>>();
+/** Where the reorderable list leaves the focus, by run then by case (SMA-437 lot 1, PR B, round 1, S1). */
+const focusCases = new Map<string, Map<string, FocusMeasure>>();
 let outDir = '';
 
 /** The runs whose grid has two or four columns — the tablets and the desktop — where the rows are `auto` and the cards pinned. */
@@ -188,10 +191,11 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       settled.forEach((outcome, index) => {
         if (outcome.status === 'fulfilled') {
           const byName = (measured: SceneMeasure[]) => new Map(measured.map((scene) => [scene.scene, scene]));
-          const { scenes, grids: measuredGrids } = outcome.value;
+          const { scenes, grids: measuredGrids, focus } = outcome.value;
           results.set(RUNS[index]!.id, byName(scenes.filter((scene) => scene.probe === null)));
           probes.set(RUNS[index]!.id, byName(scenes.filter((scene) => scene.probe !== null)));
           grids.set(RUNS[index]!.id, new Map(measuredGrids.map((grid) => [grid.scene, grid])));
+          focusCases.set(RUNS[index]!.id, new Map(focus.map((measure) => [measure.probe, measure])));
         }
       });
       const failed = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
@@ -478,6 +482,51 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
         expect(others.some((card) => card.box.y < band.box.y), run.id).toBe(true);
         expect(others.some((card) => card.box.y > band.box.y), run.id).toBe(true);
         for (const card of others) expect(card.box.h, `${run.id} ${card.scene}`).toBe(PINNED[card.size]);
+      }
+    });
+  });
+
+  // SMA-437 lot 1, PR B, round 1, S1 — the reorderable list's promise, « ▲ ▼
+  // keep the focus on themselves », read where a keyboard user lives: in a
+  // browser, bare and inside the Popover the Key figures gear draws it in.
+  // jsdom cannot tell: it drops the focus of a moved node as Chrome does, and
+  // React gives it back after its commit — the question is what the engine,
+  // the Popover's trap and dnd-kit leave in the end (`focusProbe.tsx`).
+  describe('the reorderable list leaves the focus on the control pressed (SMA-437 lot 1, PR B, round 1, S1)', () => {
+    const caseOf = (run: LayoutRun, probe: string): FocusMeasure => {
+      const measure = focusCases.get(run.id)?.get(probe);
+      if (!measure) throw new Error(`No focus measurement ${probe} in ${run.id}`);
+      return measure;
+    };
+    const ROWS = ['Cases libres', 'Occupation', 'Variétés', 'À faire aujourd’hui'];
+    /** Each gesture: the order it leaves, and where the focus must be — the row moved, the control pressed, an end reached. */
+    const EXPECTED: Array<[string, string[], string, string, boolean]> = [
+      ['down row 1', [ROWS[1]!, ROWS[0]!, ROWS[2]!, ROWS[3]!], ROWS[0]!, 'down', false],
+      ['down row 3', [ROWS[0]!, ROWS[1]!, ROWS[3]!, ROWS[2]!], ROWS[2]!, 'down', true],
+      ['up row 3', [ROWS[0]!, ROWS[2]!, ROWS[1]!, ROWS[3]!], ROWS[2]!, 'up', false],
+      ['up row 2', [ROWS[1]!, ROWS[0]!, ROWS[2]!, ROWS[3]!], ROWS[1]!, 'up', true],
+      ['handle-down row 1', [ROWS[1]!, ROWS[0]!, ROWS[2]!, ROWS[3]!], ROWS[0]!, 'handle', false],
+      ['handle-up row 3', [ROWS[0]!, ROWS[2]!, ROWS[1]!, ROWS[3]!], ROWS[2]!, 'handle', false],
+    ];
+
+    it('sees a focus the engine drops: a focused row moved by the DOM alone leaves it on the body (the control case)', () => {
+      for (const run of RUNS) {
+        const control = caseOf(run, 'control/down row 1');
+        expect([control.focusedRow, control.focusedControl, control.blurredOnTheWay], run.id).toEqual([null, 'body', true]);
+      }
+    });
+
+    it.each(['list', 'popover'])('%s: ▲, ▼ and the handle leave the focus on the control pressed, on the row moved — ends included', (container) => {
+      for (const run of RUNS) {
+        for (const [gesture, order, row, control, disabled] of EXPECTED) {
+          const measure = caseOf(run, `${container}/${gesture}`);
+          expect([measure.order, measure.focusedRow, measure.focusedControl, measure.focusedDisabled], `${run.id} ${measure.probe}`).toEqual([
+            order,
+            row,
+            control,
+            disabled,
+          ]);
+        }
       }
     });
   });

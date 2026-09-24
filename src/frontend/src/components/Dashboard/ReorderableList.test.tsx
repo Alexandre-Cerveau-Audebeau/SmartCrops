@@ -102,6 +102,34 @@ describe('ReorderableList — ▲ ▼ at the keyboard', () => {
     expect(said()).toHaveTextContent('« Cases libres » passe en 2ᵉ place.');
   });
 
+  // SMA-437 lot 1, PR B, round 1, S1 — ▼ keeps the focus on ▼. On ▼, React
+  // moves the FOCUSED row itself in the DOM (its keyed reconciliation moves the
+  // row that falls behind), the engine drops the focus of the moved node — jsdom
+  // as Chrome — and React's commit gives it back to the element focused before
+  // it. These tests pin that end state; the harness reads it in Chrome, bare
+  // and in a Popover (`test/layout/focusProbe.tsx`).
+  it('▼ moves the row down one place — and the focus stays on ▼', () => {
+    localStorage.setItem('smartcrops-language', 'fr');
+    render(<Harness />);
+    const down = screen.getByRole('button', { name: 'Descendre «\u00a0Cases libres\u00a0»' });
+    down.focus();
+    fireEvent.click(down);
+    expect(order()).toEqual(['Occupation', 'Cases libres', 'Variétés', 'À faire aujourd’hui']);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Descendre «\u00a0Cases libres\u00a0»' }));
+  });
+
+  it('keeps the focus on ▼ when the row reaches the bottom — the button turns aria-disabled under it', () => {
+    localStorage.setItem('smartcrops-language', 'fr');
+    render(<Harness />);
+    const down = screen.getByRole('button', { name: 'Descendre «\u00a0Variétés\u00a0»' });
+    down.focus();
+    fireEvent.click(down);
+    const again = screen.getByRole('button', { name: 'Descendre «\u00a0Variétés\u00a0»' });
+    expect(order()).toEqual(['Cases libres', 'Occupation', 'À faire aujourd’hui', 'Variétés']);
+    expect(document.activeElement).toBe(again);
+    expect(again).toHaveAttribute('aria-disabled', 'true');
+  });
+
   it('keeps the ends REACHABLE: ▲ of the first row and ▼ of the last are aria-disabled, not disabled, and do nothing', () => {
     localStorage.setItem('smartcrops-language', 'fr');
     const onMove = vi.fn();

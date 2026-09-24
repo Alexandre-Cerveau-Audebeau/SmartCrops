@@ -17,6 +17,7 @@ import {
   type LayoutScene,
 } from './scenes';
 import { PROBE_SCENES, probeWidget, type ProbeScene } from './probes';
+import { measureFocus, type FocusMeasure } from './focusProbe';
 import { encodeResults } from './encode';
 import { RESULTS_ID, measureCard, measureControls, type CardMeasure, type ControlMeasure } from './measure';
 
@@ -114,10 +115,12 @@ export interface GridMeasure {
   controls: Array<{ key: string; controls: ControlMeasure[] }>;
 }
 
-/** What one run of the page returns: the one-card scenes and probes, and the grid scenes. */
+/** What one run of the page returns: the one-card scenes and probes, the grid scenes, and where the focus goes in the reorderable list. */
 export interface LayoutResults {
   scenes: SceneMeasure[];
   grids: GridMeasure[];
+  /** SMA-437 lot 1, PR B, round 1, S1 — the reorderable list's gestures, and where each leaves the focus (`focusProbe.tsx`). */
+  focus: FocusMeasure[];
 }
 
 declare global {
@@ -338,7 +341,7 @@ async function main() {
   await Promise.all([300, 400, 500, 600, 700].map((weight) => document.fonts.load(`${weight} 16px Inter`)));
   progress('fonts ready');
 
-  const results: LayoutResults = { scenes: [], grids: [] };
+  const results: LayoutResults = { scenes: [], grids: [], focus: [] };
   for (const scene of [...LAYOUT_SCENES, ...PROBE_SCENES].filter((s) => !only || s.name === only)) {
     const host = document.createElement('div');
     page.appendChild(host);
@@ -375,6 +378,14 @@ async function main() {
     results.grids.push(measureGrid(grid, host));
     root.unmount();
     host.remove();
+  }
+
+  // Where the focus goes in the reorderable list (S1), after the scenes: a
+  // run asked for one scene measures that scene alone.
+  if (!only) {
+    progress('focus…');
+    results.focus = await measureFocus(page, mode);
+    progress('focus measured');
   }
 
   window.__layoutResults = results;
