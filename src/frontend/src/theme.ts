@@ -64,7 +64,11 @@ export function createAppTheme(mode: 'light' | 'dark'): Theme {
       : {
           mode: 'light',
           primary: {
-            main: '#2E8B57',
+            // SMA-449 (option C, 24/09/2026) — darkened from #2E8B57, the one
+            // departure from the historical palette described above: same hue
+            // and saturation, 4.25 → 5.20:1 on white; its worst text ground,
+            // the #E4F3E9 tint, now reads 4.53:1 (WCAG AA is 4.5:1).
+            main: '#297B4D',
             dark: '#1B5E3A',
             light: '#4CAF78',
             contrastText: '#ffffff',

@@ -1,9 +1,12 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
+import { ThemeProvider } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18next from '../i18n/i18n';
 import { AuthProvider } from '../contexts/AuthContext';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import { contrast, resolveColor } from '../test/contrast';
+import { createAppTheme } from '../theme';
 import type { AuthUser } from '../types/Auth';
 
 vi.mock('../services/plantApi', () => ({
@@ -17,7 +20,7 @@ vi.mock('../services/authApi', () => ({
   logout: vi.fn(),
 }));
 
-import Home from './Home';
+import Home, { TestimonialAvatar } from './Home';
 import { fetchPlants } from '../services/plantApi';
 import { fetchMe } from '../services/authApi';
 
@@ -382,5 +385,26 @@ describe('Home — what a signed-in visitor is offered (SMA-360)', () => {
     const reserved = container.querySelector('a[href="/register"]');
     expect(reserved).not.toBeNull();
     expect(reserved).toHaveStyle({ visibility: 'hidden' });
+  });
+});
+
+// SMA-449 — a testimonial's initials read at WCAG AA (4,5:1) on their disc, by
+// day and by night. White on `primary.light` measured 2,72:1 by day and 1,79:1
+// by night, where the light green is lighter still. The list is empty today
+// (SMA-353), so the avatar is rendered on its own, under each real theme.
+describe('Home — a testimonial’s initials read on their disc (SMA-449)', () => {
+  it.each(['light', 'dark'] as const)('at AA, %s theme', (mode) => {
+    const theme = createAppTheme(mode);
+    render(
+      <ThemeProvider theme={theme}>
+        <TestimonialAvatar initials="MD" />
+      </ThemeProvider>
+    );
+
+    const style = getComputedStyle(screen.getByText('MD'));
+    const paper = resolveColor(theme.palette.background.paper, [255, 255, 255])!;
+    const disc = resolveColor(style.backgroundColor, paper)!;
+    const initials = resolveColor(style.color, disc)!;
+    expect(contrast(initials, disc)).toBeGreaterThanOrEqual(4.5);
   });
 });
