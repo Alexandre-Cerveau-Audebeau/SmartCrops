@@ -14,10 +14,12 @@ import Skeleton from '@mui/material/Skeleton';
 import Snackbar from '@mui/material/Snackbar';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import CompactActionBar from '../components/Dashboard/CompactActionBar';
 import CustomizePanel from '../components/Dashboard/CustomizePanel';
 import DashboardActions from '../components/Dashboard/DashboardActions';
 import DashboardGrid from '../components/Dashboard/DashboardGrid';
 import { DASHBOARD_HEADER_SX } from '../components/Dashboard/dashboardHeader';
+import { useCompactActionBar } from '../components/Dashboard/useCompactActionBar';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import CountersOptionsPanel from '../components/Dashboard/blocks/CountersOptionsPanel';
 import { resolveCountersFigures } from '../components/Dashboard/blocks/countersOptions';
@@ -258,6 +260,11 @@ export default function GardensDashboard() {
 
   const [editing, setEditing] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+
+  // SMA-437, lot V39, PR B — the compact action bar: mounted at the formulas
+  // that have one (A-9), armed once the layout is read (A-10.2), shown when
+  // the header's repeated buttons pass under the site navbar plus the bar.
+  const actionBar = useCompactActionBar(level, !loading && !loadError);
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newGardenName, setNewGardenName] = useState('');
@@ -789,8 +796,24 @@ export default function GardensDashboard() {
           onEditingChange={setEditing}
           onCustomize={() => setPanelOpen(true)}
           onCreate={() => setCreateDialogOpen(true)}
+          repeatHidden={actionBar.shown}
+          pageActionsRef={actionBar.repeatedRef}
         />
       </Box>
+
+      {/* SMA-437, lot V39, PR B — right after the header and right before the
+          grid: the keyboard reaches it where it belongs (A-10.6). */}
+      {actionBar.enabled && (
+        <CompactActionBar
+          barRef={actionBar.barRef}
+          shown={actionBar.shown}
+          top={actionBar.top}
+          editing={editing}
+          unavailable={loading || loadError}
+          onEditingChange={setEditing}
+          onCustomize={() => setPanelOpen(true)}
+        />
+      )}
 
       {loading && (
         <Box

@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -29,6 +30,78 @@ export interface DashboardActionsProps {
   onCustomize: () => void;
   /** Opens the create-a-garden dialog — in Edit mode, once the mode is over. */
   onCreate: () => void;
+  /**
+   * The compact action bar has taken the two repeated buttons over (SMA-437,
+   * lot V39, PR B, B4): their wrapper turns `inert` and `aria-hidden`, so one
+   * row of them is live at a time (A-10.6). The chip, the save indicator and
+   * « Créer un jardin », which the bar does not repeat, stay live.
+   */
+  repeatHidden?: boolean;
+  /** The wrapper of the two repeated buttons — what the compact bar's trigger observes (B2). */
+  pageActionsRef?: Ref<HTMLDivElement>;
+}
+
+export interface PageActionButtonsProps {
+  editing: boolean;
+  /** The layout is loading or could not be read: « Modifier » and « Personnaliser » disabled. */
+  unavailable: boolean;
+  onEditingChange: (editing: boolean) => void;
+  onCustomize: () => void;
+}
+
+/**
+ * The two buttons the compact action bar repeats (SMA-437, lot V39, PR B, B4)
+ * — drawn by the header's zone and by the bar, so « the same buttons » (A-10.3:
+ * the same words, the same glyphs, the same height) are the same BY
+ * CONSTRUCTION. Each carries the key of its action, `data-page-action`, by
+ * which the focus finds its twin in the other row (A-10.6).
+ */
+export function PageActionButtons({
+  editing,
+  unavailable,
+  onEditingChange,
+  onCustomize,
+}: PageActionButtonsProps) {
+  const { t } = useTranslation();
+  return (
+    <>
+      {/* ONE button for « Modifier » and « Terminé » (A-10.5) — see the
+          docblock of `DashboardActions`. `EditOutlined` (round 6, N5-6): the
+          path `Main.dc.html` draws on « Modifier », matched attribute for
+          attribute; « Terminé » is filled and carries no glyph. Disabled like
+          « Personnaliser » while the layout is unavailable — « Terminé » never
+          is. */}
+      <Button
+        data-page-action="edit"
+        variant={editing ? 'contained' : 'outlined'}
+        startIcon={editing ? undefined : <EditOutlinedIcon />}
+        onClick={() => onEditingChange(!editing)}
+        disabled={!editing && unavailable}
+      >
+        {t(editing ? 'dashboard.done' : 'dashboard.edit')}
+      </Button>
+      {/* In BOTH modes (A-7, Alexandre 25/09): the compact action bar
+          carries « Personnaliser » in Edit mode and never adds a control the
+          header lacks. `DashboardCustomizeOutlined`, and not `TuneRounded`
+          (round 5, A10-11). The two glyphs were swapped: the artboard draws
+          the four squares of `DashboardCustomizeOutlined` on « Personnaliser
+          » and keeps the sliders of `Tune` for the level chip, and the page
+          had the sliders here and nothing on the chip. Putting the chip's
+          glyph back without moving this one would have drawn the same
+          sliders twice, side by side, on two controls that do different
+          things. Both paths were matched against `@mui/icons-material`
+          attribute for attribute. */}
+      <Button
+        data-page-action="customize"
+        variant="outlined"
+        startIcon={<DashboardCustomizeOutlinedIcon />}
+        onClick={onCustomize}
+        disabled={unavailable}
+      >
+        {t('dashboard.customize')}
+      </Button>
+    </>
+  );
 }
 
 /**
@@ -70,6 +143,8 @@ export default function DashboardActions({
   onEditingChange,
   onCustomize,
   onCreate,
+  repeatHidden = false,
+  pageActionsRef,
 }: DashboardActionsProps) {
   const { t } = useTranslation();
   const tk = useDashboardTokens();
@@ -164,49 +239,27 @@ export default function DashboardActions({
       </Box>
       {/* The two buttons the compact action bar repeats, in ONE wrapper of
           their own (`.rep`): two equal halves on a phone (A-10.3), side by
-          side from 600 px. */}
+          side from 600 px. While the bar shows them, this wrapper is `inert`
+          and `aria-hidden` — `aria-hidden` too because Testing Library knows
+          nothing of `inert`, and a browser drops an inert subtree from the
+          accessibility tree anyway (pre-flight, technical decision 6). */}
       <Box
+        ref={pageActionsRef}
         data-page-actions
+        inert={repeatHidden}
+        aria-hidden={repeatHidden || undefined}
         sx={{
           display: { xs: 'grid', sm: 'flex' },
           gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))' },
           gap: { xs: '8px', sm: '12px' },
         }}
       >
-        {/* ONE button for « Modifier » and « Terminé » (A-10.5) — see the
-            docblock. `EditOutlined` (round 6, N5-6): the path `Main.dc.html`
-            draws on « Modifier », matched attribute for attribute; « Terminé »
-            is filled and carries no glyph. Disabled like « Personnaliser »
-            while the layout is unavailable — « Terminé » never is. */}
-        <Button
-          data-page-action="edit"
-          variant={editing ? 'contained' : 'outlined'}
-          startIcon={editing ? undefined : <EditOutlinedIcon />}
-          onClick={() => onEditingChange(!editing)}
-          disabled={!editing && unavailable}
-        >
-          {t(editing ? 'dashboard.done' : 'dashboard.edit')}
-        </Button>
-        {/* In BOTH modes (A-7, Alexandre 25/09): the compact action bar
-            carries « Personnaliser » in Edit mode and never adds a control the
-            header lacks. `DashboardCustomizeOutlined`, and not `TuneRounded`
-            (round 5, A10-11). The two glyphs were swapped: the artboard draws
-            the four squares of `DashboardCustomizeOutlined` on « Personnaliser
-            » and keeps the sliders of `Tune` for the level chip, and the page
-            had the sliders here and nothing on the chip. Putting the chip's
-            glyph back without moving this one would have drawn the same
-            sliders twice, side by side, on two controls that do different
-            things. Both paths were matched against `@mui/icons-material`
-            attribute for attribute. */}
-        <Button
-          data-page-action="customize"
-          variant="outlined"
-          startIcon={<DashboardCustomizeOutlinedIcon />}
-          onClick={onCustomize}
-          disabled={unavailable}
-        >
-          {t('dashboard.customize')}
-        </Button>
+        <PageActionButtons
+          editing={editing}
+          unavailable={unavailable}
+          onEditingChange={onEditingChange}
+          onCustomize={onCustomize}
+        />
       </Box>
       {/* In BOTH modes, and active (A-7 amended — Alexandre, 25/09, fix
           round 1 of #291): the header keeps its arrangement when the page
