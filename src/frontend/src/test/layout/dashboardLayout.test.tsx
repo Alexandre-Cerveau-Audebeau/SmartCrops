@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { GRID_SCENES, LAYOUT_SCENES } from './scenes';
+import { ACTIONS_SCENES, GRID_SCENES, LAYOUT_SCENES } from './scenes';
 import { PROBE_SCENES, WIDE_LINE, WIDE_SHORT_HEIGHT } from './probes';
-import type { GridMeasure, SceneMeasure } from './harness';
+import type { ActionsMeasure, GridMeasure, SceneMeasure } from './harness';
 import type { FocusMeasure } from './focusProbe';
-import { VISIBLE_OVERLAP_PX } from './measure';
+import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 import { sizesFor } from '../../constants/dashboardCapabilities';
 import type { DashboardBlockKey } from '../../types/Dashboard';
 import {
@@ -126,6 +126,8 @@ const probes = new Map<string, Map<string, SceneMeasure>>();
 const grids = new Map<string, Map<string, GridMeasure>>();
 /** Where the reorderable list leaves the focus, by run then by case (SMA-437 lot 1, PR B, round 1, S1). */
 const focusCases = new Map<string, Map<string, FocusMeasure>>();
+/** The header's actions zone, by run then by scene name (SMA-437, lot V39). */
+const actionsCases = new Map<string, Map<string, ActionsMeasure>>();
 let outDir = '';
 
 /** The runs whose grid has two or four columns — the tablets and the desktop — where the rows are `auto` and the cards pinned. */
@@ -138,7 +140,7 @@ const gridWidthAt = (vw: number) => Math.min(vw, 1200) - 48;
 const PINNED: Record<string, number> = { small: 273, medium: 273, large: 566 };
 
 /** What a scene must be free of, at every width — named so a failure says which. */
-function defects(scene: SceneMeasure) {
+function defects(scene: CardMeasure) {
   return {
     overlaps: scene.overlaps
       .filter((o) => Math.min(o.w, o.h) >= VISIBLE_OVERLAP_PX)
@@ -191,11 +193,12 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       settled.forEach((outcome, index) => {
         if (outcome.status === 'fulfilled') {
           const byName = (measured: SceneMeasure[]) => new Map(measured.map((scene) => [scene.scene, scene]));
-          const { scenes, grids: measuredGrids, focus } = outcome.value;
+          const { scenes, grids: measuredGrids, focus, actions } = outcome.value;
           results.set(RUNS[index]!.id, byName(scenes.filter((scene) => scene.probe === null)));
           probes.set(RUNS[index]!.id, byName(scenes.filter((scene) => scene.probe !== null)));
           grids.set(RUNS[index]!.id, new Map(measuredGrids.map((grid) => [grid.scene, grid])));
           focusCases.set(RUNS[index]!.id, new Map(focus.map((measure) => [measure.probe, measure])));
+          actionsCases.set(RUNS[index]!.id, new Map(actions.map((measure) => [measure.scene, measure])));
         }
       });
       const failed = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
@@ -221,6 +224,10 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       }
       expect(probes.get(run.id)?.size, run.id).toBe(PROBE_SCENES.length);
       expect(grids.get(run.id)?.size, run.id).toBe(GRID_SCENES.length);
+      expect(actionsCases.get(run.id)?.size, run.id).toBe(ACTIONS_SCENES.length);
+      for (const zone of actionsCases.get(run.id)?.values() ?? []) {
+        expect(zone.fontLoaded, `${run.id} ${zone.scene}: Inter not loaded`).toBe(true);
+      }
     }
   });
 
@@ -528,6 +535,140 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
           ]);
         }
       }
+    });
+  });
+
+  // SMA-437, lot V39, step A4 (pre-flight C.6, n° 1) — the header's actions
+  // zone, `DashboardActions`, in every state (`ACTIONS_SCENES`). On a phone,
+  // the arrangement of § 4.1 of the v3 contract, drawn again by V3-05: the
+  // chip and the indicator on one line, then « Modifier » — « Terminé » in
+  // Edit mode — and « Personnaliser » in two equal halves, then « Créer un
+  // jardin » the whole width; nothing under the finger moves when the
+  // indicator speaks, in every state that holds on one line. The one state
+  // that does not — the failure beside the adjusted chip — puts the indicator
+  // under the chip for as long as it shows (decision (a) of 25/09, SMA-437).
+  describe('the header’s actions zone (SMA-437, lot V39)', () => {
+    /** The three phone runs of their own: French at 360 and 390 px, English at 360. */
+    const PHONE_IDS = ['fr@360', 'fr@390', 'en@360'];
+    /** The gap between the chip and the indicator on their line: V3-05, `.vp.ph .a-top { gap: 10px }`. */
+    const CHIP_LINE_GAP = 10;
+    /** The gap between two parts of the zone from 600 px up: the header's, as before (`.acts { gap: 12px }`). */
+    const WIDE_GAP = 12;
+    const near = (a: number, b: number) => Math.abs(a - b) <= 0.5;
+
+    const zoneOf = (run: LayoutRun, name: string): ActionsMeasure => {
+      const measure = actionsCases.get(run.id)?.get(name);
+      if (!measure) throw new Error(`No measurement for the actions scene ${name} in ${run.id}`);
+      return measure;
+    };
+    const partOf = (measure: ActionsMeasure, part: keyof ActionsMeasure['parts']) => {
+      const box = measure.parts[part];
+      if (!box) throw new Error(`${measure.scene}: no ${part}`);
+      return box;
+    };
+    /** The chip and what the indicator says hold on one line of the zone: there is nothing to put under the chip, or both widths and their gap fit. */
+    const holds = (measure: ActionsMeasure) =>
+      !measure.parts.chip ||
+      measure.statusText === '' ||
+      measure.parts.chip.w + CHIP_LINE_GAP + partOf(measure, 'status').w <= measure.zone.w + 0.5;
+
+    it.each(RUNS.map((run) => run.id))('%s: every state of the zone is clean — no overlap, nothing clipped, nothing past the zone', (id) => {
+      for (const scene of ACTIONS_SCENES) {
+        expect(defects(zoneOf(runOf(id), scene.name)), scene.name).toEqual({ overlaps: [], clipped: [], spills: [], beyondCard: 0 });
+      }
+    });
+
+    it.each(PHONE_IDS)('%s: gives the zone the whole line of the phone', (id) => {
+      const run = runOf(id);
+      for (const scene of ACTIONS_SCENES) expect(zoneOf(run, scene.name).zone.w, scene.name).toBe(run.vw - 32);
+    });
+
+    it.each(PHONE_IDS)('%s: draws the two repeated buttons side by side, two equal halves of the zone, at rest and in Edit mode (§ 4.1, A-10.3)', (id) => {
+      const faults = ACTIONS_SCENES.flatMap((scene) => {
+        const measure = zoneOf(runOf(id), scene.name);
+        const toggle = partOf(measure, 'toggle');
+        const customize = partOf(measure, 'customize');
+        const found: string[] = [];
+        if (!near(toggle.y, customize.y)) found.push(`the toggle at y ${toggle.y}, Customize at y ${customize.y}`);
+        if (!near(toggle.w, customize.w)) found.push(`halves of ${toggle.w} and ${customize.w} px`);
+        if (!near(toggle.x, 0) || !near(customize.x + customize.w, measure.zone.w)) {
+          found.push(`the pair spans ${toggle.x} to ${customize.x + customize.w} of ${measure.zone.w} px`);
+        }
+        return found.map((fault) => `${scene.name}: ${fault}`);
+      });
+      expect(faults).toEqual([]);
+    });
+
+    it.each(PHONE_IDS)('%s: puts « Créer un jardin » alone under the pair, the whole width of the zone — at rest only (§ 4.1, A-7)', (id) => {
+      const faults = ACTIONS_SCENES.flatMap((scene) => {
+        const measure = zoneOf(runOf(id), scene.name);
+        if (scene.editing) return measure.parts.create ? [`${scene.name}: a Create button in Edit mode`] : [];
+        const create = partOf(measure, 'create');
+        const toggle = partOf(measure, 'toggle');
+        const found: string[] = [];
+        if (!near(create.x, 0) || !near(create.w, measure.zone.w)) found.push(`Create spans ${create.x} to ${create.x + create.w} of ${measure.zone.w} px`);
+        if (create.y < toggle.y + toggle.h) found.push(`Create at y ${create.y}, above the pair's bottom ${toggle.y + toggle.h}`);
+        return found.map((fault) => `${scene.name}: ${fault}`);
+      });
+      expect(faults).toEqual([]);
+    });
+
+    it.each(PHONE_IDS)('%s: keeps the chip and the indicator on one line whenever they fit — and puts the indicator under the chip in the one state that does not, the failure (decision (a))', (id) => {
+      const faults = ACTIONS_SCENES.flatMap((scene) => {
+        const measure = zoneOf(runOf(id), scene.name);
+        if (!measure.parts.chip || measure.statusText === '') return [];
+        const chip = partOf(measure, 'chip');
+        const status = partOf(measure, 'status');
+        const found: string[] = [];
+        if (holds(measure)) {
+          if (Math.abs(status.y + status.h / 2 - (chip.y + chip.h / 2)) > 1) found.push(`the indicator at y ${status.y}, off the chip's line (${chip.y}, ${chip.h} px)`);
+          if (!near(status.x, chip.x + chip.w + CHIP_LINE_GAP)) found.push(`the indicator at x ${status.x}, not ${CHIP_LINE_GAP} px after the chip`);
+        } else {
+          if (scene.saveState !== 'error') found.push(`only the failure may leave the chip's line, not « ${measure.statusText} »`);
+          if (status.y < chip.y + chip.h || !near(status.x, 0)) found.push(`the indicator at (${status.x}, ${status.y}), not under the chip`);
+        }
+        return found.map((fault) => `${scene.name}: ${fault}`);
+      });
+      expect(faults).toEqual([]);
+    });
+
+    it.each(PHONE_IDS)('%s: never moves « Terminé » or « Modifier » when the indicator speaks, in every state that holds on one line — one line down in the one that does not (decision (a))', (id) => {
+      const run = runOf(id);
+      const faults = (['gardener', 'expert'] as const).flatMap((level) =>
+        (['rest', 'edit'] as const).flatMap((mode) => {
+          const reference = partOf(zoneOf(run, `actions-${level}-${mode}-idle`), 'toggle');
+          return (['pending', 'saved', 'error'] as const).flatMap((state) => {
+            const measure = zoneOf(run, `actions-${level}-${mode}-${state}`);
+            const toggle = partOf(measure, 'toggle');
+            const at = `${measure.scene}: the toggle at (${toggle.x}, ${toggle.y}) ${toggle.w} × ${toggle.h}, (${reference.x}, ${reference.y}) ${reference.w} × ${reference.h} before any change`;
+            if (holds(measure)) {
+              return near(toggle.x, reference.x) && near(toggle.y, reference.y) && near(toggle.w, reference.w) && near(toggle.h, reference.h) ? [] : [at];
+            }
+            return near(toggle.x, reference.x) && near(toggle.w, reference.w) && toggle.y > reference.y ? [] : [at];
+          });
+        })
+      );
+      expect(faults).toEqual([]);
+    });
+
+    it.each(RUNS.filter((run) => run.vw >= 600).map((run) => run.id))('%s: from 600 px up, keeps the header’s row — the pair on one line, and no room for the indicator while it is empty (risk 13)', (id) => {
+      const faults = ACTIONS_SCENES.filter((scene) => !scene.unavailable).flatMap((scene) => {
+        const measure = zoneOf(runOf(id), scene.name);
+        const chip = partOf(measure, 'chip');
+        const toggle = partOf(measure, 'toggle');
+        const customize = partOf(measure, 'customize');
+        const found: string[] = [];
+        if (!near(toggle.y, customize.y)) found.push(`the toggle at y ${toggle.y}, Customize at y ${customize.y}`);
+        // The gap is read where the toggle shares the chip's line; a zone
+        // too narrow for the whole row wraps the pair under it, as before.
+        const onChipLine = Math.abs(toggle.y + toggle.h / 2 - (chip.y + chip.h / 2)) <= 1;
+        const before = measure.statusText === '' ? chip : partOf(measure, 'status');
+        if (onChipLine && !near(toggle.x - (before.x + before.w), WIDE_GAP)) {
+          found.push(`${toggle.x - (before.x + before.w)} px from the ${measure.statusText === '' ? 'chip' : 'indicator'} to the toggle`);
+        }
+        return found.map((fault) => `${scene.name}: ${fault}`);
+      });
+      expect(faults).toEqual([]);
     });
   });
 

@@ -548,6 +548,29 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     expect(header.getAllByRole('status')).toEqual([region]);
   });
 
+  // SMA-437, lot V39, step A4 (§ 4.1 of the v3 contract, A-10.1, A-10.3) —
+  // the two buttons the compact action bar repeats sit in ONE wrapper of
+  // their own: on a phone it lays them out as two equal halves, and it is the
+  // one element whose bottom the bar's relay line will watch. « Créer un
+  // jardin », never repeated, stays outside it. jsdom lays nothing out: the
+  // geometry is the layout harness's (`dashboardLayout.test.tsx`).
+  it('holds the two repeated buttons in one wrapper of their own — Edit and Customize at rest, Done and Customize in Edit mode — Create outside it (§ 4.1)', async () => {
+    servePreferences('gardener');
+    renderPage();
+    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    const header = within(document.querySelector('[data-dashboard-actions]') as HTMLElement);
+    const customize = header.getByRole('button', { name: 'Customize' });
+    const pair = edit.parentElement!;
+
+    expect([...pair.children]).toEqual([edit, customize]);
+    expect(pair.contains(header.getByRole('button', { name: 'Create Garden' }))).toBe(false);
+
+    fireEvent.click(edit);
+    expect(await header.findByRole('button', { name: 'Done' })).toBe(edit);
+    expect([...pair.children]).toEqual([edit, customize]);
+  });
+
   it('puts the four controls inside every card', async () => {
     await enterEditMode();
 

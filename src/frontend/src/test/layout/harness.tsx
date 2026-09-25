@@ -7,12 +7,15 @@ import { ThemeProvider } from '@mui/material/styles';
 import i18next from '../../i18n/i18n';
 import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
 import { createAppTheme } from '../../theme';
+import DashboardActions from '../../components/Dashboard/DashboardActions';
 import DashboardGrid from '../../components/Dashboard/DashboardGrid';
 import {
+  ACTIONS_SCENES,
   GRID_SCENES,
   LAYOUT_SCENES,
   gridCardScene,
   sceneWidget,
+  type ActionsScene,
   type GridScene,
   type LayoutScene,
 } from './scenes';
@@ -115,12 +118,38 @@ export interface GridMeasure {
   controls: Array<{ key: string; controls: ControlMeasure[] }>;
 }
 
+/** A box relative to an origin, to a tenth of a pixel. */
+export interface RelativeBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * SMA-437, lot V39, step A4 (pre-flight C.6, n° 1) — the header's actions
+ * zone, measured: the zone read as a CARD by `measureCard` — its box the
+ * boundary nothing may cross, its texts, glyphs and painted boxes the atoms
+ * that may not meet — and the box of each of its parts relative to the zone,
+ * null where the scene draws none.
+ */
+export interface ActionsMeasure extends CardMeasure {
+  scene: string;
+  viewport: number;
+  zone: { w: number; h: number };
+  parts: Record<'chip' | 'status' | 'toggle' | 'customize' | 'create', RelativeBox | null>;
+  /** What the save indicator's region says — empty before any change. */
+  statusText: string;
+}
+
 /** What one run of the page returns: the one-card scenes and probes, the grid scenes, and where the focus goes in the reorderable list. */
 export interface LayoutResults {
   scenes: SceneMeasure[];
   grids: GridMeasure[];
   /** SMA-437 lot 1, PR B, round 1, S1 — the reorderable list's gestures, and where each leaves the focus (`focusProbe.tsx`). */
   focus: FocusMeasure[];
+  /** SMA-437, lot V39 — the header's actions zone, scene by scene. */
+  actions: ActionsMeasure[];
 }
 
 declare global {
@@ -220,6 +249,63 @@ function gridTree(grid: GridScene, mode: 'light' | 'dark') {
       </ThemeProvider>
     </MemoryRouter>
   );
+}
+
+/**
+ * An actions scene (SMA-437, lot V39): the real `DashboardActions` under the
+ * app's theme, as wide as the page's column — the header gives it the whole
+ * line on a phone. Two plain wrappers above it, because `measureCard` walks a
+ * card's slot and grid two levels up.
+ */
+function actionsTree(scene: ActionsScene, mode: 'light' | 'dark') {
+  return (
+    <ThemeProvider theme={createAppTheme(mode)}>
+      <div>
+        <div>
+          <DashboardActions
+            level={scene.level}
+            adjusted={scene.adjusted}
+            unavailable={scene.unavailable}
+            saveState={scene.saveState}
+            editing={scene.editing}
+            onEditingChange={noop}
+            onCustomize={noop}
+            onCreate={noop}
+          />
+        </div>
+      </div>
+    </ThemeProvider>
+  );
+}
+
+/** The parts of the zone, by the attributes `DashboardActions` puts on them. */
+const ZONE_PARTS = {
+  chip: '[data-level-chip]',
+  status: '[data-save-status]',
+  toggle: '[data-page-action="edit"]',
+  customize: '[data-page-action="customize"]',
+  create: '[data-create-garden]',
+} as const;
+
+/** Measures a mounted actions scene: the zone as a card, and each part's box relative to it. */
+function measureActions(scene: ActionsScene, host: HTMLElement): ActionsMeasure {
+  const zone = host.querySelector<HTMLElement>('[data-dashboard-actions]');
+  if (!zone) throw new Error(`The actions scene ${scene.name} drew no zone.`);
+  const origin = zone.getBoundingClientRect();
+  const parts = Object.fromEntries(
+    Object.entries(ZONE_PARTS).map(([part, selector]) => {
+      const el = zone.querySelector(selector);
+      return [part, el ? boxWithin(el, origin) : null];
+    })
+  ) as ActionsMeasure['parts'];
+  return {
+    scene: scene.name,
+    viewport: window.innerWidth,
+    zone: { w: Math.round(origin.width * 10) / 10, h: Math.round(origin.height * 10) / 10 },
+    parts,
+    statusText: zone.querySelector(ZONE_PARTS.status)?.textContent ?? '',
+    ...measureCard(zone),
+  };
 }
 
 /** What the harness reads of a card beyond `measureCard`, the same for a one-card scene and a card of a grid. */
@@ -341,7 +427,7 @@ async function main() {
   await Promise.all([300, 400, 500, 600, 700].map((weight) => document.fonts.load(`${weight} 16px Inter`)));
   progress('fonts ready');
 
-  const results: LayoutResults = { scenes: [], grids: [], focus: [] };
+  const results: LayoutResults = { scenes: [], grids: [], focus: [], actions: [] };
   for (const scene of [...LAYOUT_SCENES, ...PROBE_SCENES].filter((s) => !only || s.name === only)) {
     const host = document.createElement('div');
     page.appendChild(host);
@@ -376,6 +462,20 @@ async function main() {
     await settle();
     progress(`settled ${grid.name}`);
     results.grids.push(measureGrid(grid, host));
+    root.unmount();
+    host.remove();
+  }
+
+  // The header's actions zone (SMA-437, lot V39), after the grids, the same way.
+  for (const scene of ACTIONS_SCENES.filter((s) => !hold && (!only || s.name === only))) {
+    const host = document.createElement('div');
+    page.appendChild(host);
+    const root = createRoot(host);
+    root.render(actionsTree(scene, mode));
+    progress(`rendered ${scene.name}`);
+    await settle();
+    progress(`settled ${scene.name}`);
+    results.actions.push(measureActions(scene, host));
     root.unmount();
     host.remove();
   }
