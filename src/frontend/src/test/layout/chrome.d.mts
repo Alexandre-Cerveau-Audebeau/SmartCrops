@@ -13,6 +13,16 @@ export interface LayoutRun {
   freeze?: boolean;
 }
 
+/** What the harness uses of a spawned child: `node:child_process`'s `ChildProcess`, described without Node's types. */
+export interface HarnessChild {
+  readonly pid: number | undefined;
+  readonly exitCode: number | null;
+  readonly signalCode: string | null;
+  kill(signal?: string): boolean;
+  once(event: 'error', listener: (error: Error & { code?: string }) => void): unknown;
+  once(event: 'exit' | 'close', listener: (code: number | null, signal: string | null) => void): unknown;
+}
+
 /** What `runProcess` resolves with when the process ends on its own. */
 export interface ProcessResult {
   out: string;
@@ -45,15 +55,10 @@ export function buildBundle(outDir: string, bundle: { entry: string; fileName: s
 export function fontFaces(): string;
 /** The flags every Chrome of the harness is started with. */
 export const CHROME_FLAGS: readonly string[];
-/** Tracks a child spawned elsewhere until it exits, so `terminateChildren` ends it too. */
-export function trackChild<T>(child: T): T;
-/** Resolves once the child has exited; forces the kill (`SIGKILL`) after the grace when a plain kill was not enough. */
-export function exited(child: {
-  exitCode: number | null;
-  signalCode: string | null;
-  kill(signal?: string): boolean;
-  once(event: 'exit', listener: () => void): unknown;
-}): Promise<void>;
+/** Tracks a child spawned elsewhere until it exits or fails to start, so `terminateChildren` ends it too. */
+export function trackChild<T extends HarnessChild>(child: T): T;
+/** Resolves once the child has exited — or never started; forces the kill (`SIGKILL`) after the grace when a plain kill was not enough. */
+export function exited(child: HarnessChild): Promise<void>;
 /** Writes `outDir/page.html` around the bundle. */
 export function writePage(outDir: string): void;
 /** Runs Chrome headless on the page for one run — bounded, killed past the delay — and returns its measurements. */
@@ -74,5 +79,7 @@ export function liveChildren(): Array<number | undefined>;
 export function isAlive(pid: number): boolean;
 /** The `node` running this process, for a test that needs a binary. */
 export function nodeBinary(): string;
+/** Spawns `binary`, no pipes, and hands the child back untouched: for the tests of `trackChild` and `exited`. */
+export function spawnChild(binary: string, args?: string[]): HarnessChild;
 /** The measurements, back from the base64 text of the results `<pre>`. */
 export function decodeResults(base64: string): unknown;

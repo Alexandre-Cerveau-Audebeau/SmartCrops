@@ -249,9 +249,25 @@ export function nodeBinary() {
 }
 
 /**
- * Resolves once the child has exited; forces the kill (`SIGKILL`) after the
- * grace when a plain kill was not enough. The page launcher's `close()` waits
- * on it too, so both launchers end a Chrome the same way.
+ * Spawns `binary`, no pipes, and hands the child back untouched — for the
+ * tests of `trackChild` and `exited`, which touch no Node API themselves.
+ */
+export function spawnChild(binary, args = []) {
+  return spawn(binary, args, { stdio: 'ignore' });
+}
+
+/**
+ * The events that end a child for the harness, the first one that comes: its
+ * `exit`; the `error` of a spawn that failed — Node never sends `exit` for it;
+ * the `close` of its streams (fix round 2, G1).
+ */
+const ENDS = ['exit', 'error', 'close'];
+
+/**
+ * Resolves once the child has exited — or never started; forces the kill
+ * (`SIGKILL`) after the grace when a plain kill was not enough. The page
+ * launcher's `close()` waits on it too, so both launchers end a Chrome the
+ * same way.
  */
 export function exited(child) {
   return new Promise((resolve) => {
@@ -262,10 +278,11 @@ export function exited(child) {
     const force = setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     }, KILL_GRACE_MS);
-    child.once('exit', () => {
+    const end = () => {
       clearTimeout(force);
       resolve();
-    });
+    };
+    for (const event of ENDS) child.once(event, end);
   });
 }
 
@@ -315,12 +332,15 @@ export function runProcess(binary, args, { timeoutMs, label }) {
 
 /**
  * Tracks a child spawned elsewhere — the page launcher's Chrome, whose pipes
- * `runProcess` does not open — until it exits, so `terminateChildren` ends it
- * too when a suite fails half-way.
+ * `runProcess` does not open — until it exits or fails to start, so
+ * `terminateChildren` ends it too when a suite fails half-way. A child already
+ * gone is not tracked.
  */
 export function trackChild(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return child;
   running.add(child);
-  child.once('exit', () => running.delete(child));
+  const forget = () => running.delete(child);
+  for (const event of ENDS) child.once(event, forget);
   return child;
 }
 

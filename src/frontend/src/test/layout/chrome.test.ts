@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   decodeResults,
+  exited,
   isAlive,
   liveChildren,
   nodeBinary,
   runProcess,
+  spawnChild,
   terminateChildren,
   type TimedOutError,
+  trackChild,
   windowFrame,
 } from './chrome.mjs';
 import { encodeResults } from './encode';
@@ -71,6 +74,38 @@ describe('runProcess — a process past its delay is killed and the promise reje
     // The abandoned run settles too: no exit code, since it was killed.
     await expect(pending).resolves.toMatchObject({ code: null });
   });
+});
+
+// SMA-437, PR #292, fix round 2, G1 (CodeRabbit, Major) — a Chrome that never
+// started. Node reports a failed spawn with `error` then `close`, never `exit`,
+// and sets the child's exit code only as it reports it, a turn later. An
+// `exited()` asked in the SAME turn as the spawn waited for an `exit` that
+// never came, and `trackChild` kept the child in its list until the suite's
+// `terminateChildren`.
+describe('exited and trackChild — a child that never started is let go (G1)', () => {
+  /** A binary no machine has: the spawn fails with `ENOENT`. */
+  const MISSING = 'smartcrops-no-such-browser';
+
+  /** `settled` once `promise` settles, or the time waited — never a pending test. */
+  const within = (promise: Promise<unknown>, ms: number) =>
+    Promise.race([
+      promise.then(() => 'settled'),
+      new Promise<string>((resolve) => setTimeout(() => resolve(`still waiting after ${ms} ms`), ms)),
+    ]);
+
+  it('resolves exited() asked in the same turn as a spawn that fails, and terminateChildren then ends — nothing left in the list', async () => {
+    const errors: Array<string | undefined> = [];
+    const child = trackChild(spawnChild(MISSING));
+    // The page launcher listens to `error` too, as it must: an `error` nobody listens to throws.
+    child.once('error', (error) => errors.push(error.code));
+    // The same turn as the spawn: Node has not reported the failure yet.
+    const gone = exited(child);
+
+    expect(await within(gone, 3_000)).toBe('settled');
+    expect(errors).toEqual(['ENOENT']);
+    expect(await within(terminateChildren(), 3_000)).toBe('settled');
+    expect(liveChildren()).toEqual([]);
+  }, 20_000);
 });
 
 describe('decodeResults — what measureRun reads back is what the page encoded (#5)', () => {
