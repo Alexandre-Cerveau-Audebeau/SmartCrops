@@ -19,10 +19,10 @@ import {
   type GridScene,
   type LayoutScene,
 } from './scenes';
-import { PROBE_SCENES, probeWidget, type ProbeScene } from './probes';
+import { ACTIONS_PROBES, PROBE_SCENES, probeWidget, type ProbeScene } from './probes';
 import { measureFocus, type FocusMeasure } from './focusProbe';
 import { encodeResults } from './encode';
-import { RESULTS_ID, measureCard, measureControls, type CardMeasure, type ControlMeasure } from './measure';
+import { RESULTS_ID, measureCard, measureControls, wrappedTexts, type CardMeasure, type ControlMeasure } from './measure';
 
 /**
  * SMA-336 mobile lot, step 7 (pre-flight D7) — the BROWSER side of the layout
@@ -135,11 +135,15 @@ export interface RelativeBox {
  */
 export interface ActionsMeasure extends CardMeasure {
   scene: string;
+  /** The zone's probe of the harness's own (A6) — a scene with a label forced too wide — or null for a scene. */
+  probe: string | null;
   viewport: number;
   zone: { w: number; h: number };
   parts: Record<'chip' | 'status' | 'toggle' | 'customize' | 'create', RelativeBox | null>;
   /** What the save indicator's region says — empty before any change. */
   statusText: string;
+  /** The zone's texts drawn over more than one line (A6, `wrappedTexts`): every one belongs on one. */
+  wrapped: string[];
 }
 
 /** What one run of the page returns: the one-card scenes and probes, the grid scenes, and where the focus goes in the reorderable list. */
@@ -300,10 +304,12 @@ function measureActions(scene: ActionsScene, host: HTMLElement): ActionsMeasure 
   ) as ActionsMeasure['parts'];
   return {
     scene: scene.name,
+    probe: null,
     viewport: window.innerWidth,
     zone: { w: Math.round(origin.width * 10) / 10, h: Math.round(origin.height * 10) / 10 },
     parts,
     statusText: zone.querySelector(ZONE_PARTS.status)?.textContent ?? '',
+    wrapped: wrappedTexts(zone),
     ...measureCard(zone),
   };
 }
@@ -478,6 +484,30 @@ async function main() {
     results.actions.push(measureActions(scene, host));
     root.unmount();
     host.remove();
+  }
+
+  // The zone's probe (A6), after its scenes: one of them, one label forced
+  // far too wide — set on i18next for this mount alone, then given back.
+  for (const probe of ACTIONS_PROBES.filter((p) => !hold && (!only || p.name === only))) {
+    const scene = ACTIONS_SCENES.find((candidate) => candidate.name === probe.scene);
+    if (!scene) throw new Error(`The actions probe ${probe.name} names no scene ${probe.scene}.`);
+    const language = i18next.language;
+    const original: unknown = i18next.getResource(language, 'translation', probe.key);
+    i18next.addResource(language, 'translation', probe.key, probe.label);
+    const host = document.createElement('div');
+    page.appendChild(host);
+    const root = createRoot(host);
+    try {
+      root.render(actionsTree(scene, mode));
+      progress(`rendered ${probe.name}`);
+      await settle();
+      progress(`settled ${probe.name}`);
+      results.actions.push({ ...measureActions(scene, host), scene: probe.name, probe: probe.name });
+    } finally {
+      root.unmount();
+      host.remove();
+      i18next.addResource(language, 'translation', probe.key, String(original));
+    }
   }
 
   // Where the focus goes in the reorderable list (S1), after the scenes: a

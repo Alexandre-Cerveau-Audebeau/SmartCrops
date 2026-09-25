@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ACTIONS_SCENES, GRID_SCENES, LAYOUT_SCENES } from './scenes';
-import { PROBE_SCENES, WIDE_LINE, WIDE_SHORT_HEIGHT } from './probes';
+import { ACTIONS_PROBES, FORCED_ACTION_LABEL, PROBE_SCENES, WIDE_LINE, WIDE_SHORT_HEIGHT } from './probes';
 import type { ActionsMeasure, GridMeasure, SceneMeasure } from './harness';
 import type { FocusMeasure } from './focusProbe';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
@@ -128,6 +128,8 @@ const grids = new Map<string, Map<string, GridMeasure>>();
 const focusCases = new Map<string, Map<string, FocusMeasure>>();
 /** The header's actions zone, by run then by scene name (SMA-437, lot V39). */
 const actionsCases = new Map<string, Map<string, ActionsMeasure>>();
+/** The zone's probes, by run then by probe name — apart from its scenes, which must be clean; a probe must not be. */
+const actionsProbes = new Map<string, Map<string, ActionsMeasure>>();
 let outDir = '';
 
 /** The runs whose grid has two or four columns — the tablets and the desktop — where the rows are `auto` and the cards pinned. */
@@ -198,7 +200,8 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
           probes.set(RUNS[index]!.id, byName(scenes.filter((scene) => scene.probe !== null)));
           grids.set(RUNS[index]!.id, new Map(measuredGrids.map((grid) => [grid.scene, grid])));
           focusCases.set(RUNS[index]!.id, new Map(focus.map((measure) => [measure.probe, measure])));
-          actionsCases.set(RUNS[index]!.id, new Map(actions.map((measure) => [measure.scene, measure])));
+          actionsCases.set(RUNS[index]!.id, new Map(actions.filter((zone) => zone.probe === null).map((zone) => [zone.scene, zone])));
+          actionsProbes.set(RUNS[index]!.id, new Map(actions.filter((zone) => zone.probe !== null).map((zone) => [zone.scene, zone])));
         }
       });
       const failed = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
@@ -225,6 +228,7 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       expect(probes.get(run.id)?.size, run.id).toBe(PROBE_SCENES.length);
       expect(grids.get(run.id)?.size, run.id).toBe(GRID_SCENES.length);
       expect(actionsCases.get(run.id)?.size, run.id).toBe(ACTIONS_SCENES.length);
+      expect(actionsProbes.get(run.id)?.size, run.id).toBe(ACTIONS_PROBES.length);
       for (const zone of actionsCases.get(run.id)?.values() ?? []) {
         expect(zone.fontLoaded, `${run.id} ${zone.scene}: Inter not loaded`).toBe(true);
       }
@@ -566,15 +570,17 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       if (!box) throw new Error(`${measure.scene}: no ${part}`);
       return box;
     };
+    /** What the zone must be free of: the card's rules — and its own, every text on one line (V3-05, `.btn` and `.save`: `white-space: nowrap`). */
+    const zoneDefects = (measure: ActionsMeasure) => ({ ...defects(measure), wrapped: measure.wrapped });
     /** The chip and what the indicator says hold on one line of the zone: there is nothing to put under the chip, or both widths and their gap fit. */
     const holds = (measure: ActionsMeasure) =>
       !measure.parts.chip ||
       measure.statusText === '' ||
       measure.parts.chip.w + CHIP_LINE_GAP + partOf(measure, 'status').w <= measure.zone.w + 0.5;
 
-    it.each(RUNS.map((run) => run.id))('%s: every state of the zone is clean — no overlap, nothing clipped, nothing past the zone', (id) => {
+    it.each(RUNS.map((run) => run.id))('%s: every state of the zone is clean — no overlap, nothing clipped, nothing past the zone, every text on one line', (id) => {
       for (const scene of ACTIONS_SCENES) {
-        expect(defects(zoneOf(runOf(id), scene.name)), scene.name).toEqual({ overlaps: [], clipped: [], spills: [], beyondCard: 0 });
+        expect(zoneDefects(zoneOf(runOf(id), scene.name)), scene.name).toEqual({ overlaps: [], clipped: [], spills: [], beyondCard: 0, wrapped: [] });
       }
     });
 
@@ -649,6 +655,21 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
         })
       );
       expect(faults).toEqual([]);
+    });
+
+    // SMA-437, lot V39, step A6 — the zone's probe (`probes.tsx`): the
+    // instrument must SEE a label too wide for its button. A MUI button wraps
+    // it rather than cutting it, so no overlap and no clip say so: the zone's
+    // own rule must, and name it.
+    it('sees a label too wide for its button: « Personnaliser » forced far too wide is signalled by name, in every run (the zone’s probe)', () => {
+      for (const run of RUNS) {
+        const probe = actionsProbes.get(run.id)?.get('probe-actions-label-too-wide');
+        if (!probe) throw new Error(`No measurement for the zone's probe in ${run.id}`);
+        const signalled = Object.values(zoneDefects(probe))
+          .flat()
+          .filter((entry): entry is string => typeof entry === 'string');
+        expect(signalled.join(' | '), run.id).toContain(FORCED_ACTION_LABEL.slice(0, 44));
+      }
     });
 
     it.each(RUNS.filter((run) => run.vw >= 600).map((run) => run.id))('%s: from 600 px up, keeps the header’s row — the pair on one line, and no room for the indicator while it is empty (risk 13)', (id) => {

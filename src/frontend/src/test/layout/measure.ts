@@ -587,6 +587,34 @@ export function measureCard(card: HTMLElement): CardMeasure {
   };
 }
 
+/**
+ * SMA-437, lot V39, step A6 — the texts under `root` that run over more than
+ * one line: each own text node's line boxes, read from its `Range` rects (one
+ * per line fragment), tops further apart than 2 px counted as two lines. The
+ * header's actions zone draws every text on one line (V3-05: `.btn` and
+ * `.save` are `white-space: nowrap`); a MUI button does not cut a label too
+ * wide for it, it WRAPS it and grows a line — no overlap and no clip says so,
+ * this does. Labelled as `measureCard` labels its text atoms.
+ */
+export function wrappedTexts(root: Element): string[] {
+  const found: string[] = [];
+  for (const el of Array.from(root.querySelectorAll('*'))) {
+    if (!visible(el)) continue;
+    const wraps = Array.from(el.childNodes).some((node) => {
+      if (node.nodeType !== Node.TEXT_NODE || !(node.textContent ?? '').trim()) return false;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const tops = Array.from(range.getClientRects())
+        .filter((r) => r.width > 0 && r.height > 0)
+        .map((r) => r.top)
+        .sort((a, b) => a - b);
+      return tops.filter((top, index) => index === 0 || top - tops[index - 1]! > 2).length > 1;
+    });
+    if (wraps) found.push(`"${ownText(el).slice(0, 44)}"`);
+  }
+  return found;
+}
+
 /** One Edit-mode control of a card, measured against the card it sits on (SMA-437, pre-flight D19). */
 export interface ControlMeasure {
   /** Its accessible name — the language of the run — or its tag. */

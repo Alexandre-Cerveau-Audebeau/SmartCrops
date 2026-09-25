@@ -89,6 +89,33 @@ export const PROBE_SCENES: ProbeScene[] = [
   { name: 'probe-wide-short', key: 'tips', size: 'wide', weather: 'all', probe: 'wide-short' },
 ];
 
+/**
+ * SMA-437, lot V39, step A6 — the probe of the header's actions ZONE: the
+ * real `DashboardActions` of an actions scene, « Personnaliser » forced to a
+ * label far wider than any button of the zone can hold at any width of the
+ * runs — the phone's half, the tablet's and the desktop's row. A MUI button
+ * does not cut a label too long for it: it WRAPS it, the button grows a line,
+ * and nothing overlaps and nothing is clipped — so the card's rules alone
+ * would pass it clean. The zone's own rule, every text on one line (V3-05:
+ * `.btn { white-space: nowrap; height: 37px }`), must see it.
+ */
+export interface ActionsProbe {
+  name: string;
+  /** The actions scene it draws, by name. */
+  scene: string;
+  /** The i18n key whose text is forced, and the text. */
+  key: string;
+  label: string;
+}
+
+export const FORCED_ACTION_LABEL =
+  'Personnaliser la page entière, ses widgets, leur ordre, leurs tailles et leurs options — un libellé forcé bien plus large ' +
+  'que tout bouton de la zone, à toutes les largeurs du harnais, du téléphone au bureau';
+
+export const ACTIONS_PROBES: ActionsProbe[] = [
+  { name: 'probe-actions-label-too-wide', scene: 'actions-gardener-rest-idle', key: 'dashboard.customize', label: FORCED_ACTION_LABEL },
+];
+
 /** The card's border-box height, its padding and its 1 px border: the frame the widgets' cards draw, at a fixed size. */
 const CARD_HEIGHT = 200;
 const PADDING = 16;
