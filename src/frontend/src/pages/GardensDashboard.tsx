@@ -810,6 +810,7 @@ export default function GardensDashboard() {
           top={actionBar.top}
           editing={editing}
           unavailable={loading || loadError}
+          saveState={saveState}
           onEditingChange={setEditing}
           onCustomize={() => setPanelOpen(true)}
         />

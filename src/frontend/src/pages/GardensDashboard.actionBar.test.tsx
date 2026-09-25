@@ -243,3 +243,63 @@ describe('the compact action bar, out of Edit mode (SMA-437, lot V39, B4)', () =
     expect(bar()).toHaveAttribute('aria-hidden', 'true');
   });
 });
+
+describe('the compact action bar in Edit mode (SMA-437, lot V39, B5)', () => {
+  /** Scrolls the header's buttons away and enters Edit mode from the bar. */
+  async function editFromTheBar(user: ReturnType<typeof userEvent.setup>) {
+    await renderLoaded();
+    scrollPast();
+    await user.click(within(bar()!).getByRole('button', { name: 'Edit' }));
+  }
+
+  it('reads « Edit mode » and carries Done and Customize — the case it is for — in place of the page’s title', async () => {
+    const user = userEvent.setup();
+    await editFromTheBar(user);
+
+    const group = screen.getByRole('group', { name: 'Page actions' });
+    expect(within(group).getByText('Edit mode')).toBeInTheDocument();
+    expect(namesIn(group)).toEqual(['Done', 'Customize']);
+    expect(group.querySelector('[data-compact-bar-title]')).toBeNull();
+    // Still neither « Create Garden » nor the chip (A-7).
+    expect(within(group).queryByText('Create Garden')).toBeNull();
+    expect(group.querySelector('[data-level-chip]')).toBeNull();
+
+    // Back out of Edit mode: the title again, and no « Edit mode ».
+    await user.click(within(group).getByRole('button', { name: 'Done' }));
+    expect(within(group).queryByText('Edit mode')).toBeNull();
+    expect(group.querySelector('[data-compact-bar-title]')).toHaveTextContent('My Gardens');
+  });
+
+  it('shows the save state as an aria-hidden COPY — the page keeps ONE role="status" for the save, the header’s, born empty and never in an inert row', async () => {
+    const user = userEvent.setup();
+    await editFromTheBar(user);
+
+    const copy = bar()!.querySelector('[data-compact-bar-status]');
+    const region = document.querySelector('[data-save-status]')!;
+    expect(document.querySelectorAll('[data-save-status]')).toHaveLength(1);
+    expect(region).toHaveAttribute('role', 'status');
+    expect(region.closest('[inert]')).toBeNull();
+    expect(region.closest('[aria-hidden="true"]')).toBeNull();
+    expect(bar()!.querySelectorAll('[role="status"], [aria-live]')).toHaveLength(0);
+    // Its place is kept before the first change: the bar does not grow at the first gesture.
+    expect(copy).toHaveAttribute('aria-hidden', 'true');
+    expect(copy).toBeEmptyDOMElement();
+
+    await user.click(screen.getAllByRole('button', { name: /^Hide / })[0]!);
+    await waitFor(() => expect(region).toHaveTextContent('Saving…'));
+    expect(copy).toHaveTextContent('Saving…');
+    await waitFor(() => expect(region).toHaveTextContent('Saved'), { timeout: 5000 });
+    expect(copy).toHaveTextContent('Saved');
+  });
+
+  it('says a failed save in the copy too', async () => {
+    vi.mocked(saveDashboardPreferences).mockRejectedValue(new Error('down'));
+    const user = userEvent.setup();
+    await editFromTheBar(user);
+
+    await user.click(screen.getAllByRole('button', { name: /^Hide / })[0]!);
+    const region = document.querySelector('[data-save-status]')!;
+    await waitFor(() => expect(region).toHaveTextContent('Changes not saved'), { timeout: 5000 });
+    expect(bar()!.querySelector('[data-compact-bar-status]')).toHaveTextContent('Changes not saved');
+  });
+});
