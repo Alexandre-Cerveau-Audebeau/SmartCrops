@@ -103,6 +103,15 @@ describe('Navbar v2 (SMA-152 / SMA-150)', () => {
     vi.unstubAllGlobals();
   });
 
+  // SMA-437, lot V39, PR B, step B1 — the dashboard's compact action bar sits
+  // right under this bar and reads its height off the page, never a copy of
+  // 56 / 64 / 48 px: the one AppBar of the product carries the attribute.
+  it('marks its AppBar as the site navbar the compact action bar measures (SMA-437, lot V39, B1)', () => {
+    renderNavbar();
+    expect(screen.getByRole('banner')).toHaveAttribute('data-site-navbar');
+    expect(document.querySelectorAll('[data-site-navbar]')).toHaveLength(1);
+  });
+
   it('shows the Shop entry as a /shop link with a Coming Soon chip (desktop)', () => {
     renderNavbar();
     expect(screen.getByRole('link', { name: 'Shop' })).toHaveAttribute(
