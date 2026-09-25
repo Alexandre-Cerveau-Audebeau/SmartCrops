@@ -264,7 +264,15 @@ export default function GardensDashboard() {
   // SMA-437, lot V39, PR B — the compact action bar: mounted at the formulas
   // that have one (A-9), armed once the layout is read (A-10.2), shown when
   // the header's repeated buttons pass under the site navbar plus the bar.
-  const actionBar = useCompactActionBar(level, !loading && !loadError);
+  const actionBar = useCompactActionBar(level, !loading && !loadError, editing);
+
+  // B8 — every way in or out of Edit mode goes through here, so a toggle
+  // under the bar leaves what the user looks at where it was.
+  const { holdView } = actionBar;
+  const changeEditing = (next: boolean) => {
+    holdView();
+    setEditing(next);
+  };
 
   // SMA-437, lot V39, PR B, B6 (technical decision 8) — the button the
   // Customize panel was opened from. The panel gives the focus back to it when
@@ -811,7 +819,7 @@ export default function GardensDashboard() {
           unavailable={loading || loadError}
           saveState={saveState}
           editing={editing}
-          onEditingChange={setEditing}
+          onEditingChange={changeEditing}
           onCustomize={openPanel}
           onCreate={() => setCreateDialogOpen(true)}
           repeatHidden={actionBar.shown}
@@ -829,7 +837,7 @@ export default function GardensDashboard() {
           editing={editing}
           unavailable={loading || loadError}
           saveState={saveState}
-          onEditingChange={setEditing}
+          onEditingChange={changeEditing}
           onCustomize={openPanel}
         />
       )}

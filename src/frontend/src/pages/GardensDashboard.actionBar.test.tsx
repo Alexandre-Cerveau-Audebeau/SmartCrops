@@ -400,3 +400,81 @@ describe('the focus and the scroll padding under the compact action bar (SMA-437
     }
   });
 });
+
+describe('the content stays still when Edit mode is toggled under the compact bar (SMA-437, lot V39, B8)', () => {
+  // jsdom lays nothing out: the page is given the geometry of a phone
+  // scrolled mid-page — a 56 px navbar, the 54 px bar, 200 px cards 20 px
+  // apart — and Edit mode moves every card 32 px down, what the lot's
+  // pre-flight measured at 360 px (the cards take their 34 / 38 px of
+  // controls, the header loses its second line). The first card has gone
+  // under the bars; the second straddles the line, 30 px above the top of
+  // the window: it is the first one visible, the one that must not move.
+  const CARD = 200;
+  const FIRST_TOP = -250;
+  const EDIT_SHIFT = 32;
+
+  const gridCards = () =>
+    [...document.querySelectorAll('[data-widget]')].filter((node) => !node.closest('[data-drag-overlay]'));
+  const inEditMode = () =>
+    document.querySelector('[data-dashboard-header] [data-page-action="edit"]')?.textContent === 'Done';
+
+  /** Installs that geometry; returns the restore. */
+  function stubScrolledPhone() {
+    const original = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      let top = 0;
+      let height: number | null = null;
+      if (this.hasAttribute('data-site-navbar')) height = 56;
+      else if (this.hasAttribute('data-compact-bar')) height = 54;
+      else if (this.hasAttribute('data-widget') && !this.closest('[data-drag-overlay]')) {
+        height = CARD;
+        top = FIRST_TOP + gridCards().indexOf(this) * (CARD + 20) + (inEditMode() ? EDIT_SHIFT : 0);
+      }
+      if (height === null) return original.call(this);
+      return {
+        x: 0, y: top, top, left: 0, right: 0, bottom: top + height,
+        width: 0, height, toJSON: () => ({}),
+      } as DOMRect;
+    };
+    return () => {
+      Element.prototype.getBoundingClientRect = original;
+    };
+  }
+
+  it('scrolls the page by what Edit mode moved the first card visible under the bars — in, and out — so what the user looks at stays where it was', async () => {
+    const restore = stubScrolledPhone();
+    const scrollBy = vi.spyOn(window, 'scrollBy').mockImplementation(() => {});
+    try {
+      const user = userEvent.setup();
+      await renderLoaded(<header data-site-navbar />);
+      scrollPast();
+
+      await user.click(within(bar()!).getByRole('button', { name: 'Edit' }));
+      expect(scrollBy.mock.calls).toEqual([[{ top: EDIT_SHIFT, left: 0, behavior: 'instant' }]]);
+
+      await user.click(within(bar()!).getByRole('button', { name: 'Done' }));
+      expect(scrollBy.mock.calls).toEqual([
+        [{ top: EDIT_SHIFT, left: 0, behavior: 'instant' }],
+        [{ top: -EDIT_SHIFT, left: 0, behavior: 'instant' }],
+      ]);
+    } finally {
+      scrollBy.mockRestore();
+      restore();
+    }
+  });
+
+  it('scrolls nothing when Edit mode is toggled at the top of the page, the bar hidden — the header is where the user looks', async () => {
+    const restore = stubScrolledPhone();
+    const scrollBy = vi.spyOn(window, 'scrollBy').mockImplementation(() => {});
+    try {
+      const user = userEvent.setup();
+      await renderLoaded(<header data-site-navbar />);
+      await user.click(within(headerRow()).getByRole('button', { name: 'Edit' }));
+      await user.click(within(headerRow()).getByRole('button', { name: 'Done' }));
+      expect(scrollBy).not.toHaveBeenCalled();
+    } finally {
+      scrollBy.mockRestore();
+      restore();
+    }
+  });
+});

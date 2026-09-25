@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { hasActionBar } from '../../constants/dashboardCapabilities';
 import { useActionBarTrigger } from '../../hooks/useActionBarTrigger';
 import { useElementHeight, useSiteNavbarHeight } from '../../hooks/useSiteNavbarHeight';
@@ -22,7 +22,23 @@ export interface CompactActionBarState {
    * closes (technical decision 8).
    */
   refocus: (element: Element | null) => void;
+  /**
+   * Called right BEFORE the page enters or leaves Edit mode: while the bar
+   * shows, remembers where the first card visible under the two bars stands,
+   * so the page can be scrolled back by what the toggle moved it (B8).
+   */
+  holdView: () => void;
 }
+
+/** A card of the grid, and where its top stood in the window before the toggle. */
+interface ViewAnchor {
+  card: Element;
+  top: number;
+}
+
+/** The cards of the grid — not the copy the drag overlay draws of the one being dragged. */
+const gridCards = () =>
+  [...document.querySelectorAll('[data-widget]')].filter((card) => !card.closest('[data-drag-overlay]'));
 
 /** The space `scroll-padding-top` keeps under the two bars (A-10.6, WCAG 2.4.11 — the focus not obscured). */
 const SCROLL_PADDING_GAP = 8;
@@ -48,7 +64,11 @@ const SCROLL_PADDING_GAP = 8;
  * the navbar, the bar and 8 px free, so a control the keyboard reaches is
  * never scrolled under them; the previous value comes back when it leaves.
  */
-export function useCompactActionBar(level: DashboardLevel, ready: boolean): CompactActionBarState {
+export function useCompactActionBar(
+  level: DashboardLevel,
+  ready: boolean,
+  editing: boolean
+): CompactActionBarState {
   const [repeated, setRepeated] = useState<HTMLDivElement | null>(null);
   const [bar, setBar] = useState<HTMLDivElement | null>(null);
   const enabled = hasActionBar(level);
@@ -82,5 +102,35 @@ export function useCompactActionBar(level: DashboardLevel, ready: boolean): Comp
     };
   }, [shown, top, barHeight]);
 
-  return { enabled, shown, top, repeatedRef: setRepeated, barRef: setBar, refocus };
+  // Step B8 — the content stays still (pre-flight, technical decision 11).
+  // At the top of the page one enters Edit mode from the header, and the
+  // header is what one looks at; the bar lets one toggle it mid-page, where
+  // the cards take their 34 / 38 px of controls and the header loses or
+  // gains a line: what one looks at moved 32 px on a phone (11.6 on the
+  // desktop), and Chrome's scroll anchoring does not make up for it
+  // (measured). So the first card visible under the two bars is remembered
+  // before the toggle, and the window scrolled by what it moved, before the
+  // paint: a correction of position, not an animation — the same under
+  // `prefers-reduced-motion`.
+  const anchor = useRef<ViewAnchor | null>(null);
+  const line = top + barHeight;
+  const holdView = useCallback(() => {
+    if (!shown) {
+      anchor.current = null;
+      return;
+    }
+    const card = gridCards().find((candidate) => candidate.getBoundingClientRect().bottom > line);
+    anchor.current = card ? { card, top: card.getBoundingClientRect().top } : null;
+  }, [shown, line]);
+
+  useLayoutEffect(() => {
+    const held = anchor.current;
+    anchor.current = null;
+    if (!held || !held.card.isConnected) return;
+    const moved = held.card.getBoundingClientRect().top - held.top;
+    if (Math.abs(moved) < 0.5) return;
+    window.scrollBy({ top: moved, left: 0, behavior: 'instant' });
+  }, [editing]);
+
+  return { enabled, shown, top, repeatedRef: setRepeated, barRef: setBar, refocus, holdView };
 }
