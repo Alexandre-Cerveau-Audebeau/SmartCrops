@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { getSystemErrorMap } from 'node:util';
 
 /** The id of the `<pre>` the harness page ends on — `RESULTS_ID` of `measure.ts`, repeated here so this file imports no TypeScript. */
 const RESULTS_ID = 'layout-results';
@@ -26,7 +27,7 @@ const RESULTS_ID = 'layout-results';
  */
 export const CHROME_RUN_TIMEOUT_MS = 60_000;
 
-/** After a kill, how long a child has to exit on its own before the kill is forced (`SIGKILL`). */
+/** After a kill, how long a child has to exit on its own before the kill is forced (`SIGKILL`) — and, once forced, before a child still running is given up on (K1). */
 const KILL_GRACE_MS = 2_000;
 
 /** `CHROME_BIN`, then the usual names and places; null when none exists. */
@@ -56,9 +57,9 @@ export function makeOutDir() {
 }
 
 /**
- * Removes the folder, retried; never throws. Only once every Chrome has
- * exited — `terminateChildren()` first — so no profile is deleted under a
- * browser that still holds it.
+ * Removes the folder, retried; never throws. After `terminateChildren()`, in
+ * a `finally`: tried even when a browser outlived its kills (K1) — the files
+ * that browser holds then stay behind, and the error that named it stands.
  */
 export function removeOutDir(outDir) {
   try {
@@ -74,7 +75,20 @@ export function removeOutDir(outDir) {
  * whose `jsxDEV` the production `react` this bundle defines does not export —
  * so the environment is set for the build and restored after it.
  */
-export async function buildHarness(outDir) {
+export function buildHarness(outDir) {
+  return buildBundle(outDir, {
+    entry: 'src/test/layout/harness.tsx',
+    fileName: 'harness.js',
+    name: 'SmartCropsLayoutHarness',
+  });
+}
+
+/**
+ * One IIFE bundle of `entry` into `outDir/fileName`, built as `buildHarness`
+ * builds the scenes' — shared with the page launcher (`pageChrome.mjs`,
+ * SMA-437, lot V39, PR B, B9), whose entry mounts the whole page.
+ */
+export async function buildBundle(outDir, { entry, fileName, name }) {
   const { build } = await import('vite');
   const { default: react } = await import('@vitejs/plugin-react');
   const previous = process.env.NODE_ENV;
@@ -97,10 +111,10 @@ export async function buildHarness(outDir) {
         cssCodeSplit: false,
         target: 'chrome120',
         lib: {
-          entry: join(process.cwd(), 'src/test/layout/harness.tsx'),
+          entry: join(process.cwd(), entry),
           formats: ['iife'],
-          name: 'SmartCropsLayoutHarness',
-          fileName: () => 'harness.js',
+          name,
+          fileName: () => fileName,
         },
       },
     });
@@ -110,7 +124,7 @@ export async function buildHarness(outDir) {
 }
 
 /** The faces `main.tsx` loads — 300 to 700 — from the same package, over `file://`. */
-function fontFaces() {
+export function fontFaces() {
   const dir = pathToFileURL(join(process.cwd(), 'node_modules/@fontsource/inter/files')).href;
   return [300, 400, 500, 600, 700]
     .map(
@@ -148,7 +162,7 @@ body{margin:0;background:#fafcf8;color:#1b2a22;font-family:Inter,system-ui,sans-
  * reduced-motion rendering stills it, and nothing else of the dashboard reads
  * that preference.
  */
-const CHROME_FLAGS = [
+export const CHROME_FLAGS = [
   '--headless=new',
   '--disable-gpu',
   '--hide-scrollbars',
@@ -212,8 +226,11 @@ async function calibrateFrame(binary, outDir) {
   return FRAME_PROBE_WIDTH - Number(found[1]);
 }
 
-/** The children `runProcess` spawned that have not exited yet. */
+/** The children `runProcess` spawned or `trackChild` was handed that have not exited yet. */
 const running = new Set();
+
+/** The last kill the system refused, per child — what `terminateChildren` reports of a child it could not end (K1). */
+const refusals = new WeakMap();
 
 /** The pids of the children still running — empty once every run has ended or been killed. */
 export function liveChildren() {
@@ -222,11 +239,21 @@ export function liveChildren() {
 
 /** Whether a process with this pid still exists (signal 0 sends nothing; `EPERM` means it exists but is not ours). */
 export function isAlive(pid) {
+  return systemState(pid) !== 'gone';
+}
+
+/**
+ * What the SYSTEM says of `pid`, signal 0 sending nothing: `running`; `gone`
+ * (`ESRCH`); or `exists, not ours (EPERM)` — a process holds the pid but may
+ * not be signalled by us, which the harness cannot tell from its own child
+ * and so counts as there.
+ */
+function systemState(pid) {
   try {
     process.kill(pid, 0);
-    return true;
+    return 'running';
   } catch (error) {
-    return error.code === 'EPERM';
+    return error.code === 'EPERM' ? 'exists, not ours (EPERM)' : 'gone';
   }
 }
 
@@ -235,20 +262,105 @@ export function nodeBinary() {
   return process.execPath;
 }
 
-/** Resolves once the child has exited; forces the kill (`SIGKILL`) after the grace when a plain kill was not enough. */
-function exited(child) {
+/**
+ * Spawns `binary`, no pipes, and hands the child back untouched — for the
+ * tests of `trackChild` and `exited`, which touch no Node API themselves.
+ */
+export function spawnChild(binary, args = []) {
+  return spawn(binary, args, { stdio: 'ignore' });
+}
+
+/**
+ * For the tests of K1 only: the kills of the tracked child `pid` are refused —
+ * the first `count`, every one by default — as the system refuses to kill a
+ * process that is not ours: its handle answers `EPERM`, and Node's own
+ * `kill()` emits `error` while the child runs on. Returns what lifts the
+ * refusal and kills the child for real, resolved once it has exited.
+ */
+export function refuseKills(pid, count = Infinity) {
+  const child = trackedChild(pid);
+  const [eperm] = [...getSystemErrorMap()].find(([, [name]]) => name === 'EPERM');
+  const handle = child._handle;
+  const kill = handle.kill;
+  let refused = 0;
+  handle.kill = (signal) => (refused++ < count ? eperm : kill.call(handle, signal));
+  return async () => {
+    handle.kill = kill;
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL');
+      await exited(child);
+    }
+  };
+}
+
+/**
+ * For the tests of K1 only: the end of the tracked child `pid` is kept from
+ * Node — its handle's `onexit` is held back, so its `exitCode` stays null and
+ * no `exit` or `close` is emitted — while the system ends it as it would.
+ * Returns what delivers the held end (or, if none came, kills the child for
+ * real), resolved once Node has seen the child exit.
+ */
+export function withholdExit(pid) {
+  const child = trackedChild(pid);
+  const handle = child._handle;
+  const onexit = handle.onexit;
+  let held = null;
+  handle.onexit = (...end) => {
+    held = end;
+  };
+  return async () => {
+    handle.onexit = onexit;
+    if (held) onexit.apply(handle, held);
+    else if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await exited(child);
+  };
+}
+
+/** The tracked child with this pid, for the two test seams above. */
+function trackedChild(pid) {
+  const child = [...running].find((candidate) => candidate.pid === pid);
+  if (!child) throw new Error(`No child with pid ${pid} is tracked.`);
+  return child;
+}
+
+/**
+ * The events that end a child for the harness, the first one that comes: its
+ * `exit`, or the `close` of its streams — and its `error` only when it has no
+ * `pid`, a spawn that failed: Node never sends `exit` for it (fix round 2,
+ * G1). The `error` of a child that did start is a kill the system refused, and
+ * that child runs on (fix round 3, K1).
+ */
+function endsOf(child) {
+  return child.pid === undefined ? ['exit', 'error', 'close'] : ['exit', 'close'];
+}
+
+/**
+ * Resolves once the child has exited — or never started; forces the kill
+ * (`SIGKILL`) after the grace when a plain kill was not enough, and gives up
+ * one grace later: a child whose kills the system refused still runs when
+ * this resolves, still tracked, and `terminateChildren` reports it (K1). The
+ * page launcher's `close()` waits on it too, so both launchers end a Chrome
+ * the same way.
+ */
+export function exited(child) {
   return new Promise((resolve) => {
     if (child.exitCode !== null || child.signalCode !== null) {
       resolve();
       return;
     }
+    let giveUp;
     const force = setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      // Armed before the SIGKILL: the wait is bounded whatever the kill does.
+      giveUp = setTimeout(end, KILL_GRACE_MS);
+      child.kill('SIGKILL');
     }, KILL_GRACE_MS);
-    child.once('exit', () => {
+    const end = () => {
       clearTimeout(force);
+      clearTimeout(giveUp);
       resolve();
-    });
+    };
+    for (const event of endsOf(child)) child.once(event, end);
   });
 }
 
@@ -257,14 +369,15 @@ function exited(child) {
  * and never never: it resolves with the output and the exit code of a process
  * that ends on its own, and past `timeoutMs` it kills the process (`kill`,
  * then `SIGKILL` after {@link KILL_GRACE_MS}) and rejects, once the process
- * is gone, with an error that names `label` and carries `timedOut`, the
- * child's `pid` and its `stderr`. Every child is tracked until it exits, so
- * `terminateChildren` can end what a failed test left running.
+ * is gone — or given up on, its kills refused —, with an error that names
+ * `label` and carries `timedOut`, the child's `pid` and its `stderr`. Every
+ * child is tracked by {@link trackChild} until it exits, so
+ * `terminateChildren` can end what a failed test left running, and reports
+ * what it could not.
  */
 export function runProcess(binary, args, { timeoutMs, label }) {
   return new Promise((resolve, reject) => {
-    const child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    running.add(child);
+    const child = trackChild(spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'] }));
     let out = '';
     let err = '';
     let timedOut = false;
@@ -274,7 +387,6 @@ export function runProcess(binary, args, { timeoutMs, label }) {
       timedOut = true;
       child.kill();
       exited(child).then(() => {
-        running.delete(child);
         const error = new Error(`${label} did not exit within ${timeoutMs} ms and was killed.`);
         error.timedOut = true;
         error.pid = child.pid;
@@ -283,25 +395,61 @@ export function runProcess(binary, args, { timeoutMs, label }) {
       });
     }, timeoutMs);
     child.on('error', (error) => {
+      // A spawn that failed ends the run; a kill the system refused does not — the child runs on, tracked (K1).
+      if (child.pid !== undefined) return;
       clearTimeout(timer);
-      running.delete(child);
       reject(error);
     });
     child.on('close', (code) => {
       clearTimeout(timer);
       if (timedOut) return;
-      running.delete(child);
       resolve({ out, err, code });
     });
   });
 }
 
-/** Kills every child still running and resolves, with their pids, once each has exited: the suite's `finally`, and what precedes `removeOutDir`. */
+/**
+ * Tracks a child spawned elsewhere — the page launcher's Chrome, whose pipes
+ * `runProcess` does not open — until it exits or fails to start, so
+ * `terminateChildren` ends it too when a suite fails half-way. A child already
+ * gone is not tracked. A kill the system refuses does not untrack it (K1): its
+ * `error` is heard here — Node throws one no one hears — and kept for the
+ * report of `terminateChildren`.
+ */
+export function trackChild(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return child;
+  running.add(child);
+  const forget = () => running.delete(child);
+  for (const event of endsOf(child)) child.once(event, forget);
+  if (child.pid !== undefined) child.on('error', (error) => refusals.set(child, error));
+  return child;
+}
+
+/**
+ * Kills every child still running and resolves, with their pids, once each
+ * has exited: the suite's `finally`, and what precedes `removeOutDir`. The
+ * verdict on a child Node has not heard end is the SYSTEM's: gone — its `exit`
+ * not delivered yet, Node's state lagging — it is let go without error; still
+ * there after its kill and the forced `SIGKILL` — kills the system refused —,
+ * it is not let go (K1): it stays in the list, and the call REJECTS with an
+ * error that names its pid and both states, Node's and the system's.
+ */
 export async function terminateChildren() {
   const children = [...running];
   for (const child of children) child.kill();
   await Promise.all(children.map((child) => exited(child)));
-  for (const child of children) running.delete(child);
+  const survivors = children
+    .filter((child) => child.exitCode === null && child.signalCode === null)
+    .map((child) => ({ child, system: systemState(child.pid) }))
+    .filter(({ system }) => system !== 'gone');
+  for (const child of children) if (!survivors.some((survivor) => survivor.child === child)) running.delete(child);
+  if (survivors.length > 0) {
+    const named = survivors.map(({ child, system }) => {
+      const refusal = refusals.has(child) ? `kill refused with ${refusals.get(child).code}` : 'no kill refused';
+      return `pid ${child.pid} (Node: exitCode ${child.exitCode}, signalCode ${child.signalCode}, ${refusal}; system: ${system})`;
+    });
+    throw new Error(`The layout harness could not end every child — still running after its kill and the forced SIGKILL: ${named.join(', ')}.`);
+  }
   return children.map((child) => child.pid);
 }
 

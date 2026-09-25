@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -29,6 +30,78 @@ export interface DashboardActionsProps {
   onCustomize: () => void;
   /** Opens the create-a-garden dialog — in Edit mode, once the mode is over. */
   onCreate: () => void;
+  /**
+   * The compact action bar has taken the two repeated buttons over (SMA-437,
+   * lot V39, PR B, B4): their wrapper turns `inert` and `aria-hidden`, so one
+   * row of them is live at a time (A-10.6). The chip, the save indicator and
+   * « Créer un jardin », which the bar does not repeat, stay live.
+   */
+  repeatHidden?: boolean;
+  /** The wrapper of the two repeated buttons — what the compact bar's trigger observes (B2). */
+  pageActionsRef?: Ref<HTMLDivElement>;
+}
+
+export interface PageActionButtonsProps {
+  editing: boolean;
+  /** The layout is loading or could not be read: « Modifier » and « Personnaliser » disabled. */
+  unavailable: boolean;
+  onEditingChange: (editing: boolean) => void;
+  onCustomize: () => void;
+}
+
+/**
+ * The two buttons the compact action bar repeats (SMA-437, lot V39, PR B, B4)
+ * — drawn by the header's zone and by the bar, so « the same buttons » (A-10.3:
+ * the same words, the same glyphs, the same height) are the same BY
+ * CONSTRUCTION. Each carries the key of its action, `data-page-action`, by
+ * which the focus finds its twin in the other row (A-10.6).
+ */
+export function PageActionButtons({
+  editing,
+  unavailable,
+  onEditingChange,
+  onCustomize,
+}: PageActionButtonsProps) {
+  const { t } = useTranslation();
+  return (
+    <>
+      {/* ONE button for « Modifier » and « Terminé » (A-10.5) — see the
+          docblock of `DashboardActions`. `EditOutlined` (round 6, N5-6): the
+          path `Main.dc.html` draws on « Modifier », matched attribute for
+          attribute; « Terminé » is filled and carries no glyph. Disabled like
+          « Personnaliser » while the layout is unavailable — « Terminé » never
+          is. */}
+      <Button
+        data-page-action="edit"
+        variant={editing ? 'contained' : 'outlined'}
+        startIcon={editing ? undefined : <EditOutlinedIcon />}
+        onClick={() => onEditingChange(!editing)}
+        disabled={!editing && unavailable}
+      >
+        {t(editing ? 'dashboard.done' : 'dashboard.edit')}
+      </Button>
+      {/* In BOTH modes (A-7, Alexandre 25/09): the compact action bar
+          carries « Personnaliser » in Edit mode and never adds a control the
+          header lacks. `DashboardCustomizeOutlined`, and not `TuneRounded`
+          (round 5, A10-11). The two glyphs were swapped: the artboard draws
+          the four squares of `DashboardCustomizeOutlined` on « Personnaliser
+          » and keeps the sliders of `Tune` for the level chip, and the page
+          had the sliders here and nothing on the chip. Putting the chip's
+          glyph back without moving this one would have drawn the same
+          sliders twice, side by side, on two controls that do different
+          things. Both paths were matched against `@mui/icons-material`
+          attribute for attribute. */}
+      <Button
+        data-page-action="customize"
+        variant="outlined"
+        startIcon={<DashboardCustomizeOutlinedIcon />}
+        onClick={onCustomize}
+        disabled={unavailable}
+      >
+        {t('dashboard.customize')}
+      </Button>
+    </>
+  );
 }
 
 /**
@@ -52,7 +125,14 @@ export interface DashboardActionsProps {
  * nothing under the finger moves when it does — except in the one state that
  * does not hold on that line, the failure beside the adjusted chip, where it
  * wraps under the chip for as long as it shows (decision (a), Alexandre
- * 25/09). From 600 px up, the header's row, as before.
+ * 25/09). While the grid has two columns, 600 to 1 199 px (SMA-437, lot V39,
+ * PR B, T0 — decided on 25/09, option (a) of the T0 report), the zone has its
+ * own line under the title: the chip and the indicator, then « Modifier » —
+ * « Terminé » —, « Personnaliser » and « Créer un jardin », the pair anchored
+ * at the start of its line. At 1 024 px the failure beside the adjusted chip
+ * does not fit beside the title: the zone went under it for as long as it
+ * showed, and « Terminé » with it. From 1 200 px up, with the grid's four
+ * columns, the header's row, as before.
  */
 export default function DashboardActions({
   level,
@@ -63,6 +143,8 @@ export default function DashboardActions({
   onEditingChange,
   onCustomize,
   onCreate,
+  repeatHidden = false,
+  pageActionsRef,
 }: DashboardActionsProps) {
   const { t } = useTranslation();
   const tk = useDashboardTokens();
@@ -75,23 +157,29 @@ export default function DashboardActions({
         display: 'flex',
         // A phone: one part per line, 8 px apart, each the whole width of the
         // header (`.vp.ph .acts`). From 600 px: one row that wraps, 12 px
-        // apart (`.acts`), beside the title or under it as before.
+        // apart (`.acts`). While the grid has two columns (600 to 1 199 px)
+        // the zone has a line of its own under the title, the whole width of
+        // the header (T0); from 1 200 px, beside the title, as before.
         flexDirection: { xs: 'column', sm: 'row' },
         alignItems: { xs: 'stretch', sm: 'center' },
         flexWrap: { sm: 'wrap' },
         gap: { xs: '8px', sm: '12px' },
-        width: { xs: '100%', sm: 'auto' },
+        width: { xs: '100%', lg: 'auto' },
       }}
     >
       {/* The chip and the indicator, on one line (`.a-top`). On a phone the
           line wraps, 10 px apart (`.vp.ph .a-top`): the one state too wide
-          for it puts the indicator under the chip (decision (a)). */}
+          for it puts the indicator under the chip (decision (a)). From 600
+          to 1 199 px the line is the zone's first, whole: the pair starts the next one,
+          at its start, and stays there whatever the indicator says — before
+          T0 the indicator pushed the pair along the row, or down under it. */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
           flexWrap: { xs: 'wrap', sm: 'nowrap' },
           gap: { xs: '10px', sm: 0 },
+          flexBasis: { sm: '100%', lg: 'auto' },
         }}
       >
         {!unavailable && (
@@ -151,49 +239,27 @@ export default function DashboardActions({
       </Box>
       {/* The two buttons the compact action bar repeats, in ONE wrapper of
           their own (`.rep`): two equal halves on a phone (A-10.3), side by
-          side from 600 px. */}
+          side from 600 px. While the bar shows them, this wrapper is `inert`
+          and `aria-hidden` — `aria-hidden` too because Testing Library knows
+          nothing of `inert`, and a browser drops an inert subtree from the
+          accessibility tree anyway (pre-flight, technical decision 6). */}
       <Box
+        ref={pageActionsRef}
         data-page-actions
+        inert={repeatHidden}
+        aria-hidden={repeatHidden || undefined}
         sx={{
           display: { xs: 'grid', sm: 'flex' },
           gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))' },
           gap: { xs: '8px', sm: '12px' },
         }}
       >
-        {/* ONE button for « Modifier » and « Terminé » (A-10.5) — see the
-            docblock. `EditOutlined` (round 6, N5-6): the path `Main.dc.html`
-            draws on « Modifier », matched attribute for attribute; « Terminé »
-            is filled and carries no glyph. Disabled like « Personnaliser »
-            while the layout is unavailable — « Terminé » never is. */}
-        <Button
-          data-page-action="edit"
-          variant={editing ? 'contained' : 'outlined'}
-          startIcon={editing ? undefined : <EditOutlinedIcon />}
-          onClick={() => onEditingChange(!editing)}
-          disabled={!editing && unavailable}
-        >
-          {t(editing ? 'dashboard.done' : 'dashboard.edit')}
-        </Button>
-        {/* In BOTH modes (A-7, Alexandre 25/09): the compact action bar
-            carries « Personnaliser » in Edit mode and never adds a control the
-            header lacks. `DashboardCustomizeOutlined`, and not `TuneRounded`
-            (round 5, A10-11). The two glyphs were swapped: the artboard draws
-            the four squares of `DashboardCustomizeOutlined` on « Personnaliser
-            » and keeps the sliders of `Tune` for the level chip, and the page
-            had the sliders here and nothing on the chip. Putting the chip's
-            glyph back without moving this one would have drawn the same
-            sliders twice, side by side, on two controls that do different
-            things. Both paths were matched against `@mui/icons-material`
-            attribute for attribute. */}
-        <Button
-          data-page-action="customize"
-          variant="outlined"
-          startIcon={<DashboardCustomizeOutlinedIcon />}
-          onClick={onCustomize}
-          disabled={unavailable}
-        >
-          {t('dashboard.customize')}
-        </Button>
+        <PageActionButtons
+          editing={editing}
+          unavailable={unavailable}
+          onEditingChange={onEditingChange}
+          onCustomize={onCustomize}
+        />
       </Box>
       {/* In BOTH modes, and active (A-7 amended — Alexandre, 25/09, fix
           round 1 of #291): the header keeps its arrangement when the page

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sizesFor } from './dashboardCapabilities';
+import { hasActionBar, sizesFor } from './dashboardCapabilities';
 import {
   DASHBOARD_BLOCK_KEYS,
   DASHBOARD_LEVELS,
@@ -72,5 +72,20 @@ describe('the corner handle, per formula (A-N11)', () => {
     // `DashboardGrid` draws the grip for a widget with MORE than one size.
     expect(sizesFor('keyfigures', 'expert')).toHaveLength(1);
     expect(walk('wide', sizesFor('keyfigures', 'expert'), 3)).toEqual(['wide', 'wide', 'wide']);
+  });
+});
+
+// SMA-437, lot V39, PR B, step B3 — which formula has the compact action bar
+// (A-9, Alexandre 25/09): not the Novice, not even with « Créer un jardin »
+// alone. A named predicate the page reads, never a literal comparison in a
+// component — the code knows no other per-formula capability of the page's
+// actions (pre-flight, § C.7).
+describe('the compact action bar, per formula (A-9)', () => {
+  it('no action bar at the Novice formula; one at the Gardener and the Expert formulas', () => {
+    expect(Object.fromEntries(DASHBOARD_LEVELS.map((level) => [level, hasActionBar(level)]))).toEqual({
+      novice: false,
+      gardener: true,
+      expert: true,
+    });
   });
 });

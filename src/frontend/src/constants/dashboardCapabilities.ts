@@ -61,3 +61,15 @@ const EXPERT_SIZES: Record<DashboardBlockKey, DashboardSizeList> = {
 export function sizesFor(key: DashboardBlockKey, level: DashboardLevel): DashboardSizeList {
   return level === 'expert' ? EXPERT_SIZES[key] : THREE_SIZES;
 }
+
+/**
+ * SMA-437, lot V39, PR B, step B3 — whether the page draws the compact action
+ * bar at `level` (A-9, Alexandre 25/09): no bar at the Novice formula — not
+ * even with « Créer un jardin » alone —, one at the Gardener and the Expert
+ * formulas. A capability of the formula, not a consequence of the header's
+ * buttons: today's Novice grid still carries « Modifier » and « Personnaliser
+ * » (pre-flight, § C.7), and the Novice lot is the one that removes them.
+ */
+export function hasActionBar(level: DashboardLevel): boolean {
+  return level !== 'novice';
+}

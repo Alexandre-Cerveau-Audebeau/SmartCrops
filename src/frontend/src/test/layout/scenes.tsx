@@ -161,6 +161,8 @@ const data = dashboardFixture(gardens, {
   varieties,
   totals: { gardenCount: 3, placementCount: 64, varietyCount: 16, catalogPlantCount: 536 },
 });
+/** The scenes' aggregate, whole — what the page scenes' `fetch` serves the page (SMA-437, lot V39, PR B, B9). */
+export const SCENE_DATA = data;
 const views = new Map(gardens.map((garden) => [garden.id, gardenViewOf(garden)]));
 
 /** The same gardens with longer, still plausible names — the desktop probe of V34. */
@@ -372,6 +374,28 @@ const ACTION_STATES: Array<Omit<ActionsScene, 'name' | 'level'>> = [
 export const ACTIONS_SCENES: ActionsScene[] = (['gardener', 'expert'] as const).flatMap((level) =>
   ACTION_STATES.map((state) => ({ name: `actions-${level}-${state.state}`, level, ...state }))
 );
+
+/**
+ * SMA-437, lot V39, PR B, step T0 — the actions zone UNDER THE HEADER'S REAL
+ * LAYOUT (finding E3 of #291's round 1): `DASHBOARD_HEADER_SX`, the page's
+ * title block on the left, the zone beside it or under it, where the header
+ * puts it. Every state of {@link ACTIONS_SCENES}, renamed `header-…`.
+ */
+export const HEADER_SCENES: ActionsScene[] = ACTIONS_SCENES.map((scene) => ({
+  ...scene,
+  name: scene.name.replace(/^actions-/, 'header-'),
+}));
+
+/**
+ * The figures of the header's meta line for the scenes' three gardens — their
+ * count, their plants and their surface — derived as the page derives them:
+ * the aggregate's `placementCount`, the sum of the plans' surfaces.
+ */
+export const HEADER_FIGURES = {
+  gardens: gardens.length,
+  plants: data.totals.placementCount,
+  surfaceM2: gardens.reduce((sum, garden) => sum + (views.get(garden.id)?.surfaceM2 ?? 0), 0),
+};
 
 /**
  * The EXTREME band (pre-flight C.5, « le jeu extrême »): seven digits in a

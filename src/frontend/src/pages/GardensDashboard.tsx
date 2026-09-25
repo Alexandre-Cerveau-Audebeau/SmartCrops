@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
@@ -14,9 +14,12 @@ import Skeleton from '@mui/material/Skeleton';
 import Snackbar from '@mui/material/Snackbar';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import CompactActionBar from '../components/Dashboard/CompactActionBar';
 import CustomizePanel from '../components/Dashboard/CustomizePanel';
 import DashboardActions from '../components/Dashboard/DashboardActions';
 import DashboardGrid from '../components/Dashboard/DashboardGrid';
+import { DASHBOARD_HEADER_SX } from '../components/Dashboard/dashboardHeader';
+import { useCompactActionBar } from '../components/Dashboard/useCompactActionBar';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import CountersOptionsPanel from '../components/Dashboard/blocks/CountersOptionsPanel';
 import { resolveCountersFigures } from '../components/Dashboard/blocks/countersOptions';
@@ -257,6 +260,37 @@ export default function GardensDashboard() {
 
   const [editing, setEditing] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+
+  // SMA-437, lot V39, PR B — the compact action bar: mounted at the formulas
+  // that have one (A-9), armed once the layout is read (A-10.2), shown when
+  // the header's repeated buttons pass under the site navbar plus the bar.
+  const actionBar = useCompactActionBar(level, !loading && !loadError, editing);
+
+  // B8 — every way in or out of Edit mode goes through here, so a toggle
+  // under the bar leaves what the user looks at where it was.
+  const { holdView } = actionBar;
+  const changeEditing = (next: boolean) => {
+    holdView();
+    setEditing(next);
+  };
+
+  // SMA-437, lot V39, PR B, B6 (technical decision 8) — the button the
+  // Customize panel was opened from. The panel gives the focus back to it when
+  // it closes; if the page moved under the panel meanwhile — a rotation — and
+  // that button is now in the inert row, the browser cannot focus it, and the
+  // focus goes to its twin instead of falling to the `<body>`.
+  const panelOpener = useRef<Element | null>(null);
+  const openPanel = () => {
+    panelOpener.current = document.activeElement;
+    setPanelOpen(true);
+  };
+  const { refocus } = actionBar;
+  useEffect(() => {
+    if (panelOpen) return;
+    const opener = panelOpener.current;
+    panelOpener.current = null;
+    refocus(opener);
+  }, [panelOpen, refocus]);
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newGardenName, setNewGardenName] = useState('');
@@ -727,16 +761,9 @@ export default function GardensDashboard() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Box
-        sx={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '12px',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 3,
-        }}
-      >
+      {/* The header row's layout lives in one constant the layout harness
+          mounts too (SMA-437, lot V39, T0 — finding E3 of #291). */}
+      <Box data-dashboard-header sx={DASHBOARD_HEADER_SX}>
         <Box>
           {/* h1 with the h4 look (round 1, E16 / G5): every DashboardBlock
               title is an h2, so an <h4> page title put the widgets above the
@@ -792,11 +819,28 @@ export default function GardensDashboard() {
           unavailable={loading || loadError}
           saveState={saveState}
           editing={editing}
-          onEditingChange={setEditing}
-          onCustomize={() => setPanelOpen(true)}
+          onEditingChange={changeEditing}
+          onCustomize={openPanel}
           onCreate={() => setCreateDialogOpen(true)}
+          repeatHidden={actionBar.shown}
+          pageActionsRef={actionBar.repeatedRef}
         />
       </Box>
+
+      {/* SMA-437, lot V39, PR B — right after the header and right before the
+          grid: the keyboard reaches it where it belongs (A-10.6). */}
+      {actionBar.enabled && (
+        <CompactActionBar
+          barRef={actionBar.barRef}
+          shown={actionBar.shown}
+          top={actionBar.top}
+          editing={editing}
+          unavailable={loading || loadError}
+          saveState={saveState}
+          onEditingChange={changeEditing}
+          onCustomize={openPanel}
+        />
+      )}
 
       {loading && (
         <Box

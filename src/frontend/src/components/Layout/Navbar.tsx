@@ -389,7 +389,10 @@ export default function Navbar() {
 
   return (
     <>
-      <AppBar position="fixed" sx={{ bgcolor: NAV_BG, boxShadow: 2 }}>
+      {/* `data-site-navbar` (SMA-437, lot V39, PR B, B1): the dashboard's
+          compact action bar sits right under this bar and reads its height
+          off the page (`useSiteNavbarHeight`), never a copy of 56 / 64 / 48. */}
+      <AppBar position="fixed" data-site-navbar sx={{ bgcolor: NAV_BG, boxShadow: 2 }}>
         <Toolbar sx={{ justifyContent: 'space-between' }}>
           {/* Left: logo + brand (single link) */}
           <Box
