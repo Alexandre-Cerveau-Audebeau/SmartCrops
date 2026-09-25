@@ -98,8 +98,18 @@ export default function CompactActionBar({
         boxShadow: editing
           ? `inset 0 -1px 0 ${theme.palette.primary.main},${BAR_SHADOW}`
           : BAR_SHADOW,
+        // B7 — the motion (A-10.2): it slides from behind the site navbar in
+        // 150 ms (`duration.shortest`), `easeOut` in and `sharp` out, the
+        // TRANSFORM only — composited, never `top` nor `height`. Visible at
+        // once when it comes; hidden only once it is out. Under
+        // `prefers-reduced-motion`, no frame in between: a state, not a
+        // slower animation (V15) — the idiom of `SortableWidget`'s wobble.
         transform: shown ? 'none' : 'translateY(-100%)',
         visibility: shown ? 'visible' : 'hidden',
+        transition: shown
+          ? `transform ${theme.transitions.duration.shortest}ms ${theme.transitions.easing.easeOut},visibility 0s linear 0s`
+          : `transform ${theme.transitions.duration.shortest}ms ${theme.transitions.easing.sharp},visibility 0s linear ${theme.transitions.duration.shortest}ms`,
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
       }}
     >
       <Box

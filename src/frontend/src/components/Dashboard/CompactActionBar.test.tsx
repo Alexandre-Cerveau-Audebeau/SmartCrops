@@ -78,3 +78,43 @@ describe('the compact action bar in Edit mode, as it is declared (SMA-437, lot V
     expect(copy).toHaveAttribute('aria-hidden', 'true');
   });
 });
+
+describe('the compact action bar’s motion (SMA-437, lot V39, B7)', () => {
+  it('uses the theme’s shortest duration, 150 ms (A-10.2)', () => {
+    expect(createTheme().transitions.duration.shortest).toBe(150);
+  });
+
+  it('slides in from behind the site navbar: a 150 ms transform, easeOut, visible at once', () => {
+    const { theme, bar } = renderBar({ shown: true });
+    const css = rulesFor(bar);
+    expect(css).toContain('transform:none');
+    expect(css).toContain(
+      `transition:transform 150ms ${theme.transitions.easing.easeOut},visibility 0s linear 0s`
+    );
+  });
+
+  it('slides out: a 150 ms transform, sharp, and hidden only once it is out', () => {
+    const { theme, bar } = renderBar({ shown: false });
+    const css = rulesFor(bar);
+    expect(css).toContain('transform:translateY(-100%)');
+    expect(css).toContain('visibility:hidden');
+    expect(css).toContain(
+      `transition:transform 150ms ${theme.transitions.easing.sharp},visibility 0s linear 150ms`
+    );
+  });
+
+  it('animates nothing but its transform — never its top nor its height', () => {
+    for (const shown of [true, false]) {
+      const { bar } = renderBar({ shown });
+      const transitions = [...rulesFor(bar).matchAll(/transition:([^;}]+)/g)].map((found) => found[1]);
+      expect(transitions.join(' '), String(shown)).not.toMatch(/\b(top|height|all)\b/);
+    }
+  });
+
+  it('draws no frame in between under prefers-reduced-motion — a state, not a slower animation (V15)', () => {
+    const { bar } = renderBar({ shown: true });
+    // Emotion writes the prefixed declaration first: `-webkit-transition:none;transition:none;`.
+    const block = /@media \(prefers-reduced-motion: ?reduce\)\{[^{}]*\{([^}]*)\}/.exec(rulesFor(bar));
+    expect(block?.[1]).toMatch(/(^|;)transition:none(;|$)/);
+  });
+});
