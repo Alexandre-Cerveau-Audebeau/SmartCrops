@@ -74,7 +74,20 @@ export function removeOutDir(outDir) {
  * whose `jsxDEV` the production `react` this bundle defines does not export —
  * so the environment is set for the build and restored after it.
  */
-export async function buildHarness(outDir) {
+export function buildHarness(outDir) {
+  return buildBundle(outDir, {
+    entry: 'src/test/layout/harness.tsx',
+    fileName: 'harness.js',
+    name: 'SmartCropsLayoutHarness',
+  });
+}
+
+/**
+ * One IIFE bundle of `entry` into `outDir/fileName`, built as `buildHarness`
+ * builds the scenes' — shared with the page launcher (`pageChrome.mjs`,
+ * SMA-437, lot V39, PR B, B9), whose entry mounts the whole page.
+ */
+export async function buildBundle(outDir, { entry, fileName, name }) {
   const { build } = await import('vite');
   const { default: react } = await import('@vitejs/plugin-react');
   const previous = process.env.NODE_ENV;
@@ -97,10 +110,10 @@ export async function buildHarness(outDir) {
         cssCodeSplit: false,
         target: 'chrome120',
         lib: {
-          entry: join(process.cwd(), 'src/test/layout/harness.tsx'),
+          entry: join(process.cwd(), entry),
           formats: ['iife'],
-          name: 'SmartCropsLayoutHarness',
-          fileName: () => 'harness.js',
+          name,
+          fileName: () => fileName,
         },
       },
     });
@@ -110,7 +123,7 @@ export async function buildHarness(outDir) {
 }
 
 /** The faces `main.tsx` loads — 300 to 700 — from the same package, over `file://`. */
-function fontFaces() {
+export function fontFaces() {
   const dir = pathToFileURL(join(process.cwd(), 'node_modules/@fontsource/inter/files')).href;
   return [300, 400, 500, 600, 700]
     .map(
@@ -148,7 +161,7 @@ body{margin:0;background:#fafcf8;color:#1b2a22;font-family:Inter,system-ui,sans-
  * reduced-motion rendering stills it, and nothing else of the dashboard reads
  * that preference.
  */
-const CHROME_FLAGS = [
+export const CHROME_FLAGS = [
   '--headless=new',
   '--disable-gpu',
   '--hide-scrollbars',
@@ -294,6 +307,17 @@ export function runProcess(binary, args, { timeoutMs, label }) {
       resolve({ out, err, code });
     });
   });
+}
+
+/**
+ * Tracks a child spawned elsewhere — the page launcher's Chrome, whose pipes
+ * `runProcess` does not open — until it exits, so `terminateChildren` ends it
+ * too when a suite fails half-way.
+ */
+export function trackChild(child) {
+  running.add(child);
+  child.once('exit', () => running.delete(child));
+  return child;
 }
 
 /** Kills every child still running and resolves, with their pids, once each has exited: the suite's `finally`, and what precedes `removeOutDir`. */

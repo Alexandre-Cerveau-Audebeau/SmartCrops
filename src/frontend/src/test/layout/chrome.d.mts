@@ -39,6 +39,14 @@ export function makeOutDir(): string;
 export function removeOutDir(outDir: string): void;
 /** Bundles `harness.tsx` into `outDir/harness.js`, in production mode. */
 export function buildHarness(outDir: string): Promise<void>;
+/** Bundles `entry` into `outDir/fileName`, one IIFE named `name`, in production mode. */
+export function buildBundle(outDir: string, bundle: { entry: string; fileName: string; name: string }): Promise<void>;
+/** The `@font-face` rules of the faces `main.tsx` loads, over `file://`. */
+export function fontFaces(): string;
+/** The flags every Chrome of the harness is started with. */
+export const CHROME_FLAGS: readonly string[];
+/** Tracks a child spawned elsewhere until it exits, so `terminateChildren` ends it too. */
+export function trackChild<T>(child: T): T;
 /** Writes `outDir/page.html` around the bundle. */
 export function writePage(outDir: string): void;
 /** Runs Chrome headless on the page for one run — bounded, killed past the delay — and returns its measurements. */

@@ -161,6 +161,8 @@ const data = dashboardFixture(gardens, {
   varieties,
   totals: { gardenCount: 3, placementCount: 64, varietyCount: 16, catalogPlantCount: 536 },
 });
+/** The scenes' aggregate, whole — what the page scenes' `fetch` serves the page (SMA-437, lot V39, PR B, B9). */
+export const SCENE_DATA = data;
 const views = new Map(gardens.map((garden) => [garden.id, gardenViewOf(garden)]));
 
 /** The same gardens with longer, still plausible names — the desktop probe of V34. */
