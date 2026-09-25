@@ -275,6 +275,16 @@ describe('the compact action bar in Edit mode (SMA-437, lot V39, B5)', () => {
   });
 
   it('shows the save state as an aria-hidden COPY — the page keeps ONE role="status" for the save, the header’s, born empty and never in an inert row', async () => {
+    // The save HELD until the test lets it go (fix round 1, R1): « Saving… »
+    // is transient, and the region and its copy are read one after the other
+    // — a save ending between the two reads once failed this test under load.
+    let release!: () => void;
+    vi.mocked(saveDashboardPreferences).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        })
+    );
     const user = userEvent.setup();
     await editFromTheBar(user);
 
@@ -292,6 +302,9 @@ describe('the compact action bar in Edit mode (SMA-437, lot V39, B5)', () => {
     await user.click(screen.getAllByRole('button', { name: /^Hide / })[0]!);
     await waitFor(() => expect(region).toHaveTextContent('Saving…'));
     expect(copy).toHaveTextContent('Saving…');
+    // The write has left and waits: let it end.
+    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled(), { timeout: 5000 });
+    await act(async () => release());
     await waitFor(() => expect(region).toHaveTextContent('Saved'), { timeout: 5000 });
     expect(copy).toHaveTextContent('Saved');
   });

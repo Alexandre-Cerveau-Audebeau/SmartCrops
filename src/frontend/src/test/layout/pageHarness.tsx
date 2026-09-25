@@ -30,8 +30,8 @@ import { measureCard, wrappedTexts } from './measure';
  * arrives. `window.__page` is what the launcher drives: `ready()`, `measure()`
  * — everything the suite asserts, read in the engine —, `scrollTo(y)` and
  * `settle()`, the focus and the clicks, the marks that tell one node from
- * another, and the PROBES that break the page on purpose so the suite can
- * prove its checks see a break.
+ * another, the saves held and released, and the PROBES that break the page on
+ * purpose so the suite can prove its checks see a break.
  */
 
 const params = new URLSearchParams(location.search);
@@ -45,13 +45,25 @@ const json = (body: unknown) =>
 /** The layouts the page wrote, in order — what a gesture in Edit mode sends. */
 const saved: unknown[] = [];
 
+/**
+ * While the suite holds the saves (`holdSaves()`), a write waits here for
+ * `releaseSaves()` (SMA-437, PR #292, fix round 1, R1): « Enregistrement… »
+ * is transient, and it cannot end under the measurement that reads it.
+ */
+let held: Array<() => void> | null = null;
+
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   const method = (init?.method ?? 'GET').toUpperCase();
   if (url.startsWith('/api/dashboard/preferences')) {
     if (method === 'PUT') {
       saved.push(JSON.parse(String(init?.body ?? 'null')));
-      return new Response(null, { status: 204 });
+      const answer = () => new Response(null, { status: 204 });
+      if (held) {
+        const waiting = held;
+        return new Promise<Response>((resolve) => waiting.push(() => resolve(answer())));
+      }
+      return answer();
     }
     if (prefsPending) return new Promise<Response>(() => {});
     return json({ schemaVersion: 1, level, isPreset: true, blocks: presetFor(level), updatedAt: null });
@@ -307,6 +319,20 @@ const page = {
   /** The layouts the page has written. */
   saves(): number {
     return saved.length;
+  },
+
+  /** From now on, a write of the layout waits for `releaseSaves()`. */
+  holdSaves(): true {
+    held = [];
+    return true;
+  },
+
+  /** Answers every write held, and holds no more: how many were waiting. */
+  releaseSaves(): number {
+    const waiting = held ?? [];
+    held = null;
+    for (const answer of waiting) answer();
+    return waiting.length;
   },
 
   /**

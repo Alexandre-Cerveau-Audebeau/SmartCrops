@@ -248,10 +248,15 @@ async function runLevel(session: PageSession, level: Level): Promise<LevelRun> {
   };
 
   // A gesture: a widget hidden. The header's region says it, the same node, and the bar's copy with it.
+  // The save is HELD (fix round 1, R1): « Enregistrement… » cannot end under the measurement that reads it.
   const idle = await measure(session);
+  const writes = await session.evaluate<number>('window.__page.saves()');
+  await call(session, 'holdSaves()');
   await call(session, `click(${JSON.stringify(selectors.hide)})`);
   await session.waitFor(`document.querySelector('[data-save-status]').textContent === 'Enregistrement…'`, 'the save starting');
   const pending = await measure(session);
+  await session.waitFor(`window.__page.saves() > ${writes}`, 'the save leaving');
+  await call(session, 'releaseSaves()');
   await session.waitFor(`document.querySelector('[data-save-status]').textContent === 'Enregistré'`, 'the save ending');
   const saved = await measure(session);
 

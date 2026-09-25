@@ -572,6 +572,16 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
   // MutationObserver): mounted once, born empty, the same node then carries
   // each state — the idiom of the create dialog's region in the same page.
   it('mounts the save indicator’s status region EMPTY before any change, and the same node then says « Saving… » and « Saved » (A-10.6)', async () => {
+    // The save HELD until the test lets it go (SMA-437, PR #292, fix round 1,
+    // R1): « Saving… » is transient, and the region is checked again after
+    // the wait — a save ending in between would check « Saved » instead.
+    let release!: () => void;
+    vi.mocked(saveDashboardPreferences).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        })
+    );
     servePreferences('gardener');
     renderPage();
     const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
@@ -588,6 +598,9 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
 
     await waitFor(() => expect(region).toHaveTextContent('Saving…'));
     expect(header.getAllByRole('status')).toEqual([region]);
+    // The write has left and waits: let it end.
+    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled(), RENDER_TIMEOUT);
+    await act(async () => release());
     await waitFor(() => expect(region).toHaveTextContent('Saved'), RENDER_TIMEOUT);
     expect(header.getAllByRole('status')).toEqual([region]);
   });
