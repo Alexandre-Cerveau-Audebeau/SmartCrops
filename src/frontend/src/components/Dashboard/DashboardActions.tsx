@@ -95,17 +95,23 @@ export default function DashboardActions({
           }}
         />
       )}
-      {saveState !== 'idle' && (
-        <Typography
-          role="status"
-          sx={{
-            fontSize: `${DASHBOARD_TYPE.chip}px`,
-            color: saveState === 'error' ? 'error.main' : 'text.secondary',
-          }}
-        >
-          {t(`dashboard.save.${saveState}`)}
-        </Typography>
-      )}
+      {/* The save indicator's live region: mounted ONCE and born EMPTY, the
+          same node then carrying « Enregistrement… », « Enregistré » or the
+          failure (A-10.6 — the rule of #278, A-6). A region inserted already
+          filled is not announced, and this one was mounted only once it had
+          something to say. Never `display: none` while empty: that would take
+          it out of the accessibility tree, the defect over again. The same
+          idiom as the create dialog's region in `GardensDashboard`. */}
+      <Typography
+        role="status"
+        data-save-status
+        sx={{
+          fontSize: `${DASHBOARD_TYPE.chip}px`,
+          color: saveState === 'error' ? 'error.main' : 'text.secondary',
+        }}
+      >
+        {saveState === 'idle' ? '' : t(`dashboard.save.${saveState}`)}
+      </Typography>
       {/* ONE button for « Modifier » and « Terminé » (A-10.5) — see the
           docblock. `EditOutlined` (round 6, N5-6): the path `Main.dc.html`
           draws on « Modifier », matched attribute for attribute; « Terminé »

@@ -521,6 +521,33 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
     expect(back).toBe(edit);
   });
 
+  // SMA-437, lot V39, step A3 (A-10.6 — the rule of #278, A-6) — a live
+  // region announces a CHANGE of its content, not the content it is inserted
+  // with. The save indicator's region was mounted only once it had something
+  // to say, already filled with « Saving… » (measured by the pre-flight with a
+  // MutationObserver): mounted once, born empty, the same node then carries
+  // each state — the idiom of the create dialog's region in the same page.
+  it('mounts the save indicator’s status region EMPTY before any change, and the same node then says « Saving… » and « Saved » (A-10.6)', async () => {
+    servePreferences('gardener');
+    renderPage();
+    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    const header = within(document.querySelector('[data-dashboard-actions]') as HTMLElement);
+
+    const regions = header.queryAllByRole('status');
+    expect(regions).toHaveLength(1);
+    const region = regions[0]!;
+    expect(region).toBeEmptyDOMElement();
+
+    fireEvent.click(edit);
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide Weather' }, RENDER_TIMEOUT));
+
+    await waitFor(() => expect(region).toHaveTextContent('Saving…'));
+    expect(header.getAllByRole('status')).toEqual([region]);
+    await waitFor(() => expect(region).toHaveTextContent('Saved'), RENDER_TIMEOUT);
+    expect(header.getAllByRole('status')).toEqual([region]);
+  });
+
   it('puts the four controls inside every card', async () => {
     await enterEditMode();
 
