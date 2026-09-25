@@ -225,9 +225,14 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
   }, 180_000);
 
   afterAll(async () => {
-    // The profiles are deleted only once every browser has exited.
-    await terminateChildren();
-    if (outDir) removeOutDir(outDir);
+    // The profiles are deleted once every browser has exited — and still tried
+    // when one outlived its kills: `removeOutDir` never throws, so the error
+    // of `terminateChildren` stands.
+    try {
+      await terminateChildren();
+    } finally {
+      if (outDir) removeOutDir(outDir);
+    }
   });
 
   it('measured every scene and every probe, in Inter, in every run', () => {

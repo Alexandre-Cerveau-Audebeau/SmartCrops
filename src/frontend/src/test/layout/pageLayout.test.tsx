@@ -390,8 +390,12 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
   }, 240_000);
 
   afterAll(async () => {
-    await terminateChildren();
-    if (outDir) removeOutDir(outDir);
+    // Still tried when a browser outlived its kills; `removeOutDir` never throws.
+    try {
+      await terminateChildren();
+    } finally {
+      if (outDir) removeOutDir(outDir);
+    }
   });
 
   it('ran every viewport to its end, in Inter, at the viewport it claims', () => {

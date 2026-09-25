@@ -5,12 +5,14 @@ import {
   isAlive,
   liveChildren,
   nodeBinary,
+  refuseKills,
   runProcess,
   spawnChild,
   terminateChildren,
   type TimedOutError,
   trackChild,
   windowFrame,
+  withholdExit,
 } from './chrome.mjs';
 import { encodeResults } from './encode';
 
@@ -105,6 +107,123 @@ describe('exited and trackChild — a child that never started is let go (G1)', 
     expect(errors).toEqual(['ENOENT']);
     expect(await within(terminateChildren(), 3_000)).toBe('settled');
     expect(liveChildren()).toEqual([]);
+  }, 20_000);
+});
+
+// SMA-437, PR #292, fix round 3, K1 (CodeRabbit, both surfaces, Major) — a
+// kill the system refuses. Node reports it with `error`, and the child runs
+// on; since G1, `exited()` and `trackChild()` took every `error` for an end,
+// so `terminateChildren()` settled on a LIVE Chrome and dropped it from its
+// list. The refusal is injected under Node's own `kill()` (`refuseKills`: the
+// child's handle answers `EPERM`), on a real `node` that never exits, and each
+// test kills its child for real at the end — verified.
+describe('a kill the system refuses — the child is not let go while it runs (K1)', () => {
+  /** What `promise` came to, or the time waited — never a pending test. */
+  const outcome = (promise: Promise<unknown>, ms: number) =>
+    Promise.race([
+      promise.then(
+        () => 'resolved',
+        (error: Error) => `rejected: ${error.message}`
+      ),
+      new Promise<string>((resolve) => setTimeout(() => resolve(`still waiting after ${ms} ms`), ms)),
+    ]);
+
+  /** `terminateChildren()` with every kill of `pid` refused: what it came to, and the child meanwhile. The child is killed for real before this returns. */
+  const terminateRefused = async (pid: number) => {
+    const release = refuseKills(pid);
+    try {
+      const started = performance.now();
+      const settled = await outcome(terminateChildren(), 10_000);
+      return { settled, alive: isAlive(pid), live: liveChildren(), elapsed: performance.now() - started };
+    } finally {
+      await release();
+    }
+  };
+
+  /** What `terminateChildren()` rejects with when `pid` outlives its kill and the forced SIGKILL. */
+  const survivor = (pid: number) =>
+    `rejected: The layout harness could not end every child — still running after its kill and the forced SIGKILL: pid ${pid} (Node: exitCode null, signalCode null, kill refused with EPERM; system: running).`;
+
+  it('terminateChildren rejects, naming its pid, on a run of the scenes launcher it could not end — and keeps it in the list', async () => {
+    const ran = runProcess(nodeBinary(), NEVER, { timeoutMs: 60_000, label: 'a run whose kills are refused' }).then(
+      ({ code }) => `exited, code ${code}`,
+      (error: Error) => `rejected: ${error.message}`
+    );
+    const [pid] = liveChildren();
+
+    const { elapsed, ...refused } = await terminateRefused(pid!);
+
+    expect(refused).toEqual({ settled: survivor(pid!), alive: true, live: [pid] });
+    // Bounded — the kill, then the forced SIGKILL, a grace each: no suite waits on a child it cannot end.
+    expect(elapsed).toBeLessThan(10_000);
+    // Killed for real once the refusal is lifted: gone from the system and from the list, and the run settles as a killed one.
+    expect(isAlive(pid!)).toBe(false);
+    expect(liveChildren()).toEqual([]);
+    expect(await ran).toBe('exited, code null');
+  }, 20_000);
+
+  it('terminateChildren rejects, naming its pid, on a Chrome of the page launcher it could not end — and keeps it in the list', async () => {
+    const pid = trackChild(spawnChild(nodeBinary(), NEVER)).pid!;
+
+    const { elapsed, ...refused } = await terminateRefused(pid);
+
+    expect(refused).toEqual({ settled: survivor(pid), alive: true, live: [pid] });
+    expect(elapsed).toBeLessThan(10_000);
+    expect(isAlive(pid)).toBe(false);
+    expect(liveChildren()).toEqual([]);
+  }, 20_000);
+
+  it('exited() waits on through a kill refused while it waits — the child still runs, still listed — and ends with the forced SIGKILL', async () => {
+    const child = trackChild(spawnChild(nodeBinary(), NEVER));
+    const pid = child.pid!;
+    const errors: Array<string | undefined> = [];
+    child.once('error', (error) => errors.push(error.code));
+    const release = refuseKills(pid, 1);
+    try {
+      const gone = exited(child);
+      // Refused: Node emits `error`, and the child runs on.
+      child.kill();
+
+      expect({ settled: await outcome(gone, 1_000), alive: isAlive(pid), live: liveChildren() }).toEqual({
+        settled: 'still waiting after 1000 ms',
+        alive: true,
+        live: [pid],
+      });
+      expect(errors).toEqual(['EPERM']);
+      // The forced SIGKILL, past the grace, is not refused: it ends the child, and the wait.
+      expect(await outcome(gone, 5_000)).toBe('resolved');
+      expect(isAlive(pid)).toBe(false);
+      expect(liveChildren()).toEqual([]);
+    } finally {
+      await release();
+    }
+  }, 20_000);
+
+  // Fix round 3, reprise (disposition of 25/09, 21:55) — the verdict is the
+  // SYSTEM's: Node's state is a reflection, sometimes late. Under the whole
+  // suite's load, a page Chrome whose `exit` Node had not delivered failed the
+  // page suite as a survivor (pid 31004), no kill refused. The delivery is held
+  // back here (`withholdExit`) on a real `node` that terminateChildren really
+  // kills: the system no longer has it, Node still believes it runs.
+  it('terminateChildren lets go, without error, a child the system no longer has — even while Node has not told its exit', async () => {
+    const child = trackChild(spawnChild(nodeBinary(), NEVER));
+    const pid = child.pid!;
+    const deliver = withholdExit(pid);
+    try {
+      const settled = await outcome(terminateChildren(), 10_000);
+
+      expect({ settled, node: [child.exitCode, child.signalCode], system: isAlive(pid), live: liveChildren() }).toEqual({
+        settled: 'resolved',
+        node: [null, null],
+        system: false,
+        live: [],
+      });
+    } finally {
+      await deliver();
+    }
+    // Node told at last: the child is gone for both.
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+    expect(isAlive(pid)).toBe(false);
   }, 20_000);
 });
 

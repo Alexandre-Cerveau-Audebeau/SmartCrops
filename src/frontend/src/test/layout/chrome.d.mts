@@ -19,6 +19,7 @@ export interface HarnessChild {
   readonly exitCode: number | null;
   readonly signalCode: string | null;
   kill(signal?: string): boolean;
+  on(event: 'error', listener: (error: Error & { code?: string }) => void): unknown;
   once(event: 'error', listener: (error: Error & { code?: string }) => void): unknown;
   once(event: 'exit' | 'close', listener: (code: number | null, signal: string | null) => void): unknown;
 }
@@ -45,7 +46,7 @@ export function findChrome(): string | null;
 export const IS_CI: boolean;
 /** A fresh temp folder for the bundle, the page and the Chrome profiles. */
 export function makeOutDir(): string;
-/** Removes it, retried; never throws. Call `terminateChildren()` first. */
+/** Removes it, retried; never throws. Call `terminateChildren()` first, and this in its `finally`. */
 export function removeOutDir(outDir: string): void;
 /** Bundles `harness.tsx` into `outDir/harness.js`, in production mode. */
 export function buildHarness(outDir: string): Promise<void>;
@@ -55,9 +56,9 @@ export function buildBundle(outDir: string, bundle: { entry: string; fileName: s
 export function fontFaces(): string;
 /** The flags every Chrome of the harness is started with. */
 export const CHROME_FLAGS: readonly string[];
-/** Tracks a child spawned elsewhere until it exits or fails to start, so `terminateChildren` ends it too. */
+/** Tracks a child spawned elsewhere until it exits or fails to start — a refused kill does not untrack it —, so `terminateChildren` ends it too. */
 export function trackChild<T extends HarnessChild>(child: T): T;
-/** Resolves once the child has exited — or never started; forces the kill (`SIGKILL`) after the grace when a plain kill was not enough. */
+/** Resolves once the child has exited — or never started; forces the kill (`SIGKILL`) after the grace when a plain kill was not enough, and gives up one grace later on a child whose kills were refused: it still runs, still tracked. */
 export function exited(child: HarnessChild): Promise<void>;
 /** Writes `outDir/page.html` around the bundle. */
 export function writePage(outDir: string): void;
@@ -71,7 +72,7 @@ export function windowFrame(
 ): Promise<number>;
 /** Spawns a process and settles once it has exited: the result, or a `TimedOutError` past `timeoutMs`. */
 export function runProcess(binary: string, args: string[], options: { timeoutMs: number; label: string }): Promise<ProcessResult>;
-/** Kills every child still running, waits for each to exit, and returns their pids. */
+/** Kills every child still running, waits for each to exit, and returns their pids. A child the system no longer has is let go, even before Node tells its exit; one the system still has after its kill and the forced `SIGKILL` stays in the list, and the call rejects naming its pid, Node's state and the system's. */
 export function terminateChildren(): Promise<Array<number | undefined>>;
 /** The pids of the children still running. */
 export function liveChildren(): Array<number | undefined>;
@@ -81,5 +82,9 @@ export function isAlive(pid: number): boolean;
 export function nodeBinary(): string;
 /** Spawns `binary`, no pipes, and hands the child back untouched: for the tests of `trackChild` and `exited`. */
 export function spawnChild(binary: string, args?: string[]): HarnessChild;
+/** For the tests of K1: the kills of the tracked child `pid` are refused with `EPERM` — the first `count`, every one by default. Returns what lifts the refusal and kills the child for real, resolved once it has exited. */
+export function refuseKills(pid: number, count?: number): () => Promise<void>;
+/** For the tests of K1: the end of the tracked child `pid` is kept from Node — no `exit`, no `close`, its `exitCode` null — while the system ends it. Returns what delivers it (or kills the child for real), resolved once Node has seen the child exit. */
+export function withholdExit(pid: number): () => Promise<void>;
 /** The measurements, back from the base64 text of the results `<pre>`. */
 export function decodeResults(base64: string): unknown;
