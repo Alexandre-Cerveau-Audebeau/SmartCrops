@@ -454,6 +454,11 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
 
     it.each(CASES)('$id $level: the bar does not grow at the first gesture — the state’s place is kept', ({ id, level }) => {
       const { save } = levelOf(id, level);
+      // The bar is there in each state measured (fix round 1, G10): without it,
+      // the two heights below were `undefined` and `undefined`, and passed.
+      expect(save.idle.bar, 'idle').not.toBeNull();
+      expect(save.pending.bar, 'pending').not.toBeNull();
+      expect(save.saved.bar, 'saved').not.toBeNull();
       expect(save.pending.bar?.height).toBe(save.idle.bar?.height);
       expect(save.saved.bar?.height).toBe(save.idle.bar?.height);
     });
