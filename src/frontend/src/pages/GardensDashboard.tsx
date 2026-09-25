@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
@@ -265,6 +265,24 @@ export default function GardensDashboard() {
   // that have one (A-9), armed once the layout is read (A-10.2), shown when
   // the header's repeated buttons pass under the site navbar plus the bar.
   const actionBar = useCompactActionBar(level, !loading && !loadError);
+
+  // SMA-437, lot V39, PR B, B6 (technical decision 8) — the button the
+  // Customize panel was opened from. The panel gives the focus back to it when
+  // it closes; if the page moved under the panel meanwhile — a rotation — and
+  // that button is now in the inert row, the browser cannot focus it, and the
+  // focus goes to its twin instead of falling to the `<body>`.
+  const panelOpener = useRef<Element | null>(null);
+  const openPanel = () => {
+    panelOpener.current = document.activeElement;
+    setPanelOpen(true);
+  };
+  const { refocus } = actionBar;
+  useEffect(() => {
+    if (panelOpen) return;
+    const opener = panelOpener.current;
+    panelOpener.current = null;
+    refocus(opener);
+  }, [panelOpen, refocus]);
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newGardenName, setNewGardenName] = useState('');
@@ -794,7 +812,7 @@ export default function GardensDashboard() {
           saveState={saveState}
           editing={editing}
           onEditingChange={setEditing}
-          onCustomize={() => setPanelOpen(true)}
+          onCustomize={openPanel}
           onCreate={() => setCreateDialogOpen(true)}
           repeatHidden={actionBar.shown}
           pageActionsRef={actionBar.repeatedRef}
@@ -812,7 +830,7 @@ export default function GardensDashboard() {
           unavailable={loading || loadError}
           saveState={saveState}
           onEditingChange={setEditing}
-          onCustomize={() => setPanelOpen(true)}
+          onCustomize={openPanel}
         />
       )}
 

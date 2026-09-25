@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -119,11 +120,13 @@ beforeEach(() => {
 
 afterEach(() => vi.clearAllMocks());
 
-function renderPage() {
+/** The page under its providers — and, when a test needs one, the site's navbar before it, as the Layout draws it. */
+function renderPage(before?: ReactNode) {
   return render(
     <LanguageProvider>
       <UnitSystemProvider>
         <MemoryRouter>
+          {before}
           <GardensDashboard />
         </MemoryRouter>
       </UnitSystemProvider>
@@ -135,10 +138,11 @@ function renderPage() {
 const RENDER_TIMEOUT = { timeout: 10000 };
 
 /** Renders the page and waits for its grid — the layout read, the trigger armed. */
-async function renderLoaded() {
-  renderPage();
+async function renderLoaded(before?: ReactNode) {
+  const view = renderPage(before);
   await screen.findAllByRole('heading', { level: 2 }, RENDER_TIMEOUT);
   await waitFor(() => expect(live()).toHaveLength(1));
+  return view;
 }
 
 const bar = () => document.querySelector<HTMLElement>('[data-compact-bar]');
@@ -301,5 +305,98 @@ describe('the compact action bar in Edit mode (SMA-437, lot V39, B5)', () => {
     const region = document.querySelector('[data-save-status]')!;
     await waitFor(() => expect(region).toHaveTextContent('Changes not saved'), { timeout: 5000 });
     expect(bar()!.querySelector('[data-compact-bar-status]')).toHaveTextContent('Changes not saved');
+  });
+});
+
+describe('the focus and the scroll padding under the compact action bar (SMA-437, lot V39, B6)', () => {
+  /** The header's button of an action, and the bar's. */
+  const headerButton = (action: string) => headerRow().querySelector<HTMLElement>(`[data-page-action="${action}"]`)!;
+  const barButton = (action: string) => bar()!.querySelector<HTMLElement>(`[data-page-action="${action}"]`)!;
+
+  it('moves the focus to the twin when its row hides — the header’s Edit to the bar’s, and back — never to the body', async () => {
+    await renderLoaded();
+    headerButton('edit').focus();
+    expect(document.activeElement).toBe(headerButton('edit'));
+
+    scrollPast();
+    expect(document.activeElement).toBe(barButton('edit'));
+
+    scrollBack();
+    expect(document.activeElement).toBe(headerButton('edit'));
+  });
+
+  it('does the same for Customize', async () => {
+    await renderLoaded();
+    headerButton('customize').focus();
+    scrollPast();
+    expect(document.activeElement).toBe(barButton('customize'));
+    scrollBack();
+    expect(document.activeElement).toBe(headerButton('customize'));
+  });
+
+  it('never gives the focus to the bar when it appears: a focus elsewhere stays where it is', async () => {
+    await renderLoaded();
+    const create = screen.getByRole('button', { name: 'Create Garden' });
+    create.focus();
+    scrollPast();
+    expect(document.activeElement).toBe(create);
+  });
+
+  it('keeps the focus on the bar’s toggle through Edit and Done at the keyboard — one button whose label changes (A-10.5)', async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+    scrollPast();
+    const toggle = barButton('edit');
+    toggle.focus();
+    await user.keyboard('{Enter}');
+    expect(document.activeElement).toBe(toggle);
+    expect(toggle).toHaveTextContent('Done');
+    await user.keyboard('{Enter}');
+    expect(document.activeElement).toBe(toggle);
+    expect(toggle).toHaveTextContent('Edit');
+  });
+
+  it('gives the focus back to the twin when the Customize panel closes on a button that went inert meanwhile (technical decision 8)', async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+    headerButton('customize').focus();
+    await user.keyboard('{Enter}');
+    await screen.findByRole('dialog', { name: 'Customize' });
+
+    // The page scrolled under the panel — a rotation: the header's buttons are gone.
+    scrollPast();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(document.activeElement).toBe(barButton('customize')));
+  });
+
+  it('sets scroll-padding-top to the navbar plus the bar plus 8 px while the bar shows, and gives the previous value back after (WCAG 2.4.11)', async () => {
+    const original = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const height = this.hasAttribute('data-site-navbar') ? 56 : this.hasAttribute('data-compact-bar') ? 54 : null;
+      if (height === null) return original.call(this);
+      return {
+        x: 0, y: 0, top: 0, left: 0, right: 0, bottom: height,
+        width: 0, height, toJSON: () => ({}),
+      } as DOMRect;
+    };
+    const root = document.documentElement;
+    root.style.scrollPaddingTop = '5px';
+    try {
+      const view = await renderLoaded(<header data-site-navbar />);
+      expect(root.style.scrollPaddingTop).toBe('5px');
+
+      scrollPast();
+      expect(root.style.scrollPaddingTop).toBe('118px');
+
+      scrollBack();
+      expect(root.style.scrollPaddingTop).toBe('5px');
+
+      scrollPast();
+      view.unmount();
+      expect(root.style.scrollPaddingTop).toBe('5px');
+    } finally {
+      Element.prototype.getBoundingClientRect = original;
+      root.style.scrollPaddingTop = '';
+    }
   });
 });
