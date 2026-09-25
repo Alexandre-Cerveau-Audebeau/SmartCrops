@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -451,6 +452,50 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
 
     expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Done' })).toBeNull();
+  });
+
+  // SMA-437, lot V39, step A1 (A-10.5) — « Modifier » becomes « Terminé » AT
+  // THE SAME BUTTON: one node whose label changes, so the focus stays on it.
+  // The header drew one button per mode, and the one pressed was unmounted:
+  // the focus fell to the <body>, at the click and at the Enter key — measured
+  // in Chrome by the pre-flight, and jsdom drops it the same way. Driven by
+  // `userEvent`, which focuses what it presses as a browser does: a bare
+  // `click()` never moves the focus and would prove nothing.
+  it('turns Edit into Done at the same button, the focus kept on it — at the click, and back (A-10.5)', async () => {
+    servePreferences('gardener');
+    renderPage();
+    const user = userEvent.setup();
+    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+
+    await user.click(edit);
+    const done = await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+    expect(document.activeElement).toBe(done);
+    expect(done).toBe(edit);
+
+    await user.click(done);
+    const back = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    expect(document.activeElement).toBe(back);
+    expect(back).toBe(edit);
+  });
+
+  it('keeps the focus on it at the keyboard too: Enter on Edit leaves it on Done, and Enter on Done on Edit (A-10.5)', async () => {
+    servePreferences('gardener');
+    renderPage();
+    const user = userEvent.setup();
+    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    act(() => edit.focus());
+
+    await user.keyboard('{Enter}');
+    const done = await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+    expect(document.activeElement).toBe(done);
+    expect(done).toBe(edit);
+
+    await user.keyboard('{Enter}');
+    const back = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    expect(document.activeElement).toBe(back);
+    expect(back).toBe(edit);
   });
 
   it('puts the four controls inside every card', async () => {
