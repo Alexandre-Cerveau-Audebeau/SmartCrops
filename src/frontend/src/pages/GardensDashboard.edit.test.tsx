@@ -442,16 +442,39 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
-  it('swaps the header actions for Done, and back again', async () => {
+  // SMA-437, lot V39, step A2 (A-7 — Alexandre, 25/09) — REWRITTEN: this test
+  // pinned the opposite, « Customize » gone in Edit mode. The compact action
+  // bar carries « Personnaliser » in Edit mode and never adds a control the
+  // header lacks, so the header keeps it too; « Créer un jardin » alone
+  // depends on the mode, as before.
+  it('keeps Customize in the header in Edit mode — Done in Edit’s place, Create gone — and back again (A-7)', async () => {
+    await enterEditMode();
+    // The HEADER's buttons: the Gardens widget draws a « Create Garden » of
+    // its own on a page without a garden.
+    const header = within(document.querySelector('[data-dashboard-actions]') as HTMLElement);
+
+    expect(header.queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(header.getByRole('button', { name: 'Customize' })).toBeEnabled();
+    expect(header.queryByRole('button', { name: 'Create Garden' })).toBeNull();
+
+    fireEvent.click(header.getByRole('button', { name: 'Done' }));
+
+    expect(await header.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(header.queryByRole('button', { name: 'Done' })).toBeNull();
+    expect(header.getByRole('button', { name: 'Customize' })).toBeEnabled();
+    expect(header.getByRole('button', { name: 'Create Garden' })).toBeInTheDocument();
+  });
+
+  it('opens the Customize panel from Edit mode, and leaves the page in Edit mode when it closes (A-7)', async () => {
     await enterEditMode();
 
-    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Customize' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
+    const panel = await screen.findByRole('dialog', { name: 'Customize' }, RENDER_TIMEOUT);
+    fireEvent.click(within(panel).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull(), RENDER_TIMEOUT);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
-
-    expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide Weather' })).toBeInTheDocument();
   });
 
   // SMA-437, lot V39, step A1 (A-10.5) — « Modifier » becomes « Terminé » AT

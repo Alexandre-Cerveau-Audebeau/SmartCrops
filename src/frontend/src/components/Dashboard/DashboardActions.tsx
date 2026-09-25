@@ -120,37 +120,37 @@ export default function DashboardActions({
       >
         {t(editing ? 'dashboard.done' : 'dashboard.edit')}
       </Button>
+      {/* In BOTH modes (A-7, Alexandre 25/09): the compact action bar carries
+          « Personnaliser » in Edit mode and never adds a control the header
+          lacks. `DashboardCustomizeOutlined`, and not `TuneRounded` (round 5,
+          A10-11). The two glyphs were swapped: the artboard draws the four
+          squares of `DashboardCustomizeOutlined` on « Personnaliser » and
+          keeps the sliders of `Tune` for the level chip, and the page had the
+          sliders here and nothing on the chip. Putting the chip's glyph back
+          without moving this one would have drawn the same sliders twice,
+          side by side, on two controls that do different things. Both paths
+          were matched against `@mui/icons-material` attribute for attribute. */}
+      <Button
+        data-page-action="customize"
+        variant="outlined"
+        startIcon={<DashboardCustomizeOutlinedIcon />}
+        onClick={onCustomize}
+        disabled={unavailable}
+      >
+        {t('dashboard.customize')}
+      </Button>
+      {/* The one button that depends on the mode: gone in Edit mode, as
+          before (A-7). `Add` (round 6, N5-7): the path `Main.dc.html` draws
+          on « Créer un jardin ». */}
       {!editing && (
-        <>
-          {/* `DashboardCustomizeOutlined`, and not `TuneRounded` (round 5,
-              A10-11). The two glyphs were swapped: the artboard draws the
-              four squares of `DashboardCustomizeOutlined` on « Personnaliser
-              » and keeps the sliders of `Tune` for the level chip, and the
-              page had the sliders here and nothing on the chip. Putting the
-              chip's glyph back without moving this one would have drawn the
-              same sliders twice, side by side, on two controls that do
-              different things. Both paths were matched against
-              `@mui/icons-material` attribute for attribute. */}
-          <Button
-            data-page-action="customize"
-            variant="outlined"
-            startIcon={<DashboardCustomizeOutlinedIcon />}
-            onClick={onCustomize}
-            disabled={unavailable}
-          >
-            {t('dashboard.customize')}
-          </Button>
-          {/* `Add` (round 6, N5-7): the path `Main.dc.html` draws on « Créer
-              un jardin ». */}
-          <Button
-            data-create-garden
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={onCreate}
-          >
-            {t('gardens.createGarden')}
-          </Button>
-        </>
+        <Button
+          data-create-garden
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={onCreate}
+        >
+          {t('gardens.createGarden')}
+        </Button>
       )}
     </Box>
   );
