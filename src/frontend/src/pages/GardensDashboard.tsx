@@ -4,7 +4,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import Dialog from '@mui/material/Dialog';
@@ -15,11 +14,8 @@ import Skeleton from '@mui/material/Skeleton';
 import Snackbar from '@mui/material/Snackbar';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import AddIcon from '@mui/icons-material/Add';
-import DashboardCustomizeOutlinedIcon from '@mui/icons-material/DashboardCustomizeOutlined';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import CustomizePanel from '../components/Dashboard/CustomizePanel';
+import DashboardActions from '../components/Dashboard/DashboardActions';
 import DashboardGrid from '../components/Dashboard/DashboardGrid';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import CountersOptionsPanel from '../components/Dashboard/blocks/CountersOptionsPanel';
@@ -49,7 +45,6 @@ import { useDashboardData } from '../hooks/useDashboardData';
 import { useDashboardWeather } from '../hooks/useDashboardWeather';
 import { useGardenViews } from '../hooks/useGardenViews';
 import { useLanguage } from '../hooks/useLanguage';
-import { useDashboardTokens } from '../theme/useDashboardTokens';
 import { createGarden } from '../services/gardenApi';
 import { DASHBOARD_SPACING, DASHBOARD_TYPE } from '../theme/dashboardTokens';
 import { formatCount, formatSurface } from '../utils/formatNumber';
@@ -92,7 +87,6 @@ export default function GardensDashboard() {
   // previous language. One source for what is printed together.
   const { t, i18n } = useTranslation();
   const { language } = useLanguage();
-  const tk = useDashboardTokens();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -731,8 +725,6 @@ export default function GardensDashboard() {
     return null;
   };
 
-  const levelName = t(`dashboard.levels.${level}.name`);
-
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box
@@ -791,95 +783,19 @@ export default function GardensDashboard() {
           )}
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          {!loading && !loadError && (
-            /* A GLYPH before the label (round 5, A10-11). `Main.dc.html` puts
-               one in front of each of the four header elements, and this was
-               the one without: `<span class="lvl"><svg class="ic" …/>Vue
-               Jardinier</span>`, whose path is `@mui/icons-material`'s `Tune`,
-               matched attribute for attribute. `.lvl .ic { color: var(--prim) }`
-               — the glyph is the chip's one coloured mark, like the glyph of a
-               widget header. The outline stays: `.lvl` is the one chip of the
-               page the artboard draws with a border rather than a fill. */
-            <Chip
-              icon={<TuneOutlinedIcon />}
-              label={t(
-                adjusted ? 'dashboard.levelChipAdjusted' : 'dashboard.levelChip',
-                { level: levelName }
-              )}
-              variant="outlined"
-              // `.lvl` verbatim (round 6, N5-5): `height: 32px; padding: 0 13px
-              // 0 10px; border-radius: 16px; gap: 7px; font-size: 13px;
-              // font-weight: 600`. A `size="small"` chip was 24 px high.
-              sx={{
-                height: 32,
-                borderRadius: '16px',
-                fontSize: 13,
-                fontWeight: 600,
-                // `.lvl { border: 1px solid var(--chip-bd); background: var(--card) }`
-                borderColor: tk.chipBorder,
-                backgroundColor: 'background.paper',
-                '& .MuiChip-icon': { color: 'primary.main', fontSize: 18, ml: '10px', mr: 0 },
-                '& .MuiChip-label': { pl: '7px', pr: '13px' },
-              }}
-            />
-          )}
-          {saveState !== 'idle' && (
-            <Typography
-              role="status"
-              sx={{
-                fontSize: `${DASHBOARD_TYPE.chip}px`,
-                color: saveState === 'error' ? 'error.main' : 'text.secondary',
-              }}
-            >
-              {t(`dashboard.save.${saveState}`)}
-            </Typography>
-          )}
-          {editing ? (
-            <Button variant="contained" onClick={() => setEditing(false)}>
-              {t('dashboard.done')}
-            </Button>
-          ) : (
-            <>
-              {/* `EditOutlined` and `Add` (round 6, N5-6 / N5-7): the two
-                  paths `Main.dc.html` draws on « Modifier » and « Créer un
-                  jardin », matched attribute for attribute like the two
-                  others of this header were in round 5. */}
-              <Button
-                variant="outlined"
-                startIcon={<EditOutlinedIcon />}
-                onClick={() => setEditing(true)}
-                disabled={loading || loadError}
-              >
-                {t('dashboard.edit')}
-              </Button>
-              {/* `DashboardCustomizeOutlined`, and not `TuneRounded` (round 5,
-                  A10-11). The two glyphs were swapped: the artboard draws the
-                  four squares of `DashboardCustomizeOutlined` on « Personnaliser
-                  » and keeps the sliders of `Tune` for the level chip, and the
-                  page had the sliders here and nothing on the chip. Putting the
-                  chip's glyph back without moving this one would have drawn the
-                  same sliders twice, side by side, on two controls that do
-                  different things. Both paths were matched against
-                  `@mui/icons-material` attribute for attribute. */}
-              <Button
-                variant="outlined"
-                startIcon={<DashboardCustomizeOutlinedIcon />}
-                onClick={() => setPanelOpen(true)}
-                disabled={loading || loadError}
-              >
-                {t('dashboard.customize')}
-              </Button>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => setCreateDialogOpen(true)}
-              >
-                {t('gardens.createGarden')}
-              </Button>
-            </>
-          )}
-        </Box>
+        {/* SMA-437, lot V39 — the chip, the save indicator and the buttons,
+            one component: « Modifier » and « Terminé » are one button that
+            keeps the focus (A-10.5). */}
+        <DashboardActions
+          level={level}
+          adjusted={adjusted}
+          unavailable={loading || loadError}
+          saveState={saveState}
+          editing={editing}
+          onEditingChange={setEditing}
+          onCustomize={() => setPanelOpen(true)}
+          onCreate={() => setCreateDialogOpen(true)}
+        />
       </Box>
 
       {loading && (

@@ -325,6 +325,7 @@
     "edit": "Edit",
     "done": "Done",
     "customize": "Customize",
+    "pageActions": "Page actions",
     "levelChip": "{{level}} view",
     "levelChipAdjusted": "{{level}} view · adjusted",
     "loadError": "Couldn’t load your dashboard.",
@@ -357,6 +358,7 @@
       "wide": "Full width"
     },
     "editMode": {
+      "label": "Edit mode",
       "drag": "Move {{widget}}",
       "hide": "Hide {{widget}}",
       "locked": "{{widget}} can’t be hidden",

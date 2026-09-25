@@ -15,6 +15,7 @@ import { gardenViewOf, type GardenView } from '../../utils/gardenStats';
 import type { KeyFigure } from '../../components/Dashboard/blocks/keyFiguresOptions';
 import { LAYOUT_NOW_MS } from './clock';
 import { presetFor } from '../../constants/dashboardPresets';
+import type { SaveState } from '../../hooks/useDashboardPreferences';
 import type { DashboardBlockKey, DashboardLevel, DashboardSize } from '../../types/Dashboard';
 import type { DashboardGardenData, DashboardVarietyData } from '../../types/DashboardData';
 import type { DashboardWeatherData } from '../../types/DashboardWeather';
@@ -332,6 +333,45 @@ export const gridCardScene = (grid: GridScene, block: GridScene['blocks'][number
   weather: 'all',
   editing: grid.editing,
 });
+
+/**
+ * SMA-437, lot V39, step A4 (pre-flight C.6, n° 1) — the header's ACTIONS
+ * ZONE, `DashboardActions`, alone: the level chip, the save indicator and the
+ * page's buttons, at rest and in Edit mode, in each state of the indicator —
+ * « Enregistrement… », « Enregistré » and the failure following the first
+ * change, which also turns the chip to « · ajustée » — and while the layout
+ * loads. At the two formulas that draw the buttons: the Gardener, whose chip
+ * is the widest (« Vue Jardinier · ajustée »), and the Expert.
+ */
+export interface ActionsScene {
+  /** `actions-gardener-edit-pending`… */
+  name: string;
+  level: DashboardLevel;
+  /** `rest-idle`, `edit-error`…: the mode, then the indicator's state or `loading`. */
+  state: string;
+  editing: boolean;
+  saveState: SaveState;
+  adjusted: boolean;
+  unavailable: boolean;
+}
+
+/** The states of the zone: at rest and in Edit mode, the indicator before any change and in its three states; and the load. */
+const ACTION_STATES: Array<Omit<ActionsScene, 'name' | 'level'>> = [
+  { state: 'rest-loading', editing: false, saveState: 'idle', adjusted: false, unavailable: true },
+  ...([false, true] as const).flatMap((editing) =>
+    (['idle', 'pending', 'saved', 'error'] as const).map((saveState) => ({
+      state: `${editing ? 'edit' : 'rest'}-${saveState}`,
+      editing,
+      saveState,
+      adjusted: saveState !== 'idle',
+      unavailable: false,
+    }))
+  ),
+];
+
+export const ACTIONS_SCENES: ActionsScene[] = (['gardener', 'expert'] as const).flatMap((level) =>
+  ACTION_STATES.map((state) => ({ name: `actions-${level}-${state.state}`, level, ...state }))
+);
 
 /**
  * The EXTREME band (pre-flight C.5, « le jeu extrême »): seven digits in a

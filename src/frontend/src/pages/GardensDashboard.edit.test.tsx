@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -441,16 +442,177 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
-  it('swaps the header actions for Done, and back again', async () => {
+  // SMA-437, lot V39, step A2 (A-7 — Alexandre, 25/09) — REWRITTEN: this test
+  // pinned the opposite, « Customize » gone in Edit mode. The compact action
+  // bar carries « Personnaliser » in Edit mode and never adds a control the
+  // header lacks, so the header keeps it too.
+  //
+  // REWRITTEN AGAIN by the fix round 1 of #291, C1 (A-7 amended, Alexandre
+  // 25/09): it pinned « Créer un jardin » gone in Edit mode, the one button
+  // that depended on the mode. It stays, and active — the header no longer
+  // changes its arrangement when the page enters Edit mode.
+  it('keeps Create Garden in the header in Edit mode, beside Customize — Done in Edit’s place — and back again (A-7, amended 25/09)', async () => {
+    await enterEditMode();
+    // The HEADER's buttons: the Gardens widget draws a « Create Garden » of
+    // its own on a page without a garden.
+    const header = within(document.querySelector('[data-dashboard-actions]') as HTMLElement);
+
+    expect(header.queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(header.getByRole('button', { name: 'Customize' })).toBeEnabled();
+    const create = header.getByRole('button', { name: 'Create Garden' });
+    expect(create).toBeEnabled();
+
+    fireEvent.click(header.getByRole('button', { name: 'Done' }));
+
+    expect(await header.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(header.queryByRole('button', { name: 'Done' })).toBeNull();
+    expect(header.getByRole('button', { name: 'Customize' })).toBeEnabled();
+    expect(header.getByRole('button', { name: 'Create Garden' })).toBe(create);
+  });
+
+  // SMA-437, fix round 1 of #291, C1 (A-7 amended — Alexandre, 25/09: « Cette
+  // troisième option me plaît oui. ») — in Edit mode, « Créer un jardin » ends
+  // the mode FIRST, then opens the create dialog: behind the dialog's veil the
+  // page is already back at rest. The layout the user was editing is not lost
+  // on the way: the debounced save runs on under the dialog, the hook
+  // untouched. And the dialog gives the focus back to the button that opened
+  // it — the same node in both modes, so it is still there to take it.
+  // Driven by `userEvent`, which focuses what it presses as a browser does.
+  it('in Edit mode, Create Garden ends the mode, then opens the dialog — the pending layout still saved — and the focus comes back to it when the dialog closes (A-7, amended 25/09)', async () => {
+    servePreferences('gardener');
+    renderPage();
+    const user = userEvent.setup();
+    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    await user.click(edit);
+    await user.click(await screen.findByRole('button', { name: 'Hide Weather' }, RENDER_TIMEOUT));
+    const header = within(document.querySelector('[data-dashboard-actions]') as HTMLElement);
+    const create = header.getByRole('button', { name: 'Create Garden' });
+
+    await user.click(create);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Create a new garden' }, RENDER_TIMEOUT);
+    // The mode is over under the veil: « Terminé » is « Modifier » again, and
+    // no card carries its Edit-mode controls. `hidden: true` — the open modal
+    // hides the page from the accessibility tree.
+    expect(edit).toHaveTextContent('Edit');
+    expect(screen.queryByRole('button', { name: 'Done', hidden: true })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Hide /, hidden: true })).toBeNull();
+    // The change made in Edit mode leaves anyway, dialog open.
+    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled(), RENDER_TIMEOUT);
+    expect(lastSaved().blocks.find((block) => block.key === 'weather')?.hidden).toBe(true);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Create a new garden' })).toBeNull(), RENDER_TIMEOUT);
+
+    expect(header.getByRole('button', { name: 'Create Garden' })).toBe(create);
+    expect(document.activeElement).toBe(create);
+  });
+
+  it('opens the Customize panel from Edit mode, and leaves the page in Edit mode when it closes (A-7)', async () => {
     await enterEditMode();
 
-    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Customize' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
+    const panel = await screen.findByRole('dialog', { name: 'Customize' }, RENDER_TIMEOUT);
+    fireEvent.click(within(panel).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull(), RENDER_TIMEOUT);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide Weather' })).toBeInTheDocument();
+  });
 
-    expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull();
+  // SMA-437, lot V39, step A1 (A-10.5) — « Modifier » becomes « Terminé » AT
+  // THE SAME BUTTON: one node whose label changes, so the focus stays on it.
+  // The header drew one button per mode, and the one pressed was unmounted:
+  // the focus fell to the <body>, at the click and at the Enter key — measured
+  // in Chrome by the pre-flight, and jsdom drops it the same way. Driven by
+  // `userEvent`, which focuses what it presses as a browser does: a bare
+  // `click()` never moves the focus and would prove nothing.
+  it('turns Edit into Done at the same button, the focus kept on it — at the click, and back (A-10.5)', async () => {
+    servePreferences('gardener');
+    renderPage();
+    const user = userEvent.setup();
+    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+
+    await user.click(edit);
+    const done = await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+    expect(document.activeElement).toBe(done);
+    expect(done).toBe(edit);
+
+    await user.click(done);
+    const back = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    expect(document.activeElement).toBe(back);
+    expect(back).toBe(edit);
+  });
+
+  it('keeps the focus on it at the keyboard too: Enter on Edit leaves it on Done, and Enter on Done on Edit (A-10.5)', async () => {
+    servePreferences('gardener');
+    renderPage();
+    const user = userEvent.setup();
+    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    act(() => edit.focus());
+
+    await user.keyboard('{Enter}');
+    const done = await screen.findByRole('button', { name: 'Done' }, RENDER_TIMEOUT);
+    expect(document.activeElement).toBe(done);
+    expect(done).toBe(edit);
+
+    await user.keyboard('{Enter}');
+    const back = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    expect(document.activeElement).toBe(back);
+    expect(back).toBe(edit);
+  });
+
+  // SMA-437, lot V39, step A3 (A-10.6 — the rule of #278, A-6) — a live
+  // region announces a CHANGE of its content, not the content it is inserted
+  // with. The save indicator's region was mounted only once it had something
+  // to say, already filled with « Saving… » (measured by the pre-flight with a
+  // MutationObserver): mounted once, born empty, the same node then carries
+  // each state — the idiom of the create dialog's region in the same page.
+  it('mounts the save indicator’s status region EMPTY before any change, and the same node then says « Saving… » and « Saved » (A-10.6)', async () => {
+    servePreferences('gardener');
+    renderPage();
+    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    const header = within(document.querySelector('[data-dashboard-actions]') as HTMLElement);
+
+    const regions = header.queryAllByRole('status');
+    expect(regions).toHaveLength(1);
+    const region = regions[0]!;
+    expect(region).toBeEmptyDOMElement();
+
+    fireEvent.click(edit);
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide Weather' }, RENDER_TIMEOUT));
+
+    await waitFor(() => expect(region).toHaveTextContent('Saving…'));
+    expect(header.getAllByRole('status')).toEqual([region]);
+    await waitFor(() => expect(region).toHaveTextContent('Saved'), RENDER_TIMEOUT);
+    expect(header.getAllByRole('status')).toEqual([region]);
+  });
+
+  // SMA-437, lot V39, step A4 (§ 4.1 of the v3 contract, A-10.1, A-10.3) —
+  // the two buttons the compact action bar repeats sit in ONE wrapper of
+  // their own: on a phone it lays them out as two equal halves, and it is the
+  // one element whose bottom the bar's relay line will watch. « Créer un
+  // jardin », never repeated, stays outside it. jsdom lays nothing out: the
+  // geometry is the layout harness's (`dashboardLayout.test.tsx`).
+  it('holds the two repeated buttons in one wrapper of their own — Edit and Customize at rest, Done and Customize in Edit mode — Create outside it (§ 4.1)', async () => {
+    servePreferences('gardener');
+    renderPage();
+    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    const header = within(document.querySelector('[data-dashboard-actions]') as HTMLElement);
+    const customize = header.getByRole('button', { name: 'Customize' });
+    const pair = edit.parentElement!;
+
+    expect([...pair.children]).toEqual([edit, customize]);
+    expect(pair.contains(header.getByRole('button', { name: 'Create Garden' }))).toBe(false);
+
+    fireEvent.click(edit);
+    expect(await header.findByRole('button', { name: 'Done' })).toBe(edit);
+    expect([...pair.children]).toEqual([edit, customize]);
   });
 
   it('puts the four controls inside every card', async () => {

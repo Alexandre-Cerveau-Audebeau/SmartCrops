@@ -325,6 +325,7 @@
     "edit": "Modifier",
     "done": "Terminé",
     "customize": "Personnaliser",
+    "pageActions": "Actions de la page",
     "levelChip": "Vue {{level}}",
     "levelChipAdjusted": "Vue {{level}} · ajustée",
     "loadError": "Impossible de charger votre tableau de bord.",
@@ -357,6 +358,7 @@
       "wide": "Pleine largeur"
     },
     "editMode": {
+      "label": "Mode Modifier",
       "drag": "Déplacer {{widget}}",
       "hide": "Masquer {{widget}}",
       "locked": "{{widget}} ne peut pas être masqué",
