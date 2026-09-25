@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ACTIONS_SCENES, GRID_SCENES, LAYOUT_SCENES } from './scenes';
+import { ACTIONS_SCENES, GRID_SCENES, HEADER_SCENES, LAYOUT_SCENES } from './scenes';
 import { ACTIONS_PROBES, FORCED_ACTION_LABEL, PROBE_SCENES, WIDE_LINE, WIDE_SHORT_HEIGHT } from './probes';
-import type { ActionsMeasure, GridMeasure, SceneMeasure } from './harness';
+import type { ActionsMeasure, GridMeasure, HeaderMeasure, SceneMeasure } from './harness';
 import type { FocusMeasure } from './focusProbe';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 import { sizesFor } from '../../constants/dashboardCapabilities';
@@ -73,6 +73,11 @@ import {
  * exists), a short Full-width card takes the height of its content (no
  * floor, A-N10) across every column (A-N12).
  *
+ * SMA-437, lot V39, PR B, step T0 — a third tablet run, French at 768 px (the
+ * portrait tablet, between the two), and the header's actions zone measured
+ * UNDER THE HEADER'S REAL LAYOUT, beside the page's title (finding E3 of
+ * #291): where « Terminé » stands from 600 px up, state for state.
+ *
  * Chrome: `CHROME_BIN`, else the usual names on the PATH, else the usual
  * install paths. Without Chrome the suite is SKIPPED on a workstation and
  * FAILS on CI (`CI` is set there): the workflow's own step checks the browser
@@ -83,8 +88,12 @@ import {
  */
 
 const PHONE_WIDTHS = [360, 390] as const;
-/** The two tablet runs (SMA-437, D19): the lower edge of the two-column grid, and a landscape tablet. */
-const TABLET_WIDTHS = [600, 1024] as const;
+/**
+ * The tablet runs (SMA-437, D19): the lower edge of the two-column grid, and a
+ * landscape tablet — and, since lot V39's T0, a portrait tablet between them.
+ * In all three the header's zone has its own line under the title.
+ */
+const TABLET_WIDTHS = [600, 768, 1024] as const;
 const DESKTOP_WIDTH = 1280;
 /** A day in another month and another year: the wall clock the sixth run is told (#8). */
 const ANOTHER_DAY = Date.UTC(2027, 1, 3, 15, 30, 0);
@@ -130,6 +139,8 @@ const focusCases = new Map<string, Map<string, FocusMeasure>>();
 const actionsCases = new Map<string, Map<string, ActionsMeasure>>();
 /** The zone's probes, by run then by probe name — apart from its scenes, which must be clean; a probe must not be. */
 const actionsProbes = new Map<string, Map<string, ActionsMeasure>>();
+/** The zone under the header's real layout, by run then by scene name (SMA-437, lot V39, PR B, T0). */
+const headerCases = new Map<string, Map<string, HeaderMeasure>>();
 let outDir = '';
 
 /** The runs whose grid has two or four columns — the tablets and the desktop — where the rows are `auto` and the cards pinned. */
@@ -195,13 +206,14 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       settled.forEach((outcome, index) => {
         if (outcome.status === 'fulfilled') {
           const byName = (measured: SceneMeasure[]) => new Map(measured.map((scene) => [scene.scene, scene]));
-          const { scenes, grids: measuredGrids, focus, actions } = outcome.value;
+          const { scenes, grids: measuredGrids, focus, actions, headers } = outcome.value;
           results.set(RUNS[index]!.id, byName(scenes.filter((scene) => scene.probe === null)));
           probes.set(RUNS[index]!.id, byName(scenes.filter((scene) => scene.probe !== null)));
           grids.set(RUNS[index]!.id, new Map(measuredGrids.map((grid) => [grid.scene, grid])));
           focusCases.set(RUNS[index]!.id, new Map(focus.map((measure) => [measure.probe, measure])));
           actionsCases.set(RUNS[index]!.id, new Map(actions.filter((zone) => zone.probe === null).map((zone) => [zone.scene, zone])));
           actionsProbes.set(RUNS[index]!.id, new Map(actions.filter((zone) => zone.probe !== null).map((zone) => [zone.scene, zone])));
+          headerCases.set(RUNS[index]!.id, new Map(headers.map((header) => [header.scene, header])));
         }
       });
       const failed = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
@@ -232,6 +244,7 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       for (const zone of actionsCases.get(run.id)?.values() ?? []) {
         expect(zone.fontLoaded, `${run.id} ${zone.scene}: Inter not loaded`).toBe(true);
       }
+      expect(headerCases.get(run.id)?.size, run.id).toBe(HEADER_SCENES.length);
     }
   });
 
@@ -297,7 +310,7 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
     });
   });
 
-  describe('the tablet (600 and 1 024 px) — two columns, the cards pinned (SMA-437, D19)', () => {
+  describe('the tablet (600, 768 and 1 024 px) — two columns, the cards pinned (SMA-437, D19)', () => {
     it.each(TABLET_WIDTHS)('measures the viewport it claims: %i px, the window calibrated for its frame', (width) => {
       for (const scene of scenesOf(runOf(`fr@${width}`)).values()) {
         expect(scene.viewport, scene.scene).toBe(width);
@@ -440,7 +453,7 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       }
     });
 
-    it('draws its four tiles four in a row from 900 px — at 1 024 and 1 280 px — and two by two below — at 600, 390 and 360 px (arbitrage 2)', () => {
+    it('draws its four tiles four in a row from 900 px — at 1 024 and 1 280 px — and two by two below — at 768, 600, 390 and 360 px (arbitrage 2)', () => {
       for (const run of RUNS) {
         const expected = run.vw >= 900 ? [4] : [2, 2];
         for (const name of TILED) {
@@ -734,6 +747,86 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
         }
         return found.map((fault) => `${scene.name}: ${fault}`);
       });
+      expect(faults).toEqual([]);
+    });
+  });
+
+  // SMA-437, lot V39, PR B, step T0 — the arrangement of the tablet, decided
+  // on 25/09 as the first step of this PR (SMA-437, 13:02), then carried up
+  // to 1 199 px (option (a) of the T0 report, Alexandre, 25/09): the zone on
+  // its own line under the title while the grid has two columns, the pair
+  // anchored so that « Terminé » no longer moves when the indicator speaks,
+  // in every state. Measured UNDER THE HEADER'S REAL LAYOUT (finding E3 of #291's round
+  // 1): the zone beside the page's title, or under it, where the header puts
+  // it — never in a frame of its own.
+  describe('the header — the actions zone under the header’s real layout (SMA-437, lot V39, T0)', () => {
+    /** The runs of 600 px and more — the phone has its own arrangement, pinned above. */
+    const WIDE_IDS = RUNS.filter((run) => run.vw >= 600).map((run) => run.id);
+    /** Under this width — the grid's four columns — the zone has a line of its own under the title (T0, option (a)); from it, the header's row. */
+    const OWN_LINE_BELOW = 1200;
+    const OWN_LINE_IDS = WIDE_IDS.filter((id) => runOf(id).vw < OWN_LINE_BELOW);
+    const near = (a: number, b: number) => Math.abs(a - b) <= 0.5;
+
+    const headerOf = (run: LayoutRun, name: string): HeaderMeasure => {
+      const measure = headerCases.get(run.id)?.get(name);
+      if (!measure) throw new Error(`No measurement for the header scene ${name} in ${run.id}`);
+      return measure;
+    };
+    const toggleOf = (measure: HeaderMeasure) => {
+      if (!measure.parts.toggle) throw new Error(`${measure.scene}: no toggle`);
+      return measure.parts.toggle;
+    };
+    const boxText = (box: { x: number; y: number; w: number; h: number }) => `(${box.x}, ${box.y}) ${box.w} × ${box.h}`;
+
+    it.each(RUNS.map((run) => run.id))('%s: every state of the header is clean — no overlap, nothing clipped, nothing past the header, every text of the zone on one line', (id) => {
+      for (const scene of HEADER_SCENES) {
+        const measure = headerOf(runOf(id), scene.name);
+        expect({ ...defects(measure), wrapped: measure.wrapped }, scene.name).toEqual({ overlaps: [], clipped: [], spills: [], beyondCard: 0, wrapped: [] });
+      }
+    });
+
+    it.each(OWN_LINE_IDS)('%s: under 1 200 px, gives the zone its own line under the title, the whole width of the header, in every state (T0)', (id) => {
+      const faults = HEADER_SCENES.flatMap((scene) => {
+        const measure = headerOf(runOf(id), scene.name);
+        const { title, zone } = measure;
+        const found: string[] = [];
+        if (zone.y < title.y + title.h) found.push(`the zone at y ${zone.y}, beside the title (${title.y} to ${title.y + title.h})`);
+        if (!near(zone.x, 0) || !near(zone.w, measure.header.w)) found.push(`the zone spans ${zone.x} to ${zone.x + zone.w} of ${measure.header.w} px`);
+        return found.map((fault) => `${scene.name}: ${fault}`);
+      });
+      expect(faults).toEqual([]);
+    });
+
+    it.each(WIDE_IDS)('%s: never moves « Terminé » or « Modifier » when the indicator speaks — saving, saved or failed, from where it stood before any change (T0)', (id) => {
+      const run = runOf(id);
+      const faults = (['gardener', 'expert'] as const).flatMap((level) =>
+        (['rest', 'edit'] as const).flatMap((mode) => {
+          const reference = toggleOf(headerOf(run, `header-${level}-${mode}-idle`));
+          return (['pending', 'saved', 'error'] as const).flatMap((state) => {
+            const toggle = toggleOf(headerOf(run, `header-${level}-${mode}-${state}`));
+            const still = near(toggle.x, reference.x) && near(toggle.y, reference.y) && near(toggle.w, reference.w) && near(toggle.h, reference.h);
+            return still ? [] : [`header-${level}-${mode}-${state}: the toggle at ${boxText(toggle)}, ${boxText(reference)} before any change`];
+          });
+        })
+      );
+      expect(faults).toEqual([]);
+    });
+
+    it.each(WIDE_IDS)('%s: puts « Terminé » where « Modifier » stood, state for state — its left edge under 1 200 px, where the pair starts its line; its right edge from 1 200 px, where the header aligns the zone right (T0)', (id) => {
+      const run = runOf(id);
+      const ownLine = run.vw < OWN_LINE_BELOW;
+      const faults = (['gardener', 'expert'] as const).flatMap((level) =>
+        (['idle', 'pending', 'saved', 'error'] as const).flatMap((state) => {
+          const rest = headerOf(run, `header-${level}-rest-${state}`);
+          const edit = headerOf(run, `header-${level}-edit-${state}`);
+          const modifier = toggleOf(rest);
+          const done = toggleOf(edit);
+          const edge = (measure: HeaderMeasure, box: { x: number; w: number }) =>
+            ownLine ? box.x : Math.round((measure.header.w - (box.x + box.w)) * 10) / 10;
+          const kept = near(edge(edit, done), edge(rest, modifier)) && near(done.y, modifier.y);
+          return kept ? [] : [`${level}-${state}: « Terminé » at ${boxText(done)}, « Modifier » at ${boxText(modifier)} (${ownLine ? 'left edge' : 'right edge from the header’s end'} ${edge(edit, done)} and ${edge(rest, modifier)})`];
+        })
+      );
       expect(faults).toEqual([]);
     });
   });

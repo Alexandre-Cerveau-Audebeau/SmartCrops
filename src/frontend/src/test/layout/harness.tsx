@@ -3,15 +3,22 @@
 import './freeze';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import { ThemeProvider } from '@mui/material/styles';
 import i18next from '../../i18n/i18n';
 import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
 import { createAppTheme } from '../../theme';
 import DashboardActions from '../../components/Dashboard/DashboardActions';
 import DashboardGrid from '../../components/Dashboard/DashboardGrid';
+import { DASHBOARD_HEADER_SX } from '../../components/Dashboard/dashboardHeader';
+import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
+import { formatSurface } from '../../utils/formatNumber';
 import {
   ACTIONS_SCENES,
   GRID_SCENES,
+  HEADER_FIGURES,
+  HEADER_SCENES,
   LAYOUT_SCENES,
   gridCardScene,
   sceneWidget,
@@ -146,6 +153,24 @@ export interface ActionsMeasure extends CardMeasure {
   wrapped: string[];
 }
 
+/**
+ * SMA-437, lot V39, PR B, step T0 — the actions zone under the header's real
+ * layout (finding E3 of #291): the header read as a CARD by `measureCard`,
+ * and the boxes of the title block, of the zone and of each of its parts,
+ * relative to the HEADER — where the header puts them.
+ */
+export interface HeaderMeasure extends CardMeasure {
+  scene: string;
+  viewport: number;
+  header: { w: number; h: number };
+  title: RelativeBox;
+  zone: RelativeBox;
+  parts: ActionsMeasure['parts'];
+  statusText: string;
+  /** The zone's texts drawn over more than one line — none belongs on two. */
+  wrapped: string[];
+}
+
 /** What one run of the page returns: the one-card scenes and probes, the grid scenes, and where the focus goes in the reorderable list. */
 export interface LayoutResults {
   scenes: SceneMeasure[];
@@ -154,6 +179,8 @@ export interface LayoutResults {
   focus: FocusMeasure[];
   /** SMA-437, lot V39 — the header's actions zone, scene by scene. */
   actions: ActionsMeasure[];
+  /** SMA-437, lot V39, PR B, T0 — the same zone under the header's real layout, scene by scene. */
+  headers: HeaderMeasure[];
 }
 
 declare global {
@@ -282,6 +309,50 @@ function actionsTree(scene: ActionsScene, mode: 'light' | 'dark') {
   );
 }
 
+/**
+ * A header scene (SMA-437, lot V39, PR B, T0 — finding E3 of #291): the real
+ * `DashboardActions` under the header's real layout, `DASHBOARD_HEADER_SX`,
+ * beside the page's title block as `GardensDashboard` draws it — an h1 with
+ * the h4 look, then the meta line of the scenes' three gardens. The title is
+ * drawn here and not imported: it lives in the page, which this lot leaves as
+ * it is. Two plain wrappers above the header, for `measureCard`.
+ */
+function headerTree(scene: ActionsScene, mode: 'light' | 'dark') {
+  const surface = formatSurface(HEADER_FIGURES.surfaceM2, i18next.language);
+  return (
+    <ThemeProvider theme={createAppTheme(mode)}>
+      <div>
+        <div>
+          <Box data-dashboard-header sx={DASHBOARD_HEADER_SX}>
+            <Box data-header-title>
+              <Typography variant="h4" component="h1" fontWeight={700} color="primary">
+                {i18next.t('gardens.title')}
+              </Typography>
+              <Typography sx={{ fontSize: `${DASHBOARD_TYPE.secondary}px`, color: 'text.secondary' }}>
+                {i18next.t('dashboard.meta', {
+                  gardens: i18next.t('dashboard.metaGardens', { count: HEADER_FIGURES.gardens }),
+                  plants: i18next.t('dashboard.metaPlants', { count: HEADER_FIGURES.plants }),
+                  surface: i18next.t(`dashboard.surface.${surface.unit}`, { value: surface.value }),
+                })}
+              </Typography>
+            </Box>
+            <DashboardActions
+              level={scene.level}
+              adjusted={scene.adjusted}
+              unavailable={scene.unavailable}
+              saveState={scene.saveState}
+              editing={scene.editing}
+              onEditingChange={noop}
+              onCustomize={noop}
+              onCreate={noop}
+            />
+          </Box>
+        </div>
+      </div>
+    </ThemeProvider>
+  );
+}
+
 /** The parts of the zone, by the attributes `DashboardActions` puts on them. */
 const ZONE_PARTS = {
   chip: '[data-level-chip]',
@@ -311,6 +382,32 @@ function measureActions(scene: ActionsScene, host: HTMLElement): ActionsMeasure 
     statusText: zone.querySelector(ZONE_PARTS.status)?.textContent ?? '',
     wrapped: wrappedTexts(zone),
     ...measureCard(zone),
+  };
+}
+
+/** Measures a mounted header scene: the header as a card, and the title, the zone and each part relative to it. */
+function measureHeader(scene: ActionsScene, host: HTMLElement): HeaderMeasure {
+  const header = host.querySelector<HTMLElement>('[data-dashboard-header]');
+  const zone = header?.querySelector<HTMLElement>('[data-dashboard-actions]');
+  const title = header?.querySelector<HTMLElement>('[data-header-title]');
+  if (!header || !zone || !title) throw new Error(`The header scene ${scene.name} drew no header, zone or title.`);
+  const origin = header.getBoundingClientRect();
+  const parts = Object.fromEntries(
+    Object.entries(ZONE_PARTS).map(([part, selector]) => {
+      const el = zone.querySelector(selector);
+      return [part, el ? boxWithin(el, origin) : null];
+    })
+  ) as HeaderMeasure['parts'];
+  return {
+    scene: scene.name,
+    viewport: window.innerWidth,
+    header: { w: Math.round(origin.width * 10) / 10, h: Math.round(origin.height * 10) / 10 },
+    title: boxWithin(title, origin),
+    zone: boxWithin(zone, origin),
+    parts,
+    statusText: zone.querySelector(ZONE_PARTS.status)?.textContent ?? '',
+    wrapped: wrappedTexts(zone),
+    ...measureCard(header),
   };
 }
 
@@ -433,7 +530,7 @@ async function main() {
   await Promise.all([300, 400, 500, 600, 700].map((weight) => document.fonts.load(`${weight} 16px Inter`)));
   progress('fonts ready');
 
-  const results: LayoutResults = { scenes: [], grids: [], focus: [], actions: [] };
+  const results: LayoutResults = { scenes: [], grids: [], focus: [], actions: [], headers: [] };
   for (const scene of [...LAYOUT_SCENES, ...PROBE_SCENES].filter((s) => !only || s.name === only)) {
     const host = document.createElement('div');
     page.appendChild(host);
@@ -508,6 +605,21 @@ async function main() {
       host.remove();
       i18next.addResource(language, 'translation', probe.key, String(original));
     }
+  }
+
+  // The same zone under the header's real layout (T0 — E3 of #291), after
+  // the zone's probe, the same way.
+  for (const scene of HEADER_SCENES.filter((s) => !hold && (!only || s.name === only))) {
+    const host = document.createElement('div');
+    page.appendChild(host);
+    const root = createRoot(host);
+    root.render(headerTree(scene, mode));
+    progress(`rendered ${scene.name}`);
+    await settle();
+    progress(`settled ${scene.name}`);
+    results.headers.push(measureHeader(scene, host));
+    root.unmount();
+    host.remove();
   }
 
   // Where the focus goes in the reorderable list (S1), after the scenes: a

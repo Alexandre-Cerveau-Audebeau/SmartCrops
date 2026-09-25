@@ -52,7 +52,14 @@ export interface DashboardActionsProps {
  * nothing under the finger moves when it does — except in the one state that
  * does not hold on that line, the failure beside the adjusted chip, where it
  * wraps under the chip for as long as it shows (decision (a), Alexandre
- * 25/09). From 600 px up, the header's row, as before.
+ * 25/09). While the grid has two columns, 600 to 1 199 px (SMA-437, lot V39,
+ * PR B, T0 — decided on 25/09, option (a) of the T0 report), the zone has its
+ * own line under the title: the chip and the indicator, then « Modifier » —
+ * « Terminé » —, « Personnaliser » and « Créer un jardin », the pair anchored
+ * at the start of its line. At 1 024 px the failure beside the adjusted chip
+ * does not fit beside the title: the zone went under it for as long as it
+ * showed, and « Terminé » with it. From 1 200 px up, with the grid's four
+ * columns, the header's row, as before.
  */
 export default function DashboardActions({
   level,
@@ -75,23 +82,29 @@ export default function DashboardActions({
         display: 'flex',
         // A phone: one part per line, 8 px apart, each the whole width of the
         // header (`.vp.ph .acts`). From 600 px: one row that wraps, 12 px
-        // apart (`.acts`), beside the title or under it as before.
+        // apart (`.acts`). While the grid has two columns (600 to 1 199 px)
+        // the zone has a line of its own under the title, the whole width of
+        // the header (T0); from 1 200 px, beside the title, as before.
         flexDirection: { xs: 'column', sm: 'row' },
         alignItems: { xs: 'stretch', sm: 'center' },
         flexWrap: { sm: 'wrap' },
         gap: { xs: '8px', sm: '12px' },
-        width: { xs: '100%', sm: 'auto' },
+        width: { xs: '100%', lg: 'auto' },
       }}
     >
       {/* The chip and the indicator, on one line (`.a-top`). On a phone the
           line wraps, 10 px apart (`.vp.ph .a-top`): the one state too wide
-          for it puts the indicator under the chip (decision (a)). */}
+          for it puts the indicator under the chip (decision (a)). From 600
+          to 1 199 px the line is the zone's first, whole: the pair starts the next one,
+          at its start, and stays there whatever the indicator says — before
+          T0 the indicator pushed the pair along the row, or down under it. */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
           flexWrap: { xs: 'wrap', sm: 'nowrap' },
           gap: { xs: '10px', sm: 0 },
+          flexBasis: { sm: '100%', lg: 'auto' },
         }}
       >
         {!unavailable && (

@@ -374,6 +374,28 @@ export const ACTIONS_SCENES: ActionsScene[] = (['gardener', 'expert'] as const).
 );
 
 /**
+ * SMA-437, lot V39, PR B, step T0 — the actions zone UNDER THE HEADER'S REAL
+ * LAYOUT (finding E3 of #291's round 1): `DASHBOARD_HEADER_SX`, the page's
+ * title block on the left, the zone beside it or under it, where the header
+ * puts it. Every state of {@link ACTIONS_SCENES}, renamed `header-…`.
+ */
+export const HEADER_SCENES: ActionsScene[] = ACTIONS_SCENES.map((scene) => ({
+  ...scene,
+  name: scene.name.replace(/^actions-/, 'header-'),
+}));
+
+/**
+ * The figures of the header's meta line for the scenes' three gardens — their
+ * count, their plants and their surface — derived as the page derives them:
+ * the aggregate's `placementCount`, the sum of the plans' surfaces.
+ */
+export const HEADER_FIGURES = {
+  gardens: gardens.length,
+  plants: data.totals.placementCount,
+  surfaceM2: gardens.reduce((sum, garden) => sum + (views.get(garden.id)?.surfaceM2 ?? 0), 0),
+};
+
+/**
  * The EXTREME band (pre-flight C.5, « le jeu extrême »): seven digits in a
  * tile — 1 284 630 plants, 1 284 630 free cells, 1 284 000 of them in full sun
  * — 24,56 ha, and the longest label of the catalogue, « Cases libres en plein

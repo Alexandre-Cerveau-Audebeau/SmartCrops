@@ -17,6 +17,7 @@ import Typography from '@mui/material/Typography';
 import CustomizePanel from '../components/Dashboard/CustomizePanel';
 import DashboardActions from '../components/Dashboard/DashboardActions';
 import DashboardGrid from '../components/Dashboard/DashboardGrid';
+import { DASHBOARD_HEADER_SX } from '../components/Dashboard/dashboardHeader';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
 import CountersOptionsPanel from '../components/Dashboard/blocks/CountersOptionsPanel';
 import { resolveCountersFigures } from '../components/Dashboard/blocks/countersOptions';
@@ -727,16 +728,9 @@ export default function GardensDashboard() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Box
-        sx={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '12px',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: 3,
-        }}
-      >
+      {/* The header row's layout lives in one constant the layout harness
+          mounts too (SMA-437, lot V39, T0 — finding E3 of #291). */}
+      <Box data-dashboard-header sx={DASHBOARD_HEADER_SX}>
         <Box>
           {/* h1 with the h4 look (round 1, E16 / G5): every DashboardBlock
               title is an h2, so an <h4> page title put the widgets above the
