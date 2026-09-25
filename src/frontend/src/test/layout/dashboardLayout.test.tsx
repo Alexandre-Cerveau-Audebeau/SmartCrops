@@ -605,17 +605,62 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       expect(faults).toEqual([]);
     });
 
-    it.each(PHONE_IDS)('%s: puts « Créer un jardin » alone under the pair, the whole width of the zone — at rest only (§ 4.1, A-7)', (id) => {
+    // In BOTH modes since the fix round 1 of #291, C1 (A-7 amended, Alexandre
+    // 25/09): « Créer un jardin » stays in Edit mode, on its line under the
+    // pair, so « Terminé » stands exactly where « Modifier » stood — the same
+    // box, state for state.
+    it.each(PHONE_IDS)('%s: puts « Créer un jardin » alone under the pair, the whole width of the zone, in both modes — « Terminé » where « Modifier » stood (§ 4.1, A-7 amended 25/09)', (id) => {
+      const run = runOf(id);
       const faults = ACTIONS_SCENES.flatMap((scene) => {
-        const measure = zoneOf(runOf(id), scene.name);
-        if (scene.editing) return measure.parts.create ? [`${scene.name}: a Create button in Edit mode`] : [];
+        const measure = zoneOf(run, scene.name);
+        if (!measure.parts.create) return [`${scene.name}: no « Créer un jardin »`];
         const create = partOf(measure, 'create');
         const toggle = partOf(measure, 'toggle');
         const found: string[] = [];
         if (!near(create.x, 0) || !near(create.w, measure.zone.w)) found.push(`Create spans ${create.x} to ${create.x + create.w} of ${measure.zone.w} px`);
         if (create.y < toggle.y + toggle.h) found.push(`Create at y ${create.y}, above the pair's bottom ${toggle.y + toggle.h}`);
+        if (scene.editing) {
+          const rest = partOf(zoneOf(run, scene.name.replace('-edit-', '-rest-')), 'toggle');
+          if (!near(toggle.x, rest.x) || !near(toggle.y, rest.y) || !near(toggle.w, rest.w) || !near(toggle.h, rest.h)) {
+            found.push(`« Terminé » at (${toggle.x}, ${toggle.y}) ${toggle.w} × ${toggle.h}, « Modifier » at (${rest.x}, ${rest.y}) ${rest.w} × ${rest.h}`);
+          }
+        }
         return found.map((fault) => `${scene.name}: ${fault}`);
       });
+      expect(faults).toEqual([]);
+    });
+
+    // The desktop (fix round 1 of #291, C1): the header aligns its zone to
+    // the right, so what places « Terminé » is its distance to the END of the
+    // zone's row — « Personnaliser » and « Créer un jardin » after it. The
+    // same distance in both modes keeps its right edge at « Modifier »'s; the
+    // label alone changes the width, on the left. The harness mounts the zone
+    // outside the header (E3, PR B), hence the distance to the row's end and
+    // not to the header's edge.
+    it(`fr@${DESKTOP_WIDTH}: keeps the right edge of « Terminé » at the right edge of « Modifier », state for state (A-7 amended 25/09)`, () => {
+      const run = runOf(`fr@${DESKTOP_WIDTH}`);
+      /** The toggle's right edge, from the end of the zone's row. */
+      const fromRowEnd = (measure: ActionsMeasure) => {
+        const toggle = partOf(measure, 'toggle');
+        const rowEnd = Math.max(...Object.values(measure.parts).map((box) => (box ? box.x + box.w : 0)));
+        return Math.round((rowEnd - (toggle.x + toggle.w)) * 10) / 10;
+      };
+      const faults = (['gardener', 'expert'] as const).flatMap((level) =>
+        (['idle', 'pending', 'saved', 'error'] as const).flatMap((state) => {
+          const rest = zoneOf(run, `actions-${level}-rest-${state}`);
+          const done = zoneOf(run, `actions-${level}-edit-${state}`);
+          const found: string[] = [];
+          for (const measure of [rest, done]) {
+            const toggle = partOf(measure, 'toggle');
+            const off = Object.entries(measure.parts).filter(([, box]) => box && !near(box.y + box.h / 2, toggle.y + toggle.h / 2)).map(([part]) => part);
+            if (off.length > 0) found.push(`${measure.scene}: ${off.join(', ')} off the toggle's line`);
+          }
+          if (!near(fromRowEnd(done), fromRowEnd(rest))) {
+            found.push(`« Terminé » ${fromRowEnd(done)} px from the row's end, « Modifier » ${fromRowEnd(rest)} px`);
+          }
+          return found.map((fault) => `${level}-${state}: ${fault}`);
+        })
+      );
       expect(faults).toEqual([]);
     });
 

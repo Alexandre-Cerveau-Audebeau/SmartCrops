@@ -445,9 +445,13 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
   // SMA-437, lot V39, step A2 (A-7 — Alexandre, 25/09) — REWRITTEN: this test
   // pinned the opposite, « Customize » gone in Edit mode. The compact action
   // bar carries « Personnaliser » in Edit mode and never adds a control the
-  // header lacks, so the header keeps it too; « Créer un jardin » alone
-  // depends on the mode, as before.
-  it('keeps Customize in the header in Edit mode — Done in Edit’s place, Create gone — and back again (A-7)', async () => {
+  // header lacks, so the header keeps it too.
+  //
+  // REWRITTEN AGAIN by the fix round 1 of #291, C1 (A-7 amended, Alexandre
+  // 25/09): it pinned « Créer un jardin » gone in Edit mode, the one button
+  // that depended on the mode. It stays, and active — the header no longer
+  // changes its arrangement when the page enters Edit mode.
+  it('keeps Create Garden in the header in Edit mode, beside Customize — Done in Edit’s place — and back again (A-7, amended 25/09)', async () => {
     await enterEditMode();
     // The HEADER's buttons: the Gardens widget draws a « Create Garden » of
     // its own on a page without a garden.
@@ -455,14 +459,54 @@ describe('GardensDashboard — Edit mode chrome (SMA-336)', () => {
 
     expect(header.queryByRole('button', { name: 'Edit' })).toBeNull();
     expect(header.getByRole('button', { name: 'Customize' })).toBeEnabled();
-    expect(header.queryByRole('button', { name: 'Create Garden' })).toBeNull();
+    const create = header.getByRole('button', { name: 'Create Garden' });
+    expect(create).toBeEnabled();
 
     fireEvent.click(header.getByRole('button', { name: 'Done' }));
 
     expect(await header.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
     expect(header.queryByRole('button', { name: 'Done' })).toBeNull();
     expect(header.getByRole('button', { name: 'Customize' })).toBeEnabled();
-    expect(header.getByRole('button', { name: 'Create Garden' })).toBeInTheDocument();
+    expect(header.getByRole('button', { name: 'Create Garden' })).toBe(create);
+  });
+
+  // SMA-437, fix round 1 of #291, C1 (A-7 amended — Alexandre, 25/09: « Cette
+  // troisième option me plaît oui. ») — in Edit mode, « Créer un jardin » ends
+  // the mode FIRST, then opens the create dialog: behind the dialog's veil the
+  // page is already back at rest. The layout the user was editing is not lost
+  // on the way: the debounced save runs on under the dialog, the hook
+  // untouched. And the dialog gives the focus back to the button that opened
+  // it — the same node in both modes, so it is still there to take it.
+  // Driven by `userEvent`, which focuses what it presses as a browser does.
+  it('in Edit mode, Create Garden ends the mode, then opens the dialog — the pending layout still saved — and the focus comes back to it when the dialog closes (A-7, amended 25/09)', async () => {
+    servePreferences('gardener');
+    renderPage();
+    const user = userEvent.setup();
+    const edit = await screen.findByRole('button', { name: 'Edit' }, RENDER_TIMEOUT);
+    await waitFor(() => expect(edit).toBeEnabled(), RENDER_TIMEOUT);
+    await user.click(edit);
+    await user.click(await screen.findByRole('button', { name: 'Hide Weather' }, RENDER_TIMEOUT));
+    const header = within(document.querySelector('[data-dashboard-actions]') as HTMLElement);
+    const create = header.getByRole('button', { name: 'Create Garden' });
+
+    await user.click(create);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Create a new garden' }, RENDER_TIMEOUT);
+    // The mode is over under the veil: « Terminé » is « Modifier » again, and
+    // no card carries its Edit-mode controls. `hidden: true` — the open modal
+    // hides the page from the accessibility tree.
+    expect(edit).toHaveTextContent('Edit');
+    expect(screen.queryByRole('button', { name: 'Done', hidden: true })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Hide /, hidden: true })).toBeNull();
+    // The change made in Edit mode leaves anyway, dialog open.
+    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled(), RENDER_TIMEOUT);
+    expect(lastSaved().blocks.find((block) => block.key === 'weather')?.hidden).toBe(true);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Create a new garden' })).toBeNull(), RENDER_TIMEOUT);
+
+    expect(header.getByRole('button', { name: 'Create Garden' })).toBe(create);
+    expect(document.activeElement).toBe(create);
   });
 
   it('opens the Customize panel from Edit mode, and leaves the page in Edit mode when it closes (A-7)', async () => {

@@ -27,7 +27,7 @@ export interface DashboardActionsProps {
   onEditingChange: (editing: boolean) => void;
   /** Opens the Customize panel. */
   onCustomize: () => void;
-  /** Opens the create-a-garden dialog. */
+  /** Opens the create-a-garden dialog — in Edit mode, once the mode is over. */
   onCreate: () => void;
 }
 
@@ -195,20 +195,29 @@ export default function DashboardActions({
           {t('dashboard.customize')}
         </Button>
       </Box>
-      {/* The one button that depends on the mode: gone in Edit mode, as
-          before (A-7) — the whole width on a phone, where the zone stretches
-          its parts (`.vp.ph .acts > .btn`). `Add` (round 6, N5-7): the path
-          `Main.dc.html` draws on « Créer un jardin ». */}
-      {!editing && (
-        <Button
-          data-create-garden
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={onCreate}
-        >
-          {t('gardens.createGarden')}
-        </Button>
-      )}
+      {/* In BOTH modes, and active (A-7 amended — Alexandre, 25/09, fix
+          round 1 of #291): the header keeps its arrangement when the page
+          enters Edit mode. On a phone « Créer un jardin » keeps its line under
+          the pair, so « Terminé » stands where « Modifier » stood; on the
+          desktop, where the header aligns the zone to the right, the right
+          edge of « Terminé » stays at « Modifier »'s. In Edit mode it ENDS the
+          mode first, then opens the dialog: the page behind the veil is back
+          at rest, and the debounced save of the layout runs on under the
+          dialog. The same node in both modes, so the dialog gives the focus
+          back to it when it closes. The whole width on a phone, where the
+          zone stretches its parts (`.vp.ph .acts > .btn`). `Add` (round 6,
+          N5-7): the path `Main.dc.html` draws on « Créer un jardin ». */}
+      <Button
+        data-create-garden
+        variant="contained"
+        startIcon={<AddIcon />}
+        onClick={() => {
+          if (editing) onEditingChange(false);
+          onCreate();
+        }}
+      >
+        {t('gardens.createGarden')}
+      </Button>
     </Box>
   );
 }
