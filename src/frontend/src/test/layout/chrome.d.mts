@@ -47,6 +47,13 @@ export function fontFaces(): string;
 export const CHROME_FLAGS: readonly string[];
 /** Tracks a child spawned elsewhere until it exits, so `terminateChildren` ends it too. */
 export function trackChild<T>(child: T): T;
+/** Resolves once the child has exited; forces the kill (`SIGKILL`) after the grace when a plain kill was not enough. */
+export function exited(child: {
+  exitCode: number | null;
+  signalCode: string | null;
+  kill(signal?: string): boolean;
+  once(event: 'exit', listener: () => void): unknown;
+}): Promise<void>;
 /** Writes `outDir/page.html` around the bundle. */
 export function writePage(outDir: string): void;
 /** Runs Chrome headless on the page for one run — bounded, killed past the delay — and returns its measurements. */

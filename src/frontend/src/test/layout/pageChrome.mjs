@@ -19,7 +19,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { CHROME_FLAGS, buildBundle, fontFaces, trackChild } from './chrome.mjs';
+import { CHROME_FLAGS, buildBundle, exited, fontFaces, trackChild } from './chrome.mjs';
 
 /**
  * How long one session — one Chrome, every scenario of one viewport — may
@@ -30,9 +30,6 @@ export const PAGE_SESSION_TIMEOUT_MS = 120_000;
 
 /** How long one wait on a condition may last — a page that never becomes ready, a bar that never shows. */
 export const PAGE_WAIT_MS = 15_000;
-
-/** After a kill, how long the browser has to exit before the kill is forced. */
-const KILL_GRACE_MS = 2_000;
 
 /** The keys the scenarios press, as the protocol wants them. */
 const KEYS = {
@@ -67,23 +64,6 @@ body{margin:0}
 </style>
 </head><body><div id="root"></div><script src="./page-harness.js"></script></body></html>`;
   writeFileSync(join(outDir, 'page-harness.html'), html, 'utf8');
-}
-
-/** Resolves once the child has exited; forces the kill after the grace. */
-function exited(child) {
-  return new Promise((resolve) => {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      resolve();
-      return;
-    }
-    const force = setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-    }, KILL_GRACE_MS);
-    child.once('exit', () => {
-      clearTimeout(force);
-      resolve();
-    });
-  });
 }
 
 /**

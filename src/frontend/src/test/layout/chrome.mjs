@@ -248,8 +248,12 @@ export function nodeBinary() {
   return process.execPath;
 }
 
-/** Resolves once the child has exited; forces the kill (`SIGKILL`) after the grace when a plain kill was not enough. */
-function exited(child) {
+/**
+ * Resolves once the child has exited; forces the kill (`SIGKILL`) after the
+ * grace when a plain kill was not enough. The page launcher's `close()` waits
+ * on it too, so both launchers end a Chrome the same way.
+ */
+export function exited(child) {
   return new Promise((resolve) => {
     if (child.exitCode !== null || child.signalCode !== null) {
       resolve();
