@@ -342,7 +342,18 @@
       "empty": {
         "title": "You don’t have a garden yet.",
         "body": "Create one to see its plan, its plants and its weather here. You can change or delete it at any time."
+      },
+      "foot": {
+        "text": "Need more? The Gardener formula adds a dashboard of widgets: the month’s calendar, the tips, the tasks and the counts.",
+        "link": "Switch to the Gardener formula →"
       }
+    },
+    "formulaChooser": {
+      "title": "Change formula",
+      "promise": "Change whenever you like, in either direction, without losing anything.",
+      "close": "Close without changing formula",
+      "chipLabel": "{{level}} view — change formula",
+      "tooltip": "Change formula"
     },
     "weatherDisclaimer": "The weather shown here is for general information only. Forecasts and current conditions are probabilistic and may be inaccurate for your exact location or time. Do not rely on them as the only basis for decisions about personal safety, aviation, marine navigation, emergency planning or any other safety-critical activity. For decisions where accuracy matters, always refer to official weather services and the relevant authorities.",
     "save": {

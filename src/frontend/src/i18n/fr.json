@@ -342,7 +342,18 @@
       "empty": {
         "title": "Vous n’avez pas encore de jardin.",
         "body": "Créez-en un pour voir son plan, ses plantes et sa météo ici. Vous pourrez le modifier ou le supprimer à tout moment."
+      },
+      "foot": {
+        "text": "Besoin de plus ? La formule Jardinier ajoute un tableau de bord de widgets : le calendrier du mois, les conseils, les tâches et les compteurs.",
+        "link": "Passer à la formule Jardinier →"
       }
+    },
+    "formulaChooser": {
+      "title": "Changer de formule",
+      "promise": "Changez quand vous voulez, dans les deux sens, sans rien perdre.",
+      "close": "Fermer sans changer de formule",
+      "chipLabel": "Vue {{level}} — changer de formule",
+      "tooltip": "Changer de formule"
     },
     "weatherDisclaimer": "La météo affichée ici est fournie à titre d'information générale. Les prévisions et les conditions actuelles sont probabilistes et peuvent être inexactes pour votre lieu ou votre horaire précis. Ne vous fondez pas uniquement sur elles pour des décisions touchant à la sécurité des personnes, à l'aviation, à la navigation maritime, à la planification d'urgence ou à toute autre activité où la sécurité est en jeu. Pour toute décision où l'exactitude compte, référez-vous toujours aux services météorologiques officiels et aux autorités compétentes.",
     "save": {

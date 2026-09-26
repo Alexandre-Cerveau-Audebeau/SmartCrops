@@ -4,13 +4,14 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
+import DashboardCustomizeOutlinedIcon from '@mui/icons-material/DashboardCustomizeOutlined';
 import YardOutlinedIcon from '@mui/icons-material/YardOutlined';
 import DeleteGardenDialog from '../Garden/DeleteGardenDialog';
 import RenameGardenDialog from '../Garden/RenameGardenDialog';
 import InviteState from './InviteState';
 import NoviceGardenCard from './NoviceGardenCard';
 import type { NoviceCard } from './noviceCards';
-import { DASHBOARD_NOVICE, DASHBOARD_SPACING } from '../../theme/dashboardTokens';
+import { DASHBOARD_NOVICE, DASHBOARD_SPACING, DASHBOARD_TYPE } from '../../theme/dashboardTokens';
 import type { DashboardGardenData } from '../../types/DashboardData';
 
 interface Props {
@@ -31,6 +32,12 @@ interface Props {
   onChanged: () => void;
   /** A deletion the backend confirmed: the page toasts and re-reads. */
   onDeleted: () => void;
+  /**
+   * The foot's « Passer à la formule Jardinier → » (contract § 4.3, the link
+   * decided by Alexandre on 22/09 16:39): the same choice of formula the chip
+   * opens — PROVISIONAL until lot F3 (N3).
+   */
+  onChangeFormula: () => void;
 }
 
 /** The skeleton cards drawn while the gardens load: the Novice's three at most. */
@@ -68,6 +75,7 @@ export default function NoviceGardens({
   onLocate,
   onChanged,
   onDeleted,
+  onChangeFormula,
 }: Props) {
   const { t } = useTranslation();
 
@@ -162,6 +170,42 @@ export default function NoviceGardens({
   return (
     <Box data-novice-page>
       {body()}
+
+      {/* The foot message of SMA-436 — centred, 14 px (V11's floor, C25),
+          the `dashboard_customize` glyph in green — and its link, the one
+          decided (§ 4.3): what the Gardener formula adds is said with what
+          exists today (R7), in the product's word « formule » (V31). */}
+      <Box
+        data-novice-foot-message
+        sx={{
+          mt: `${DASHBOARD_NOVICE.footMessageGap}px`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexWrap: 'wrap',
+          gap: '9px',
+          textAlign: 'center',
+        }}
+      >
+        <DashboardCustomizeOutlinedIcon aria-hidden sx={{ fontSize: 17, color: 'primary.main', flexShrink: 0 }} />
+        <Typography component="span" sx={{ fontSize: `${DASHBOARD_TYPE.secondary}px`, color: 'text.secondary' }}>
+          {t('dashboard.novice.foot.text')}
+        </Typography>
+        <Button
+          variant="text"
+          size="small"
+          onClick={onChangeFormula}
+          sx={{
+            p: 0,
+            minWidth: 0,
+            fontSize: `${DASHBOARD_TYPE.secondary}px`,
+            fontWeight: 700,
+            textTransform: 'none',
+          }}
+        >
+          {t('dashboard.novice.foot.link')}
+        </Button>
+      </Box>
 
       <RenameGardenDialog
         garden={editingGarden}

@@ -342,6 +342,8 @@ export const DASHBOARD_NOVICE = {
   chevron: 20,
   /** The skeleton of a card while the gardens load. */
   skeletonHeight: 220,
+  /** `.novfoot { margin-top: 26px }`: the foot message under the cards. */
+  footMessageGap: 26,
   /** V3-00's empty state: `.inv { max-width: 640px }`. */
   inviteMaxW: 640,
 } as const;

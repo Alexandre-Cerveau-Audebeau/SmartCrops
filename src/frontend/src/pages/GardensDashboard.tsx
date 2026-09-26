@@ -18,6 +18,7 @@ import CompactActionBar from '../components/Dashboard/CompactActionBar';
 import CustomizePanel from '../components/Dashboard/CustomizePanel';
 import DashboardActions from '../components/Dashboard/DashboardActions';
 import DashboardGrid from '../components/Dashboard/DashboardGrid';
+import FormulaChooserDialog from '../components/Dashboard/FormulaChooserDialog';
 import { DASHBOARD_HEADER_SX } from '../components/Dashboard/dashboardHeader';
 import { useCompactActionBar } from '../components/Dashboard/useCompactActionBar';
 import CountersBlock from '../components/Dashboard/blocks/CountersBlock';
@@ -319,8 +320,22 @@ export default function GardensDashboard() {
   // « Réessayer », the one action the page offers while its layout is
   // unavailable (SMA-448, PR #293, fix round 2, R2-E1).
   const retryRef = useRef<HTMLButtonElement | null>(null);
+  // « Créer un jardin », the one control every formula's header has (N3).
+  const createRef = useRef<HTMLButtonElement | null>(null);
+
+  // SMA-448, lot F2, N3 — PROVISIONAL: the choice of formula the Novice
+  // page's chip and foot link open, until lot F3 builds the choice screen
+  // behind the chip (`FormulaChooserDialog`). Its opener is remembered like
+  // the panel's, for the focus when it closes.
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const chooserOpener = useRef<Element | null>(null);
+  const openChooser = () => {
+    chooserOpener.current = document.activeElement;
+    setChooserOpen(true);
+  };
+
   useEffect(() => {
-    if (panelOpen) return;
+    if (panelOpen || chooserOpen) return;
     const opener = panelOpener.current;
     panelOpener.current = null;
     refocus(opener);
@@ -332,7 +347,16 @@ export default function GardensDashboard() {
     // a button on click, nothing ever held it: either way the focus would
     // fall to the body. It goes to the one action the page offers.
     retryRef.current?.focus();
-  }, [panelOpen, refocus]);
+    // N3 — the chooser closed on a switch that LANDED: the page is a grid
+    // now, and the chip it was opened from opens nothing there (until lot
+    // F3), so the dialog's own restoring of the focus finds nothing to give
+    // it back to. It goes to « Créer un jardin », which every formula's
+    // header has — never to the body. Closed on the Novice page itself (a
+    // refusal, « Fermer »), the dialog gives the chip back by itself.
+    const from = chooserOpener.current;
+    chooserOpener.current = null;
+    if (from && !cardsPage && !retryRef.current) createRef.current?.focus();
+  }, [panelOpen, chooserOpen, cardsPage, refocus]);
 
   // SMA-448, PR #293, fix round 2 (R2-E1) — the choice of a formula, and what
   // the page does when the switch ends on no layout: the panel is closed
@@ -342,6 +366,20 @@ export default function GardensDashboard() {
   // level over it, and come back by itself once « Réessayer » had succeeded.
   const chooseLevel = async (level: DashboardLevel) => {
     if ((await setLevel(level)) === 'unread') setPanelOpen(false);
+  };
+
+  // N3 — the same switch from the chooser: closed in the handler on a switch
+  // that landed (the page is the new formula's) and on one whose layout could
+  // not be read back (the load error and its retry); kept open on a refusal,
+  // which it says, and on a layout that could not be written, which the
+  // header's indicator says.
+  const closeChooser = () => {
+    setChooserOpen(false);
+    dismissRefusal();
+  };
+  const chooseFormula = async (level: DashboardLevel) => {
+    const outcome = await setLevel(level);
+    if (outcome === 'switched' || outcome === 'unread') setChooserOpen(false);
   };
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -890,6 +928,10 @@ export default function GardensDashboard() {
           repeatHidden={actionBar.shown}
           pageActionsRef={actionBar.repeatedRef}
           cards={cardsPage}
+          // PROVISIONAL (N3): the chip opens the choice at the Novice formula
+          // only — the grid formulas keep the panel's choice until lot F3.
+          onChangeFormula={cardsPage ? openChooser : undefined}
+          createRef={createRef}
         />
       </Box>
 
@@ -957,6 +999,7 @@ export default function GardensDashboard() {
           onLocate={openLocate}
           onChanged={refetch}
           onDeleted={handleDeleted}
+          onChangeFormula={openChooser}
         />
       )}
 
@@ -1008,6 +1051,18 @@ export default function GardensDashboard() {
           `panelOpen` stayed true, so it came back by itself once the retry
           had succeeded. Not on the cards page at all (lot F2): the Novice has
           no « Personnaliser » — no button, no panel. */}
+      {/* PROVISIONAL (SMA-448, lot F2, N3) — the Novice page's choice of
+          formula; lot F3 puts the choice screen of V3-01 here. Hidden the
+          instant the formula it would name is unknown, like the panel. */}
+      <FormulaChooserDialog
+        open={chooserOpen && capabilities !== null}
+        level={level}
+        switching={switching}
+        refusal={refusal}
+        onClose={closeChooser}
+        onChoose={chooseFormula}
+      />
+
       {!cardsPage && (
         <CustomizePanel
           open={panelOpen && capabilities !== null}
