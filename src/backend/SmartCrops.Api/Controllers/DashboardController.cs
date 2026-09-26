@@ -587,19 +587,26 @@ public class DashboardController(
         var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
+        // The formula and the layout in ONE statement (SMA-448, PR #293, fix
+        // round 1, S4): the account left-joined to its row. Under READ
+        // COMMITTED each statement sees the database as of its own start, so
+        // two reads could straddle a formula switch and pair the formula of
+        // before it with the layout it put in the row; one statement answers
+        // from one instant. Cheaper than a REPEATABLE READ transaction around
+        // two reads, for the same guarantee: one round trip, no transaction.
         // Reading never fails: an account this server cannot find reads the
-        // default formula, as an unknown one does.
-        var formula = await context.Users
-            .AsNoTracking()
-            .Where(u => u.Id == userId)
-            .Select(u => u.Formula)
+        // default formula, as an unknown one does — and has no row, the row
+        // being cascade-deleted with it.
+        var account = await (
+            from user in context.Users.AsNoTracking()
+            where user.Id == userId
+            join preferences in context.UserDashboardPreferences.AsNoTracking()
+                on user.Id equals preferences.UserId into rows
+            from row in rows.DefaultIfEmpty()
+            select new { user.Formula, Row = row })
             .SingleOrDefaultAsync(ct);
 
-        var row = await context.UserDashboardPreferences
-            .AsNoTracking()
-            .SingleOrDefaultAsync(p => p.UserId == userId, ct);
-
-        return Ok(ToResponse(row, formula));
+        return Ok(ToResponse(account?.Row, account?.Formula));
     }
 
     /// <summary>
