@@ -1,7 +1,11 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using SmartCrops.Core.Dashboard;
 
 namespace SmartCrops.Api.DTOs;
+
+/// <summary>SMA-448, lot F1 — <c>PUT /api/formulas/current</c>: the formula the caller chooses.</summary>
+public record ChangeFormulaRequest([Required][StringLength(20)] string Formula);
 
 /// <summary>SMA-448 — a garden size, in cells.</summary>
 public record GardenSizeDto(int Width, int Height);
