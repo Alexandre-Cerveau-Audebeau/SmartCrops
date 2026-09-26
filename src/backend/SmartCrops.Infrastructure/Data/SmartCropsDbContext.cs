@@ -32,6 +32,8 @@ public class SmartCropsDbContext(DbContextOptions<SmartCropsDbContext> options)
 
     public DbSet<UserDashboardPreferences> UserDashboardPreferences => Set<UserDashboardPreferences>();
 
+    public DbSet<SavedDashboardLayout> SavedDashboardLayouts => Set<SavedDashboardLayout>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

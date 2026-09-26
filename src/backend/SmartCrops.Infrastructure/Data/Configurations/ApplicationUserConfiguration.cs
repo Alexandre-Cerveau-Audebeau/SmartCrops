@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using SmartCrops.Core.Dashboard;
 using SmartCrops.Core.Entities;
 
 namespace SmartCrops.Infrastructure.Data.Configurations;
@@ -9,7 +10,9 @@ namespace SmartCrops.Infrastructure.Data.Configurations;
 /// <see cref="ApplicationUser"/> on top of Identity's own. Identity maps
 /// <c>AspNetUsers</c> in <c>IdentityDbContext.OnModelCreating</c>; this
 /// configuration is applied AFTER it by <c>ApplyConfigurationsFromAssembly</c>
-/// and only touches the account's default location (ADR-0006). The earlier
+/// and touches the account's default location (ADR-0006) and, since SMA-448
+/// (lot F1), its formula — the one CHECK constraint that is not a location's.
+/// The earlier
 /// profile columns (<c>City</c>, <c>DisplayName</c>, …) keep their
 /// convention-mapped <c>text</c> shape on purpose: changing them is a migration
 /// with no reader behind it.
@@ -29,8 +32,19 @@ public class ApplicationUserConfiguration : IEntityTypeConfiguration<Application
         builder.Property(u => u.LocationRegion).HasMaxLength(120);
         builder.Property(u => u.LocationCountry).HasMaxLength(80);
 
+        // SMA-448, lot F1 — the formula, a right on the account. NOT NULL with a
+        // database default, so the migration gives every existing row
+        // 'gardener' before the backfill replaces it with the effective level.
+        builder.Property(u => u.Formula)
+            .HasMaxLength(20)
+            .IsRequired()
+            .HasDefaultValue(DashboardLayout.Levels.Gardener);
+
         builder.ToTable("AspNetUsers", t =>
         {
+            t.HasCheckConstraint(
+                "CK_AspNetUsers_Formula",
+                "\"Formula\" IN ('novice', 'gardener', 'expert')");
             t.HasCheckConstraint(
                 "CK_AspNetUsers_Latitude_Range",
                 "\"Latitude\" IS NULL OR (\"Latitude\" >= -90 AND \"Latitude\" <= 90)");
