@@ -127,6 +127,37 @@ export interface DashboardPreferences {
   capabilities: FormulaCapabilities;
 }
 
+/**
+ * SMA-448, PR #293, fix round 2 (A1) — why the server refused a formula, as
+ * `PUT /api/formulas/current` serves it in its 409 `formula.tooSmall` problem:
+ * too many gardens for the formula, or a garden larger than it allows, one
+ * reason per garden. The numbers are the message's.
+ */
+export interface GardensRefusalReason {
+  kind: 'gardens';
+  /** How many gardens the account has. */
+  have: number;
+  /** How many the formula allows. */
+  limit: number;
+}
+
+export interface SizeRefusalReason {
+  kind: 'size';
+  gardenId: string;
+  width: number;
+  height: number;
+  maxWidth: number;
+  maxHeight: number;
+}
+
+export type FormulaRefusalReason = GardensRefusalReason | SizeRefusalReason;
+
+/** A switch of formula that did not go through: the formula asked for, and the reasons served — none for a failure the server did not explain. */
+export interface FormulaRefusal {
+  formula: DashboardLevel;
+  reasons: FormulaRefusalReason[];
+}
+
 /** PUT /api/dashboard/preferences — the layout is replaced wholesale. */
 export interface SaveDashboardPreferences {
   level: DashboardLevel;

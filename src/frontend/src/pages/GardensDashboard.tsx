@@ -101,6 +101,8 @@ export default function GardensDashboard() {
     loadError,
     saveState,
     switching,
+    refusal,
+    dismissRefusal,
     adjusted,
     reload,
     setBlocks,
@@ -942,8 +944,14 @@ export default function GardensDashboard() {
         capabilities={capabilities}
         blocks={blocks}
         switching={switching}
+        refusal={refusal}
         preview={galleryPreview}
-        onClose={() => setPanelOpen(false)}
+        // Closing the place where the refusal was said clears it (A1): the
+        // panel reopens on the choice, not on the last refusal.
+        onClose={() => {
+          setPanelOpen(false);
+          dismissRefusal();
+        }}
         onLevelChange={setLevel}
         onReset={resetToLevel}
         onShow={(key) =>

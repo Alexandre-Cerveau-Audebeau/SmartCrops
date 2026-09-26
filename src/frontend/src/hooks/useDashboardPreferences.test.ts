@@ -13,7 +13,11 @@ import { HttpStatusError } from '../services/httpStatusError';
 import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import type { DashboardBlock, DashboardLevel, DashboardPreferences } from '../types/Dashboard';
 
-vi.mock('../services/dashboardApi', () => ({
+// SMA-448, PR #293, fix round 2 (A1) — the module's own `refusalOf` stays
+// real: it is what turns a refused switch into what the panel says, and a
+// mock of it would test nothing.
+vi.mock('../services/dashboardApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../services/dashboardApi')>()),
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
   changeFormula: vi.fn(),
@@ -256,7 +260,7 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
     expect(result.current.capabilities).toEqual(capabilitiesFor('expert'));
   });
 
-  it('a switch the server refuses (409, a formula too small) leaves the formula and the layout as they were, and says so', async () => {
+  it('a switch the server refuses for a reason the hook cannot read (a bare 409) leaves the formula and the layout as they were, and says the refusal — never « not saved » (SMA-448, A1)', async () => {
     serveFormulas('gardener', presetFor('gardener'));
     vi.mocked(changeFormula).mockRejectedValue(new HttpStatusError('Request failed (409)', 409));
     const { result } = renderHook(() => useDashboardPreferences());
@@ -266,7 +270,8 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
       await result.current.setLevel('novice');
     });
 
-    await waitFor(() => expect(result.current.saveState).toBe('error'));
+    expect(result.current.saveState).not.toBe('error');
+    expect(result.current.refusal).toEqual({ formula: 'novice', reasons: [] });
     expect(result.current.level).toBe('gardener');
     expect(result.current.blocks).toEqual(presetFor('gardener'));
     expect(saveDashboardPreferences).not.toHaveBeenCalled();
@@ -799,5 +804,148 @@ describe('useDashboardPreferences — a switch whose read-back fails says so hon
     expect(result.current.blocks).toEqual(presetFor('expert'));
     expect(result.current.capabilities).toEqual(capabilitiesFor('expert'));
     expect(result.current.loadError).toBe(false);
+  });
+});
+
+// SMA-448, PR #293, fix round 2 — A1 (Alexandre's visual finding, 26/09), and
+// the family. A formula the server refused (409 `formula.tooSmall`) used to
+// show « Modifications non enregistrées » — false: nothing was unsaved, and
+// the server had sent its reasons. The three ends of a switch that does not
+// go through now each say the truth, and nothing else: the layout that could
+// not be written before the switch (S2) — « not saved »; the formula the
+// server refuses (A1) — the refusal and each reason served, for the panel;
+// the layout that could not be read back (S6) — the load error.
+describe('useDashboardPreferences — the three ends of a switch that does not go through each say the truth (SMA-448, A1)', () => {
+  const tooSmall = (formula: DashboardLevel, reasons: unknown[]) =>
+    new HttpStatusError('Request failed (409)', 409, {
+      status: 409,
+      title: "This formula is too small for the account's gardens.",
+      code: 'formula.tooSmall',
+      formula,
+      reasons,
+    });
+  const moved = () => {
+    const blocks = presetFor('gardener');
+    blocks[0]!.size = 'small';
+    return blocks;
+  };
+
+  it('S2 — a layout that cannot be written: « not saved », no refusal, no load error', async () => {
+    const server = serveFormulas('gardener', presetFor('gardener'));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    vi.mocked(saveDashboardPreferences).mockRejectedValue(new HttpStatusError('Request failed (503)', 503));
+    act(() => result.current.setBlocks(moved()));
+    await waitFor(() => expect(result.current.saveState).toBe('error'));
+
+    await act(async () => {
+      await result.current.setLevel('expert');
+    });
+
+    expect(result.current.saveState).toBe('error');
+    expect(result.current.refusal).toBeNull();
+    expect(result.current.loadError).toBe(false);
+    expect(server.formula).toBe('gardener');
+    expect(result.current.blocks).toEqual(moved());
+  });
+
+  it('A1 — a formula the server refuses: the refusal and each reason served, the indicator left as it was, no load error — the formula and the layout stay', async () => {
+    const server = serveFormulas('gardener', presetFor('gardener'));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    // An arrangement, saved: what the indicator says before the switch, and
+    // must still say after — it is true.
+    act(() => result.current.setBlocks(moved()));
+    await waitFor(() => expect(result.current.saveState).toBe('saved'));
+    vi.mocked(changeFormula).mockRejectedValue(
+      tooSmall('novice', [
+        { kind: 'gardens', have: 5, limit: 3 },
+        { kind: 'size', gardenId: 'g1', width: 30, height: 30, maxWidth: 20, maxHeight: 20 },
+      ])
+    );
+
+    await act(async () => {
+      await result.current.setLevel('novice');
+    });
+
+    expect(result.current.saveState).not.toBe('error');
+    expect(result.current.saveState).toBe('saved');
+    expect(result.current.refusal).toEqual({
+      formula: 'novice',
+      reasons: [
+        { kind: 'gardens', have: 5, limit: 3 },
+        { kind: 'size', gardenId: 'g1', width: 30, height: 30, maxWidth: 20, maxHeight: 20 },
+      ],
+    });
+    expect(result.current.loadError).toBe(false);
+    expect(server.formula).toBe('gardener');
+    expect(result.current.level).toBe('gardener');
+    expect(result.current.blocks).toEqual(moved());
+  });
+
+  it('S6 — a layout that cannot be read back: the load error, no refusal, nothing « not saved »', async () => {
+    const server = serveFormulas('gardener', presetFor('gardener'));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    vi.mocked(fetchDashboardPreferences).mockRejectedValueOnce(new Error('network'));
+
+    await act(async () => {
+      await result.current.setLevel('expert');
+    });
+
+    expect(result.current.loadError).toBe(true);
+    expect(result.current.refusal).toBeNull();
+    expect(result.current.saveState).toBe('idle');
+    expect(server.formula).toBe('expert');
+  });
+
+  it('a refusal whose reasons the hook cannot all read keeps the ones it can — the refusal is said either way', async () => {
+    serveFormulas('gardener', presetFor('gardener'));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    vi.mocked(changeFormula).mockRejectedValue(
+      tooSmall('novice', [
+        { kind: 'gardens', have: 'five', limit: 3 },
+        { kind: 'size', width: 30 },
+        'nonsense',
+        { kind: 'gardens', have: 4, limit: 3 },
+      ])
+    );
+
+    await act(async () => {
+      await result.current.setLevel('novice');
+    });
+
+    expect(result.current.refusal).toEqual({ formula: 'novice', reasons: [{ kind: 'gardens', have: 4, limit: 3 }] });
+    expect(result.current.saveState).toBe('idle');
+  });
+
+  it('the next choice clears the refusal, and so does dismissing it', async () => {
+    serveFormulas('gardener', presetFor('gardener'));
+    const switchOnServer = vi.mocked(changeFormula).getMockImplementation()!;
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    vi.mocked(changeFormula).mockRejectedValueOnce(tooSmall('novice', [{ kind: 'gardens', have: 5, limit: 3 }]));
+    await act(async () => {
+      await result.current.setLevel('novice');
+    });
+    expect(result.current.refusal).not.toBeNull();
+
+    act(() => result.current.dismissRefusal());
+    expect(result.current.refusal).toBeNull();
+
+    vi.mocked(changeFormula).mockRejectedValueOnce(tooSmall('novice', [{ kind: 'gardens', have: 5, limit: 3 }]));
+    await act(async () => {
+      await result.current.setLevel('novice');
+    });
+    expect(result.current.refusal).not.toBeNull();
+
+    vi.mocked(changeFormula).mockImplementation(switchOnServer);
+    await act(async () => {
+      await result.current.setLevel('expert');
+    });
+    expect(result.current.refusal).toBeNull();
+    expect(result.current.level).toBe('expert');
   });
 });

@@ -9,7 +9,11 @@ import {
   type DashboardSize,
   type DashboardSizeList,
   type FormulaCapabilities,
+  type FormulaRefusal,
+  type FormulaRefusalReason,
+  type GardensRefusalReason,
   type SaveDashboardPreferences,
+  type SizeRefusalReason,
 } from '../types/Dashboard';
 import type {
   DashboardData,
@@ -21,6 +25,7 @@ import type { GardenConfig, LightSlot } from '../types/Garden';
 import type { PlacementData } from './gardenLayoutApi';
 import { permitsBlock, presetOf, sizesFor } from '../constants/dashboardCapabilities';
 import { fetchJson } from './fetchJson';
+import { HttpStatusError } from './httpStatusError';
 import {
   arrayOf,
   isBoolean,
@@ -308,6 +313,42 @@ export async function changeFormula(formula: DashboardLevel): Promise<void> {
     credentials: 'include',
     body: JSON.stringify({ formula }),
   });
+}
+
+// ── The refusal of a formula ─────────────────────────────────────────────
+
+const isGardensReason = matches<GardensRefusalReason>({
+  kind: (value): value is 'gardens' => value === 'gardens',
+  have: isWholeNumber,
+  limit: isWholeNumber,
+});
+
+const isSizeReason = matches<SizeRefusalReason>({
+  kind: (value): value is 'size' => value === 'size',
+  gardenId: isString,
+  width: isWholeNumber,
+  height: isWholeNumber,
+  maxWidth: isWholeNumber,
+  maxHeight: isWholeNumber,
+});
+
+const isRefusalReason = (value: unknown): value is FormulaRefusalReason =>
+  isGardensReason(value) || isSizeReason(value);
+
+/**
+ * SMA-448, PR #293, fix round 2 (A1) — what a `changeFormula` that failed
+ * means for the page: the formula it asked for, refused, and the reasons the
+ * server served — those of a 409 `formula.tooSmall` problem (RFC 9457), each
+ * checked at this boundary as every record is, the ones that do not hold
+ * dropped. Any other failure is the same refusal with no reason to say. The
+ * account and its layout are as they were either way: nothing is unsaved.
+ */
+export function refusalOf(error: unknown, formula: DashboardLevel): FormulaRefusal {
+  const problem = error instanceof HttpStatusError ? error.problem : undefined;
+  if (problem?.code !== 'formula.tooSmall' || !Array.isArray(problem.reasons)) {
+    return { formula, reasons: [] };
+  }
+  return { formula, reasons: (problem.reasons as unknown[]).filter(isRefusalReason) };
 }
 
 // The primitives — `matches`, `isString`, `isBoolean`, `nullable`, `arrayOf`,

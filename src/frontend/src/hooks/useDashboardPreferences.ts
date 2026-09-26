@@ -3,6 +3,7 @@ import { isAdjusted, presetOf } from '../constants/dashboardCapabilities';
 import {
   changeFormula,
   fetchDashboardPreferences,
+  refusalOf,
   saveDashboardPreferences,
 } from '../services/dashboardApi';
 import {
@@ -10,6 +11,7 @@ import {
   type DashboardBlock,
   type DashboardLevel,
   type FormulaCapabilities,
+  type FormulaRefusal,
 } from '../types/Dashboard';
 
 /**
@@ -89,6 +91,20 @@ export function useDashboardPreferences() {
   // guards the mutators; the state tells the page to take no gesture.
   const switchingRef = useRef(false);
   const [switching, setSwitching] = useState(false);
+  // SMA-448, PR #293, fix round 2 (A1) — a switch the server refused, with
+  // the reasons it served, for the panel to say where the user just chose.
+  // Null until a refusal, cleared by the next choice or by the page.
+  const [refusal, setRefusal] = useState<FormulaRefusal | null>(null);
+  // The save indicator, and a mirror of what it says (A1): a switch the
+  // server refuses puts back what the indicator said before — true, since
+  // `persist` has just made the server hold the layout on screen — and that
+  // has to be read after the awaits, not from the render the callback was
+  // made in. `say` is the one way the indicator is set.
+  const saveStateRef = useRef<SaveState>('idle');
+  const say = useCallback((state: SaveState) => {
+    saveStateRef.current = state;
+    setSaveState(state);
+  }, []);
 
   const send = useCallback((next: Layout, keepalive: boolean) => {
     // S2 — the tail of the chain settles the account of what the server
@@ -179,10 +195,10 @@ export function useDashboardPreferences() {
       }
       if (!pending) return;
       send(pending, keepalive)
-        .then(() => setSaveState('saved'))
-        .catch(() => setSaveState('error'));
+        .then(() => say('saved'))
+        .catch(() => say('error'));
     },
-    [send]
+    [send, say]
   );
 
   const schedule = useCallback(
@@ -193,11 +209,11 @@ export function useDashboardPreferences() {
       // back/forward cache therefore saves normally without ever reviving a
       // stale write.
       pendingRef.current = next;
-      setSaveState('pending');
+      say('pending');
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => flush(), SAVE_DEBOUNCE_MS);
     },
-    [flush]
+    [flush, say]
   );
 
   /**
@@ -303,11 +319,14 @@ export function useDashboardPreferences() {
    *    for a formula never visited;
    * 3. the hook reads back what the server holds, capabilities included.
    *
-   * A layout that cannot be written, or a switch the server refuses — 409, a
-   * formula too small for the account's gardens —, leaves the formula and the
-   * layout as they were and says so (« Modifications non enregistrées »): no
-   * switch ever archives a layout other than the one on screen. Resolves true
-   * once the page stands at the new formula, false otherwise.
+   * A switch that does not go through leaves the formula and the layout as
+   * they were, and says the truth of its end, nothing else (PR #293, fix
+   * round 2, A1 — the family): a layout that cannot be written, « not saved »;
+   * a formula the server refuses — 409, too small for the account's gardens —,
+   * the refusal and its reasons, in `refusal`, the indicator left as it was;
+   * a layout that cannot be read back, the load error. No switch ever
+   * archives a layout other than the one on screen. Resolves true once the
+   * page stands at the new formula, false otherwise.
    *
    * One switch at a time, and no change during it (S5): a second choice is
    * refused, as is any edit, until the page stands at one formula again. A
@@ -319,25 +338,42 @@ export function useDashboardPreferences() {
       if (!layoutRef.current || switchingRef.current) return false;
       switchingRef.current = true;
       setSwitching(true);
-      let switched = false;
+      setRefusal(null);
+      // Where the switch stands when it fails decides what is true of it.
+      let stage: 'writing' | 'switching' | 'reading' = 'writing';
       try {
         if (!(await persist())) {
-          setSaveState('error');
+          say('error');
           return false;
         }
-        setSaveState('pending');
-        await changeFormula(level);
-        switched = true;
+        // What the indicator says now is true — the server holds the layout
+        // on screen — and is what it says again if the server refuses.
+        const before = saveStateRef.current;
+        stage = 'switching';
+        say('pending');
+        try {
+          await changeFormula(level);
+        } catch (error) {
+          // A1 — the server refused the formula (409 `formula.tooSmall`, with
+          // its reasons), or the switch failed before it could: the account
+          // and its layout are as they were, and nothing is unsaved. The
+          // panel says the refusal; the indicator says what it said before,
+          // never « not saved ».
+          setRefusal(refusalOf(error, level));
+          say(before);
+          return false;
+        }
+        stage = 'reading';
         const preferences = await fetchDashboardPreferences();
         const loaded = { level: preferences.level, blocks: preferences.blocks };
         layoutRef.current = loaded;
         unsavedRef.current = false;
         setLayout(loaded);
         setCapabilities(preferences.capabilities);
-        setSaveState('saved');
+        say('saved');
         return true;
       } catch {
-        if (switched) {
+        if (stage === 'reading') {
           // S6 — the account stands at the new formula, and its layout could
           // not be read back. Nothing of the formula LEFT stays on screen
           // under the new one, and no edit of it can be made: the page shows
@@ -349,9 +385,9 @@ export function useDashboardPreferences() {
           setLayout(null);
           setCapabilities(null);
           setLoadError(true);
-          setSaveState('idle');
+          say('idle');
         } else {
-          setSaveState('error');
+          say('error');
         }
         return false;
       } finally {
@@ -359,8 +395,11 @@ export function useDashboardPreferences() {
         setSwitching(false);
       }
     },
-    [persist]
+    [persist, say]
   );
+
+  /** The page has shown the refusal where the user chose; closing that place clears it. */
+  const dismissRefusal = useCallback(() => setRefusal(null), []);
 
   /**
    * Back to the current formula's preset, discarding the manual arrangement —
@@ -386,6 +425,9 @@ export function useDashboardPreferences() {
     saveState,
     /** A switch of formula is in flight: the page takes no gesture that changes the layout. */
     switching,
+    /** A switch the server refused, with the reasons it served; null otherwise. */
+    refusal,
+    dismissRefusal,
     adjusted: layout && capabilities ? isAdjusted(blocks, capabilities) : false,
     reload,
     setBlocks,

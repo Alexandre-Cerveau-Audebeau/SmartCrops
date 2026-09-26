@@ -379,7 +379,12 @@
       "galleryEmpty": "Aucun widget masqué.",
       "gallerySoon": "Bientôt",
       "hidden": "masqué",
-      "add": "Ajouter {{widget}}"
+      "add": "Ajouter {{widget}}",
+      "refused": "Impossible de passer en {{level}} : {{reasons, list}}",
+      "refusedNoReason": "Impossible de passer en {{level}} pour le moment ; réessayez",
+      "reasonGardens_one": "{{count}} jardin pour {{limit}} au plus",
+      "reasonGardens_other": "{{count}} jardins pour {{limit}} au plus",
+      "reasonSize": "un jardin de {{width}} × {{height}} cases pour {{maxWidth}} × {{maxHeight}} au plus"
     },
     "a11y": {
       "instructions": "Appuyez sur Espace ou Entrée pour saisir le widget, les flèches pour le déplacer, Espace ou Entrée pour le déposer, Échap pour annuler.",

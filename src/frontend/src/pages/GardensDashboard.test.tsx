@@ -33,7 +33,11 @@ vi.mock('../services/gardenApi', () => ({
   deleteGarden: vi.fn(),
 }));
 
-vi.mock('../services/dashboardApi', () => ({
+// SMA-448, PR #293, fix round 2 (A1) — the module's own `refusalOf` stays
+// real: it is what turns a refused switch into what the panel says, and a
+// mock of it would test nothing.
+vi.mock('../services/dashboardApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../services/dashboardApi')>()),
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
   fetchDashboardData: vi.fn(),
@@ -61,6 +65,7 @@ import {
   saveDashboardPreferences,
 } from '../services/dashboardApi';
 import { fetchDashboardWeather } from '../services/weatherApi';
+import { HttpStatusError } from '../services/httpStatusError';
 import { fetchProfile } from '../services/profileApi';
 
 /**
@@ -1146,6 +1151,71 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
 
     await waitFor(() => expect(renderedKeys()).toHaveLength(9));
     expect(await screen.findByText('Expert view')).toBeInTheDocument();
+  });
+
+  // SMA-448, PR #293, fix round 2 — A1 (Alexandre's visual finding, 26/09):
+  // a formula the server refused showed « Changes not saved » in the header —
+  // false, nothing was unsaved — and nothing else. The panel now says the
+  // refusal and each reason the server served, where the user just acted;
+  // the indicator says nothing false; the formula and the layout stay.
+  const refuseNovice = () =>
+    vi.mocked(changeFormula).mockRejectedValue(
+      new HttpStatusError('Request failed (409)', 409, {
+        status: 409,
+        code: 'formula.tooSmall',
+        formula: 'novice',
+        reasons: [
+          { kind: 'gardens', have: 5, limit: 3 },
+          { kind: 'size', gardenId: 'g1', width: 30, height: 30, maxWidth: 20, maxHeight: 20 },
+        ],
+      })
+    );
+
+  it('a formula the server refuses is said in the panel, with each reason served — never « Changes not saved » — and the formula stays', async () => {
+    refuseNovice();
+    await openPanel();
+    const panel = screen.getByRole('dialog', { name: 'Customize' });
+
+    fireEvent.click(screen.getByRole('radio', { name: /Novice/ }));
+
+    const said = await within(panel).findByText(
+      'Can’t switch to Novice: 5 gardens for 3 at most and a garden of 30 × 30 cells for 20 × 20 at most'
+    );
+    expect(said).toHaveAttribute('role', 'status');
+    expect(said).toHaveAttribute('aria-live', 'polite');
+    expect(screen.queryByText('Changes not saved')).toBeNull();
+    expect(screen.queryByText('Couldn’t load your dashboard.')).toBeNull();
+    expect(screen.getByRole('radio', { name: /Gardener/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /Novice/ })).toBeEnabled();
+    expect(renderedKeys()).toHaveLength(6);
+  });
+
+  it('the panel’s refusal region is born empty and stays mounted, so what it then says is announced', async () => {
+    await openPanel();
+    const panel = screen.getByRole('dialog', { name: 'Customize' });
+
+    const region = within(panel).getByRole('status');
+    expect(region).toHaveTextContent('');
+    expect(region).not.toHaveAttribute('aria-live', 'assertive');
+  });
+
+  it('dit le refus en français, avec chaque raison servie', async () => {
+    localStorage.setItem('smartcrops-language', 'fr');
+    refuseNovice();
+    renderPage();
+    const customize = await screen.findByRole('button', { name: 'Personnaliser' });
+    await waitFor(() => expect(customize).toBeEnabled());
+    fireEvent.click(customize);
+    const panel = await screen.findByRole('dialog', { name: 'Personnaliser' });
+
+    fireEvent.click(screen.getByRole('radio', { name: /Novice/ }));
+
+    expect(
+      await within(panel).findByText(
+        'Impossible de passer en Novice : 5 jardins pour 3 au plus et un jardin de 30 × 30 cases pour 20 × 20 au plus'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Modifications non enregistrées')).toBeNull();
   });
 
   it('says so when nothing is hidden', async () => {
