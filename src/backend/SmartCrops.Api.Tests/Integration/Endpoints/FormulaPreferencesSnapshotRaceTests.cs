@@ -267,12 +267,20 @@ internal sealed class FormulaReadRaceInterceptor : DbCommandInterceptor
 
         Interlocked.Increment(ref _seen);
 
-        // The read of the account's formula, and only it: the switch's own
-        // lock on the same row reads `FOR UPDATE`, and a read of the whole
-        // user would carry its other columns.
+        // The ONE statement that reads the account's formula AND its layout
+        // row — the joined read, and only it: the switch's own lock on the
+        // same row reads `FOR UPDATE`, and a read of the whole user would
+        // carry its other columns. Requiring the layout's table too (PR #293,
+        // fix round 2, R2-G1 — GitHub 4111245319): a `GetPreferences` gone
+        // back to two reads, the row first, would have let the old predicate
+        // fire on the formula read that came SECOND — after both reads, where
+        // the switch could no longer pair anything wrongly — and the test
+        // would have passed on a regression. Now no statement of a split read
+        // matches, `Fired` stays false, and the test says so.
         var text = command.CommandText;
         if (text.Contains("FROM \"AspNetUsers\"", StringComparison.Ordinal)
             && text.Contains("\"Formula\"", StringComparison.Ordinal)
+            && text.Contains("\"UserDashboardPreferences\"", StringComparison.Ordinal)
             && !text.Contains("FOR UPDATE", StringComparison.Ordinal)
             && !text.Contains("\"NormalizedUserName\"", StringComparison.Ordinal)
             && Interlocked.Exchange(ref _fired, 1) == 0)
