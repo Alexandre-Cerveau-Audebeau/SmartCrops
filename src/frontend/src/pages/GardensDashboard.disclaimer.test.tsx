@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import i18next from 'i18next';
@@ -235,6 +235,10 @@ beforeEach(() => {
 
 afterEach(async () => {
   vi.clearAllMocks();
+  // Unmount before the language reset (SMA-174): this hook runs before Testing
+  // Library's automatic cleanup, and the reset used to re-render the whole
+  // mounted dashboard outside act() — 657 React warnings per CI run.
+  cleanup();
   await i18next.changeLanguage('fr');
 });
 
