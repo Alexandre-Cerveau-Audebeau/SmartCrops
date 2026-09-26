@@ -69,3 +69,17 @@ export function isAdjusted(blocks: DashboardBlock[], capabilities: FormulaCapabi
 export function hasActionBar(capabilities: FormulaCapabilities): boolean {
   return capabilities.compactBar;
 }
+
+/**
+ * SMA-448, lot F2 (SMA-436) — whether the formula's page is ONE CARD PER
+ * GARDEN rather than a grid of widgets: the Novice page (contract v3 § 3.1
+ * « Page d'accueil », § 4.3), decided by Alexandre on 22/09 (14:53). Read
+ * from the served capabilities, as every right is (R8): the formula's weather
+ * mode `gardenCards` — « no widget: the weather of each garden's own city, on
+ * its card » (`FormulaCatalog.WeatherModes`) — is the one that names the
+ * page; the formulas with a widget grid show their weather in the Weather
+ * widget (`singleCity`, `allCities`).
+ */
+export function isCardsPage(capabilities: FormulaCapabilities): boolean {
+  return capabilities.weather === 'gardenCards';
+}

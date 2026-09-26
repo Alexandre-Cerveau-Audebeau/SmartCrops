@@ -170,7 +170,14 @@ function nth<T extends Element = Element>(selector: string, n: number): T {
 const markOf = (element: Element | null) => (element as (Element & { __mark?: string }) | null)?.__mark ?? null;
 
 const barOf = () => document.querySelector<HTMLElement>('[data-compact-bar]');
-const headerRowOf = () => document.querySelector<HTMLElement>('[data-dashboard-header] [data-page-actions]');
+/**
+ * The header's repeated buttons — their wrapper — or, on the Novice page,
+ * which repeats none (SMA-448, lot F2: no « Modifier », no « Personnaliser »),
+ * the header's whole actions zone: the row the scenarios scroll past.
+ */
+const headerRowOf = () =>
+  document.querySelector<HTMLElement>('[data-dashboard-header] [data-page-actions]') ??
+  document.querySelector<HTMLElement>('[data-dashboard-header] [data-dashboard-actions]');
 const gridCards = () =>
   [...document.querySelectorAll<HTMLElement>('[data-widget]')].filter((card) => !card.closest('[data-drag-overlay]'));
 
@@ -234,7 +241,10 @@ const page = {
     if (document.fonts.status !== 'loaded') return false;
     if (!document.querySelector('[data-site-navbar]') || !headerRowOf()) return false;
     if (prefsPending) return true;
-    return gridCards().length > 0 && document.querySelectorAll('.MuiSkeleton-root').length === 0;
+    // The grid's cards, or the Novice page (SMA-448, lot F2) — drawn, and no
+    // skeleton left, the Novice page's own included.
+    const drawn = gridCards().length > 0 || document.querySelector('[data-novice-page]') !== null;
+    return drawn && document.querySelectorAll('.MuiSkeleton-root').length === 0;
   },
 
   /** Waits `frames` frames: the observers report at a frame, React commits, the effects run. */

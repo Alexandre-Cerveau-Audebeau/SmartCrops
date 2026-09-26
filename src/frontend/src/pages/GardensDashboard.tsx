@@ -41,8 +41,10 @@ import WeatherBlock from '../components/Dashboard/blocks/WeatherBlock';
 import WeatherOptionsPanel from '../components/Dashboard/blocks/WeatherOptionsPanel';
 import LocationDialog from '../components/Dashboard/LocationDialog';
 import type { LocationTarget } from '../components/Dashboard/locationTools';
+import NoviceGardens from '../components/Dashboard/NoviceGardens';
+import { cardBearsWeather, noviceCardsOf } from '../components/Dashboard/noviceCards';
 import { weatherDisclaimerVisible } from '../components/Dashboard/weatherDisclaimer';
-import { hasActionBar, sizesFor } from '../constants/dashboardCapabilities';
+import { hasActionBar, isCardsPage, sizesFor } from '../constants/dashboardCapabilities';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useDashboardWeather } from '../hooks/useDashboardWeather';
@@ -81,6 +83,12 @@ type GardensNavState = { toast?: 'gardenDeleted' } | null;
  *
  * No preference is written to `localStorage`: the layout follows the account,
  * not the browser (design freeze).
+ *
+ * SMA-448, lot F2 (SMA-436) — at the Novice formula the page is ONE CARD PER
+ * GARDEN (`NoviceGardens`), not the grid: the same header, data, dialogs and
+ * location door, the view chosen by the served capabilities (`isCardsPage`,
+ * R8) — a rendering of `/gardens`, so every door to « Mes Jardins » stays the
+ * same and a change of formula replaces the view in place (pre-flight § C.5 a).
  */
 export default function GardensDashboard() {
   // `language` (the provider's state) drives the FETCH; every figure the page
@@ -252,6 +260,15 @@ export default function GardensDashboard() {
     : weatherError
       ? 'error'
       : 'ready';
+
+  // SMA-448, lot F2 (SMA-436) — the formula's page, as the served
+  // capabilities say (R8): one card per garden — the Novice — or the grid of
+  // widgets. The cards are derived ONCE, through `displayWeather` (A-4), for
+  // the view that draws them and for the warning that follows them (V1).
+  const cardsPage = capabilities !== null && isCardsPage(capabilities);
+  const noviceCards = cardsPage
+    ? noviceCardsOf(gardens, dashboardData.varieties, gardenViews, displayWeather, weatherStatus)
+    : [];
   const totalSurface = gardens.reduce(
     (sum, garden) => sum + (gardenViews.get(garden.id)?.surfaceM2 ?? 0),
     0
@@ -419,8 +436,11 @@ export default function GardensDashboard() {
    * HARVEST columns when theirs are not (frozen design): a column for data the
    * user has taken off their dashboard is a column of nothing.
    */
+  // The blocks the page DRAWS: none on the cards page, whatever the layout
+  // carries (SMA-448, lot F2) — a widget that is not drawn shows no weather.
+  const drawnBlocks = cardsPage ? [] : blocks;
   const isBlockVisible = (key: DashboardBlockKey) =>
-    blocks.some((block) => block.key === key && !block.hidden);
+    drawnBlocks.some((block) => block.key === key && !block.hidden);
 
   // SMA-387 — the provider's terms ask for a clear, prominent warning for the
   // end user wherever weather data from the API is shown. ONE for the page,
@@ -438,13 +458,18 @@ export default function GardensDashboard() {
   // while it SHOWS « À faire aujourd'hui » or « Conseils » — its figures read
   // through the same `keyFiguresOptions` the band draws with, none when it is
   // off the page.
-  const band = blocks.find((block) => block.key === 'keyfigures' && !block.hidden);
+  //
+  // SMA-448, lot F2 (V1): the Novice page bears it as soon as one of its
+  // cards shows a weather figure — a temperature, a task read from a
+  // forecast — read from the same derivation the cards are drawn with.
+  const band = drawnBlocks.find((block) => block.key === 'keyfigures' && !block.hidden);
   const showWeatherDisclaimer = weatherDisclaimerVisible({
     loading: weatherLoading,
     error: weatherError,
     locations: weatherData.locations,
     isBlockVisible,
     keyFigures: band ? keyFiguresOptions(band.options ?? null).figures : [],
+    cards: noviceCards.some(cardBearsWeather),
   });
 
   const renderBlock = (block: DashboardBlock) => {
@@ -834,13 +859,18 @@ export default function GardensDashboard() {
                   `useGardenViews` is the shared derivation the Gardens and
                   Statistics widgets already read — asking for it here costs
                   nothing, because `gardenViewOf` memoizes on the garden object. */}
-              {t('dashboard.meta', {
-                gardens: t('dashboard.metaGardens', { count: gardens.length }),
-                plants: t('dashboard.metaPlants', {
-                  count: dashboardData.totals.placementCount,
-                }),
-                surface: surfaceText,
-              })}
+              {/* V3-00, the Novice's state « 0 jardin » (SMA-448, lot F2):
+                  « Aucun jardin pour l'instant » — never a « 0 » drawn as a
+                  figure (R5). */}
+              {cardsPage && gardens.length === 0
+                ? t('dashboard.novice.metaNone')
+                : t('dashboard.meta', {
+                    gardens: t('dashboard.metaGardens', { count: gardens.length }),
+                    plants: t('dashboard.metaPlants', {
+                      count: dashboardData.totals.placementCount,
+                    }),
+                    surface: surfaceText,
+                  })}
             </Typography>
           )}
         </Box>
@@ -859,6 +889,7 @@ export default function GardensDashboard() {
           onCreate={() => setCreateDialogOpen(true)}
           repeatHidden={actionBar.shown}
           pageActionsRef={actionBar.repeatedRef}
+          cards={cardsPage}
         />
       </Box>
 
@@ -913,7 +944,23 @@ export default function GardensDashboard() {
         </Box>
       )}
 
-      {!loading && !loadError && capabilities && (
+      {/* SMA-448, lot F2 — the Novice page in place of the grid: one card per
+          garden, through the page's own data, dialogs and location door. */}
+      {!loading && !loadError && capabilities && cardsPage && (
+        <NoviceGardens
+          cards={noviceCards}
+          loading={gardensLoading}
+          loadError={gardensError}
+          refreshing={gardensRefreshing}
+          onRetry={refetch}
+          onCreate={() => setCreateDialogOpen(true)}
+          onLocate={openLocate}
+          onChanged={refetch}
+          onDeleted={handleDeleted}
+        />
+      )}
+
+      {!loading && !loadError && capabilities && !cardsPage && (
         <DashboardGrid
           blocks={blocks}
           capabilities={capabilities}
@@ -959,27 +1006,30 @@ export default function GardensDashboard() {
           #293, fix round 1, S6), and CLOSED by `chooseLevel` when a switch
           ends that way (fix round 2, R2-E1): the condition alone hid it while
           `panelOpen` stayed true, so it came back by itself once the retry
-          had succeeded. */}
-      <CustomizePanel
-        open={panelOpen && capabilities !== null}
-        level={level}
-        capabilities={capabilities}
-        blocks={blocks}
-        switching={switching}
-        refusal={refusal}
-        preview={galleryPreview}
-        // Closing the place where the refusal was said clears it (A1): the
-        // panel reopens on the choice, not on the last refusal.
-        onClose={() => {
-          setPanelOpen(false);
-          dismissRefusal();
-        }}
-        onLevelChange={chooseLevel}
-        onReset={resetToLevel}
-        onShow={(key) =>
-          patchBlock(key, (block) => ({ ...block, hidden: false }))
-        }
-      />
+          had succeeded. Not on the cards page at all (lot F2): the Novice has
+          no « Personnaliser » — no button, no panel. */}
+      {!cardsPage && (
+        <CustomizePanel
+          open={panelOpen && capabilities !== null}
+          level={level}
+          capabilities={capabilities}
+          blocks={blocks}
+          switching={switching}
+          refusal={refusal}
+          preview={galleryPreview}
+          // Closing the place where the refusal was said clears it (A1): the
+          // panel reopens on the choice, not on the last refusal.
+          onClose={() => {
+            setPanelOpen(false);
+            dismissRefusal();
+          }}
+          onLevelChange={chooseLevel}
+          onReset={resetToLevel}
+          onShow={(key) =>
+            patchBlock(key, (block) => ({ ...block, hidden: false }))
+          }
+        />
+      )}
 
       <Dialog
         open={createDialogOpen}

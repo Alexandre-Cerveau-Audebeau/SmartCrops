@@ -52,6 +52,7 @@ describe('weatherDisclaimerVisible — with data, the warning follows the weathe
           locations: places('fresh'),
           isBlockVisible,
           keyFigures: ['free', 'occupancy', 'varieties', 'noplan'],
+          cards: false,
         })
       ).toBe(subset.length > 0);
     }
@@ -65,6 +66,7 @@ describe('weatherDisclaimerVisible — with data, the warning follows the weathe
         locations: places('unavailable', 'stale'),
         isBlockVisible: layoutWith(['todo']),
         keyFigures: [],
+        cards: false,
       })
     ).toBe(true);
   });
@@ -84,6 +86,7 @@ describe('weatherDisclaimerVisible — absent when no surface shows a figure, wh
         locations: places('fresh'),
         isBlockVisible: everything,
         keyFigures,
+        cards: false,
       })
     ).toBe(false);
   });
@@ -96,6 +99,7 @@ describe('weatherDisclaimerVisible — absent when no surface shows a figure, wh
         locations: places('fresh'),
         isBlockVisible: everything,
         keyFigures,
+        cards: false,
       })
     ).toBe(false);
   });
@@ -108,6 +112,7 @@ describe('weatherDisclaimerVisible — absent when no surface shows a figure, wh
         locations: places(),
         isBlockVisible: everything,
         keyFigures,
+        cards: false,
       })
     ).toBe(false);
   });
@@ -120,6 +125,7 @@ describe('weatherDisclaimerVisible — absent when no surface shows a figure, wh
         locations: places('unavailable', 'unavailable'),
         isBlockVisible: everything,
         keyFigures,
+        cards: false,
       })
     ).toBe(false);
   });
@@ -162,6 +168,7 @@ describe('weatherDisclaimerVisible — the Key figures band bears the weather by
         locations: places('fresh'),
         isBlockVisible: layoutWith([...NON_BEARING, 'keyfigures']),
         keyFigures: DEFAULT_KEY_FIGURES,
+        cards: false,
       })
     ).toBe(true);
   });
@@ -179,6 +186,7 @@ describe('weatherDisclaimerVisible — the Key figures band bears the weather by
         locations: places('fresh'),
         isBlockVisible: layoutWith([...NON_BEARING, ...(figures.length ? (['keyfigures'] as const) : []), ...subset]),
         keyFigures: figures,
+        cards: false,
       })
     ).toBe(subset.length > 0 || bandBears);
   });
@@ -196,11 +204,59 @@ describe('weatherDisclaimerVisible — the Key figures band bears the weather by
         locations: places('fresh'),
         isBlockVisible: layoutWith([...NON_BEARING, 'keyfigures']),
         keyFigures: figures,
+        cards: false,
       });
       // Never less (V1) — and, with nothing else bearing, never more.
       expect(shown, figures.join(',')).toBe(shows);
     }
     // C(22, 4) − C(20, 4): the sets holding at least one of the two.
     expect(bearing).toBe(7315 - 4845);
+  });
+});
+
+// SMA-448, lot F2 (V1, contract § 6 « ce que la v3 ajoute », 1) — the Novice
+// page bears the warning as soon as one of its cards shows a weather figure:
+// a bearer that is not a widget, said by the page from the derivation it
+// draws the cards with. A page of widgets says `false` here.
+describe('weatherDisclaimerVisible — the Novice page bears the weather by what its cards show (SMA-448, F2)', () => {
+  /** The cards page draws no widget: no bearer, no band. */
+  const noWidget = layoutWith([]);
+
+  it('shows the warning when a card shows a weather figure, with no widget on the page at all', () => {
+    expect(
+      weatherDisclaimerVisible({
+        loading: false,
+        error: false,
+        locations: places('fresh'),
+        isBlockVisible: noWidget,
+        keyFigures: [],
+        cards: true,
+      })
+    ).toBe(true);
+  });
+
+  it('shows none when no card shows one — the same page, no widget', () => {
+    expect(
+      weatherDisclaimerVisible({
+        loading: false,
+        error: false,
+        locations: places('fresh'),
+        isBlockVisible: noWidget,
+        keyFigures: [],
+        cards: false,
+      })
+    ).toBe(false);
+  });
+
+  it('never behind a load error nor while the aggregate loads, whatever the cards say: no card can show a figure then', () => {
+    for (const [loading, error] of [
+      [true, false],
+      [false, true],
+    ] as const) {
+      expect(
+        weatherDisclaimerVisible({ loading, error, locations: places('fresh'), isBlockVisible: noWidget, keyFigures: [], cards: true }),
+        `loading ${loading}, error ${error}`
+      ).toBe(false);
+    }
   });
 });

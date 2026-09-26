@@ -517,7 +517,12 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
     it.each(VIEWS.map((view) => view.id))('%s: none at the Novice formula, at the top nor mid-page (A-9)', (id) => {
       const { novice } = viewOf(id);
       expect([novice?.top.bar, novice?.mid.bar]).toEqual([null, null]);
-      expect(novice!.mid.scrollY).toBeGreaterThan(novice!.top.headerRow.docBottom);
+      // Scrolled past the header — or to the page's end where the Novice
+      // page, its three cards and their warning, stops before that (SMA-448,
+      // lot F2: the page of cards is shorter than the grid was).
+      expect(novice!.mid.scrollY).toBeGreaterThanOrEqual(
+        Math.min(novice!.top.headerRow.docBottom, novice!.top.maxScroll) - 1
+      );
     });
 
     it.each(VIEWS.map((view) => view.id))('%s: none while the layout loads, the page scrolled as far as it goes (A-10.2)', (id) => {

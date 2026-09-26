@@ -22,10 +22,21 @@ export type InviteVariant = 'invite' | 'catalogue' | 'soon';
 interface Props {
   icon: ReactNode;
   message: string;
+  /**
+   * A second sentence under the first, in the secondary size — what the state
+   * means and what the gesture will bring (SMA-448, lot F2: the Novice page's
+   * « Créez-en un pour voir son plan, ses plantes et sa météo ici. »).
+   */
+  body?: string;
   variant?: InviteVariant;
   /** Only read for `variant: 'invite'` — the gesture that resolves the state. */
   action?: ReactNode;
+  /** The panel's width at most, in px: the artboards' 360, or V3-00's 640 for the Novice page's own state. */
+  maxWidth?: number;
 }
+
+/** `.inv` of the frozen artboards: a panel of 360 px at most. */
+const DEFAULT_MAX_WIDTH = 360;
 
 /**
  * The shared invitation panel of the gardens dashboard: a soft disc, one
@@ -46,8 +57,10 @@ interface Props {
 export default function InviteState({
   icon,
   message,
+  body,
   variant = 'invite',
   action,
+  maxWidth = DEFAULT_MAX_WIDTH,
 }: Props) {
   const { t } = useTranslation();
   const tk = useDashboardTokens();
@@ -67,7 +80,7 @@ export default function InviteState({
         // back to filling its card.
         m: 'auto',
         width: '100%',
-        maxWidth: 360,
+        maxWidth,
         // `.inv` of the frozen artboards, verbatim.
         display: 'flex',
         alignItems: 'flex-start',
@@ -108,6 +121,19 @@ export default function InviteState({
         >
           {message}
         </Typography>
+        {body && (
+          <Typography
+            sx={{
+              // `.inv-b`, like the « soon » mention below.
+              fontSize: `${DASHBOARD_TYPE.secondary}px`,
+              lineHeight: 1.5,
+              color: 'text.secondary',
+              mt: '4px',
+            }}
+          >
+            {body}
+          </Typography>
+        )}
         {variant === 'invite' && action}
         {variant === 'soon' && (
           <Typography

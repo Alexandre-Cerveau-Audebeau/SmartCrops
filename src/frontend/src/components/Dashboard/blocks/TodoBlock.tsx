@@ -7,21 +7,16 @@ import Chip from '@mui/material/Chip';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import { visuallyHidden } from '@mui/utils';
-import type { SvgIconComponent } from '@mui/icons-material';
-import AcUnitOutlinedIcon from '@mui/icons-material/AcUnitOutlined';
-import ContentCutOutlinedIcon from '@mui/icons-material/ContentCutOutlined';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
-import SpaOutlinedIcon from '@mui/icons-material/SpaOutlined';
-import WaterDropOutlinedIcon from '@mui/icons-material/WaterDropOutlined';
 import DashboardBlock from '../DashboardBlock';
 import IconDisc from '../IconDisc';
 import InviteState from '../InviteState';
 import { BLOCK_ICONS } from '../blockIcons';
 import { useRowBudget } from '../useRowBudget';
-import { monthLabel } from './plantCalendar';
-import { gardensWithoutWeather, todoTasks, type TodoTask, type TodoTaskKind } from './todoTasks';
-import { displayTemperature, nameList } from './weatherFormat';
-import { weekdayLong } from './weatherTime';
+import { TASK_ICONS } from './todoIcons';
+import { todoSentence } from './todoSentence';
+import { gardensWithoutWeather, todoTasks, type TodoTask } from './todoTasks';
+import { nameList } from './weatherFormat';
 import { useUnitSystem } from '../../../hooks/useUnitSystem';
 import { DASHBOARD_TYPE } from '../../../theme/dashboardTokens';
 import { useDashboardTokens } from '../../../theme/useDashboardTokens';
@@ -73,20 +68,6 @@ const MEDIUM_ROWS = 4;
 const MEDIUM_ROWS_WITH_INVITE = 2;
 /** The 8 px between the rows of the Medium list — the same number the list declares, for the measured budget. */
 const MEDIUM_ROW_GAP = 8;
-
-/**
- * The glyph of each kind, matched path-for-path against the artboards:
- * `WaterDropOutlined`, `AcUnitOutlined` (PR 3b/5), and — PR 4a/5 —
- * `ContentCutOutlined` for « Tailler » and `SpaOutlined` for « Semer »
- * (`Main.dc.html`, the four Medium rows).
- */
-const TASK_ICONS: Record<TodoTaskKind, SvgIconComponent> = {
-  water: WaterDropOutlinedIcon,
-  prune: ContentCutOutlinedIcon,
-  sow: SpaOutlinedIcon,
-  cold: AcUnitOutlinedIcon,
-  frost: AcUnitOutlinedIcon,
-};
 
 /**
  * SMA-336 PR 3b/5 — « À faire aujourd'hui », fed by the weather (pre-flight
@@ -170,45 +151,13 @@ export default function TodoBlock({
       return next;
     });
 
-  const degrees = (celsius: number) =>
-    t('dashboard.blocks.weather.degrees', { value: displayTemperature(celsius, system) });
-
   /**
-   * The sentence of a task — with the garden in brackets on an ungrouped list
-   * of several gardens. A cold task names the TOLERANCE it is about (round 1,
-   * O1: « 3 plantes sensibles sous 8° », not « 3 plantes connues sensibles »);
-   * a task planned on a place's LAST KNOWN weather says so (G2).
+   * The sentence of a task — ONE function for this widget and for the Novice
+   * card (`todoSentence`, SMA-448 lot F2): with the garden in brackets on an
+   * ungrouped list of several gardens, without it in a group.
    */
-  const label = (task: TodoTask, grouped: boolean): string => {
-    // PR 4a/5 — the calendar tasks name PLANTS, not a number of them
-    // (`Main.dc.html`: « Tailler — Thym, Romarin et Tournesol (septembre) »).
-    // Past three, `nameList` closes with the « N autres » the weather
-    // invitation already uses, so the row never grows past one line.
-    if (task.month !== null) {
-      const plants = nameList(task.names, i18n.language, (count) =>
-        t('dashboard.blocks.weather.others', { count })
-      );
-      const month = monthLabel(task.month.month, i18n.language);
-      const key = grouped ? `${task.kind}Grouped` : task.kind;
-      return t(`dashboard.blocks.todo.${key}`, { plants, garden: task.gardenName, month });
-    }
-    const plants =
-      task.kind === 'cold'
-        ? t('dashboard.blocks.todo.sensitivePlants', {
-            count: task.count,
-            threshold: task.toleranceC === null ? '' : degrees(task.toleranceC),
-          })
-        : t('dashboard.blocks.todo.plants', { count: task.count });
-    const when = task.today
-      ? t('dashboard.blocks.todo.tonight')
-      : t('dashboard.blocks.todo.eveningOf', {
-          day: weekdayLong(task.date, i18n.language) ?? task.date,
-        });
-    const temp = task.tempC === null ? '' : degrees(task.tempC);
-    const key = grouped ? `${task.kind}Grouped` : task.kind;
-    const sentence = t(`dashboard.blocks.todo.${key}`, { plants, garden: task.gardenName, temp, when });
-    return task.stale ? t('dashboard.blocks.todo.stale', { task: sentence }) : sentence;
-  };
+  const label = (task: TodoTask, grouped: boolean): string =>
+    todoSentence(task, grouped, t, i18n.language, system);
 
   /** One task row: the kind's glyph on its disc (or the Large card's checkbox), the sentence; `hidden` past the measured budget. */
   const row = (task: TodoTask, grouped: boolean, checkbox: boolean, hidden = false) => {

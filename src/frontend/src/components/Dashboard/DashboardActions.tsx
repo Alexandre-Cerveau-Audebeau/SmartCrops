@@ -39,6 +39,14 @@ export interface DashboardActionsProps {
   repeatHidden?: boolean;
   /** The wrapper of the two repeated buttons — what the compact bar's trigger observes (B2). */
   pageActionsRef?: Ref<HTMLDivElement>;
+  /**
+   * SMA-448, lot F2 — the formula's page is one card per garden (the Novice,
+   * SMA-436): no « Modifier », no « Personnaliser », nothing the compact bar
+   * repeats — the chip, the indicator and « Créer un jardin » alone (contract
+   * v3 § 3.1 « En-tête », A-9). And never « · ajustée »: the page has nothing
+   * to adjust (§ 4.1).
+   */
+  cards?: boolean;
 }
 
 export interface PageActionButtonsProps {
@@ -145,10 +153,13 @@ export default function DashboardActions({
   onCreate,
   repeatHidden = false,
   pageActionsRef,
+  cards = false,
 }: DashboardActionsProps) {
   const { t } = useTranslation();
   const tk = useDashboardTokens();
   const levelName = t(`dashboard.levels.${level}.name`);
+  // In Novice, never « · ajustée » (§ 4.1): the page draws no layout.
+  const chipAdjusted = adjusted && !cards;
 
   return (
     <Box
@@ -195,7 +206,7 @@ export default function DashboardActions({
             data-level-chip
             icon={<TuneOutlinedIcon />}
             label={t(
-              adjusted ? 'dashboard.levelChipAdjusted' : 'dashboard.levelChip',
+              chipAdjusted ? 'dashboard.levelChipAdjusted' : 'dashboard.levelChip',
               { level: levelName }
             )}
             variant="outlined"
@@ -242,25 +253,29 @@ export default function DashboardActions({
           side from 600 px. While the bar shows them, this wrapper is `inert`
           and `aria-hidden` — `aria-hidden` too because Testing Library knows
           nothing of `inert`, and a browser drops an inert subtree from the
-          accessibility tree anyway (pre-flight, technical decision 6). */}
-      <Box
-        ref={pageActionsRef}
-        data-page-actions
-        inert={repeatHidden}
-        aria-hidden={repeatHidden || undefined}
-        sx={{
-          display: { xs: 'grid', sm: 'flex' },
-          gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))' },
-          gap: { xs: '8px', sm: '12px' },
-        }}
-      >
-        <PageActionButtons
-          editing={editing}
-          unavailable={unavailable}
-          onEditingChange={onEditingChange}
-          onCustomize={onCustomize}
-        />
-      </Box>
+          accessibility tree anyway (pre-flight, technical decision 6).
+          Not drawn at all on the cards page (SMA-448, lot F2): the Novice has
+          neither « Modifier » nor « Personnaliser » — not disabled, ABSENT. */}
+      {!cards && (
+        <Box
+          ref={pageActionsRef}
+          data-page-actions
+          inert={repeatHidden}
+          aria-hidden={repeatHidden || undefined}
+          sx={{
+            display: { xs: 'grid', sm: 'flex' },
+            gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))' },
+            gap: { xs: '8px', sm: '12px' },
+          }}
+        >
+          <PageActionButtons
+            editing={editing}
+            unavailable={unavailable}
+            onEditingChange={onEditingChange}
+            onCustomize={onCustomize}
+          />
+        </Box>
+      )}
       {/* In BOTH modes, and active (A-7 amended — Alexandre, 25/09, fix
           round 1 of #291): the header keeps its arrangement when the page
           enters Edit mode. On a phone « Créer un jardin » keeps its line under

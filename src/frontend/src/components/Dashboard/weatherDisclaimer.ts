@@ -53,6 +53,15 @@ export interface WeatherDisclaimerInput {
    * page or the formula has no band (A-N8).
    */
   keyFigures: readonly KeyFigure[];
+  /**
+   * SMA-448, lot F2 (V1, contract v3 § 6 — « ce que la v3 ajoute », 1) — the
+   * Novice page shows a figure of the weather on at least one of its cards: a
+   * temperature at the garden's city, or a task read from a forecast
+   * (`cardBearsWeather`). A bearer that is not a widget: the page says it,
+   * from the same derivation it draws the cards with. False on a page of
+   * widgets, whose bearers are the two inputs above.
+   */
+  cards: boolean;
 }
 
 /**
@@ -63,7 +72,8 @@ export interface WeatherDisclaimerInput {
  * errs on the side of showing); and at least one of `WEATHER_BEARING_BLOCKS`
  * is visible — or the Key figures band shows one of
  * `WEATHER_BEARING_FIGURES` (SMA-437, A-N8), whatever its own state
- * (skeleton, invitation), as the rule already treats To-do and Tips. A layout
+ * (skeleton, invitation), as the rule already treats To-do and Tips — or a
+ * card of the Novice page shows a weather figure (SMA-448, lot F2). A layout
  * with every weather-bearing surface off the page shows no weather figure, so
  * it shows no warning either (G1).
  */
@@ -73,12 +83,14 @@ export function weatherDisclaimerVisible({
   locations,
   isBlockVisible,
   keyFigures,
+  cards,
 }: WeatherDisclaimerInput): boolean {
   if (loading || error) return false;
   if (!locations.some((place) => place.status !== 'unavailable')) return false;
   const bearing: readonly KeyFigure[] = WEATHER_BEARING_FIGURES;
   return (
     WEATHER_BEARING_BLOCKS.some((key) => isBlockVisible(key)) ||
-    keyFigures.some((figure) => bearing.includes(figure))
+    keyFigures.some((figure) => bearing.includes(figure)) ||
+    cards
   );
 }
