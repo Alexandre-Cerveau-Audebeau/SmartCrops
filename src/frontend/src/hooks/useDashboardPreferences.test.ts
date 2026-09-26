@@ -675,3 +675,92 @@ describe('useDashboardPreferences — a switch never loses a layout that is not 
     expect(result.current.saveState).toBe('error');
   });
 });
+
+// SMA-448, PR #293, fix round 1 — S5 (GitHub 4109933667): an edit made while
+// a switch was on the wire was drawn, then replaced by the layout of the
+// formula entered, and written under the formula LEFT — refused by R8, so
+// « Changes not saved » after a switch that had succeeded.
+describe('useDashboardPreferences — no edit is taken while a switch is in flight (SMA-448, S5)', () => {
+  it('an edit or a reset made while the switch is on the wire is refused: never drawn then lost, never written under the formula left', async () => {
+    const server = serveFormulas('gardener', presetFor('gardener'));
+    const switchOnServer = vi.mocked(changeFormula).getMockImplementation()!;
+    let release!: () => void;
+    vi.mocked(changeFormula).mockImplementationOnce(async (to) => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return switchOnServer(to);
+    });
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let switching!: Promise<boolean>;
+    act(() => {
+      switching = result.current.setLevel('expert');
+    });
+    await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('expert'));
+
+    const edited = presetFor('gardener');
+    edited[0]!.size = 'small';
+    act(() => result.current.setBlocks(edited));
+    expect(result.current.blocks).toEqual(presetFor('gardener'));
+    act(() => result.current.resetToLevel());
+    expect(result.current.blocks).toEqual(presetFor('gardener'));
+    expect(result.current.switching).toBe(true);
+
+    await act(async () => {
+      release();
+      await switching;
+    });
+    // Past the pause an edit's write would have waited.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS + 100));
+    });
+
+    expect(saveDashboardPreferences).not.toHaveBeenCalled();
+    expect(server.formula).toBe('expert');
+    expect(server.archive.get('gardener')).toEqual(presetFor('gardener'));
+    expect(result.current.switching).toBe(false);
+    expect(result.current.level).toBe('expert');
+    expect(result.current.blocks).toEqual(presetFor('expert'));
+    expect(result.current.saveState).toBe('saved');
+  });
+
+  it('a second choice while a switch is in flight is refused: the page and the server stand at the same formula', async () => {
+    const server = serveFormulas('gardener', presetFor('gardener'));
+    const readFromServer = vi.mocked(fetchDashboardPreferences).getMockImplementation()!;
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // The first switch's read-back is slow: it answers what the server held
+    // when it was asked.
+    let answer!: () => void;
+    vi.mocked(fetchDashboardPreferences).mockImplementationOnce(async () => {
+      const held = await readFromServer();
+      await new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      return held;
+    });
+
+    let first!: Promise<boolean>;
+    act(() => {
+      first = result.current.setLevel('expert');
+    });
+    await waitFor(() => expect(fetchDashboardPreferences).toHaveBeenCalledTimes(2));
+
+    let second: boolean | undefined;
+    await act(async () => {
+      second = await result.current.setLevel('novice');
+    });
+    await act(async () => {
+      answer();
+      await first;
+    });
+
+    expect(second).toBe(false);
+    expect(changeFormula).toHaveBeenCalledTimes(1);
+    expect(server.formula).toBe('expert');
+    expect(result.current.level).toBe(server.formula);
+  });
+});

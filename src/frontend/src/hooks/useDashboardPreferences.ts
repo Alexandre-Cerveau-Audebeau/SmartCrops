@@ -82,6 +82,13 @@ export function useDashboardPreferences() {
   // so the layout on screen has to be there first. Kept by the chain itself
   // (see `send`), so whoever awaits the chain reads it settled.
   const unsavedRef = useRef(false);
+  // S5 — a switch of formula in flight, from its first write to the layout it
+  // reads back. No change is taken meanwhile: it would be drawn on the layout
+  // of the formula being left, then replaced by the one of the formula
+  // entered, and written under the formula left — refused by R8. The ref
+  // guards the mutators; the state tells the page to take no gesture.
+  const switchingRef = useRef(false);
+  const [switching, setSwitching] = useState(false);
 
   const send = useCallback((next: Layout, keepalive: boolean) => {
     // S2 — the tail of the chain settles the account of what the server
@@ -193,9 +200,14 @@ export function useDashboardPreferences() {
     [flush]
   );
 
-  /** Applies a layout locally and schedules its write. The ONE side-effect path. */
+  /**
+   * Applies a layout locally and schedules its write. The ONE side-effect path
+   * — and so the one place a change is refused while a switch is in flight
+   * (S5): nothing is drawn that the switch would then take away.
+   */
   const commit = useCallback(
     (next: Layout) => {
+      if (switchingRef.current) return;
       layoutRef.current = next;
       unsavedRef.current = true;
       setLayout(next);
@@ -296,10 +308,15 @@ export function useDashboardPreferences() {
    * layout as they were and says so (« Modifications non enregistrées »): no
    * switch ever archives a layout other than the one on screen. Resolves true
    * once the page stands at the new formula, false otherwise.
+   *
+   * One switch at a time, and no change during it (S5): a second choice is
+   * refused, as is any edit, until the page stands at one formula again.
    */
   const setLevel = useCallback(
     async (level: DashboardLevel): Promise<boolean> => {
-      if (!layoutRef.current) return false;
+      if (!layoutRef.current || switchingRef.current) return false;
+      switchingRef.current = true;
+      setSwitching(true);
       try {
         if (!(await persist())) {
           setSaveState('error');
@@ -318,6 +335,9 @@ export function useDashboardPreferences() {
       } catch {
         setSaveState('error');
         return false;
+      } finally {
+        switchingRef.current = false;
+        setSwitching(false);
       }
     },
     [persist]
@@ -345,6 +365,8 @@ export function useDashboardPreferences() {
     loading,
     loadError,
     saveState,
+    /** A switch of formula is in flight: the page takes no gesture that changes the layout. */
+    switching,
     adjusted: layout && capabilities ? isAdjusted(blocks, capabilities) : false,
     reload,
     setBlocks,

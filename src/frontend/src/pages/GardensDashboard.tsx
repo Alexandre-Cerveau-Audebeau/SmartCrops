@@ -100,6 +100,7 @@ export default function GardensDashboard() {
     loading,
     loadError,
     saveState,
+    switching,
     adjusted,
     reload,
     setBlocks,
@@ -935,6 +936,7 @@ export default function GardensDashboard() {
         level={level}
         capabilities={capabilities}
         blocks={blocks}
+        switching={switching}
         preview={galleryPreview}
         onClose={() => setPanelOpen(false)}
         onLevelChange={setLevel}

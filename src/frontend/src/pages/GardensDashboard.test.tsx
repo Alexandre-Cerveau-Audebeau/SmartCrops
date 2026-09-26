@@ -1094,6 +1094,36 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     ).toEqual([]);
   });
 
+  // SMA-448, PR #293, fix round 1 — S5: while a switch is on the wire the
+  // panel takes no gesture, so none can be made and then lost — its levels,
+  // its reset and its « + » are disabled until the page stands at the new
+  // formula.
+  it('while a switch is in flight the panel takes no gesture: its levels, its reset and its « + » are disabled until the new formula stands', async () => {
+    let release!: () => void;
+    vi.mocked(changeFormula).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        })
+    );
+    await openPanel();
+
+    fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
+    await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('expert'));
+
+    for (const name of [/Novice/, /Gardener/, /Expert/]) {
+      expect(screen.getByRole('radio', { name })).toBeDisabled();
+    }
+    expect(screen.getByRole('button', { name: 'Reset to the Gardener level' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add Harvest' })).toBeDisabled();
+
+    servePreferences('expert');
+    release();
+    await waitFor(() => expect(screen.getByRole('radio', { name: /Expert/ })).toBeChecked());
+    expect(screen.getByRole('radio', { name: /Novice/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Reset to the Expert level' })).toBeEnabled();
+  });
+
   it('says so when nothing is hidden', async () => {
     servePreferences('expert');
 

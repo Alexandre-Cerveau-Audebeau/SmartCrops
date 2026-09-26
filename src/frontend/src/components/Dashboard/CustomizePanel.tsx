@@ -39,6 +39,12 @@ interface Props {
   capabilities: FormulaCapabilities | null;
   /** Every block - the gallery reads the hidden ones. */
   blocks: DashboardBlock[];
+  /**
+   * A switch of formula is in flight (SMA-448, PR #293, fix round 1, S5): the
+   * levels, the reset and the « + » take no gesture until the page stands at
+   * one formula again — none can be made, then lost.
+   */
+  switching: boolean;
   /** A hidden widget's headline figure, or null when it has none yet. */
   preview?: (key: DashboardBlockKey) => GalleryPreview | null;
   onClose: () => void;
@@ -59,6 +65,7 @@ export default function CustomizePanel({
   level,
   capabilities,
   blocks,
+  switching,
   preview,
   onClose,
   onLevelChange,
@@ -138,6 +145,7 @@ export default function CustomizePanel({
                 <FormControlLabel
                   key={option}
                   value={option}
+                  disabled={switching}
                   control={<Radio size="small" />}
                   sx={{
                     m: 0,
@@ -190,6 +198,7 @@ export default function CustomizePanel({
             size="small"
             startIcon={<RestartAltOutlinedIcon />}
             onClick={onReset}
+            disabled={switching}
           >
             {t('dashboard.panel.reset', {
               level: t(`dashboard.levels.${level}.name`),
@@ -342,6 +351,7 @@ export default function CustomizePanel({
                       glyph the panel had. */}
                   <IconButton
                     onClick={() => onShow(block.key)}
+                    disabled={switching}
                     aria-label={t('dashboard.panel.add', { widget: name })}
                     sx={{
                       ml: 'auto',
@@ -351,6 +361,12 @@ export default function CustomizePanel({
                       backgroundColor: 'primary.main',
                       color: 'primary.contrastText',
                       '&:hover': { backgroundColor: 'primary.dark' },
+                      // The disc says it takes no gesture, as MUI's disabled
+                      // buttons do — not a live green over a dead click.
+                      '&.Mui-disabled': {
+                        backgroundColor: 'action.disabledBackground',
+                        color: 'action.disabled',
+                      },
                     }}
                   >
                     <AddRoundedIcon sx={{ fontSize: 20 }} />
