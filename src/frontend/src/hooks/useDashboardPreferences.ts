@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isAdjusted, presetOf } from '../constants/dashboardCapabilities';
 import {
-  DEFAULT_DASHBOARD_LEVEL,
-  isAdjusted,
-  presetFor,
-} from '../constants/dashboardPresets';
-import {
+  changeFormula,
   fetchDashboardPreferences,
   saveDashboardPreferences,
 } from '../services/dashboardApi';
-import type { DashboardBlock, DashboardLevel } from '../types/Dashboard';
+import {
+  DEFAULT_DASHBOARD_LEVEL,
+  type DashboardBlock,
+  type DashboardLevel,
+  type FormulaCapabilities,
+} from '../types/Dashboard';
 
 /**
  * How long the hook waits after the LAST change before writing (SMA-336).
@@ -43,6 +45,11 @@ interface Layout {
  */
 export function useDashboardPreferences() {
   const [layout, setLayout] = useState<Layout | null>(null);
+  // SMA-448, lot F1 — what the account's formula permits, as the server
+  // served it with the layout: the page draws its widgets, their sizes and
+  // its bar from it. Beside the layout, not in it: the layout is what is
+  // WRITTEN, the capabilities are only ever read.
+  const [capabilities, setCapabilities] = useState<FormulaCapabilities | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -132,18 +139,24 @@ export function useDashboardPreferences() {
     return sent;
   }, []);
 
+  /**
+   * Sends the write the debounce still owes, at once. Returns that write — or
+   * undefined when nothing was pending — so a caller that must know it
+   * LANDED (the formula switch) can wait for it; the save indicator follows
+   * it either way.
+   */
   const flush = useCallback(
-    (keepalive = false) => {
+    (keepalive = false): Promise<unknown> | undefined => {
       const pending = pendingRef.current;
       pendingRef.current = null;
       if (timerRef.current !== null) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
-      if (!pending) return;
-      send(pending, keepalive)
-        .then(() => setSaveState('saved'))
-        .catch(() => setSaveState('error'));
+      if (!pending) return undefined;
+      const sent = send(pending, keepalive);
+      sent.then(() => setSaveState('saved')).catch(() => setSaveState('error'));
+      return sent;
     },
     [send]
   );
@@ -181,12 +194,14 @@ export function useDashboardPreferences() {
         const loaded = { level: preferences.level, blocks: preferences.blocks };
         layoutRef.current = loaded;
         setLayout(loaded);
+        setCapabilities(preferences.capabilities);
         setLoadError(false);
       })
       .catch(() => {
         if (controller.signal.aborted) return;
         layoutRef.current = null;
         setLayout(null);
+        setCapabilities(null);
         setLoadError(true);
       })
       .finally(() => {
@@ -225,21 +240,56 @@ export function useDashboardPreferences() {
   );
 
   /**
-   * Picking a level PRE-CONFIGURES the widgets: it applies that level's preset
-   * (`_spec.md` § 8 — « le niveau pré-configure les widgets »). Manual changes
-   * made afterwards win, which is what makes « Réinitialiser au niveau X » a
-   * distinct gesture rather than a duplicate of this one.
+   * SMA-448, lot F1, S5 — choosing a level is choosing the account's FORMULA,
+   * a right the server holds. It used to apply the level's preset and write
+   * it, which erased the layout of the level left — its order, its sizes, its
+   * visibility and every widget's options (V4, fact F1 of the contract). Now:
+   *
+   * 1. the layout the debounce still owes is written FIRST, so the layout the
+   *    server archives under the formula left is the one on screen;
+   * 2. the server switches the formula (`changeFormula`), archiving that
+   *    layout and restoring the one of the formula entered — or its preset,
+   *    for a formula never visited;
+   * 3. the hook reads back what the server holds, capabilities included.
+   *
+   * A write that fails, or a switch the server refuses — 409, a formula too
+   * small for the account's gardens —, leaves the formula and the layout as
+   * they were and says so (« Modifications non enregistrées »). Resolves true
+   * once the page stands at the new formula, false otherwise.
    */
   const setLevel = useCallback(
-    (level: DashboardLevel) => commit({ level, blocks: presetFor(level) }),
-    [commit]
+    async (level: DashboardLevel): Promise<boolean> => {
+      if (!layoutRef.current) return false;
+      try {
+        await flush();
+        await chainRef.current;
+        setSaveState('pending');
+        await changeFormula(level);
+        const preferences = await fetchDashboardPreferences();
+        const loaded = { level: preferences.level, blocks: preferences.blocks };
+        layoutRef.current = loaded;
+        setLayout(loaded);
+        setCapabilities(preferences.capabilities);
+        setSaveState('saved');
+        return true;
+      } catch {
+        setSaveState('error');
+        return false;
+      }
+    },
+    [flush]
   );
 
-  /** Back to the current level's preset, discarding the manual arrangement. */
+  /**
+   * Back to the current formula's preset, discarding the manual arrangement —
+   * of THIS formula only: the layouts of the others wait in the server's
+   * archive, untouched.
+   */
   const resetToLevel = useCallback(() => {
-    const level = layoutRef.current?.level ?? DEFAULT_DASHBOARD_LEVEL;
-    commit({ level, blocks: presetFor(level) });
-  }, [commit]);
+    const current = layoutRef.current;
+    if (!current || !capabilities) return;
+    commit({ level: current.level, blocks: presetOf(capabilities) });
+  }, [commit, capabilities]);
 
   const level = layout?.level ?? DEFAULT_DASHBOARD_LEVEL;
   const blocks = layout?.blocks ?? [];
@@ -247,10 +297,12 @@ export function useDashboardPreferences() {
   return {
     level,
     blocks,
+    /** What the account's formula permits, as served; null until the layout is read. */
+    capabilities,
     loading,
     loadError,
     saveState,
-    adjusted: layout ? isAdjusted(blocks, level) : false,
+    adjusted: layout && capabilities ? isAdjusted(blocks, capabilities) : false,
     reload,
     setBlocks,
     setLevel,

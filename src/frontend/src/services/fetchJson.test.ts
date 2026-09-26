@@ -6,6 +6,7 @@ import { HttpStatusError } from './httpStatusError';
 function mockFetch(response: {
   ok: boolean;
   status?: number;
+  headers?: Headers;
   text?: () => Promise<string>;
 }) {
   const spy = vi.fn().mockResolvedValue(response);
@@ -69,6 +70,59 @@ describe('fetchJson (SMA-280)', () => {
     await expect(
       fetchJson('/api/contact', { credentials: 'omit' })
     ).rejects.toMatchObject({ status: 429 });
+  });
+
+  // SMA-448, lot F1 — a refusal the server EXPLAINS (RFC 9457, pre-flight
+  // § C.4): the body of an `application/problem+json` response travels on the
+  // error, so a caller branches on its stable `code` and says its reasons.
+  it('carries the problem+json body of a refusal on the error — its code and its reasons', async () => {
+    const problem = {
+      title: 'This formula is too small for the account\'s gardens.',
+      status: 409,
+      code: 'formula.tooSmall',
+      formula: 'novice',
+      reasons: [{ kind: 'gardens', have: 5, limit: 3 }],
+    };
+    mockFetch({
+      ok: false,
+      status: 409,
+      headers: new Headers({ 'content-type': 'application/problem+json; charset=utf-8' }),
+      text: () => Promise.resolve(JSON.stringify(problem)),
+    });
+
+    const error = await fetchJson('/api/formulas/current', { credentials: 'include' }).catch(
+      (caught: unknown) => caught
+    );
+
+    expect(error).toBeInstanceOf(HttpStatusError);
+    expect(error).toMatchObject({ status: 409, problem });
+  });
+
+  it('carries no problem for another body, nor for one that does not parse — still an HttpStatusError', async () => {
+    mockFetch({
+      ok: false,
+      status: 400,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      text: () => Promise.resolve('{"error":"unknown level"}'),
+    });
+    const plain = await fetchJson('/api/dashboard/preferences', { credentials: 'include' }).catch(
+      (caught: unknown) => caught
+    );
+    expect(plain).toBeInstanceOf(HttpStatusError);
+    expect((plain as HttpStatusError).problem).toBeUndefined();
+
+    mockFetch({
+      ok: false,
+      status: 409,
+      headers: new Headers({ 'content-type': 'application/problem+json' }),
+      text: () => Promise.resolve('not json'),
+    });
+    const garbled = await fetchJson('/api/formulas/current', { credentials: 'include' }).catch(
+      (caught: unknown) => caught
+    );
+    expect(garbled).toBeInstanceOf(HttpStatusError);
+    expect(garbled).toMatchObject({ status: 409 });
+    expect((garbled as HttpStatusError).problem).toBeUndefined();
   });
 
   it('propagates a network rejection untouched (no status attached)', async () => {

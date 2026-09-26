@@ -11,7 +11,7 @@ import { AuthProvider } from '../../contexts/AuthContext';
 import { ColorModeProvider } from '../../contexts/ColorModeContext';
 import { LanguageProvider } from '../../contexts/LanguageContext';
 import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
-import { presetFor } from '../../constants/dashboardPresets';
+import { capabilitiesFor, presetFor } from '../fixtures/formulas';
 import type { DashboardLevel } from '../../types/Dashboard';
 import { SCENE_DATA, weatherAll } from './scenes';
 import { measureCard, wrappedTexts } from './measure';
@@ -66,7 +66,15 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       return answer();
     }
     if (prefsPending) return new Promise<Response>(() => {});
-    return json({ schemaVersion: 1, level, isPreset: true, blocks: presetFor(level), updatedAt: null });
+    // With the formula's capabilities, as the server serves them (SMA-448, S5).
+    return json({
+      schemaVersion: 1,
+      level,
+      isPreset: true,
+      blocks: presetFor(level),
+      updatedAt: null,
+      capabilities: capabilitiesFor(level),
+    });
   }
   if (url.startsWith('/api/dashboard/weather')) return json(weatherAll());
   if (url.startsWith('/api/dashboard')) return json(SCENE_DATA);

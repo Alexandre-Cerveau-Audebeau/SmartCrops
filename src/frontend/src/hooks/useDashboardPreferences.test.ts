@@ -5,32 +5,79 @@ import {
   useDashboardPreferences,
 } from './useDashboardPreferences';
 import {
+  changeFormula,
   fetchDashboardPreferences,
   saveDashboardPreferences,
 } from '../services/dashboardApi';
-import { presetFor } from '../constants/dashboardPresets';
-import type { DashboardPreferences } from '../types/Dashboard';
+import { HttpStatusError } from '../services/httpStatusError';
+import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
+import type { DashboardBlock, DashboardLevel, DashboardPreferences } from '../types/Dashboard';
 
 vi.mock('../services/dashboardApi', () => ({
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
+  changeFormula: vi.fn(),
 }));
 
+/**
+ * The layout the server serves: a formula's preset and its capabilities
+ * (SMA-448, S5 — the capabilities come with the layout), unless overridden.
+ */
 const preferences = (
   overrides: Partial<DashboardPreferences> = {}
-): DashboardPreferences => ({
-  schemaVersion: 1,
-  level: 'gardener',
-  isPreset: true,
-  blocks: presetFor('gardener'),
-  updatedAt: null,
-  ...overrides,
-});
+): DashboardPreferences => {
+  const level = overrides.level ?? 'gardener';
+  return {
+    schemaVersion: 1,
+    level,
+    isPreset: true,
+    blocks: presetFor(level),
+    updatedAt: null,
+    capabilities: capabilitiesFor(level),
+    ...overrides,
+  };
+};
+
+/**
+ * SMA-448, lot F1 — the server's side of a formula switch, in memory: the
+ * contract `FormulaSwitchTests` proves on the real one. A save lands on the
+ * account's current layout, at its formula only (R8 — any other level is a
+ * 400); a switch archives the current layout under the formula it leaves and
+ * brings back the archived layout of the formula it enters, or its preset.
+ */
+function serveFormulas(formula: DashboardLevel, blocks: DashboardBlock[] | null) {
+  const server = {
+    formula,
+    current: blocks,
+    archive: new Map<DashboardLevel, DashboardBlock[]>(),
+  };
+  vi.mocked(fetchDashboardPreferences).mockImplementation(async () =>
+    preferences({
+      level: server.formula,
+      isPreset: server.current === null,
+      blocks: structuredClone(server.current ?? presetFor(server.formula)),
+    })
+  );
+  vi.mocked(saveDashboardPreferences).mockImplementation(async ({ level, blocks: saved }) => {
+    if (level !== server.formula) throw new HttpStatusError('Request failed (400)', 400);
+    server.current = structuredClone(saved);
+  });
+  vi.mocked(changeFormula).mockImplementation(async (to) => {
+    if (to === server.formula) return;
+    if (server.current) server.archive.set(server.formula, server.current);
+    server.current = server.archive.get(to) ?? null;
+    server.archive.delete(to);
+    server.formula = to;
+  });
+  return server;
+}
 
 beforeEach(() => {
   vi.mocked(fetchDashboardPreferences).mockReset();
   vi.mocked(saveDashboardPreferences).mockReset();
   vi.mocked(saveDashboardPreferences).mockResolvedValue(undefined);
+  vi.mocked(changeFormula).mockReset();
+  vi.mocked(changeFormula).mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -153,23 +200,76 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
     expect(result.current.adjusted).toBe(true);
   });
 
-  it('choosing a level applies its preset and schedules the write', async () => {
-    vi.mocked(fetchDashboardPreferences).mockResolvedValue(preferences());
+  // SMA-448, lot F1, S5 — choosing a level used to APPLY its preset and write
+  // it (« choosing a level applies its preset and schedules the write »): the
+  // layout of the level left was gone, its widgets' options with it (V4, F1 of
+  // the contract). A level is now the account's FORMULA: choosing one switches
+  // it on the server, which archives and restores the layouts, and the hook
+  // reads back what the server holds.
+
+  it('V4 — an Expert with four chosen key figures goes Gardener and back: the figures, their order and the arrangement come back', async () => {
+    const figures = ['cities', 'free', 'tips', 'surface'];
+    const [band, first, ...rest] = presetFor('expert');
+    const arranged: DashboardBlock[] = [
+      first!,
+      { ...band!, options: { figures } },
+      ...rest.map((block) => (block.key === 'tips' ? { ...block, size: 'small' as const } : block)),
+    ];
+    serveFormulas('expert', arranged);
     const { result } = renderHook(() => useDashboardPreferences());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    act(() => result.current.setLevel('expert'));
+    await act(async () => {
+      await result.current.setLevel('gardener');
+    });
+    await waitFor(() => expect(result.current.level).toBe('gardener'));
+    expect(result.current.blocks).toEqual(presetFor('gardener'));
 
-    expect(result.current.level).toBe('expert');
+    await act(async () => {
+      await result.current.setLevel('expert');
+    });
+    await waitFor(() => expect(result.current.level).toBe('expert'));
+    expect(result.current.blocks).toEqual(arranged);
+    expect(result.current.blocks.find((block) => block.key === 'keyfigures')?.options).toEqual({ figures });
+  });
+
+  it('choosing a formula writes the pending layout first, then switches it on the server — it never writes a preset', async () => {
+    const server = serveFormulas('gardener', presetFor('gardener'));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // A drag still inside its 700 ms: it must reach the server BEFORE the
+    // switch, or the layout archived under the Gardener would miss it.
+    const moved = presetFor('gardener');
+    moved[0]!.size = 'small';
+    act(() => result.current.setBlocks(moved));
+
+    await act(async () => {
+      await result.current.setLevel('expert');
+    });
+    await waitFor(() => expect(result.current.level).toBe('expert'));
+
+    expect(server.archive.get('gardener')).toEqual(moved);
+    expect(changeFormula).toHaveBeenCalledWith('expert');
+    expect(vi.mocked(saveDashboardPreferences).mock.calls.map((call) => call[0].level)).toEqual(['gardener']);
     expect(result.current.blocks).toEqual(presetFor('expert'));
-    expect(result.current.adjusted).toBe(false);
-    await waitFor(() =>
-      expect(saveDashboardPreferences).toHaveBeenCalledWith(
-        { level: 'expert', blocks: presetFor('expert') },
-        false,
-        expect.any(AbortSignal)
-      )
-    );
+    expect(result.current.capabilities).toEqual(capabilitiesFor('expert'));
+  });
+
+  it('a switch the server refuses (409, a formula too small) leaves the formula and the layout as they were, and says so', async () => {
+    serveFormulas('gardener', presetFor('gardener'));
+    vi.mocked(changeFormula).mockRejectedValue(new HttpStatusError('Request failed (409)', 409));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.setLevel('novice');
+    });
+
+    await waitFor(() => expect(result.current.saveState).toBe('error'));
+    expect(result.current.level).toBe('gardener');
+    expect(result.current.blocks).toEqual(presetFor('gardener'));
+    expect(saveDashboardPreferences).not.toHaveBeenCalled();
   });
 
   it('resetToLevel() restores the current level preset and clears « ajustée »', async () => {
@@ -476,7 +576,10 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
     const { result } = renderHook(() => useDashboardPreferences());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    act(() => result.current.setLevel('novice'));
+    // Awaited since SMA-448 (S5): choosing a level is a switch on the server.
+    await act(async () => {
+      await result.current.setLevel('novice');
+    });
 
     expect(setItem).not.toHaveBeenCalled();
     setItem.mockRestore();

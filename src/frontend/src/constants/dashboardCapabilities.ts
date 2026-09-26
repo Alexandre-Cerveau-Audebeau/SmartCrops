@@ -1,75 +1,71 @@
 import type {
+  DashboardBlock,
   DashboardBlockKey,
-  DashboardLevel,
   DashboardSizeList,
+  FormulaCapabilities,
 } from '../types/Dashboard';
 
 /**
- * SMA-437 lot 1, PR A, step A2 (pre-flight D3) — the sizes a widget may take,
- * per formula. The twin of the server's `DashboardCapabilities.SizesFor`, row
- * for row: the server refuses a size outside this table on write and brings
- * it back to the preset's on read, and the client does the same on read
- * (`dashboardApi.normalize`). Pinned literally on both sides, as the presets
- * are — and both sides are checked against ONE file,
- * `dashboardLayout.reference.json` (PR #287, fix round 1, S2): a row changed
- * here and not there, or not in the file, fails a suite.
- *
- * The rule it carries (A-N11, 23/09): the Full width is an Expert capability,
- * and a widget gets it only once its Full-width version is DRAWN — until then
- * the size would show its Large stretched over 1 152 px. So the table follows
- * what is drawn, not only what is permitted: Jardins, Météo, Statistiques,
- * Compteurs and Ce mois-ci will each add `wide` to their Expert row in their
- * own lot, on both sides. The Key figures band arrived with `wide` as its one
- * size (PR B, step B1 — pre-flight D3: « keyfigures@Expert = [wide] ; tout le
- * reste = [P, M, G] »): it is the one widget drawn in Full width, and a
- * one-size row draws no corner handle (`DashboardGrid`).
- *
- * Which formula HAS a widget is not this table's to say but its preset's (D4):
- * the band's rows at the Novice and Gardener formulas are the default three
- * sizes and are never read — a layout of theirs never carries the band
- * (`dashboardApi.normalize`; on the server, `Validate` and `Merge`).
+ * SMA-448, lot F1, step S5 — what a formula permits, READ from the
+ * capabilities the API serves with the layout (pre-flight § C.2 a, decided by
+ * Alexandre on 26/09). This module used to hold the client's own copy of the
+ * size table and of the presets, twins of the server's kept equal by a shared
+ * reference file (PR #287, S2); the server is now the one source, and the
+ * twins survive only as test fixtures read from that file
+ * (`src/test/fixtures/formulas.ts`). R8 — a right is checked on the server —
+ * becomes the rule of display too: the page draws what it is told is
+ * permitted.
  */
-
-/** Small, Medium, Large — in the order the corner handle steps through them. */
-const THREE_SIZES = ['small', 'medium', 'large'] as const satisfies DashboardSizeList;
-
-/** The Full width alone — the Key figures band's one size (A-N11, C28). */
-const WIDE_ONLY = ['wide'] as const satisfies DashboardSizeList;
 
 /**
- * The Expert's row, widget by widget: the one formula the Full width is ever
- * offered to. A row here, not a rule, so the day a widget is drawn in Full
- * width is a one-line change that a review sees.
+ * The sizes `key` may take at the formula, in the order the corner handle
+ * steps through them; null for a widget the formula does not have — which the
+ * page never renders (`permitsBlock`, and `dashboardApi.normalize`).
  */
-const EXPERT_SIZES: Record<DashboardBlockKey, DashboardSizeList> = {
-  weather: THREE_SIZES,
-  gardens: THREE_SIZES,
-  tips: THREE_SIZES,
-  month: THREE_SIZES,
-  todo: THREE_SIZES,
-  counters: THREE_SIZES,
-  stats: THREE_SIZES,
-  harvest: THREE_SIZES,
-  keyfigures: WIDE_ONLY,
-};
+export function sizesFor(
+  key: DashboardBlockKey,
+  capabilities: FormulaCapabilities
+): DashboardSizeList | null {
+  return capabilities.sizes[key] ?? null;
+}
+
+/** Whether the formula has the widget `key` at all. */
+export function permitsBlock(capabilities: FormulaCapabilities, key: DashboardBlockKey): boolean {
+  return capabilities.widgets.includes(key);
+}
 
 /**
- * The sizes `key` may take at `level`, in the order the corner handle steps
- * through them. The Gardener never gets the Full width (A-N11: « Petit → Moyen
- * → Grand → Petit »); the Novice keeps the three sizes of today's grid.
+ * A FRESH copy of the formula's preset — the caller mutates its result (drag,
+ * resize, hide) and must never reach the capabilities it was served.
  */
-export function sizesFor(key: DashboardBlockKey, level: DashboardLevel): DashboardSizeList {
-  return level === 'expert' ? EXPERT_SIZES[key] : THREE_SIZES;
+export function presetOf(capabilities: FormulaCapabilities): DashboardBlock[] {
+  return capabilities.preset.map((block) => ({ ...block }));
+}
+
+/**
+ * True when the layout no longer matches its formula's preset — the
+ * « · ajustée » suffix of the level chip. Compared on the three things the
+ * user can change in the Edit mode: ORDER (index by index), size and
+ * visibility. `options` is deliberately out (V19): setting a widget — its
+ * figures, its sort, its count — never relabels a layout the user never
+ * rearranged.
+ */
+export function isAdjusted(blocks: DashboardBlock[], capabilities: FormulaCapabilities): boolean {
+  const preset = capabilities.preset;
+  if (blocks.length !== preset.length) return true;
+  return blocks.some(
+    (block, index) =>
+      block.key !== preset[index]!.key ||
+      block.size !== preset[index]!.size ||
+      block.hidden !== preset[index]!.hidden
+  );
 }
 
 /**
  * SMA-437, lot V39, PR B, step B3 — whether the page draws the compact action
- * bar at `level` (A-9, Alexandre 25/09): no bar at the Novice formula — not
- * even with « Créer un jardin » alone —, one at the Gardener and the Expert
- * formulas. A capability of the formula, not a consequence of the header's
- * buttons: today's Novice grid still carries « Modifier » and « Personnaliser
- * » (pre-flight, § C.7), and the Novice lot is the one that removes them.
+ * bar (A-9, Alexandre 25/09): none at the Novice formula, one at the Gardener
+ * and the Expert formulas — as the formula's capabilities say.
  */
-export function hasActionBar(level: DashboardLevel): boolean {
-  return level !== 'novice';
+export function hasActionBar(capabilities: FormulaCapabilities): boolean {
+  return capabilities.compactBar;
 }

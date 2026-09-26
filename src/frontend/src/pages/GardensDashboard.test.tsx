@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
-import { presetFor } from '../constants/dashboardPresets';
+import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import {
   dashboardFixture as dashboardWith,
   gardenFixture,
@@ -37,6 +37,7 @@ vi.mock('../services/dashboardApi', () => ({
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
   fetchDashboardData: vi.fn(),
+  changeFormula: vi.fn(),
 }));
 
 // SMA-336 PR 3b/5 — the weather aggregate and the profile city the Weather
@@ -54,6 +55,7 @@ vi.mock('../services/profileApi', () => ({ fetchProfile: vi.fn() }));
 
 import GardensDashboard from './GardensDashboard';
 import {
+  changeFormula,
   fetchDashboardData,
   fetchDashboardPreferences,
   saveDashboardPreferences,
@@ -86,6 +88,7 @@ function servePreferences(level: DashboardLevel, blocks?: DashboardBlock[]) {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level,
+    capabilities: capabilitiesFor(level),
     isPreset: blocks === undefined,
     blocks: blocks ?? presetFor(level),
     updatedAt: null,
@@ -473,6 +476,7 @@ describe('GardensDashboard — page states (SMA-336)', () => {
     resolve({
       schemaVersion: 1,
       level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: true,
       blocks: presetFor('gardener'),
       updatedAt: null,
@@ -487,6 +491,7 @@ describe('GardensDashboard — page states (SMA-336)', () => {
       .mockResolvedValueOnce({
         schemaVersion: 1,
         level: 'gardener',
+        capabilities: capabilitiesFor('gardener'),
         isPreset: true,
         blocks: presetFor('gardener'),
         updatedAt: null,
@@ -976,21 +981,24 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(screen.getByRole('radiogroup', { name: 'Level' })).toBeInTheDocument();
   });
 
-  it('choosing a level applies its preset and persists it', async () => {
+  // SMA-448, lot F1, S5 — this test used to pin « choosing a level applies its
+  // preset and persists it »: the page wrote the Expert preset over the layout
+  // it left (V4, fact F1 of the contract). Choosing a level now switches the
+  // account's formula on the server, and the page draws what the server then
+  // holds — here the Expert preset, for a formula never visited.
+  it('choosing a level switches the formula on the server, then draws the layout the server holds', async () => {
+    vi.mocked(changeFormula).mockResolvedValue(undefined);
     await openPanel();
+    // What the server holds once the account is Expert.
+    servePreferences('expert');
 
     fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
 
     // The Expert preset: the Key figures band, then the eight (PR B, B1).
     await waitFor(() => expect(renderedKeys()).toHaveLength(9));
     expect(await screen.findByText('Expert view')).toBeInTheDocument();
-    await waitFor(() =>
-      expect(saveDashboardPreferences).toHaveBeenCalledWith(
-        { level: 'expert', blocks: presetFor('expert') },
-        false,
-        expect.any(AbortSignal)
-      )
-    );
+    expect(changeFormula).toHaveBeenCalledWith('expert');
+    expect(saveDashboardPreferences).not.toHaveBeenCalled();
   });
 
   it('the reset names the current level and restores its preset', async () => {
@@ -1051,6 +1059,39 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
 
     await waitFor(() => expect(renderedKeys()).toContain('harvest'));
     expect(renderedKeys()).not.toContain('stats');
+  });
+
+  // SMA-448, lot F1, S5 — the gallery offers the widgets of the FORMULA, as the
+  // served capabilities list them: a hidden block they do not permit is never
+  // offered back, whatever the layout carries.
+  it('offers in the gallery only the widgets the served capabilities permit — never a hidden block they do not', async () => {
+    servePreferences('gardener', [
+      ...presetFor('gardener'),
+      { key: 'stats', size: 'large', hidden: true },
+    ]);
+
+    await openPanel();
+    const gallery = screen.getByRole('dialog', { name: 'Customize' });
+
+    expect(within(gallery).getByText('Harvest')).toBeInTheDocument();
+    expect(within(gallery).queryByText('Statistics')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add Statistics' })).toBeNull();
+  });
+
+  // SMA-448, lot F1, S5 — V4 on the page: choosing a formula in the panel
+  // switches it on the server, which keeps every formula's layout; the page
+  // never writes the chosen formula's preset over what the user arranged.
+  it('choosing another formula in the panel switches it on the server — it never writes its preset', async () => {
+    vi.mocked(changeFormula).mockResolvedValue(undefined);
+    await openPanel();
+
+    fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
+
+    await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('expert'));
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(
+      vi.mocked(saveDashboardPreferences).mock.calls.filter(([saved]) => saved.level === 'expert')
+    ).toEqual([]);
   });
 
   it('says so when nothing is hidden', async () => {

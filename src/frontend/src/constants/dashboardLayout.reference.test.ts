@@ -4,19 +4,24 @@ import {
   DASHBOARD_BLOCK_KEYS,
   DASHBOARD_LEVELS,
   DASHBOARD_SIZES,
+  DEFAULT_DASHBOARD_LEVEL,
   NON_HIDABLE_BLOCK,
 } from '../types/Dashboard';
-import { sizesFor } from './dashboardCapabilities';
-import { DEFAULT_DASHBOARD_LEVEL, presetFor } from './dashboardPresets';
 
 // PR #287, fix round 1, S2 (CodeRabbit, both surfaces) — the dashboard's
-// vocabulary, its size table and its presets exist twice, here and in
-// `SmartCrops.Core/Dashboard`, each pinned by its own literals: a change made
-// on one side only failed no test. Both suites now compare THEIR constants to
-// the one reference file, `dashboardLayout.reference.json`; the server's twin
-// of this test is `DashboardLayoutReferenceTests.cs`, which reads the same
-// file. A drift on either side fails that side's suite.
-describe('the dashboard layout reference — the client’s constants against the file both sides read', () => {
+// vocabulary, its size table and its presets existed twice, here and in
+// `SmartCrops.Core/Dashboard`, each pinned by its own literals: both suites
+// compared THEIR constants to the one reference file,
+// `dashboardLayout.reference.json`.
+//
+// SMA-448, lot F1, S5 — the client no longer holds the size table nor the
+// presets: the API serves them with the layout (pre-flight § C.2 a), and the
+// file is the contract of that SERVED catalogue, tested on the server
+// (`FormulasControllerTests`, `DashboardLayoutReferenceTests.cs`). What the
+// client still owns is the VOCABULARY it parses the wire with — the keys, the
+// sizes, the levels — and that stays checked here. The client's tests serve
+// the catalogue through `src/test/fixtures/formulas.ts`, which reads this file.
+describe('the dashboard layout reference — the client’s vocabulary against the file both sides read', () => {
   it('lists the blocks in the reference’s order', () => {
     expect([...DASHBOARD_BLOCK_KEYS]).toEqual(reference.blocks);
   });
@@ -34,12 +39,8 @@ describe('the dashboard layout reference — the client’s constants against th
     expect(NON_HIDABLE_BLOCK).toBe(reference.nonHidableBlock);
   });
 
-  it.each(DASHBOARD_LEVELS)('offers every block, at %s, the sizes of the reference’s table, in its order', (level) => {
-    const table = Object.fromEntries(DASHBOARD_BLOCK_KEYS.map((key) => [key, [...sizesFor(key, level)]]));
-    expect(table).toEqual(reference.sizesFor[level]);
-  });
-
-  it.each(DASHBOARD_LEVELS)('draws the %s preset the reference describes, block by block', (level) => {
-    expect(presetFor(level)).toEqual(reference.presets[level]);
+  it('describes every formula the client knows, and only them', () => {
+    expect(Object.keys(reference.formulas)).toEqual([...DASHBOARD_LEVELS]);
+    expect(Object.keys(reference.presets)).toEqual([...DASHBOARD_LEVELS]);
   });
 });

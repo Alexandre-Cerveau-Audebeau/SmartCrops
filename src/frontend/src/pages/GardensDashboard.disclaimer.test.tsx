@@ -13,7 +13,7 @@ import { contrast, resolveColor } from '../test/contrast';
 import { rulesFor } from '../test/dashboardDom';
 import { dashboardFixture, gardenFixture } from '../test/fixtures/dashboard';
 import { linkFixture, locationFixture, weatherFixture } from '../test/fixtures/weather';
-import { presetFor } from '../constants/dashboardPresets';
+import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import { WEATHER_BEARING_BLOCKS } from '../components/Dashboard/weatherDisclaimer';
 import type { DashboardBlockKey, DashboardLevel } from '../types/Dashboard';
 import type { DashboardWeatherData, WeatherStatus } from '../types/DashboardWeather';
@@ -151,6 +151,7 @@ function serveLayoutShowing(
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level,
+    capabilities: capabilitiesFor(level),
     isPreset: false,
     blocks: presetFor(level).map((block) => ({
       ...block,
@@ -216,6 +217,7 @@ beforeEach(() => {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level: 'gardener',
+    capabilities: capabilitiesFor('gardener'),
     isPreset: true,
     blocks: presetFor('gardener'),
     updatedAt: null,
@@ -288,6 +290,7 @@ describe('GardensDashboard — the weather warning under the grid (SMA-387)', ()
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
       level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks: presetFor('gardener').map((block) =>
         block.key === 'weather' ? { ...block, size: 'large' } : block
@@ -449,6 +452,7 @@ describe('GardensDashboard — the Key figures band bears the warning by what it
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
       level: 'expert',
+      capabilities: capabilitiesFor('expert'),
       isPreset: false,
       blocks: presetFor('expert').map((block) => ({
         ...block,

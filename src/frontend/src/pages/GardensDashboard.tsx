@@ -42,7 +42,7 @@ import WeatherOptionsPanel from '../components/Dashboard/blocks/WeatherOptionsPa
 import LocationDialog from '../components/Dashboard/LocationDialog';
 import type { LocationTarget } from '../components/Dashboard/locationTools';
 import { weatherDisclaimerVisible } from '../components/Dashboard/weatherDisclaimer';
-import { sizesFor } from '../constants/dashboardCapabilities';
+import { hasActionBar, sizesFor } from '../constants/dashboardCapabilities';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useDashboardWeather } from '../hooks/useDashboardWeather';
@@ -96,6 +96,7 @@ export default function GardensDashboard() {
   const {
     level,
     blocks,
+    capabilities,
     loading,
     loadError,
     saveState,
@@ -264,7 +265,16 @@ export default function GardensDashboard() {
   // SMA-437, lot V39, PR B — the compact action bar: mounted at the formulas
   // that have one (A-9), armed once the layout is read (A-10.2), shown when
   // the header's repeated buttons pass under the site navbar plus the bar.
-  const actionBar = useCompactActionBar(level, !loading && !loadError, editing);
+  // SMA-448, S5: « have one » is the formula's served capability. Until it is
+  // read — loading, or a layout that could not be read — the page stands at
+  // the default formula and keeps the bar mounted, unarmed, as before: it
+  // never shows then (`ready` is false), and a Novice's comes off as soon as
+  // its capabilities say so.
+  const actionBar = useCompactActionBar(
+    capabilities ? hasActionBar(capabilities) : true,
+    !loading && !loadError,
+    editing
+  );
 
   // B8 — every way in or out of Edit mode goes through here, so a toggle
   // under the bar leaves what the user looks at where it was.
@@ -878,21 +888,22 @@ export default function GardensDashboard() {
         </Box>
       )}
 
-      {!loading && !loadError && (
+      {!loading && !loadError && capabilities && (
         <DashboardGrid
           blocks={blocks}
-          level={level}
+          capabilities={capabilities}
           editing={editing}
           onReorder={setBlocks}
           onHide={(key) =>
             patchBlock(key, (block) => ({ ...block, hidden: true }))
           }
           // Through the sizes the widget may take at THIS formula (SMA-437,
-          // A-N11): the Gardener's cycle never reaches the Full width.
+          // A-N11), as the server serves them (SMA-448, S5): the Gardener's
+          // cycle never reaches the Full width.
           onResize={(key) =>
             patchBlock(key, (block) => ({
               ...block,
-              size: nextDashboardSize(block.size, sizesFor(block.key, level)),
+              size: nextDashboardSize(block.size, sizesFor(block.key, capabilities) ?? ([block.size] as const)),
             }))
           }
           renderBlock={renderBlock}
@@ -922,6 +933,7 @@ export default function GardensDashboard() {
       <CustomizePanel
         open={panelOpen}
         level={level}
+        capabilities={capabilities}
         blocks={blocks}
         preview={galleryPreview}
         onClose={() => setPanelOpen(false)}

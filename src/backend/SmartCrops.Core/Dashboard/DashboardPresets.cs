@@ -28,10 +28,10 @@ public record DashboardPresetBlock(string Key, string Size, bool Hidden);
 /// also the fallback the API serves when a user has no saved layout, or one
 /// stored under an unknown schema version.</para>
 ///
-/// <para>Byte-identical to the client's <c>constants/dashboardPresets.ts</c>,
-/// and checked so: both sides compare their presets to
-/// <c>src/frontend/src/constants/dashboardLayout.reference.json</c> (PR #287,
-/// fix round 1, S2).</para>
+/// <para>Checked against <c>src/frontend/src/constants/dashboardLayout.reference.json</c>
+/// (PR #287, fix round 1, S2). The client kept a byte-identical copy until
+/// SMA-448 (lot F1): it now receives the preset with the formula's
+/// capabilities, served by <see cref="FormulaCatalog"/>.</para>
 /// </summary>
 public static class DashboardPresets
 {
@@ -104,7 +104,8 @@ public static class DashboardPresets
     /// all — whether its preset lists it (pre-flight D4). The minimal right of a
     /// level the controller checks: a block it does not permit is refused on
     /// write and dropped on read. An unknown level reads as the default one, as
-    /// <see cref="For"/> does. The client's twin is <c>permitsBlock</c>.
+    /// <see cref="For"/> does. The client reads the same answer in the widgets
+    /// the formula's capabilities list (SMA-448).
     /// </summary>
     public static bool Permits(string? level, string key) =>
         For(level).Any(block => block.Key == key);

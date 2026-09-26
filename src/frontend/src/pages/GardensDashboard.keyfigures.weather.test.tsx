@@ -44,6 +44,7 @@ import { fetchDashboardWeather } from '../services/weatherApi';
 import { fetchProfile } from '../services/profileApi';
 import GardensDashboard from './GardensDashboard';
 import { fetchDashboardData, fetchDashboardPreferences, saveDashboardPreferences } from '../services/dashboardApi';
+import { capabilitiesFor } from '../test/fixtures/formulas';
 
 // SMA-437 lot 1, PR B, round 1, É8 — A PAGE NEVER CONTRADICTS ITSELF: the Key
 // figures band reads the weather the page reads. Each tile that depends on the
@@ -98,6 +99,7 @@ function serve(figures: KeyFigure[], size: 'medium' | 'large' = 'medium') {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level: 'expert',
+    capabilities: capabilitiesFor('expert'),
     isPreset: false,
     blocks,
     updatedAt: null,

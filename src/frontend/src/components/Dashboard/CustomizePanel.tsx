@@ -14,12 +14,14 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import { BLOCK_ICONS } from './blockIcons';
+import { permitsBlock } from '../../constants/dashboardCapabilities';
 import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
 import {
   DASHBOARD_LEVELS,
   type DashboardBlock,
   type DashboardBlockKey,
   type DashboardLevel,
+  type FormulaCapabilities,
   type GalleryPreview,
 } from '../../types/Dashboard';
 
@@ -30,6 +32,11 @@ const LEVEL_LABEL_ID = 'dashboard-customize-level-label';
 interface Props {
   open: boolean;
   level: DashboardLevel;
+  /**
+   * What the formula permits, as served (SMA-448, S5); null until the layout
+   * is read. The gallery offers only the widgets it lists.
+   */
+  capabilities: FormulaCapabilities | null;
   /** Every block - the gallery reads the hidden ones. */
   blocks: DashboardBlock[];
   /** A hidden widget's headline figure, or null when it has none yet. */
@@ -50,6 +57,7 @@ interface Props {
 export default function CustomizePanel({
   open,
   level,
+  capabilities,
   blocks,
   preview,
   onClose,
@@ -58,7 +66,12 @@ export default function CustomizePanel({
   onShow,
 }: Props) {
   const { t } = useTranslation();
-  const hidden = blocks.filter((block) => block.hidden);
+  // The gallery offers what the FORMULA has (SMA-448, S5 — R1): a hidden block
+  // the served capabilities do not list is never offered back, whatever the
+  // layout carries; nothing is offered before they are read.
+  const hidden = blocks.filter(
+    (block) => block.hidden && capabilities !== null && permitsBlock(capabilities, block.key)
+  );
 
   const sectionTitleSx = {
     fontSize: `${DASHBOARD_TYPE.title}px`,
