@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -8,6 +9,7 @@ import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import { dashboardFixture } from '../test/fixtures/dashboard';
 import { linkFixture, weatherFixture } from '../test/fixtures/weather';
 import { gardens as sceneGardens, varieties as sceneVarieties, weatherAll } from '../test/layout/scenes';
+import { rulesFor } from '../test/dashboardDom';
 import type { DashboardBlock, DashboardLevel } from '../types/Dashboard';
 import type { DashboardData } from '../types/DashboardData';
 import type { DashboardWeatherData } from '../types/DashboardWeather';
@@ -298,6 +300,9 @@ function serveFormulas(formula: DashboardLevel, blocks: DashboardBlock[] | null)
 const renderedKeys = () =>
   [...document.querySelectorAll('[data-widget]')].map((node) => node.getAttribute('data-widget'));
 
+/** The SMA-174 patience for a switch's round trips under the whole suite's load, below the 20 s test timeout. */
+const PATIENCE = { timeout: 10000 };
+
 // SMA-448, lot F2, N3 — A NOVICE IS NEVER TRAPPED. The Novice page has no
 // « Personnaliser », and the panel was the one door to another formula: until
 // lot F3 builds the choice screen behind the chip (contract § 4.1, § 4.2),
@@ -354,7 +359,7 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close without changing formula' }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull(), PATIENCE);
     expect(changeFormula).not.toHaveBeenCalled();
     expect(cards()).toHaveLength(3);
     await waitFor(() => expect(document.activeElement).toBe(chip()));
@@ -375,23 +380,23 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
 
     fireEvent.click(within(dialog).getByRole('radio', { name: /Gardener/ }));
 
-    await waitFor(() => expect(renderedKeys()).toHaveLength(6));
+    await waitFor(() => expect(renderedKeys()).toHaveLength(6), PATIENCE);
     expect(renderedKeys().slice(0, 2)).toEqual(['gardens', 'weather']);
     expect(cards()).toHaveLength(0);
     expect(server.formula).toBe('gardener');
     expect(changeFormula).toHaveBeenCalledWith('gardener');
     // A Novice has no layout to write before the switch: nothing was sent.
     expect(saveDashboardPreferences).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull(), PATIENCE);
     // The Gardener's chip — « · adjusted », its layout being rearranged — a
     // plain chip again, not a button.
-    expect(await screen.findByText('Gardener view · adjusted')).toBeInTheDocument();
+    expect(await screen.findByText('Gardener view · adjusted', {}, PATIENCE)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /change formula/u })).toBeNull();
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     // The chip the chooser was opened from opens nothing now: the focus goes
     // to « Create Garden », the control every formula's header has — never
     // to the body.
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Create Garden' })));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Create Garden' })), PATIENCE);
   });
 
   it('a formula the server refuses is said in the chooser, with each reason served — the formula stays, the chip stays a button, the indicator says nothing false', async () => {
@@ -440,16 +445,16 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
 
     fireEvent.click(within(dialog).getByRole('radio', { name: /Expert/ }));
 
-    expect(await screen.findByText('Couldn’t load your dashboard.')).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull());
+    expect(await screen.findByText('Couldn’t load your dashboard.', {}, PATIENCE)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull(), PATIENCE);
     const retry = screen.getByRole('button', { name: 'Try again' });
-    await waitFor(() => expect(document.activeElement).toBe(retry));
+    await waitFor(() => expect(document.activeElement).toBe(retry), PATIENCE);
     expect(screen.queryByText('Changes not saved')).toBeNull();
 
     fireEvent.click(retry);
 
-    await waitFor(() => expect(renderedKeys()).toHaveLength(9));
-    expect(await screen.findByText('Expert view')).toBeInTheDocument();
+    await waitFor(() => expect(renderedKeys()).toHaveLength(9), PATIENCE);
+    expect(await screen.findByText('Expert view', {}, PATIENCE)).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull();
   });
 
@@ -485,5 +490,182 @@ describe('the Novice page — the provisional exit: the chip opens a choice of f
 
     expect(await within(dialog).findByText('Impossible de passer en Jardinier : 12 jardins pour 10 au plus')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Passer à la formule Jardinier →', hidden: true })).toBeInTheDocument();
+  });
+});
+
+// SMA-448, lot F2, N4 — ACCESSIBILITY (contract V16): the cards as a named
+// list with one heading per garden; everything at the keyboard, the focus
+// visible; the live regions born empty and kept mounted, never assertive;
+// the decorative glyphs hidden from assistive technology; no state written
+// in an effect (the page's one effect moves the focus, nothing else).
+describe('the Novice page — at the keyboard and for a screen reader (SMA-448 lot F2, N4)', () => {
+  /** What the focus is on, named as a screen reader would name it: the accessible name, or the marker of the node. */
+  const focused = () => {
+    const active = document.activeElement as HTMLElement | null;
+    if (!active || active === document.body) return 'body';
+    return active.getAttribute('aria-label') ?? active.textContent ?? active.tagName;
+  };
+
+  it('lists the cards as a named list — one list item and one h2 per garden, in a `ul` — and nothing else of the page is an h2', async () => {
+    renderPage();
+
+    const list = await screen.findByRole('list', { name: 'Your gardens' });
+    expect(list.tagName).toBe('UL');
+    const items = within(list).getAllByRole('listitem');
+    expect(items).toHaveLength(3);
+    for (const item of items) {
+      expect(item.tagName).toBe('LI');
+      expect(within(item).getAllByRole('heading', { level: 2 })).toHaveLength(1);
+    }
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(3);
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  });
+
+  it('reaches at the keyboard, card after card, the name, the pencil, the bin and the weather door — and never the chevron', async () => {
+    renderPage();
+    await waitFor(() => expect(document.querySelectorAll('[data-novice-weather]')).toHaveLength(3));
+    const user = userEvent.setup();
+
+    // From the header: the chip, then « Create Garden », then the first card.
+    const reached: string[] = [];
+    for (let step = 0; step < 14; step += 1) {
+      await user.tab();
+      reached.push(focused());
+    }
+    expect(reached).toEqual([
+      'Novice view — change formula',
+      'Create Garden',
+      'Terrasse',
+      'Edit Terrasse',
+      'Delete Terrasse',
+      'Change the location of Terrasse',
+      'Balcon sud',
+      'Edit Balcon sud',
+      'Delete Balcon sud',
+      'Change the location of Balcon sud',
+      'Potager du fond',
+      'Edit Potager du fond',
+      'Delete Potager du fond',
+      'Change the location of Potager du fond',
+    ]);
+    // The chevron is never a stop: the name is the card's one link.
+    for (const chevron of document.querySelectorAll('[data-novice-chevron]')) {
+      expect(chevron).toHaveAttribute('tabindex', '-1');
+    }
+    // …and after the last card, the foot's link.
+    await user.tab();
+    expect(focused()).toBe('Switch to the Gardener formula →');
+  });
+
+  it('declares a visible focus ring on the card’s own controls — the name, the weather door — and on the chip', async () => {
+    renderPage();
+    await waitFor(() => expect(document.querySelectorAll('[data-novice-weather]')).toHaveLength(3));
+
+    const name = within(cardOf('g1')).getByRole('link', { name: 'Terrasse' });
+    const door = cardOf('g1').querySelector('[data-novice-weather]')!;
+    const chip = screen.getByRole('button', { name: 'Novice view — change formula' });
+    for (const control of [name, door]) {
+      const rules = rulesFor(control).replace(/\s+/g, '');
+      expect(rules).toContain(':focus-visible');
+      expect(rules).toMatch(/outline:2pxsolid/u);
+    }
+    const chipRules = rulesFor(chip).replace(/\s+/g, '');
+    expect(chipRules).toContain('.Mui-focusVisible');
+    expect(chipRules).toMatch(/outline:2pxsolid/u);
+  });
+
+  it('keeps its live regions born empty and mounted — the header’s save indicator, the chooser’s refusal — and none assertive', async () => {
+    renderPage();
+    await waitFor(() => expect(cards()).toHaveLength(3));
+
+    const indicator = document.querySelector('[data-save-status]');
+    expect(indicator).not.toBeNull();
+    expect(indicator).toHaveAttribute('role', 'status');
+    expect(indicator).toHaveTextContent('');
+    expect(document.querySelector('[aria-live="assertive"]')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Novice view — change formula' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Change formula' });
+    expect(within(dialog).getByRole('status')).toHaveTextContent('');
+    expect(document.querySelector('[aria-live="assertive"]')).toBeNull();
+  });
+
+  it('hides the decorative glyphs from assistive technology: the task’s, the chip’s, the chevron’s — the weather door and the buttons keep their names', async () => {
+    renderPage();
+    await waitFor(() => expect(document.querySelectorAll('[data-novice-weather]')).toHaveLength(3));
+    const terrasse = cardOf('g1');
+
+    expect(terrasse.querySelector('[data-novice-task] svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(terrasse.querySelector('[data-novice-chevron]')).toHaveAttribute('aria-hidden', 'true');
+    for (const glyph of terrasse.querySelectorAll('.MuiChip-root svg')) {
+      expect(glyph).toHaveAttribute('aria-hidden', 'true');
+    }
+    expect(within(terrasse).getByRole('button', { name: 'Change the location of Terrasse' })).toBeInTheDocument();
+    expect(within(terrasse).getByRole('button', { name: 'Edit Terrasse' })).toBeInTheDocument();
+    expect(within(terrasse).getByRole('button', { name: 'Delete Terrasse' })).toBeInTheDocument();
+  });
+
+  it('Escape closes the chooser — and does nothing while a switch is on the wire, when the choice takes no gesture (S5)', async () => {
+    let release!: () => void;
+    vi.mocked(changeFormula).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        })
+    );
+    const server = serveFormulas('novice', null);
+    vi.mocked(changeFormula).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = () => {
+            server.formula = 'expert';
+            resolve();
+          };
+        })
+    );
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Change formula' });
+
+    fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull(), PATIENCE);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
+    const reopened = await screen.findByRole('dialog', { name: 'Change formula' });
+    fireEvent.click(within(reopened).getByRole('radio', { name: /Expert/ }));
+    await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('expert'));
+    for (const name of [/Novice/, /Gardener/, /Expert/]) {
+      expect(within(reopened).getByRole('radio', { name })).toBeDisabled();
+    }
+    expect(within(reopened).getByRole('button', { name: 'Close without changing formula' })).toBeDisabled();
+    fireEvent.keyDown(reopened, { key: 'Escape', code: 'Escape' });
+    expect(screen.getByRole('dialog', { name: 'Change formula' })).toBeInTheDocument();
+
+    release();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change formula' })).toBeNull(), PATIENCE);
+    expect(await screen.findByText('Expert view', {}, PATIENCE)).toBeInTheDocument();
+  });
+
+  it('opens the rename and the delete dialogs from a card, and gives the focus back to the button they were opened from', async () => {
+    renderPage();
+    await waitFor(() => expect(cards()).toHaveLength(3));
+
+    const pencil = within(cardOf('g1')).getByRole('button', { name: 'Edit Terrasse' });
+    pencil.focus();
+    fireEvent.click(pencil);
+    const rename = await screen.findByRole('dialog', { name: 'Edit garden' });
+    expect(within(rename).getByRole('textbox', { name: /^Name/ })).toHaveValue('Terrasse');
+    fireEvent.click(within(rename).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit garden' })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(pencil));
+
+    const bin = within(cardOf('g2')).getByRole('button', { name: 'Delete Balcon sud' });
+    bin.focus();
+    fireEvent.click(bin);
+    const remove = await screen.findByRole('dialog', { name: 'Delete this garden?' });
+    expect(within(remove).getByText(/“Balcon sud”/u)).toBeInTheDocument();
+    fireEvent.click(within(remove).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete this garden?' })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(bin));
   });
 });
