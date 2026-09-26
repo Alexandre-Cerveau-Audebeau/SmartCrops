@@ -13,6 +13,7 @@ import { placement } from '../fixtures/placements';
 import { linkFixture, locationFixture, weatherFixture, weekFixture } from '../fixtures/weather';
 import { gardenViewOf, type GardenView } from '../../utils/gardenStats';
 import type { KeyFigure } from '../../components/Dashboard/blocks/keyFiguresOptions';
+import { cardBearsWeather, noviceCardsOf, type NoviceCard } from '../../components/Dashboard/noviceCards';
 import { LAYOUT_NOW_MS } from './clock';
 import { presetFor } from '../fixtures/formulas';
 import type { SaveState } from '../../hooks/useDashboardPreferences';
@@ -326,6 +327,113 @@ export const GRID_SCENES: GridScene[] = [
     ] satisfies GridScene['blocks'],
   })),
 ];
+
+/**
+ * SMA-448, lot F2, step N5 (V5: « toute forme nouvelle devient une scène ») —
+ * THE NOVICE PAGE as a scene: the header (the title, its meta line, the chip
+ * that opens the choice of formula, « Créer un jardin »), one card per garden,
+ * the foot message and the weather warning — with 0, 1 and 3 gardens, 5 (an
+ * account beyond the Novice's limit keeps its gardens — « Votre formule —
+ * conservée »), very long garden names, and a garden without a city.
+ */
+export interface NoviceScene {
+  /** `novice-0`, `novice-1`, `novice-3`, `novice-5`, `novice-3-long`, `novice-3-partial`. */
+  name: string;
+  /** How many gardens the page shows. */
+  count: 0 | 1 | 3 | 5;
+  /** Garden names far longer than V34's probe: the one ellipsis a source allows (SMA-436), the task and the plants wrapping. */
+  long?: boolean;
+  /** Balcon sud without a city: the dashed « Ajouter une ville » in a foot. */
+  weather: 'all' | 'partial';
+}
+
+export const NOVICE_SCENES: NoviceScene[] = [
+  { name: 'novice-0', count: 0, weather: 'all' },
+  { name: 'novice-1', count: 1, weather: 'all' },
+  { name: 'novice-3', count: 3, weather: 'all' },
+  { name: 'novice-5', count: 5, weather: 'all' },
+  { name: 'novice-3-long', count: 3, long: true, weather: 'all' },
+  { name: 'novice-3-partial', count: 3, weather: 'partial' },
+];
+
+/** Two more gardens, on the product's own fields — a greenhouse of herbs, a small square of thyme. */
+const serre: DashboardGardenData = {
+  ...terrasse,
+  id: 'g4',
+  name: 'Serre nord',
+  description: null,
+  width: 8,
+  height: 6,
+  cellsJson: null,
+  config: { ...terrasse.config, gardenType: 'greenhouse' },
+  placements: [...many('basil', [[0, 0], [0, 1], [0, 2]]), ...many('mint', [[1, 0], [1, 1]]), ...many('thyme', [[2, 0], [2, 1], [2, 2], [2, 3]])],
+  placementCount: 9,
+  varietyCount: 3,
+  occupiedCells: 9,
+  updatedAt: '2026-09-18T08:00:00Z',
+};
+const carre: DashboardGardenData = {
+  ...potager,
+  id: 'g5',
+  name: 'Carré aromatique',
+  width: 4,
+  height: 4,
+  cellSize: '25cm',
+  config: { ...potager.config, gardenType: 'inground' },
+  placements: [...many('thyme', [[0, 0], [0, 1], [1, 0]]), ...many('rosemary', [[2, 2], [3, 3]])],
+  placementCount: 5,
+  varietyCount: 2,
+  occupiedCells: 5,
+  updatedAt: '2026-09-11T16:00:00Z',
+};
+
+/** The very long names of the long scene — real sentences a gardener might type. */
+export const NOVICE_LONG_NAMES = [
+  'Le grand potager derrière la maison de mes grands-parents, côté verger',
+  'Balcon sud de l’appartement du troisième étage, au-dessus de la rue',
+  'Petite serre en verre tout au fond du jardin, près du vieux cerisier',
+] as const;
+const gardensVeryLong: DashboardGardenData[] = [
+  { ...terrasse, name: NOVICE_LONG_NAMES[0] },
+  { ...balcon, name: NOVICE_LONG_NAMES[1] },
+  { ...potager, name: NOVICE_LONG_NAMES[2] },
+];
+
+/** The weather of a Novice scene: every garden in Écully — but Balcon sud when partial. */
+const noviceWeather = (list: readonly DashboardGardenData[], partial: boolean): DashboardWeatherData =>
+  weatherFixture(
+    [ecully],
+    list.map((garden) =>
+      partial && garden.id === 'g2'
+        ? linkFixture({ gardenId: garden.id, locationKey: null, source: null })
+        : linkFixture({ gardenId: garden.id, locationKey: ecully.key, source: garden.id === 'g3' ? 'garden' : 'profile' })
+    )
+  );
+
+/** What the harness mounts for a Novice scene: its gardens, its cards as the page derives them, the header's figures, whether the warning shows. */
+export interface NoviceSceneData {
+  gardens: DashboardGardenData[];
+  cards: NoviceCard[];
+  figures: { gardens: number; plants: number; surfaceM2: number };
+  /** V1: a card shows a temperature — every scene but the empty one. */
+  warning: boolean;
+}
+
+export function noviceSceneData(scene: NoviceScene): NoviceSceneData {
+  const list = scene.long ? gardensVeryLong : [...gardens, serre, carre].slice(0, scene.count);
+  const sceneViews = new Map(list.map((garden) => [garden.id, gardenViewOf(garden)]));
+  const cards = noviceCardsOf(list, varieties, sceneViews, noviceWeather(list, scene.weather === 'partial'), 'ready');
+  return {
+    gardens: list,
+    cards,
+    figures: {
+      gardens: list.length,
+      plants: list.reduce((sum, garden) => sum + garden.placementCount, 0),
+      surfaceM2: list.reduce((sum, garden) => sum + (sceneViews.get(garden.id)?.surfaceM2 ?? 0), 0),
+    },
+    warning: cards.some(cardBearsWeather),
+  };
+}
 
 /** The scene of one card of a grid scene: the widget at its size, on every garden located. */
 export const gridCardScene = (grid: GridScene, block: GridScene['blocks'][number]): LayoutScene => ({
