@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
@@ -98,6 +98,11 @@ beforeEach(() => {
 
 afterEach(async () => {
   vi.clearAllMocks();
+  // Unmount before the language reset (SMA-174): this hook runs before Testing
+  // Library's automatic cleanup, and the reset used to re-render every mounted
+  // `useTranslation` outside act() — 626 React warnings per CI run from this
+  // file alone, the whole Library re-rendered once more for nothing.
+  cleanup();
   localStorage.clear();
   delete (window as { matchMedia?: unknown }).matchMedia;
   await i18next.changeLanguage('en');
