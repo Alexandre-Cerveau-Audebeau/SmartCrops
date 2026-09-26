@@ -22,7 +22,7 @@ Operational guide for AI coding agents and context for automated review.
 
 - Branch from `develop` → commit → push → open PR → trigger CodeRabbit (`@coderabbitai review`; re-review is **manual**) → harvest → human squash-merge with `--delete-branch`. **Never commit to `develop`. Never auto-merge.**
 - **Harvest = STOP AND REPORT.** CodeRabbit findings live on three disjoint surfaces (GitHub inline comments, GitHub review body, VS Code extension JSON) — cross-check all three; they routinely diverge. **Every finding skipped/deferred/rejected becomes a Linear issue** (labels `cr-deferred`/`cr-rejected` + `tech-debt`/`post-v2`) **before merge**. A trivial fix still goes through push + re-review, never a silent edit.
-- **No merge without green CI.** Known flake: `PlantLibrary.test.tsx` timeout (SMA-174) — re-run the failed job; on a no-code PR it is not a regression.
+- **No merge without green CI.** Vitest runs two projects (`src/frontend/vite.config.ts`): `unit` — every jsdom file — then `layout` — the two Chrome suites of `src/test/layout`, one at a time — so the headless browsers never share the runner with the jsdom workers (SMA-174, fixed at the root). A `PlantLibrary.test.tsx` timeout is a regression to investigate, not a flake to re-run.
 
 ## Pre-flight audit
 
