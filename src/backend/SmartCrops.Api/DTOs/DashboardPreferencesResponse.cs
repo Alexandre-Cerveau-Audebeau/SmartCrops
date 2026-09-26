@@ -22,7 +22,7 @@ public record DashboardBlockDto(
 /// SMA-336 — the dashboard layout of the signed-in user.
 /// </summary>
 /// <param name="SchemaVersion">Shape version of the layout the server understands.</param>
-/// <param name="Level">Experience level: <c>novice</c>, <c>gardener</c> or <c>expert</c>.</param>
+/// <param name="Level">The account's formula — <c>novice</c>, <c>gardener</c> or <c>expert</c> — which decides the level a layout is read at since SMA-448 (lot F1), never the level its document names.</param>
 /// <param name="IsPreset">
 /// True when this layout is the level preset rather than something the user saved
 /// — either they never saved one, or what they saved carries a schema version
@@ -31,12 +31,19 @@ public record DashboardBlockDto(
 /// </param>
 /// <param name="Blocks">Every block the level has — the eight widgets, and the Key figures band at the Expert level (SMA-437) — in display order, hidden ones included.</param>
 /// <param name="UpdatedAt">When the stored layout was last written; null for a preset.</param>
+/// <param name="Capabilities">
+/// SMA-448, lot F1 — what the account's formula permits (its widgets, their
+/// sizes, its preset, its limits, its weather mode, its compact bar), as
+/// <c>GET /api/formulas</c> serves it: the client draws from this rather than
+/// from a copy of its own, in the same read as the layout it applies it to.
+/// </param>
 public record DashboardPreferencesResponse(
     int SchemaVersion,
     string Level,
     bool IsPreset,
     List<DashboardBlockDto> Blocks,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    FormulaDto Capabilities);
 
 /// <summary>
 /// SMA-336 — one block of a layout being saved.

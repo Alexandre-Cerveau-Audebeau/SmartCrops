@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.JsonWebTokens;
-using Npgsql;
 using SmartCrops.Api.DTOs;
 using SmartCrops.Core.Dashboard;
 using SmartCrops.Core.Entities;
@@ -573,8 +572,14 @@ public class DashboardController(
     }
 
     /// <summary>
-    /// The caller's layout, or the preset of their level when they have never
+    /// The caller's layout, or the preset of their formula when they have never
     /// saved one. Always 200 for an authenticated caller — never 404.
+    ///
+    /// <para>SMA-448, lot F1, step S4 — the account's FORMULA decides the level
+    /// the layout is read at, never the level its document names: what the
+    /// formula does not permit is brought back to its preset (<see cref="Merge"/>),
+    /// never an error. The response carries the formula's capabilities, as
+    /// <c>GET /api/formulas</c> serves them.</para>
     /// </summary>
     [HttpGet("preferences")]
     public async Task<ActionResult<DashboardPreferencesResponse>> GetPreferences(CancellationToken ct = default)
@@ -582,18 +587,34 @@ public class DashboardController(
         var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
+        // Reading never fails: an account this server cannot find reads the
+        // default formula, as an unknown one does.
+        var formula = await context.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.Formula)
+            .SingleOrDefaultAsync(ct);
+
         var row = await context.UserDashboardPreferences
             .AsNoTracking()
             .SingleOrDefaultAsync(p => p.UserId == userId, ct);
 
-        return Ok(ToResponse(row));
+        return Ok(ToResponse(row, formula));
     }
 
     /// <summary>
     /// Replaces the caller's layout, creating the row on first save. 400 when the
-    /// document is not one this server can store: unknown level, unknown or
-    /// duplicated block key, unknown size, or an attempt to hide the gardens
-    /// block.
+    /// document is not one this server can store: unknown level, a level that is
+    /// not the account's formula, unknown or duplicated block key, a block or a
+    /// size the formula does not permit, or an attempt to hide the gardens block.
+    ///
+    /// <para>SMA-448, lot F1, step S4 — the level of a layout is the account's
+    /// formula (R8): only <c>PUT /api/formulas/current</c> changes it. The
+    /// account's row is locked for the write (<see cref="AccountFormulaLock"/>),
+    /// so a save and a formula switch of one account apply one after the other:
+    /// a save never lands on a row a switch has just refilled, and two first
+    /// saves never race on the unique index — the second finds the first's
+    /// row.</para>
     /// </summary>
     [HttpPut("preferences")]
     [RequestSizeLimit(MaxRequestBodyBytes)]
@@ -604,52 +625,29 @@ public class DashboardController(
         var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
-        if (Validate(request) is { } error) return BadRequest(new { error });
+        await using var transaction = await context.Database.BeginTransactionAsync(ct);
+
+        var formula = await AccountFormulaLock.LockAsync(context, userId, ct);
+        if (formula is null) return Unauthorized();
+
+        if (Validate(request, formula) is { } error) return BadRequest(new { error });
 
         var document = new StoredLayout(
             DashboardLayout.CurrentSchemaVersion,
-            request.Level,
-            [.. Storable(request.Blocks, request.Level).Select(b => new StoredBlock(b.Key, b.Size, b.Hidden, b.Options))]);
+            formula,
+            [.. Storable(request.Blocks, formula).Select(b => new StoredBlock(b.Key, b.Size, b.Hidden, b.Options))]);
         var json = JsonSerializer.Serialize(document, JsonWeb);
 
-        try
-        {
-            await UpsertAsync(userId, json, ct);
-        }
-        catch (DbUpdateException ex)
-            when (!ct.IsCancellationRequested && IsUserRowConflict(ex))
-        {
-            // A concurrent FIRST save won the unique index on UserId: both
-            // requests read no row, both inserted, one lost. The PUT replaces
-            // the document wholesale, so re-applying it over the row the winner
-            // created is safe and idempotent. Exactly one retry — a second
-            // conflict is a real failure and propagates.
-            context.ChangeTracker.Clear();
-            await UpsertAsync(userId, json, ct);
-        }
+        await UpsertAsync(userId, json, ct);
+        await transaction.CommitAsync(ct);
 
         return NoContent();
     }
 
     /// <summary>
-    /// The ONE failure the retry above answers (round 2, E'3): the unique index
-    /// on <c>UserId</c> rejecting the second of two concurrent first inserts.
-    /// Any other write failure — a foreign key, a check constraint, a dead
-    /// connection — is not a race this endpoint can resolve by trying again,
-    /// and a blanket <see cref="DbUpdateException"/> filter would buy it a
-    /// second read-then-insert cycle before failing anyway.
-    /// </summary>
-    private static bool IsUserRowConflict(DbUpdateException ex) =>
-        ex.InnerException is PostgresException
-        {
-            SqlState: PostgresErrorCodes.UniqueViolation,
-            ConstraintName: "IX_UserDashboardPreferences_UserId",
-        };
-
-    /// <summary>
     /// Writes the document on the caller's row, creating it on first save.
-    /// Deliberately not atomic on its own: the read-then-insert race is handled
-    /// by the single retry in <see cref="PutPreferences"/>.
+    /// Called with the account's row locked (<see cref="PutPreferences"/>), so
+    /// the read-then-insert cannot race another save of the same account.
     /// </summary>
     private async Task UpsertAsync(string userId, string layoutJson, CancellationToken ct)
     {
@@ -671,27 +669,26 @@ public class DashboardController(
     // ── Reading ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Projects a stored row (or its absence) onto the response. Every failure
-    /// mode collapses to the preset, deliberately and silently.
+    /// Projects a stored row (or its absence) onto the response, at the
+    /// account's formula. Every failure mode collapses to the formula's
+    /// preset, deliberately and silently.
     /// </summary>
-    private static DashboardPreferencesResponse ToResponse(UserDashboardPreferences? row)
+    private static DashboardPreferencesResponse ToResponse(UserDashboardPreferences? row, string? formula)
     {
+        // The account's formula decides (SMA-448, S4) — the level the document
+        // names is ignored. An unknown value reads as the default formula.
+        var level = DashboardPresets.IsKnownLevel(formula) ? formula : DashboardLayout.DefaultLevel;
+
         var stored = Parse(row);
-
-        // Nothing usable stored: the level lives inside the document, so an
-        // unreadable document takes the default level with it.
-        if (stored is null) return Preset(DashboardLayout.DefaultLevel, updatedAt: null);
-
-        var effectiveLevel = DashboardPresets.IsKnownLevel(stored.Level)
-            ? stored.Level
-            : DashboardLayout.DefaultLevel;
+        if (stored is null) return Preset(level, updatedAt: null);
 
         return new DashboardPreferencesResponse(
             DashboardLayout.CurrentSchemaVersion,
-            effectiveLevel,
+            level,
             IsPreset: false,
-            Merge(stored.Blocks, effectiveLevel),
-            row!.UpdatedAt);
+            Merge(stored.Blocks, level),
+            row!.UpdatedAt,
+            FormulaDtos.From(FormulaCatalog.For(level)));
     }
 
     /// <summary>
@@ -728,13 +725,14 @@ public class DashboardController(
         }
     }
 
-    /// <summary>The preset of a level, as a response.</summary>
+    /// <summary>The preset of a level, as a response, with the level's capabilities.</summary>
     private static DashboardPreferencesResponse Preset(string level, DateTime? updatedAt) =>
         new(DashboardLayout.CurrentSchemaVersion,
             level,
             IsPreset: true,
             [.. DashboardPresets.For(level).Select(b => new DashboardBlockDto(b.Key, b.Size, b.Hidden, null))],
-            updatedAt);
+            updatedAt,
+            FormulaDtos.From(FormulaCatalog.For(level)));
 
     /// <summary>
     /// Keeps the stored blocks in their stored order, drops keys this server does
@@ -799,10 +797,15 @@ public class DashboardController(
     /// can. Validation is deliberately strict on WRITE and forgiving on READ: a
     /// bad document must never enter the database, but one that somehow did must
     /// never break a page.
+    ///
+    /// <para>SMA-448, lot F1, step S4 — <paramref name="formula"/> is the
+    /// account's: a known level that is not it is refused (R8), so the checks
+    /// below read the request's level only once it IS the formula.</para>
     /// </summary>
-    private static string? Validate(SaveDashboardPreferencesRequest request)
+    private static string? Validate(SaveDashboardPreferencesRequest request, string formula)
     {
         if (!DashboardPresets.IsKnownLevel(request.Level)) return "unknown level";
+        if (request.Level != formula) return $"level '{request.Level}' is not the account's formula '{formula}'";
         if (request.Blocks.Count == 0) return "blocks must not be empty";
         if (request.Blocks.Count > DashboardLayout.Blocks.All.Count) return "too many blocks";
 
@@ -849,7 +852,7 @@ public class DashboardController(
     /// <summary>
     /// The blocks of a validated request that are stored: every one the level
     /// has. A block it does not have reaches here only hidden — shown, it was
-    /// refused by <see cref="Validate(SaveDashboardPreferencesRequest)"/> — and
+    /// refused by <see cref="Validate(SaveDashboardPreferencesRequest, string)"/> — and
     /// is left out, so no layout ever stores a block its formula lacks.
     /// </summary>
     private static IEnumerable<SaveDashboardBlockRequest> Storable(
