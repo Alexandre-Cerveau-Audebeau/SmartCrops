@@ -107,21 +107,23 @@ afterEach(() => {
 
 describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
   it('passes a well-formed document through unchanged', async () => {
+    // A formula other than the default, with widgets — the Expert's (the
+    // Novice has none since SMA-448, lot F2).
     mockFetch({
       schemaVersion: 1,
-      level: 'novice',
-      capabilities: capabilitiesFor('novice'),
+      level: 'expert',
+      capabilities: capabilitiesFor('expert'),
       isPreset: true,
-      blocks: presetFor('novice'),
+      blocks: presetFor('expert'),
       updatedAt: '2026-09-09T10:00:00Z',
     });
 
     const preferences = await fetchDashboardPreferences();
 
-    expect(preferences.level).toBe('novice');
+    expect(preferences.level).toBe('expert');
     expect(preferences.isPreset).toBe(true);
     expect(preferences.updatedAt).toBe('2026-09-09T10:00:00Z');
-    expect(preferences.blocks).toEqual(presetFor('novice'));
+    expect(preferences.blocks).toEqual(presetFor('expert'));
   });
 
   it('drops blocks whose key this build does not know', async () => {
@@ -284,8 +286,8 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     // "we could not read your layout".
     mockFetch({
       schemaVersion: 1,
-      level: 'novice',
-      capabilities: capabilitiesFor('novice'),
+      level: 'expert',
+      capabilities: capabilitiesFor('expert'),
       isPreset: false,
       blocks: [{ key: 'moon-phase', size: 'huge', hidden: false }, null, 7],
       updatedAt: null,
@@ -293,8 +295,8 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
 
     const preferences = await fetchDashboardPreferences();
 
-    expect(preferences.level).toBe('novice');
-    expect(preferences.blocks).toEqual(presetFor('novice'));
+    expect(preferences.level).toBe('expert');
+    expect(preferences.blocks).toEqual(presetFor('expert'));
   });
 
   // SMA-448, lot F1, S5 — this body used to « survive » as the default

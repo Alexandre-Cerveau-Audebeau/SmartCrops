@@ -192,12 +192,14 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         var mine = Guid.NewGuid().ToString();
         var theirs = Guid.NewGuid().ToString();
         await SeedUserAsync(mine);
-        await SeedUserAsync(theirs, DashboardLayout.Levels.Novice);
+        // Theirs on a formula that is not the default, and that has a layout
+        // to save — the Expert's (the Novice has no widget since lot F2).
+        await SeedUserAsync(theirs, DashboardLayout.Levels.Expert);
 
         AuthAs(theirs);
         Assert.Equal(
             HttpStatusCode.NoContent,
-            (await Client.PutAsJsonAsync(Url, ValidRequest(DashboardLayout.Levels.Novice))).StatusCode);
+            (await Client.PutAsJsonAsync(Url, ValidRequest(DashboardLayout.Levels.Expert))).StatusCode);
 
         AuthAs(mine);
         var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
@@ -210,15 +212,17 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
 
     [Theory]
     [InlineData("wizard", DashboardLayout.Blocks.Weather, DashboardLayout.Sizes.Medium, false)]
-    [InlineData(DashboardLayout.Levels.Novice, "compost", DashboardLayout.Sizes.Medium, false)]
-    [InlineData(DashboardLayout.Levels.Novice, DashboardLayout.Blocks.Weather, "huge", false)]
-    [InlineData(DashboardLayout.Levels.Novice, DashboardLayout.Blocks.Gardens, DashboardLayout.Sizes.Medium, true)]
+    [InlineData(DashboardLayout.Levels.Gardener, "compost", DashboardLayout.Sizes.Medium, false)]
+    [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Weather, "huge", false)]
+    [InlineData(DashboardLayout.Levels.Gardener, DashboardLayout.Blocks.Gardens, DashboardLayout.Sizes.Medium, true)]
     public async Task PutPreferences_InvalidDocument_Returns400(
         string level, string key, string size, bool hidden)
     {
         // The account on the level the document names, when it names a real
         // one: each row is refused for its own reason, never for a level that
-        // is not the account's (SMA-448, S4).
+        // is not the account's (SMA-448, S4) — at a formula that HAS the
+        // widget, the Gardener (the Novice has none since lot F2, and would
+        // refuse every row for that one reason).
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId, DashboardPresets.IsKnownLevel(level) ? level : DashboardLayout.Levels.Gardener);
         AuthAs(userId);
@@ -234,11 +238,11 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task PutPreferences_DuplicateBlock_Returns400()
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId, DashboardLayout.Levels.Novice);
+        await SeedUserAsync(userId);
         AuthAs(userId);
 
         var request = new SaveDashboardPreferencesRequest(
-            DashboardLayout.Levels.Novice,
+            DashboardLayout.Levels.Gardener,
             [
                 new(DashboardLayout.Blocks.Weather, DashboardLayout.Sizes.Medium, false, null),
                 new(DashboardLayout.Blocks.Weather, DashboardLayout.Sizes.Small, false, null),
@@ -253,14 +257,47 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task PutPreferences_EmptyBlocks_Returns400()
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId, DashboardLayout.Levels.Novice);
+        await SeedUserAsync(userId);
         AuthAs(userId);
 
-        var request = new SaveDashboardPreferencesRequest(DashboardLayout.Levels.Novice, []);
+        var request = new SaveDashboardPreferencesRequest(DashboardLayout.Levels.Gardener, []);
 
         var response = await Client.PutAsJsonAsync(Url, request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    /// <summary>
+    /// SMA-448, lot F2 — the Novice formula has NO widget: its page is one
+    /// card per garden, not a grid (V3-01: « Aucun »), and the client writes
+    /// no layout for it. Strict on write, as every right is (R8): a Novice can
+    /// store no layout at all — the empty document is refused as every empty
+    /// one is, and any block is one the formula does not have. And it reads
+    /// as its preset: no block, capabilities without a widget.
+    /// </summary>
+    [Fact]
+    public async Task PutPreferences_Novice_HasNoWidget_EveryDocumentIsRefused_AndItReadsNoBlock()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, DashboardLayout.Levels.Novice);
+        AuthAs(userId);
+
+        var empty = new SaveDashboardPreferencesRequest(DashboardLayout.Levels.Novice, []);
+        var gardens = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Novice,
+            [new(DashboardLayout.Blocks.Gardens, DashboardLayout.Sizes.Medium, false, null)]);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await Client.PutAsJsonAsync(Url, empty)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Client.PutAsJsonAsync(Url, gardens)).StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        Assert.False(await db.UserDashboardPreferences.AnyAsync(p => p.UserId == userId));
+
+        using var document = JsonDocument.Parse(await Client.GetStringAsync(Url));
+        Assert.Equal(DashboardLayout.Levels.Novice, document.RootElement.GetProperty("level").GetString());
+        Assert.Equal(0, document.RootElement.GetProperty("blocks").GetArrayLength());
+        Assert.Equal(0, document.RootElement.GetProperty("capabilities").GetProperty("widgets").GetArrayLength());
     }
 
     [Fact]
@@ -311,15 +348,17 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task GetPreferences_LayoutMissingABlock_FillsItFromThePreset()
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId, DashboardLayout.Levels.Novice);
+        await SeedUserAsync(userId);
         AuthAs(userId);
 
-        // A layout saved before a block existed: only two blocks, current version.
+        // A layout saved before a block existed: only two blocks, current
+        // version — at the Gardener, a formula with widgets to fill in (the
+        // Novice has none since SMA-448, lot F2).
         await InsertRawLayoutAsync(
             userId,
             DashboardLayout.CurrentSchemaVersion,
             """
-            {"schemaVersion":1,"level":"novice","blocks":[
+            {"schemaVersion":1,"level":"gardener","blocks":[
               {"key":"gardens","size":"small","hidden":false,"options":null},
               {"key":"weather","size":"small","hidden":false,"options":null}]}
             """);
@@ -328,16 +367,16 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
 
         Assert.NotNull(body);
         Assert.False(body.IsPreset);
-        Assert.Equal(DashboardLayout.Levels.Novice, body.Level);
+        Assert.Equal(DashboardLayout.Levels.Gardener, body.Level);
 
-        // The two stored blocks keep their stored order and size; the six others
-        // arrive at their preset places — here, behind them — with their preset
-        // values.
+        // The two stored blocks keep their stored order and size; the five
+        // others arrive at their preset places — here, behind them — with their
+        // preset values, Récolte hidden as the preset has it.
         Assert.Equal(DashboardLayout.Blocks.Gardens, body.Blocks[0].Key);
         Assert.Equal(DashboardLayout.Blocks.Weather, body.Blocks[1].Key);
         Assert.Equal(DashboardLayout.Sizes.Small, body.Blocks[0].Size);
-        Assert.Equal(DashboardPresets.For(DashboardLayout.Levels.Novice).Count, body.Blocks.Count);
-        Assert.True(Block(body, DashboardLayout.Blocks.Stats).Hidden);
+        Assert.Equal(DashboardPresets.For(DashboardLayout.Levels.Gardener).Count, body.Blocks.Count);
+        Assert.True(Block(body, DashboardLayout.Blocks.Harvest).Hidden);
     }
 
     [Fact]
@@ -426,12 +465,13 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     /// <summary>
     /// <c>wide</c> is a size this server knows (the fourth, V8), and no block
     /// may take it yet at any formula: a crafted PUT must not be able to show a
-    /// widget's Large stretched over the page's width. Strict on write.
+    /// widget's Large stretched over the page's width. Strict on write. At the
+    /// two formulas that have widgets — the Novice has none since SMA-448,
+    /// lot F2, and refuses every document for that reason.
     /// </summary>
     [Theory]
     [InlineData(DashboardLayout.Levels.Expert)]
     [InlineData(DashboardLayout.Levels.Gardener)]
-    [InlineData(DashboardLayout.Levels.Novice)]
     public async Task PutPreferences_SizeTheFormulaDoesNotPermit_Returns400(string level)
     {
         var userId = Guid.NewGuid().ToString();

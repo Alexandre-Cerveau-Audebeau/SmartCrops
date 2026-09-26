@@ -33,7 +33,12 @@ public class DashboardCapabilitiesTests
         return data;
     }
 
-    /// <summary>Every block a level's preset lists, with that level — what <c>Merge</c> can meet.</summary>
+    /// <summary>
+    /// Every block a level's preset lists, with that level — what <c>Merge</c>
+    /// can meet. The Novice contributes no row since SMA-448, lot F2: its
+    /// preset is empty (<c>DashboardPresetsTests.For_Novice_IsEmpty_TheFormulaHasNoWidget</c>),
+    /// so <c>Merge</c> meets no block of its own.
+    /// </summary>
     public static TheoryData<string, string> PresetBlocksAtEveryLevel()
     {
         var data = new TheoryData<string, string>();

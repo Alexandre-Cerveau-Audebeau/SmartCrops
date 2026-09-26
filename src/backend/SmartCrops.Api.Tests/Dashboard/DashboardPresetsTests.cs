@@ -32,16 +32,24 @@ public class DashboardPresetsTests
         return data;
     }
 
+    public static TheoryData<string> Blocks()
+    {
+        var data = new TheoryData<string>();
+        foreach (var key in DashboardLayout.Blocks.All) data.Add(key);
+        return data;
+    }
+
     /// <summary>
     /// The Expert lists all nine blocks (V3-01: « Les chiffres clés — Non · Non ·
     /// Oui »). The Gardener never has the band, and since the formulas (SMA-448,
     /// lot F1) never Statistics either — R1, V3-01: « Les statistiques — Non ·
     /// Non · Oui », « retiré au Jardinier » — while it keeps Récolte (Alexandre,
-    /// 26/09, question 3). The Novice keeps today's eight until its own page
-    /// (lot F2). Literals on purpose — the keys are the wire contract.
+    /// 26/09, question 3). The Novice has NO widget (lot F2): its page is one
+    /// card per garden, not a grid (V3-01: « Aucun »). Literals on purpose —
+    /// the keys are the wire contract.
     /// </summary>
     [Theory]
-    [InlineData(DashboardLayout.Levels.Novice, "keyfigures")]
+    [InlineData(DashboardLayout.Levels.Novice, "weather,gardens,tips,month,todo,counters,stats,harvest,keyfigures")]
     [InlineData(DashboardLayout.Levels.Gardener, "keyfigures,stats")]
     [InlineData(DashboardLayout.Levels.Expert, "")]
     public void For_EveryLevel_ListsExactlyTheBlocksItsLevelPermits_EachOnce(string level, string without)
@@ -54,6 +62,32 @@ public class DashboardPresetsTests
             expected.OrderBy(k => k, StringComparer.Ordinal),
             preset.Select(b => b.Key).OrderBy(k => k, StringComparer.Ordinal));
         Assert.Equal(preset.Count, preset.Select(b => b.Key).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    /// <summary>
+    /// SMA-448, lot F2 — the Novice has NO widget (V3-01: « Aucun »; contract v3
+    /// § 3.1): its preset is empty, so the catalogue serves it no widget and no
+    /// size, and the controller stores it no layout. Pinned on its own, apart
+    /// from the theory above: the day a widget is given back to the Novice is a
+    /// decision, and this is the test that names it.
+    /// </summary>
+    [Fact]
+    public void For_Novice_IsEmpty_TheFormulaHasNoWidget()
+    {
+        Assert.Empty(DashboardPresets.For(DashboardLayout.Levels.Novice));
+        Assert.Empty(FormulaCatalog.Novice.Widgets);
+        Assert.Empty(FormulaCatalog.Novice.Preset);
+    }
+
+    /// <summary>
+    /// The rule the controller refuses a Novice's write by (R8, lot F2): no
+    /// block at all, whatever its key — the nine of the vocabulary, one by one.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Blocks))]
+    public void Permits_Novice_NoBlockWhateverItsKey(string key)
+    {
+        Assert.False(DashboardPresets.Permits(DashboardLayout.Levels.Novice, key));
     }
 
     /// <summary>
@@ -85,8 +119,16 @@ public class DashboardPresetsTests
     [MemberData(nameof(Levels))]
     public void For_EveryLevel_NeverHidesTheNonHidableBlock(string level)
     {
-        var gardens = DashboardPresets.For(level)
-            .Single(b => b.Key == DashboardLayout.NonHidableBlock);
+        var preset = DashboardPresets.For(level);
+        // A formula without a widget has nothing to hide — the Novice alone,
+        // since SMA-448, lot F2: its page is one card per garden.
+        if (preset.Count == 0)
+        {
+            Assert.Equal(DashboardLayout.Levels.Novice, level);
+            return;
+        }
+
+        var gardens = preset.Single(b => b.Key == DashboardLayout.NonHidableBlock);
 
         Assert.False(gardens.Hidden);
     }
@@ -122,7 +164,8 @@ public class DashboardPresetsTests
     [InlineData(DashboardLayout.Levels.Gardener, "stats", false)]
     [InlineData(DashboardLayout.Levels.Expert, "stats", true)]
     [InlineData(DashboardLayout.Levels.Gardener, "harvest", true)]
-    [InlineData(DashboardLayout.Levels.Novice, "stats", true)]
+    [InlineData(DashboardLayout.Levels.Novice, "stats", false)]
+    [InlineData(DashboardLayout.Levels.Novice, "gardens", false)]
     [InlineData(DashboardLayout.Levels.Expert, "compost", false)]
     [InlineData("archdruid", "keyfigures", false)]
     public void Permits_IsWhetherTheLevelsPresetListsTheBlock(string level, string key, bool permitted)
