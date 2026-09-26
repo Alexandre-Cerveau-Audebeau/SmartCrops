@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   SAVE_DEBOUNCE_MS,
   useDashboardPreferences,
+  type SwitchOutcome,
 } from './useDashboardPreferences';
 import {
   changeFormula,
@@ -612,12 +613,12 @@ describe('useDashboardPreferences — a switch never loses a layout that is not 
     act(() => result.current.setBlocks(moved()));
     await waitFor(() => expect(result.current.saveState).toBe('error'));
 
-    let switched: boolean | undefined;
+    let switched: SwitchOutcome | undefined;
     await act(async () => {
       switched = await result.current.setLevel('expert');
     });
 
-    expect(switched).toBe(true);
+    expect(switched).toBe('switched');
     expect(server.archive.get('gardener')).toEqual(moved());
     expect(result.current.level).toBe('expert');
     expect(result.current.saveState).toBe('saved');
@@ -632,12 +633,12 @@ describe('useDashboardPreferences — a switch never loses a layout that is not 
     act(() => result.current.setBlocks(moved()));
     await waitFor(() => expect(result.current.saveState).toBe('error'));
 
-    let switched: boolean | undefined;
+    let switched: SwitchOutcome | undefined;
     await act(async () => {
       switched = await result.current.setLevel('expert');
     });
 
-    expect(switched).toBe(false);
+    expect(switched).toBe('unsaved');
     expect(changeFormula).not.toHaveBeenCalled();
     expect(server.formula).toBe('gardener');
     expect(result.current.level).toBe('gardener');
@@ -663,17 +664,17 @@ describe('useDashboardPreferences — a switch never loses a layout that is not 
     // would any other.
     vi.mocked(saveDashboardPreferences).mockRejectedValue(new HttpStatusError('Request failed (503)', 503));
 
-    let switching!: Promise<boolean>;
+    let switching!: Promise<SwitchOutcome>;
     act(() => {
       switching = result.current.setLevel('expert');
     });
-    let switched: boolean | undefined;
+    let switched: SwitchOutcome | undefined;
     await act(async () => {
       failInFlight(new HttpStatusError('Request failed (503)', 503));
       switched = await switching;
     });
 
-    expect(switched).toBe(false);
+    expect(switched).toBe('unsaved');
     expect(changeFormula).not.toHaveBeenCalled();
     expect(server.formula).toBe('gardener');
     expect(result.current.blocks).toEqual(moved());
@@ -699,7 +700,7 @@ describe('useDashboardPreferences — no edit is taken while a switch is in flig
     const { result } = renderHook(() => useDashboardPreferences());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    let switching!: Promise<boolean>;
+    let switching!: Promise<SwitchOutcome>;
     act(() => {
       switching = result.current.setLevel('expert');
     });
@@ -748,13 +749,13 @@ describe('useDashboardPreferences — no edit is taken while a switch is in flig
       return held;
     });
 
-    let first!: Promise<boolean>;
+    let first!: Promise<SwitchOutcome>;
     act(() => {
       first = result.current.setLevel('expert');
     });
     await waitFor(() => expect(fetchDashboardPreferences).toHaveBeenCalledTimes(2));
 
-    let second: boolean | undefined;
+    let second: SwitchOutcome | undefined;
     await act(async () => {
       second = await result.current.setLevel('novice');
     });
@@ -763,7 +764,7 @@ describe('useDashboardPreferences — no edit is taken while a switch is in flig
       await first;
     });
 
-    expect(second).toBe(false);
+    expect(second).toBe('ignored');
     expect(changeFormula).toHaveBeenCalledTimes(1);
     expect(server.formula).toBe('expert');
     expect(result.current.level).toBe(server.formula);
@@ -781,14 +782,14 @@ describe('useDashboardPreferences — a switch whose read-back fails says so hon
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     vi.mocked(fetchDashboardPreferences).mockRejectedValueOnce(new Error('network'));
-    let switched: boolean | undefined;
+    let switched: SwitchOutcome | undefined;
     await act(async () => {
       switched = await result.current.setLevel('expert');
     });
 
     // The switch DID land; the page does not know the layout it brought.
     expect(server.formula).toBe('expert');
-    expect(switched).toBe(false);
+    expect(switched).toBe('unread');
     expect(result.current.loadError).toBe(true);
     expect(result.current.blocks).toEqual([]);
     expect(result.current.capabilities).toBeNull();

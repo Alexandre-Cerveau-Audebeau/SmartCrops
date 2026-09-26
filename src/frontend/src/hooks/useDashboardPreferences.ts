@@ -25,6 +25,16 @@ export const SAVE_DEBOUNCE_MS = 700;
 
 export type SaveState = 'idle' | 'pending' | 'saved' | 'error';
 
+/**
+ * SMA-448, PR #293, fix round 2 (R2-E1) — how a switch of formula ended, for
+ * the page to act on: `switched`; `unsaved`, a layout that could not be
+ * written first (S2); `refused`, a formula the server refused (A1);
+ * `unread`, a switch that landed but whose layout could not be read back —
+ * the page is on its load error (S6); `ignored`, no layout yet or a switch
+ * already in flight (S5).
+ */
+export type SwitchOutcome = 'switched' | 'unsaved' | 'refused' | 'unread' | 'ignored';
+
 interface Layout {
   level: DashboardLevel;
   blocks: DashboardBlock[];
@@ -325,8 +335,8 @@ export function useDashboardPreferences() {
    * a formula the server refuses — 409, too small for the account's gardens —,
    * the refusal and its reasons, in `refusal`, the indicator left as it was;
    * a layout that cannot be read back, the load error. No switch ever
-   * archives a layout other than the one on screen. Resolves true once the
-   * page stands at the new formula, false otherwise.
+   * archives a layout other than the one on screen. Resolves how it ended
+   * (`SwitchOutcome`): the page closes its panel on `unread` (R2-E1).
    *
    * One switch at a time, and no change during it (S5): a second choice is
    * refused, as is any edit, until the page stands at one formula again. A
@@ -334,8 +344,8 @@ export function useDashboardPreferences() {
    * its load error, never on the formula left (S6).
    */
   const setLevel = useCallback(
-    async (level: DashboardLevel): Promise<boolean> => {
-      if (!layoutRef.current || switchingRef.current) return false;
+    async (level: DashboardLevel): Promise<SwitchOutcome> => {
+      if (!layoutRef.current || switchingRef.current) return 'ignored';
       switchingRef.current = true;
       setSwitching(true);
       setRefusal(null);
@@ -344,7 +354,7 @@ export function useDashboardPreferences() {
       try {
         if (!(await persist())) {
           say('error');
-          return false;
+          return 'unsaved';
         }
         // What the indicator says now is true — the server holds the layout
         // on screen — and is what it says again if the server refuses.
@@ -361,7 +371,7 @@ export function useDashboardPreferences() {
           // never « not saved ».
           setRefusal(refusalOf(error, level));
           say(before);
-          return false;
+          return 'refused';
         }
         stage = 'reading';
         const preferences = await fetchDashboardPreferences();
@@ -371,7 +381,7 @@ export function useDashboardPreferences() {
         setLayout(loaded);
         setCapabilities(preferences.capabilities);
         say('saved');
-        return true;
+        return 'switched';
       } catch {
         if (stage === 'reading') {
           // S6 — the account stands at the new formula, and its layout could
@@ -389,7 +399,7 @@ export function useDashboardPreferences() {
         } else {
           say('error');
         }
-        return false;
+        return stage === 'reading' ? 'unread' : 'unsaved';
       } finally {
         switchingRef.current = false;
         setSwitching(false);

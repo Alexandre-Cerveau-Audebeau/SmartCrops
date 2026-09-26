@@ -55,6 +55,7 @@ import {
   nextDashboardSize,
   type DashboardBlock,
   type DashboardBlockKey,
+  type DashboardLevel,
   type GalleryPreview,
 } from '../types/Dashboard';
 import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
@@ -298,12 +299,33 @@ export default function GardensDashboard() {
     setPanelOpen(true);
   };
   const { refocus } = actionBar;
+  // « Réessayer », the one action the page offers while its layout is
+  // unavailable (SMA-448, PR #293, fix round 2, R2-E1).
+  const retryRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     if (panelOpen) return;
     const opener = panelOpener.current;
     panelOpener.current = null;
     refocus(opener);
+    // R2-E1 — the panel closed on the load error of a switch whose layout
+    // could not be read back (S6). « Réessayer » exists only while the layout
+    // is unavailable, and at a closing of the panel that is this one case.
+    // The button the panel was opened from is disabled then, so the browser
+    // cannot give it the focus back — and in the browsers that do not focus
+    // a button on click, nothing ever held it: either way the focus would
+    // fall to the body. It goes to the one action the page offers.
+    retryRef.current?.focus();
   }, [panelOpen, refocus]);
+
+  // SMA-448, PR #293, fix round 2 (R2-E1) — the choice of a formula, and what
+  // the page does when the switch ends on no layout: the panel is closed
+  // HERE, in the handler that sees it, never from an effect. A switch whose
+  // layout could not be read back (S6) leaves the page on its load error;
+  // hidden by its condition alone, the panel would have named the default
+  // level over it, and come back by itself once « Réessayer » had succeeded.
+  const chooseLevel = async (level: DashboardLevel) => {
+    if ((await setLevel(level)) === 'unread') setPanelOpen(false);
+  };
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newGardenName, setNewGardenName] = useState('');
@@ -885,7 +907,7 @@ export default function GardensDashboard() {
           <Typography sx={{ mb: 2, color: 'text.secondary' }}>
             {t('dashboard.loadError')}
           </Typography>
-          <Button variant="contained" onClick={reload}>
+          <Button ref={retryRef} variant="contained" onClick={reload}>
             {t('dashboard.retry')}
           </Button>
         </Box>
@@ -933,11 +955,11 @@ export default function GardensDashboard() {
         </Typography>
       )}
 
-      {/* Open only while the formula it would name is known (SMA-448, PR
-          #293, fix round 1, S6): a switch whose layout cannot be read back
-          leaves the page on its load error, and the panel would otherwise
-          name the default level over an account at another. The retry brings
-          it back at the new formula. */}
+      {/* Hidden the instant the formula it would name is unknown (SMA-448, PR
+          #293, fix round 1, S6), and CLOSED by `chooseLevel` when a switch
+          ends that way (fix round 2, R2-E1): the condition alone hid it while
+          `panelOpen` stayed true, so it came back by itself once the retry
+          had succeeded. */}
       <CustomizePanel
         open={panelOpen && capabilities !== null}
         level={level}
@@ -952,7 +974,7 @@ export default function GardensDashboard() {
           setPanelOpen(false);
           dismissRefusal();
         }}
-        onLevelChange={setLevel}
+        onLevelChange={chooseLevel}
         onReset={resetToLevel}
         onShow={(key) =>
           patchBlock(key, (block) => ({ ...block, hidden: false }))

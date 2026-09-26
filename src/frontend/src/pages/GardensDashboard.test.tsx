@@ -1218,6 +1218,34 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(screen.queryByText('Modifications non enregistrées')).toBeNull();
   });
 
+  // SMA-448, PR #293, fix round 2 — R2-E1 (the Extension, on the correction
+  // of S6): the panel was hidden by its condition while `panelOpen` stayed
+  // true, so it came back by itself once « Try again » had succeeded, and its
+  // closing never ran the effect that gives the focus back. The handler that
+  // sees the failure now closes the panel; the focus goes to « Try again »,
+  // the one action the page offers while its layout is unavailable.
+  it('after a switch whose layout cannot be read back, the focus goes to « Try again », and the panel does not come back by itself once the retry succeeds', async () => {
+    vi.mocked(changeFormula).mockResolvedValue(undefined);
+    await openPanel();
+    vi.mocked(fetchDashboardPreferences).mockRejectedValueOnce(new Error('network'));
+
+    fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
+
+    // The error first, then the drawer gone: while it closes, the page behind
+    // it is still hidden from the accessibility tree, and its buttons with it.
+    expect(await screen.findByText('Couldn’t load your dashboard.')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull());
+    const retry = screen.getByRole('button', { name: 'Try again' });
+    await waitFor(() => expect(document.activeElement).toBe(retry));
+
+    servePreferences('expert');
+    fireEvent.click(retry);
+
+    await waitFor(() => expect(renderedKeys()).toHaveLength(9));
+    expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull();
+    expect(await screen.findByText('Expert view')).toBeInTheDocument();
+  });
+
   it('says so when nothing is hidden', async () => {
     servePreferences('expert');
 
