@@ -1124,6 +1124,30 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(screen.getByRole('button', { name: 'Reset to the Expert level' })).toBeEnabled();
   });
 
+  // SMA-448, PR #293, fix round 1 — S6: the switch lands but its layout
+  // cannot be read back. The page used to keep the formula left on screen,
+  // under its name, the panel still open on it; it now shows its load error
+  // and its retry — the panel closed, no « Changes not saved » for a layout
+  // that was saved — and the retry brings the new formula.
+  it('a switch whose layout cannot be read back closes the panel on the load error and its retry, which brings the new formula', async () => {
+    vi.mocked(changeFormula).mockResolvedValue(undefined);
+    await openPanel();
+    vi.mocked(fetchDashboardPreferences).mockRejectedValueOnce(new Error('network'));
+
+    fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
+
+    expect(await screen.findByText('Couldn’t load your dashboard.')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull());
+    expect(renderedKeys()).toEqual([]);
+    expect(screen.queryByText('Changes not saved')).toBeNull();
+
+    servePreferences('expert');
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() => expect(renderedKeys()).toHaveLength(9));
+    expect(await screen.findByText('Expert view')).toBeInTheDocument();
+  });
+
   it('says so when nothing is hidden', async () => {
     servePreferences('expert');
 

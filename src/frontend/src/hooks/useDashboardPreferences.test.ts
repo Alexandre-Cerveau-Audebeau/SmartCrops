@@ -764,3 +764,40 @@ describe('useDashboardPreferences — no edit is taken while a switch is in flig
     expect(result.current.level).toBe(server.formula);
   });
 });
+
+// SMA-448, PR #293, fix round 1 — S6 (GitHub 4109933669): when the switch
+// landed but reading the new layout back failed, the page kept the layout of
+// the formula LEFT under its name while the account stood at the new one, and
+// every later edit was refused by R8.
+describe('useDashboardPreferences — a switch whose read-back fails says so honestly (SMA-448, S6)', () => {
+  it('shows the load error — nothing of the formula left, nothing unsaved — and reload() brings the new formula', async () => {
+    const server = serveFormulas('gardener', presetFor('gardener'));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    vi.mocked(fetchDashboardPreferences).mockRejectedValueOnce(new Error('network'));
+    let switched: boolean | undefined;
+    await act(async () => {
+      switched = await result.current.setLevel('expert');
+    });
+
+    // The switch DID land; the page does not know the layout it brought.
+    expect(server.formula).toBe('expert');
+    expect(switched).toBe(false);
+    expect(result.current.loadError).toBe(true);
+    expect(result.current.blocks).toEqual([]);
+    expect(result.current.capabilities).toBeNull();
+    // Nothing is unsaved: the layout left was written before the switch.
+    expect(result.current.saveState).toBe('idle');
+
+    // No edit of the formula left can be made meanwhile.
+    act(() => result.current.setBlocks(presetFor('gardener')));
+    expect(result.current.blocks).toEqual([]);
+
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.level).toBe('expert'));
+    expect(result.current.blocks).toEqual(presetFor('expert'));
+    expect(result.current.capabilities).toEqual(capabilitiesFor('expert'));
+    expect(result.current.loadError).toBe(false);
+  });
+});

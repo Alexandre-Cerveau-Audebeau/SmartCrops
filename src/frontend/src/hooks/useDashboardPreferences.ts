@@ -310,13 +310,16 @@ export function useDashboardPreferences() {
    * once the page stands at the new formula, false otherwise.
    *
    * One switch at a time, and no change during it (S5): a second choice is
-   * refused, as is any edit, until the page stands at one formula again.
+   * refused, as is any edit, until the page stands at one formula again. A
+   * switch that lands but whose layout cannot be read back leaves the page on
+   * its load error, never on the formula left (S6).
    */
   const setLevel = useCallback(
     async (level: DashboardLevel): Promise<boolean> => {
       if (!layoutRef.current || switchingRef.current) return false;
       switchingRef.current = true;
       setSwitching(true);
+      let switched = false;
       try {
         if (!(await persist())) {
           setSaveState('error');
@@ -324,6 +327,7 @@ export function useDashboardPreferences() {
         }
         setSaveState('pending');
         await changeFormula(level);
+        switched = true;
         const preferences = await fetchDashboardPreferences();
         const loaded = { level: preferences.level, blocks: preferences.blocks };
         layoutRef.current = loaded;
@@ -333,7 +337,22 @@ export function useDashboardPreferences() {
         setSaveState('saved');
         return true;
       } catch {
-        setSaveState('error');
+        if (switched) {
+          // S6 — the account stands at the new formula, and its layout could
+          // not be read back. Nothing of the formula LEFT stays on screen
+          // under the new one, and no edit of it can be made: the page shows
+          // its load error and its retry (`reload`). Nothing is unsaved —
+          // the layout left was written before the switch —, so the save
+          // indicator says nothing rather than « not saved ».
+          layoutRef.current = null;
+          unsavedRef.current = false;
+          setLayout(null);
+          setCapabilities(null);
+          setLoadError(true);
+          setSaveState('idle');
+        } else {
+          setSaveState('error');
+        }
         return false;
       } finally {
         switchingRef.current = false;

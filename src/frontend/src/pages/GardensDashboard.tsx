@@ -931,8 +931,13 @@ export default function GardensDashboard() {
         </Typography>
       )}
 
+      {/* Open only while the formula it would name is known (SMA-448, PR
+          #293, fix round 1, S6): a switch whose layout cannot be read back
+          leaves the page on its load error, and the panel would otherwise
+          name the default level over an account at another. The retry brings
+          it back at the new formula. */}
       <CustomizePanel
-        open={panelOpen}
+        open={panelOpen && capabilities !== null}
         level={level}
         capabilities={capabilities}
         blocks={blocks}
