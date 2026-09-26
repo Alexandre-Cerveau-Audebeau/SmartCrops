@@ -40,8 +40,9 @@ interface Layout {
  * the page shows its actionable error instead of an empty grid.
  *
  * A failed SAVE does NOT roll the layout back: the user keeps the arrangement
- * they just made, sees the error, and the next change retries. Silently undoing
- * a drag under someone's cursor is worse than a stale server.
+ * they just made, sees the error, and the next change retries — and so does a
+ * switch of formula, before it switches (SMA-448, S2). Silently undoing a drag
+ * under someone's cursor is worse than a stale server.
  */
 export function useDashboardPreferences() {
   const [layout, setLayout] = useState<Layout | null>(null);
@@ -74,8 +75,30 @@ export function useDashboardPreferences() {
   // lane (round 3, N'2 — see `send`).
   const inFlightRef = useRef<AbortController | null>(null);
   const epochRef = useRef(0);
+  // SMA-448, PR #293, fix round 1 (S2) — whether the layout on screen may not
+  // be the one the server holds: raised by every local change and by every
+  // write that fails, lowered only when the write of the layout on screen
+  // lands. A switch of formula reads it: the server archives what IT holds,
+  // so the layout on screen has to be there first. Kept by the chain itself
+  // (see `send`), so whoever awaits the chain reads it settled.
+  const unsavedRef = useRef(false);
 
   const send = useCallback((next: Layout, keepalive: boolean) => {
+    // S2 — the tail of the chain settles the account of what the server
+    // holds, and never rejects: a write that fails leaves the layout on screen
+    // unsaved; one that lands clears it only if it carried THAT layout and
+    // nothing newer waits. A write that was superseded or aborted resolves
+    // carrying an older layout, so it clears nothing.
+    const settle = (write: Promise<unknown>) =>
+      write.then(
+        () => {
+          if (next === layoutRef.current && pendingRef.current === null) unsavedRef.current = false;
+        },
+        () => {
+          unsavedRef.current = true;
+        }
+      );
+
     if (keepalive) {
       // THE TEARDOWN LANE (round 2, E'6 / N4). Two rules, and they are not the
       // same rule.
@@ -108,7 +131,7 @@ export function useDashboardPreferences() {
       inFlightRef.current = null;
 
       const urgent = saveDashboardPreferences(next, true);
-      chainRef.current = urgent.catch(() => {});
+      chainRef.current = settle(urgent);
       return urgent;
     }
 
@@ -135,28 +158,22 @@ export function useDashboardPreferences() {
       .finally(() => {
         if (inFlightRef.current === controller) inFlightRef.current = null;
       });
-    chainRef.current = sent.catch(() => {});
+    chainRef.current = settle(sent);
     return sent;
   }, []);
 
-  /**
-   * Sends the write the debounce still owes, at once. Returns that write — or
-   * undefined when nothing was pending — so a caller that must know it
-   * LANDED (the formula switch) can wait for it; the save indicator follows
-   * it either way.
-   */
   const flush = useCallback(
-    (keepalive = false): Promise<unknown> | undefined => {
+    (keepalive = false) => {
       const pending = pendingRef.current;
       pendingRef.current = null;
       if (timerRef.current !== null) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
-      if (!pending) return undefined;
-      const sent = send(pending, keepalive);
-      sent.then(() => setSaveState('saved')).catch(() => setSaveState('error'));
-      return sent;
+      if (!pending) return;
+      send(pending, keepalive)
+        .then(() => setSaveState('saved'))
+        .catch(() => setSaveState('error'));
     },
     [send]
   );
@@ -180,6 +197,7 @@ export function useDashboardPreferences() {
   const commit = useCallback(
     (next: Layout) => {
       layoutRef.current = next;
+      unsavedRef.current = true;
       setLayout(next);
       schedule(next);
     },
@@ -193,6 +211,7 @@ export function useDashboardPreferences() {
         if (controller.signal.aborted) return;
         const loaded = { level: preferences.level, blocks: preferences.blocks };
         layoutRef.current = loaded;
+        unsavedRef.current = false;
         setLayout(loaded);
         setCapabilities(preferences.capabilities);
         setLoadError(false);
@@ -240,34 +259,58 @@ export function useDashboardPreferences() {
   );
 
   /**
+   * SMA-448, PR #293, fix round 1 (S2) — makes the server hold the layout on
+   * screen, and says whether it does: the write the debounce still owes leaves
+   * now, every write in flight settles, and a layout that a write FAILED to
+   * carry is written again, once. Resolves true when the layout on screen is
+   * the one the server holds.
+   */
+  const persist = useCallback(async (): Promise<boolean> => {
+    flush();
+    await chainRef.current;
+    if (unsavedRef.current && layoutRef.current) {
+      pendingRef.current = layoutRef.current;
+      flush();
+      await chainRef.current;
+    }
+    return !unsavedRef.current;
+  }, [flush]);
+
+  /**
    * SMA-448, lot F1, S5 — choosing a level is choosing the account's FORMULA,
    * a right the server holds. It used to apply the level's preset and write
    * it, which erased the layout of the level left — its order, its sizes, its
    * visibility and every widget's options (V4, fact F1 of the contract). Now:
    *
-   * 1. the layout the debounce still owes is written FIRST, so the layout the
-   *    server archives under the formula left is the one on screen;
+   * 1. the layout on screen is written FIRST (`persist`), so the layout the
+   *    server archives under the formula left is the one on screen — the
+   *    write the debounce still owes, and a write that failed before the
+   *    switch, written again (PR #293, fix round 1, S2);
    * 2. the server switches the formula (`changeFormula`), archiving that
    *    layout and restoring the one of the formula entered — or its preset,
    *    for a formula never visited;
    * 3. the hook reads back what the server holds, capabilities included.
    *
-   * A write that fails, or a switch the server refuses — 409, a formula too
-   * small for the account's gardens —, leaves the formula and the layout as
-   * they were and says so (« Modifications non enregistrées »). Resolves true
+   * A layout that cannot be written, or a switch the server refuses — 409, a
+   * formula too small for the account's gardens —, leaves the formula and the
+   * layout as they were and says so (« Modifications non enregistrées »): no
+   * switch ever archives a layout other than the one on screen. Resolves true
    * once the page stands at the new formula, false otherwise.
    */
   const setLevel = useCallback(
     async (level: DashboardLevel): Promise<boolean> => {
       if (!layoutRef.current) return false;
       try {
-        await flush();
-        await chainRef.current;
+        if (!(await persist())) {
+          setSaveState('error');
+          return false;
+        }
         setSaveState('pending');
         await changeFormula(level);
         const preferences = await fetchDashboardPreferences();
         const loaded = { level: preferences.level, blocks: preferences.blocks };
         layoutRef.current = loaded;
+        unsavedRef.current = false;
         setLayout(loaded);
         setCapabilities(preferences.capabilities);
         setSaveState('saved');
@@ -277,7 +320,7 @@ export function useDashboardPreferences() {
         return false;
       }
     },
-    [flush]
+    [persist]
   );
 
   /**

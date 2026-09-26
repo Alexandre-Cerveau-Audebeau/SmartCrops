@@ -585,3 +585,93 @@ describe('useDashboardPreferences — deferred saving (SMA-336)', () => {
     setItem.mockRestore();
   });
 });
+
+// SMA-448, PR #293, fix round 1 — S2 (the Extension, `major`): a write that
+// failed BEFORE the switch used to let it go on. `flush` owed nothing, the
+// chain swallowed the rejection, and the server archived the last layout it
+// held, not the one on screen — which was then gone, under « Saved ».
+describe('useDashboardPreferences — a switch never loses a layout that is not saved (SMA-448, S2)', () => {
+  const moved = () => {
+    const blocks = presetFor('gardener');
+    blocks[0]!.size = 'small';
+    return blocks;
+  };
+
+  it('a write that failed before the switch is written again FIRST: the layout on screen is the one archived', async () => {
+    const server = serveFormulas('gardener', presetFor('gardener'));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // The server misses ONE write: the arrangement stays on screen, unsaved.
+    vi.mocked(saveDashboardPreferences).mockRejectedValueOnce(new HttpStatusError('Request failed (503)', 503));
+    act(() => result.current.setBlocks(moved()));
+    await waitFor(() => expect(result.current.saveState).toBe('error'));
+
+    let switched: boolean | undefined;
+    await act(async () => {
+      switched = await result.current.setLevel('expert');
+    });
+
+    expect(switched).toBe(true);
+    expect(server.archive.get('gardener')).toEqual(moved());
+    expect(result.current.level).toBe('expert');
+    expect(result.current.saveState).toBe('saved');
+  });
+
+  it('a write that STILL fails stops the switch: the formula, the layout on screen and « Changes not saved » stay', async () => {
+    const server = serveFormulas('gardener', presetFor('gardener'));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    vi.mocked(saveDashboardPreferences).mockRejectedValue(new HttpStatusError('Request failed (503)', 503));
+    act(() => result.current.setBlocks(moved()));
+    await waitFor(() => expect(result.current.saveState).toBe('error'));
+
+    let switched: boolean | undefined;
+    await act(async () => {
+      switched = await result.current.setLevel('expert');
+    });
+
+    expect(switched).toBe(false);
+    expect(changeFormula).not.toHaveBeenCalled();
+    expect(server.formula).toBe('gardener');
+    expect(result.current.level).toBe('gardener');
+    expect(result.current.blocks).toEqual(moved());
+    expect(result.current.saveState).toBe('error');
+  });
+
+  it('a write still IN FLIGHT when the switch is chosen, and that then fails, stops the switch too', async () => {
+    const server = serveFormulas('gardener', presetFor('gardener'));
+    const { result } = renderHook(() => useDashboardPreferences());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let failInFlight!: (error: unknown) => void;
+    vi.mocked(saveDashboardPreferences).mockImplementationOnce(
+      () =>
+        new Promise<void>((_, reject) => {
+          failInFlight = reject;
+        })
+    );
+    act(() => result.current.setBlocks(moved()));
+    await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalledTimes(1));
+    // The server is down from now on: the write on the wire will fail, and so
+    // would any other.
+    vi.mocked(saveDashboardPreferences).mockRejectedValue(new HttpStatusError('Request failed (503)', 503));
+
+    let switching!: Promise<boolean>;
+    act(() => {
+      switching = result.current.setLevel('expert');
+    });
+    let switched: boolean | undefined;
+    await act(async () => {
+      failInFlight(new HttpStatusError('Request failed (503)', 503));
+      switched = await switching;
+    });
+
+    expect(switched).toBe(false);
+    expect(changeFormula).not.toHaveBeenCalled();
+    expect(server.formula).toBe('gardener');
+    expect(result.current.blocks).toEqual(moved());
+    expect(result.current.saveState).toBe('error');
+  });
+});
