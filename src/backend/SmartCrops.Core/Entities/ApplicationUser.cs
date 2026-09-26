@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using SmartCrops.Core.Dashboard;
 
 namespace SmartCrops.Core.Entities;
 
@@ -51,4 +52,24 @@ public class ApplicationUser : IdentityUser
 
     /// <summary>UTC instant the default was resolved (ADR-0001); stamped explicitly by the writer.</summary>
     public DateTime? LocationResolvedAt { get; set; }
+
+    // ── Formula (SMA-448, lot F1) ───────────────────────────────────────────
+    // The account's formula is a RIGHT, not a display preference (contract v3,
+    // R1 and R8): it decides what the account MAY do, and the server checks it.
+    // It lives here rather than in the dashboard layout document, where a
+    // client could write any level it liked and an unreadable document lost it
+    // (pre-flight § C.1 a, decided by Alexandre on 26/09). One of the three
+    // levels, never null (CK_AspNetUsers_Formula), 'gardener' by default — the
+    // level every account read before the formulas existed.
+
+    /// <summary>The account's formula: <c>novice</c>, <c>gardener</c> or <c>expert</c>.</summary>
+    public string Formula { get; set; } = DashboardLayout.Levels.Gardener;
+
+    /// <summary>
+    /// UTC instant of the account's last DELIBERATE choice of formula; null
+    /// until it makes one — the migration gives every existing account its
+    /// effective level and leaves this null, so the choice screen still shows
+    /// once (pre-flight § C.6 a, question 1).
+    /// </summary>
+    public DateTime? FormulaChosenAt { get; set; }
 }

@@ -10,9 +10,32 @@ export class HttpStatusError extends Error {
   // non-erasable TS syntax at `tsc -b` time (TS1294 — broke the CI build).
   readonly status: number;
 
-  constructor(message: string, status: number) {
+  /**
+   * SMA-448, lot F1 — the body of a refusal the server EXPLAINS, an
+   * `application/problem+json` document (RFC 9457): its stable `code` to
+   * branch on, and whatever the refusal carries (the reasons a formula is too
+   * small, …). Undefined for any other response.
+   */
+  readonly problem?: ProblemDetails;
+
+  constructor(message: string, status: number, problem?: ProblemDetails) {
     super(message);
     this.name = 'HttpStatusError';
     this.status = status;
+    this.problem = problem;
   }
+}
+
+/**
+ * An RFC 9457 problem document as the API sends it: the standard members,
+ * a stable `code` (SMA-448: `formula.tooSmall`, …), and the extensions of the
+ * refusal.
+ */
+export interface ProblemDetails {
+  type?: string;
+  title?: string;
+  status?: number;
+  detail?: string;
+  code?: string;
+  [extension: string]: unknown;
 }

@@ -14,7 +14,7 @@ import { linkFixture, locationFixture, weatherFixture, weekFixture } from '../fi
 import { gardenViewOf, type GardenView } from '../../utils/gardenStats';
 import type { KeyFigure } from '../../components/Dashboard/blocks/keyFiguresOptions';
 import { LAYOUT_NOW_MS } from './clock';
-import { presetFor } from '../../constants/dashboardPresets';
+import { presetFor } from '../fixtures/formulas';
 import type { SaveState } from '../../hooks/useDashboardPreferences';
 import type { DashboardBlockKey, DashboardLevel, DashboardSize } from '../../types/Dashboard';
 import type { DashboardGardenData, DashboardVarietyData } from '../../types/DashboardData';

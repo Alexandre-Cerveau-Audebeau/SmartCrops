@@ -14,12 +14,15 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import { BLOCK_ICONS } from './blockIcons';
+import { permitsBlock } from '../../constants/dashboardCapabilities';
 import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
 import {
   DASHBOARD_LEVELS,
   type DashboardBlock,
   type DashboardBlockKey,
   type DashboardLevel,
+  type FormulaCapabilities,
+  type FormulaRefusal,
   type GalleryPreview,
 } from '../../types/Dashboard';
 
@@ -30,8 +33,24 @@ const LEVEL_LABEL_ID = 'dashboard-customize-level-label';
 interface Props {
   open: boolean;
   level: DashboardLevel;
+  /**
+   * What the formula permits, as served (SMA-448, S5); null until the layout
+   * is read. The gallery offers only the widgets it lists.
+   */
+  capabilities: FormulaCapabilities | null;
   /** Every block - the gallery reads the hidden ones. */
   blocks: DashboardBlock[];
+  /**
+   * A switch of formula is in flight (SMA-448, PR #293, fix round 1, S5): the
+   * levels, the reset and the « + » take no gesture until the page stands at
+   * one formula again — none can be made, then lost.
+   */
+  switching: boolean;
+  /**
+   * A formula the server refused (SMA-448, PR #293, fix round 2, A1), with
+   * the reasons it served: said here, under the choice the user just made.
+   */
+  refusal: FormulaRefusal | null;
   /** A hidden widget's headline figure, or null when it has none yet. */
   preview?: (key: DashboardBlockKey) => GalleryPreview | null;
   onClose: () => void;
@@ -50,7 +69,10 @@ interface Props {
 export default function CustomizePanel({
   open,
   level,
+  capabilities,
   blocks,
+  switching,
+  refusal,
   preview,
   onClose,
   onLevelChange,
@@ -58,7 +80,34 @@ export default function CustomizePanel({
   onShow,
 }: Props) {
   const { t } = useTranslation();
-  const hidden = blocks.filter((block) => block.hidden);
+  // The gallery offers what the FORMULA has (SMA-448, S5 — R1): a hidden block
+  // the served capabilities do not list is never offered back, whatever the
+  // layout carries; nothing is offered before they are read.
+  const hidden = blocks.filter(
+    (block) => block.hidden && capabilities !== null && permitsBlock(capabilities, block.key)
+  );
+
+  // The refusal, in words (A1): the formula refused, then each reason the
+  // server served with its numbers — how many gardens for how many at most, a
+  // garden of what size for what size at most —, joined as the language lists
+  // things. A refusal the server did not explain names the formula alone.
+  const refusalText = refusal
+    ? refusal.reasons.length === 0
+      ? t('dashboard.panel.refusedNoReason', { level: t(`dashboard.levels.${refusal.formula}.name`) })
+      : t('dashboard.panel.refused', {
+          level: t(`dashboard.levels.${refusal.formula}.name`),
+          reasons: refusal.reasons.map((reason) =>
+            reason.kind === 'gardens'
+              ? t('dashboard.panel.reasonGardens', { count: reason.have, limit: reason.limit })
+              : t('dashboard.panel.reasonSize', {
+                  width: reason.width,
+                  height: reason.height,
+                  maxWidth: reason.maxWidth,
+                  maxHeight: reason.maxHeight,
+                })
+          ),
+        })
+    : '';
 
   const sectionTitleSx = {
     fontSize: `${DASHBOARD_TYPE.title}px`,
@@ -125,6 +174,7 @@ export default function CustomizePanel({
                 <FormControlLabel
                   key={option}
                   value={option}
+                  disabled={switching}
                   control={<Radio size="small" />}
                   sx={{
                     m: 0,
@@ -157,6 +207,24 @@ export default function CustomizePanel({
                 />
               ))}
             </RadioGroup>
+            {/* The refusal of a formula (A1), said HERE, under the choice the
+                user just made, in a live region born EMPTY and kept mounted —
+                the rule of the save indicator (A-10.6): a region inserted
+                already filled is not announced, and `display: none` while
+                empty would take it out of the accessibility tree. Its margin
+                stands only while it speaks. `polite`, never `assertive`. */}
+            <Typography
+              role="status"
+              aria-live="polite"
+              data-formula-refusal
+              sx={{
+                fontSize: `${DASHBOARD_TYPE.secondary}px`,
+                color: 'error.main',
+                '&:not(:empty)': { mt: '12px' },
+              }}
+            >
+              {refusalText}
+            </Typography>
           </FormControl>
           <Typography
             sx={{
@@ -177,6 +245,7 @@ export default function CustomizePanel({
             size="small"
             startIcon={<RestartAltOutlinedIcon />}
             onClick={onReset}
+            disabled={switching}
           >
             {t('dashboard.panel.reset', {
               level: t(`dashboard.levels.${level}.name`),
@@ -329,6 +398,7 @@ export default function CustomizePanel({
                       glyph the panel had. */}
                   <IconButton
                     onClick={() => onShow(block.key)}
+                    disabled={switching}
                     aria-label={t('dashboard.panel.add', { widget: name })}
                     sx={{
                       ml: 'auto',
@@ -338,6 +408,12 @@ export default function CustomizePanel({
                       backgroundColor: 'primary.main',
                       color: 'primary.contrastText',
                       '&:hover': { backgroundColor: 'primary.dark' },
+                      // The disc says it takes no gesture, as MUI's disabled
+                      // buttons do — not a live green over a dead click.
+                      '&.Mui-disabled': {
+                        backgroundColor: 'action.disabledBackground',
+                        color: 'action.disabled',
+                      },
                     }}
                   >
                     <AddRoundedIcon sx={{ fontSize: 20 }} />

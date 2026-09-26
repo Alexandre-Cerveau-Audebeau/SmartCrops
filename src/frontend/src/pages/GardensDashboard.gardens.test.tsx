@@ -17,7 +17,7 @@ import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
 import { useLanguage } from '../hooks/useLanguage';
-import { presetFor } from '../constants/dashboardPresets';
+import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import {
   dashboardFixture as dashboardWith,
   gardenFixture,
@@ -121,6 +121,7 @@ beforeEach(() => {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level: 'gardener',
+    capabilities: capabilitiesFor('gardener'),
     isPreset: true,
     blocks: presetFor('gardener'),
     updatedAt: null,
@@ -999,6 +1000,7 @@ describe('Gardens widget — the garden description (V10, V18)', () => {
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
       level: 'novice',
+      capabilities: capabilitiesFor('novice'),
       isPreset: true,
       blocks: presetFor('novice'),
       updatedAt: null,
@@ -1038,6 +1040,7 @@ async function renderExpert() {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level: 'expert',
+    capabilities: capabilitiesFor('expert'),
     isPreset: true,
     blocks: presetFor('expert'),
     updatedAt: null,
@@ -1052,6 +1055,7 @@ async function renderNovice() {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level: 'novice',
+    capabilities: capabilitiesFor('novice'),
     isPreset: true,
     blocks: presetFor('novice'),
     updatedAt: null,
@@ -1081,6 +1085,7 @@ async function renderIn(level: 'novice' | 'gardener' | 'expert', mode: 'light' |
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level,
+    capabilities: capabilitiesFor(level),
     isPreset: true,
     blocks: presetFor(level),
     updatedAt: null,
@@ -1255,6 +1260,7 @@ describe('Gardens rows — the artboard’s own measurements (round 5)', () => {
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
       level: 'novice',
+      capabilities: capabilitiesFor('novice'),
       isPreset: false,
       blocks,
       updatedAt: null,
@@ -1286,6 +1292,7 @@ describe('Gardens rows — the artboard’s own measurements (round 5)', () => {
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
       level: 'novice',
+      capabilities: capabilitiesFor('novice'),
       isPreset: false,
       blocks,
       updatedAt: null,
@@ -1818,6 +1825,7 @@ describe('Gardens rows — the chevron opens the garden (V15)', () => {
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
       level: level as 'novice' | 'expert',
+      capabilities: capabilitiesFor(level as 'novice' | 'expert'),
       isPreset: true,
       blocks: presetFor(level as 'novice' | 'expert'),
       updatedAt: null,
@@ -1837,6 +1845,7 @@ describe('Gardens rows — the chevron opens the garden (V15)', () => {
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
       level: level as 'novice' | 'expert',
+      capabilities: capabilitiesFor(level as 'novice' | 'expert'),
       isPreset: true,
       blocks: presetFor(level as 'novice' | 'expert'),
       updatedAt: null,
@@ -2040,6 +2049,7 @@ describe('Gardens rows — the closing findings (round 7)', () => {
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
       level: 'novice',
+      capabilities: capabilitiesFor('novice'),
       isPreset: false,
       blocks,
       updatedAt: null,
@@ -2080,6 +2090,7 @@ describe('Gardens — an unreadable `updatedAt` is never displayed as « now » 
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
       level: 'novice',
+      capabilities: capabilitiesFor('novice'),
       isPreset: false,
       blocks,
       updatedAt: null,

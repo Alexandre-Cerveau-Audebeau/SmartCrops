@@ -1170,6 +1170,46 @@ public class AuthControllerTests : IntegrationTestBase
         Assert.Equal("fr", root.GetProperty("suggestions")[0].GetProperty("language").GetString());
     }
 
+    /// <summary>
+    /// SMA-448, lot F1, step S6 — the account's formula is a right on the
+    /// account, and the choice of it the user's own act: it travels in the
+    /// file (art. 20), with the instant of that deliberate choice — null for an
+    /// account that never made one. Additive: the export's schema version does
+    /// not move.
+    /// </summary>
+    [Fact]
+    public async Task ExportAccount_CarriesTheFormula_AndWhenItWasChosen()
+    {
+        var (_, chooserId) = await RegisterUserAsync();
+        var (_, neverChoseId) = await RegisterUserAsync();
+        var chosenAt = new DateTime(2026, 9, 26, 9, 30, 0, DateTimeKind.Utc);
+        using (var scope = CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+            var user = await db.Users.SingleAsync(u => u.Id == chooserId);
+            user.Formula = "expert";
+            user.FormulaChosenAt = chosenAt;
+            await db.SaveChangesAsync();
+        }
+
+        AuthAs(chooserId);
+        using (var doc = JsonDocument.Parse(await Client.GetStringAsync("/api/auth/account/export")))
+        {
+            var profile = doc.RootElement.GetProperty("profile");
+            Assert.Equal("expert", profile.GetProperty("formula").GetString());
+            Assert.Equal(chosenAt, profile.GetProperty("formulaChosenAt").GetDateTime().ToUniversalTime());
+            Assert.Equal(AccountExportResponse.CurrentSchemaVersion, doc.RootElement.GetProperty("schemaVersion").GetInt32());
+        }
+
+        AuthAs(neverChoseId);
+        using (var doc = JsonDocument.Parse(await Client.GetStringAsync("/api/auth/account/export")))
+        {
+            var profile = doc.RootElement.GetProperty("profile");
+            Assert.Equal("gardener", profile.GetProperty("formula").GetString());
+            Assert.Equal(JsonValueKind.Null, profile.GetProperty("formulaChosenAt").ValueKind);
+        }
+    }
+
     [Fact]
     public async Task ExportAccount_CarriesProfileDefaultAndGardenOverrideLocations()
     {

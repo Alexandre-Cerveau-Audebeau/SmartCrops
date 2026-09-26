@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  changeFormula,
   fetchDashboardData,
   fetchDashboardPreferences,
   matches,
   saveDashboardPreferences,
 } from './dashboardApi';
-import { presetFor } from '../constants/dashboardPresets';
+import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 
 // SMA-336 round 1 (E17) — the service boundary is the last place an untrusted
 // body can be turned into the typed layout the app relies on. `fetchJson`
@@ -109,6 +110,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     mockFetch({
       schemaVersion: 1,
       level: 'novice',
+      capabilities: capabilitiesFor('novice'),
       isPreset: true,
       blocks: presetFor('novice'),
       updatedAt: '2026-09-09T10:00:00Z',
@@ -126,6 +128,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     mockFetch({
       schemaVersion: 1,
       level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks: [
         { key: 'weather', size: 'medium', hidden: false },
@@ -152,6 +155,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     mockFetch({
       schemaVersion: 1,
       level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks: [
         { key: 'weather', size: 'enormous', hidden: false },
@@ -172,6 +176,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     mockFetch({
       schemaVersion: 1,
       level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks: [
         { key: 'gardens', size: 'huge', hidden: false },
@@ -197,6 +202,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     mockFetch({
       schemaVersion: 1,
       level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks: [
         { key: 'keyfigures', size: 'wide', hidden: false },
@@ -218,6 +224,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     mockFetch({
       schemaVersion: 1,
       level: 'expert',
+      capabilities: capabilitiesFor('expert'),
       isPreset: false,
       blocks: [
         { key: 'keyfigures', size: 'large', hidden: false },
@@ -238,6 +245,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     mockFetch({
       schemaVersion: 1,
       level: 'expert',
+      capabilities: capabilitiesFor('expert'),
       isPreset: false,
       blocks: [
         { key: 'weather', size: 'wide', hidden: false },
@@ -255,9 +263,12 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
   });
 
   it('falls back to the default level when the stored one is unknown', async () => {
+    // SMA-448, S5: to the formula the served capabilities are the account's —
+    // the server's default one, which is what it serves such an account.
     mockFetch({
       schemaVersion: 1,
       level: 'archdruid',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks: [{ key: 'gardens', size: 'large', hidden: false }],
       updatedAt: null,
@@ -274,6 +285,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     mockFetch({
       schemaVersion: 1,
       level: 'novice',
+      capabilities: capabilitiesFor('novice'),
       isPreset: false,
       blocks: [{ key: 'moon-phase', size: 'huge', hidden: false }, null, 7],
       updatedAt: null,
@@ -285,20 +297,22 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     expect(preferences.blocks).toEqual(presetFor('novice'));
   });
 
-  it('survives a body that is not an object at all', async () => {
+  // SMA-448, lot F1, S5 — this body used to « survive » as the default
+  // level's preset, drawn from the client's own copy. That copy is gone: with
+  // no capabilities to draw it by, the body is refused, and the page shows its
+  // actionable error (« Impossible de charger votre tableau de bord »,
+  // Réessayer) — never a guess.
+  it('refuses a body that is not an object at all — there are no capabilities to draw it by', async () => {
     mockFetch('a string where a layout was expected');
 
-    const preferences = await fetchDashboardPreferences();
-
-    expect(preferences.level).toBe('gardener');
-    expect(preferences.blocks).toEqual(presetFor('gardener'));
-    expect(preferences.updatedAt).toBeNull();
+    await expect(fetchDashboardPreferences()).rejects.toThrow('Invalid formula capabilities');
   });
 
   it('keeps a valid `options` object', async () => {
     mockFetch({
       schemaVersion: 1,
       level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks: [
         { key: 'gardens', size: 'large', hidden: false, options: { pinned: true } },
@@ -318,6 +332,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     mockFetch({
       schemaVersion: 1,
       level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks: [{ key: 'gardens', size: 'large', hidden: false, options: null }],
       updatedAt: null,
@@ -334,6 +349,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     mockFetch({
       schemaVersion: 1,
       level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks: [
         { key: 'gardens', size: 'large', hidden: false, options: ['a', 'b'] },
@@ -353,6 +369,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     mockFetch({
       schemaVersion: 1,
       level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks: [
         { key: 'gardens', size: 'large', hidden: false },
@@ -375,6 +392,7 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     mockFetch({
       schemaVersion: 1,
       level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks: [{ key: 'gardens', size: 'large', hidden: 'yes' }],
       updatedAt: null,
@@ -383,6 +401,88 @@ describe('fetchDashboardPreferences — normalization (SMA-336)', () => {
     const preferences = await fetchDashboardPreferences();
 
     expect(preferences.blocks[0]!.hidden).toBe(false);
+  });
+});
+
+// SMA-448, lot F1, S5 — the API serves the capabilities (pre-flight § C.2 a):
+// the layout comes with those of the account's formula, and the boundary reads
+// the blocks through THEM, never through a table of its own.
+describe('fetchDashboardPreferences — the served capabilities decide (SMA-448)', () => {
+  it('drops a block the served capabilities do not permit, and keeps a size they permit', async () => {
+    // Capabilities the client's old tables would contradict on both counts:
+    // no Counters, and the Full width offered to Weather.
+    const served = capabilitiesFor('gardener');
+    const capabilities = {
+      ...served,
+      widgets: served.widgets.filter((key) => key !== 'counters'),
+      sizes: { ...served.sizes, weather: ['small', 'medium', 'large', 'wide'] },
+      preset: served.preset.filter((block) => block.key !== 'counters'),
+    };
+    delete (capabilities.sizes as Record<string, unknown>).counters;
+    mockFetch({
+      schemaVersion: 1,
+      level: 'gardener',
+      isPreset: false,
+      blocks: [
+        { key: 'weather', size: 'wide', hidden: false },
+        { key: 'counters', size: 'medium', hidden: false },
+        { key: 'gardens', size: 'large', hidden: false },
+      ],
+      updatedAt: null,
+      capabilities,
+    });
+
+    const preferences = await fetchDashboardPreferences();
+
+    expect(preferences.blocks).toEqual([
+      { key: 'weather', size: 'wide', hidden: false },
+      { key: 'gardens', size: 'large', hidden: false },
+    ]);
+    expect(preferences.capabilities.widgets).not.toContain('counters');
+  });
+
+  it('refuses a layout that comes without the capabilities of its formula', async () => {
+    // Nothing to draw it by: the page shows its error, never a guess.
+    mockFetch({
+      schemaVersion: 1,
+      level: 'gardener',
+      isPreset: true,
+      blocks: presetFor('gardener'),
+      updatedAt: null,
+    });
+
+    await expect(fetchDashboardPreferences()).rejects.toThrow();
+  });
+
+  it('refuses capabilities that do not hold together — a widget without its sizes', async () => {
+    const served = capabilitiesFor('gardener');
+    const sizes = { ...served.sizes };
+    delete (sizes as Record<string, unknown>).weather;
+    mockFetch({
+      schemaVersion: 1,
+      level: 'gardener',
+      isPreset: true,
+      blocks: presetFor('gardener'),
+      updatedAt: null,
+      capabilities: { ...served, sizes },
+    });
+
+    await expect(fetchDashboardPreferences()).rejects.toThrow();
+  });
+});
+
+describe('changeFormula (SMA-448)', () => {
+  it('PUTs the chosen formula to /api/formulas/current, with the auth cookie', async () => {
+    const spy = mockEmptyBody();
+
+    await changeFormula('expert');
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [url, init] = spy.mock.calls[0]!;
+    expect(url).toBe('/api/formulas/current');
+    expect(init.method).toBe('PUT');
+    expect(init.credentials).toBe('include');
+    expect(JSON.parse(init.body)).toEqual({ formula: 'expert' });
   });
 });
 

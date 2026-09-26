@@ -13,9 +13,9 @@ import { contrast, resolveColor } from '../test/contrast';
 import { rulesFor } from '../test/dashboardDom';
 import { dashboardFixture, gardenFixture } from '../test/fixtures/dashboard';
 import { linkFixture, locationFixture, weatherFixture } from '../test/fixtures/weather';
-import { presetFor } from '../constants/dashboardPresets';
+import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import { WEATHER_BEARING_BLOCKS } from '../components/Dashboard/weatherDisclaimer';
-import type { DashboardBlockKey } from '../types/Dashboard';
+import type { DashboardBlockKey, DashboardLevel } from '../types/Dashboard';
 import type { DashboardWeatherData, WeatherStatus } from '../types/DashboardWeather';
 
 vi.mock('../services/gardenApi', () => ({
@@ -137,17 +137,23 @@ const disclaimers = () => document.querySelectorAll('[data-weather-disclaimer]')
 const SHOWN_BESIDE: readonly DashboardBlockKey[] = ['gardens', 'month', 'counters', 'stats'];
 
 /**
- * A stored Gardener layout with exactly `visible` of the three weather-bearing
- * widgets on the page, the four of `SHOWN_BESIDE` shown and Harvest hidden as
- * the preset has it.
+ * A stored layout — the Gardener's unless told otherwise — with exactly
+ * `visible` of the three weather-bearing widgets on the page, those of
+ * `SHOWN_BESIDE` its formula has shown, and everything else hidden: Harvest as
+ * the preset has it, and at the Expert level the Key figures band. Statistics
+ * is shown only where the formula has it — the Expert's since SMA-448 (R1).
  */
-function serveLayoutShowing(visible: readonly DashboardBlockKey[]) {
+function serveLayoutShowing(
+  visible: readonly DashboardBlockKey[],
+  level: DashboardLevel = 'gardener'
+) {
   const bearing: readonly DashboardBlockKey[] = WEATHER_BEARING_BLOCKS;
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
-    level: 'gardener',
+    level,
+    capabilities: capabilitiesFor(level),
     isPreset: false,
-    blocks: presetFor('gardener').map((block) => ({
+    blocks: presetFor(level).map((block) => ({
       ...block,
       hidden: bearing.includes(block.key)
         ? !visible.includes(block.key)
@@ -211,6 +217,7 @@ beforeEach(() => {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level: 'gardener',
+    capabilities: capabilitiesFor('gardener'),
     isPreset: true,
     blocks: presetFor('gardener'),
     updatedAt: null,
@@ -283,6 +290,7 @@ describe('GardensDashboard — the weather warning under the grid (SMA-387)', ()
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
       level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: false,
       blocks: presetFor('gardener').map((block) =>
         block.key === 'weather' ? { ...block, size: 'large' } : block
@@ -391,8 +399,10 @@ describe('GardensDashboard — the weather warning follows the visible weather, 
     // landed WITH data (a fresh place, 24° now, 16–29 today): the page shows
     // no weather, so it shows no warning. The second half is the guard: if a
     // future change draws weather outside the three widgets, it turns red
-    // and the visibility rule has to be revisited.
-    serveLayoutShowing([]);
+    // and the visibility rule has to be revisited. At the Expert level, the
+    // one formula that has Statistics since SMA-448 (R1), the Key figures
+    // band hidden — so the guard keeps covering Statistics.
+    serveLayoutShowing([], 'expert');
     const land = holdWeather();
 
     await renderPage('fr');
@@ -442,6 +452,7 @@ describe('GardensDashboard — the Key figures band bears the warning by what it
     vi.mocked(fetchDashboardPreferences).mockResolvedValue({
       schemaVersion: 1,
       level: 'expert',
+      capabilities: capabilitiesFor('expert'),
       isPreset: false,
       blocks: presetFor('expert').map((block) => ({
         ...block,

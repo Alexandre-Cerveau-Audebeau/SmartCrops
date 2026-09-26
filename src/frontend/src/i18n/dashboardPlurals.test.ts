@@ -214,3 +214,18 @@ describe('the figures are written in the reader’s language', () => {
     expect(en).toContain('12,000');
   });
 });
+
+// SMA-448, PR #293, fix round 2 (A1) — the reasons a formula is refused for
+// carry a count of gardens.
+describe('the reasons a formula is refused for (SMA-448, A1)', () => {
+  describe.each(LANGUAGES)('%s', (language) => {
+    it('« N gardens for M at most » — singular and plural', () => {
+      const one = tr(language, 'dashboard.panel.reasonGardens', { count: 1, limit: 3 });
+      const many = tr(language, 'dashboard.panel.reasonGardens', { count: 5, limit: 3 });
+
+      expect(one).not.toBe(many);
+      expect(one).toMatch(/^1 (garden|jardin) /);
+      expect(many).toMatch(/^5 (gardens|jardins) /);
+    });
+  });
+});

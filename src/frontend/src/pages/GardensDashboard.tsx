@@ -42,7 +42,7 @@ import WeatherOptionsPanel from '../components/Dashboard/blocks/WeatherOptionsPa
 import LocationDialog from '../components/Dashboard/LocationDialog';
 import type { LocationTarget } from '../components/Dashboard/locationTools';
 import { weatherDisclaimerVisible } from '../components/Dashboard/weatherDisclaimer';
-import { sizesFor } from '../constants/dashboardCapabilities';
+import { hasActionBar, sizesFor } from '../constants/dashboardCapabilities';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useDashboardWeather } from '../hooks/useDashboardWeather';
@@ -55,6 +55,7 @@ import {
   nextDashboardSize,
   type DashboardBlock,
   type DashboardBlockKey,
+  type DashboardLevel,
   type GalleryPreview,
 } from '../types/Dashboard';
 import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
@@ -96,9 +97,13 @@ export default function GardensDashboard() {
   const {
     level,
     blocks,
+    capabilities,
     loading,
     loadError,
     saveState,
+    switching,
+    refusal,
+    dismissRefusal,
     adjusted,
     reload,
     setBlocks,
@@ -264,7 +269,16 @@ export default function GardensDashboard() {
   // SMA-437, lot V39, PR B — the compact action bar: mounted at the formulas
   // that have one (A-9), armed once the layout is read (A-10.2), shown when
   // the header's repeated buttons pass under the site navbar plus the bar.
-  const actionBar = useCompactActionBar(level, !loading && !loadError, editing);
+  // SMA-448, S5: « have one » is the formula's served capability. Until it is
+  // read — loading, or a layout that could not be read — the page stands at
+  // the default formula and keeps the bar mounted, unarmed, as before: it
+  // never shows then (`ready` is false), and a Novice's comes off as soon as
+  // its capabilities say so.
+  const actionBar = useCompactActionBar(
+    capabilities ? hasActionBar(capabilities) : true,
+    !loading && !loadError,
+    editing
+  );
 
   // B8 — every way in or out of Edit mode goes through here, so a toggle
   // under the bar leaves what the user looks at where it was.
@@ -285,12 +299,33 @@ export default function GardensDashboard() {
     setPanelOpen(true);
   };
   const { refocus } = actionBar;
+  // « Réessayer », the one action the page offers while its layout is
+  // unavailable (SMA-448, PR #293, fix round 2, R2-E1).
+  const retryRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     if (panelOpen) return;
     const opener = panelOpener.current;
     panelOpener.current = null;
     refocus(opener);
+    // R2-E1 — the panel closed on the load error of a switch whose layout
+    // could not be read back (S6). « Réessayer » exists only while the layout
+    // is unavailable, and at a closing of the panel that is this one case.
+    // The button the panel was opened from is disabled then, so the browser
+    // cannot give it the focus back — and in the browsers that do not focus
+    // a button on click, nothing ever held it: either way the focus would
+    // fall to the body. It goes to the one action the page offers.
+    retryRef.current?.focus();
   }, [panelOpen, refocus]);
+
+  // SMA-448, PR #293, fix round 2 (R2-E1) — the choice of a formula, and what
+  // the page does when the switch ends on no layout: the panel is closed
+  // HERE, in the handler that sees it, never from an effect. A switch whose
+  // layout could not be read back (S6) leaves the page on its load error;
+  // hidden by its condition alone, the panel would have named the default
+  // level over it, and come back by itself once « Réessayer » had succeeded.
+  const chooseLevel = async (level: DashboardLevel) => {
+    if ((await setLevel(level)) === 'unread') setPanelOpen(false);
+  };
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newGardenName, setNewGardenName] = useState('');
@@ -872,27 +907,28 @@ export default function GardensDashboard() {
           <Typography sx={{ mb: 2, color: 'text.secondary' }}>
             {t('dashboard.loadError')}
           </Typography>
-          <Button variant="contained" onClick={reload}>
+          <Button ref={retryRef} variant="contained" onClick={reload}>
             {t('dashboard.retry')}
           </Button>
         </Box>
       )}
 
-      {!loading && !loadError && (
+      {!loading && !loadError && capabilities && (
         <DashboardGrid
           blocks={blocks}
-          level={level}
+          capabilities={capabilities}
           editing={editing}
           onReorder={setBlocks}
           onHide={(key) =>
             patchBlock(key, (block) => ({ ...block, hidden: true }))
           }
           // Through the sizes the widget may take at THIS formula (SMA-437,
-          // A-N11): the Gardener's cycle never reaches the Full width.
+          // A-N11), as the server serves them (SMA-448, S5): the Gardener's
+          // cycle never reaches the Full width.
           onResize={(key) =>
             patchBlock(key, (block) => ({
               ...block,
-              size: nextDashboardSize(block.size, sizesFor(block.key, level)),
+              size: nextDashboardSize(block.size, sizesFor(block.key, capabilities) ?? ([block.size] as const)),
             }))
           }
           renderBlock={renderBlock}
@@ -919,13 +955,26 @@ export default function GardensDashboard() {
         </Typography>
       )}
 
+      {/* Hidden the instant the formula it would name is unknown (SMA-448, PR
+          #293, fix round 1, S6), and CLOSED by `chooseLevel` when a switch
+          ends that way (fix round 2, R2-E1): the condition alone hid it while
+          `panelOpen` stayed true, so it came back by itself once the retry
+          had succeeded. */}
       <CustomizePanel
-        open={panelOpen}
+        open={panelOpen && capabilities !== null}
         level={level}
+        capabilities={capabilities}
         blocks={blocks}
+        switching={switching}
+        refusal={refusal}
         preview={galleryPreview}
-        onClose={() => setPanelOpen(false)}
-        onLevelChange={setLevel}
+        // Closing the place where the refusal was said clears it (A1): the
+        // panel reopens on the choice, not on the last refusal.
+        onClose={() => {
+          setPanelOpen(false);
+          dismissRefusal();
+        }}
+        onLevelChange={chooseLevel}
         onReset={resetToLevel}
         onShow={(key) =>
           patchBlock(key, (block) => ({ ...block, hidden: false }))

@@ -379,7 +379,12 @@
       "galleryEmpty": "No hidden widget.",
       "gallerySoon": "Soon",
       "hidden": "hidden",
-      "add": "Add {{widget}}"
+      "add": "Add {{widget}}",
+      "refused": "Can’t switch to {{level}}: {{reasons, list}}",
+      "refusedNoReason": "Can’t switch to {{level}} right now; try again",
+      "reasonGardens_one": "{{count}} garden for {{limit}} at most",
+      "reasonGardens_other": "{{count}} gardens for {{limit}} at most",
+      "reasonSize": "a garden of {{width}} × {{height}} cells for {{maxWidth}} × {{maxHeight}} at most"
     },
     "a11y": {
       "instructions": "Press Space or Enter to pick up the widget, the arrow keys to move it, Space or Enter to drop it, Escape to cancel.",

@@ -7,7 +7,7 @@ import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
-import { presetFor } from '../constants/dashboardPresets';
+import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import { dashboardFixture, gardenFixture } from '../test/fixtures/dashboard';
 import type { DashboardLevel } from '../types/Dashboard';
 
@@ -94,6 +94,7 @@ function servePreferences(level: DashboardLevel) {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level,
+    capabilities: capabilitiesFor(level),
     isPreset: true,
     blocks: presetFor(level),
     updatedAt: null,

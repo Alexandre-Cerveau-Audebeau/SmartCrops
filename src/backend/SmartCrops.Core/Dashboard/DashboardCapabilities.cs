@@ -2,11 +2,11 @@ namespace SmartCrops.Core.Dashboard;
 
 /// <summary>
 /// SMA-437 lot 1, PR A, step A5 (pre-flight D3, D4) — the sizes a block may
-/// take, per level: the twin of the client's
-/// <c>constants/dashboardCapabilities.ts</c>, row for row. The controller
-/// refuses a size outside this table on write and brings it back to the
-/// preset's on read — a right checked on the server, never only in the
-/// interface (R8).
+/// take, per level. The controller refuses a size outside this table on write
+/// and brings it back to the preset's on read — a right checked on the
+/// server, never only in the interface (R8). Since SMA-448 (lot F1) it is also
+/// what the client DRAWS by: <see cref="FormulaCatalog"/> serves it, and the
+/// client keeps no twin of it any more.
 ///
 /// <para>The rule it carries (A-N11): the Full width is an Expert capability,
 /// and a block gets it only once its Full-width version is DRAWN — until then
@@ -24,10 +24,11 @@ namespace SmartCrops.Core.Dashboard;
 /// controller refuses the band there on write and drops it on read before any
 /// size is looked up.</para>
 ///
-/// <para>Both sides are checked against ONE file,
+/// <para>Checked against ONE file,
 /// <c>src/frontend/src/constants/dashboardLayout.reference.json</c> (PR #287,
-/// fix round 1, S2): a row changed here and not there — or not in the file —
-/// fails a suite. Adding <c>wide</c> to a row is a change in three places.</para>
+/// fix round 1, S2), the contract of the served catalogue: a row changed here
+/// and not in the file fails a suite. Adding <c>wide</c> to a row is a change
+/// in two places — here and in the file.</para>
 /// </summary>
 public static class DashboardCapabilities
 {

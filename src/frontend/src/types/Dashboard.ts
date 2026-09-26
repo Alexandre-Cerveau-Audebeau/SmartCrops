@@ -9,7 +9,8 @@
  * The frozen design of 08/09 settled the count at EIGHT widgets (`_spec.md`
  * § 8); the v3 adds a ninth, the Key figures band — `keyfigures` (SMA-437
  * lot 1, PR B, step B1, pre-flight D1), the Expert's alone: which formula has
- * which widget is its preset's to say (`dashboardPresets.ts`, D4). The order
+ * which widget is the server's to say, in the capabilities it serves
+ * (SMA-448, lot F1 — `FormulaCapabilities.widgets`). The order
  * here is the canonical one, the band last since it arrived last; where a
  * layout that lacks a widget receives it is its PRESET's place (arbitrage 3 of
  * the lot 1 pre-flight — the server's `Merge`), so the band heads an Expert
@@ -44,6 +45,13 @@ export type DashboardSizeList = readonly [DashboardSize, ...DashboardSize[]];
 export const DASHBOARD_LEVELS = ['novice', 'gardener', 'expert'] as const;
 
 export type DashboardLevel = (typeof DASHBOARD_LEVELS)[number];
+
+/**
+ * The level the page stands at until the layout is read — the server's own
+ * default, the formula of an account that never chose one. A placeholder, not
+ * a capability: what a formula permits comes from the server (SMA-448, S5).
+ */
+export const DEFAULT_DASHBOARD_LEVEL: DashboardLevel = 'gardener';
 
 /**
  * The one widget the grid never lets go: hiding it would leave the page with
@@ -81,14 +89,73 @@ export interface GalleryPreview {
   bars?: number[];
 }
 
+/**
+ * SMA-448, lot F1 — what a formula permits, as the API SERVES it (pre-flight
+ * § C.2 a, decided by Alexandre on 26/09): the client draws from this rather
+ * than from a copy of its own. The server builds it from the tables it refuses
+ * by (`FormulaCatalog`), so what is drawn is what is permitted.
+ */
+export interface FormulaCapabilities {
+  /** The formula these capabilities are the account's. */
+  key: DashboardLevel;
+  /** How many gardens it allows; null for no limit. Applied from lot F3. */
+  gardenLimit: number | null;
+  /** The largest garden it allows, in cells. Applied from lot F3. */
+  maxGardenSize: { width: number; height: number };
+  /** The widgets it has, in its preset's order. */
+  widgets: DashboardBlockKey[];
+  /** For each of its widgets, the sizes that widget may take, in the order the corner handle steps through them. */
+  sizes: Partial<Record<DashboardBlockKey, DashboardSizeList>>;
+  /** Its default layout — what « Réinitialiser » returns to, and « · ajustée » compares against. */
+  preset: DashboardBlock[];
+  /** How it shows the weather — `gardenCards`, `singleCity`, `allCities`; read from lot F4. */
+  weather: string;
+  /** Whether the page draws the compact action bar (A-9). */
+  compactBar: boolean;
+}
+
 /** GET /api/dashboard/preferences. */
 export interface DashboardPreferences {
   schemaVersion: number;
+  /** The account's formula — the server's, never the level a document names. */
   level: DashboardLevel;
   /** True when the server served the level preset instead of a saved layout. */
   isPreset: boolean;
   blocks: DashboardBlock[];
   updatedAt: string | null;
+  /** What the formula permits (SMA-448): the ONE source the page draws its widgets, sizes and bar from. */
+  capabilities: FormulaCapabilities;
+}
+
+/**
+ * SMA-448, PR #293, fix round 2 (A1) — why the server refused a formula, as
+ * `PUT /api/formulas/current` serves it in its 409 `formula.tooSmall` problem:
+ * too many gardens for the formula, or a garden larger than it allows, one
+ * reason per garden. The numbers are the message's.
+ */
+export interface GardensRefusalReason {
+  kind: 'gardens';
+  /** How many gardens the account has. */
+  have: number;
+  /** How many the formula allows. */
+  limit: number;
+}
+
+export interface SizeRefusalReason {
+  kind: 'size';
+  gardenId: string;
+  width: number;
+  height: number;
+  maxWidth: number;
+  maxHeight: number;
+}
+
+export type FormulaRefusalReason = GardensRefusalReason | SizeRefusalReason;
+
+/** A switch of formula that did not go through: the formula asked for, and the reasons served — none for a failure the server did not explain. */
+export interface FormulaRefusal {
+  formula: DashboardLevel;
+  reasons: FormulaRefusalReason[];
 }
 
 /** PUT /api/dashboard/preferences — the layout is replaced wholesale. */

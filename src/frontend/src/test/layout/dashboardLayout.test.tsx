@@ -4,7 +4,7 @@ import { ACTIONS_PROBES, FORCED_ACTION_LABEL, PROBE_SCENES, WIDE_LINE, WIDE_SHOR
 import type { ActionsMeasure, GridMeasure, HeaderMeasure, SceneMeasure } from './harness';
 import type { FocusMeasure } from './focusProbe';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
-import { sizesFor } from '../../constants/dashboardCapabilities';
+import { sizesFor } from '../fixtures/formulas';
 import type { DashboardBlockKey } from '../../types/Dashboard';
 import {
   IS_CI,

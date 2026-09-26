@@ -1,4 +1,24 @@
-import { HttpStatusError } from './httpStatusError';
+import { HttpStatusError, type ProblemDetails } from './httpStatusError';
+
+/**
+ * SMA-448, lot F1 — the body of a refusal, when the server EXPLAINS it: an
+ * `application/problem+json` document (RFC 9457) that parses as an object.
+ * Anything else — another type, no headers, a body that does not parse —
+ * yields undefined: the refusal stays an {@link HttpStatusError} with its
+ * status, and reading its body can never replace it with another error.
+ */
+async function readProblem(res: Response): Promise<ProblemDetails | undefined> {
+  const type = res.headers?.get('content-type') ?? '';
+  if (!type.toLowerCase().startsWith('application/problem+json')) return undefined;
+  try {
+    const body: unknown = JSON.parse(await res.text());
+    return typeof body === 'object' && body !== null && !Array.isArray(body)
+      ? (body as ProblemDetails)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 // 15s: sized above the backend's 10s wall-clock SMTP deadline
 // (SmtpEmailService.SendTimeout) — the slowest call the API makes — so a
@@ -22,7 +42,9 @@ export interface FetchJsonOptions extends Omit<RequestInit, 'credentials'> {
  *
  * Contract:
  * - Non-OK responses throw {@link HttpStatusError} carrying `res.status`, so
- *   callers narrow with `instanceof` instead of duck-typing a `status` field.
+ *   callers narrow with `instanceof` instead of duck-typing a `status` field —
+ *   and, when the server explains the refusal in `application/problem+json`,
+ *   its body as `problem` (SMA-448).
  * - Abort rejections and network failures (fetch `TypeError`) propagate
  *   untouched — both are statusless by design so callers can tell "server
  *   said no" from "no server". The timeout aborts with a `'TimeoutError'`
@@ -57,7 +79,7 @@ export async function fetchJson<T = void>(
     }
     const res = await fetch(url, { ...init, signal: controller.signal });
     if (!res.ok) {
-      throw new HttpStatusError(`Request failed (${res.status})`, res.status);
+      throw new HttpStatusError(`Request failed (${res.status})`, res.status, await readProblem(res));
     }
     if (res.status === 204) return undefined as T;
     const text = await res.text();

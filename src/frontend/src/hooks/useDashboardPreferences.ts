@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isAdjusted, presetOf } from '../constants/dashboardCapabilities';
 import {
-  DEFAULT_DASHBOARD_LEVEL,
-  isAdjusted,
-  presetFor,
-} from '../constants/dashboardPresets';
-import {
+  changeFormula,
   fetchDashboardPreferences,
+  refusalOf,
   saveDashboardPreferences,
 } from '../services/dashboardApi';
-import type { DashboardBlock, DashboardLevel } from '../types/Dashboard';
+import {
+  DEFAULT_DASHBOARD_LEVEL,
+  type DashboardBlock,
+  type DashboardLevel,
+  type FormulaCapabilities,
+  type FormulaRefusal,
+} from '../types/Dashboard';
 
 /**
  * How long the hook waits after the LAST change before writing (SMA-336).
@@ -20,6 +24,16 @@ import type { DashboardBlock, DashboardLevel } from '../types/Dashboard';
 export const SAVE_DEBOUNCE_MS = 700;
 
 export type SaveState = 'idle' | 'pending' | 'saved' | 'error';
+
+/**
+ * SMA-448, PR #293, fix round 2 (R2-E1) — how a switch of formula ended, for
+ * the page to act on: `switched`; `unsaved`, a layout that could not be
+ * written first (S2); `refused`, a formula the server refused (A1);
+ * `unread`, a switch that landed but whose layout could not be read back —
+ * the page is on its load error (S6); `ignored`, no layout yet or a switch
+ * already in flight (S5).
+ */
+export type SwitchOutcome = 'switched' | 'unsaved' | 'refused' | 'unread' | 'ignored';
 
 interface Layout {
   level: DashboardLevel;
@@ -38,11 +52,17 @@ interface Layout {
  * the page shows its actionable error instead of an empty grid.
  *
  * A failed SAVE does NOT roll the layout back: the user keeps the arrangement
- * they just made, sees the error, and the next change retries. Silently undoing
- * a drag under someone's cursor is worse than a stale server.
+ * they just made, sees the error, and the next change retries — and so does a
+ * switch of formula, before it switches (SMA-448, S2). Silently undoing a drag
+ * under someone's cursor is worse than a stale server.
  */
 export function useDashboardPreferences() {
   const [layout, setLayout] = useState<Layout | null>(null);
+  // SMA-448, lot F1 — what the account's formula permits, as the server
+  // served it with the layout: the page draws its widgets, their sizes and
+  // its bar from it. Beside the layout, not in it: the layout is what is
+  // WRITTEN, the capabilities are only ever read.
+  const [capabilities, setCapabilities] = useState<FormulaCapabilities | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -67,8 +87,51 @@ export function useDashboardPreferences() {
   // lane (round 3, N'2 — see `send`).
   const inFlightRef = useRef<AbortController | null>(null);
   const epochRef = useRef(0);
+  // SMA-448, PR #293, fix round 1 (S2) — whether the layout on screen may not
+  // be the one the server holds: raised by every local change and by every
+  // write that fails, lowered only when the write of the layout on screen
+  // lands. A switch of formula reads it: the server archives what IT holds,
+  // so the layout on screen has to be there first. Kept by the chain itself
+  // (see `send`), so whoever awaits the chain reads it settled.
+  const unsavedRef = useRef(false);
+  // S5 — a switch of formula in flight, from its first write to the layout it
+  // reads back. No change is taken meanwhile: it would be drawn on the layout
+  // of the formula being left, then replaced by the one of the formula
+  // entered, and written under the formula left — refused by R8. The ref
+  // guards the mutators; the state tells the page to take no gesture.
+  const switchingRef = useRef(false);
+  const [switching, setSwitching] = useState(false);
+  // SMA-448, PR #293, fix round 2 (A1) — a switch the server refused, with
+  // the reasons it served, for the panel to say where the user just chose.
+  // Null until a refusal, cleared by the next choice or by the page.
+  const [refusal, setRefusal] = useState<FormulaRefusal | null>(null);
+  // The save indicator, and a mirror of what it says (A1): a switch the
+  // server refuses puts back what the indicator said before — true, since
+  // `persist` has just made the server hold the layout on screen — and that
+  // has to be read after the awaits, not from the render the callback was
+  // made in. `say` is the one way the indicator is set.
+  const saveStateRef = useRef<SaveState>('idle');
+  const say = useCallback((state: SaveState) => {
+    saveStateRef.current = state;
+    setSaveState(state);
+  }, []);
 
   const send = useCallback((next: Layout, keepalive: boolean) => {
+    // S2 — the tail of the chain settles the account of what the server
+    // holds, and never rejects: a write that fails leaves the layout on screen
+    // unsaved; one that lands clears it only if it carried THAT layout and
+    // nothing newer waits. A write that was superseded or aborted resolves
+    // carrying an older layout, so it clears nothing.
+    const settle = (write: Promise<unknown>) =>
+      write.then(
+        () => {
+          if (next === layoutRef.current && pendingRef.current === null) unsavedRef.current = false;
+        },
+        () => {
+          unsavedRef.current = true;
+        }
+      );
+
     if (keepalive) {
       // THE TEARDOWN LANE (round 2, E'6 / N4). Two rules, and they are not the
       // same rule.
@@ -101,7 +164,7 @@ export function useDashboardPreferences() {
       inFlightRef.current = null;
 
       const urgent = saveDashboardPreferences(next, true);
-      chainRef.current = urgent.catch(() => {});
+      chainRef.current = settle(urgent);
       return urgent;
     }
 
@@ -128,7 +191,7 @@ export function useDashboardPreferences() {
       .finally(() => {
         if (inFlightRef.current === controller) inFlightRef.current = null;
       });
-    chainRef.current = sent.catch(() => {});
+    chainRef.current = settle(sent);
     return sent;
   }, []);
 
@@ -142,10 +205,10 @@ export function useDashboardPreferences() {
       }
       if (!pending) return;
       send(pending, keepalive)
-        .then(() => setSaveState('saved'))
-        .catch(() => setSaveState('error'));
+        .then(() => say('saved'))
+        .catch(() => say('error'));
     },
-    [send]
+    [send, say]
   );
 
   const schedule = useCallback(
@@ -156,17 +219,23 @@ export function useDashboardPreferences() {
       // back/forward cache therefore saves normally without ever reviving a
       // stale write.
       pendingRef.current = next;
-      setSaveState('pending');
+      say('pending');
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => flush(), SAVE_DEBOUNCE_MS);
     },
-    [flush]
+    [flush, say]
   );
 
-  /** Applies a layout locally and schedules its write. The ONE side-effect path. */
+  /**
+   * Applies a layout locally and schedules its write. The ONE side-effect path
+   * — and so the one place a change is refused while a switch is in flight
+   * (S5): nothing is drawn that the switch would then take away.
+   */
   const commit = useCallback(
     (next: Layout) => {
+      if (switchingRef.current) return;
       layoutRef.current = next;
+      unsavedRef.current = true;
       setLayout(next);
       schedule(next);
     },
@@ -180,13 +249,16 @@ export function useDashboardPreferences() {
         if (controller.signal.aborted) return;
         const loaded = { level: preferences.level, blocks: preferences.blocks };
         layoutRef.current = loaded;
+        unsavedRef.current = false;
         setLayout(loaded);
+        setCapabilities(preferences.capabilities);
         setLoadError(false);
       })
       .catch(() => {
         if (controller.signal.aborted) return;
         layoutRef.current = null;
         setLayout(null);
+        setCapabilities(null);
         setLoadError(true);
       })
       .finally(() => {
@@ -225,21 +297,130 @@ export function useDashboardPreferences() {
   );
 
   /**
-   * Picking a level PRE-CONFIGURES the widgets: it applies that level's preset
-   * (`_spec.md` § 8 — « le niveau pré-configure les widgets »). Manual changes
-   * made afterwards win, which is what makes « Réinitialiser au niveau X » a
-   * distinct gesture rather than a duplicate of this one.
+   * SMA-448, PR #293, fix round 1 (S2) — makes the server hold the layout on
+   * screen, and says whether it does: the write the debounce still owes leaves
+   * now, every write in flight settles, and a layout that a write FAILED to
+   * carry is written again, once. Resolves true when the layout on screen is
+   * the one the server holds.
+   */
+  const persist = useCallback(async (): Promise<boolean> => {
+    flush();
+    await chainRef.current;
+    if (unsavedRef.current && layoutRef.current) {
+      pendingRef.current = layoutRef.current;
+      flush();
+      await chainRef.current;
+    }
+    return !unsavedRef.current;
+  }, [flush]);
+
+  /**
+   * SMA-448, lot F1, S5 — choosing a level is choosing the account's FORMULA,
+   * a right the server holds. It used to apply the level's preset and write
+   * it, which erased the layout of the level left — its order, its sizes, its
+   * visibility and every widget's options (V4, fact F1 of the contract). Now:
+   *
+   * 1. the layout on screen is written FIRST (`persist`), so the layout the
+   *    server archives under the formula left is the one on screen — the
+   *    write the debounce still owes, and a write that failed before the
+   *    switch, written again (PR #293, fix round 1, S2);
+   * 2. the server switches the formula (`changeFormula`), archiving that
+   *    layout and restoring the one of the formula entered — or its preset,
+   *    for a formula never visited;
+   * 3. the hook reads back what the server holds, capabilities included.
+   *
+   * A switch that does not go through leaves the formula and the layout as
+   * they were, and says the truth of its end, nothing else (PR #293, fix
+   * round 2, A1 — the family): a layout that cannot be written, « not saved »;
+   * a formula the server refuses — 409, too small for the account's gardens —,
+   * the refusal and its reasons, in `refusal`, the indicator left as it was;
+   * a layout that cannot be read back, the load error. No switch ever
+   * archives a layout other than the one on screen. Resolves how it ended
+   * (`SwitchOutcome`): the page closes its panel on `unread` (R2-E1).
+   *
+   * One switch at a time, and no change during it (S5): a second choice is
+   * refused, as is any edit, until the page stands at one formula again. A
+   * switch that lands but whose layout cannot be read back leaves the page on
+   * its load error, never on the formula left (S6).
    */
   const setLevel = useCallback(
-    (level: DashboardLevel) => commit({ level, blocks: presetFor(level) }),
-    [commit]
+    async (level: DashboardLevel): Promise<SwitchOutcome> => {
+      if (!layoutRef.current || switchingRef.current) return 'ignored';
+      switchingRef.current = true;
+      setSwitching(true);
+      setRefusal(null);
+      // Where the switch stands when it fails decides what is true of it.
+      let stage: 'writing' | 'switching' | 'reading' = 'writing';
+      try {
+        if (!(await persist())) {
+          say('error');
+          return 'unsaved';
+        }
+        // What the indicator says now is true — the server holds the layout
+        // on screen — and is what it says again if the server refuses.
+        const before = saveStateRef.current;
+        stage = 'switching';
+        say('pending');
+        try {
+          await changeFormula(level);
+        } catch (error) {
+          // A1 — the server refused the formula (409 `formula.tooSmall`, with
+          // its reasons), or the switch failed before it could: the account
+          // and its layout are as they were, and nothing is unsaved. The
+          // panel says the refusal; the indicator says what it said before,
+          // never « not saved ».
+          setRefusal(refusalOf(error, level));
+          say(before);
+          return 'refused';
+        }
+        stage = 'reading';
+        const preferences = await fetchDashboardPreferences();
+        const loaded = { level: preferences.level, blocks: preferences.blocks };
+        layoutRef.current = loaded;
+        unsavedRef.current = false;
+        setLayout(loaded);
+        setCapabilities(preferences.capabilities);
+        say('saved');
+        return 'switched';
+      } catch {
+        if (stage === 'reading') {
+          // S6 — the account stands at the new formula, and its layout could
+          // not be read back. Nothing of the formula LEFT stays on screen
+          // under the new one, and no edit of it can be made: the page shows
+          // its load error and its retry (`reload`). Nothing is unsaved —
+          // the layout left was written before the switch —, so the save
+          // indicator says nothing rather than « not saved ».
+          layoutRef.current = null;
+          unsavedRef.current = false;
+          setLayout(null);
+          setCapabilities(null);
+          setLoadError(true);
+          say('idle');
+        } else {
+          say('error');
+        }
+        return stage === 'reading' ? 'unread' : 'unsaved';
+      } finally {
+        switchingRef.current = false;
+        setSwitching(false);
+      }
+    },
+    [persist, say]
   );
 
-  /** Back to the current level's preset, discarding the manual arrangement. */
+  /** The page has shown the refusal where the user chose; closing that place clears it. */
+  const dismissRefusal = useCallback(() => setRefusal(null), []);
+
+  /**
+   * Back to the current formula's preset, discarding the manual arrangement —
+   * of THIS formula only: the layouts of the others wait in the server's
+   * archive, untouched.
+   */
   const resetToLevel = useCallback(() => {
-    const level = layoutRef.current?.level ?? DEFAULT_DASHBOARD_LEVEL;
-    commit({ level, blocks: presetFor(level) });
-  }, [commit]);
+    const current = layoutRef.current;
+    if (!current || !capabilities) return;
+    commit({ level: current.level, blocks: presetOf(capabilities) });
+  }, [commit, capabilities]);
 
   const level = layout?.level ?? DEFAULT_DASHBOARD_LEVEL;
   const blocks = layout?.blocks ?? [];
@@ -247,10 +428,17 @@ export function useDashboardPreferences() {
   return {
     level,
     blocks,
+    /** What the account's formula permits, as served; null until the layout is read. */
+    capabilities,
     loading,
     loadError,
     saveState,
-    adjusted: layout ? isAdjusted(blocks, level) : false,
+    /** A switch of formula is in flight: the page takes no gesture that changes the layout. */
+    switching,
+    /** A switch the server refused, with the reasons it served; null otherwise. */
+    refusal,
+    dismissRefusal,
+    adjusted: layout && capabilities ? isAdjusted(blocks, capabilities) : false,
     reload,
     setBlocks,
     setLevel,

@@ -5,7 +5,7 @@ import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
 import { EMPTY_WEATHER_DATA } from '../types/DashboardWeather';
-import { presetFor } from '../constants/dashboardPresets';
+import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import { dashboardFixture, gardenFixture } from '../test/fixtures/dashboard';
 
 vi.mock('../services/gardenApi', () => ({
@@ -56,6 +56,7 @@ function serve(blocks: DashboardBlock[] = presetFor('expert')) {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level: 'expert',
+    capabilities: capabilitiesFor('expert'),
     isPreset: false,
     blocks,
     updatedAt: null,

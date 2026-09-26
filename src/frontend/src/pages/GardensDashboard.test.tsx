@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
-import { presetFor } from '../constants/dashboardPresets';
+import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
 import {
   dashboardFixture as dashboardWith,
   gardenFixture,
@@ -33,10 +33,15 @@ vi.mock('../services/gardenApi', () => ({
   deleteGarden: vi.fn(),
 }));
 
-vi.mock('../services/dashboardApi', () => ({
+// SMA-448, PR #293, fix round 2 (A1) — the module's own `refusalOf` stays
+// real: it is what turns a refused switch into what the panel says, and a
+// mock of it would test nothing.
+vi.mock('../services/dashboardApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../services/dashboardApi')>()),
   fetchDashboardPreferences: vi.fn(),
   saveDashboardPreferences: vi.fn(),
   fetchDashboardData: vi.fn(),
+  changeFormula: vi.fn(),
 }));
 
 // SMA-336 PR 3b/5 — the weather aggregate and the profile city the Weather
@@ -54,11 +59,13 @@ vi.mock('../services/profileApi', () => ({ fetchProfile: vi.fn() }));
 
 import GardensDashboard from './GardensDashboard';
 import {
+  changeFormula,
   fetchDashboardData,
   fetchDashboardPreferences,
   saveDashboardPreferences,
 } from '../services/dashboardApi';
 import { fetchDashboardWeather } from '../services/weatherApi';
+import { HttpStatusError } from '../services/httpStatusError';
 import { fetchProfile } from '../services/profileApi';
 
 /**
@@ -86,6 +93,7 @@ function servePreferences(level: DashboardLevel, blocks?: DashboardBlock[]) {
   vi.mocked(fetchDashboardPreferences).mockResolvedValue({
     schemaVersion: 1,
     level,
+    capabilities: capabilitiesFor(level),
     isPreset: blocks === undefined,
     blocks: blocks ?? presetFor(level),
     updatedAt: null,
@@ -473,6 +481,7 @@ describe('GardensDashboard — page states (SMA-336)', () => {
     resolve({
       schemaVersion: 1,
       level: 'gardener',
+      capabilities: capabilitiesFor('gardener'),
       isPreset: true,
       blocks: presetFor('gardener'),
       updatedAt: null,
@@ -487,6 +496,7 @@ describe('GardensDashboard — page states (SMA-336)', () => {
       .mockResolvedValueOnce({
         schemaVersion: 1,
         level: 'gardener',
+        capabilities: capabilitiesFor('gardener'),
         isPreset: true,
         blocks: presetFor('gardener'),
         updatedAt: null,
@@ -976,21 +986,24 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     expect(screen.getByRole('radiogroup', { name: 'Level' })).toBeInTheDocument();
   });
 
-  it('choosing a level applies its preset and persists it', async () => {
+  // SMA-448, lot F1, S5 — this test used to pin « choosing a level applies its
+  // preset and persists it »: the page wrote the Expert preset over the layout
+  // it left (V4, fact F1 of the contract). Choosing a level now switches the
+  // account's formula on the server, and the page draws what the server then
+  // holds — here the Expert preset, for a formula never visited.
+  it('choosing a level switches the formula on the server, then draws the layout the server holds', async () => {
+    vi.mocked(changeFormula).mockResolvedValue(undefined);
     await openPanel();
+    // What the server holds once the account is Expert.
+    servePreferences('expert');
 
     fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
 
     // The Expert preset: the Key figures band, then the eight (PR B, B1).
     await waitFor(() => expect(renderedKeys()).toHaveLength(9));
     expect(await screen.findByText('Expert view')).toBeInTheDocument();
-    await waitFor(() =>
-      expect(saveDashboardPreferences).toHaveBeenCalledWith(
-        { level: 'expert', blocks: presetFor('expert') },
-        false,
-        expect.any(AbortSignal)
-      )
-    );
+    expect(changeFormula).toHaveBeenCalledWith('expert');
+    expect(saveDashboardPreferences).not.toHaveBeenCalled();
   });
 
   it('the reset names the current level and restores its preset', async () => {
@@ -1024,19 +1037,213 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     ).not.toBeNull();
   });
 
-  it('the gallery lists the hidden widgets and « + » puts one back on the page', async () => {
+  /**
+   * SMA-448, lot F1 — the Statistics thumbnail lives at the Expert formula,
+   * the one that has Statistics (R1): an Expert layout with Statistics and
+   * Harvest hidden, so the gallery offers both, as the Gardener's used to.
+   */
+  const serveExpertWithStatisticsAndHarvestHidden = () =>
+    servePreferences(
+      'expert',
+      presetFor('expert').map((block) =>
+        block.key === 'stats' || block.key === 'harvest' ? { ...block, hidden: true } : block
+      )
+    );
+
+  it('the gallery lists the hidden widgets and « + » puts one back on the page — never Statistics at the Gardener formula (SMA-448, R1)', async () => {
     await openPanel();
     // Round 1 (G9): MUI renders the open temporary Drawer as role="dialog";
     // since round 1 it also carries an accessible name (E5).
     const gallery = screen.getByRole('dialog', { name: 'Customize' });
 
-    expect(within(gallery).getByText('Statistics')).toBeInTheDocument();
     expect(within(gallery).getByText('Harvest')).toBeInTheDocument();
+    expect(within(gallery).queryByText('Statistics')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add Statistics' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add Statistics' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Harvest' }));
 
-    await waitFor(() => expect(renderedKeys()).toContain('stats'));
-    expect(renderedKeys()).not.toContain('harvest');
+    await waitFor(() => expect(renderedKeys()).toContain('harvest'));
+    expect(renderedKeys()).not.toContain('stats');
+  });
+
+  // SMA-448, lot F1, S5 — the gallery offers the widgets of the FORMULA, as the
+  // served capabilities list them: a hidden block they do not permit is never
+  // offered back, whatever the layout carries.
+  it('offers in the gallery only the widgets the served capabilities permit — never a hidden block they do not', async () => {
+    servePreferences('gardener', [
+      ...presetFor('gardener'),
+      { key: 'stats', size: 'large', hidden: true },
+    ]);
+
+    await openPanel();
+    const gallery = screen.getByRole('dialog', { name: 'Customize' });
+
+    expect(within(gallery).getByText('Harvest')).toBeInTheDocument();
+    expect(within(gallery).queryByText('Statistics')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add Statistics' })).toBeNull();
+  });
+
+  // SMA-448, lot F1, S5 — V4 on the page: choosing a formula in the panel
+  // switches it on the server, which keeps every formula's layout; the page
+  // never writes the chosen formula's preset over what the user arranged.
+  it('choosing another formula in the panel switches it on the server — it never writes its preset', async () => {
+    vi.mocked(changeFormula).mockResolvedValue(undefined);
+    await openPanel();
+
+    fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
+
+    await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('expert'));
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(
+      vi.mocked(saveDashboardPreferences).mock.calls.filter(([saved]) => saved.level === 'expert')
+    ).toEqual([]);
+  });
+
+  // SMA-448, PR #293, fix round 1 — S5: while a switch is on the wire the
+  // panel takes no gesture, so none can be made and then lost — its levels,
+  // its reset and its « + » are disabled until the page stands at the new
+  // formula.
+  it('while a switch is in flight the panel takes no gesture: its levels, its reset and its « + » are disabled until the new formula stands', async () => {
+    let release!: () => void;
+    vi.mocked(changeFormula).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        })
+    );
+    await openPanel();
+
+    fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
+    await waitFor(() => expect(changeFormula).toHaveBeenCalledWith('expert'));
+
+    for (const name of [/Novice/, /Gardener/, /Expert/]) {
+      expect(screen.getByRole('radio', { name })).toBeDisabled();
+    }
+    expect(screen.getByRole('button', { name: 'Reset to the Gardener level' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add Harvest' })).toBeDisabled();
+
+    servePreferences('expert');
+    release();
+    await waitFor(() => expect(screen.getByRole('radio', { name: /Expert/ })).toBeChecked());
+    expect(screen.getByRole('radio', { name: /Novice/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Reset to the Expert level' })).toBeEnabled();
+  });
+
+  // SMA-448, PR #293, fix round 1 — S6: the switch lands but its layout
+  // cannot be read back. The page used to keep the formula left on screen,
+  // under its name, the panel still open on it; it now shows its load error
+  // and its retry — the panel closed, no « Changes not saved » for a layout
+  // that was saved — and the retry brings the new formula.
+  it('a switch whose layout cannot be read back closes the panel on the load error and its retry, which brings the new formula', async () => {
+    vi.mocked(changeFormula).mockResolvedValue(undefined);
+    await openPanel();
+    vi.mocked(fetchDashboardPreferences).mockRejectedValueOnce(new Error('network'));
+
+    fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
+
+    expect(await screen.findByText('Couldn’t load your dashboard.')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull());
+    expect(renderedKeys()).toEqual([]);
+    expect(screen.queryByText('Changes not saved')).toBeNull();
+
+    servePreferences('expert');
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() => expect(renderedKeys()).toHaveLength(9));
+    expect(await screen.findByText('Expert view')).toBeInTheDocument();
+  });
+
+  // SMA-448, PR #293, fix round 2 — A1 (Alexandre's visual finding, 26/09):
+  // a formula the server refused showed « Changes not saved » in the header —
+  // false, nothing was unsaved — and nothing else. The panel now says the
+  // refusal and each reason the server served, where the user just acted;
+  // the indicator says nothing false; the formula and the layout stay.
+  const refuseNovice = () =>
+    vi.mocked(changeFormula).mockRejectedValue(
+      new HttpStatusError('Request failed (409)', 409, {
+        status: 409,
+        code: 'formula.tooSmall',
+        formula: 'novice',
+        reasons: [
+          { kind: 'gardens', have: 5, limit: 3 },
+          { kind: 'size', gardenId: 'g1', width: 30, height: 30, maxWidth: 20, maxHeight: 20 },
+        ],
+      })
+    );
+
+  it('a formula the server refuses is said in the panel, with each reason served — never « Changes not saved » — and the formula stays', async () => {
+    refuseNovice();
+    await openPanel();
+    const panel = screen.getByRole('dialog', { name: 'Customize' });
+
+    fireEvent.click(screen.getByRole('radio', { name: /Novice/ }));
+
+    const said = await within(panel).findByText(
+      'Can’t switch to Novice: 5 gardens for 3 at most and a garden of 30 × 30 cells for 20 × 20 at most'
+    );
+    expect(said).toHaveAttribute('role', 'status');
+    expect(said).toHaveAttribute('aria-live', 'polite');
+    expect(screen.queryByText('Changes not saved')).toBeNull();
+    expect(screen.queryByText('Couldn’t load your dashboard.')).toBeNull();
+    expect(screen.getByRole('radio', { name: /Gardener/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /Novice/ })).toBeEnabled();
+    expect(renderedKeys()).toHaveLength(6);
+  });
+
+  it('the panel’s refusal region is born empty and stays mounted, so what it then says is announced', async () => {
+    await openPanel();
+    const panel = screen.getByRole('dialog', { name: 'Customize' });
+
+    const region = within(panel).getByRole('status');
+    expect(region).toHaveTextContent('');
+    expect(region).not.toHaveAttribute('aria-live', 'assertive');
+  });
+
+  it('dit le refus en français, avec chaque raison servie', async () => {
+    localStorage.setItem('smartcrops-language', 'fr');
+    refuseNovice();
+    renderPage();
+    const customize = await screen.findByRole('button', { name: 'Personnaliser' });
+    await waitFor(() => expect(customize).toBeEnabled());
+    fireEvent.click(customize);
+    const panel = await screen.findByRole('dialog', { name: 'Personnaliser' });
+
+    fireEvent.click(screen.getByRole('radio', { name: /Novice/ }));
+
+    expect(
+      await within(panel).findByText(
+        'Impossible de passer en Novice : 5 jardins pour 3 au plus et un jardin de 30 × 30 cases pour 20 × 20 au plus'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Modifications non enregistrées')).toBeNull();
+  });
+
+  // SMA-448, PR #293, fix round 2 — R2-E1 (the Extension, on the correction
+  // of S6): the panel was hidden by its condition while `panelOpen` stayed
+  // true, so it came back by itself once « Try again » had succeeded, and its
+  // closing never ran the effect that gives the focus back. The handler that
+  // sees the failure now closes the panel; the focus goes to « Try again »,
+  // the one action the page offers while its layout is unavailable.
+  it('after a switch whose layout cannot be read back, the focus goes to « Try again », and the panel does not come back by itself once the retry succeeds', async () => {
+    vi.mocked(changeFormula).mockResolvedValue(undefined);
+    await openPanel();
+    vi.mocked(fetchDashboardPreferences).mockRejectedValueOnce(new Error('network'));
+
+    fireEvent.click(screen.getByRole('radio', { name: /Expert/ }));
+
+    // The error first, then the drawer gone: while it closes, the page behind
+    // it is still hidden from the accessibility tree, and its buttons with it.
+    expect(await screen.findByText('Couldn’t load your dashboard.')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull());
+    const retry = screen.getByRole('button', { name: 'Try again' });
+    await waitFor(() => expect(document.activeElement).toBe(retry));
+
+    servePreferences('expert');
+    fireEvent.click(retry);
+
+    await waitFor(() => expect(renderedKeys()).toHaveLength(9));
+    expect(screen.queryByRole('dialog', { name: 'Customize' })).toBeNull();
+    expect(await screen.findByText('Expert view')).toBeInTheDocument();
   });
 
   it('says so when nothing is hidden', async () => {
@@ -1055,6 +1262,7 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     //
     // The fixture is one 4 × 3 garden at 50 cm: 12 active cells make 3 m², and
     // the plan is empty, so the occupancy bar sits at 0.
+    serveExpertWithStatisticsAndHarvestHidden();
     await openPanel();
     const gallery = screen.getByRole('dialog', { name: 'Customize' });
 
@@ -1073,6 +1281,7 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     vi.mocked(fetchDashboardData).mockResolvedValue(
       dashboardWith([garden('g1', 'Domaine', { width: 101, height: 100, cellSize: '1m' })])
     );
+    serveExpertWithStatisticsAndHarvestHidden();
 
     await openPanel();
     const gallery = screen.getByRole('dialog', { name: 'Customize' });
@@ -1291,6 +1500,7 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     // adding the widget is worth doing now — it existed nowhere a screen reader
     // could reach, because the whole thumbnail was `aria-hidden`. The glyph and
     // the bars are decorative and stay hidden; the sentence is content.
+    serveExpertWithStatisticsAndHarvestHidden();
     await openPanel();
     const gallery = screen.getByRole('dialog', { name: 'Customize' });
 

@@ -67,7 +67,9 @@ public record DeleteAccountRequest([Required] string Confirmation);
 // the service holds, and immune to legacy payloads a re-parse could choke on.
 /// <summary>The profile's personal fields, INCLUDING the account's default
 /// location (SMA-336 PR 3a/5): a place the user typed is theirs to carry away
-/// — art. 20 covers it like the free-text city beside it. Additive, so
+/// — art. 20 covers it like the free-text city beside it — and, since SMA-448
+/// (lot F1), the account's formula with the instant of its deliberate choice
+/// (null for an account that never made one). Additive, so
 /// <see cref="AccountExportResponse.CurrentSchemaVersion"/> stays at 1.</summary>
 public record AccountExportProfile(
     string Email,
@@ -80,7 +82,9 @@ public record AccountExportProfile(
     string? LocationCountry,
     double? Latitude,
     double? Longitude,
-    DateTime? LocationResolvedAt);
+    DateTime? LocationResolvedAt,
+    string Formula,
+    DateTime? FormulaChosenAt);
 /// <summary>One plant suggestion the user AUTHORED (R2, arts. 17/20 scope
 /// parity): the deletion path anonymizes these rows as the person's data, so
 /// the portability export must carry them too — the two articles cover one
@@ -1159,7 +1163,9 @@ public class AuthController(
                 user.LocationCountry,
                 user.Latitude,
                 user.Longitude,
-                user.LocationResolvedAt),
+                user.LocationResolvedAt,
+                user.Formula,
+                user.FormulaChosenAt),
             gardens.Select(g => new AccountExportGarden(
                 g.Id,
                 g.Name,

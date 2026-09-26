@@ -16,7 +16,8 @@ public record DashboardPresetBlock(string Key, string Size, bool Hidden);
 /// (<c>_spec.md</c> § 8): « Novice : Météo Moyen, Jardins Moyen, Conseils Petit,
 /// Ce mois-ci Petit », « Jardinier : Météo Moyen, Jardins Grand, Conseils Moyen,
 /// Ce mois-ci Moyen, À faire Moyen, Compteurs Moyen », « Expert : les huit
-/// widgets en Grand ».
+/// widgets en Grand ». Since SMA-448 (lot F1) they are also the WIDGETS each
+/// formula has, and <see cref="FormulaCatalog"/> serves them.
 ///
 /// <para>Every preset lists every block its level permits: a block a level does
 /// not show is present and <c>Hidden</c>, so the Customize gallery can offer it
@@ -27,10 +28,10 @@ public record DashboardPresetBlock(string Key, string Size, bool Hidden);
 /// also the fallback the API serves when a user has no saved layout, or one
 /// stored under an unknown schema version.</para>
 ///
-/// <para>Byte-identical to the client's <c>constants/dashboardPresets.ts</c>,
-/// and checked so: both sides compare their presets to
-/// <c>src/frontend/src/constants/dashboardLayout.reference.json</c> (PR #287,
-/// fix round 1, S2).</para>
+/// <para>Checked against <c>src/frontend/src/constants/dashboardLayout.reference.json</c>
+/// (PR #287, fix round 1, S2). The client kept a byte-identical copy until
+/// SMA-448 (lot F1): it now receives the preset with the formula's
+/// capabilities, served by <see cref="FormulaCatalog"/>.</para>
 /// </summary>
 public static class DashboardPresets
 {
@@ -51,6 +52,13 @@ public static class DashboardPresets
         new(DashboardLayout.Blocks.Harvest, L, true),
     ];
 
+    /// <summary>
+    /// Without Statistics since the formulas (SMA-448, lot F1 — R1, V3-01:
+    /// « Les statistiques — Non · Non · Oui », « retiré au Jardinier »): a
+    /// preset lists the blocks its formula HAS, so the Gardener cannot bring
+    /// Statistics back from its gallery, nor save it. Récolte stays, hidden, as
+    /// before (Alexandre, 26/09, question 3).
+    /// </summary>
     private static readonly IReadOnlyList<DashboardPresetBlock> GardenerPreset =
     [
         new(DashboardLayout.Blocks.Weather, M, false),
@@ -59,7 +67,6 @@ public static class DashboardPresets
         new(DashboardLayout.Blocks.Month, M, false),
         new(DashboardLayout.Blocks.Todo, M, false),
         new(DashboardLayout.Blocks.Counters, M, false),
-        new(DashboardLayout.Blocks.Stats, L, true),
         new(DashboardLayout.Blocks.Harvest, L, true),
     ];
 
@@ -97,7 +104,8 @@ public static class DashboardPresets
     /// all — whether its preset lists it (pre-flight D4). The minimal right of a
     /// level the controller checks: a block it does not permit is refused on
     /// write and dropped on read. An unknown level reads as the default one, as
-    /// <see cref="For"/> does. The client's twin is <c>permitsBlock</c>.
+    /// <see cref="For"/> does. The client reads the same answer in the widgets
+    /// the formula's capabilities list (SMA-448).
     /// </summary>
     public static bool Permits(string? level, string key) =>
         For(level).Any(block => block.Key == key);

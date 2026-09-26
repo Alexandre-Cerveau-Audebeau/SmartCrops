@@ -7,7 +7,13 @@ import {
   type DashboardLevel,
   type DashboardPreferences,
   type DashboardSize,
+  type DashboardSizeList,
+  type FormulaCapabilities,
+  type FormulaRefusal,
+  type FormulaRefusalReason,
+  type GardensRefusalReason,
   type SaveDashboardPreferences,
+  type SizeRefusalReason,
 } from '../types/Dashboard';
 import type {
   DashboardData,
@@ -17,9 +23,9 @@ import type {
 } from '../types/DashboardData';
 import type { GardenConfig, LightSlot } from '../types/Garden';
 import type { PlacementData } from './gardenLayoutApi';
-import { sizesFor } from '../constants/dashboardCapabilities';
-import { DEFAULT_DASHBOARD_LEVEL, permitsBlock, presetFor } from '../constants/dashboardPresets';
+import { permitsBlock, presetOf, sizesFor } from '../constants/dashboardCapabilities';
 import { fetchJson } from './fetchJson';
+import { HttpStatusError } from './httpStatusError';
 import {
   arrayOf,
   isBoolean,
@@ -37,14 +43,16 @@ const API_BASE = '/api';
 // HttpOnly auth cookie flows (SMA-280 policy: every call site states it).
 
 /**
- * The size a block takes in its level's preset — what a size the level does
- * not permit comes back to. Every preset lists every block its level permits
- * (pinned by `dashboardPresets.test.ts`, and by the server's
- * `DashboardPresetsTests`), and `normalizeBlock` drops any other before asking;
- * the first size the level permits stands in should one ever not.
+ * The size a block takes in its formula's preset — what a size the formula
+ * does not permit comes back to. The served preset lists every widget the
+ * formula has (`normalizeCapabilities` refuses capabilities where it does
+ * not), and `normalizeBlock` drops any other block before asking.
  */
-function presetSize(key: DashboardBlockKey, level: DashboardLevel): DashboardSize {
-  return presetFor(level).find((block) => block.key === key)?.size ?? sizesFor(key, level)[0];
+function presetSize(key: DashboardBlockKey, capabilities: FormulaCapabilities): DashboardSize {
+  return (
+    capabilities.preset.find((block) => block.key === key)?.size ??
+    (sizesFor(key, capabilities) as DashboardSizeList)[0]
+  );
 }
 
 /**
@@ -75,21 +83,25 @@ function presetSize(key: DashboardBlockKey, level: DashboardLevel): DashboardSiz
  * preset, which holds no size for it to come back to. No write path of this
  * client produces one; the server refuses it on write and drops it on read
  * (`Merge`) — this is the same rule, in defence.
+ *
+ * SMA-448, lot F1, S5 — « permitted » is what the SERVED capabilities say,
+ * never a table of this client's: the server sends the formula's widgets and
+ * their sizes with the layout, and they are what a block is read through.
  */
-function normalizeBlock(value: unknown, level: DashboardLevel): DashboardBlock | null {
+function normalizeBlock(value: unknown, capabilities: FormulaCapabilities): DashboardBlock | null {
   if (typeof value !== 'object' || value === null) return null;
 
   const block = value as { key?: unknown; size?: unknown; hidden?: unknown; options?: unknown };
   if (typeof block.key !== 'string' || !isDashboardBlockKey(block.key)) return null;
-  if (!permitsBlock(level, block.key)) return null;
+  if (!permitsBlock(capabilities, block.key)) return null;
 
-  const permitted = sizesFor(block.key, level);
+  const permitted: readonly DashboardSize[] = sizesFor(block.key, capabilities) ?? [];
   const normalized: DashboardBlock = {
     key: block.key,
     size:
       typeof block.size === 'string' && isDashboardSize(block.size) && permitted.includes(block.size)
         ? block.size
-        : presetSize(block.key, level),
+        : presetSize(block.key, capabilities),
     hidden: block.hidden === true,
   };
 
@@ -113,13 +125,104 @@ function normalizeBlock(value: unknown, level: DashboardLevel): DashboardBlock |
   return normalized;
 }
 
+/** A size list the grid can step through: non-empty, every entry a known size. */
+function isSizeList(value: unknown): value is DashboardSizeList {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((size) => typeof size === 'string' && isDashboardSize(size))
+  );
+}
+
+/**
+ * SMA-448, lot F1, S5 — the capabilities the server serves with the layout,
+ * checked before they are trusted, as every record at this boundary is. They
+ * are what the page draws its widgets, their sizes and its bar from, so
+ * capabilities that do not hold together are refused WHOLE — the page shows
+ * its actionable error rather than guess: an unknown formula, a widget this
+ * build does not know, a widget without a size list, a preset block of a
+ * widget the formula does not have, or a preset that misses one it has.
+ */
+function normalizeCapabilities(raw: unknown): FormulaCapabilities {
+  function fail(reason: string): never {
+    throw new Error(`Invalid formula capabilities: ${reason}`);
+  }
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) fail('not an object');
+  const source = raw as Record<string, unknown>;
+
+  const key = source.key;
+  if (typeof key !== 'string' || !isDashboardLevel(key)) fail('unknown formula');
+
+  const widgetsRaw = source.widgets;
+  if (!Array.isArray(widgetsRaw)) fail('no widgets');
+  const widgets = (widgetsRaw as unknown[]).map((widget) =>
+    typeof widget === 'string' && isDashboardBlockKey(widget) ? widget : fail(`unknown widget ${String(widget)}`)
+  );
+
+  const sizesRaw = source.sizes;
+  if (typeof sizesRaw !== 'object' || sizesRaw === null || Array.isArray(sizesRaw)) fail('no sizes');
+  const sizes: Partial<Record<DashboardBlockKey, DashboardSizeList>> = {};
+  for (const widget of widgets) {
+    const list = (sizesRaw as Record<string, unknown>)[widget];
+    if (!isSizeList(list)) fail(`no sizes for ${widget}`);
+    sizes[widget] = [...(list as DashboardSizeList)] as unknown as DashboardSizeList;
+  }
+
+  const presetRaw = source.preset;
+  if (!Array.isArray(presetRaw)) fail('no preset');
+  const preset = (presetRaw as unknown[]).map((entry) => {
+    const block = (typeof entry === 'object' && entry !== null ? entry : {}) as Record<string, unknown>;
+    if (typeof block.key !== 'string' || !isDashboardBlockKey(block.key) || !widgets.includes(block.key)) {
+      return fail(`a preset block of a widget the formula does not have`);
+    }
+    if (typeof block.size !== 'string' || !isDashboardSize(block.size)) return fail(`a preset size`);
+    if (typeof block.hidden !== 'boolean') return fail(`a preset visibility`);
+    return { key: block.key, size: block.size, hidden: block.hidden } satisfies DashboardBlock;
+  });
+  if (preset.length !== widgets.length) fail('a preset that is not the formula\'s widgets');
+
+  const maxRaw = source.maxGardenSize as Record<string, unknown> | null | undefined;
+  if (
+    typeof maxRaw !== 'object' ||
+    maxRaw === null ||
+    !isWholeNumber(maxRaw.width) ||
+    !isWholeNumber(maxRaw.height)
+  ) {
+    fail('no largest garden size');
+  }
+  const gardenLimit = source.gardenLimit;
+  if (gardenLimit !== null && !isWholeNumber(gardenLimit)) fail('a garden limit');
+  if (!isString(source.weather)) fail('no weather mode');
+  if (!isBoolean(source.compactBar)) fail('no compact bar');
+
+  return {
+    key: key as DashboardLevel,
+    gardenLimit: gardenLimit as number | null,
+    maxGardenSize: {
+      width: (maxRaw as { width: number }).width,
+      height: (maxRaw as { height: number }).height,
+    },
+    widgets,
+    sizes,
+    preset,
+    weather: source.weather as string,
+    compactBar: source.compactBar as boolean,
+  };
+}
+
 function normalize(raw: unknown): DashboardPreferences {
   const source = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
 
+  // What the formula permits comes from the server, or the layout is not read
+  // at all (SMA-448, S5): no table of this client's stands in for it.
+  const capabilities = normalizeCapabilities(source.capabilities);
+
+  // The account's formula: the level the server read the layout at, which is
+  // the formula its capabilities are the account's.
   const level =
     typeof source.level === 'string' && isDashboardLevel(source.level)
       ? source.level
-      : DEFAULT_DASHBOARD_LEVEL;
+      : capabilities.key;
 
   // `key` is the identity the grid sorts by (round 2, E'8): React keys,
   // `SortableContext` items, the `indexOf` of `handleDragEnd`, and the match
@@ -128,7 +231,7 @@ function normalize(raw: unknown): DashboardPreferences {
   // did not write — so the first occurrence wins here too.
   const seen = new Set<DashboardBlockKey>();
   const blocks = (Array.isArray(source.blocks) ? source.blocks : [])
-    .map((block) => normalizeBlock(block, level))
+    .map((block) => normalizeBlock(block, capabilities))
     .filter((block): block is DashboardBlock => block !== null)
     .filter((block) => {
       if (seen.has(block.key)) return false;
@@ -140,11 +243,12 @@ function normalize(raw: unknown): DashboardPreferences {
     schemaVersion: typeof source.schemaVersion === 'number' ? source.schemaVersion : 0,
     level,
     isPreset: source.isPreset === true,
-    // Nothing usable came back: show the level's preset rather than an empty
+    // Nothing usable came back: show the formula's preset rather than an empty
     // grid, which would read as "you have no widgets" instead of "we could not
     // read your layout".
-    blocks: blocks.length > 0 ? blocks : presetFor(level),
+    blocks: blocks.length > 0 ? blocks : presetOf(capabilities),
     updatedAt: typeof source.updatedAt === 'string' ? source.updatedAt : null,
+    capabilities,
   };
 }
 
@@ -191,6 +295,60 @@ export async function saveDashboardPreferences(
     signal,
     body: JSON.stringify(preferences),
   });
+}
+
+/**
+ * SMA-448, lot F1 — changes the caller's formula (`PUT /api/formulas/current`).
+ * The server archives the layout of the formula left and restores the layout
+ * of the formula entered — nothing is lost, in either direction (V4) — so the
+ * caller reads the layout back afterwards rather than writing one. A formula
+ * too small for the account's gardens is refused in 409 with a
+ * `formula.tooSmall` problem, which reaches the caller on the
+ * {@link HttpStatusError}'s `problem`.
+ */
+export async function changeFormula(formula: DashboardLevel): Promise<void> {
+  return fetchJson<void>(`${API_BASE}/formulas/current`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ formula }),
+  });
+}
+
+// ── The refusal of a formula ─────────────────────────────────────────────
+
+const isGardensReason = matches<GardensRefusalReason>({
+  kind: (value): value is 'gardens' => value === 'gardens',
+  have: isWholeNumber,
+  limit: isWholeNumber,
+});
+
+const isSizeReason = matches<SizeRefusalReason>({
+  kind: (value): value is 'size' => value === 'size',
+  gardenId: isString,
+  width: isWholeNumber,
+  height: isWholeNumber,
+  maxWidth: isWholeNumber,
+  maxHeight: isWholeNumber,
+});
+
+const isRefusalReason = (value: unknown): value is FormulaRefusalReason =>
+  isGardensReason(value) || isSizeReason(value);
+
+/**
+ * SMA-448, PR #293, fix round 2 (A1) — what a `changeFormula` that failed
+ * means for the page: the formula it asked for, refused, and the reasons the
+ * server served — those of a 409 `formula.tooSmall` problem (RFC 9457), each
+ * checked at this boundary as every record is, the ones that do not hold
+ * dropped. Any other failure is the same refusal with no reason to say. The
+ * account and its layout are as they were either way: nothing is unsaved.
+ */
+export function refusalOf(error: unknown, formula: DashboardLevel): FormulaRefusal {
+  const problem = error instanceof HttpStatusError ? error.problem : undefined;
+  if (problem?.code !== 'formula.tooSmall' || !Array.isArray(problem.reasons)) {
+    return { formula, reasons: [] };
+  }
+  return { formula, reasons: (problem.reasons as unknown[]).filter(isRefusalReason) };
 }
 
 // The primitives — `matches`, `isString`, `isBoolean`, `nullable`, `arrayOf`,

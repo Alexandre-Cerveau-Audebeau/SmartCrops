@@ -29,6 +29,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     private static readonly string[] ResponseWhitelist =
     [
         "blocks",
+        "capabilities",
         "isPreset",
         "level",
         "schemaVersion",
@@ -80,17 +81,18 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.Equal(DashboardLayout.CurrentSchemaVersion, body.SchemaVersion);
         Assert.Null(body.UpdatedAt);
 
-        // The preset lists every block of the Gardener — the eight widgets, in
-        // canonical order, hidden ones included, and never the Key figures band,
-        // which is the Expert's alone (SMA-437, pre-flight D4). The Customize
+        // The preset lists every block of the Gardener — its seven widgets, in
+        // canonical order, hidden ones included; never the Key figures band,
+        // the Expert's alone (SMA-437, pre-flight D4), and since the formulas
+        // never Statistics either (SMA-448, lot F1 — R1, V3-01). The Customize
         // gallery reads them from here.
         Assert.Equal(GardenerKeys, body.Blocks.Select(b => b.Key).ToList());
         Assert.DoesNotContain("keyfigures", body.Blocks.Select(b => b.Key));
+        Assert.DoesNotContain(DashboardLayout.Blocks.Stats, body.Blocks.Select(b => b.Key));
 
-        // Gardener: gardens large, stats and harvest hidden (frozen design § 8).
+        // Gardener: gardens large, harvest hidden (frozen design § 8).
         Assert.Equal(DashboardLayout.Sizes.Large, Block(body, DashboardLayout.Blocks.Gardens).Size);
         Assert.False(Block(body, DashboardLayout.Blocks.Gardens).Hidden);
-        Assert.True(Block(body, DashboardLayout.Blocks.Stats).Hidden);
         Assert.True(Block(body, DashboardLayout.Blocks.Harvest).Hidden);
     }
 
@@ -118,7 +120,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task PutThenGetPreferences_ReturnsWhatWasSaved()
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId);
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
         AuthAs(userId);
 
         // Expert level, gardens moved first and shrunk, harvest hidden — and the
@@ -163,8 +165,16 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         await SeedUserAsync(userId);
         AuthAs(userId);
 
-        await Client.PutAsJsonAsync(Url, ValidRequest(DashboardLayout.Levels.Novice));
-        await Client.PutAsJsonAsync(Url, ValidRequest(DashboardLayout.Levels.Expert));
+        // Two saves at the account's formula, the second different from the
+        // first (SMA-448, S4: a layout is saved at the account's formula only —
+        // the test used to switch level between the two saves, which only the
+        // formula switch may do now).
+        var first = ValidRequest();
+        var second = new SaveDashboardPreferencesRequest(
+            first.Level,
+            [.. first.Blocks.Select(b => b.Key == DashboardLayout.Blocks.Tips ? b with { Size = DashboardLayout.Sizes.Small } : b)]);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.PutAsJsonAsync(Url, first)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Client.PutAsJsonAsync(Url, second)).StatusCode);
 
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
@@ -173,7 +183,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.Single(rows);
 
         var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
-        Assert.Equal(DashboardLayout.Levels.Expert, body!.Level);
+        Assert.Equal(DashboardLayout.Sizes.Small, Block(body!, DashboardLayout.Blocks.Tips).Size);
     }
 
     [Fact]
@@ -182,10 +192,12 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         var mine = Guid.NewGuid().ToString();
         var theirs = Guid.NewGuid().ToString();
         await SeedUserAsync(mine);
-        await SeedUserAsync(theirs);
+        await SeedUserAsync(theirs, DashboardLayout.Levels.Novice);
 
         AuthAs(theirs);
-        await Client.PutAsJsonAsync(Url, ValidRequest(DashboardLayout.Levels.Novice));
+        Assert.Equal(
+            HttpStatusCode.NoContent,
+            (await Client.PutAsJsonAsync(Url, ValidRequest(DashboardLayout.Levels.Novice))).StatusCode);
 
         AuthAs(mine);
         var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
@@ -204,8 +216,11 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task PutPreferences_InvalidDocument_Returns400(
         string level, string key, string size, bool hidden)
     {
+        // The account on the level the document names, when it names a real
+        // one: each row is refused for its own reason, never for a level that
+        // is not the account's (SMA-448, S4).
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId);
+        await SeedUserAsync(userId, DashboardPresets.IsKnownLevel(level) ? level : DashboardLayout.Levels.Gardener);
         AuthAs(userId);
 
         var request = new SaveDashboardPreferencesRequest(level, [new(key, size, hidden, null)]);
@@ -219,7 +234,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task PutPreferences_DuplicateBlock_Returns400()
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId);
+        await SeedUserAsync(userId, DashboardLayout.Levels.Novice);
         AuthAs(userId);
 
         var request = new SaveDashboardPreferencesRequest(
@@ -238,7 +253,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task PutPreferences_EmptyBlocks_Returns400()
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId);
+        await SeedUserAsync(userId, DashboardLayout.Levels.Novice);
         AuthAs(userId);
 
         var request = new SaveDashboardPreferencesRequest(DashboardLayout.Levels.Novice, []);
@@ -296,7 +311,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task GetPreferences_LayoutMissingABlock_FillsItFromThePreset()
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId);
+        await SeedUserAsync(userId, DashboardLayout.Levels.Novice);
         AuthAs(userId);
 
         // A layout saved before a block existed: only two blocks, current version.
@@ -420,7 +435,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task PutPreferences_SizeTheFormulaDoesNotPermit_Returns400(string level)
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId);
+        await SeedUserAsync(userId, level);
         AuthAs(userId);
 
         var request = new SaveDashboardPreferencesRequest(
@@ -481,7 +496,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task PutPreferences_ExpertWithTheBandInFullWidth_IsStored_AndReadFirst()
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId);
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
         AuthAs(userId);
 
         var request = new SaveDashboardPreferencesRequest(
@@ -522,12 +537,191 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         await AssertNothingStoredAsync(userId);
     }
 
+    // ── The widgets of a formula (SMA-448, lot F1 — R1) ──────────────────────
+
+    /// <summary>
+    /// R1 and R8 (V3-01: « Les statistiques — Non · Non · Oui »): Statistics is
+    /// not the Gardener's, so a Gardener SHOWING it is refused on the server,
+    /// not only absent from its gallery.
+    /// </summary>
+    [Fact]
+    public async Task PutPreferences_GardenerShowingStatistics_Returns400_NamingTheLevel()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var request = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Gardener,
+            [
+                new(DashboardLayout.Blocks.Gardens, DashboardLayout.Sizes.Large, false, null),
+                new(DashboardLayout.Blocks.Stats, DashboardLayout.Sizes.Large, false, null),
+            ]);
+
+        var response = await Client.PutAsJsonAsync(Url, request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("block 'stats' is not available at level 'gardener'", await response.Content.ReadAsStringAsync());
+        await AssertNothingStoredAsync(userId);
+    }
+
+    /// <summary>
+    /// A tab opened before the formulas carries the Gardener preset of its
+    /// time — Statistics included, HIDDEN (pre-flight § C.7.3, the window of
+    /// the old client). A hidden block the formula does not have shows nothing
+    /// and grants nothing: it is dropped, not refused, so that tab keeps
+    /// saving — and it is never stored.
+    /// </summary>
+    [Fact]
+    public async Task PutPreferences_GardenerTabCarryingStatisticsHidden_IsAccepted_AndStoresNoStatistics()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var request = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Gardener,
+            [
+                new(DashboardLayout.Blocks.Weather, DashboardLayout.Sizes.Medium, false, null),
+                new(DashboardLayout.Blocks.Gardens, DashboardLayout.Sizes.Large, false, null),
+                new(DashboardLayout.Blocks.Stats, DashboardLayout.Sizes.Large, true, null),
+            ]);
+
+        var put = await Client.PutAsJsonAsync(Url, request);
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var stored = await db.UserDashboardPreferences.AsNoTracking().SingleAsync(p => p.UserId == userId);
+        Assert.DoesNotContain("\"stats\"", stored.LayoutJson);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+        Assert.NotNull(body);
+        Assert.DoesNotContain(DashboardLayout.Blocks.Stats, body.Blocks.Select(b => b.Key));
+    }
+
+    // ── The account's formula decides (SMA-448, lot F1, step S4) ─────────────
+
+    /// <summary>
+    /// R8: the level of a layout is the account's FORMULA — a right on the
+    /// account, not a field the client writes. A Gardener sending an Expert
+    /// layout is refused, and nothing is stored; only the formula switch
+    /// (<c>PUT /api/formulas/current</c>) changes the level. On develop any
+    /// known level was accepted (<c>Validate</c>, l. 805): 204.
+    /// </summary>
+    [Fact]
+    public async Task PutPreferences_AGardenerSendingAnExpertLayout_Returns400_AndStoresNothing()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var response = await Client.PutAsJsonAsync(Url, ValidRequest(DashboardLayout.Levels.Expert));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains(
+            "level 'expert' is not the account's formula 'gardener'",
+            await response.Content.ReadAsStringAsync());
+        await AssertNothingStoredAsync(userId);
+    }
+
+    /// <summary>
+    /// Read side of R8: the account's formula decides the level a layout is
+    /// read at, never the level the document names. A Gardener's row that
+    /// says « expert » — written by hand, or by a tab opened before the
+    /// formulas — reads as the Gardener's: the band and Statistics, which the
+    /// Gardener does not have, are dropped; what it has keeps its place and
+    /// size. Never an error.
+    /// </summary>
+    [Fact]
+    public async Task GetPreferences_TheAccountsFormulaDecides_NotTheStoredLevel_AndNeverAnError()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+        await InsertRawLayoutAsync(
+            userId,
+            DashboardLayout.CurrentSchemaVersion,
+            StoredExpertLayout([("keyfigures", "wide", false), ("stats", "large", false), ("tips", "small", false)]));
+
+        var response = await Client.GetAsync(Url);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<DashboardPreferencesResponse>();
+        Assert.NotNull(body);
+        Assert.Equal(DashboardLayout.Levels.Gardener, body.Level);
+        Assert.Equal(GardenerKeys.Order(StringComparer.Ordinal), body.Blocks.Select(b => b.Key).Order(StringComparer.Ordinal));
+        Assert.Equal(DashboardLayout.Sizes.Small, Block(body, DashboardLayout.Blocks.Tips).Size);
+    }
+
+    /// <summary>An Expert who never saved a layout reads the Expert preset — the account's formula, not the default level.</summary>
+    [Fact]
+    public async Task GetPreferences_NoStoredLayout_ReturnsThePresetOfTheAccountsFormula()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
+        AuthAs(userId);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+
+        Assert.NotNull(body);
+        Assert.True(body.IsPreset);
+        Assert.Equal(DashboardLayout.Levels.Expert, body.Level);
+        Assert.Equal(
+            DashboardPresets.For(DashboardLayout.Levels.Expert).Select(b => (b.Key, b.Size, b.Hidden)),
+            body.Blocks.Select(b => (b.Key, b.Size, b.Hidden)));
+    }
+
+    /// <summary>
+    /// The API serves the capabilities (pre-flight § C.2 a): the layout comes
+    /// with those of the account's formula — the catalogue's own entry, as
+    /// <c>GET /api/formulas</c> serves it — so the client draws what it is told
+    /// is permitted, from the same read as the layout it applies it to.
+    /// </summary>
+    [Theory]
+    [InlineData(DashboardLayout.Levels.Novice)]
+    [InlineData(DashboardLayout.Levels.Gardener)]
+    [InlineData(DashboardLayout.Levels.Expert)]
+    public async Task GetPreferences_CarriesTheCapabilitiesOfTheAccountsFormula(string formula)
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId, formula);
+        AuthAs(userId);
+
+        // Read on the wire, as the client receives it.
+        using var document = JsonDocument.Parse(await Client.GetStringAsync(Url));
+        Assert.True(
+            document.RootElement.TryGetProperty("capabilities", out var capabilities),
+            "Expected the response to carry the capabilities of the account's formula");
+
+        var expected = FormulaDtos.From(FormulaCatalog.For(formula));
+        Assert.Equal(formula, capabilities.GetProperty("key").GetString());
+        Assert.Equal(expected.Widgets, capabilities.GetProperty("widgets").EnumerateArray().Select(w => w.GetString()!));
+        var sizes = capabilities.GetProperty("sizes");
+        Assert.Equal(expected.Sizes.Keys.Order(StringComparer.Ordinal), sizes.EnumerateObject().Select(row => row.Name).Order(StringComparer.Ordinal));
+        Assert.All(expected.Sizes, row => Assert.Equal(row.Value, sizes.GetProperty(row.Key).EnumerateArray().Select(s => s.GetString()!)));
+        Assert.Equal(
+            expected.Preset.Select(b => (b.Key, b.Size, b.Hidden)),
+            capabilities.GetProperty("preset").EnumerateArray().Select(b => (
+                b.GetProperty("key").GetString()!,
+                b.GetProperty("size").GetString()!,
+                b.GetProperty("hidden").GetBoolean())));
+        // « null » for the Expert's unlimited number, the figure otherwise.
+        Assert.Equal(
+            expected.GardenLimit is { } limit ? limit.ToString(System.Globalization.CultureInfo.InvariantCulture) : "null",
+            capabilities.GetProperty("gardenLimit").GetRawText());
+        Assert.Equal(expected.MaxGardenSize.Width, capabilities.GetProperty("maxGardenSize").GetProperty("width").GetInt32());
+        Assert.Equal(expected.MaxGardenSize.Height, capabilities.GetProperty("maxGardenSize").GetProperty("height").GetInt32());
+        Assert.Equal(expected.Weather, capabilities.GetProperty("weather").GetString());
+        Assert.Equal(expected.CompactBar, capabilities.GetProperty("compactBar").GetBoolean());
+    }
+
     /// <summary>The band's one size is the Full width: a Large band is refused even at the Expert level.</summary>
     [Fact]
     public async Task PutPreferences_ExpertBandInLarge_Returns400_NamingTheSize()
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId);
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
         AuthAs(userId);
 
         var request = new SaveDashboardPreferencesRequest(
@@ -550,7 +744,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task PutPreferences_ExpertClientOfEightBlocks_IsAccepted_AndTheBandComesBackFirst()
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId);
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
         AuthAs(userId);
 
         var request = new SaveDashboardPreferencesRequest(
@@ -610,7 +804,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task GetPreferences_ExpertLayoutSavedBeforeTheBand_ReceivesItFirst_AndReadsAsThePreset()
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId);
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
         AuthAs(userId);
 
         await InsertRawLayoutAsync(
@@ -637,7 +831,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task GetPreferences_RearrangedExpertLayoutSavedBeforeTheBand_ReceivesItFirst_KeepingTheRest()
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId);
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
         AuthAs(userId);
 
         (string Key, string Size, bool Hidden)[] stored =
@@ -679,7 +873,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task PutPreferences_BandFiguresNotFourDistinctKnownOnes_Returns400(string figures)
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId);
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
         AuthAs(userId);
 
         var response = await Client.PutAsJsonAsync(Url, ExpertRequestWithBandOptions(new() { ["figures"] = JsonValue(figures) }));
@@ -693,7 +887,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task PutPreferences_BandFiguresFourDistinctKnownOnes_IsStored_AsSent()
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId);
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
         AuthAs(userId);
 
         var put = await Client.PutAsJsonAsync(
@@ -715,7 +909,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     public async Task PutPreferences_BandOptionsWithoutFigures_IsAccepted()
     {
         var userId = Guid.NewGuid().ToString();
-        await SeedUserAsync(userId);
+        await SeedUserAsync(userId, DashboardLayout.Levels.Expert);
         AuthAs(userId);
 
         var response = await Client.PutAsJsonAsync(
@@ -801,9 +995,10 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         var userId = Guid.NewGuid().ToString();
         await SeedUserAsync(userId);
 
-        // Eight clients, no stored row yet: every one of them reads `row is null`
-        // and inserts. The unique index on UserId lets exactly one through; the
-        // others must be retried against the winner's row, not surfaced as 500.
+        // Eight clients, no stored row yet. Since SMA-448 (S4) each save locks
+        // the account's row first (AccountFormulaLock), so the eight apply one
+        // after the other: the first inserts, the others find its row and
+        // replace the document — none surfaces as 500, one row is left.
         var clients = Enumerable.Range(0, 8).Select(_ => AuthorizedClient(userId)).ToList();
         try
         {
@@ -826,7 +1021,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    /// <summary>The Gardener preset's keys, in order — the eight widgets, never the band.</summary>
+    /// <summary>The Gardener preset's keys, in order — its seven widgets, never the band nor Statistics.</summary>
     private static List<string> GardenerKeys =>
         [.. DashboardPresets.For(DashboardLayout.Levels.Gardener).Select(b => b.Key)];
 
@@ -902,7 +1097,13 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         return client;
     }
 
-    private async Task SeedUserAsync(string userId)
+    /// <summary>
+    /// An account on <paramref name="formula"/> — the Gardener by default, as
+    /// the column's own default. Since SMA-448 (lot F1, step S4) the account's
+    /// formula decides which level a layout may be saved at and read as, so a
+    /// test that saves an Expert or a Novice layout seeds that formula.
+    /// </summary>
+    private async Task SeedUserAsync(string userId, string formula = DashboardLayout.Levels.Gardener)
     {
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
@@ -910,9 +1111,9 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
             @"INSERT INTO ""AspNetUsers"" (
                 ""Id"", ""UserName"", ""NormalizedUserName"", ""Email"", ""NormalizedEmail"",
                 ""EmailConfirmed"", ""PasswordHash"", ""SecurityStamp"", ""ConcurrencyStamp"",
-                ""PhoneNumberConfirmed"", ""TwoFactorEnabled"", ""LockoutEnabled"", ""AccessFailedCount"")
-            VALUES ({0}, {0}, {0}, NULL, NULL, FALSE, NULL, NULL, NULL, FALSE, FALSE, FALSE, 0);",
-            userId);
+                ""PhoneNumberConfirmed"", ""TwoFactorEnabled"", ""LockoutEnabled"", ""AccessFailedCount"", ""Formula"")
+            VALUES ({0}, {0}, {0}, NULL, NULL, FALSE, NULL, NULL, NULL, FALSE, FALSE, FALSE, 0, {1});",
+            userId, formula);
     }
 
     /// <summary>

@@ -1,8 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { hasActionBar } from '../../constants/dashboardCapabilities';
 import { useActionBarTrigger } from '../../hooks/useActionBarTrigger';
 import { useElementHeight, useSiteNavbarHeight } from '../../hooks/useSiteNavbarHeight';
-import type { DashboardLevel } from '../../types/Dashboard';
 
 export interface CompactActionBarState {
   /** The formula has a compact bar (A-9): the page mounts it. */
@@ -63,15 +61,19 @@ const SCROLL_PADDING_GAP = 8;
  * bar shows, `scroll-padding-top` on the page's one scrolling element keeps
  * the navbar, the bar and 8 px free, so a control the keyboard reaches is
  * never scrolled under them; the previous value comes back when it leaves.
+ *
+ * SMA-448, lot F1, S5 — `compactBar` is the formula's capability, as the
+ * server served it (`hasActionBar`), where it used to be a rule of this client
+ * on the level.
  */
 export function useCompactActionBar(
-  level: DashboardLevel,
+  compactBar: boolean,
   ready: boolean,
   editing: boolean
 ): CompactActionBarState {
   const [repeated, setRepeated] = useState<HTMLDivElement | null>(null);
   const [bar, setBar] = useState<HTMLDivElement | null>(null);
-  const enabled = hasActionBar(level);
+  const enabled = compactBar;
   const top = useSiteNavbarHeight();
   const barHeight = useElementHeight(bar);
   const shown = useActionBarTrigger(repeated, top, barHeight, enabled && ready);
