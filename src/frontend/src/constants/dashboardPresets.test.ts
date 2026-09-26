@@ -19,15 +19,21 @@ const EIGHT = DASHBOARD_BLOCK_KEYS.filter((key) => key !== 'keyfigures');
 describe('dashboard presets (SMA-336)', () => {
   // SMA-437 lot 1, PR B, step B1 (pre-flight D4, D8) — a preset lists EXACTLY
   // the blocks its formula permits. The Key figures band is the Expert's
-  // alone (V3-01: « Les chiffres clés — Non · Non · Oui »), so the Novice and
-  // the Gardener list the eight others, hidden ones included, and nothing
-  // else: their Customize gallery cannot offer the band back.
-  it.each(['novice', 'gardener'] as const)(
-    'the %s preset lists the eight widgets of its formula in the canonical order — never the Key figures band',
-    (level) => {
-      expect(presetFor(level).map((block) => block.key)).toEqual(EIGHT);
-    }
-  );
+  // alone (V3-01: « Les chiffres clés — Non · Non · Oui »), so the Novice lists
+  // the eight others, hidden ones included, and nothing else: its Customize
+  // gallery cannot offer the band back.
+  it('the novice preset lists the eight widgets of its formula in the canonical order — never the Key figures band', () => {
+    expect(presetFor('novice').map((block) => block.key)).toEqual(EIGHT);
+  });
+
+  // SMA-448, lot F1 — R1 (V3-01: « Les statistiques — Non · Non · Oui »):
+  // Statistics is not the Gardener's either, so its preset — and its gallery —
+  // never carries it.
+  it('the gardener preset lists the seven widgets of its formula in the canonical order — neither the band nor Statistics', () => {
+    expect(presetFor('gardener').map((block) => block.key)).toEqual(
+      EIGHT.filter((key) => key !== 'stats')
+    );
+  });
 
   it('Expert: the Key figures band first, in Full width — its one size — then the eight widgets in Large, none hidden', () => {
     // « en tête du preset Expert » (contract § 3.3 [A], § 4.5): written by
@@ -52,7 +58,7 @@ describe('dashboard presets (SMA-336)', () => {
     ]);
   });
 
-  it('Gardener shows six widgets, Gardens in Large, and hides Statistics and Harvest', () => {
+  it('Gardener shows six widgets, Gardens in Large, and hides Harvest — Statistics is not its own (SMA-448, R1)', () => {
     expect(presetFor('gardener')).toEqual([
       { key: 'weather', size: 'medium', hidden: false },
       { key: 'gardens', size: 'large', hidden: false },
@@ -60,7 +66,6 @@ describe('dashboard presets (SMA-336)', () => {
       { key: 'month', size: 'medium', hidden: false },
       { key: 'todo', size: 'medium', hidden: false },
       { key: 'counters', size: 'medium', hidden: false },
-      { key: 'stats', size: 'large', hidden: true },
       { key: 'harvest', size: 'large', hidden: true },
     ]);
   });
@@ -101,8 +106,9 @@ describe('isAdjusted (SMA-336)', () => {
     expect(isAdjusted(blocks, 'gardener')).toBe(true);
   });
 
-  it('is true when the layout does not carry all eight blocks', () => {
-    expect(isAdjusted(presetFor('gardener').slice(0, 7), 'gardener')).toBe(true);
+  it('is true when the layout does not carry all the blocks of its preset', () => {
+    const preset = presetFor('gardener');
+    expect(isAdjusted(preset.slice(0, preset.length - 1), 'gardener')).toBe(true);
   });
 
   it('reads the preset of the LEVEL, not of the default one', () => {

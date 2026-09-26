@@ -37,6 +37,12 @@ const NOVICE: DashboardBlock[] = [
   { key: 'harvest', size: L, hidden: true },
 ];
 
+/**
+ * Without Statistics since the formulas (SMA-448, lot F1 — R1, V3-01: « Les
+ * statistiques — Non · Non · Oui »): the Gardener cannot bring it back from its
+ * gallery, and the server refuses it shown. Récolte stays, hidden (Alexandre,
+ * 26/09, question 3).
+ */
 const GARDENER: DashboardBlock[] = [
   { key: 'weather', size: M, hidden: false },
   { key: 'gardens', size: L, hidden: false },
@@ -44,7 +50,6 @@ const GARDENER: DashboardBlock[] = [
   { key: 'month', size: M, hidden: false },
   { key: 'todo', size: M, hidden: false },
   { key: 'counters', size: M, hidden: false },
-  { key: 'stats', size: L, hidden: true },
   { key: 'harvest', size: L, hidden: true },
 ];
 

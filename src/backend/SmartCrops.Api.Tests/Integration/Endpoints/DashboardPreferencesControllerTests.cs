@@ -80,17 +80,18 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         Assert.Equal(DashboardLayout.CurrentSchemaVersion, body.SchemaVersion);
         Assert.Null(body.UpdatedAt);
 
-        // The preset lists every block of the Gardener — the eight widgets, in
-        // canonical order, hidden ones included, and never the Key figures band,
-        // which is the Expert's alone (SMA-437, pre-flight D4). The Customize
+        // The preset lists every block of the Gardener — its seven widgets, in
+        // canonical order, hidden ones included; never the Key figures band,
+        // the Expert's alone (SMA-437, pre-flight D4), and since the formulas
+        // never Statistics either (SMA-448, lot F1 — R1, V3-01). The Customize
         // gallery reads them from here.
         Assert.Equal(GardenerKeys, body.Blocks.Select(b => b.Key).ToList());
         Assert.DoesNotContain("keyfigures", body.Blocks.Select(b => b.Key));
+        Assert.DoesNotContain(DashboardLayout.Blocks.Stats, body.Blocks.Select(b => b.Key));
 
-        // Gardener: gardens large, stats and harvest hidden (frozen design § 8).
+        // Gardener: gardens large, harvest hidden (frozen design § 8).
         Assert.Equal(DashboardLayout.Sizes.Large, Block(body, DashboardLayout.Blocks.Gardens).Size);
         Assert.False(Block(body, DashboardLayout.Blocks.Gardens).Hidden);
-        Assert.True(Block(body, DashboardLayout.Blocks.Stats).Hidden);
         Assert.True(Block(body, DashboardLayout.Blocks.Harvest).Hidden);
     }
 
@@ -522,6 +523,69 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         await AssertNothingStoredAsync(userId);
     }
 
+    // ── The widgets of a formula (SMA-448, lot F1 — R1) ──────────────────────
+
+    /// <summary>
+    /// R1 and R8 (V3-01: « Les statistiques — Non · Non · Oui »): Statistics is
+    /// not the Gardener's, so a Gardener SHOWING it is refused on the server,
+    /// not only absent from its gallery.
+    /// </summary>
+    [Fact]
+    public async Task PutPreferences_GardenerShowingStatistics_Returns400_NamingTheLevel()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var request = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Gardener,
+            [
+                new(DashboardLayout.Blocks.Gardens, DashboardLayout.Sizes.Large, false, null),
+                new(DashboardLayout.Blocks.Stats, DashboardLayout.Sizes.Large, false, null),
+            ]);
+
+        var response = await Client.PutAsJsonAsync(Url, request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("block 'stats' is not available at level 'gardener'", await response.Content.ReadAsStringAsync());
+        await AssertNothingStoredAsync(userId);
+    }
+
+    /// <summary>
+    /// A tab opened before the formulas carries the Gardener preset of its
+    /// time — Statistics included, HIDDEN (pre-flight § C.7.3, the window of
+    /// the old client). A hidden block the formula does not have shows nothing
+    /// and grants nothing: it is dropped, not refused, so that tab keeps
+    /// saving — and it is never stored.
+    /// </summary>
+    [Fact]
+    public async Task PutPreferences_GardenerTabCarryingStatisticsHidden_IsAccepted_AndStoresNoStatistics()
+    {
+        var userId = Guid.NewGuid().ToString();
+        await SeedUserAsync(userId);
+        AuthAs(userId);
+
+        var request = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Gardener,
+            [
+                new(DashboardLayout.Blocks.Weather, DashboardLayout.Sizes.Medium, false, null),
+                new(DashboardLayout.Blocks.Gardens, DashboardLayout.Sizes.Large, false, null),
+                new(DashboardLayout.Blocks.Stats, DashboardLayout.Sizes.Large, true, null),
+            ]);
+
+        var put = await Client.PutAsJsonAsync(Url, request);
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+
+        using var scope = CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
+        var stored = await db.UserDashboardPreferences.AsNoTracking().SingleAsync(p => p.UserId == userId);
+        Assert.DoesNotContain("\"stats\"", stored.LayoutJson);
+
+        var body = await Client.GetFromJsonAsync<DashboardPreferencesResponse>(Url);
+        Assert.NotNull(body);
+        Assert.DoesNotContain(DashboardLayout.Blocks.Stats, body.Blocks.Select(b => b.Key));
+    }
+
     /// <summary>The band's one size is the Full width: a Large band is refused even at the Expert level.</summary>
     [Fact]
     public async Task PutPreferences_ExpertBandInLarge_Returns400_NamingTheSize()
@@ -826,7 +890,7 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    /// <summary>The Gardener preset's keys, in order — the eight widgets, never the band.</summary>
+    /// <summary>The Gardener preset's keys, in order — its seven widgets, never the band nor Statistics.</summary>
     private static List<string> GardenerKeys =>
         [.. DashboardPresets.For(DashboardLayout.Levels.Gardener).Select(b => b.Key)];
 

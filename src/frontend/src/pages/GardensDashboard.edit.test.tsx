@@ -1116,6 +1116,8 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
       ])
     );
     await waitFor(() => expect(saveDashboardPreferences).toHaveBeenCalled());
+    // Every block of the Gardener, hidden Harvest included — and never
+    // Statistics, which is not its own (SMA-448, R1).
     expect(lastSavedKeys()).toEqual([
       'gardens',
       'weather',
@@ -1123,7 +1125,6 @@ describe('GardensDashboard — keyboard reordering (SMA-336)', () => {
       'month',
       'todo',
       'counters',
-      'stats',
       'harvest',
     ]);
   });

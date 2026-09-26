@@ -609,7 +609,7 @@ public class DashboardController(
         var document = new StoredLayout(
             DashboardLayout.CurrentSchemaVersion,
             request.Level,
-            [.. request.Blocks.Select(b => new StoredBlock(b.Key, b.Size, b.Hidden, b.Options))]);
+            [.. Storable(request.Blocks, request.Level).Select(b => new StoredBlock(b.Key, b.Size, b.Hidden, b.Options))]);
         var json = JsonSerializer.Serialize(document, JsonWeb);
 
         try
@@ -811,11 +811,19 @@ public class DashboardController(
         {
             if (!DashboardLayout.Blocks.All.Contains(block.Key)) return $"unknown block '{block.Key}'";
             // A known block is not one every level has (SMA-437, pre-flight
-            // D4): the Key figures band is the Expert's alone — a right checked
-            // here, never only in the interface (R8).
+            // D4): the Key figures band is the Expert's alone, and since the
+            // formulas Statistics is not the Gardener's (SMA-448, lot F1 — R1) —
+            // a right checked here, never only in the interface (R8). SHOWN, it
+            // is refused. HIDDEN, it shows nothing and grants nothing: a tab
+            // opened before the formulas carries the Gardener preset of its
+            // time, Statistics hidden (pre-flight § C.7.3), and must keep
+            // saving — so it is dropped from what is stored (`Storable`), not
+            // refused.
             if (!DashboardPresets.Permits(request.Level, block.Key))
             {
-                return $"block '{block.Key}' is not available at level '{request.Level}'";
+                if (!block.Hidden) return $"block '{block.Key}' is not available at level '{request.Level}'";
+                if (!seen.Add(block.Key)) return $"duplicate block '{block.Key}'";
+                continue;
             }
 
             if (!seen.Add(block.Key)) return $"duplicate block '{block.Key}'";
@@ -837,6 +845,17 @@ public class DashboardController(
 
         return null;
     }
+
+    /// <summary>
+    /// The blocks of a validated request that are stored: every one the level
+    /// has. A block it does not have reaches here only hidden — shown, it was
+    /// refused by <see cref="Validate(SaveDashboardPreferencesRequest)"/> — and
+    /// is left out, so no layout ever stores a block its formula lacks.
+    /// </summary>
+    private static IEnumerable<SaveDashboardBlockRequest> Storable(
+        IEnumerable<SaveDashboardBlockRequest> blocks,
+        string level) =>
+        blocks.Where(block => DashboardPresets.Permits(level, block.Key));
 
     /// <summary>
     /// Bounds one block's options document. BOTH ceilings are needed: the key

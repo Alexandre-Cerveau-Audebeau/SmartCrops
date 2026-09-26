@@ -79,8 +79,9 @@ describe('useDashboardPreferences — loading (SMA-336)', () => {
     act(() => result.current.reload());
 
     // reload() clears the error and re-shows the skeleton at once; the layout
-    // lands when the second fetch settles.
-    await waitFor(() => expect(result.current.blocks).toHaveLength(8));
+    // lands when the second fetch settles — the Gardener preset, whole (seven
+    // blocks since SMA-448, R1: no Statistics).
+    await waitFor(() => expect(result.current.blocks).toHaveLength(presetFor('gardener').length));
     expect(result.current.loadError).toBe(false);
     expect(fetchDashboardPreferences).toHaveBeenCalledTimes(2);
   });

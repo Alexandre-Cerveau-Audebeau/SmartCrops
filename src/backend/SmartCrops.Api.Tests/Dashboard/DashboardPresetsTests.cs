@@ -33,18 +33,22 @@ public class DashboardPresetsTests
     }
 
     /// <summary>
-    /// The Novice and the Gardener list the eight widgets and never the band;
-    /// the Expert lists all nine (V3-01: « Les chiffres clés — Non · Non · Oui »).
-    /// Literal on purpose — the band's key is the wire contract.
+    /// The Expert lists all nine blocks (V3-01: « Les chiffres clés — Non · Non ·
+    /// Oui »). The Gardener never has the band, and since the formulas (SMA-448,
+    /// lot F1) never Statistics either — R1, V3-01: « Les statistiques — Non ·
+    /// Non · Oui », « retiré au Jardinier » — while it keeps Récolte (Alexandre,
+    /// 26/09, question 3). The Novice keeps today's eight until its own page
+    /// (lot F2). Literals on purpose — the keys are the wire contract.
     /// </summary>
     [Theory]
-    [InlineData(DashboardLayout.Levels.Novice, false)]
-    [InlineData(DashboardLayout.Levels.Gardener, false)]
-    [InlineData(DashboardLayout.Levels.Expert, true)]
-    public void For_EveryLevel_ListsExactlyTheBlocksItsLevelPermits_EachOnce(string level, bool withTheBand)
+    [InlineData(DashboardLayout.Levels.Novice, "keyfigures")]
+    [InlineData(DashboardLayout.Levels.Gardener, "keyfigures,stats")]
+    [InlineData(DashboardLayout.Levels.Expert, "")]
+    public void For_EveryLevel_ListsExactlyTheBlocksItsLevelPermits_EachOnce(string level, string without)
     {
+        var excluded = without.Split(',', StringSplitOptions.RemoveEmptyEntries);
         var preset = DashboardPresets.For(level);
-        var expected = DashboardLayout.Blocks.All.Where(key => withTheBand || key != "keyfigures");
+        var expected = DashboardLayout.Blocks.All.Where(key => !excluded.Contains(key));
 
         Assert.Equal(
             expected.OrderBy(k => k, StringComparer.Ordinal),
@@ -115,7 +119,10 @@ public class DashboardPresetsTests
     [InlineData(DashboardLayout.Levels.Novice, "keyfigures", false)]
     [InlineData(DashboardLayout.Levels.Gardener, "keyfigures", false)]
     [InlineData(DashboardLayout.Levels.Expert, "keyfigures", true)]
-    [InlineData(DashboardLayout.Levels.Gardener, "stats", true)]
+    [InlineData(DashboardLayout.Levels.Gardener, "stats", false)]
+    [InlineData(DashboardLayout.Levels.Expert, "stats", true)]
+    [InlineData(DashboardLayout.Levels.Gardener, "harvest", true)]
+    [InlineData(DashboardLayout.Levels.Novice, "stats", true)]
     [InlineData(DashboardLayout.Levels.Expert, "compost", false)]
     [InlineData("archdruid", "keyfigures", false)]
     public void Permits_IsWhetherTheLevelsPresetListsTheBlock(string level, string key, bool permitted)

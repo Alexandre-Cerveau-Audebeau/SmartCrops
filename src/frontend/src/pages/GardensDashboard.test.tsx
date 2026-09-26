@@ -1024,19 +1024,33 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     ).not.toBeNull();
   });
 
-  it('the gallery lists the hidden widgets and « + » puts one back on the page', async () => {
+  /**
+   * SMA-448, lot F1 — the Statistics thumbnail lives at the Expert formula,
+   * the one that has Statistics (R1): an Expert layout with Statistics and
+   * Harvest hidden, so the gallery offers both, as the Gardener's used to.
+   */
+  const serveExpertWithStatisticsAndHarvestHidden = () =>
+    servePreferences(
+      'expert',
+      presetFor('expert').map((block) =>
+        block.key === 'stats' || block.key === 'harvest' ? { ...block, hidden: true } : block
+      )
+    );
+
+  it('the gallery lists the hidden widgets and « + » puts one back on the page — never Statistics at the Gardener formula (SMA-448, R1)', async () => {
     await openPanel();
     // Round 1 (G9): MUI renders the open temporary Drawer as role="dialog";
     // since round 1 it also carries an accessible name (E5).
     const gallery = screen.getByRole('dialog', { name: 'Customize' });
 
-    expect(within(gallery).getByText('Statistics')).toBeInTheDocument();
     expect(within(gallery).getByText('Harvest')).toBeInTheDocument();
+    expect(within(gallery).queryByText('Statistics')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add Statistics' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add Statistics' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Harvest' }));
 
-    await waitFor(() => expect(renderedKeys()).toContain('stats'));
-    expect(renderedKeys()).not.toContain('harvest');
+    await waitFor(() => expect(renderedKeys()).toContain('harvest'));
+    expect(renderedKeys()).not.toContain('stats');
   });
 
   it('says so when nothing is hidden', async () => {
@@ -1055,6 +1069,7 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     //
     // The fixture is one 4 × 3 garden at 50 cm: 12 active cells make 3 m², and
     // the plan is empty, so the occupancy bar sits at 0.
+    serveExpertWithStatisticsAndHarvestHidden();
     await openPanel();
     const gallery = screen.getByRole('dialog', { name: 'Customize' });
 
@@ -1073,6 +1088,7 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     vi.mocked(fetchDashboardData).mockResolvedValue(
       dashboardWith([garden('g1', 'Domaine', { width: 101, height: 100, cellSize: '1m' })])
     );
+    serveExpertWithStatisticsAndHarvestHidden();
 
     await openPanel();
     const gallery = screen.getByRole('dialog', { name: 'Customize' });
@@ -1291,6 +1307,7 @@ describe('GardensDashboard — Customize panel (SMA-336)', () => {
     // adding the widget is worth doing now — it existed nowhere a screen reader
     // could reach, because the whole thumbnail was `aria-hidden`. The glyph and
     // the bars are decorative and stay hidden; the sentence is content.
+    serveExpertWithStatisticsAndHarvestHidden();
     await openPanel();
     const gallery = screen.getByRole('dialog', { name: 'Customize' });
 
