@@ -607,13 +607,10 @@ describe('the Novice page — at the keyboard and for a screen reader (SMA-448 l
 
   it('Escape closes the chooser — and does nothing while a switch is on the wire, when the choice takes no gesture (S5)', async () => {
     let release!: () => void;
-    vi.mocked(changeFormula).mockImplementation(
-      () =>
-        new Promise<void>((resolve) => {
-          release = resolve;
-        })
-    );
     const server = serveFormulas('novice', null);
+    // Installed AFTER `serveFormulas`'s own mock — the one the switch on the
+    // wire waits on (fix round 2, U1: a first mock, overwritten twice before
+    // any call, is gone).
     vi.mocked(changeFormula).mockImplementation(
       () =>
         new Promise<void>((resolve) => {
