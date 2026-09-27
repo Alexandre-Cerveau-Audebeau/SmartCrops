@@ -65,6 +65,11 @@ export function useDashboardPreferences() {
   // its bar from it. Beside the layout, not in it: the layout is what is
   // WRITTEN, the capabilities are only ever read.
   const [capabilities, setCapabilities] = useState<FormulaCapabilities | null>(null);
+  // SMA-448, lot F3 — whether the account has ever CHOSEN its formula, read
+  // with the layout: false until its first deliberate choice — the choice
+  // screen shows itself once on it (N18) — and null while the layout is not
+  // read. Beside the layout, like the capabilities: read, never written.
+  const [formulaChosen, setFormulaChosen] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -254,6 +259,7 @@ export function useDashboardPreferences() {
         unsavedRef.current = false;
         setLayout(loaded);
         setCapabilities(preferences.capabilities);
+        setFormulaChosen(preferences.formulaChosen);
         setLoadError(false);
       })
       .catch(() => {
@@ -261,6 +267,7 @@ export function useDashboardPreferences() {
         layoutRef.current = null;
         setLayout(null);
         setCapabilities(null);
+        setFormulaChosen(null);
         setLoadError(true);
       })
       .finally(() => {
@@ -384,6 +391,9 @@ export function useDashboardPreferences() {
         unsavedRef.current = false;
         setLayout(loaded);
         setCapabilities(preferences.capabilities);
+        // A choice is deliberate — « Garder » included: the server stamped
+        // it, and the read-back says so; the choice screen closes on it.
+        setFormulaChosen(preferences.formulaChosen);
         say('saved');
         return 'switched';
       } catch {
@@ -398,6 +408,7 @@ export function useDashboardPreferences() {
           unsavedRef.current = false;
           setLayout(null);
           setCapabilities(null);
+          setFormulaChosen(null);
           setLoadError(true);
           say('idle');
         } else {
@@ -434,6 +445,8 @@ export function useDashboardPreferences() {
     blocks,
     /** What the account's formula permits, as served; null until the layout is read. */
     capabilities,
+    /** Whether the account has ever chosen its formula (SMA-448, lot F3); null until the layout is read. */
+    formulaChosen,
     loading,
     loadError,
     saveState,

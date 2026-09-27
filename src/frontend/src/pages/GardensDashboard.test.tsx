@@ -95,6 +95,7 @@ function servePreferences(level: DashboardLevel, blocks?: DashboardBlock[]) {
     level,
     capabilities: capabilitiesFor(level),
     isPreset: blocks === undefined,
+    formulaChosen: true,
     blocks: blocks ?? presetFor(level),
     updatedAt: null,
   });
@@ -488,6 +489,7 @@ describe('GardensDashboard — page states (SMA-336)', () => {
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: true,
+      formulaChosen: true,
       blocks: presetFor('gardener'),
       updatedAt: null,
     });
@@ -503,6 +505,7 @@ describe('GardensDashboard — page states (SMA-336)', () => {
         level: 'gardener',
         capabilities: capabilitiesFor('gardener'),
         isPreset: true,
+        formulaChosen: true,
         blocks: presetFor('gardener'),
         updatedAt: null,
       });

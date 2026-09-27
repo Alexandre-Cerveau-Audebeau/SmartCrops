@@ -90,6 +90,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       schemaVersion: 1,
       level,
       isPreset: true,
+      formulaChosen: true,
       blocks: presetFor(level),
       updatedAt: null,
       capabilities: capabilitiesFor(level),

@@ -154,6 +154,7 @@ function serveLayoutShowing(
     level,
     capabilities: capabilitiesFor(level),
     isPreset: false,
+    formulaChosen: true,
     blocks: presetFor(level).map((block) => ({
       ...block,
       hidden: bearing.includes(block.key)
@@ -227,6 +228,7 @@ beforeEach(() => {
     level: 'gardener',
     capabilities: capabilitiesFor('gardener'),
     isPreset: true,
+    formulaChosen: true,
     blocks: presetFor('gardener'),
     updatedAt: null,
   });
@@ -304,6 +306,7 @@ describe('GardensDashboard — the weather warning under the grid (SMA-387)', ()
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks: presetFor('gardener').map((block) =>
         block.key === 'weather' ? { ...block, size: 'large' } : block
       ),
@@ -466,6 +469,7 @@ describe('GardensDashboard — the Key figures band bears the warning by what it
       level: 'expert',
       capabilities: capabilitiesFor('expert'),
       isPreset: false,
+      formulaChosen: true,
       blocks: presetFor('expert').map((block) => ({
         ...block,
         hidden: block.key === 'keyfigures' ? hidden : bearing.includes(block.key),
@@ -536,6 +540,7 @@ describe('GardensDashboard — the Novice page bears the warning by what its car
       level: 'novice',
       capabilities: capabilitiesFor('novice'),
       isPreset: true,
+      formulaChosen: true,
       blocks: presetFor('novice'),
       updatedAt: null,
     });

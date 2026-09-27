@@ -96,6 +96,7 @@ function servePreferences(level: DashboardLevel) {
     level,
     capabilities: capabilitiesFor(level),
     isPreset: true,
+    formulaChosen: true,
     blocks: presetFor(level),
     updatedAt: null,
   });

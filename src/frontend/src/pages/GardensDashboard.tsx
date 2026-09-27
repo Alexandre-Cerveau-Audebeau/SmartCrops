@@ -137,6 +137,7 @@ export default function GardensDashboard() {
     level,
     blocks,
     capabilities,
+    formulaChosen,
     loading,
     loadError,
     saveState,
@@ -297,6 +298,12 @@ export default function GardensDashboard() {
   // widgets. The cards are derived ONCE, through `displayWeather` (A-4), for
   // the view that draws them and for the warning that follows them (V1).
   const cardsPage = capabilities !== null && isCardsPage(capabilities);
+  // SMA-448, lot F3 (N18, Alexandre 26/09) — the choice of formula is
+  // MANDATORY the first time: an account that never chose (FormulaChosenAt
+  // null) sees the screen with the page, without a way out, until it
+  // chooses — « Garder » included, which stamps the choice. Read with the
+  // layout; once chosen, never again.
+  const mandatoryChoice = capabilities !== null && formulaChosen === false;
   const noviceCards = cardsPage
     ? noviceCardsOf(gardens, dashboardData.varieties, gardenViews, displayWeather, weatherStatus)
     : [];
@@ -409,9 +416,25 @@ export default function GardensDashboard() {
   // which it says, and on a layout that could not be written, which the
   // header's indicator says.
   const closeChooser = () => {
+    if (mandatoryChoice) return;
     setChooserOpen(false);
     dismissRefusal();
   };
+
+  // After the mandatory screen closes on the first choice, the focus goes to
+  // « Créer un jardin » — every formula's header has it — rather than to the
+  // body: the screen had no opener to give it back to. A ref and a focus,
+  // no state written in an effect.
+  const mandatoryShownRef = useRef(false);
+  useEffect(() => {
+    if (mandatoryChoice) {
+      mandatoryShownRef.current = true;
+      return;
+    }
+    if (!mandatoryShownRef.current) return;
+    mandatoryShownRef.current = false;
+    createRef.current?.focus();
+  }, [mandatoryChoice]);
   const chooseFormula = async (level: DashboardLevel) => {
     const outcome = await setLevel(level);
     if (outcome === 'switched' || outcome === 'unread') setChooserOpen(false);
@@ -1114,12 +1137,14 @@ export default function GardensDashboard() {
           `panelOpen` stayed true, so it came back by itself once the retry
           had succeeded. Not on the cards page at all (lot F2): the Novice has
           no « Personnaliser » — no button, no panel. */}
-      {/* PROVISIONAL (SMA-448, lot F2, N3) — the Novice page's choice of
-          formula; lot F3 puts the choice screen of V3-01 here. Hidden the
-          instant the formula it would name is unknown, like the panel. */}
+      {/* SMA-448, lot F3 (L5) — the choice screen of V3-01, on the wiring of
+          lot F2's provisional chooser (N3): opened from the chip or the
+          foot's link, or MANDATORY when the account never chose (N18).
+          Hidden the instant the formula it would name is unknown, like the
+          panel. */}
       <FormulaChooserDialog
-        open={chooserOpen && capabilities !== null}
-        level={level}
+        open={(chooserOpen || mandatoryChoice) && capabilities !== null}
+        mandatory={mandatoryChoice}
         switching={switching}
         refusal={refusal}
         onClose={closeChooser}

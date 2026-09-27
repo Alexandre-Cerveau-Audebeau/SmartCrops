@@ -36,6 +36,7 @@ const preferences = (
     schemaVersion: 1,
     level,
     isPreset: true,
+    formulaChosen: true,
     blocks: presetFor(level),
     updatedAt: null,
     capabilities: capabilitiesFor(level),
@@ -60,6 +61,7 @@ function serveFormulas(formula: DashboardLevel, blocks: DashboardBlock[] | null)
     preferences({
       level: server.formula,
       isPreset: server.current === null,
+      formulaChosen: true,
       blocks: structuredClone(server.current ?? presetFor(server.formula)),
     })
   );

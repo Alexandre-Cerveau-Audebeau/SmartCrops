@@ -5,7 +5,7 @@ import {
   type FormulaAvailability,
   type FormulasCatalog,
 } from '../types/Dashboard';
-import { isRefusalReason, normalizeCapabilities } from './dashboardApi';
+import { isRefusalReason, normalizeCapabilities } from './formulaWire';
 import { fetchJson } from './fetchJson';
 import { arrayOf, isBoolean, isNullableString, isRecord, isWholeNumber, matches, nullable } from './wireChecks';
 

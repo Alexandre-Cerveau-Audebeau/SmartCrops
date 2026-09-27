@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { UnitSystemProvider } from '../contexts/UnitSystemContext';
-import { capabilitiesFor, presetFor } from '../test/fixtures/formulas';
+import { capabilitiesFor, catalogFor, presetFor } from '../test/fixtures/formulas';
 import { dashboardFixture } from '../test/fixtures/dashboard';
 import { weatherFixture } from '../test/fixtures/weather';
 import type { DashboardLevel } from '../types/Dashboard';
@@ -34,8 +34,11 @@ vi.mock('../services/weatherApi', () => ({
 
 vi.mock('../services/profileApi', () => ({ fetchProfile: vi.fn() }));
 
+vi.mock('../services/formulasApi', () => ({ fetchFormulas: vi.fn() }));
+
 import { fetchDashboardWeather } from '../services/weatherApi';
 import { fetchProfile } from '../services/profileApi';
+import { fetchFormulas } from '../services/formulasApi';
 import GardensDashboard from './GardensDashboard';
 import { createGarden } from '../services/gardenApi';
 import {
@@ -58,6 +61,7 @@ function servePreferences(level: DashboardLevel) {
     level,
     capabilities: capabilitiesFor(level),
     isPreset: true,
+    formulaChosen: true,
     blocks: presetFor(level),
     updatedAt: null,
   });
@@ -111,6 +115,7 @@ beforeEach(() => {
   vi.mocked(fetchDashboardData).mockResolvedValue(dashboardFixture([]));
   vi.mocked(fetchDashboardWeather).mockResolvedValue(weatherFixture([], []));
   vi.mocked(saveDashboardPreferences).mockResolvedValue(undefined);
+  vi.mocked(fetchFormulas).mockResolvedValue(catalogFor('gardener', { gardenCount: 3 }));
   servePreferences('gardener');
 });
 
@@ -133,7 +138,7 @@ describe('the creation of a garden — refused or failed, said truthfully (SMA-4
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'See the formulas' }));
 
-    expect(await screen.findByRole('dialog', { name: 'Change formula' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Choose your formula' })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Create a new garden' })).toBeNull());
   });
 
@@ -169,12 +174,13 @@ describe('the creation of a garden — refused or failed, said truthfully (SMA-4
 describe('the change of formula — a session that expired, said where the user chose (R3-E1)', () => {
   it('in the chooser of the Novice page: the region says the session expired, and « Sign in again » is offered', async () => {
     servePreferences('novice');
+    vi.mocked(fetchFormulas).mockResolvedValue(catalogFor('novice', { gardenCount: 1 }));
     vi.mocked(changeFormula).mockRejectedValue(new HttpStatusError('Request failed (401)', 401));
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Novice view — change formula' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Change formula' });
+    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
 
-    fireEvent.click(within(dialog).getByRole('radio', { name: /Gardener/ }));
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Choose Gardener' }));
 
     const said = await within(dialog).findByText('Your session has expired. Sign in again to continue.');
     expect(said).toHaveAttribute('role', 'status');

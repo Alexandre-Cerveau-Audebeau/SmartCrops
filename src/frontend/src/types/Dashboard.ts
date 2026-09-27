@@ -125,6 +125,12 @@ export interface DashboardPreferences {
   updatedAt: string | null;
   /** What the formula permits (SMA-448): the ONE source the page draws its widgets, sizes and bar from. */
   capabilities: FormulaCapabilities;
+  /**
+   * SMA-448, lot F3 — whether the account has ever CHOSEN its formula: false
+   * until its first deliberate choice, and the cue the choice screen is shown
+   * once on (N18). Read with the layout, in the server's one statement.
+   */
+  formulaChosen: boolean;
 }
 
 /**

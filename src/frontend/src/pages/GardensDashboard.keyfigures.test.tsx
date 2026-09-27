@@ -58,6 +58,7 @@ function serve(blocks: DashboardBlock[] = presetFor('expert')) {
     level: 'expert',
     capabilities: capabilitiesFor('expert'),
     isPreset: false,
+    formulaChosen: true,
     blocks,
     updatedAt: null,
   });

@@ -132,6 +132,7 @@ beforeEach(() => {
     level: 'gardener',
     capabilities: capabilitiesFor('gardener'),
     isPreset: true,
+    formulaChosen: true,
     blocks: presetFor('gardener'),
     updatedAt: null,
   });
@@ -1011,6 +1012,7 @@ describe('Gardens widget — the garden description (V10, V18)', () => {
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: true,
+      formulaChosen: true,
       blocks: gardensAt('medium'),
       updatedAt: null,
     });
@@ -1051,6 +1053,7 @@ async function renderExpert() {
     level: 'expert',
     capabilities: capabilitiesFor('expert'),
     isPreset: true,
+    formulaChosen: true,
     blocks: presetFor('expert'),
     updatedAt: null,
   });
@@ -1066,6 +1069,7 @@ async function renderMedium() {
     level: 'gardener',
     capabilities: capabilitiesFor('gardener'),
     isPreset: true,
+    formulaChosen: true,
     blocks: gardensAt('medium'),
     updatedAt: null,
   });
@@ -1100,6 +1104,7 @@ async function renderIn(
     level,
     capabilities: capabilitiesFor(level),
     isPreset: false,
+    formulaChosen: true,
     blocks,
     updatedAt: null,
   });
@@ -1275,6 +1280,7 @@ describe('Gardens rows — the artboard’s own measurements (round 5)', () => {
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks,
       updatedAt: null,
     });
@@ -1307,6 +1313,7 @@ describe('Gardens rows — the artboard’s own measurements (round 5)', () => {
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks,
       updatedAt: null,
     });
@@ -1843,6 +1850,7 @@ describe('Gardens rows — the chevron opens the garden (V15)', () => {
       level,
       capabilities: capabilitiesFor(level),
       isPreset: false,
+      formulaChosen: true,
       blocks,
       updatedAt: null,
     });
@@ -1860,6 +1868,7 @@ describe('Gardens rows — the chevron opens the garden (V15)', () => {
       level,
       capabilities: capabilitiesFor(level),
       isPreset: false,
+      formulaChosen: true,
       blocks,
       updatedAt: null,
     });
@@ -2064,6 +2073,7 @@ describe('Gardens rows — the closing findings (round 7)', () => {
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks,
       updatedAt: null,
     });
@@ -2105,6 +2115,7 @@ describe('Gardens — an unreadable `updatedAt` is never displayed as « now » 
       level: 'gardener',
       capabilities: capabilitiesFor('gardener'),
       isPreset: false,
+      formulaChosen: true,
       blocks,
       updatedAt: null,
     });

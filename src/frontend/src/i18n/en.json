@@ -353,6 +353,147 @@
         "link": "Switch to the Gardener formula →"
       }
     },
+    "choice": {
+      "title": "Choose your formula",
+      "lead": "Three ways to garden with SmartCrops. All are free for now, and you can change at any time.",
+      "welcome": "Welcome. Before opening your gardens, choose the formula that suits you. You can change whenever you like, in either direction, without losing anything.",
+      "existing_one": "You have {{count}} garden. Your current formula is preselected: keep it in one click, or choose another. Nothing will be deleted.",
+      "existing_other": "You have {{count}} gardens. Your current formula is preselected: keep it in one click, or choose another. Nothing will be deleted.",
+      "context_zero": "You are on {{formula}}. Change formula, or close: nothing moves until you have chosen.",
+      "context_one": "You are on {{formula}} and you have {{count}} garden. Change formula, or close: nothing moves until you have chosen.",
+      "context_other": "You are on {{formula}} and you have {{count}} gardens. Change formula, or close: nothing moves until you have chosen.",
+      "loading": "Loading the formulas…",
+      "loadError": "Couldn’t load the formulas.",
+      "offers": "The three formulas",
+      "tag": {
+        "current": "Your formula",
+        "currentKept": "Your formula — kept",
+        "recommended": "Recommended for you",
+        "recommendedWhy": "The simplest one that holds your gardens.",
+        "unavailable": "Unavailable"
+      },
+      "price": "€0",
+      "priceFree": "— Free",
+      "free": "Free for now.",
+      "preview": {
+        "novice": "Preview: one card per garden",
+        "gardener": "Preview: a dashboard of widgets",
+        "expert": "Preview: the key figures across the full width, then the widgets"
+      },
+      "limitGardens_one": "Up to {{count}} garden",
+      "limitGardens_other": "Up to {{count}} gardens",
+      "limitGardensNone": "Unlimited gardens",
+      "limitSize": "Up to {{width}} × {{height}} cells per garden",
+      "contains": "What it includes:",
+      "plus": "Everything {{formula}} offers, plus:",
+      "who": {
+        "novice": "A balcony, a terrace, a small vegetable patch.",
+        "gardener": "Several gardens, a family vegetable garden.",
+        "expert": "Many gardens or large areas, up to several hectares."
+      },
+      "features": {
+        "novice": [
+          "A simple home page: one card per garden, nothing to set",
+          "Each garden’s plan, as a preview",
+          "Today’s weather, on each card",
+          "Today’s task, on each card",
+          "The number of plants and the area of each garden"
+        ],
+        "gardener": [
+          "A dashboard of widgets, which you compose",
+          "The month’s calendar: sowing, flowering, harvests",
+          "Exposure and watering tips",
+          "Counters by variety",
+          "The list of your gardens, as a table",
+          "Three widget sizes, to move as you like"
+        ],
+        "expert": [
+          "Every widget, statistics included",
+          "A band of key figures at the top of the page, across the full width"
+        ]
+      },
+      "whyGardens_one": "You have {{count}} garden — {{formula}} allows {{limit}}.",
+      "whyGardens_other": "You have {{count}} gardens — {{formula}} allows {{limit}}.",
+      "whySize": "A garden of {{width}} × {{height}} cells — {{formula}} allows {{maxWidth}} × {{maxHeight}}.",
+      "whyKept": "No garden will be deleted: this formula is simply too small for yours.",
+      "keptNote": "You keep everything: nothing will be deleted. This formula no longer lets you add or grow beyond its limits.",
+      "choose": "Choose {{formula}}",
+      "keep": "Keep {{formula}}",
+      "compare": {
+        "title": "Compare the formulas",
+        "subtitle": "Everything that changes from one formula to the next, line by line.",
+        "yes": "Yes",
+        "no": "No",
+        "unlimited": "No limit",
+        "upTo_one": "Up to {{count}}",
+        "upTo_other": "Up to {{count}}",
+        "upToSize": "Up to {{width}} × {{height}} cells",
+        "rows": {
+          "gardens": "Number of gardens",
+          "size": "Garden size",
+          "home": {
+            "label": "The home page",
+            "novice": "One card per garden",
+            "gardener": "A dashboard of widgets",
+            "expert": "A dashboard of widgets"
+          },
+          "task": {
+            "label": "Today’s task",
+            "novice": "On each garden card",
+            "gardener": "In the “To do” widget",
+            "expert": "In the “To do” widget"
+          },
+          "weather": {
+            "label": "Each garden’s weather",
+            "novice": "Today’s weather, on each card",
+            "gardener": "The Weather widget",
+            "expert": "The Weather widget"
+          },
+          "month": {
+            "label": "The month’s calendar",
+            "novice": "No",
+            "gardener": "Yes",
+            "expert": "Yes"
+          },
+          "tips": {
+            "label": "Exposure and watering tips",
+            "novice": "No",
+            "gardener": "Yes",
+            "expert": "Yes"
+          },
+          "counters": {
+            "label": "Counters by variety",
+            "novice": "No",
+            "gardener": "Yes",
+            "expert": "Yes"
+          },
+          "stats": {
+            "label": "Statistics",
+            "novice": "No",
+            "gardener": "No",
+            "expert": "Yes"
+          },
+          "keyfigures": {
+            "label": "Key figures, across the full width",
+            "novice": "No",
+            "gardener": "No",
+            "expert": "Yes"
+          },
+          "resize": {
+            "label": "Move and resize widgets",
+            "novice": "No — there is nothing to set",
+            "gardener": "Yes — three sizes",
+            "expert": "Yes — three sizes"
+          },
+          "widgets": {
+            "label": "Add or remove widgets",
+            "novice": "No",
+            "gardener": "Yes, among its own",
+            "expert": "Yes, all of them"
+          }
+        }
+      }
+    },
     "formulaChooser": {
       "title": "Change formula",
       "promise": "Change whenever you like, in either direction, without losing anything.",
