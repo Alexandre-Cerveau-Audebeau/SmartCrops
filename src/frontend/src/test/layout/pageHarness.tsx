@@ -13,8 +13,8 @@ import { LanguageProvider } from '../../contexts/LanguageContext';
 import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
 import { capabilitiesFor, presetFor } from '../fixtures/formulas';
 import type { DashboardLevel } from '../../types/Dashboard';
-import { SCENE_DATA, weatherAll } from './scenes';
-import { measureCard, wrappedTexts } from './measure';
+import { NOVICE_SCENES, SCENE_DATA, noviceSceneData, weatherAll, type NoviceScene } from './scenes';
+import { measureCard, wrappedTexts, type CardMeasure } from './measure';
 
 /**
  * SMA-437, lot V39, PR B, step B9 — the BROWSER side of the page launcher
@@ -32,11 +32,30 @@ import { measureCard, wrappedTexts } from './measure';
  * `settle()`, the focus and the clicks, the marks that tell one node from
  * another, the saves held and released, and the PROBES that break the page on
  * purpose so the suite can prove its checks see a break.
+ *
+ * SMA-448, lot F2 — PR #296, fix round 1, S1: the Novice page is measured
+ * HERE, on the page the app mounts, and no longer on a tree the scenes'
+ * harness rebuilt beside it (the Extension's two comments on `noviceTree`: a
+ * harness that could stay green while the real page broke). `scene=<name>`
+ * names a Novice scene of `scenes.tsx`, whose gardens and weather `fetch`
+ * serves the REAL page; `measureNovice()` reads the page as one card and card
+ * by card; `fail=gardens` answers the aggregate with a 500, for the proof
+ * that a page showing its load error is never taken for ready.
  */
 
 const params = new URLSearchParams(location.search);
 const level = (params.get('level') ?? 'expert') as DashboardLevel;
 const prefsPending = params.get('prefs') === 'pending';
+
+const sceneName = params.get('scene');
+const scene: NoviceScene | null = sceneName
+  ? (NOVICE_SCENES.find((candidate) => candidate.name === sceneName) ?? null)
+  : null;
+if (sceneName && !scene) throw new Error(`No Novice scene ${sceneName}`);
+/** What `fetch` serves the page for the scene: its aggregate and its weather — the same data the scene's expected cards are derived from. */
+const served = scene ? noviceSceneData(scene) : null;
+/** The gardens' aggregate answered 500: the page shows its load error, and must never be measured as if it were drawn. */
+const failGardens = params.get('fail') === 'gardens';
 
 /** A JSON answer. */
 const json = (body: unknown) =>
@@ -76,8 +95,11 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
       capabilities: capabilitiesFor(level),
     });
   }
-  if (url.startsWith('/api/dashboard/weather')) return json(weatherAll());
-  if (url.startsWith('/api/dashboard')) return json(SCENE_DATA);
+  if (url.startsWith('/api/dashboard/weather')) return json(served ? served.weather : weatherAll());
+  if (url.startsWith('/api/dashboard')) {
+    if (failGardens) return new Response(null, { status: 500 });
+    return json(served ? served.data : SCENE_DATA);
+  }
   // A visitor: the navbar of someone not signed in, as the pre-flight measured it.
   if (url.startsWith('/api/auth/')) return new Response(null, { status: 401 });
   return new Response(null, { status: 404 });
@@ -143,6 +165,31 @@ export interface PageMeasure {
   fontLoaded: boolean;
 }
 
+/**
+ * SMA-448, lot F2 (N5; PR #296, fix round 1, S1) — the Novice page measured
+ * as one card — the `Container` of `GardensDashboard`, every atom against
+ * every other — and card by card (each card as a card, its box relative to
+ * the page). `body` is the gardens' own zone (`data-novice-page`: the cards,
+ * or the empty state, and the foot message), not the container's last child
+ * — the warning, when it shows (the Extension's second draw, `04a18a9d…`).
+ */
+export interface NoviceMeasure extends CardMeasure {
+  scene: string;
+  viewport: number;
+  /** The gardens' zone, relative to the page: what `body` measures. */
+  content: Rect;
+  /** Each card: its measure, and its box relative to the page. */
+  cards: Array<CardMeasure & { id: string; box: Rect }>;
+  /** The header's zone texts drawn over more than one line — none belongs on two. */
+  wrapped: string[];
+  /** The weather warning under the cards, drawn or not (V1). */
+  warning: boolean;
+  /** The chip is the button of N3 — the provisional door to another formula. */
+  chipButton: boolean;
+  /** How many columns the cards take: their distinct left edges. */
+  columns: number;
+}
+
 declare global {
   interface Window {
     __page?: typeof page;
@@ -155,6 +202,12 @@ const round = (value: number) => Math.round(value * 10) / 10;
 const rectOf = (element: Element): Rect => {
   const box = element.getBoundingClientRect();
   return { x: round(box.left), y: round(box.top), w: round(box.width), h: round(box.height) };
+};
+
+/** A box to a tenth of a pixel, relative to `origin`. */
+const rectWithin = (element: Element, origin: DOMRect): Rect => {
+  const box = element.getBoundingClientRect();
+  return { x: round(box.left - origin.left), y: round(box.top - origin.top), w: round(box.width), h: round(box.height) };
 };
 
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -236,15 +289,31 @@ function describeActive(): ActiveMeasure {
 }
 
 const page = {
-  /** The page has drawn what the scenario needs: the fonts in, the grid laid out — or, while the layout never arrives, the header. */
+  /**
+   * The page has drawn what the scenario needs: the fonts in, the grid laid
+   * out — or the Novice page DRAWN, its cards or its empty state (SMA-448,
+   * lot F2), never its load error (PR #296, fix round 1: the Extension's
+   * second draw, `11595896…` — the error screen rendered the page's root
+   * without a card nor a skeleton, and passed for ready) — or, while the
+   * layout never arrives, the header.
+   */
   ready(): boolean {
     if (document.fonts.status !== 'loaded') return false;
     if (!document.querySelector('[data-site-navbar]') || !headerRowOf()) return false;
     if (prefsPending) return true;
-    // The grid's cards, or the Novice page (SMA-448, lot F2) — drawn, and no
-    // skeleton left, the Novice page's own included.
-    const drawn = gridCards().length > 0 || document.querySelector('[data-novice-page]') !== null;
+    if (page.failed()) return false;
+    const drawn =
+      gridCards().length > 0 || document.querySelector('[data-novice-cards], [data-novice-empty]') !== null;
     return drawn && document.querySelectorAll('.MuiSkeleton-root').length === 0;
+  },
+
+  /**
+   * Why the page will never be ready — its Novice load error on screen —, or
+   * null. The launcher's `navigate` rejects on it at once, naming it, rather
+   * than waiting out its delay on a page that shows an error.
+   */
+  failed(): string | null {
+    return document.querySelector('[data-novice-error]') ? 'the Novice page shows its load error (data-novice-error)' : null;
   },
 
   /** Waits `frames` frames: the observers report at a frame, React commits, the effects run. */
@@ -290,6 +359,47 @@ const page = {
       scrollPaddingTop: getComputedStyle(document.documentElement).scrollPaddingTop,
       firstCard: card ? { key: card.getAttribute('data-widget') ?? '', top: round(card.getBoundingClientRect().top) } : null,
       fontLoaded: document.fonts.check('16px Inter'),
+    };
+  },
+
+  /**
+   * SMA-448, lot F2 — PR #296, fix round 1, S1: the Novice page AS THE APP
+   * MOUNTS IT, measured as one card and card by card. The page is the
+   * `Container` of `GardensDashboard` — its two plain ancestors, `<main>` and
+   * the layout's column, are what `measureCard` walks. `body` is the gardens'
+   * zone, not the container's last child.
+   */
+  measureNovice(): NoviceMeasure {
+    const header = document.querySelector<HTMLElement>('[data-dashboard-header]');
+    const container = header?.parentElement;
+    const zone = document.querySelector<HTMLElement>('[data-dashboard-actions]');
+    const content = document.querySelector<HTMLElement>('[data-novice-page]');
+    if (!header || !container || !zone || !content) {
+      throw new Error('The Novice page drew no header, no actions zone or no gardens zone to measure.');
+    }
+    const origin = container.getBoundingClientRect();
+    const cards = [...container.querySelectorAll<HTMLElement>('[data-novice-card]')].map((card) => ({
+      id: card.getAttribute('data-novice-card') ?? '',
+      box: rectWithin(card, origin),
+      ...measureCard(card),
+    }));
+    const measured = measureCard(container);
+    return {
+      ...measured,
+      body: {
+        h: round(content.getBoundingClientRect().height),
+        scrollH: content.scrollHeight,
+        overflow: Math.max(0, content.scrollHeight - content.clientHeight),
+        beyondCard: measured.body.beyondCard,
+      },
+      scene: sceneName ?? '',
+      viewport: innerWidth,
+      content: rectWithin(content, origin),
+      cards,
+      wrapped: wrappedTexts(zone),
+      warning: document.querySelector('[data-weather-disclaimer]') !== null,
+      chipButton: document.querySelector('[data-level-chip]')?.getAttribute('role') === 'button',
+      columns: new Set(cards.map((card) => card.box.x)).size,
     };
   },
 

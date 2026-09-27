@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { IS_CI, findChrome, makeOutDir, removeOutDir, terminateChildren } from './chrome.mjs';
 import { buildPageHarness, openPage, writePageHarness, type PageSession } from './pageChrome.mjs';
-import type { PageMeasure } from './pageHarness';
+import type { NoviceMeasure, PageMeasure } from './pageHarness';
+import { NOVICE_LONG_NAMES, NOVICE_SCENES } from './scenes';
+import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 
 /**
  * SMA-437, lot V39, PR B, step B9 — the compact action bar ON THE WHOLE PAGE,
@@ -16,6 +18,11 @@ import type { PageMeasure } from './pageHarness';
  * while the layout loads. At five viewports — two phones, a portrait tablet,
  * a desktop, a phone in landscape — at the Gardener and the Expert formulas,
  * out of and in Edit mode; at night and in English at 360 and 1 280 px.
+ *
+ * SMA-448, lot F2 — PR #296, fix round 1, S1: THE NOVICE PAGE too, as the app
+ * mounts it — six scenes at 360, 390, 600, 768, 1 024 and 1 280 px, measured
+ * as one card and card by card, where the scenes' harness measured a tree
+ * rebuilt beside the page (the last describe).
  *
  * And the PROBES (the rule of SMA-446): the page broken on purpose — the bar
  * over the navbar, a label wider than its half, a save region born filled, a
@@ -111,6 +118,126 @@ const lineOf = (m: PageMeasure) => m.navbar.y + m.navbar.h + (m.bar?.height ?? 0
 
 /** The scroll position the header's repeated buttons cross that line. */
 const relayOf = (m: PageMeasure) => m.headerRow.docBottom - lineOf(m);
+
+// ── The Novice page (SMA-448, lot F2 — PR #296, fix round 1, S1) ────────────
+
+/**
+ * One run of the Novice page: the language, the theme and the wall clock the
+ * page is told; grouped by viewport below, one Chrome per viewport. The
+ * scenes' harness measured the page on a tree rebuilt beside it; the page is
+ * measured here, as the app mounts it — the Extension's finding.
+ */
+interface NoviceRun {
+  /** `fr@360`… */
+  id: string;
+  lang: 'fr' | 'en';
+  theme: 'light' | 'dark';
+  /** The wall clock the page is told the machine has; inert while `freeze.ts` freezes the harness's instant over it (#8). */
+  clockMs?: number;
+}
+
+interface NoviceView extends PageView {
+  runs: NoviceRun[];
+}
+
+/** A day in another month and another year: the wall clock one run is told (#8). */
+const ANOTHER_DAY = Date.UTC(2027, 1, 3, 15, 30, 0);
+
+const french = (id: string): NoviceRun => ({ id, lang: 'fr', theme: 'light' });
+
+/**
+ * The five widths of the brief — 360, 390, 600, 1 024, 1 280 — and 768, the
+ * portrait tablet the bar's scenarios use: the phones, the tablet's lower
+ * edge, the portrait and the landscape tablets, the desktop. At 360: the twin
+ * run (determinism, #4), English (language parity), the night, and the page
+ * told another day (#8); at 1 280: the night.
+ */
+const NOVICE_VIEWS: NoviceView[] = [
+  {
+    id: '360x780',
+    width: 360,
+    height: 780,
+    mobile: true,
+    runs: [
+      french('fr@360'),
+      french('fr@360-twin'),
+      { id: 'en@360', lang: 'en', theme: 'light' },
+      { id: 'dark@360', lang: 'fr', theme: 'dark' },
+      { id: 'fr@360-clock', lang: 'fr', theme: 'light', clockMs: ANOTHER_DAY },
+    ],
+  },
+  { id: '390x844', width: 390, height: 844, mobile: true, runs: [french('fr@390')] },
+  { id: '600x1024', width: 600, height: 1024, mobile: true, runs: [french('fr@600')] },
+  { id: '768x1024', width: 768, height: 1024, mobile: true, runs: [french('fr@768')] },
+  { id: '1024x768', width: 1024, height: 768, mobile: true, runs: [french('fr@1024')] },
+  { id: '1280x800', width: 1280, height: 800, mobile: false, runs: [french('fr@1280'), { id: 'dark@1280', lang: 'fr', theme: 'dark' }] },
+];
+
+/** Every run, with the width of its viewport. */
+const NOVICE_RUNS: Array<NoviceRun & { vw: number }> = NOVICE_VIEWS.flatMap((view) =>
+  view.runs.map((run) => ({ ...run, vw: view.width }))
+);
+
+/** The Novice page, by run then by scene name. */
+const noviceCases = new Map<string, Map<string, NoviceMeasure>>();
+
+/**
+ * The readiness probe: what `navigate` rejected with when the gardens'
+ * aggregate answered 500 — the page shows its load error, and the launcher
+ * must say so rather than measure it (the Extension's second draw,
+ * `11595896…`). Null when it resolved: the defect the probe exists to see.
+ */
+let noviceLoadFailure: string | null = null;
+
+/** A run by its id — never by its position. */
+const noviceRunOf = (id: string): NoviceRun & { vw: number } => {
+  const run = NOVICE_RUNS.find((candidate) => candidate.id === id);
+  if (!run) throw new Error(`No Novice run ${id}`);
+  return run;
+};
+
+/** The query of one scene in one run. */
+const noviceQuery = (run: NoviceRun, sceneName: string) =>
+  `level=novice&theme=${run.theme}&lang=${run.lang}&scene=${sceneName}${run.clockMs ? `&clock=${run.clockMs}` : ''}`;
+
+/** Every scene of every run of one viewport, in one Chrome — and, at 360 px, the readiness probe. */
+async function runNoviceView(view: NoviceView): Promise<Map<string, Map<string, NoviceMeasure>>> {
+  const session = await openPage(CHROME!, outDir, { label: `novice-${view.id}`, width: view.width, height: view.height, mobile: view.mobile });
+  try {
+    const byRun = new Map<string, Map<string, NoviceMeasure>>();
+    for (const run of view.runs) {
+      const byScene = new Map<string, NoviceMeasure>();
+      for (const scene of NOVICE_SCENES) {
+        await session.navigate(noviceQuery(run, scene.name));
+        byScene.set(scene.name, await session.evaluate<NoviceMeasure>('window.__page.measureNovice()'));
+      }
+      byRun.set(run.id, byScene);
+    }
+    if (view.width === 360) {
+      noviceLoadFailure = await session.navigate(`${noviceQuery(french('probe'), 'novice-3')}&fail=gardens`).then(
+        () => null,
+        (error: unknown) => String(error)
+      );
+    }
+    return byRun;
+  } finally {
+    await session.close();
+  }
+}
+
+/** What a page or a card must be free of, at every width — named so a failure says which. */
+function defects(scene: CardMeasure) {
+  return {
+    overlaps: scene.overlaps
+      .filter((o) => Math.min(o.w, o.h) >= VISIBLE_OVERLAP_PX)
+      .map((o) => `${o.a} ∩ ${o.b} = ${o.w}×${o.h} @(${o.x},${o.y})`),
+    clipped: scene.clipped
+      .filter((c) => !c.scroller)
+      .map((c) => `${c.label} by ${c.by}: top ${c.top} right ${c.right} bottom ${c.bottom} left ${c.left}`),
+    spills: scene.spills.map((s) => `${s.label}: ${s.textW} px in ${s.container} of ${s.containerW}`),
+    beyondCard: scene.body.beyondCard,
+  };
+}
 
 // ── The checks — the SAME for the scenes and for the probes ────────────────
 
@@ -384,6 +511,12 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
         if (outcome.status === 'fulfilled') results.set(VIEWS[index]!.id, outcome.value);
         else failures.set(VIEWS[index]!.id, outcome.reason);
       });
+      // The Novice page's viewports after the bar's: one Chrome per viewport, six at once at most.
+      const noviceSettled = await Promise.allSettled(NOVICE_VIEWS.map((view) => runNoviceView(view)));
+      noviceSettled.forEach((outcome, index) => {
+        if (outcome.status === 'fulfilled') for (const [id, byScene] of outcome.value) noviceCases.set(id, byScene);
+        else failures.set(`novice-${NOVICE_VIEWS[index]!.id}`, outcome.reason);
+      });
     } finally {
       await terminateChildren();
     }
@@ -554,6 +687,158 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
         ['Done', 'Customize'],
         'Edit mode',
       ]);
+    });
+  });
+
+  // SMA-448, lot F2, step N5 (V5: « toute forme nouvelle de la v3 entre dans
+  // le harnais comme une scène ») — THE NOVICE PAGE, as the app mounts it
+  // (PR #296, fix round 1, S1): the header in its cards form, one card per
+  // garden, the foot message and the warning, with 0, 1, 3 and 5 gardens,
+  // very long names and a garden without a city — at 360 and 390 (the
+  // phones), 600, 768 and 1 024 (the tablets), 1 280 (the desktop), in French
+  // and in English, by day and by night. The page is measured as one card —
+  // every atom against every other — and card by card: zero overlap, zero
+  // clipped text, zero spill, nothing beyond; the one ellipsis a source
+  // allows is the garden name (SMA-436), the task and the plants wrap.
+  describe('the Novice page, as the app mounts it (SMA-448, lot F2, N5 — PR #296, fix round 1, S1)', () => {
+    const pageOf = (run: NoviceRun, name: string): NoviceMeasure => {
+      const measure = noviceCases.get(run.id)?.get(name);
+      if (!measure) throw new Error(`No measurement for the Novice scene ${name} in ${run.id}`);
+      return measure;
+    };
+    const SCENE_NAMES = NOVICE_SCENES.map((scene) => scene.name);
+    const clean = { overlaps: [], clipped: [], spills: [], beyondCard: 0 };
+
+    it('draws the six scenes: 0, 1, 3 and 5 gardens, the long names, the garden without a city — in every run, at the viewport it claims, in Inter', () => {
+      expect(SCENE_NAMES).toEqual(['novice-0', 'novice-1', 'novice-3', 'novice-5', 'novice-3-long', 'novice-3-partial']);
+      for (const run of NOVICE_RUNS) {
+        expect(noviceCases.get(run.id)?.size, run.id).toBe(NOVICE_SCENES.length);
+        for (const scene of NOVICE_SCENES) {
+          const page = pageOf(run, scene.name);
+          expect(page.cards, `${run.id} ${scene.name}`).toHaveLength(scene.count);
+          expect(page.viewport, `${run.id} ${scene.name}`).toBe(run.vw);
+          expect(page.fontLoaded, `${run.id} ${scene.name}: Inter not loaded`).toBe(true);
+        }
+      }
+    });
+
+    it.each(NOVICE_RUNS.map((run) => run.id))('%s: every scene is clean — the page as one card, and each card: no overlap, nothing clipped, nothing spilled, nothing beyond; the header’s texts on one line', (id) => {
+      const run = noviceRunOf(id);
+      for (const name of SCENE_NAMES) {
+        const page = pageOf(run, name);
+        expect({ ...defects(page), wrapped: page.wrapped }, `${id} ${name}`).toEqual({ ...clean, wrapped: [] });
+        for (const card of page.cards) {
+          expect(defects(card), `${id} ${name} ${card.id}`).toEqual(clean);
+        }
+      }
+    });
+
+    it.each(NOVICE_RUNS.map((run) => run.id))('%s: measures the gardens’ zone as the page’s body — every card inside it, the warning outside it', (id) => {
+      // The Extension's second draw (`04a18a9d…`): measured as one card, the
+      // page's `body` was its LAST child — the warning, when it showed. It is
+      // the gardens' zone now, whatever follows it.
+      const run = noviceRunOf(id);
+      for (const scene of NOVICE_SCENES) {
+        const page = pageOf(run, scene.name);
+        expect(page.body.h, `${id} ${scene.name}`).toBe(page.content.h);
+        for (const card of page.cards) {
+          expect(card.box.y, `${id} ${scene.name} ${card.id}`).toBeGreaterThanOrEqual(page.content.y - 0.5);
+          expect(card.box.y + card.box.h, `${id} ${scene.name} ${card.id}`).toBeLessThanOrEqual(page.content.y + page.content.h + 0.5);
+        }
+      }
+    });
+
+    it.each(NOVICE_RUNS.map((run) => run.id))('%s: ellipsizes nothing but a garden name — none on the short names, the long names alone on the long scene (V5, SMA-436)', (id) => {
+      const run = noviceRunOf(id);
+      for (const scene of NOVICE_SCENES) {
+        const cut = pageOf(run, scene.name).ellipsized.map((ellipsis) => ellipsis.text);
+        if (!scene.long) {
+          expect(cut, `${id} ${scene.name}`).toEqual([]);
+          continue;
+        }
+        expect(cut.length, `${id} ${scene.name}`).toBeGreaterThan(0);
+        for (const text of cut) {
+          expect(
+            NOVICE_LONG_NAMES.some((name) => name.startsWith(text.replace(/^"|"$/g, '').slice(0, 12))),
+            `${id} ${scene.name}: ${text}`
+          ).toBe(true);
+        }
+      }
+    });
+
+    it('lays the cards in one column on a phone, as wide as the page (328 / 358 px), two from 600 to 1 199 px, three from 1 200 px — the five gardens on two rows', () => {
+      for (const run of NOVICE_RUNS) {
+        const expected = run.vw < 600 ? 1 : run.vw < 1200 ? 2 : 3;
+        for (const scene of NOVICE_SCENES.filter((candidate) => candidate.count > 0)) {
+          const page = pageOf(run, scene.name);
+          expect(page.columns, `${run.id} ${scene.name}`).toBe(Math.min(expected, scene.count));
+          if (run.vw < 600) {
+            for (const card of page.cards) expect(card.card.w, `${run.id} ${scene.name} ${card.id}`).toBe(run.vw - 32);
+          }
+        }
+        const five = pageOf(run, 'novice-5');
+        expect(five.cards[expected]!.box.y, `${run.id} novice-5`).toBeGreaterThan(five.cards[0]!.box.y);
+      }
+    });
+
+    it('aligns the feet of the cards of one row: the cards of a row share one height (V3-00, `flex: 1`)', () => {
+      for (const run of NOVICE_RUNS) {
+        for (const scene of NOVICE_SCENES.filter((candidate) => candidate.count > 1)) {
+          const rows = new Map<number, number[]>();
+          for (const card of pageOf(run, scene.name).cards) rows.set(card.box.y, [...(rows.get(card.box.y) ?? []), card.box.h]);
+          for (const [y, heights] of rows) {
+            expect(new Set(heights).size, `${run.id} ${scene.name} row at ${y}`).toBe(1);
+          }
+        }
+      }
+    });
+
+    it('draws the warning under the cards when a card shows a temperature — every scene but the empty one (V1) — and the chip as the button of N3 on all', () => {
+      for (const run of NOVICE_RUNS) {
+        for (const scene of NOVICE_SCENES) {
+          const page = pageOf(run, scene.name);
+          expect(page.warning, `${run.id} ${scene.name}`).toBe(scene.count > 0);
+          expect(page.chipButton, `${run.id} ${scene.name}`).toBe(true);
+        }
+      }
+    });
+
+    it('keeps every text at 14 px or more, except the chips at 13 (V11)', () => {
+      for (const run of NOVICE_RUNS) {
+        for (const scene of NOVICE_SCENES) {
+          const page = pageOf(run, scene.name);
+          const under = page.smallFonts.filter((font) => font.px < 13);
+          expect(under, `${run.id} ${scene.name}`).toEqual([]);
+        }
+      }
+    });
+
+    it('reads the same measurements twice: two identical runs agree on every scene, box for box (#4)', () => {
+      const twin = noviceCases.get('fr@360-twin');
+      for (const [name, page] of noviceCases.get('fr@360') ?? []) {
+        expect(twin?.get(name), name).toEqual(page);
+      }
+    });
+
+    it('does not follow the machine’s date: told another day, the same run measures the same, box for box (#8)', () => {
+      const other = noviceCases.get('fr@360-clock');
+      for (const [name, page] of noviceCases.get('fr@360') ?? []) {
+        expect(other?.get(name), name).toEqual(page);
+      }
+    });
+
+    it('draws the same card frame in both languages and at night: fr@360, en@360 and dark@360 share the card columns and widths — the heights follow the texts (language parity)', () => {
+      for (const id of ['en@360', 'dark@360']) {
+        const other = noviceCases.get(id);
+        for (const [name, page] of noviceCases.get('fr@360') ?? []) {
+          expect(other?.get(name)?.cards.map((card) => [card.box.x, card.box.w]), `${id} ${name}`).toEqual(page.cards.map((card) => [card.box.x, card.box.w]));
+        }
+      }
+    });
+
+    it('never takes a page showing its load error for ready: the gardens answered 500, and `navigate` says so at once (the Extension’s second draw, `11595896…`)', () => {
+      expect(noviceLoadFailure).toContain('failed before it was ready');
+      expect(noviceLoadFailure).toContain('data-novice-error');
     });
   });
 

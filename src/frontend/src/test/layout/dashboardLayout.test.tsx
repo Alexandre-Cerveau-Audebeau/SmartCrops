@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ACTIONS_SCENES, GRID_SCENES, HEADER_SCENES, LAYOUT_SCENES, NOVICE_LONG_NAMES, NOVICE_SCENES } from './scenes';
+import { ACTIONS_SCENES, GRID_SCENES, HEADER_SCENES, LAYOUT_SCENES } from './scenes';
 import { ACTIONS_PROBES, FORCED_ACTION_LABEL, PROBE_SCENES, WIDE_LINE, WIDE_SHORT_HEIGHT } from './probes';
-import type { ActionsMeasure, GridMeasure, HeaderMeasure, NoviceMeasure, SceneMeasure } from './harness';
+import type { ActionsMeasure, GridMeasure, HeaderMeasure, SceneMeasure } from './harness';
 import type { FocusMeasure } from './focusProbe';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 import { sizesFor } from '../fixtures/formulas';
@@ -141,8 +141,6 @@ const actionsCases = new Map<string, Map<string, ActionsMeasure>>();
 const actionsProbes = new Map<string, Map<string, ActionsMeasure>>();
 /** The zone under the header's real layout, by run then by scene name (SMA-437, lot V39, PR B, T0). */
 const headerCases = new Map<string, Map<string, HeaderMeasure>>();
-/** The Novice page, by run then by scene name (SMA-448, lot F2, N5). */
-const noviceCases = new Map<string, Map<string, NoviceMeasure>>();
 let outDir = '';
 
 /** The runs whose grid has two or four columns — the tablets and the desktop — where the rows are `auto` and the cards pinned. */
@@ -208,7 +206,7 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
       settled.forEach((outcome, index) => {
         if (outcome.status === 'fulfilled') {
           const byName = (measured: SceneMeasure[]) => new Map(measured.map((scene) => [scene.scene, scene]));
-          const { scenes, grids: measuredGrids, focus, actions, headers, novice } = outcome.value;
+          const { scenes, grids: measuredGrids, focus, actions, headers } = outcome.value;
           results.set(RUNS[index]!.id, byName(scenes.filter((scene) => scene.probe === null)));
           probes.set(RUNS[index]!.id, byName(scenes.filter((scene) => scene.probe !== null)));
           grids.set(RUNS[index]!.id, new Map(measuredGrids.map((grid) => [grid.scene, grid])));
@@ -216,7 +214,6 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
           actionsCases.set(RUNS[index]!.id, new Map(actions.filter((zone) => zone.probe === null).map((zone) => [zone.scene, zone])));
           actionsProbes.set(RUNS[index]!.id, new Map(actions.filter((zone) => zone.probe !== null).map((zone) => [zone.scene, zone])));
           headerCases.set(RUNS[index]!.id, new Map(headers.map((header) => [header.scene, header])));
-          noviceCases.set(RUNS[index]!.id, new Map(novice.map((measure) => [measure.scene, measure])));
         }
       });
       const failed = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
@@ -253,10 +250,6 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
         expect(zone.fontLoaded, `${run.id} ${zone.scene}: Inter not loaded`).toBe(true);
       }
       expect(headerCases.get(run.id)?.size, run.id).toBe(HEADER_SCENES.length);
-      expect(noviceCases.get(run.id)?.size, run.id).toBe(NOVICE_SCENES.length);
-      for (const page of noviceCases.get(run.id)?.values() ?? []) {
-        expect(page.fontLoaded, `${run.id} ${page.scene}: Inter not loaded`).toBe(true);
-      }
     }
   });
 
@@ -840,111 +833,6 @@ describe.skipIf(!CHROME)('dashboard layout in a real engine (SMA-336 mobile lot,
         })
       );
       expect(faults).toEqual([]);
-    });
-  });
-
-  // SMA-448, lot F2, step N5 (V5: « toute forme nouvelle de la v3 entre dans
-  // le harnais comme une scène ») — THE NOVICE PAGE: the header in its cards
-  // form, one card per garden, the foot message and the warning, with 0, 1,
-  // 3 and 5 gardens, very long names and a garden without a city — at every
-  // width of the runs: 360 and 390 (the phones), 600, 768 and 1 024 (the
-  // tablets), 1 280 (the desktop), in French and in English. The page is
-  // measured as one card — every atom against every other — and card by
-  // card: zero overlap, zero clipped text, zero spill, nothing beyond; the
-  // one ellipsis a source allows is the garden name (SMA-436), the task and
-  // the plants wrap.
-  describe('the Novice page (SMA-448, lot F2, N5)', () => {
-    const pageOf = (run: LayoutRun, name: string): NoviceMeasure => {
-      const measure = noviceCases.get(run.id)?.get(name);
-      if (!measure) throw new Error(`No measurement for the Novice scene ${name} in ${run.id}`);
-      return measure;
-    };
-    const SCENE_NAMES = NOVICE_SCENES.map((scene) => scene.name);
-    const clean = { overlaps: [], clipped: [], spills: [], beyondCard: 0 };
-
-    it('draws the six scenes: 0, 1, 3 and 5 gardens, the long names, the garden without a city', () => {
-      expect(SCENE_NAMES).toEqual(['novice-0', 'novice-1', 'novice-3', 'novice-5', 'novice-3-long', 'novice-3-partial']);
-      for (const run of RUNS) {
-        for (const scene of NOVICE_SCENES) {
-          expect(pageOf(run, scene.name).cards, `${run.id} ${scene.name}`).toHaveLength(scene.count);
-        }
-      }
-    });
-
-    it.each(RUNS.map((run) => run.id))('%s: every scene is clean — the page as one card, and each card: no overlap, nothing clipped, nothing spilled, nothing beyond; the header’s texts on one line', (id) => {
-      const run = runOf(id);
-      for (const name of SCENE_NAMES) {
-        const page = pageOf(run, name);
-        expect({ ...defects(page), wrapped: page.wrapped }, `${id} ${name}`).toEqual({ ...clean, wrapped: [] });
-        for (const card of page.cards) {
-          expect(defects(card), `${id} ${name} ${card.id}`).toEqual(clean);
-        }
-      }
-    });
-
-    it.each(RUNS.map((run) => run.id))('%s: ellipsizes nothing but a garden name — none on the short names, the long names alone on the long scene (V5, SMA-436)', (id) => {
-      const run = runOf(id);
-      for (const scene of NOVICE_SCENES) {
-        const cut = pageOf(run, scene.name).ellipsized.map((ellipsis) => ellipsis.text);
-        if (!scene.long) {
-          expect(cut, `${id} ${scene.name}`).toEqual([]);
-          continue;
-        }
-        expect(cut.length, `${id} ${scene.name}`).toBeGreaterThan(0);
-        for (const text of cut) {
-          expect(
-            NOVICE_LONG_NAMES.some((name) => name.startsWith(text.replace(/^"|"$/g, '').slice(0, 12))),
-            `${id} ${scene.name}: ${text}`
-          ).toBe(true);
-        }
-      }
-    });
-
-    it('lays the cards in one column on a phone, as wide as the page (328 / 358 px), two from 600 to 1 199 px, three from 1 200 px — the five gardens on two rows', () => {
-      for (const run of RUNS) {
-        const expected = run.vw < 600 ? 1 : run.vw < 1200 ? 2 : 3;
-        for (const scene of NOVICE_SCENES.filter((candidate) => candidate.count > 0)) {
-          const page = pageOf(run, scene.name);
-          expect(page.columns, `${run.id} ${scene.name}`).toBe(Math.min(expected, scene.count));
-          if (run.vw < 600) {
-            for (const card of page.cards) expect(card.card.w, `${run.id} ${scene.name} ${card.id}`).toBe(run.vw - 32);
-          }
-        }
-        const five = pageOf(run, 'novice-5');
-        expect(five.cards[expected]!.box.y, `${run.id} novice-5`).toBeGreaterThan(five.cards[0]!.box.y);
-      }
-    });
-
-    it('aligns the feet of the cards of one row: the cards of a row share one height (V3-00, `flex: 1`)', () => {
-      for (const run of RUNS) {
-        for (const scene of NOVICE_SCENES.filter((candidate) => candidate.count > 1)) {
-          const rows = new Map<number, number[]>();
-          for (const card of pageOf(run, scene.name).cards) rows.set(card.box.y, [...(rows.get(card.box.y) ?? []), card.box.h]);
-          for (const [y, heights] of rows) {
-            expect(new Set(heights).size, `${run.id} ${scene.name} row at ${y}`).toBe(1);
-          }
-        }
-      }
-    });
-
-    it('draws the warning under the cards when a card shows a temperature — every scene but the empty one (V1) — and the chip as the button of N3 on all', () => {
-      for (const run of RUNS) {
-        for (const scene of NOVICE_SCENES) {
-          const page = pageOf(run, scene.name);
-          expect(page.warning, `${run.id} ${scene.name}`).toBe(scene.count > 0);
-          expect(page.chipButton, `${run.id} ${scene.name}`).toBe(true);
-        }
-      }
-    });
-
-    it('keeps every text at 14 px or more, except the chips at 13 (V11)', () => {
-      for (const run of RUNS) {
-        for (const scene of NOVICE_SCENES) {
-          const page = pageOf(run, scene.name);
-          const under = page.smallFonts.filter((font) => font.px < 13);
-          expect(under, `${run.id} ${scene.name}`).toEqual([]);
-        }
-      }
     });
   });
 

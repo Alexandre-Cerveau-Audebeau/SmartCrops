@@ -15,7 +15,7 @@ export interface PageSession {
   evaluate<T = unknown>(expression: string): Promise<T>;
   /** Polls an expression at the page's frames until it is truthy; rejects past `PAGE_WAIT_MS`, naming `what`. */
   waitFor(expression: string, what: string): Promise<void>;
-  /** Loads the page with `query` and waits until it reports ready. */
+  /** Loads the page with `query` and waits until it reports ready — or rejects at once, naming it, when the page reports a failure (`__page.failed()`). */
   navigate(query: string): Promise<void>;
   /** A real key, through the browser's input pipeline, to the focused element. */
   press(key: PageKey): Promise<void>;

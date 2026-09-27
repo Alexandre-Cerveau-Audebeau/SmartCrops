@@ -18,7 +18,7 @@ import { LAYOUT_NOW_MS } from './clock';
 import { presetFor } from '../fixtures/formulas';
 import type { SaveState } from '../../hooks/useDashboardPreferences';
 import type { DashboardBlockKey, DashboardLevel, DashboardSize } from '../../types/Dashboard';
-import type { DashboardGardenData, DashboardVarietyData } from '../../types/DashboardData';
+import type { DashboardData, DashboardGardenData, DashboardVarietyData } from '../../types/DashboardData';
 import type { DashboardWeatherData } from '../../types/DashboardWeather';
 
 /**
@@ -410,22 +410,35 @@ const noviceWeather = (list: readonly DashboardGardenData[], partial: boolean): 
     )
   );
 
-/** What the harness mounts for a Novice scene: its gardens, its cards as the page derives them, the header's figures, whether the warning shows. */
+/**
+ * A Novice scene: its gardens, its cards as the page derives them, the
+ * header's figures, whether the warning shows — and what the page launcher's
+ * `fetch` serves the REAL page for it (PR #296, fix round 1, S1): the
+ * aggregate and the weather the cards above are derived from, so what the
+ * page draws and what the suite expects come from the same data.
+ */
 export interface NoviceSceneData {
   gardens: DashboardGardenData[];
   cards: NoviceCard[];
   figures: { gardens: number; plants: number; surfaceM2: number };
   /** V1: a card shows a temperature — every scene but the empty one. */
   warning: boolean;
+  /** `/api/dashboard` for this scene. */
+  data: DashboardData;
+  /** `/api/dashboard/weather` for this scene. */
+  weather: DashboardWeatherData;
 }
 
 export function noviceSceneData(scene: NoviceScene): NoviceSceneData {
   const list = scene.long ? gardensVeryLong : [...gardens, serre, carre].slice(0, scene.count);
   const sceneViews = new Map(list.map((garden) => [garden.id, gardenViewOf(garden)]));
-  const cards = noviceCardsOf(list, varieties, sceneViews, noviceWeather(list, scene.weather === 'partial'), 'ready');
+  const weather = noviceWeather(list, scene.weather === 'partial');
+  const cards = noviceCardsOf(list, varieties, sceneViews, weather, 'ready');
   return {
     gardens: list,
     cards,
+    data: dashboardFixture(list, { varieties }),
+    weather,
     figures: {
       gardens: list.length,
       plants: list.reduce((sum, garden) => sum + garden.placementCount, 0),

@@ -11,9 +11,8 @@ import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
 import { createAppTheme } from '../../theme';
 import DashboardActions from '../../components/Dashboard/DashboardActions';
 import DashboardGrid from '../../components/Dashboard/DashboardGrid';
-import NoviceGardens from '../../components/Dashboard/NoviceGardens';
 import { DASHBOARD_HEADER_SX } from '../../components/Dashboard/dashboardHeader';
-import { DASHBOARD_SPACING, DASHBOARD_TYPE } from '../../theme/dashboardTokens';
+import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
 import { formatSurface } from '../../utils/formatNumber';
 import {
   ACTIONS_SCENES,
@@ -21,14 +20,11 @@ import {
   HEADER_FIGURES,
   HEADER_SCENES,
   LAYOUT_SCENES,
-  NOVICE_SCENES,
   gridCardScene,
-  noviceSceneData,
   sceneWidget,
   type ActionsScene,
   type GridScene,
   type LayoutScene,
-  type NoviceScene,
 } from './scenes';
 import { ACTIONS_PROBES, PROBE_SCENES, probeWidget, type ProbeScene } from './probes';
 import { measureFocus, type FocusMeasure } from './focusProbe';
@@ -176,27 +172,6 @@ export interface HeaderMeasure extends CardMeasure {
   wrapped: string[];
 }
 
-/**
- * SMA-448, lot F2, step N5 — the Novice page, measured as ONE card (the
- * header, the cards, the foot message, the warning: every atom of the page
- * against every other — `measureCard` on the page's box) and card by card
- * (each card as a card, its box relative to the page).
- */
-export interface NoviceMeasure extends CardMeasure {
-  scene: string;
-  viewport: number;
-  /** Each card: its measure, and its box relative to the page. */
-  cards: Array<CardMeasure & { id: string; box: RelativeBox }>;
-  /** The header's zone texts drawn over more than one line — none belongs on two. */
-  wrapped: string[];
-  /** The weather warning under the cards, drawn or not (V1). */
-  warning: boolean;
-  /** The chip is the button of N3 — the provisional door to another formula. */
-  chipButton: boolean;
-  /** How many columns the cards take: their distinct left edges. */
-  columns: number;
-}
-
 /** What one run of the page returns: the one-card scenes and probes, the grid scenes, and where the focus goes in the reorderable list. */
 export interface LayoutResults {
   scenes: SceneMeasure[];
@@ -207,8 +182,6 @@ export interface LayoutResults {
   actions: ActionsMeasure[];
   /** SMA-437, lot V39, PR B, T0 — the same zone under the header's real layout, scene by scene. */
   headers: HeaderMeasure[];
-  /** SMA-448, lot F2, N5 — the Novice page, scene by scene. */
-  novice: NoviceMeasure[];
 }
 
 declare global {
@@ -380,111 +353,6 @@ function headerTree(scene: ActionsScene, mode: 'light' | 'dark') {
       </div>
     </ThemeProvider>
   );
-}
-
-/**
- * A Novice scene (SMA-448, lot F2, N5): the whole page as `GardensDashboard`
- * draws it at the Novice formula — the header's real layout with the title
- * block and the zone in its cards form (the chip-button, « Créer un jardin »),
- * `NoviceGardens` on the scene's cards, the warning under them when a card
- * shows a temperature — under the app's providers and theme. Two plain
- * wrappers above the page, for `measureCard`.
- */
-function noviceTree(scene: NoviceScene, mode: 'light' | 'dark') {
-  const data = noviceSceneData(scene);
-  const surface = formatSurface(data.figures.surfaceM2, i18next.language);
-  const meta =
-    data.gardens.length === 0
-      ? i18next.t('dashboard.novice.metaNone')
-      : i18next.t('dashboard.meta', {
-          gardens: i18next.t('dashboard.metaGardens', { count: data.figures.gardens }),
-          plants: i18next.t('dashboard.metaPlants', { count: data.figures.plants }),
-          surface: i18next.t(`dashboard.surface.${surface.unit}`, { value: surface.value }),
-        });
-  return (
-    <MemoryRouter>
-      <ThemeProvider theme={createAppTheme(mode)}>
-        <UnitSystemProvider>
-          <div>
-            <div>
-              <Box data-novice-scene>
-                <Box data-dashboard-header sx={DASHBOARD_HEADER_SX}>
-                  <Box data-header-title>
-                    <Typography variant="h4" component="h1" fontWeight={700} color="primary">
-                      {i18next.t('gardens.title')}
-                    </Typography>
-                    <Typography sx={{ fontSize: `${DASHBOARD_TYPE.secondary}px`, color: 'text.secondary' }}>
-                      {meta}
-                    </Typography>
-                  </Box>
-                  <DashboardActions
-                    level="novice"
-                    adjusted={false}
-                    unavailable={false}
-                    saveState="idle"
-                    editing={false}
-                    onEditingChange={noop}
-                    onCustomize={noop}
-                    onCreate={noop}
-                    cards
-                    onChangeFormula={noop}
-                  />
-                </Box>
-                <NoviceGardens
-                  cards={data.cards}
-                  loading={false}
-                  loadError={false}
-                  onRetry={noop}
-                  onCreate={noop}
-                  onLocate={noop}
-                  onChanged={noop}
-                  onDeleted={noop}
-                  onChangeFormula={noop}
-                />
-                {data.warning && (
-                  <Typography
-                    role="note"
-                    data-weather-disclaimer
-                    sx={{
-                      mt: `${DASHBOARD_SPACING.sectionGap}px`,
-                      fontSize: DASHBOARD_TYPE.secondary,
-                      lineHeight: 1.5,
-                      color: 'text.secondary',
-                    }}
-                  >
-                    {i18next.t('dashboard.weatherDisclaimer')}
-                  </Typography>
-                )}
-              </Box>
-            </div>
-          </div>
-        </UnitSystemProvider>
-      </ThemeProvider>
-    </MemoryRouter>
-  );
-}
-
-/** Measures a mounted Novice scene: the page as a card, each card as a card with its box, the header's wraps, the warning, the chip, the columns. */
-function measureNovicePage(scene: NoviceScene, host: HTMLElement): NoviceMeasure {
-  const page = host.querySelector<HTMLElement>('[data-novice-scene]');
-  const zone = page?.querySelector<HTMLElement>('[data-dashboard-actions]');
-  if (!page || !zone) throw new Error(`The Novice scene ${scene.name} drew no page or no header zone.`);
-  const origin = page.getBoundingClientRect();
-  const cards = Array.from(page.querySelectorAll<HTMLElement>('[data-novice-card]')).map((card) => ({
-    id: card.getAttribute('data-novice-card') ?? '',
-    box: boxWithin(card, origin),
-    ...measureCard(card),
-  }));
-  return {
-    scene: scene.name,
-    viewport: window.innerWidth,
-    cards,
-    wrapped: wrappedTexts(zone),
-    warning: page.querySelector('[data-weather-disclaimer]') !== null,
-    chipButton: page.querySelector('[data-level-chip]')?.getAttribute('role') === 'button',
-    columns: new Set(cards.map((card) => card.box.x)).size,
-    ...measureCard(page),
-  };
 }
 
 /** The parts of the zone, by the attributes `DashboardActions` puts on them. */
@@ -664,7 +532,7 @@ async function main() {
   await Promise.all([300, 400, 500, 600, 700].map((weight) => document.fonts.load(`${weight} 16px Inter`)));
   progress('fonts ready');
 
-  const results: LayoutResults = { scenes: [], grids: [], focus: [], actions: [], headers: [], novice: [] };
+  const results: LayoutResults = { scenes: [], grids: [], focus: [], actions: [], headers: [] };
   for (const scene of [...LAYOUT_SCENES, ...PROBE_SCENES].filter((s) => !only || s.name === only)) {
     const host = document.createElement('div');
     page.appendChild(host);
@@ -752,22 +620,6 @@ async function main() {
     await settle();
     progress(`settled ${scene.name}`);
     results.headers.push(measureHeader(scene, host));
-    root.unmount();
-    host.remove();
-  }
-
-  // The Novice page (SMA-448, lot F2, N5), after the header scenes, the same
-  // way — and, with `hold=1`, left on the page like a one-card scene.
-  for (const scene of NOVICE_SCENES.filter((s) => !only || s.name === only)) {
-    const host = document.createElement('div');
-    page.appendChild(host);
-    const root = createRoot(host);
-    root.render(noviceTree(scene, mode));
-    progress(`rendered ${scene.name}`);
-    await settle();
-    progress(`settled ${scene.name}`);
-    results.novice.push(measureNovicePage(scene, host));
-    if (hold) break;
     root.unmount();
     host.remove();
   }
