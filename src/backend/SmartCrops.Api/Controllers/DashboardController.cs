@@ -808,11 +808,21 @@ public class DashboardController(
     /// <para>SMA-448, lot F1, step S4 — <paramref name="formula"/> is the
     /// account's: a known level that is not it is refused (R8), so the checks
     /// below read the request's level only once it IS the formula.</para>
+    ///
+    /// <para>SMA-448, lot F2 (PR #296, fix round 1) — a formula WITHOUT a
+    /// widget stores no layout at all: the Novice's page is one card per
+    /// garden, and the client writes nothing for it. Refused before the
+    /// blocks are read, because a document of hidden blocks the formula lacks
+    /// would otherwise pass — a hidden block is dropped, not refused, for the
+    /// tab opened before the formulas (pre-flight § C.7.3) — and <see
+    /// cref="Storable"/> would empty it into a stored layout of nothing, read
+    /// back as a stored layout rather than the preset.</para>
     /// </summary>
     private static string? Validate(SaveDashboardPreferencesRequest request, string formula)
     {
         if (!DashboardPresets.IsKnownLevel(request.Level)) return "unknown level";
         if (request.Level != formula) return $"level '{request.Level}' is not the account's formula '{formula}'";
+        if (DashboardPresets.For(request.Level).Count == 0) return $"level '{request.Level}' has no dashboard block to store";
         if (request.Blocks.Count == 0) return "blocks must not be empty";
         if (request.Blocks.Count > DashboardLayout.Blocks.All.Count) return "too many blocks";
 

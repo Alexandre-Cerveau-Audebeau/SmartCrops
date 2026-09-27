@@ -274,6 +274,14 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
     /// store no layout at all — the empty document is refused as every empty
     /// one is, and any block is one the formula does not have. And it reads
     /// as its preset: no block, capabilities without a widget.
+    ///
+    /// <para>A document of HIDDEN blocks too (PR #296, fix round 1 — the
+    /// Extension's second draw, <c>d3a7eba8…</c>): a hidden block a formula
+    /// lacks is dropped rather than refused, for the tab opened before the
+    /// formulas (pre-flight § C.7.3) — so a Novice document of hidden blocks
+    /// alone passed, emptied into a stored layout of nothing, and read back
+    /// as a stored layout rather than the preset. Red on <c>8a9b1b9</c>: 204
+    /// and a row.</para>
     /// </summary>
     [Fact]
     public async Task PutPreferences_Novice_HasNoWidget_EveryDocumentIsRefused_AndItReadsNoBlock()
@@ -286,9 +294,13 @@ public class DashboardPreferencesControllerTests : IntegrationTestBase
         var gardens = new SaveDashboardPreferencesRequest(
             DashboardLayout.Levels.Novice,
             [new(DashboardLayout.Blocks.Gardens, DashboardLayout.Sizes.Medium, false, null)]);
+        var hiddenWeather = new SaveDashboardPreferencesRequest(
+            DashboardLayout.Levels.Novice,
+            [new(DashboardLayout.Blocks.Weather, DashboardLayout.Sizes.Medium, true, null)]);
 
         Assert.Equal(HttpStatusCode.BadRequest, (await Client.PutAsJsonAsync(Url, empty)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Client.PutAsJsonAsync(Url, gardens)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Client.PutAsJsonAsync(Url, hiddenWeather)).StatusCode);
 
         using var scope = CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SmartCropsDbContext>();
