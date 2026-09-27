@@ -3,7 +3,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import { getDashboardTokens } from '../../theme/dashboardTokens';
 import { getPlannerTokens } from '../../theme/plannerTokens';
-import { gardenToPreview } from '../../utils/gardenPreview';
+import { coverPlantInset, gardenToPreview } from '../../utils/gardenPreview';
 import { getGardenTemplate } from '../../utils/gardenTemplates';
 import TemplatePreview from './TemplatePreview';
 
@@ -28,6 +28,24 @@ function renderFitted(
     plants: within(preview).queryAllByTestId('template-preview-plant'),
   };
 }
+
+/**
+ * The declarations emotion emitted for `element`'s own class, as written.
+ * jsdom's `getComputedStyle` drops what its parser does not know — the
+ * container query units of the cover's inset (U2) — and `toHaveStyle` would
+ * then compare an empty expectation with an empty value: the rule is read
+ * from the stylesheet instead.
+ */
+function emittedRule(element: HTMLElement): string {
+  const own = [...element.classList].find((name) => name.startsWith('css-'));
+  const css = [...document.querySelectorAll('style')].map((style) => style.textContent ?? '').join('\n');
+  const match = own && css.match(new RegExp(`\\.${own}\\{([^}]*)\\}`));
+  if (!match) throw new Error(`No emitted rule for ${String(own)}`);
+  return match[1];
+}
+
+/** `text`, as a pattern that tolerates the serializer's whitespace. */
+const loosely = (text: string) => new RegExp(text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&').replace(/\s+/g, '\\s*'));
 
 const bigGarden = () =>
   gardenToPreview(
@@ -131,6 +149,29 @@ describe('TemplatePreview drawing a real garden (SMA-336 PR 2/5)', () => {
     expect(plants[0]).toHaveStyle({ margin: '2px' });
   });
 
+  it('keeps the 2 px inset on a planting that spans several cells — in px, not a share: the span changes nothing, contained (U2, control)', () => {
+    const wide = gardenToPreview(null, 10, 4, [
+      {
+        id: 'pl-1',
+        plantId: 'p-1',
+        plantScientificName: null,
+        startRow: 0,
+        startCol: 0,
+        spanRows: 1,
+        spanCols: 7,
+        notes: null,
+      },
+    ]);
+
+    const { preview, plants } = renderFitted(
+      <TemplatePreview template={wide} fitTo={{ maxW: 240, maxH: 96 }} />
+    );
+
+    expect(plants).toHaveLength(1);
+    expect(plants[0]).toHaveStyle({ margin: '2px' });
+    expect(emittedRule(preview)).not.toMatch(loosely('container-type'));
+  });
+
   it('without fitTo, nothing moves — the template picker is untouched', () => {
     const { preview, plants } = renderFitted(
       <TemplatePreview template={getGardenTemplate('potager')} />
@@ -220,11 +261,17 @@ describe('TemplatePreview covering its frame (SMA-448, PR #296, fix round 1, V1)
     expect(cells).toHaveLength(80);
   });
 
-  it('gives a planting a share of its cell, not a fixed inset: 7 % — two pixels at 28 px, nothing at a cell too small to keep one', () => {
-    const { plants } = renderFitted(<TemplatePreview template={bigGarden()} fitTo={{ cover: true }} />);
+  it('gives a planting a share of ONE cell, not a fixed inset: 7 % — two pixels at 28 px, nothing at a cell too small to keep one — in container units of the grid, a size container, never a percentage (U2)', () => {
+    // GitHub `4115367541`: `margin: 7%` resolved on the inline size of the
+    // planting's grid AREA, its top and bottom included — a 1 × 7 planting
+    // kept no height. The geometry is proven in Chrome (`pageLayout`, the
+    // greenhouse of `novice-5`); this pins the rule as emitted.
+    const { preview, plants } = renderFitted(<TemplatePreview template={bigGarden()} fitTo={{ cover: true }} />);
 
     expect(plants).toHaveLength(1);
-    expect(plants[0]).toHaveStyle({ margin: '7%' });
+    expect(emittedRule(preview)).toMatch(loosely('container-type:size'));
+    expect(emittedRule(plants[0]!)).toMatch(loosely(`margin:${coverPlantInset(30, 40, 1)}`));
+    expect(emittedRule(plants[0]!)).not.toMatch(loosely('margin:7%'));
   });
 });
 

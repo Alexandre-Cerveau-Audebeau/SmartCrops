@@ -45,6 +45,31 @@ export function plantInsetPx(cellPx: number): number {
   return cellPx <= TINY_CELL_PX ? 0 : 2;
 }
 
+/**
+ * Under COVER (SMA-448, lot F2 — PR #296, fix round 1, V1), a planting's
+ * inset is a SHARE of its cell rather than a count of pixels — the cell is
+ * fluid, the frame's to decide —: 7 %, the 2 px of {@link plantInsetPx} at a
+ * 28 px cell, and nothing of a cell too small to keep one.
+ */
+export const COVER_PLANT_INSET = 0.07;
+
+/**
+ * The inset of a planting under cover, as CSS: a share of ONE cell on each
+ * axis — `cqh` for its top and bottom, `cqw` for its left and right —,
+ * whatever the planting spans (PR #296, fix round 2, U2 — GitHub
+ * `4115367541`). A PERCENTAGE margin resolves on the inline size of the
+ * planting's own grid area, its top and bottom included, so a planting wider
+ * than tall lost its height with its span: 1 × 3 kept two thirds of it,
+ * 1 × 7 nothing. Container query units resolve on the grid, a size container
+ * under cover: a cell is its content box less the gaps between the tracks,
+ * by the tracks.
+ */
+export function coverPlantInset(rows: number, cols: number, gapPx: number): string {
+  const ofCell = (unit: 'cqh' | 'cqw', count: number) =>
+    `calc((100${unit} - ${(count - 1) * gapPx}px) / ${count} * ${COVER_PLANT_INSET})`;
+  return `${ofCell('cqh', rows)} ${ofCell('cqw', cols)}`;
+}
+
 /** How to draw a plan inside a box: cell edge and gap, both in whole px. */
 export interface PreviewFit {
   cellPx: number;

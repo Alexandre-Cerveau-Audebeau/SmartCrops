@@ -179,6 +179,24 @@ export interface PlanMeasure {
 }
 
 /**
+ * A planting of a plan (PR #296, fix round 2, U2 — GitHub `4115367541`):
+ * what it spans, the cell it is drawn from, the area its cells make, and the
+ * box it draws — all relative to the preview, to a tenth of a pixel. The
+ * suite computes the box it OWES from the rule — a share of ONE cell on each
+ * side under cover, `plantInsetPx` contained — and compares; this reads.
+ */
+export interface PlantingMeasure {
+  /** `${rows}x${cols}`. */
+  span: string;
+  /** The cell at its top-left corner: the unit its inset is a share of. */
+  cell: { w: number; h: number };
+  /** The union of the cells it spans. */
+  area: Rect;
+  /** The box it draws. */
+  drawn: Rect;
+}
+
+/**
  * SMA-448, lot F2 (N5; PR #296, fix round 1, S1) — the Novice page measured
  * as one card — the `Container` of `GardensDashboard`, every atom against
  * every other — and card by card (each card as a card, its box relative to
@@ -191,8 +209,8 @@ export interface NoviceMeasure extends CardMeasure {
   viewport: number;
   /** The gardens' zone, relative to the page: what `body` measures. */
   content: Rect;
-  /** Each card: its measure, its box relative to the page, its plan band (V1) and its foot (S3). */
-  cards: Array<CardMeasure & { id: string; box: Rect; plan: PlanMeasure | null; foot: Rect }>;
+  /** Each card: its measure, its box relative to the page, its plan band (V1), the plantings the plan draws (U2) and its foot (S3). */
+  cards: Array<CardMeasure & { id: string; box: Rect; plan: PlanMeasure | null; plantings: PlantingMeasure[]; foot: Rect }>;
   /** Every pair of cards whose boxes intersect by more than a pixel (S3 — as `measureGrid` reads the grid's). */
   cardOverlaps: string[];
   /** The header's zone texts drawn over more than one line — none belongs on two. */
@@ -260,6 +278,47 @@ function planOf(card: HTMLElement, origin: DOMRect): PlanMeasure | null {
       drawn.right >= inner.right - 0.5 &&
       drawn.bottom >= inner.bottom - 0.5,
   };
+}
+
+/**
+ * The plantings a preview draws (U2 — GitHub `4115367541`): for each, the
+ * cells it spans — read from its grid lines —, the area those cells make,
+ * the box it draws, and the cell at its corner, the unit its inset is a
+ * share of. Relative to the preview's own box, so a transform on the preview
+ * (the cover's centring) cancels out. Nothing of the rule lives here: the
+ * suite says what the box must be, this reads what it is.
+ */
+function plantingsOf(preview: HTMLElement | null): PlantingMeasure[] {
+  if (!preview) return [];
+  const origin = preview.getBoundingClientRect();
+  const cells = new Map<string, DOMRect>();
+  for (const cell of preview.querySelectorAll<HTMLElement>('[data-testid="template-preview-cell"]')) {
+    const style = getComputedStyle(cell);
+    cells.set(`${style.gridRowStart}:${style.gridColumnStart}`, cell.getBoundingClientRect());
+  }
+  const spanOf = (end: string) => (end.startsWith('span ') ? Number(end.slice('span '.length)) : 1);
+  return [...preview.querySelectorAll<HTMLElement>('[data-testid="template-preview-plant"]')].map((plant) => {
+    const style = getComputedStyle(plant);
+    const row = Number(style.gridRowStart);
+    const col = Number(style.gridColumnStart);
+    const rows = spanOf(style.gridRowEnd);
+    const cols = spanOf(style.gridColumnEnd);
+    const first = cells.get(`${row}:${col}`);
+    const last = cells.get(`${row + rows - 1}:${col + cols - 1}`);
+    if (!first || !last) throw new Error(`No cell under the planting at row ${row}, column ${col}, spanning ${rows} × ${cols}.`);
+    const drawn = plant.getBoundingClientRect();
+    return {
+      span: `${rows}x${cols}`,
+      cell: { w: round(first.width), h: round(first.height) },
+      area: {
+        x: round(first.left - origin.left),
+        y: round(first.top - origin.top),
+        w: round(last.right - first.left),
+        h: round(last.bottom - first.top),
+      },
+      drawn: { x: round(drawn.left - origin.left), y: round(drawn.top - origin.top), w: round(drawn.width), h: round(drawn.height) },
+    };
+  });
 }
 
 /** The `n`-th element `selector` finds, or a throw that names it. */
@@ -432,6 +491,7 @@ const page = {
       id: card.getAttribute('data-novice-card') ?? '',
       box: rectWithin(card, origin),
       plan: planOf(card, origin),
+      plantings: plantingsOf(card.querySelector<HTMLElement>('[data-novice-plan] [data-testid="template-preview"]')),
       foot: rectWithin(card.querySelector('[data-novice-foot]') ?? card, origin),
       ...measureCard(card),
     }));
@@ -462,6 +522,14 @@ const page = {
       chipButton: document.querySelector('[data-level-chip]')?.getAttribute('role') === 'button',
       columns: new Set(cards.map((card) => card.box.x)).size,
     };
+  },
+
+  /**
+   * Every planting of every preview on the page (U2's control): on the grid
+   * page, the Gardens widget's thumbnails — CONTAINED, their inset in px.
+   */
+  measurePlantings(): PlantingMeasure[] {
+    return [...document.querySelectorAll<HTMLElement>('[data-testid="template-preview"]')].flatMap((preview) => plantingsOf(preview));
   },
 
   /**

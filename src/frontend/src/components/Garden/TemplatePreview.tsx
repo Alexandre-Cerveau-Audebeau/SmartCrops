@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import { alpha } from '@mui/material/styles';
 import { usePlannerTokens } from '../../theme/usePlannerTokens';
 import {
+  coverPlantInset,
   fitPreviewBox,
   plantInsetPx,
   type PreviewFit,
@@ -147,6 +148,10 @@ function TemplatePreview(props: Props) {
     ? ({
         // COVER (V1): the smallest box of the plan's ratio that is at least
         // the frame on both axes, centred in it — the frame crops the rest.
+        // A SIZE CONTAINER (U2): the plantings' insets are container units
+        // of ONE cell — its size owes nothing to its contents, so containing
+        // it changes nothing of the box above.
+        containerType: 'size',
         position: 'absolute',
         top: '50%',
         left: '50%',
@@ -254,8 +259,13 @@ function TemplatePreview(props: Props) {
             // thumbnails would stop showing any planting at all.
             // Under cover the cell is the frame's to decide: a share of it
             // — 7 % of a 28 px cell is the 2 px inset, and nothing of a cell
-            // too small to keep one (the rule of `plantInsetPx`, in CSS).
-            m: cover ? '7%' : `${inset}px`,
+            // too small to keep one (the rule of `plantInsetPx`, in CSS) —
+            // in container units of ONE cell on each axis, never a
+            // percentage: a percentage margin resolves on the inline size of
+            // the planting's own grid AREA, top and bottom included, and a
+            // planting wider than tall lost its height with its span (PR
+            // #296, fix round 2, U2 — GitHub `4115367541`).
+            m: cover ? coverPlantInset(template.rows, template.cols, fit.gapPx) : `${inset}px`,
             borderRadius: '3px',
             bgcolor: getPlantColor(plantColorKey(i)),
           }}

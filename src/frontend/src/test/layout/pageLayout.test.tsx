@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { IS_CI, findChrome, makeOutDir, removeOutDir, terminateChildren } from './chrome.mjs';
 import { buildPageHarness, openPage, writePageHarness, type PageSession } from './pageChrome.mjs';
-import type { NoviceMeasure, PageMeasure } from './pageHarness';
+import type { NoviceMeasure, PageMeasure, PlantingMeasure } from './pageHarness';
 import { NOVICE_LONG_NAMES, NOVICE_SCENES } from './scenes';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
+import { COVER_PLANT_INSET, plantInsetPx } from '../../utils/gardenPreview';
 
 /**
  * SMA-437, lot V39, PR B, step B9 — the compact action bar ON THE WHOLE PAGE,
@@ -71,6 +72,8 @@ const RELAY_STEP = 2;
 interface LevelRun {
   /** The top of the page, before anything. */
   top: PageMeasure;
+  /** The plantings of the Gardens widget's thumbnails at the top — contained, their inset in px (U2's control). */
+  plantings: PlantingMeasure[];
   /** Out of Edit mode: the scroll position the header's buttons cross the line, and the page just before it, just after it, and back before it. */
   relay: { expected: number; before: PageMeasure; after: PageMeasure; back: PageMeasure };
   /** Mid-page, the header's toggle focused before the scroll. */
@@ -226,6 +229,30 @@ async function runNoviceView(view: NoviceView): Promise<Map<string, Map<string, 
 }
 
 /** What a page or a card must be free of, at every width — named so a failure says which. */
+/**
+ * The plantings whose drawn box is not the box they owe — their area inset
+ * by `inset(cell)` on each side, to `tolerance` —, each with its drawn sizes
+ * against the expected ones (PR #296, fix round 2, U2).
+ */
+function plantingFaults(
+  plantings: PlantingMeasure[],
+  inset: (cell: { w: number; h: number }) => { x: number; y: number },
+  tolerance = 0.5
+): string[] {
+  const tenth = (value: number) => Math.round(value * 10) / 10;
+  const share = (drawn: number, expected: number) => `${Math.round((drawn / expected) * 100)} %`;
+  const faults: string[] = [];
+  for (const { span, cell, area, drawn } of plantings) {
+    const by = inset(cell);
+    const expected = { x: area.x + by.x, y: area.y + by.y, w: area.w - 2 * by.x, h: area.h - 2 * by.y };
+    if ((['x', 'y', 'w', 'h'] as const).every((key) => Math.abs(drawn[key] - expected[key]) <= tolerance)) continue;
+    faults.push(
+      `${span}: drawn ${drawn.w}×${drawn.h} at (${drawn.x}, ${drawn.y}) for ${tenth(expected.w)}×${tenth(expected.h)} at (${tenth(expected.x)}, ${tenth(expected.y)}) expected — w ${share(drawn.w, expected.w)}, h ${share(drawn.h, expected.h)}`
+    );
+  }
+  return faults;
+}
+
 function defects(scene: CardMeasure) {
   return {
     overlaps: scene.overlaps
@@ -327,6 +354,7 @@ async function runLevel(session: PageSession, level: Level): Promise<LevelRun> {
   await call(session, `mark('bar-toggle', ${JSON.stringify(selectors.barToggle)})`);
   await call(session, `mark('region', ${JSON.stringify(selectors.region)})`);
   const top = await measure(session);
+  const plantings = await session.evaluate<PlantingMeasure[]>('window.__page.measurePlantings()');
 
   // The relay, out of Edit mode.
   const expected = relayOf(top);
@@ -401,6 +429,7 @@ async function runLevel(session: PageSession, level: Level): Promise<LevelRun> {
 
   return {
     top,
+    plantings,
     relay: { expected, before, after, back },
     mid,
     enter,
@@ -543,6 +572,26 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
   describe('at the top of the page', () => {
     it.each(CASES)('$id $level: no bar — hidden, inert, aria-hidden — and the header’s buttons live', ({ id, level }) => {
       expect(hiddenFaults(levelOf(id, level).top)).toEqual([]);
+    });
+
+    it.each(CASES)('$id $level: the Gardens widget’s thumbnails, contained — every planting inset by `plantInsetPx` of its cell, in whole px, exactly: nothing of the cover’s share reaches them (U2, control)', ({ id, level }) => {
+      // The other use of `TemplatePreview` on a page: the 48 × 40 and 40 × 34
+      // thumbnails of the Gardens widget, drawn unscaled at 2 and 3 px a cell
+      // — a cell too small to keep an inset (`TINY_CELL_PX`), so the box is
+      // the area itself. Read at a tenth of a pixel: a share of a cell leaking
+      // in here would show.
+      const { plantings } = levelOf(id, level);
+      expect(plantings.length, 'no planting drawn in the Gardens widget').toBeGreaterThan(0);
+      expect(
+        plantingFaults(
+          plantings,
+          (cell) => {
+            const px = plantInsetPx(cell.w);
+            return { x: px, y: px };
+          },
+          0.1
+        )
+      ).toEqual([]);
     });
   });
 
@@ -794,6 +843,25 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
           ).toEqual({ covered: true, frame: card.plan!.frame, drawn: card.plan!.drawn });
         }
       }
+    });
+
+    it.each(NOVICE_RUNS.map((run) => run.id))('%s: every planting keeps its shape under the crop — its box is its cells’ area inset by 7 % of ONE cell on each side, whatever it spans: 1 × 3, 1 × 7, 7 × 1, 4 × 4 and the 1 × 1 (U2, GitHub 4115367541)', (id) => {
+      // GitHub `4115367541`: a percentage margin resolves on the grid AREA's
+      // inline size — a planting wider than tall lost its height with its
+      // span, to nothing from 1 × 7. The greenhouse of `novice-5` carries the
+      // four elongated shapes; every card's 1 × 1 are the control.
+      const run = noviceRunOf(id);
+      const spans = new Set<string>();
+      for (const scene of NOVICE_SCENES) {
+        for (const card of pageOf(run, scene.name).cards) {
+          for (const planting of card.plantings) spans.add(planting.span);
+          expect(
+            plantingFaults(card.plantings, (cell) => ({ x: COVER_PLANT_INSET * cell.w, y: COVER_PLANT_INSET * cell.h })),
+            `${id} ${scene.name} ${card.id}`
+          ).toEqual([]);
+        }
+      }
+      expect([...spans].sort()).toEqual(expect.arrayContaining(['1x1', '1x3', '1x7', '4x4', '7x1']));
     });
 
     it('aligns the feet of the cards of one row: the cards of a row share one height, and their feet one top and one bottom (V3-00, `flex: 1` — S3)', () => {

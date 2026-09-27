@@ -88,6 +88,9 @@ const plant = (plantId: string, row: number, col: number) =>
 /** The same variety on several cells. */
 const many = (plantId: string, cells: Array<[number, number]>) =>
   cells.map(([row, col]) => plant(plantId, row, col));
+/** One planting over `spanRows` × `spanCols` cells from its top-left corner (PR #296, fix round 2, U2: the elongated ones). */
+const spread = (plantId: string, row: number, col: number, spanRows: number, spanCols: number) =>
+  placement({ id: `${plantId}-${row}-${col}-${spanRows}x${spanCols}`, plantId, startRow: row, startCol: col, spanRows, spanCols });
 
 const terrasse = gardenFixture({
   id: 'g1',
@@ -356,20 +359,35 @@ export const NOVICE_SCENES: NoviceScene[] = [
   { name: 'novice-3-partial', count: 3, weather: 'partial' },
 ];
 
-/** Two more gardens, on the product's own fields — a greenhouse of herbs, a small square of thyme. */
+/**
+ * Two more gardens, on the product's own fields — a greenhouse, a small
+ * square of thyme. The greenhouse carries the ELONGATED plantings (PR #296,
+ * fix round 2, U2 — GitHub `4115367541`): a row of courgettes over 1 × 7
+ * cells, a bean trellis over 7 × 1, a lettuce strip over 1 × 3, a potato bed
+ * over 4 × 4, beside 1 × 1 herbs — the shapes a planting must keep in the
+ * band, whatever it spans. Under the crop, at every width of the page.
+ */
 const serre: DashboardGardenData = {
   ...terrasse,
   id: 'g4',
   name: 'Serre nord',
   description: null,
   width: 8,
-  height: 6,
+  height: 8,
   cellsJson: null,
   config: { ...terrasse.config, gardenType: 'greenhouse' },
-  placements: [...many('basil', [[0, 0], [0, 1], [0, 2]]), ...many('mint', [[1, 0], [1, 1]]), ...many('thyme', [[2, 0], [2, 1], [2, 2], [2, 3]])],
-  placementCount: 9,
-  varietyCount: 3,
-  occupiedCells: 9,
+  placements: [
+    spread('courgette', 0, 0, 1, 7),
+    spread('bean', 1, 7, 7, 1),
+    spread('lettuce', 2, 0, 1, 3),
+    spread('potato', 3, 2, 4, 4),
+    ...many('mint', [[1, 0], [1, 1]]),
+    ...many('basil', [[2, 4], [2, 5], [2, 6]]),
+    ...many('thyme', [[7, 0], [7, 1], [7, 2], [7, 3]]),
+  ],
+  placementCount: 13,
+  varietyCount: 7,
+  occupiedCells: 42,
   updatedAt: '2026-09-18T08:00:00Z',
 };
 const carre: DashboardGardenData = {
