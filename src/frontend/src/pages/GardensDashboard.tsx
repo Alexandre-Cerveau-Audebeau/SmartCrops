@@ -1207,6 +1207,7 @@ export default function GardensDashboard() {
             </Box>
           )}
           <TextField
+            data-create-name
             label={t('gardens.gardenName')}
             fullWidth
             required
@@ -1246,6 +1247,7 @@ export default function GardensDashboard() {
             {t('gardens.cancel')}
           </Button>
           <Button
+            data-create-submit
             variant="contained"
             disabled={isMutating || !newGardenName.trim()}
             aria-busy={isMutating}

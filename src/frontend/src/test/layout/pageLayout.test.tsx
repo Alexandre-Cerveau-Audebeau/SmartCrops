@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { IS_CI, findChrome, makeOutDir, removeOutDir, terminateChildren } from './chrome.mjs';
 import { buildPageHarness, openPage, writePageHarness, type PageSession } from './pageChrome.mjs';
-import type { NoviceMeasure, PageMeasure, PlantingMeasure } from './pageHarness';
-import { NOVICE_LONG_NAMES, NOVICE_SCENES } from './scenes';
+import type { ChoiceMeasure, DialogMeasure, NoviceMeasure, PageMeasure, PlannerLimitMeasure, PlantingMeasure } from './pageHarness';
+import { CHOICE_SCENES, NOVICE_LONG_NAMES, NOVICE_SCENES } from './scenes';
 import { VISIBLE_OVERLAP_PX, type CardMeasure } from './measure';
 import { COVER_PLANT_INSET, plantInsetPx } from '../../utils/gardenPreview';
 
@@ -223,6 +223,139 @@ async function runNoviceView(view: NoviceView): Promise<Map<string, Map<string, 
       );
     }
     return byRun;
+  } finally {
+    await session.close();
+  }
+}
+
+// ── The choice screen and the refusals (SMA-448, lot F3, L7) ───────────────
+
+interface ChoiceRun {
+  id: string;
+  lang: 'fr' | 'en';
+  theme: 'light' | 'dark';
+}
+
+interface ChoiceView extends PageView {
+  runs: ChoiceRun[];
+}
+
+/**
+ * The five widths of the brief — 360, 390, 600, 1 024, 1 280 — for the choice
+ * screen (V5: a new form of the v3 enters the harness); the night at 360 and
+ * 1 280 (the veil), English at 1 280 (language parity).
+ */
+const CHOICE_VIEWS: ChoiceView[] = [
+  { id: '360x780', width: 360, height: 780, mobile: true, runs: [{ id: 'fr@360', lang: 'fr', theme: 'light' }, { id: 'dark@360', lang: 'fr', theme: 'dark' }] },
+  { id: '390x844', width: 390, height: 844, mobile: true, runs: [{ id: 'fr@390', lang: 'fr', theme: 'light' }] },
+  { id: '600x1024', width: 600, height: 1024, mobile: true, runs: [{ id: 'fr@600', lang: 'fr', theme: 'light' }] },
+  { id: '1024x768', width: 1024, height: 768, mobile: true, runs: [{ id: 'fr@1024', lang: 'fr', theme: 'light' }] },
+  {
+    id: '1280x800',
+    width: 1280,
+    height: 800,
+    mobile: false,
+    runs: [
+      { id: 'fr@1280', lang: 'fr', theme: 'light' },
+      { id: 'dark@1280', lang: 'fr', theme: 'dark' },
+      { id: 'en@1280', lang: 'en', theme: 'light' },
+    ],
+  },
+];
+const CHOICE_RUNS: Array<ChoiceRun & { vw: number }> = CHOICE_VIEWS.flatMap((view) => view.runs.map((run) => ({ ...run, vw: view.width })));
+/** The choice screen, by run then by scene name. */
+const choiceCases = new Map<string, Map<string, ChoiceMeasure>>();
+/** The creation's refusals at the five widths. */
+const REFUSAL_VIEWS: PageView[] = CHOICE_VIEWS.map(({ id, width, height, mobile }) => ({ id, width, height, mobile }));
+const refusalCases = new Map<string, { limit: DialogMeasure; unauthorized: DialogMeasure }>();
+/** The planner's, at the desktop widths: its sidebar — where the shape mode is switched — beside the grid. */
+const PLANNER_VIEWS: PageView[] = [
+  { id: '1024x768', width: 1024, height: 768, mobile: true },
+  { id: '1280x800', width: 1280, height: 800, mobile: false },
+];
+const plannerCases = new Map<string, { limit: PlannerLimitMeasure; refused: DialogMeasure; unauthorized: DialogMeasure }>();
+
+const choiceRunOf = (id: string): ChoiceRun & { vw: number } => {
+  const run = CHOICE_RUNS.find((candidate) => candidate.id === id);
+  if (!run) throw new Error(`No choice run ${id}`);
+  return run;
+};
+
+const OFFERS_DRAWN = 'document.querySelectorAll("[data-formula-offer]").length === 3';
+
+/** Every scene of every run of one viewport, in one Chrome: the screen by itself on an account that never chose, from the chip otherwise. */
+async function runChoiceView(view: ChoiceView): Promise<Map<string, Map<string, ChoiceMeasure>>> {
+  const session = await openPage(CHROME!, outDir, { label: `choice-${view.id}`, width: view.width, height: view.height, mobile: view.mobile });
+  try {
+    const byRun = new Map<string, Map<string, ChoiceMeasure>>();
+    for (const run of view.runs) {
+      const byScene = new Map<string, ChoiceMeasure>();
+      for (const scene of CHOICE_SCENES) {
+        await session.navigate(`choice=${scene.name}&theme=${run.theme}&lang=${run.lang}`);
+        if (scene.opened === 'chip') await session.evaluate('window.__page.click("[data-level-chip]")');
+        await session.waitFor(OFFERS_DRAWN, `the three offers of ${scene.name}`);
+        await settle(session);
+        byScene.set(scene.name, await session.evaluate<ChoiceMeasure>('window.__page.measureChoice()'));
+      }
+      byRun.set(run.id, byScene);
+    }
+    return byRun;
+  } finally {
+    await session.close();
+  }
+}
+
+/** The creation refused by the formula's limit, then by a session that expired, in one Chrome. */
+async function runRefusalView(view: PageView): Promise<{ limit: DialogMeasure; unauthorized: DialogMeasure }> {
+  const session = await openPage(CHROME!, outDir, { label: `refusal-${view.id}`, width: view.width, height: view.height, mobile: view.mobile });
+  try {
+    const create = async (outcome: 'limit' | 'unauthorized') => {
+      await session.navigate(`level=gardener&theme=light&lang=fr&create=${outcome}`);
+      await session.evaluate('window.__page.click("[data-create-garden]")');
+      await session.waitFor('document.querySelector("[data-create-name] input")', 'the creation dialog');
+      await session.evaluate('window.__page.fill("[data-create-name] input", "Quatrième jardin")');
+      await session.waitFor('!document.querySelector("[data-create-submit]").disabled', 'the submit button live');
+      await session.evaluate('window.__page.click("[data-create-submit]")');
+      await session.waitFor('document.querySelector("[data-create-refusal]")', 'the refusal said');
+      await settle(session);
+      return session.evaluate<DialogMeasure>('window.__page.measureDialog("[data-create-refusal]")');
+    };
+    return { limit: await create('limit'), unauthorized: await create('unauthorized') };
+  } finally {
+    await session.close();
+  }
+}
+
+const ADD_ROW_TOP = "button[aria-label='Ajouter une ligne en haut']";
+
+/** The planner at the Novice's limit, then its save refused for the plan's size, then by a session that expired. */
+async function runPlannerView(view: PageView): Promise<{ limit: PlannerLimitMeasure; refused: DialogMeasure; unauthorized: DialogMeasure }> {
+  const session = await openPage(CHROME!, outDir, { label: `planner-${view.id}`, width: view.width, height: view.height, mobile: view.mobile });
+  try {
+    // Under 1 200 px the sidebar — where the shape mode is switched — is a
+    // bottom sheet behind its trigger: opened first, when there is one.
+    const shapeMode = async () => {
+      await session.evaluate(`(() => { const trigger = document.querySelector("button[aria-controls='planner-sheet']"); if (trigger) trigger.click(); return true; })()`);
+      await session.waitFor('document.querySelector("[data-shape-toggle] input")', 'the shape toggle');
+      await session.evaluate('window.__page.click("[data-shape-toggle] input")');
+    };
+    await session.navigate('page=planner&theme=light&lang=fr');
+    await shapeMode();
+    await session.waitFor('document.querySelector("[data-planner-limit]")', 'the limit note');
+    await settle(session);
+    const limit = await session.evaluate<PlannerLimitMeasure>('window.__page.measurePlannerLimit()');
+    const save = async (outcome: 'refused' | 'unauthorized') => {
+      await session.navigate(`page=planner&save=${outcome}&theme=light&lang=fr`);
+      await shapeMode();
+      await session.waitFor(`document.querySelector("${ADD_ROW_TOP}")`, 'the shape mode');
+      await session.evaluate(`window.__page.click("${ADD_ROW_TOP}")`);
+      await session.waitFor('!document.querySelector("[data-planner-save]").disabled', 'the save button live');
+      await session.evaluate('window.__page.click("[data-planner-save]")');
+      await session.waitFor('document.querySelector("[data-planner-toast]")', 'the toast');
+      await settle(session);
+      return session.evaluate<DialogMeasure>('window.__page.measureDialog("[data-planner-toast]")');
+    };
+    return { limit, refused: await save('refused'), unauthorized: await save('unauthorized') };
   } finally {
     await session.close();
   }
@@ -545,6 +678,23 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
       noviceSettled.forEach((outcome, index) => {
         if (outcome.status === 'fulfilled') for (const [id, byScene] of outcome.value) noviceCases.set(id, byScene);
         else failures.set(`novice-${NOVICE_VIEWS[index]!.id}`, outcome.reason);
+      });
+      // The choice screen (SMA-448, lot F3, L7): one Chrome per viewport, five at once.
+      const choiceSettled = await Promise.allSettled(CHOICE_VIEWS.map((view) => runChoiceView(view)));
+      choiceSettled.forEach((outcome, index) => {
+        if (outcome.status === 'fulfilled') for (const [id, byScene] of outcome.value) choiceCases.set(id, byScene);
+        else failures.set(`choice-${CHOICE_VIEWS[index]!.id}`, outcome.reason);
+      });
+      // The refusals of the creation and of the planner's save.
+      const refusalSettled = await Promise.allSettled([
+        ...REFUSAL_VIEWS.map((view) => runRefusalView(view).then((measured) => refusalCases.set(view.id, measured))),
+        ...PLANNER_VIEWS.map((view) => runPlannerView(view).then((measured) => plannerCases.set(view.id, measured))),
+      ]);
+      refusalSettled.forEach((outcome, index) => {
+        if (outcome.status === 'rejected') {
+          const label = index < REFUSAL_VIEWS.length ? `refusal-${REFUSAL_VIEWS[index]!.id}` : `planner-${PLANNER_VIEWS[index - REFUSAL_VIEWS.length]!.id}`;
+          failures.set(label, outcome.reason);
+        }
       });
     } finally {
       await terminateChildren();
@@ -941,6 +1091,204 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
     it('never takes a page showing its load error for ready: the gardens answered 500, and `navigate` says so at once (the Extension’s second draw, `11595896…`)', () => {
       expect(noviceLoadFailure).toContain('failed before it was ready');
       expect(noviceLoadFailure).toContain('data-novice-error');
+    });
+  });
+
+  // SMA-448, lot F3, step L7 (V5) — THE CHOICE SCREEN as the app opens it,
+  // in its five situations (V3-01, and the kept formula it left undrawn), at
+  // 360, 390, 600, 1 024 and 1 280 px, by day and by night, in French and in
+  // English: the panel measured as one card — zero overlap, zero clipped
+  // text, zero spill, nothing beyond, no ellipsis, every text at 14 px or
+  // more (the tags at 13, as chips) —, and what each situation draws.
+  describe('the choice screen, as the app opens it (SMA-448, lot F3, L7 — V3-01)', () => {
+    const choiceOf = (runId: string, name: string): ChoiceMeasure => {
+      const measure = choiceCases.get(runId)?.get(name);
+      if (!measure) throw new Error(`No measurement for the choice scene ${name} in ${runId}: ${String(failures.get(`choice-${choiceRunOf(runId).vw}`) ?? [...failures.keys()].join(', '))}`);
+      return measure;
+    };
+    const SCENE_NAMES = CHOICE_SCENES.map((scene) => scene.name);
+    const clean = { overlaps: [], clipped: [], spills: [], beyondCard: 0 };
+    const tagsOf = (measure: ChoiceMeasure, key: string) => measure.offers.find((offer) => offer.key === key)?.tags ?? ['no such offer'];
+    const buttonOf = (measure: ChoiceMeasure, key: string) => measure.offers.find((offer) => offer.key === key)?.button ?? { text: '', disabled: true };
+
+    it('draws the five situations in every run, at the viewport it claims, in Inter — three offers each, in the catalogue’s order', () => {
+      expect(SCENE_NAMES).toEqual(['choice-first', 'choice-change', 'choice-five', 'choice-twelve', 'choice-kept']);
+      for (const run of CHOICE_RUNS) {
+        expect(choiceCases.get(run.id)?.size, run.id).toBe(CHOICE_SCENES.length);
+        for (const name of SCENE_NAMES) {
+          const screen = choiceOf(run.id, name);
+          expect(screen.viewport, `${run.id} ${name}`).toBe(run.vw);
+          expect(screen.fontLoaded, `${run.id} ${name}: Inter not loaded`).toBe(true);
+          expect(screen.offers.map((offer) => offer.key), `${run.id} ${name}`).toEqual(['novice', 'gardener', 'expert']);
+        }
+      }
+    });
+
+    it.each(CHOICE_RUNS.map((run) => run.id))('%s: every situation is clean — no overlap, nothing clipped, nothing spilled, nothing beyond, no ellipsis; every text at 14 px or more, the tags alone at 13 (V5, V11)', (id) => {
+      for (const name of SCENE_NAMES) {
+        const screen = choiceOf(id, name);
+        expect(defects(screen), `${id} ${name}`).toEqual(clean);
+        expect(screen.ellipsized.map((cut) => cut.text), `${id} ${name}`).toEqual([]);
+        expect(screen.smallFonts.filter((font) => font.px < (font.chip ? 13 : 14)), `${id} ${name}`).toEqual([]);
+      }
+    });
+
+    it('a first visit: mandatory — no close button —, three « Choisir » live, Novice recommended, no formula of its own yet', () => {
+      for (const run of CHOICE_RUNS) {
+        const screen = choiceOf(run.id, 'choice-first');
+        expect({ mandatory: screen.mandatory, closeButton: screen.closeButton }, run.id).toEqual({ mandatory: true, closeButton: false });
+        expect(screen.offers.map((offer) => offer.tags), run.id).toEqual([['recommended'], [], []]);
+        expect(screen.offers.map((offer) => offer.button.disabled), run.id).toEqual([false, false, false]);
+        expect(screen.offers.every((offer) => !offer.kept && !offer.why), run.id).toBe(true);
+      }
+    });
+
+    it('a change from the chip: closable, the dashboard veiled behind — the scrim token and its blur —, the title seen above the panel, « Garder » on the current formula, no recommendation (decision 3)', () => {
+      for (const run of CHOICE_RUNS) {
+        const screen = choiceOf(run.id, 'choice-change');
+        expect({ mandatory: screen.mandatory, closeButton: screen.closeButton }, run.id).toEqual({ mandatory: false, closeButton: true });
+        expect(screen.offers.map((offer) => offer.tags), run.id).toEqual([[], ['current'], []]);
+        expect(buttonOf(screen, 'gardener').text, run.id).toMatch(run.lang === 'en' ? /^Keep Gardener$/ : /^Garder Jardinier$/);
+        expect(screen.backdrop.color, run.id).toBe(run.theme === 'dark' ? 'rgba(3, 10, 20, 0.58)' : 'rgba(24, 46, 34, 0.42)');
+        expect(screen.backdrop.filter, run.id).toContain('blur(2.5px)');
+        expect({ title: screen.title, clear: screen.titleClear }, `${run.id}: the panel at ${screen.rect.y}, the title at ${JSON.stringify(screen.title)}`).toMatchObject({ clear: true });
+      }
+    });
+
+    it('a mandatory screen veils the page with its own ground — nothing of the dashboard to see behind', () => {
+      for (const run of CHOICE_RUNS) {
+        const screen = choiceOf(run.id, 'choice-first');
+        expect(screen.backdrop.color, run.id).toBe(run.theme === 'dark' ? 'rgb(13, 30, 52)' : 'rgb(250, 253, 247)');
+      }
+    });
+
+    it('five gardens: Novice unavailable, its reason in words, its button inert; Gardener current and recommended, « Garder » live', () => {
+      for (const run of CHOICE_RUNS) {
+        const screen = choiceOf(run.id, 'choice-five');
+        expect(tagsOf(screen, 'novice'), run.id).toEqual(['unavailable']);
+        expect(buttonOf(screen, 'novice').disabled, run.id).toBe(true);
+        expect(screen.offers[0]!.why, run.id).toMatch(/5/);
+        expect(screen.offers[0]!.why, run.id).toMatch(/3/);
+        expect(tagsOf(screen, 'gardener'), run.id).toEqual(['current', 'recommended']);
+        expect(buttonOf(screen, 'gardener').disabled, run.id).toBe(false);
+        expect(tagsOf(screen, 'expert'), run.id).toEqual([]);
+      }
+    });
+
+    it('twelve gardens on Expert: Novice and Gardener unavailable, each with its count; Expert current and recommended', () => {
+      for (const run of CHOICE_RUNS) {
+        const screen = choiceOf(run.id, 'choice-twelve');
+        expect(screen.offers.map((offer) => offer.tags), run.id).toEqual([['unavailable'], ['unavailable'], ['current', 'recommended']]);
+        expect(screen.offers.map((offer) => offer.button.disabled), run.id).toEqual([true, true, false]);
+        expect(screen.offers[0]!.why, run.id).toMatch(/12/);
+        expect(screen.offers[1]!.why, run.id).toMatch(/10/);
+      }
+    });
+
+    it('twelve gardens still on Gardener: « Votre formule — conservée », what it keeps said, « Garder » live; Novice unavailable; Expert recommended', () => {
+      for (const run of CHOICE_RUNS) {
+        const screen = choiceOf(run.id, 'choice-kept');
+        expect(screen.offers.map((offer) => offer.tags), run.id).toEqual([['unavailable'], ['currentKept'], ['recommended']]);
+        expect(screen.offers.map((offer) => offer.button.disabled), run.id).toEqual([true, false, false]);
+        expect(screen.offers[1]!.kept, run.id).toMatch(/12/);
+        expect(screen.offers[1]!.why, run.id).toBeNull();
+      }
+    });
+
+    it('the comparison is a table from 900 px and one list per formula under it — never a horizontal scroll', () => {
+      for (const run of CHOICE_RUNS) {
+        for (const name of SCENE_NAMES) {
+          const screen = choiceOf(run.id, name);
+          expect(screen.compare, `${run.id} ${name}`).toBe(run.vw >= 900 ? 'table' : 'lists');
+          expect(screen.scrollers.filter((scroller) => scroller.overflowX > 0), `${run.id} ${name}`).toEqual([]);
+        }
+      }
+    });
+
+    it('never a weather warning on the screen (V1), never a price above 0 (V2), never Récolte promised (R7)', () => {
+      for (const run of CHOICE_RUNS) {
+        for (const name of SCENE_NAMES) {
+          const screen = choiceOf(run.id, name);
+          expect(screen.warning, `${run.id} ${name}`).toBe(false);
+          expect(screen.text, `${run.id} ${name}`).not.toMatch(/[1-9]\d*\s?€|€\s?[1-9]|\$/);
+          expect(screen.text, `${run.id} ${name}`).not.toMatch(/\bRécolte\b|\bHarvest\b/);
+        }
+      }
+    });
+
+    it('reads the same screen in French and in English at 1 280 px: the same tags, the same buttons live, box widths alike (language parity)', () => {
+      for (const name of SCENE_NAMES) {
+        const fr = choiceOf('fr@1280', name);
+        const en = choiceOf('en@1280', name);
+        expect(en.offers.map((offer) => [offer.tags, offer.button.disabled]), name).toEqual(fr.offers.map((offer) => [offer.tags, offer.button.disabled]));
+        expect(en.rect.w, name).toBe(fr.rect.w);
+      }
+    });
+  });
+
+  // SMA-448, lot F3, step L7 — THE REFUSALS said on the real pages (R3-E1):
+  // the creation's dialog, at the five widths; the planner's shape mode at
+  // the Novice's limit and its save refused, at the desktop widths.
+  describe('the refusals said on the real pages (SMA-448, lot F3, L7 — R3-E1)', () => {
+    const refusalOf = (id: string) => {
+      const measured = refusalCases.get(id);
+      if (!measured) throw new Error(`No measurement for the creation refusals at ${id}: ${String(failures.get(`refusal-${id}`) ?? 'not run')}`);
+      return measured;
+    };
+    const plannerOf = (id: string) => {
+      const measured = plannerCases.get(id);
+      if (!measured) throw new Error(`No measurement for the planner at ${id}: ${String(failures.get(`planner-${id}`) ?? 'not run')}`);
+      return measured;
+    };
+    const clean = { overlaps: [], clipped: [], spills: [], beyondCard: 0 };
+    const names = (dialog: DialogMeasure) => dialog.buttons.map((button) => button.text);
+
+    it.each(REFUSAL_VIEWS.map((view) => view.id))('%s: a fourth garden refused — the creation dialog says the limit with its numbers and offers « Voir les formules », clean', (id) => {
+      const { limit } = refusalOf(id);
+      expect(defects(limit), id).toEqual(clean);
+      expect(limit.ellipsized, id).toEqual([]);
+      expect(limit.text, id).toMatch(/Novice/);
+      expect(limit.text, id).toMatch(/3 jardins au plus/);
+      expect(names(limit), id).toContain('Voir les formules');
+      expect(limit.text, id).not.toMatch(/réessayer/i);
+    });
+
+    it.each(REFUSAL_VIEWS.map((view) => view.id))('%s: a session that expired on the creation — « Se reconnecter », never « réessayer », clean', (id) => {
+      const { unauthorized } = refusalOf(id);
+      expect(defects(unauthorized), id).toEqual(clean);
+      expect(unauthorized.text, id).toMatch(/Votre session a expiré/);
+      expect(names(unauthorized), id).toContain('Se reconnecter');
+      expect(names(unauthorized), id).not.toContain('Voir les formules');
+      expect(unauthorized.text, id).not.toMatch(/réessayer/i);
+    });
+
+    it.each(PLANNER_VIEWS.map((view) => view.id))('%s: the planner at the Novice’s 20 × 20 — the four add buttons inert, the four remove buttons live, the note says the limit, whole and clear of the row', (id) => {
+      const { limit } = plannerOf(id);
+      expect(limit.fontLoaded, id).toBe(true);
+      expect(limit.adds.map((button) => button.disabled), id).toEqual([true, true, true, true]);
+      expect(limit.removes.map((button) => button.disabled), id).toEqual([false, false, false, false]);
+      expect(limit.note, id).not.toBeNull();
+      expect(limit.note!.text, id).toMatch(/Novice/);
+      expect(limit.note!.text, id).toMatch(/20 × 20/);
+      expect({ x: limit.note!.overflowX, y: limit.note!.overflowY }, id).toEqual({ x: 0, y: 0 });
+      expect(limit.gap, id).toBeGreaterThanOrEqual(0);
+    });
+
+    it.each(PLANNER_VIEWS.map((view) => view.id))('%s: a plan the server refuses for its size — the toast says the formula, its limit and the size asked, with « Voir les formules », clean', (id) => {
+      const { refused } = plannerOf(id);
+      expect(defects(refused), id).toEqual(clean);
+      expect(refused.ellipsized, id).toEqual([]);
+      expect(refused.text, id).toMatch(/Novice/);
+      expect(refused.text, id).toMatch(/20 × 20/);
+      expect(refused.text, id).toMatch(/20 × 21/);
+      expect(names(refused), id).toContain('Voir les formules');
+    });
+
+    it.each(PLANNER_VIEWS.map((view) => view.id))('%s: a session that expired on the save — « Se reconnecter », clean', (id) => {
+      const { unauthorized } = plannerOf(id);
+      expect(defects(unauthorized), id).toEqual(clean);
+      expect(unauthorized.text, id).toMatch(/Votre session a expiré/);
+      expect(names(unauthorized), id).toContain('Se reconnecter');
     });
   });
 

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -75,6 +76,16 @@ export default function FormulaChoice({ titleId, mandatory, switching, refusal, 
   const { t } = useTranslation();
   const { catalog, loading, loadError, reload } = useFormulas();
 
+  // The screen opens on its TITLE, without scrolling (measured in Chrome by
+  // the page harness, L7): the dialog left to focus its paper scrolled the
+  // overlay to the paper's top — the panel is taller than the viewport —
+  // and the header the panel descends from was gone the instant it opened.
+  // A focus, no state: the trap of the dialog stays.
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  useEffect(() => {
+    titleRef.current?.focus({ preventScroll: true });
+  }, []);
+
   const nameOf = (level: DashboardLevel) => t(`dashboard.levels.${level}.name`);
 
   return (
@@ -83,7 +94,9 @@ export default function FormulaChoice({ titleId, mandatory, switching, refusal, 
         <Typography
           component="h2"
           id={titleId}
-          sx={{ m: 0, fontSize: { xs: 26, sm: 34 }, lineHeight: 1.2, fontWeight: 800, color: 'primary.main', pr: mandatory ? 0 : '56px' }}
+          ref={titleRef}
+          tabIndex={-1}
+          sx={{ m: 0, fontSize: { xs: 26, sm: 34 }, lineHeight: 1.2, fontWeight: 800, color: 'primary.main', pr: mandatory ? 0 : '56px', outline: 'none' }}
         >
           {t('dashboard.choice.title')}
         </Typography>

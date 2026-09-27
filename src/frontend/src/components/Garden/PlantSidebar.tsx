@@ -342,6 +342,7 @@ function PlantSidebar({ plants, searchQuery, onSearchChange, selectedPlantId, on
         <FormControlLabel
           control={
             <Switch
+              data-shape-toggle
               checked={shapeEditMode}
               onChange={(e) => onShapeEditToggle(e.target.checked)}
               sx={iosSwitchSx(tk)}

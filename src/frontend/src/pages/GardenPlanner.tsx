@@ -2564,6 +2564,7 @@ export default function GardenPlanner() {
           }
           disabled={!isDirty || saving}
           onClick={handleSave}
+          data-planner-save
           sx={{
             ...headerBtnSx,
             fontWeight: 700,

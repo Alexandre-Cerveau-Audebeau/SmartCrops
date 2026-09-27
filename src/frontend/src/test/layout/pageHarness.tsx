@@ -3,17 +3,29 @@
 import './freeze';
 import './pageSetup';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import '../../i18n/i18n';
 import Layout from '../../components/Layout/Layout';
 import GardensDashboard from '../../pages/GardensDashboard';
+import GardenPlanner from '../../pages/GardenPlanner';
 import { AuthProvider } from '../../contexts/AuthContext';
 import { ColorModeProvider } from '../../contexts/ColorModeContext';
 import { LanguageProvider } from '../../contexts/LanguageContext';
 import { UnitSystemProvider } from '../../contexts/UnitSystemContext';
-import { capabilitiesFor, presetFor } from '../fixtures/formulas';
+import { capabilitiesFor, catalogFor, presetFor } from '../fixtures/formulas';
 import type { DashboardLevel } from '../../types/Dashboard';
-import { NOVICE_SCENES, SCENE_DATA, noviceSceneData, weatherAll, type NoviceScene } from './scenes';
+import {
+  CHOICE_SCENES,
+  NOVICE_SCENES,
+  PLANNER_GARDEN,
+  PLANNER_LAYOUT,
+  SCENE_DATA,
+  choiceSceneCatalog,
+  noviceSceneData,
+  weatherAll,
+  type ChoiceScene,
+  type NoviceScene,
+} from './scenes';
 import { measureCard, wrappedTexts, type CardMeasure } from './measure';
 
 /**
@@ -57,6 +69,28 @@ const served = scene ? noviceSceneData(scene) : null;
 /** The gardens' aggregate answered 500: the page shows its load error, and must never be measured as if it were drawn. */
 const failGardens = params.get('fail') === 'gardens';
 
+// SMA-448, lot F3, step L7 — the choice screen, the refusals of the creation
+// and of the planner's save, on the real pages.
+/** The choice screen's scene (`scenes.tsx`): what `/api/formulas` serves, whether the account chose, the formula the page stands at. */
+const choiceName = params.get('choice');
+const choiceScene: ChoiceScene | null = choiceName
+  ? (CHOICE_SCENES.find((candidate) => candidate.name === choiceName) ?? null)
+  : null;
+if (choiceName && !choiceScene) throw new Error(`No choice scene ${choiceName}`);
+/** The creation refused by the formula's limit (403 `formula.gardenLimit`), or by a session that expired (401). */
+const createOutcome = params.get('create');
+/** The planner's page instead of the dashboard, on the Novice's 20 x 20 garden. */
+const plannerPage = params.get('page') === 'planner';
+/**
+ * The planner's save refused for the plan's size (403 `formula.gardenSize`)
+ * or by a session that expired (401). Either makes the catalogue unreadable
+ * too: the add buttons then stay live — the server is the judge — and a
+ * 21st row can be asked for and refused.
+ */
+const saveOutcome = params.get('save');
+/** The formula the page stands at: the choice scene's, or the query's. */
+const pageLevel: DashboardLevel = choiceScene ? choiceScene.level : level;
+
 /** A JSON answer. */
 const json = (body: unknown) =>
   new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -71,9 +105,46 @@ const saved: unknown[] = [];
  */
 let held: Array<() => void> | null = null;
 
+/** An RFC 9457 problem, as the API refuses. */
+const problem = (status: number, body: unknown) =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/problem+json' } });
+
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   const method = (init?.method ?? 'GET').toUpperCase();
+  if (url.startsWith('/api/formulas')) {
+    if (plannerPage && saveOutcome) return new Response(null, { status: 500 });
+    return json(choiceScene ? choiceSceneCatalog(choiceScene) : catalogFor(plannerPage ? 'novice' : pageLevel, { gardenCount: 3 }));
+  }
+  if (url.startsWith('/api/gardens/g1/layout')) {
+    if (method === 'PUT') {
+      if (saveOutcome === 'refused') {
+        return problem(403, {
+          status: 403,
+          code: 'formula.gardenSize',
+          formula: 'novice',
+          limit: { width: 20, height: 20 },
+          current: { width: 20, height: 20 },
+          requested: { width: 20, height: 21 },
+        });
+      }
+      if (saveOutcome === 'unauthorized') return new Response(null, { status: 401 });
+      return new Response(null, { status: 204 });
+    }
+    return json(PLANNER_LAYOUT);
+  }
+  if (url.startsWith('/api/gardens/g1')) return json(PLANNER_GARDEN);
+  if (url.startsWith('/api/gardens')) {
+    if (method === 'POST') {
+      if (createOutcome === 'limit') {
+        return problem(403, { status: 403, code: 'formula.gardenLimit', formula: 'novice', limit: 3, current: 3 });
+      }
+      if (createOutcome === 'unauthorized') return new Response(null, { status: 401 });
+      return json({ id: 'g9', name: 'Nouveau', description: null });
+    }
+    return json([]);
+  }
+  if (url.startsWith('/api/plants')) return json([]);
   if (url.startsWith('/api/dashboard/preferences')) {
     if (method === 'PUT') {
       saved.push(JSON.parse(String(init?.body ?? 'null')));
@@ -88,12 +159,13 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     // With the formula's capabilities, as the server serves them (SMA-448, S5).
     return json({
       schemaVersion: 1,
-      level,
+      level: pageLevel,
       isPreset: true,
-      formulaChosen: true,
-      blocks: presetFor(level),
+      // The choice screen opens by itself on an account that never chose (N18).
+      formulaChosen: choiceScene ? choiceScene.chosen : true,
+      blocks: presetFor(pageLevel),
       updatedAt: null,
-      capabilities: capabilitiesFor(level),
+      capabilities: capabilitiesFor(pageLevel),
     });
   }
   if (url.startsWith('/api/dashboard/weather')) return json(served ? served.weather : weatherAll());
@@ -222,6 +294,48 @@ export interface NoviceMeasure extends CardMeasure {
   chipButton: boolean;
   /** How many columns the cards take: their distinct left edges. */
   columns: number;
+}
+
+/**
+ * SMA-448, lot F3, step L7 — a dialog or a toast measured as one card: its
+ * paper, every atom against every other, plus what it says and offers.
+ */
+export interface DialogMeasure extends CardMeasure {
+  rect: Rect;
+  text: string;
+  buttons: Array<{ text: string; disabled: boolean }>;
+}
+
+/** The choice screen (V3-01) measured on the real page: the panel as one card, and the situation it draws. */
+export interface ChoiceMeasure extends DialogMeasure {
+  scene: string;
+  viewport: number;
+  /** No way out: the account never chose. */
+  mandatory: boolean;
+  closeButton: boolean;
+  /** Each offer, in the catalogue's order: its tags, its button, the reason it is unavailable, what a kept formula says. */
+  offers: Array<{ key: string; tags: string[]; button: { text: string; disabled: boolean }; why: string | null; kept: string | null }>;
+  /** Which form of the comparison is DRAWN: the table from 900 px, the lists under it. */
+  compare: 'table' | 'lists' | 'none';
+  /** The veil: its computed colour, and its blur. */
+  backdrop: { color: string; filter: string };
+  /** The page's title in the window, and whether the panel starts under it — the header seen above the veil (V3-01). */
+  title: Rect | null;
+  titleClear: boolean;
+  /** V1: no weather warning on the screen, ever. */
+  warning: boolean;
+}
+
+/** The planner's shape mode at the formula's limit: the note that says why, the four add buttons inert, the four remove buttons live. */
+export interface PlannerLimitMeasure {
+  /** The note: its box, its words, and what it cannot show — the text past its box, in px, each way. */
+  note: { rect: Rect; text: string; overflowX: number; overflowY: number; whiteSpace: string } | null;
+  /** The top +/- row's box, and the gap between the note's bottom and its top: never negative. */
+  topRow: Rect | null;
+  gap: number | null;
+  adds: Array<{ label: string; disabled: boolean }>;
+  removes: Array<{ label: string; disabled: boolean }>;
+  fontLoaded: boolean;
 }
 
 declare global {
@@ -409,7 +523,12 @@ const page = {
    */
   ready(): boolean {
     if (document.fonts.status !== 'loaded') return false;
-    if (!document.querySelector('[data-site-navbar]') || !headerRowOf()) return false;
+    if (!document.querySelector('[data-site-navbar]')) return false;
+    // The planner (SMA-448, lot F3, L7): its grid drawn, no skeleton.
+    if (plannerPage) {
+      return document.querySelector('[role="grid"]') !== null && document.querySelectorAll('.MuiSkeleton-root').length === 0;
+    }
+    if (!headerRowOf()) return false;
     if (prefsPending) return true;
     if (page.failed()) return false;
     const drawn =
@@ -523,6 +642,104 @@ const page = {
       chipButton: document.querySelector('[data-level-chip]')?.getAttribute('role') === 'button',
       columns: new Set(cards.map((card) => card.box.x)).size,
     };
+  },
+
+  /** A dialog's paper — or a toast — as one card, from any element inside it (SMA-448, lot F3, L7). */
+  measureDialog(anchor: string): DialogMeasure {
+    const inside = document.querySelector<HTMLElement>(anchor);
+    const card = inside?.closest<HTMLElement>('.MuiDialog-paper, .MuiAlert-root');
+    if (!inside || !card) throw new Error(`No dialog nor toast around ${anchor}.`);
+    return {
+      ...measureCard(card),
+      rect: rectOf(card),
+      text: card.textContent ?? '',
+      buttons: [...card.querySelectorAll<HTMLButtonElement>('button')].map((button) => ({
+        text: button.textContent ?? '',
+        disabled: button.disabled,
+      })),
+    };
+  },
+
+  /**
+   * SMA-448, lot F3, step L7 — THE CHOICE SCREEN as the app opens it (V3-01):
+   * the panel measured as one card — every text and glyph against every
+   * other —, and the situation it draws: each offer's tags and button, the
+   * reason of an unavailable one, the form of the comparison, the veil, the
+   * title seen above it.
+   */
+  measureChoice(): ChoiceMeasure {
+    const root = document.querySelector<HTMLElement>('[data-formula-choice-dialog]');
+    const paper = root?.querySelector<HTMLElement>('.MuiDialog-paper');
+    if (!root || !paper) throw new Error('The choice screen is not open.');
+    const backdrop = root.querySelector<HTMLElement>('.MuiBackdrop-root');
+    const backdropStyle = backdrop ? getComputedStyle(backdrop) : null;
+    const table = paper.querySelector<HTMLElement>('[data-formula-compare]');
+    const list = paper.querySelector<HTMLElement>('[data-formula-compare-list]');
+    const drawn = (element: HTMLElement | null) => element !== null && getComputedStyle(element).display !== 'none';
+    const title = document.querySelector<HTMLElement>('[data-dashboard-header] h1');
+    const paperBox = paper.getBoundingClientRect();
+    const titleBox = title?.getBoundingClientRect() ?? null;
+    return {
+      ...page.measureDialog('[data-formula-choice]'),
+      scene: choiceName ?? '',
+      viewport: innerWidth,
+      mandatory: root.getAttribute('data-mandatory') === 'true',
+      closeButton: paper.querySelector('[data-formula-choice-close]') !== null,
+      offers: [...paper.querySelectorAll<HTMLElement>('[data-formula-offer]')].map((offer) => {
+        const button = offer.querySelector<HTMLButtonElement>(':scope > button');
+        return {
+          key: offer.getAttribute('data-formula-offer') ?? '',
+          tags: [...offer.querySelectorAll('[data-offer-tag]')].map((tag) => tag.getAttribute('data-offer-tag') ?? ''),
+          button: { text: button?.textContent ?? '', disabled: button?.disabled ?? true },
+          why: offer.querySelector('[data-offer-why]')?.textContent ?? null,
+          kept: offer.querySelector('[data-offer-kept]')?.textContent ?? null,
+        };
+      }),
+      compare: drawn(table) ? 'table' : drawn(list) ? 'lists' : 'none',
+      backdrop: { color: backdropStyle?.backgroundColor ?? '', filter: backdropStyle?.backdropFilter ?? '' },
+      title: titleBox ? { x: round(titleBox.left), y: round(titleBox.top), w: round(titleBox.width), h: round(titleBox.height) } : null,
+      titleClear: titleBox !== null && paperBox.top >= titleBox.bottom - 0.5,
+      warning: paper.querySelector('[data-weather-disclaimer]') !== null,
+    };
+  },
+
+  /** The planner's shape mode at the formula's limit (SMA-448, lot F3, L7): the note, the row under it, the eight buttons. */
+  measurePlannerLimit(): PlannerLimitMeasure {
+    const note = document.querySelector<HTMLElement>('[data-planner-limit]');
+    const topRow = note?.nextElementSibling as HTMLElement | null;
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label]')];
+    const named = (prefix: string) =>
+      buttons
+        .filter((button) => (button.getAttribute('aria-label') ?? '').startsWith(prefix))
+        .map((button) => ({ label: button.getAttribute('aria-label') ?? '', disabled: button.disabled }));
+    const noteBox = note?.getBoundingClientRect() ?? null;
+    const rowBox = topRow?.getBoundingClientRect() ?? null;
+    return {
+      note: note
+        ? {
+            rect: rectOf(note),
+            text: note.textContent ?? '',
+            overflowX: Math.max(0, note.scrollWidth - note.clientWidth),
+            overflowY: Math.max(0, note.scrollHeight - note.clientHeight),
+            whiteSpace: getComputedStyle(note).whiteSpace,
+          }
+        : null,
+      topRow: topRow ? rectOf(topRow) : null,
+      gap: noteBox && rowBox ? round(rowBox.top - noteBox.bottom) : null,
+      adds: named('Ajouter'),
+      removes: named('Retirer'),
+      fontLoaded: document.fonts.check('16px Inter'),
+    };
+  },
+
+  /** Types `value` into the `n`-th element `selector` finds, as React reads it: the native setter, then an input event. False when there is none. */
+  fill(selector: string, value: string, n = 0): boolean {
+    const input = document.querySelectorAll<HTMLInputElement>(selector)[n];
+    if (!input) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return input.value === value;
   },
 
   /**
@@ -645,9 +862,16 @@ createRoot(document.getElementById('root')!).render(
     <LanguageProvider>
       <AuthProvider>
         <UnitSystemProvider>
-          <MemoryRouter initialEntries={['/gardens']}>
+          <MemoryRouter initialEntries={[plannerPage ? '/gardens/g1/planner' : '/gardens']}>
             <Layout>
-              <GardensDashboard />
+              {plannerPage ? (
+                <Routes>
+                  <Route path="/gardens/:id/planner" element={<GardenPlanner />} />
+                  <Route path="/gardens" element={<GardensDashboard />} />
+                </Routes>
+              ) : (
+                <GardensDashboard />
+              )}
             </Layout>
           </MemoryRouter>
         </UnitSystemProvider>

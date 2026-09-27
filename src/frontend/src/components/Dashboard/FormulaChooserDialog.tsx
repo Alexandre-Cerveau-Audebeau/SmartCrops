@@ -4,6 +4,7 @@ import Dialog from '@mui/material/Dialog';
 import IconButton from '@mui/material/IconButton';
 import CloseIcon from '@mui/icons-material/Close';
 import FormulaChoice from './FormulaChoice';
+import { useSiteNavbarHeight } from '../../hooks/useSiteNavbarHeight';
 import { useDashboardTokens } from '../../theme/useDashboardTokens';
 import type { DashboardLevel, FormulaRefusal } from '../../types/Dashboard';
 
@@ -47,6 +48,9 @@ export default function FormulaChooserDialog({ open, mandatory, switching, refus
   const { t } = useTranslation();
   const titleId = useId();
   const tk = useDashboardTokens();
+  // The site's navbar stands over the page: the panel descends from under
+  // it, so the header's title stays in view above the veil.
+  const navbar = useSiteNavbarHeight();
   // No way out while mandatory, and none while a switch is on the wire (S5).
   const locked = mandatory || switching;
 
@@ -60,6 +64,10 @@ export default function FormulaChooserDialog({ open, mandatory, switching, refus
       fullWidth
       scroll="body"
       disableScrollLock
+      // The content focuses its title, without scrolling (`FormulaChoice`):
+      // MUI's own focus of the paper scrolled the overlay past the panel's
+      // top margin, and the header was gone. The trap stays.
+      disableAutoFocus
       data-formula-choice-dialog
       data-mandatory={mandatory ? 'true' : 'false'}
       slotProps={{
@@ -71,8 +79,12 @@ export default function FormulaChooserDialog({ open, mandatory, switching, refus
         paper: {
           sx: {
             // The panel descends enough to let « Mes Jardins » and the chip
-            // be seen (V3-01: 104 px on a desktop, 58 on a phone).
-            m: { xs: '58px 12px 24px', sm: '104px 24px 40px' },
+            // be seen (V3-01: 104 px on a desktop, 58 on a phone) — under
+            // the site's navbar, which the mock-up did not draw. On a phone,
+            // 80 rather than 58: measured in Chrome (L7), the title's line
+            // box runs from 88 to 130 px under the real navbar, and 58 put
+            // the panel's top inside it.
+            m: { xs: `${navbar + 80}px 12px 24px`, sm: `${navbar + 104}px 24px 40px` },
             width: { xs: 'calc(100% - 24px)', sm: 'calc(100% - 48px)' },
             maxWidth: 1200,
             borderRadius: { xs: '14px', sm: '18px' },
