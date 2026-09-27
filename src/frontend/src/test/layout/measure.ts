@@ -28,7 +28,11 @@
  *   vertical one cuts its left and right edges for good, and a single flag
  *   for both axes made that cut pass for a fold;
  * - the text wider than its own block (a spill), the ellipsized lines, the
- *   scrolling zones and their excess, the smallest font drawn.
+ *   scrolling zones and their excess, the smallest font drawn;
+ * - a CROP BY DESIGN (`data-crop` — SMA-448, PR #296, fix round 1, V1): a
+ *   picture that covers its frame and is cut by it, the Novice card's plan
+ *   band, is read as the frame shows it, never as a clip; a text the frame
+ *   cuts is a clip still.
  *
  * A chevauchement is VISIBLE from {@link VISIBLE_OVERLAP_PX} in both
  * dimensions; below that, two line boxes touch without their glyphs meeting
@@ -415,6 +419,13 @@ export function measureCard(card: HTMLElement): CardMeasure {
       kind = el.children.length === 0 ? 'box' : 'panel';
       label = `${kind}:${tag}[${dataTag(el, card)}]`;
     }
+    // A CROP BY DESIGN (`data-crop` — V1: the plan covering its frame,
+    // `object-fit: cover`): what the frame cuts of a painted box or a glyph
+    // is the design, asserted by the frame's own measure (the plan covers
+    // it), so the atom is read as the frame shows it. A TEXT the frame cuts
+    // stays a clip: a crop is for a picture, never for words.
+    const crop = kind === 'text' ? null : el.parentElement?.closest('[data-crop]');
+    if (crop && crop !== card && card.contains(crop)) rect = intersect(rect, paddingBox(crop));
     if (rect.width <= 0.5 || rect.height <= 0.5) continue;
     const vis = occlude(intersect(rect, clipBoxFor(el, card, kind === 'text')), el, sticky);
     atoms.push({ el, kind, rect, vis, label, fontSize: parseFloat(cs.fontSize), display: cs.display });

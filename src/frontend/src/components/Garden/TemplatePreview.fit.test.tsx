@@ -201,6 +201,33 @@ describe('TemplatePreview — a fitted plan stays in its box (round 8)', () => {
   });
 });
 
+describe('TemplatePreview covering its frame (SMA-448, PR #296, fix round 1, V1)', () => {
+  it('draws fluid tracks, both minimum sizes at 100 %, centred — the frame crops the rest; the ratio is proven in Chrome', () => {
+    const { preview, cells } = renderFitted(
+      <TemplatePreview template={gardenToPreview(null, 10, 8, [])} fitTo={{ cover: true }} />
+    );
+
+    expect(preview).toHaveStyle({
+      gridTemplateColumns: 'repeat(10, minmax(0, 1fr))',
+      gridTemplateRows: 'repeat(8, minmax(0, 1fr))',
+      minWidth: '100%',
+      minHeight: '100%',
+      position: 'absolute',
+      transform: 'translate(-50%, -50%)',
+    });
+    expect(preview).not.toHaveStyle({ width: 'fit-content' });
+    // Still one node per cell.
+    expect(cells).toHaveLength(80);
+  });
+
+  it('gives a planting a share of its cell, not a fixed inset: 7 % — two pixels at 28 px, nothing at a cell too small to keep one', () => {
+    const { plants } = renderFitted(<TemplatePreview template={bigGarden()} fitTo={{ cover: true }} />);
+
+    expect(plants).toHaveLength(1);
+    expect(plants[0]).toHaveStyle({ margin: '7%' });
+  });
+});
+
 describe('TemplatePreview cell colours (SMA-336 PR 2/5)', () => {
   it('takes the planner tokens by default', () => {
     const tk = getPlannerTokens('dark');

@@ -781,6 +781,21 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
       }
     });
 
+    it.each(NOVICE_RUNS.map((run) => run.id))('%s: the plan fills its band from edge to edge, cropped — every card, at every width (V1, Alexandre 27/09, V3-00 B)', (id) => {
+      // Alexandre's finding on 8a9b1b9: the plan « en tout petit et centrée
+      // au milieu », where the mock-up's touches every edge of its slot.
+      const run = noviceRunOf(id);
+      for (const scene of NOVICE_SCENES) {
+        for (const card of pageOf(run, scene.name).cards) {
+          expect(card.plan, `${id} ${scene.name} ${card.id}: no plan drawn in the band`).not.toBeNull();
+          expect(
+            { covered: card.plan!.covered, frame: card.plan!.frame, drawn: card.plan!.drawn },
+            `${id} ${scene.name} ${card.id}`
+          ).toEqual({ covered: true, frame: card.plan!.frame, drawn: card.plan!.drawn });
+        }
+      }
+    });
+
     it('aligns the feet of the cards of one row: the cards of a row share one height (V3-00, `flex: 1`)', () => {
       for (const run of NOVICE_RUNS) {
         for (const scene of NOVICE_SCENES.filter((candidate) => candidate.count > 1)) {

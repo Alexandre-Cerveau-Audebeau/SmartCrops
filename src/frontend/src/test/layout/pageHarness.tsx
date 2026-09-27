@@ -166,6 +166,19 @@ export interface PageMeasure {
 }
 
 /**
+ * SMA-448, lot F2 — PR #296, fix round 1, V1 (Alexandre's finding of 27/09):
+ * the plan in a card's band. `frame` is the slot the plan must fill — the
+ * `data-novice-plan` frame, or the band less its padding —, `drawn` the box
+ * the plan is drawn at (before the frame crops it), and `covered` whether
+ * the drawing reaches every edge of the frame, to half a pixel.
+ */
+export interface PlanMeasure {
+  frame: Rect;
+  drawn: Rect;
+  covered: boolean;
+}
+
+/**
  * SMA-448, lot F2 (N5; PR #296, fix round 1, S1) — the Novice page measured
  * as one card — the `Container` of `GardensDashboard`, every atom against
  * every other — and card by card (each card as a card, its box relative to
@@ -178,8 +191,8 @@ export interface NoviceMeasure extends CardMeasure {
   viewport: number;
   /** The gardens' zone, relative to the page: what `body` measures. */
   content: Rect;
-  /** Each card: its measure, and its box relative to the page. */
-  cards: Array<CardMeasure & { id: string; box: Rect }>;
+  /** Each card: its measure, its box relative to the page, and its plan band (V1). */
+  cards: Array<CardMeasure & { id: string; box: Rect; plan: PlanMeasure | null }>;
   /** The header's zone texts drawn over more than one line — none belongs on two. */
   wrapped: string[];
   /** The weather warning under the cards, drawn or not (V1). */
@@ -211,6 +224,41 @@ const rectWithin = (element: Element, origin: DOMRect): Rect => {
 };
 
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+/**
+ * The plan of a Novice card and its slot (V1): the `data-novice-plan` frame
+ * — or, before it existed, the band's content box, the slot the mock-up's
+ * `.thumb { width: 100%; height: 100% }` fills — and the preview drawn in it.
+ * Null when the card draws no plan (the garden has none).
+ */
+function planOf(card: HTMLElement, origin: DOMRect): PlanMeasure | null {
+  const slot = card.querySelector<HTMLElement>('[data-novice-plan]') ?? card.querySelector<HTMLElement>('[data-novice-band]');
+  const preview = slot?.querySelector<HTMLElement>('[data-testid="template-preview"]');
+  if (!slot || !preview) return null;
+  const style = getComputedStyle(slot);
+  const box = slot.getBoundingClientRect();
+  const inner = {
+    left: box.left + (parseFloat(style.borderLeftWidth) || 0) + (parseFloat(style.paddingLeft) || 0),
+    top: box.top + (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.paddingTop) || 0),
+    right: box.right - (parseFloat(style.borderRightWidth) || 0) - (parseFloat(style.paddingRight) || 0),
+    bottom: box.bottom - (parseFloat(style.borderBottomWidth) || 0) - (parseFloat(style.paddingBottom) || 0),
+  };
+  const drawn = preview.getBoundingClientRect();
+  return {
+    frame: {
+      x: round(inner.left - origin.left),
+      y: round(inner.top - origin.top),
+      w: round(inner.right - inner.left),
+      h: round(inner.bottom - inner.top),
+    },
+    drawn: rectWithin(preview, origin),
+    covered:
+      drawn.left <= inner.left + 0.5 &&
+      drawn.top <= inner.top + 0.5 &&
+      drawn.right >= inner.right - 0.5 &&
+      drawn.bottom >= inner.bottom - 0.5,
+  };
+}
 
 /** The `n`-th element `selector` finds, or a throw that names it. */
 function nth<T extends Element = Element>(selector: string, n: number): T {
@@ -381,6 +429,7 @@ const page = {
     const cards = [...container.querySelectorAll<HTMLElement>('[data-novice-card]')].map((card) => ({
       id: card.getAttribute('data-novice-card') ?? '',
       box: rectWithin(card, origin),
+      plan: planOf(card, origin),
       ...measureCard(card),
     }));
     const measured = measureCard(container);

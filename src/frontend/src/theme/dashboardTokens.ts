@@ -315,13 +315,6 @@ export const DASHBOARD_NOVICE = {
   /** `.gcard-band`: 58 px high, 6 px of padding, a rule under it. */
   band: 58,
   bandPadding: 6,
-  /**
-   * The width the plan may take in the band. The band is as wide as the
-   * card; the plan keeps its ratio and is fitted to the band's height, so the
-   * width only bounds a plan far wider than tall — 300 px fits the narrowest
-   * card of a phone (328 px at 360, 12 px of band padding).
-   */
-  thumbMaxW: 300,
   /** `.gcard-b { padding: 14px 16px 12px; gap: 10px }`. */
   bodyPadding: '14px 16px 12px',
   bodyGap: 10,

@@ -230,9 +230,15 @@ export default function NoviceGardenCard({ card, onRename, onDelete, onLocate }:
       }}
     >
       {/* The plan in a band — 58 px, 6 px of padding, a rule under it
-          (contract § 4.3, 1). The plan keeps its own ratio, fitted to the
-          band's height and centred: a stretched plan would be a false plan.
-          A garden without a plan says so, in words. */}
+          (contract § 4.3, 1). The plan FILLS its slot from edge to edge
+          (V3-00 B: `.gcard-band .thumb { width: 100%; height: 100% }` —
+          Alexandre, 27/09: « elle touche tous les bords de son emplacement »),
+          its ratio kept and the rest cropped, centred — `object-fit: cover`,
+          not the mock-up's stretch, which would draw a false plan. The slot
+          is the band less its 6 px, as the mock-up keeps them. The frame is
+          `data-crop` for the layout harness: what it cuts of the plan is the
+          design, and its own measure asserts the plan covers it. A garden
+          without a plan says so, in words. */}
       <Box
         data-novice-band
         sx={{
@@ -249,11 +255,13 @@ export default function NoviceGardenCard({ card, onRename, onDelete, onLocate }:
         }}
       >
         {view?.hasPlan ? (
-          <GardenThumbnail
-            garden={garden}
-            maxW={DASHBOARD_NOVICE.thumbMaxW}
-            maxH={DASHBOARD_NOVICE.band - 2 * DASHBOARD_NOVICE.bandPadding}
-          />
+          <Box
+            data-novice-plan
+            data-crop
+            sx={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: '6px' }}
+          >
+            <GardenThumbnail garden={garden} fit="cover" />
+          </Box>
         ) : (
           <MissingDataMark label={t('dashboard.blocks.gardens.noPlan')} />
         )}
