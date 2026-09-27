@@ -189,18 +189,26 @@ describe('the change of formula — a session that expired, said where the user 
     expect(await screen.findByText('login page')).toBeInTheDocument();
   });
 
-  it('in the Customize panel: the same words, the same way back', async () => {
+  // SMA-448, PR #297, fix round 1 (A1): the panel chooses no formula any more
+  // — its link opens the choice screen, where a session that expired is said.
+  it('from the Customize panel’s « Change formula »: the same words, the same way back, said on the choice screen', async () => {
     vi.mocked(changeFormula).mockRejectedValue(new HttpStatusError('Request failed (401)', 401));
     renderPage();
     const customize = await screen.findByRole('button', { name: 'Customize' });
     await waitFor(() => expect(customize).toBeEnabled());
     fireEvent.click(customize);
     const panel = await screen.findByRole('dialog', { name: 'Customize' });
+    expect(within(panel).queryAllByRole('radio')).toEqual([]);
+    fireEvent.click(within(panel).getByRole('button', { name: 'Change formula' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Choose your formula' });
 
-    fireEvent.click(within(panel).getByRole('radio', { name: /Novice/ }));
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Choose Novice' }));
 
-    expect(await within(panel).findByText('Your session has expired. Sign in again to continue.')).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Sign in again' })).toBeInTheDocument();
+    const said = await within(dialog).findByText('Your session has expired. Sign in again to continue.');
+    expect(said).toHaveAttribute('role', 'status');
+    expect(within(dialog).getByRole('button', { name: 'Sign in again' })).toBeInTheDocument();
     expect(screen.queryByText('Changes not saved')).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Sign in again' }));
+    expect(await screen.findByText('login page')).toBeInTheDocument();
   });
 });

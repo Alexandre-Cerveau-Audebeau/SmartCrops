@@ -381,42 +381,37 @@ export default function GardensDashboard() {
   };
 
   useEffect(() => {
-    if (panelOpen || chooserOpen) return;
-    const opener = panelOpener.current;
-    panelOpener.current = null;
-    refocus(opener);
-    // R2-E1 — the panel closed on the load error of a switch whose layout
-    // could not be read back (S6). « Réessayer » exists only while the layout
-    // is unavailable, and at a closing of the panel that is this one case.
-    // The button the panel was opened from is disabled then, so the browser
-    // cannot give it the focus back — and in the browsers that do not focus
-    // a button on click, nothing ever held it: either way the focus would
-    // fall to the body. It goes to the one action the page offers.
-    retryRef.current?.focus();
+    if (chooserOpen) return;
+    if (!panelOpen) {
+      const opener = panelOpener.current;
+      panelOpener.current = null;
+      refocus(opener);
+      // R2-E1 — the panel closed on the load error of a switch whose layout
+      // could not be read back (S6). « Réessayer » exists only while the
+      // layout is unavailable, and at a closing of the panel that is this one
+      // case. The button the panel was opened from is disabled then, so the
+      // browser cannot give it the focus back — and in the browsers that do
+      // not focus a button on click, nothing ever held it: either way the
+      // focus would fall to the body. It goes to the one action the page
+      // offers.
+      retryRef.current?.focus();
+    }
     // SMA-448, lot F3 (L6) — the chip is the door at EVERY formula, so the
     // element the choice was opened from is still there after a switch (the
     // same node, the header re-rendered in place), and the focus returns to
-    // it (contract v3 § 4.1: « à la fermeture, le focus lui revient »).
-    // Gone with the dialog it stood in — « Voir les formules » of the
-    // creation's refusal, whose opener is « Créer un jardin » —, or
-    // unreachable, it goes to « Créer un jardin », which every formula's
-    // header has — never to the body.
+    // it (contract v3 § 4.1: « à la fermeture, le focus lui revient »). So
+    // is the Customize panel's link (PR #297, fix round 1, A1): the panel
+    // stays open under the screen, and the focus comes back to the link
+    // while the panel is still there. Gone with the dialog it stood in —
+    // « Voir les formules » of the creation's refusal, whose opener is
+    // « Créer un jardin » —, or unreachable, it goes to « Créer un jardin »,
+    // which every formula's header has — never to the body.
     const from = chooserOpener.current;
     chooserOpener.current = null;
     if (!from || retryRef.current) return;
     if (from instanceof HTMLElement && from !== document.body && document.contains(from)) from.focus();
     else createRef.current?.focus();
   }, [panelOpen, chooserOpen, refocus]);
-
-  // SMA-448, PR #293, fix round 2 (R2-E1) — the choice of a formula, and what
-  // the page does when the switch ends on no layout: the panel is closed
-  // HERE, in the handler that sees it, never from an effect. A switch whose
-  // layout could not be read back (S6) leaves the page on its load error;
-  // hidden by its condition alone, the panel would have named the default
-  // level over it, and come back by itself once « Réessayer » had succeeded.
-  const chooseLevel = async (level: DashboardLevel) => {
-    if ((await setLevel(level)) === 'unread') setPanelOpen(false);
-  };
 
   // N3 — the same switch from the chooser: closed in the handler on a switch
   // that landed (the page is the new formula's) and on one whose layout could
@@ -443,9 +438,20 @@ export default function GardensDashboard() {
     mandatoryShownRef.current = false;
     createRef.current?.focus();
   }, [mandatoryChoice]);
+  // SMA-448, PR #297, fix round 1 (A1) — the ONE place where the formula
+  // changes: every other control — the chip, the Novice page's foot link,
+  // « Voir les formules » of a refusal, the Customize panel's link — opens
+  // this screen and switches nothing itself.
   const chooseFormula = async (level: DashboardLevel) => {
     const outcome = await setLevel(level);
     if (outcome === 'switched' || outcome === 'unread') setChooserOpen(false);
+    // PR #293, fix round 2 (R2-E1) — a switch whose layout could not be read
+    // back (S6) leaves the page on its load error: the panel the screen may
+    // have been opened from is closed HERE, in the handler that sees it,
+    // never from an effect. Hidden by its condition alone, it would have
+    // named the default level over the error, and come back by itself once
+    // « Réessayer » had succeeded.
+    if (outcome === 'unread') setPanelOpen(false);
   };
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -1140,7 +1146,7 @@ export default function GardensDashboard() {
       )}
 
       {/* Hidden the instant the formula it would name is unknown (SMA-448, PR
-          #293, fix round 1, S6), and CLOSED by `chooseLevel` when a switch
+          #293, fix round 1, S6), and CLOSED by `chooseFormula` when a switch
           ends that way (fix round 2, R2-E1): the condition alone hid it while
           `panelOpen` stayed true, so it came back by itself once the retry
           had succeeded. Not on the cards page at all (lot F2): the Novice has
@@ -1166,15 +1172,11 @@ export default function GardensDashboard() {
           capabilities={capabilities}
           blocks={blocks}
           switching={switching}
-          refusal={refusal}
           preview={galleryPreview}
-          // Closing the place where the refusal was said clears it (A1): the
-          // panel reopens on the choice, not on the last refusal.
-          onClose={() => {
-            setPanelOpen(false);
-            dismissRefusal();
-          }}
-          onLevelChange={chooseLevel}
+          onClose={() => setPanelOpen(false)}
+          // SMA-448, PR #297, fix round 1 (A1) — the panel chooses no formula
+          // any more: its link opens the choice screen, like the chip.
+          onChangeFormula={(event) => openChooser(event.currentTarget)}
           onReset={resetToLevel}
           onShow={(key) =>
             patchBlock(key, (block) => ({ ...block, hidden: false }))
