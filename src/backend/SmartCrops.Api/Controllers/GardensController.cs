@@ -425,12 +425,42 @@ public class GardensController(
     /// lock, like the creation: a resize and a switch of formula of one
     /// account apply one after the other, so a plan is never measured against
     /// the formula the account has just left.
+    ///
+    /// <para><b>The order of the answers</b> (SMA-448, PR #297, fix round 1,
+    /// S1): 401 without a caller; then <b>400</b> for a request malformed in
+    /// itself — an unknown cell size, an invalid config —, decided on the
+    /// request alone, BEFORE the transaction and the account's lock (a
+    /// malformed request used to hold the lock for the time of a lock, a
+    /// load and a rejection, and to wait for a release it did not need);
+    /// then, under the lock, 404 for a garden the caller does not own, 403
+    /// <c>formula.gardenSize</c> beyond the formula, and the writes. Two
+    /// consequences, assumed: an invalid cell size on a garden of another
+    /// account answers 400 (it was 404 — a 400 says nothing about the
+    /// garden), and a request at once too large and malformed answers 400
+    /// before the formula's 403.</para>
     /// </summary>
     [HttpPut("{id:guid}/layout")]
     public async Task<IActionResult> SaveLayout(Guid id, [FromBody] SaveLayoutRequest request, CancellationToken ct = default)
     {
         var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        // What depends on the request alone is decided here, before the
+        // transaction and the lock (S1).
+        // SMA-448, lot F3, step L2 (pre-flight, constat 7): the cell size is a
+        // whitelist here too — the three the planner offers. An unknown value
+        // used to be stored as it came and read as 25 cm by the client.
+        if (!AllowedCellSizes.Contains(request.CellSize))
+            return BadRequest("cellSize must be one of 25cm, 50cm, 1m.");
+
+        // Config == null -> the stored config is PRESERVED untouched (the
+        // pre-5.3-B save dialog never sends it). Config present -> strict
+        // validation here, then the full overwrite of the five fields below.
+        if (request.Config is { } configToValidate)
+        {
+            var configError = ValidateConfig(configToValidate);
+            if (configError != null) return BadRequest(configError);
+        }
 
         await using var transaction = await context.Database.BeginTransactionAsync(ct);
 
@@ -443,12 +473,6 @@ public class GardensController(
 
         if (garden == null) return NotFound();
 
-        // SMA-448, lot F3, step L2 (pre-flight, constat 7): the cell size is a
-        // whitelist here too — the three the planner offers. An unknown value
-        // used to be stored as it came and read as 25 cm by the client.
-        if (!AllowedCellSizes.Contains(request.CellSize))
-            return BadRequest("cellSize must be one of 25cm, 50cm, 1m.");
-
         var definition = FormulaCatalog.For(formula);
         var current = garden.LayoutWidth is { } storedWidth && garden.LayoutHeight is { } storedHeight
             ? new GardenSize(storedWidth, storedHeight)
@@ -459,14 +483,10 @@ public class GardensController(
             return FormulaRefusals.GardenSize(definition, current, new GardenSize(request.Width, request.Height));
         }
 
-        // Config == null -> the stored config is PRESERVED untouched (the
-        // pre-5.3-B save dialog never sends it). Config present -> strict
-        // validation, then full overwrite of the five fields.
+        // Config present — validated above, before the lock (S1) -> the full
+        // overwrite of the five fields; absent -> the stored config is kept.
         if (request.Config is { } config)
         {
-            var configError = ValidateConfig(config);
-            if (configError != null) return BadRequest(configError);
-
             garden.Orientation = config.Orientation;
             garden.GardenType = config.GardenType;
             garden.LightScheduleJson = config.LightSchedule is { Count: > 0 }
