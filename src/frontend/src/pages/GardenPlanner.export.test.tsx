@@ -39,6 +39,14 @@ vi.mock('../services/gardenLayoutApi', () => ({
 // real PNG/PDF output belongs to the visual pass.
 vi.mock('html-to-image', () => ({ toPng: vi.fn() }));
 
+// SMA-448, lot F3: the planner reads the formulas' catalogue for its bounds
+// (`useFormulas`); served here as a Gardener's — the 50 × 50 of before — so
+// nothing this suite pins changes, and no request ever leaves.
+vi.mock('../services/formulasApi', async () => {
+  const { catalogFor } = await import('../test/fixtures/formulas');
+  return { fetchFormulas: vi.fn(async () => catalogFor('gardener')) };
+});
+
 import GardenPlanner from './GardenPlanner';
 import { fetchGarden, updateGarden } from '../services/gardenApi';
 import { fetchLayout } from '../services/gardenLayoutApi';

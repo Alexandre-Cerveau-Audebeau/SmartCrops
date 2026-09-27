@@ -145,6 +145,50 @@ describe('GardenConfigDialog (SMA-17, §12)', () => {
     ]);
   });
 
+  // SMA-448, lot F3, step L3 — the dialog bounds the dimensions to the
+  // formula's largest size (V3: the planner shows the limit and disables what
+  // exceeds it), and says why. Without a bound — the catalogue not read — the
+  // 50 of before, the server's refusal saying why.
+  it('bounds the columns and rows to the formula: with 20 × 20, a 25 becomes 20, the inputs say max 20, and the reason is shown (SMA-448, F3)', () => {
+    const { onConfirm } = renderDialog({
+      maxCols: 20,
+      maxRows: 20,
+      limitNote: 'Your Novice formula allows up to 20 × 20 cells per garden.',
+    });
+
+    expect(screen.getByLabelText('Columns')).toHaveAttribute('max', '20');
+    expect(screen.getByLabelText('Rows')).toHaveAttribute('max', '20');
+    expect(screen.getByText('Your Novice formula allows up to 20 × 20 cells per garden.')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Columns'), { target: { value: '25' } });
+    fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '21' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onConfirm.mock.calls[0]![0]).toEqual({ cols: 20, rows: 20, cellSize: '50cm' });
+  });
+
+  it('lets an Expert reach 100 × 100 — the size the server accepts (Alexandre, 26/09)', () => {
+    const { onConfirm } = renderDialog({ maxCols: 100, maxRows: 100 });
+
+    fireEvent.change(screen.getByLabelText('Columns'), { target: { value: '120' } });
+    fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '100' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onConfirm.mock.calls[0]![0]).toEqual({ cols: 100, rows: 100, cellSize: '50cm' });
+  });
+
+  it('without a bound, 50 as before, and no reason shown', () => {
+    const { onConfirm } = renderDialog();
+
+    expect(screen.getByLabelText('Columns')).toHaveAttribute('max', '50');
+    expect(document.querySelector('[data-config-limit]')).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Columns'), { target: { value: '60' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onConfirm.mock.calls[0]![0]).toEqual({ cols: 50, rows: 8, cellSize: '50cm' });
+  });
+
   it('keeps grid dimensions integer-only: decimals are truncated (SMA-17 R6)', () => {
     const { onConfirm } = renderDialog();
 

@@ -47,6 +47,7 @@ import GardenConfigDialog, {
 import GardenTemplatesDialog from '../components/Garden/GardenTemplatesDialog';
 import RemovePlacementDialog from '../components/Garden/RemovePlacementDialog';
 import { STICKY_OFFSET } from '../constants/layout';
+import { useFormulas } from '../hooks/useFormulas';
 import { useGardenLayout } from '../hooks/useGardenLayout';
 import { useLanguage } from '../hooks/useLanguage';
 import { useScrollHold } from '../hooks/useScrollHold';
@@ -59,6 +60,7 @@ import { usePlannerTokens } from '../theme/usePlannerTokens';
 import type { Garden, GardenConfig } from '../types/Garden';
 import type { Plant } from '../types/Plant';
 import { serializeCellsJson } from '../types/GardenLayout';
+import { planSizeBound } from '../utils/planSizeBound';
 import type {
   Blocker,
   ExposureCategory,
@@ -131,6 +133,8 @@ const addBtnSx = {
   fontWeight: 500,
   bgcolor: (theme: Theme) => alpha(theme.palette.success.main, 0.06),
   '&:hover': { bgcolor: 'success.light', color: '#fff' },
+  // At the formula's limit (SMA-448, F3 L3): inert, and seen to be.
+  '&:disabled': { cursor: 'not-allowed', opacity: 0.4, bgcolor: 'transparent', color: 'text.disabled' },
 };
 
 const removeBtnSx = {
@@ -238,6 +242,37 @@ export default function GardenPlanner() {
     useSelection(placements);
 
   const [garden, setGarden] = useState<Garden | null>(null);
+  // SMA-448, lot F3, step L3 — the size the plan is STORED at, the other half
+  // of the bound the formula sets (`planSizeBound`): a garden already beyond
+  // its formula is saved at its size and shrunk, never grown. Hydrated with
+  // the layout, moved by every save that lands.
+  const [storedSize, setStoredSize] = useState<{ width: number; height: number } | null>(null);
+  // The served formula (R8: what the planner bounds is what the server
+  // refuses by). Null while unread or unreadable: the planner then bounds
+  // nothing of its own — the 50 of before in the dialog, live add buttons —
+  // and the server's refusal says why.
+  const { catalog: formulasCatalog } = useFormulas();
+  const sizeBound = planSizeBound(formulasCatalog, storedSize);
+  const atMaxCols = sizeBound !== null && layoutWidth >= sizeBound.cols;
+  const atMaxRows = sizeBound !== null && layoutHeight >= sizeBound.rows;
+  // ONE sentence for the two places the limit is said — the settings dialog
+  // and the shape mode's note: the formula's largest size, or, for a garden
+  // kept beyond it, its stored size and the formula it exceeds.
+  const limitNote = sizeBound
+    ? sizeBound.kept && storedSize
+      ? t('planner.limit.kept', {
+          formula: t(`dashboard.levels.${sizeBound.formula}.name`),
+          width: storedSize.width,
+          height: storedSize.height,
+          maxWidth: sizeBound.limit.width,
+          maxHeight: sizeBound.limit.height,
+        })
+      : t('planner.limit.formula', {
+          formula: t(`dashboard.levels.${sizeBound.formula}.name`),
+          width: sizeBound.limit.width,
+          height: sizeBound.limit.height,
+        })
+    : null;
   const [saving, setSaving] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
@@ -586,6 +621,9 @@ export default function GardenPlanner() {
     if (layoutSnapshot) {
       const { garden: gardenData, layout: layoutData } = layoutSnapshot;
       setGarden(gardenData);
+      setStoredSize(
+        layoutData.width && layoutData.height ? { width: layoutData.width, height: layoutData.height } : null
+      );
       if (layoutData.width && layoutData.height && layoutData.cellSize) {
         dispatch({
           type: 'HYDRATE_FROM_LAYOUT',
@@ -2026,6 +2064,9 @@ export default function GardenPlanner() {
         })),
       });
       dispatch({ type: 'MARK_SAVED', submitted });
+      // The server holds this size now: the bound of a garden kept beyond
+      // its formula follows it — shrunk, it grows back only to the formula's.
+      setStoredSize({ width, height });
       setMessage({ type: 'success', text: t('planner.toolbar.saveSuccess') });
     } catch {
       setMessage({ type: 'error', text: t('planner.toolbar.saveError') });
@@ -2257,6 +2298,9 @@ export default function GardenPlanner() {
         initialConfig={configFromGarden}
         busy={configSaving}
         errorText={configError}
+        maxCols={sizeBound?.cols}
+        maxRows={sizeBound?.rows}
+        limitNote={limitNote}
         onConfirm={handleSetupConfigConfirm}
         onCancel={() => navigate('/gardens')}
       />
@@ -2271,6 +2315,9 @@ export default function GardenPlanner() {
         initialConfig={configFromGarden}
         busy={configSaving}
         errorText={configError}
+        maxCols={sizeBound?.cols}
+        maxRows={sizeBound?.rows}
+        limitNote={limitNote}
         onConfirm={handleSettingsConfigConfirm}
         onCancel={() => setShowConfig(false)}
         onDeleteRequest={handleDeleteGardenRequest}
@@ -2794,6 +2841,21 @@ export default function GardenPlanner() {
               </Box>
             )}
 
+            {/* SMA-448, lot F3, step L3 — the formula's limit, said where the
+                growth stops (V3: the planner shows the limit and disables
+                what exceeds it; pre-flight risk 12: « en avant » written
+                where it bites). One line above the top row, in shape mode,
+                only while an add button is inert because of it. */}
+            {shapeEditMode && limitNote && (atMaxCols || atMaxRows) && (
+              <Typography
+                role="note"
+                data-planner-limit
+                sx={{ alignSelf: 'center', textAlign: 'center', fontSize: 13, color: 'text.secondary', mb: 0.5, px: 1 }}
+              >
+                {limitNote}
+              </Typography>
+            )}
+
             {/* TOP +/- row — OUTSIDE scroll, centered in wrapper width (= visible viewport) */}
             {shapeEditMode && (
               <Box
@@ -2803,6 +2865,7 @@ export default function GardenPlanner() {
                   component="button"
                   type="button"
                   onClick={addRowTop}
+                  disabled={atMaxRows}
                   aria-label={t('planner.shape.addRowTop')}
                   sx={{
                     ...addBtnSx,
@@ -2926,6 +2989,7 @@ export default function GardenPlanner() {
                       component="button"
                       type="button"
                       onClick={addColLeft}
+                      disabled={atMaxCols}
                       aria-label={t('planner.shape.addColLeft')}
                       sx={{
                         ...addBtnSx,
@@ -3003,6 +3067,7 @@ export default function GardenPlanner() {
                       component="button"
                       type="button"
                       onClick={addColRight}
+                      disabled={atMaxCols}
                       aria-label={t('planner.shape.addColRight')}
                       sx={{
                         ...addBtnSx,
@@ -3054,6 +3119,7 @@ export default function GardenPlanner() {
                   component="button"
                   type="button"
                   onClick={addRowBottom}
+                  disabled={atMaxRows}
                   aria-label={t('planner.shape.addRowBottom')}
                   sx={{
                     ...addBtnSx,

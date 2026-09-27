@@ -142,8 +142,10 @@ function isSizeList(value: unknown): value is DashboardSizeList {
  * its actionable error rather than guess: an unknown formula, a widget this
  * build does not know, a widget without a size list, a preset block of a
  * widget the formula does not have, or a preset that misses one it has.
+ * Exported for the catalogue (`formulasApi`, SMA-448 lot F3), which reads
+ * each of its three formulas through the same check.
  */
-function normalizeCapabilities(raw: unknown): FormulaCapabilities {
+export function normalizeCapabilities(raw: unknown): FormulaCapabilities {
   function fail(reason: string): never {
     throw new Error(`Invalid formula capabilities: ${reason}`);
   }
@@ -332,7 +334,7 @@ const isSizeReason = matches<SizeRefusalReason>({
   maxHeight: isWholeNumber,
 });
 
-const isRefusalReason = (value: unknown): value is FormulaRefusalReason =>
+export const isRefusalReason = (value: unknown): value is FormulaRefusalReason =>
   isGardensReason(value) || isSizeReason(value);
 
 /**

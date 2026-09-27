@@ -1183,6 +1183,10 @@
       "addColRight": "Ajouter une colonne à droite",
       "removeColRight": "Retirer la colonne de droite"
     },
+    "limit": {
+      "formula": "Votre formule {{formula}} permet jusqu’à {{width}} × {{height}} cases par jardin.",
+      "kept": "Ce jardin fait {{width}} × {{height}} cases, au-delà des {{maxWidth}} × {{maxHeight}} de votre formule {{formula}} : vous pouvez le réduire, pas l’agrandir."
+    },
     "shapeEditMode": "Modifier la forme",
     "tabs": {
       "plants": "Plantes",

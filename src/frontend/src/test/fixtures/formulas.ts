@@ -1,10 +1,15 @@
 import reference from '../../constants/dashboardLayout.reference.json';
-import type {
-  DashboardBlock,
-  DashboardBlockKey,
-  DashboardLevel,
-  DashboardSizeList,
-  FormulaCapabilities,
+import {
+  DASHBOARD_LEVELS,
+  type DashboardBlock,
+  type DashboardBlockKey,
+  type DashboardLevel,
+  type DashboardSizeList,
+  type FormulaAccount,
+  type FormulaAvailability,
+  type FormulaCapabilities,
+  type FormulaRefusalReason,
+  type FormulasCatalog,
 } from '../../types/Dashboard';
 
 /**
@@ -48,5 +53,39 @@ export function capabilitiesFor(level: DashboardLevel): FormulaCapabilities {
     preset,
     weather: formula.weather,
     compactBar: formula.compactBar,
+  };
+}
+
+/**
+ * SMA-448, lot F3 — the catalogue as `GET /api/formulas` serves it, for
+ * tests: the three formulas (each `capabilitiesFor`), and the account on
+ * `current` — chosen, without a garden, every formula available — unless
+ * `account` says otherwise. `unavailable` names a formula too small, with
+ * the reasons the server would serve; the formula the account is on stays
+ * available whatever its reasons (« Votre formule — conservée »).
+ */
+export function catalogFor(
+  current: DashboardLevel,
+  account: Partial<Omit<FormulaAccount, 'formula' | 'availability'>> & {
+    unavailable?: Partial<Record<DashboardLevel, FormulaRefusalReason[]>>;
+  } = {}
+): FormulasCatalog {
+  const { unavailable = {}, ...rest } = account;
+  const availability: FormulaAvailability[] = DASHBOARD_LEVELS.map((level) => {
+    const reasons = unavailable[level] ?? [];
+    const isCurrent = level === current;
+    return { formula: level, current: isCurrent, available: isCurrent || reasons.length === 0, reasons };
+  });
+  return {
+    formulas: DASHBOARD_LEVELS.map((level) => capabilitiesFor(level)),
+    account: {
+      formula: current,
+      chosen: true,
+      chosenAt: '2026-09-26T00:00:00Z',
+      gardenCount: 0,
+      largestGardenSize: null,
+      availability,
+      ...rest,
+    },
   };
 }

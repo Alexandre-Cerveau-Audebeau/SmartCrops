@@ -1183,6 +1183,10 @@
       "addColRight": "Add column on right",
       "removeColRight": "Remove right column"
     },
+    "limit": {
+      "formula": "Your {{formula}} formula allows up to {{width}} × {{height}} cells per garden.",
+      "kept": "This garden is {{width}} × {{height}} cells, beyond the {{maxWidth}} × {{maxHeight}} of your {{formula}} formula: you can shrink it, not grow it."
+    },
     "shapeEditMode": "Edit shape",
     "tabs": {
       "plants": "Plants",
