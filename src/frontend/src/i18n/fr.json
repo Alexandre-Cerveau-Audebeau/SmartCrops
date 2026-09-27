@@ -409,7 +409,8 @@
         ],
         "expert": [
           "Tous les widgets, statistiques comprises",
-          "Un bandeau de chiffres clés en tête de page, sur toute la largeur"
+          "Un bandeau de chiffres clés en tête de page, sur toute la largeur",
+          "Météo pour plusieurs jardins, dans plusieurs villes différentes en même temps"
         ]
       },
       "whyGardens_one": "Vous avez {{count}} jardin — {{formula}} en permet {{limit}}.",
@@ -446,8 +447,8 @@
           "weather": {
             "label": "La météo de chaque jardin",
             "novice": "La météo du jour, sur chaque carte",
-            "gardener": "Le widget Météo",
-            "expert": "Le widget Météo"
+            "gardener": "Le widget Météo, pour une ville",
+            "expert": "Le widget Météo, pour plusieurs villes en même temps"
           },
           "month": {
             "label": "Le calendrier du mois",

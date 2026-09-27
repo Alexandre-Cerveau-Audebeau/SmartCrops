@@ -316,6 +316,60 @@ describe('the choice screen, shown once (SMA-448, lot F3, L5 — N18)', () => {
     expect(within(screenOfChoice).getByRole('table')).toBeInTheDocument();
   });
 
+  // SMA-448, PR #297, fix round 1 (A3) — Alexandre, 27/09 (Linear, 22:04):
+  // the Expert offer carries EXACTLY three lines — its two of lot F3,
+  // unchanged, and « Météo pour plusieurs jardins, dans plusieurs villes
+  // différentes en même temps » —, no other (SMA-453 for the rest). So that
+  // the page does not contradict itself, the comparison's weather row tells
+  // the Gardener's one city from the Expert's several. True once lot F4 is
+  // delivered: a prerequisite of the promotion of the v3.
+  describe('the Expert offer and the comparison’s weather row (A3)', () => {
+    const featuresOf = (level: DashboardLevel) => [...offer(level).querySelectorAll('[data-offer-features] li')].map((line) => line.textContent);
+    const rowOf = (table: HTMLElement, label: string) => {
+      const row = [...table.querySelectorAll('tbody tr')].find((candidate) => candidate.querySelector('th')?.textContent === label);
+      return row ? [...row.querySelectorAll('td')].map((cell) => cell.textContent) : ['no such row'];
+    };
+
+    it('in English: exactly three lines for the Expert — the two of lot F3 unchanged, then the weather of several gardens in several cities at once; the weather row tells one city from several', async () => {
+      serve('gardener', { chosen: true, gardenCount: 2 });
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Gardener view — change formula' }, PATIENCE));
+      const screenOfChoice = await dialog();
+      await within(screenOfChoice).findByRole('button', { name: 'Choose Expert' }, PATIENCE);
+
+      expect(featuresOf('expert')).toEqual([
+        'Every widget, statistics included',
+        'A band of key figures at the top of the page, across the full width',
+        'Weather for several gardens, in several different cities at the same time',
+      ]);
+      expect(rowOf(within(screenOfChoice).getByRole('table'), 'Each garden’s weather')).toEqual([
+        'Today’s weather, on each card',
+        'The Weather widget, for one city',
+        'The Weather widget, for several cities at the same time',
+      ]);
+    });
+
+    it('en français : « Météo pour plusieurs jardins, dans plusieurs villes différentes en même temps » en troisième ligne, et la ligne Météo du comparatif distingue une ville de plusieurs', async () => {
+      localStorage.setItem('smartcrops-language', 'fr');
+      serve('gardener', { chosen: true, gardenCount: 2 });
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Vue Jardinier — changer de formule' }, PATIENCE));
+      const screenOfChoice = await screen.findByRole('dialog', { name: 'Choisissez votre formule' }, PATIENCE);
+      await within(screenOfChoice).findByRole('button', { name: 'Choisir Expert' }, PATIENCE);
+
+      expect(featuresOf('expert')).toEqual([
+        'Tous les widgets, statistiques comprises',
+        'Un bandeau de chiffres clés en tête de page, sur toute la largeur',
+        'Météo pour plusieurs jardins, dans plusieurs villes différentes en même temps',
+      ]);
+      expect(rowOf(within(screenOfChoice).getByRole('table'), 'La météo de chaque jardin')).toEqual([
+        'La météo du jour, sur chaque carte',
+        'Le widget Météo, pour une ville',
+        'Le widget Météo, pour plusieurs villes en même temps',
+      ]);
+    });
+  });
+
   it('a choice the server refuses is said in the region, with its reasons — the screen stays, mandatory as it was', async () => {
     serve('gardener', { chosen: false, gardenCount: 5, unavailable: { novice: [{ kind: 'gardens', have: 5, limit: 3 }] } });
     // The server says it, whatever the screen shows (R8): the button is

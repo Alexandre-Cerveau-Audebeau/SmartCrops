@@ -409,7 +409,8 @@
         ],
         "expert": [
           "Every widget, statistics included",
-          "A band of key figures at the top of the page, across the full width"
+          "A band of key figures at the top of the page, across the full width",
+          "Weather for several gardens, in several different cities at the same time"
         ]
       },
       "whyGardens_one": "You have {{count}} garden — {{formula}} allows {{limit}}.",
@@ -446,8 +447,8 @@
           "weather": {
             "label": "Each garden’s weather",
             "novice": "Today’s weather, on each card",
-            "gardener": "The Weather widget",
-            "expert": "The Weather widget"
+            "gardener": "The Weather widget, for one city",
+            "expert": "The Weather widget, for several cities at the same time"
           },
           "month": {
             "label": "The month’s calendar",
