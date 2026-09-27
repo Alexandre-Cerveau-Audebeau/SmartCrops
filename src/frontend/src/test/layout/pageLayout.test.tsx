@@ -818,11 +818,11 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
       }
     });
 
-    it('keeps every text at 14 px or more, except the chips at 13 (V11)', () => {
+    it('keeps every text at 14 px or more — the chips, the pills and the missing-data marks alone at 13 (V11): a 13 px text outside them is refused (S2)', () => {
       for (const run of NOVICE_RUNS) {
         for (const scene of NOVICE_SCENES) {
           const page = pageOf(run, scene.name);
-          const under = page.smallFonts.filter((font) => font.px < 13);
+          const under = page.smallFonts.filter((font) => font.px < (font.chip ? 13 : 14));
           expect(under, `${run.id} ${scene.name}`).toEqual([]);
         }
       }

@@ -121,7 +121,13 @@ export interface CardMeasure {
   ellipsized: EllipsisMeasure[];
   scrollers: ScrollerMeasure[];
   minFont: number;
-  smallFonts: { label: string; px: number }[];
+  /**
+   * Every text or glyph under 14 px, with whether it belongs to a chip, a
+   * pill or a missing-data mark of the design — the one exception V11
+   * grants to 13 px (PR #296, fix round 1, S2: the exception is theirs, not
+   * every 13 px text's).
+   */
+  smallFonts: { label: string; px: number; chip: boolean }[];
   fontLoaded: boolean;
 }
 
@@ -462,7 +468,7 @@ export function measureCard(card: HTMLElement): CardMeasure {
 
   const clipped: ClipMeasure[] = [];
   const spills: SpillMeasure[] = [];
-  const smallFonts: { label: string; px: number }[] = [];
+  const smallFonts: { label: string; px: number; chip: boolean }[] = [];
   let minFont = 999;
   let maxBottom = -Infinity;
   for (const at of atoms) {
@@ -528,7 +534,13 @@ export function measureCard(card: HTMLElement): CardMeasure {
         }
       }
       if (at.fontSize < minFont) minFont = at.fontSize;
-      if (at.fontSize < 14) smallFonts.push({ label: at.label, px: at.fontSize });
+      if (at.fontSize < 14) {
+        smallFonts.push({
+          label: at.label,
+          px: at.fontSize,
+          chip: at.el.closest('.MuiChip-root, [data-pill], [data-missing-mark]') !== null,
+        });
+      }
     }
     // Below the card's edge and NOT in a scrolling zone: lost, where a zone's
     // fold is reachable (rule 5: « défile à l'intérieur de la carte »). A zone

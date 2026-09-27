@@ -103,7 +103,7 @@ export default function NoviceGardenCard({ card, onRename, onDelete, onLocate }:
 
   const TaskIcon = task ? TASK_ICONS[task.kind] : null;
 
-  /** The weather pill — `.pill.wx` of the artboards: `warnBg` / `warnText`, a 14 px glyph. */
+  /** The weather pill — `.pill.wx` of the artboards: `warnBg` / `warnText`, a 14 px glyph. `data-pill`: 13 px by V11's exception, which the layout harness grants to the design's chips, pills and marks alone (S2). */
   const pillSx = {
     display: 'inline-flex',
     alignItems: 'center',
@@ -152,6 +152,7 @@ export default function NoviceGardenCard({ card, onRename, onDelete, onLocate }:
             component="button"
             type="button"
             data-novice-weather-add
+            data-pill
             onClick={() => onLocate(garden.id)}
             aria-label={t('dashboard.blocks.weather.cellAddNamed', { name: garden.name })}
             sx={{
@@ -174,6 +175,7 @@ export default function NoviceGardenCard({ card, onRename, onDelete, onLocate }:
             component="button"
             type="button"
             data-novice-weather-silent
+            data-pill
             onClick={() => onLocate(garden.id)}
             aria-label={t('dashboard.blocks.weather.cellEditNamed', { name: garden.name })}
             sx={{ ...pillSx, backgroundColor: tk.pillBg, color: tk.pillText }}
@@ -196,6 +198,7 @@ export default function NoviceGardenCard({ card, onRename, onDelete, onLocate }:
             component="button"
             type="button"
             data-novice-weather
+            data-pill
             onClick={() => onLocate(garden.id)}
             aria-label={t('dashboard.blocks.weather.cellEditNamed', { name: garden.name })}
             sx={{ ...pillSx, backgroundColor: tk.warnBg, color: tk.warnText }}

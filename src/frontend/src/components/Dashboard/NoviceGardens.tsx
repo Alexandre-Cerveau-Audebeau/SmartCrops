@@ -143,7 +143,7 @@ export default function NoviceGardens({
             body={t('dashboard.novice.empty.body')}
             maxWidth={DASHBOARD_NOVICE.inviteMaxW}
             action={
-              <Button variant="contained" size="small" onClick={onCreate} sx={{ mt: '10px' }}>
+              <Button variant="contained" onClick={onCreate} sx={{ mt: '10px' }}>
                 {t('gardens.createGarden')}
               </Button>
             }
