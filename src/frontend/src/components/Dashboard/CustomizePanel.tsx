@@ -13,6 +13,7 @@ import Typography from '@mui/material/Typography';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
+import ReconnectButton from '../ReconnectButton';
 import { BLOCK_ICONS } from './blockIcons';
 import { formulaRefusalText } from './formulaRefusal';
 import { permitsBlock } from '../../constants/dashboardCapabilities';
@@ -209,6 +210,14 @@ export default function CustomizePanel({
             >
               {refusalText}
             </Typography>
+            {/* R3-E1 (SMA-448, lot F3, L4): a session that expired is said
+                above; the way back is offered here, outside the live region,
+                which carries words only. */}
+            {refusal?.kind === 'unauthorized' && (
+              <Box sx={{ mt: '8px' }}>
+                <ReconnectButton />
+              </Box>
+            )}
           </FormControl>
           <Typography
             sx={{

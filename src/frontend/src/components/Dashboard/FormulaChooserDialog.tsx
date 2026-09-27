@@ -10,6 +10,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import Typography from '@mui/material/Typography';
+import ReconnectButton from '../ReconnectButton';
 import { formulaRefusalText } from './formulaRefusal';
 import { DASHBOARD_TYPE } from '../../theme/dashboardTokens';
 import { DASHBOARD_LEVELS, type DashboardLevel, type FormulaRefusal } from '../../types/Dashboard';
@@ -117,6 +118,14 @@ export default function FormulaChooserDialog({ open, level, switching, refusal, 
         >
           {formulaRefusalText(refusal, t)}
         </Typography>
+        {/* R3-E1 (lot F3, L4): a session that expired is said above, and the
+            way back is offered here — outside the live region, which carries
+            words only. */}
+        {refusal?.kind === 'unauthorized' && (
+          <Box>
+            <ReconnectButton />
+          </Box>
+        )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         {/* Named as the choice screen's close button will be (§ 4.2): what

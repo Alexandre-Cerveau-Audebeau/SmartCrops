@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../i18n/i18n';
 import { LanguageProvider } from '../contexts/LanguageContext';
@@ -22,7 +22,8 @@ vi.mock('../services/formulasApi', () => ({ fetchFormulas: vi.fn() }));
 
 import GardenPlanner from './GardenPlanner';
 import { fetchGarden } from '../services/gardenApi';
-import { fetchLayout } from '../services/gardenLayoutApi';
+import { fetchLayout, saveLayout } from '../services/gardenLayoutApi';
+import { HttpStatusError } from '../services/httpStatusError';
 import { fetchFormulas } from '../services/formulasApi';
 import { fetchPlants } from '../services/plantApi';
 
@@ -43,12 +44,21 @@ function serve(level: DashboardLevel, width: number, height: number) {
   vi.mocked(fetchFormulas).mockResolvedValue(catalogFor(level, { gardenCount: 1, largestGardenSize: { width, height } }));
 }
 
+/** Where « See the formulas » and « Sign in again » lead: `/gardens` with the choice asked for, or the login page. */
+function GardensStub() {
+  const location = useLocation();
+  const state = location.state as { formulas?: boolean } | null;
+  return <div>{state?.formulas ? 'gardens — formulas open' : 'gardens'}</div>;
+}
+
 function renderPlanner() {
   return render(
     <LanguageProvider>
       <MemoryRouter initialEntries={['/gardens/g1/planner']}>
         <Routes>
           <Route path="/gardens/:id/planner" element={<GardenPlanner />} />
+          <Route path="/gardens" element={<GardensStub />} />
+          <Route path="/login" element={<div>login page</div>} />
         </Routes>
       </MemoryRouter>
     </LanguageProvider>
@@ -154,5 +164,78 @@ describe('the planner bounded by the formula (SMA-448, lot F3, L3)', () => {
 
     for (const name of ADD) expect(screen.getByRole('button', { name })).toBeEnabled();
     expect(document.querySelector('[data-planner-limit]')).toBeNull();
+  });
+});
+
+// SMA-448, lot F3, step L4 (R3-E1) — THE SAVE THAT DOES NOT GO THROUGH, each
+// outcome its own truth: a plan the server refuses for its size says the
+// formula's limit and the plan's size, with a door to the choice of
+// formula; a session that expired says so and how to sign in again; a right
+// the account lacks says the right; a failure proposes to try again.
+describe('the save refused or failed, said truthfully (SMA-448, lot F3, L4 — R3-E1)', () => {
+  /** A dirty plan: the catalogue unreadable — the server the judge — and one row added. */
+  async function growAndSave() {
+    serve('novice', 20, 20);
+    vi.mocked(fetchFormulas).mockRejectedValue(new Error('down'));
+    renderPlanner();
+    await enterShapeMode();
+    fireEvent.click(screen.getByRole('button', { name: 'Add row at top' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
+    await waitFor(() => expect(saveLayout).toHaveBeenCalled());
+    // The planner's one toast, by its mark: the page has other alerts.
+    await waitFor(() => expect(document.querySelector('[data-planner-toast]')).not.toBeNull());
+    return document.querySelector<HTMLElement>('[data-planner-toast]')!;
+  }
+
+  it('a plan beyond the formula: the toast says the limit and the size asked, and « See the formulas » leads to Mes Jardins with the choice open', async () => {
+    vi.mocked(saveLayout).mockRejectedValue(
+      new HttpStatusError('Request failed (403)', 403, {
+        status: 403,
+        code: 'formula.gardenSize',
+        formula: 'novice',
+        limit: { width: 20, height: 20 },
+        current: { width: 20, height: 20 },
+        requested: { width: 20, height: 21 },
+      })
+    );
+
+    const alert = await growAndSave();
+
+    expect(alert.textContent).toContain('Novice');
+    expect(alert.textContent).toContain('20 × 20');
+    expect(alert.textContent).toContain('20 × 21');
+    expect(alert.textContent).not.toMatch(/failed to save/i);
+    fireEvent.click(within(alert).getByRole('button', { name: 'See the formulas' }));
+    expect(await screen.findByText('gardens — formulas open')).toBeInTheDocument();
+  });
+
+  it('a session that expired: the toast says so, and « Sign in again » leads to the login page — never « try again »', async () => {
+    vi.mocked(saveLayout).mockRejectedValue(new HttpStatusError('Request failed (401)', 401));
+
+    const alert = await growAndSave();
+
+    expect(alert.textContent).toContain('Your session has expired. Sign in again to continue.');
+    expect(alert.textContent).not.toMatch(/try again/i);
+    fireEvent.click(within(alert).getByRole('button', { name: 'Sign in again' }));
+    expect(await screen.findByText('login page')).toBeInTheDocument();
+  });
+
+  it('a right the account lacks: the toast says the right, not a retry', async () => {
+    vi.mocked(saveLayout).mockRejectedValue(new HttpStatusError('Request failed (403)', 403));
+
+    const alert = await growAndSave();
+
+    expect(alert.textContent).toContain('Your account is not allowed to do this.');
+    expect(within(alert).queryByRole('button', { name: 'See the formulas' })).toBeNull();
+  });
+
+  it('a failure: « Failed to save layout. » as before — the Save button the retry', async () => {
+    vi.mocked(saveLayout).mockRejectedValue(new TypeError('Failed to fetch'));
+
+    const alert = await growAndSave();
+
+    expect(alert.textContent).toContain('Failed to save layout.');
+    expect(within(alert).queryByRole('button', { name: 'See the formulas' })).toBeNull();
+    expect(within(alert).queryByRole('button', { name: 'Sign in again' })).toBeNull();
   });
 });

@@ -152,8 +152,18 @@ export interface SizeRefusalReason {
 
 export type FormulaRefusalReason = GardensRefusalReason | SizeRefusalReason;
 
-/** A switch of formula that did not go through: the formula asked for, and the reasons served — none for a failure the server did not explain. */
+/**
+ * SMA-448, lot F3, step L4 (R3-E1) — how a switch of formula did not go
+ * through: `refused`, the server refused the formula with its reasons (409
+ * `formula.tooSmall`); `unauthorized`, the session expired (401); `forbidden`,
+ * a right the account lacks (403); `failed`, a failure a retry may cure —
+ * no server, a timeout, a 5xx, a refusal the server did not explain.
+ */
+export type FormulaRefusalKind = 'refused' | 'unauthorized' | 'forbidden' | 'failed';
+
+/** A switch of formula that did not go through: how, the formula asked for, and the reasons served — none but for a refusal. */
 export interface FormulaRefusal {
+  kind: FormulaRefusalKind;
   formula: DashboardLevel;
   reasons: FormulaRefusalReason[];
 }

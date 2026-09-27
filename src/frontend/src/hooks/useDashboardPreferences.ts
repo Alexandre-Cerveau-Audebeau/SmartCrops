@@ -28,12 +28,14 @@ export type SaveState = 'idle' | 'pending' | 'saved' | 'error';
 /**
  * SMA-448, PR #293, fix round 2 (R2-E1) — how a switch of formula ended, for
  * the page to act on: `switched`; `unsaved`, a layout that could not be
- * written first (S2); `refused`, a formula the server refused (A1);
- * `unread`, a switch that landed but whose layout could not be read back —
- * the page is on its load error (S6); `ignored`, no layout yet or a switch
- * already in flight (S5).
+ * written first (S2); `refused`, a formula the server refused with its
+ * reasons (A1); `failed`, a switch that did not go through for another
+ * reason — the session expired, a right the account lacks, a failure — which
+ * `refusal.kind` names (lot F3, L4 — R3-E1); `unread`, a switch that landed
+ * but whose layout could not be read back — the page is on its load error
+ * (S6); `ignored`, no layout yet or a switch already in flight (S5).
  */
-export type SwitchOutcome = 'switched' | 'unsaved' | 'refused' | 'unread' | 'ignored';
+export type SwitchOutcome = 'switched' | 'unsaved' | 'refused' | 'failed' | 'unread' | 'ignored';
 
 interface Layout {
   level: DashboardLevel;
@@ -368,10 +370,12 @@ export function useDashboardPreferences() {
           // its reasons), or the switch failed before it could: the account
           // and its layout are as they were, and nothing is unsaved. The
           // panel says the refusal; the indicator says what it said before,
-          // never « not saved ».
-          setRefusal(refusalOf(error, level));
+          // never « not saved ». R3-E1: a refusal and a failure are two
+          // outcomes — the failure named in the refusal's kind.
+          const refusal = refusalOf(error, level);
+          setRefusal(refusal);
           say(before);
-          return 'refused';
+          return refusal.kind === 'refused' ? 'refused' : 'failed';
         }
         stage = 'reading';
         const preferences = await fetchDashboardPreferences();

@@ -308,6 +308,11 @@
     "loading": "Chargement des jardins...",
     "error": "Impossible de charger les jardins. Veuillez réessayer plus tard.",
     "mutationError": "Une erreur est survenue. Veuillez réessayer.",
+    "refusal": {
+      "limit_one": "Votre formule {{formula}} permet {{count}} jardin au plus, et vous en avez déjà {{current}}. Pour en créer un autre, passez à une formule plus grande.",
+      "limit_other": "Votre formule {{formula}} permet {{count}} jardins au plus, et vous en avez déjà {{current}}. Pour en créer un autre, passez à une formule plus grande.",
+      "viewFormulas": "Voir les formules"
+    },
     "seeMore": "Voir plus",
     "seeLess": "Voir moins",
     "planMyGarden": "Planifier mon jardin"
@@ -901,6 +906,9 @@
     "backToTop": "Revenir en haut",
     "comingSoon": "Bientôt disponible",
     "loading": "Chargement",
+    "sessionExpired": "Votre session a expiré. Reconnectez-vous pour continuer.",
+    "reconnect": "Se reconnecter",
+    "forbidden": "Votre compte n’est pas autorisé à faire cela.",
     "brandTitle": "SmartCrops — Votre jardin virtuel intelligent"
   },
   "auth": {
@@ -1185,7 +1193,8 @@
     },
     "limit": {
       "formula": "Votre formule {{formula}} permet jusqu’à {{width}} × {{height}} cases par jardin.",
-      "kept": "Ce jardin fait {{width}} × {{height}} cases, au-delà des {{maxWidth}} × {{maxHeight}} de votre formule {{formula}} : vous pouvez le réduire, pas l’agrandir."
+      "kept": "Ce jardin fait {{width}} × {{height}} cases, au-delà des {{maxWidth}} × {{maxHeight}} de votre formule {{formula}} : vous pouvez le réduire, pas l’agrandir.",
+      "refused": "Votre formule {{formula}} permet jusqu’à {{maxWidth}} × {{maxHeight}} cases par jardin ; ce plan fait {{width}} × {{height}}. Réduisez-le, ou changez de formule depuis Mes Jardins."
     },
     "shapeEditMode": "Modifier la forme",
     "tabs": {

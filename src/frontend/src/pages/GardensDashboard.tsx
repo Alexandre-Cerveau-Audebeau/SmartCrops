@@ -43,6 +43,7 @@ import WeatherOptionsPanel from '../components/Dashboard/blocks/WeatherOptionsPa
 import LocationDialog from '../components/Dashboard/LocationDialog';
 import type { LocationTarget } from '../components/Dashboard/locationTools';
 import NoviceGardens from '../components/Dashboard/NoviceGardens';
+import ReconnectButton from '../components/ReconnectButton';
 import { cardBearsWeather, noviceCardsOf } from '../components/Dashboard/noviceCards';
 import { weatherDisclaimerVisible } from '../components/Dashboard/weatherDisclaimer';
 import { hasActionBar, isCardsPage, sizesFor } from '../constants/dashboardCapabilities';
@@ -52,9 +53,12 @@ import { useDashboardWeather } from '../hooks/useDashboardWeather';
 import { useGardenViews } from '../hooks/useGardenViews';
 import { useLanguage } from '../hooks/useLanguage';
 import { createGarden } from '../services/gardenApi';
+import { problemOf, requestFailureKind, type RequestFailureKind } from '../services/requestFailure';
+import { isWholeNumber } from '../services/wireChecks';
 import { DASHBOARD_SPACING, DASHBOARD_TYPE } from '../theme/dashboardTokens';
 import { formatCount, formatSurface } from '../utils/formatNumber';
 import {
+  isDashboardLevel,
   nextDashboardSize,
   type DashboardBlock,
   type DashboardBlockKey,
@@ -66,10 +70,36 @@ import type { GardenView } from '../utils/gardenStats';
 
 /**
  * Router state the planner posts when it navigates here after deleting the
- * garden (SMA-18 lot 1). Consumed once at mount, then erased with a replace so
- * a refresh never replays the toast.
+ * garden (SMA-18 lot 1) — and, since SMA-448 lot F3 (L4), when its « Voir les
+ * formules » leads here with the choice of formula to open. Consumed once at
+ * mount, then erased with a replace so a refresh never replays it.
  */
-type GardensNavState = { toast?: 'gardenDeleted' } | null;
+type GardensNavState = { toast?: 'gardenDeleted'; formulas?: boolean } | null;
+
+/**
+ * SMA-448, lot F3, step L4 (R3-E1) — why a creation did not go through:
+ * the formula's garden limit, with its numbers (403 `formula.gardenLimit`);
+ * or a failure named for what it is — the session expired, a right the
+ * account lacks, a failure a retry may cure.
+ */
+type CreateFailure =
+  | { kind: 'limit'; formula: DashboardLevel; limit: number; current: number }
+  | { kind: RequestFailureKind };
+
+/** The creation's refusal, read from the problem the server served — or the failure's kind. */
+function createFailureOf(error: unknown): CreateFailure {
+  const problem = problemOf(error);
+  if (
+    problem?.code === 'formula.gardenLimit' &&
+    typeof problem.formula === 'string' &&
+    isDashboardLevel(problem.formula) &&
+    isWholeNumber(problem.limit) &&
+    isWholeNumber(problem.current)
+  ) {
+    return { kind: 'limit', formula: problem.formula, limit: problem.limit, current: problem.current };
+  }
+  return { kind: requestFailureKind(error) };
+}
 
 /**
  * SMA-336 PR 1/5 - the gardens dashboard: eight widgets on a resizable,
@@ -327,10 +357,15 @@ export default function GardensDashboard() {
   // page's chip and foot link open, until lot F3 builds the choice screen
   // behind the chip (`FormulaChooserDialog`). Its opener is remembered like
   // the panel's, for the focus when it closes.
-  const [chooserOpen, setChooserOpen] = useState(false);
+  // Open at mount when the planner's « Voir les formules » led here (L4):
+  // its refusal of a plan's size names the formula as the way out.
+  const [chooserOpen, setChooserOpen] = useState(
+    () => (location.state as GardensNavState)?.formulas === true
+  );
   const chooserOpener = useRef<Element | null>(null);
-  const openChooser = () => {
-    chooserOpener.current = document.activeElement;
+  /** Opens the choice; `opener` is where the focus returns to when it closes — the active element by default. */
+  const openChooser = (opener: Element | null = document.activeElement) => {
+    chooserOpener.current = opener;
     setChooserOpen(true);
   };
 
@@ -385,7 +420,7 @@ export default function GardensDashboard() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newGardenName, setNewGardenName] = useState('');
   const [newGardenDescription, setNewGardenDescription] = useState('');
-  const [createError, setCreateError] = useState(false);
+  const [createError, setCreateError] = useState<CreateFailure | null>(null);
   const [isMutating, setIsMutating] = useState(false);
 
   const navState = location.state as GardensNavState;
@@ -402,7 +437,7 @@ export default function GardensDashboard() {
   );
 
   useEffect(() => {
-    if (navState?.toast) {
+    if (navState?.toast || navState?.formulas) {
       // Replace ONLY the state: the entry keeps its search and hash (a future
       // filter / sort / deep link must survive arriving from the planner).
       navigate(
@@ -424,19 +459,28 @@ export default function GardensDashboard() {
   const closeCreateDialog = () => {
     if (isMutating) return;
     setCreateDialogOpen(false);
-    setCreateError(false);
+    setCreateError(null);
     setNewGardenName('');
     setNewGardenDescription('');
+  };
+
+  // L4 — the door the refusal opens: the creation's dialog closes, the choice
+  // of formula opens, and the focus will come back to « Créer un jardin »,
+  // which every formula's header has — the button pressed is gone with the
+  // dialog.
+  const seeFormulasFromCreate = () => {
+    closeCreateDialog();
+    openChooser(createRef.current);
   };
 
   const handleCreate = async () => {
     if (isMutating) return;
     setIsMutating(true);
-    setCreateError(false);
+    setCreateError(null);
     try {
       await createGarden(newGardenName, newGardenDescription || undefined);
       setCreateDialogOpen(false);
-      setCreateError(false);
+      setCreateError(null);
       setNewGardenName('');
       setNewGardenDescription('');
       refetch();
@@ -448,10 +492,29 @@ export default function GardensDashboard() {
       // STORED PLACE, so an aggregate kept over a failed re-read names nothing
       // the server has dropped — and the figure surfaces read `loadError` first.
       refetchWeather();
-    } catch {
-      setCreateError(true);
+    } catch (error) {
+      // R3-E1 (L4): the refusal with its numbers, or the failure named.
+      setCreateError(createFailureOf(error));
     } finally {
       setIsMutating(false);
+    }
+  };
+
+  /** What the creation's dialog says of a creation that did not go through. */
+  const createErrorText = (failure: CreateFailure): string => {
+    switch (failure.kind) {
+      case 'limit':
+        return t('gardens.refusal.limit', {
+          formula: t(`dashboard.levels.${failure.formula}.name`),
+          count: failure.limit,
+          current: failure.current,
+        });
+      case 'unauthorized':
+        return t('common.sessionExpired');
+      case 'forbidden':
+        return t('common.forbidden');
+      case 'failed':
+        return t('gardens.mutationError');
     }
   };
 
@@ -1094,10 +1157,21 @@ export default function GardensDashboard() {
       >
         <DialogTitle>{t('gardens.createDialogTitle')}</DialogTitle>
         <DialogContent>
+          {/* A creation that did not go through (R3-E1, L4): the formula's
+              refusal with its numbers and its door to the choice of formula;
+              a session that expired and the way to sign in again; a right
+              the account lacks; a failure and its retry — the « Créer »
+              button, still there. */}
           {createError && (
-            <Typography color="error" sx={{ mb: 1 }}>
-              {t('gardens.mutationError')}
-            </Typography>
+            <Box data-create-refusal sx={{ mb: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1 }}>
+              <Typography color="error">{createErrorText(createError)}</Typography>
+              {createError.kind === 'limit' && (
+                <Button variant="outlined" size="small" onClick={seeFormulasFromCreate} sx={{ textTransform: 'none' }}>
+                  {t('gardens.refusal.viewFormulas')}
+                </Button>
+              )}
+              {createError.kind === 'unauthorized' && <ReconnectButton />}
+            </Box>
           )}
           <TextField
             label={t('gardens.gardenName')}

@@ -308,6 +308,11 @@
     "loading": "Loading gardens...",
     "error": "Unable to load gardens. Please try again later.",
     "mutationError": "An error occurred. Please try again.",
+    "refusal": {
+      "limit_one": "Your {{formula}} formula allows {{count}} garden at most, and you already have {{current}}. To create another one, move to a larger formula.",
+      "limit_other": "Your {{formula}} formula allows {{count}} gardens at most, and you already have {{current}}. To create another one, move to a larger formula.",
+      "viewFormulas": "See the formulas"
+    },
     "seeMore": "See more",
     "seeLess": "See less",
     "planMyGarden": "Plan my garden"
@@ -901,6 +906,9 @@
     "backToTop": "Back to top",
     "comingSoon": "Coming Soon",
     "loading": "Loading",
+    "sessionExpired": "Your session has expired. Sign in again to continue.",
+    "reconnect": "Sign in again",
+    "forbidden": "Your account is not allowed to do this.",
     "brandTitle": "SmartCrops — Your smart virtual garden"
   },
   "auth": {
@@ -1185,7 +1193,8 @@
     },
     "limit": {
       "formula": "Your {{formula}} formula allows up to {{width}} × {{height}} cells per garden.",
-      "kept": "This garden is {{width}} × {{height}} cells, beyond the {{maxWidth}} × {{maxHeight}} of your {{formula}} formula: you can shrink it, not grow it."
+      "kept": "This garden is {{width}} × {{height}} cells, beyond the {{maxWidth}} × {{maxHeight}} of your {{formula}} formula: you can shrink it, not grow it.",
+      "refused": "Your {{formula}} formula allows up to {{maxWidth}} × {{maxHeight}} cells per garden; this plan is {{width}} × {{height}}. Shrink it, or change formula from My Gardens."
     },
     "shapeEditMode": "Edit shape",
     "tabs": {

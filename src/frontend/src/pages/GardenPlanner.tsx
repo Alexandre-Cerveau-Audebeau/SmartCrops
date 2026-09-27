@@ -45,6 +45,7 @@ import GardenConfigDialog, {
   type DialogDimensions,
 } from '../components/Garden/GardenConfigDialog';
 import GardenTemplatesDialog from '../components/Garden/GardenTemplatesDialog';
+import ReconnectButton from '../components/ReconnectButton';
 import RemovePlacementDialog from '../components/Garden/RemovePlacementDialog';
 import { STICKY_OFFSET } from '../constants/layout';
 import { useFormulas } from '../hooks/useFormulas';
@@ -54,6 +55,8 @@ import { useScrollHold } from '../hooks/useScrollHold';
 import { useSelection } from '../hooks/useSelection';
 import { updateGarden } from '../services/gardenApi';
 import { saveLayout } from '../services/gardenLayoutApi';
+import { problemOf, requestFailureKind } from '../services/requestFailure';
+import { isWholeNumber } from '../services/wireChecks';
 import { fetchPlants } from '../services/plantApi';
 import { footprintBadgeSx, GAP_PX } from '../theme/plannerTokens';
 import { usePlannerTokens } from '../theme/usePlannerTokens';
@@ -119,6 +122,19 @@ const EMPTY_BLOCKERS: Blocker[] = [];
 // version when the copy changes re-shows the banner once. SMA-302 tracks the
 // rotating-tips + account-preference successor.
 const HELP_BANNER_DISMISSED_KEY = 'smartcrops.planner.helpBanner.dismissed.v1';
+
+/**
+ * The planner's one toast — what `message` holds and what the Snackbar shows.
+ * SMA-448, lot F3, step L4 (R3-E1): `action`, the action a failed save calls
+ * for beside its words — the choice of formula, for a plan the formula
+ * refuses; signing in again, for a session that expired. None otherwise:
+ * the retry is the Save button, still there.
+ */
+interface PlannerMessage {
+  type: 'success' | 'error' | 'info';
+  text: string;
+  action?: 'formulas' | 'reconnect';
+}
 
 const addBtnSx = {
   cursor: 'pointer',
@@ -354,10 +370,7 @@ export default function GardenPlanner() {
     localStorage.setItem(HELP_BANNER_DISMISSED_KEY, '1');
     setShowHelp(false);
   }, []);
-  const [message, setMessage] = useState<{
-    type: 'success' | 'error' | 'info';
-    text: string;
-  } | null>(null);
+  const [message, setMessage] = useState<PlannerMessage | null>(null);
   // What the Snackbar SHOWS outlives `message` (SMA-309 R3). Clearing the
   // state in the same render that flips `open` to false would hand the exit
   // transition an undefined child mid-close — Grow clones its child to inject
@@ -369,7 +382,7 @@ export default function GardenPlanner() {
   // `open`, not on children, so a swap-in-place would inherit the previous
   // toast's remainder (a collision arriving at 5.5s would flash for 0.5s).
   const [displayedToast, setDisplayedToast] = useState<{
-    src: { type: 'success' | 'error' | 'info'; text: string };
+    src: PlannerMessage;
     seq: number;
   } | null>(null);
   if (message !== null && displayedToast?.src !== message) {
@@ -2068,8 +2081,47 @@ export default function GardenPlanner() {
       // its formula follows it — shrunk, it grows back only to the formula's.
       setStoredSize({ width, height });
       setMessage({ type: 'success', text: t('planner.toolbar.saveSuccess') });
-    } catch {
-      setMessage({ type: 'error', text: t('planner.toolbar.saveError') });
+    } catch (error) {
+      // R3-E1 (L4): a plan the formula refuses says the limit and the size
+      // asked, with the door to the choice of formula; a session that
+      // expired says so and how to sign in again; a right the account lacks
+      // says the right; a failure says the plan could not be saved — the
+      // Save button is the retry.
+      const problem = problemOf(error);
+      const limit = problem?.limit as { width?: unknown; height?: unknown } | undefined;
+      const requested = problem?.requested as { width?: unknown; height?: unknown } | undefined;
+      if (
+        problem?.code === 'formula.gardenSize' &&
+        typeof problem.formula === 'string' &&
+        isWholeNumber(limit?.width) &&
+        isWholeNumber(limit?.height) &&
+        isWholeNumber(requested?.width) &&
+        isWholeNumber(requested?.height)
+      ) {
+        setMessage({
+          type: 'error',
+          text: t('planner.limit.refused', {
+            formula: t(`dashboard.levels.${problem.formula}.name`),
+            maxWidth: limit.width,
+            maxHeight: limit.height,
+            width: requested.width,
+            height: requested.height,
+          }),
+          action: 'formulas',
+        });
+      } else {
+        const kind = requestFailureKind(error);
+        setMessage({
+          type: 'error',
+          text:
+            kind === 'unauthorized'
+              ? t('common.sessionExpired')
+              : kind === 'forbidden'
+                ? t('common.forbidden')
+                : t('planner.toolbar.saveError'),
+          action: kind === 'unauthorized' ? 'reconnect' : undefined,
+        });
+      }
     } finally {
       setSaving(false);
     }
@@ -2622,12 +2674,31 @@ export default function GardenPlanner() {
       >
         {displayedToast ? (
           <Alert
+            data-planner-toast
             onClose={() => setMessage(null)}
             severity={displayedToast.src.type}
             variant="filled"
             sx={{ width: '100%' }}
           >
             {displayedToast.src.text}
+            {/* The action beside the words (R3-E1, L4) — in the body, not in
+                the Alert's `action` slot, which would replace the X an error
+                dismisses through. */}
+            {displayedToast.src.action === 'formulas' && (
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => navigate('/gardens', { state: { formulas: true } })}
+                sx={{ ml: 1, textTransform: 'none', fontWeight: 700, textDecoration: 'underline' }}
+              >
+                {t('gardens.refusal.viewFormulas')}
+              </Button>
+            )}
+            {displayedToast.src.action === 'reconnect' && (
+              <Box component="span" sx={{ display: 'inline-block', ml: 1 }}>
+                <ReconnectButton />
+              </Box>
+            )}
           </Alert>
         ) : undefined}
       </Snackbar>

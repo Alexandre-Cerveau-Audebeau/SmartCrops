@@ -26,6 +26,7 @@ import type { PlacementData } from './gardenLayoutApi';
 import { permitsBlock, presetOf, sizesFor } from '../constants/dashboardCapabilities';
 import { fetchJson } from './fetchJson';
 import { HttpStatusError } from './httpStatusError';
+import { requestFailureKind } from './requestFailure';
 import {
   arrayOf,
   isBoolean,
@@ -342,15 +343,18 @@ export const isRefusalReason = (value: unknown): value is FormulaRefusalReason =
  * means for the page: the formula it asked for, refused, and the reasons the
  * server served — those of a 409 `formula.tooSmall` problem (RFC 9457), each
  * checked at this boundary as every record is, the ones that do not hold
- * dropped. Any other failure is the same refusal with no reason to say. The
- * account and its layout are as they were either way: nothing is unsaved.
+ * dropped. Lot F3, L4 (R3-E1): any other failure is NOT a refusal — it is
+ * named for what it is (`requestFailureKind`): a session that expired, a
+ * right the account lacks, or a failure a retry may cure — with no reason to
+ * say. The account and its layout are as they were either way: nothing is
+ * unsaved.
  */
 export function refusalOf(error: unknown, formula: DashboardLevel): FormulaRefusal {
   const problem = error instanceof HttpStatusError ? error.problem : undefined;
   if (problem?.code !== 'formula.tooSmall' || !Array.isArray(problem.reasons)) {
-    return { formula, reasons: [] };
+    return { kind: requestFailureKind(error), formula, reasons: [] };
   }
-  return { formula, reasons: (problem.reasons as unknown[]).filter(isRefusalReason) };
+  return { kind: 'refused', formula, reasons: (problem.reasons as unknown[]).filter(isRefusalReason) };
 }
 
 // The primitives — `matches`, `isString`, `isBoolean`, `nullable`, `arrayOf`,
