@@ -261,7 +261,14 @@ const CHOICE_VIEWS: ChoiceView[] = [
       { id: 'en@1280', lang: 'en', theme: 'light' },
     ],
   },
+  // SMA-448, PR #297, fix round 1 (A2, Alexandre 27/09): the desktop windows
+  // where the three « Choisir » must be seen without scrolling — a common
+  // laptop's, the browser's bar deducted, and a larger one.
+  { id: '1280x720', width: 1280, height: 720, mobile: false, runs: [{ id: 'fr@1280x720', lang: 'fr', theme: 'light' }] },
+  { id: '1440x900', width: 1440, height: 900, mobile: false, runs: [{ id: 'fr@1440x900', lang: 'fr', theme: 'light' }] },
 ];
+/** The windows of A2: where the buttons are measured against the fold. */
+const FOLD_RUNS = ['fr@1280x720', 'fr@1440x900'];
 const CHOICE_RUNS: Array<ChoiceRun & { vw: number }> = CHOICE_VIEWS.flatMap((view) => view.runs.map((run) => ({ ...run, vw: view.width })));
 /** The choice screen, by run then by scene name. */
 const choiceCases = new Map<string, Map<string, ChoiceMeasure>>();
@@ -1213,6 +1220,22 @@ describe.skipIf(!CHROME)('the compact action bar on the whole page, in a real en
           expect(screen.text, `${run.id} ${name}`).not.toMatch(/[1-9]\d*\s?€|€\s?[1-9]|\$/);
           expect(screen.text, `${run.id} ${name}`).not.toMatch(/\bRécolte\b|\bHarvest\b/);
         }
+      }
+    });
+
+    // SMA-448, PR #297, fix round 1 (A2, Alexandre 27/09): « un poil plus haut
+    // d'un cran, histoire que les boutons "Choisir Novice / Jardinier / Expert"
+    // soient visibles dès le début dans la vue desktop » — measured against
+    // the fold of a common laptop's window (1 280 × 720, the browser's bar
+    // deducted) and of a larger one (1 440 × 900), in every situation.
+    it.each(FOLD_RUNS)('%s: the three « Choisir » / « Garder » buttons are seen entirely without scrolling, in every situation (A2)', (id) => {
+      for (const name of SCENE_NAMES) {
+        const screen = choiceOf(id, name);
+        const fold = screen.viewportHeight;
+        const below = screen.offers
+          .map((offer) => ({ key: offer.key, top: offer.button.rect.y, bottom: offer.button.rect.y + offer.button.rect.h }))
+          .filter((button) => button.top < 0 || button.bottom > fold);
+        expect(below, `${id} ${name}: the fold at ${fold} px, the panel at ${screen.rect.y}, the buttons at ${JSON.stringify(screen.offers.map((offer) => offer.button.rect))}`).toEqual([]);
       }
     });
 

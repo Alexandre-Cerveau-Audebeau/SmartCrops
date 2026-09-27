@@ -83,8 +83,13 @@ export default function FormulaChooserDialog({ open, mandatory, switching, refus
             // the site's navbar, which the mock-up did not draw. On a phone,
             // 80 rather than 58: measured in Chrome (L7), the title's line
             // box runs from 88 to 130 px under the real navbar, and 58 put
-            // the panel's top inside it.
-            m: { xs: `${navbar + 80}px 12px 24px`, sm: `${navbar + 104}px 24px 40px` },
+            // the panel's top inside it. From 600 px, 80 rather than 104
+            // (PR #297, fix round 1, A2 — Alexandre: « un poil plus haut
+            // d'un cran »): one notch up, the same 80 as on a phone — the
+            // title's line box ends 138 px down at 600 px and beyond
+            // (measured), so 72 put the panel 2 px inside it; 80 leaves it
+            // clear above the veil.
+            m: { xs: `${navbar + 80}px 12px 24px`, sm: `${navbar + 80}px 24px 40px` },
             width: { xs: 'calc(100% - 24px)', sm: 'calc(100% - 48px)' },
             maxWidth: 1200,
             borderRadius: { xs: '14px', sm: '18px' },

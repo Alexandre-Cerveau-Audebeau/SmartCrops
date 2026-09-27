@@ -271,6 +271,22 @@ function OfferCard({ formula, previous, availability, isCurrent, isRecommended, 
 
   const tagSx = { height: 24, fontSize: DASHBOARD_TYPE.chip, fontWeight: 800, borderRadius: '999px' } as const;
 
+  // SMA-448, PR #297, fix round 1 (A2) — Alexandre, 27/09: the three
+  // « Choisir » « visibles dès le début dans la vue desktop ». Measured in
+  // Chrome, the card's button stood 1 199 px down in a 1 280-wide window —
+  // 479 px under the fold of a common laptop (720), 299 under a larger one
+  // (900): no raise of the panel, no tightening of the spacing reaches
+  // either. From 900 px, where the three cards stand side by side, the card
+  // is DRAWN in another order — its head (tags, name, who, price), then the
+  // button, then the reason of an unavailable or kept formula (under the
+  // button it explains, so the three buttons stand on one line), then the
+  // preview, the limits and what it contains — by CSS order alone: the DOM
+  // keeps the mock-up's order, so a screen reader hears the card as V3-01
+  // wrote it, and under 900 px nothing changes. Nothing is removed.
+  const head = { order: { xs: 0, md: -3 } } as const;
+  const choice = { order: { xs: 0, md: -2 } } as const;
+  const decision = { order: { xs: 0, md: -1 } } as const;
+
   return (
     <Box
       component="li"
@@ -290,7 +306,7 @@ function OfferCard({ formula, previous, availability, isCurrent, isRecommended, 
       }}
     >
       {/* The tags: a reserved zone from 900 px, so the three cards' names align (V3-01, correction 1). */}
-      <Box sx={{ minHeight: { md: 54 }, display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      <Box sx={{ ...head, minHeight: { md: 54 }, display: 'flex', flexDirection: 'column', gap: '5px' }}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
           {isCurrent && (
             <Chip
@@ -321,14 +337,14 @@ function OfferCard({ formula, previous, availability, isCurrent, isRecommended, 
         )}
       </Box>
 
-      <Typography component="h3" sx={{ m: 0, fontSize: 24, lineHeight: 1.2, fontWeight: 800 }}>
+      <Typography component="h3" sx={{ ...head, m: 0, fontSize: 24, lineHeight: 1.2, fontWeight: 800 }}>
         {name}
       </Typography>
-      <Typography sx={{ m: 0, fontSize: `${DASHBOARD_TYPE.secondary}px`, lineHeight: 1.45, color: 'text.secondary', minHeight: { md: 42 } }}>
+      <Typography sx={{ ...head, m: 0, fontSize: `${DASHBOARD_TYPE.secondary}px`, lineHeight: 1.45, color: 'text.secondary', minHeight: { md: 42 } }}>
         {t(`dashboard.choice.who.${formula.key}`)}
       </Typography>
       {/* V2: « 0 € — Gratuit », and nothing about a price to come. */}
-      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
+      <Box sx={{ ...head, display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
         <Typography component="span" sx={{ fontSize: 34, lineHeight: 1.05, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
           {t('dashboard.choice.price')}
         </Typography>
@@ -336,7 +352,7 @@ function OfferCard({ formula, previous, availability, isCurrent, isRecommended, 
           {t('dashboard.choice.priceFree')}
         </Typography>
       </Box>
-      <Typography sx={{ m: 0, fontSize: `${DASHBOARD_TYPE.secondary}px`, lineHeight: 1.4, color: 'text.secondary' }}>
+      <Typography sx={{ ...head, m: 0, fontSize: `${DASHBOARD_TYPE.secondary}px`, lineHeight: 1.4, color: 'text.secondary' }}>
         {t('dashboard.choice.free')}
       </Typography>
 
@@ -381,7 +397,7 @@ function OfferCard({ formula, previous, availability, isCurrent, isRecommended, 
       {blocked && (
         <Box
           data-offer-why
-          sx={{ display: 'flex', alignItems: 'flex-start', gap: '10px', bgcolor: tk.warnBg, border: '1px solid', borderColor: tk.warnBorder, borderRadius: '10px', px: '13px', py: '11px' }}
+          sx={{ ...decision, display: 'flex', alignItems: 'flex-start', gap: '10px', bgcolor: tk.warnBg, border: '1px solid', borderColor: tk.warnBorder, borderRadius: '10px', px: '13px', py: '11px' }}
         >
           <WarningAmberRoundedIcon aria-hidden sx={{ fontSize: 20, color: tk.warnIcon, mt: '1px', flexShrink: 0 }} />
           <Box sx={{ fontSize: `${DASHBOARD_TYPE.secondary}px`, lineHeight: 1.5, color: tk.warnText }}>
@@ -401,7 +417,7 @@ function OfferCard({ formula, previous, availability, isCurrent, isRecommended, 
       {kept && (
         <Box
           data-offer-kept
-          sx={{ display: 'flex', alignItems: 'flex-start', gap: '10px', bgcolor: tk.invBg, border: '1px solid', borderColor: tk.invBd, borderRadius: '10px', px: '13px', py: '11px' }}
+          sx={{ ...decision, display: 'flex', alignItems: 'flex-start', gap: '10px', bgcolor: tk.invBg, border: '1px solid', borderColor: tk.invBd, borderRadius: '10px', px: '13px', py: '11px' }}
         >
           <InfoOutlinedIcon aria-hidden sx={{ fontSize: 20, color: 'primary.main', mt: '1px', flexShrink: 0 }} />
           <Box sx={{ fontSize: `${DASHBOARD_TYPE.secondary}px`, lineHeight: 1.5 }}>
@@ -421,7 +437,9 @@ function OfferCard({ formula, previous, availability, isCurrent, isRecommended, 
         variant={isCurrent ? 'outlined' : 'contained'}
         disabled={blocked || switching}
         onClick={() => onChoose(formula.key)}
-        sx={{ mt: 'auto', height: 46, borderRadius: '10px', fontSize: 15, fontWeight: 800, textTransform: 'none' }}
+        // At the foot of the card under 900 px (`mt: auto` takes the free
+        // space of a stretched card); under the price from 900 px (A2).
+        sx={{ ...choice, mt: { xs: 'auto', md: 0 }, height: 46, borderRadius: '10px', fontSize: 15, fontWeight: 800, textTransform: 'none' }}
       >
         {t(isCurrent ? 'dashboard.choice.keep' : 'dashboard.choice.choose', { formula: name })}
       </Button>

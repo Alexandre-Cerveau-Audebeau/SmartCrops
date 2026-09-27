@@ -310,11 +310,17 @@ export interface DialogMeasure extends CardMeasure {
 export interface ChoiceMeasure extends DialogMeasure {
   scene: string;
   viewport: number;
+  /** The window's height (SMA-448, PR #297, fix round 1, A2): what is seen without scrolling. */
+  viewportHeight: number;
   /** No way out: the account never chose. */
   mandatory: boolean;
   closeButton: boolean;
-  /** Each offer, in the catalogue's order: its tags, its button, the reason it is unavailable, what a kept formula says. */
-  offers: Array<{ key: string; tags: string[]; button: { text: string; disabled: boolean }; why: string | null; kept: string | null }>;
+  /**
+   * Each offer, in the catalogue's order: its tags, its button — and where
+   * the button stands in the window (A2: seen entirely, or not, without
+   * scrolling) —, the reason it is unavailable, what a kept formula says.
+   */
+  offers: Array<{ key: string; tags: string[]; button: { text: string; disabled: boolean; rect: Rect }; why: string | null; kept: string | null }>;
   /** Which form of the comparison is DRAWN: the table from 900 px, the lists under it. */
   compare: 'table' | 'lists' | 'none';
   /** The veil: its computed colour, and its blur. */
@@ -683,14 +689,20 @@ const page = {
       ...page.measureDialog('[data-formula-choice]'),
       scene: choiceName ?? '',
       viewport: innerWidth,
+      viewportHeight: innerHeight,
       mandatory: root.getAttribute('data-mandatory') === 'true',
       closeButton: paper.querySelector('[data-formula-choice-close]') !== null,
       offers: [...paper.querySelectorAll<HTMLElement>('[data-formula-offer]')].map((offer) => {
         const button = offer.querySelector<HTMLButtonElement>(':scope > button');
+        const buttonBox = button?.getBoundingClientRect();
         return {
           key: offer.getAttribute('data-formula-offer') ?? '',
           tags: [...offer.querySelectorAll('[data-offer-tag]')].map((tag) => tag.getAttribute('data-offer-tag') ?? ''),
-          button: { text: button?.textContent ?? '', disabled: button?.disabled ?? true },
+          button: {
+            text: button?.textContent ?? '',
+            disabled: button?.disabled ?? true,
+            rect: buttonBox ? { x: round(buttonBox.left), y: round(buttonBox.top), w: round(buttonBox.width), h: round(buttonBox.height) } : { x: 0, y: 0, w: 0, h: 0 },
+          },
           why: offer.querySelector('[data-offer-why]')?.textContent ?? null,
           kept: offer.querySelector('[data-offer-kept]')?.textContent ?? null,
         };
