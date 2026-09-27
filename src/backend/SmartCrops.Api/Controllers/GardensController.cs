@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmartCrops.Api.DTOs;
+using SmartCrops.Core.Dashboard;
 using SmartCrops.Core.Entities;
 using SmartCrops.Core.Enums;
 using SmartCrops.Core.Geo;
@@ -164,12 +165,36 @@ public class GardensController(
         return Ok(ToGardenResponse(garden, await LoadProfileLocationAsync(userId)));
     }
 
+    /// <summary>
+    /// SMA-448, lot F3, step L1 — a garden beyond the formula's number is
+    /// refused: 403 <c>formula.gardenLimit</c> with the limit and the count
+    /// (<see cref="FormulaRefusals.GardenLimit"/>; V3: a limit shown is a
+    /// limit applied). <b>Without a race</b> (pre-flight § C.4.1; constat 8):
+    /// the account's row is locked for the transaction
+    /// (<see cref="AccountFormulaLock"/>, the lock of lot F1), its gardens
+    /// counted under the lock, and the garden inserted before it is released
+    /// — two creations at « limit − 1 » run one after the other, and the
+    /// second counts the first. The limit applies going forward only: an
+    /// account already beyond it keeps every garden it has, and adds none.
+    /// </summary>
     [HttpPost]
-    public async Task<IActionResult> CreateGarden(CreateGardenRequest request)
+    public async Task<IActionResult> CreateGarden(CreateGardenRequest request, CancellationToken ct = default)
     {
         var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
+
+        await using var transaction = await context.Database.BeginTransactionAsync(ct);
+
+        var formula = await AccountFormulaLock.LockAsync(context, userId, ct);
+        if (formula is null) return Unauthorized();
+
+        var definition = FormulaCatalog.For(formula);
+        if (definition.GardenLimit is { } limit)
+        {
+            var count = await context.Gardens.CountAsync(g => g.UserId == userId, ct);
+            if (count >= limit) return FormulaRefusals.GardenLimit(definition, count);
+        }
 
         var garden = new Garden
         {
@@ -182,7 +207,8 @@ public class GardensController(
         };
 
         context.Gardens.Add(garden);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
 
         return CreatedAtAction(
             nameof(GetGarden),
@@ -387,17 +413,45 @@ public class GardensController(
             placements));
     }
 
+    /// <summary>
+    /// SMA-448, lot F3, step L1 — a plan larger than the formula allows is
+    /// refused: 403 <c>formula.gardenSize</c> with the formula's largest size,
+    /// the garden's stored size and the size asked
+    /// (<see cref="FormulaRefusals.GardenSize"/>). <b>Going forward only</b>
+    /// (Alexandre, 22/09 18:02): the bound of each dimension is the larger of
+    /// the formula's and the garden's stored one, so a garden already beyond
+    /// its formula is saved at its size and shrunk freely, but never grown —
+    /// and, once shrunk, grows back only to the formula's. Under the account's
+    /// lock, like the creation: a resize and a switch of formula of one
+    /// account apply one after the other, so a plan is never measured against
+    /// the formula the account has just left.
+    /// </summary>
     [HttpPut("{id:guid}/layout")]
-    public async Task<IActionResult> SaveLayout(Guid id, [FromBody] SaveLayoutRequest request)
+    public async Task<IActionResult> SaveLayout(Guid id, [FromBody] SaveLayoutRequest request, CancellationToken ct = default)
     {
         var userId = GetCurrentUserId();
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
+        await using var transaction = await context.Database.BeginTransactionAsync(ct);
+
+        var formula = await AccountFormulaLock.LockAsync(context, userId, ct);
+        if (formula is null) return Unauthorized();
+
         var garden = await context.Gardens
             .Include(g => g.Placements)
-            .FirstOrDefaultAsync(g => g.Id == id && g.UserId == userId);
+            .FirstOrDefaultAsync(g => g.Id == id && g.UserId == userId, ct);
 
         if (garden == null) return NotFound();
+
+        var definition = FormulaCatalog.For(formula);
+        var current = garden.LayoutWidth is { } storedWidth && garden.LayoutHeight is { } storedHeight
+            ? new GardenSize(storedWidth, storedHeight)
+            : null;
+        if (request.Width > Math.Max(definition.MaxGardenSize.Width, current?.Width ?? 0)
+            || request.Height > Math.Max(definition.MaxGardenSize.Height, current?.Height ?? 0))
+        {
+            return FormulaRefusals.GardenSize(definition, current, new GardenSize(request.Width, request.Height));
+        }
 
         // Config == null -> the stored config is PRESERVED untouched (the
         // pre-5.3-B save dialog never sends it). Config present -> strict
@@ -428,7 +482,7 @@ public class GardensController(
         var existingPlantIds = await context.Plants
             .Where(p => plantIds.Contains(p.Id))
             .Select(p => p.Id)
-            .ToListAsync();
+            .ToListAsync(ct);
 
         var missingIds = plantIds.Except(existingPlantIds).ToList();
         if (missingIds.Count > 0)
@@ -449,7 +503,8 @@ public class GardensController(
             });
         }
 
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
         return NoContent();
     }
 
